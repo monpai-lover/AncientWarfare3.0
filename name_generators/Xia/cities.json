@@ -1,0 +1,15 @@
+[
+    {
+        "id": "Xia_city",
+        "templates": [
+            {
+                "format": "{真实城名}",
+                "weight": 2
+            },
+            {
+                "format": "{中文城名上}{中文城名下}",
+                "weight": 3
+            }
+        ]
+    }
+]

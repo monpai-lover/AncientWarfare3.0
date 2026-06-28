@@ -1,0 +1,16 @@
+# —— 编译产物 ——
+bin/
+obj/
+*.user
+
+# —— 游戏本体 / 第三方 DLL(有版权,不入库;本地从游戏目录引用)——
+Assemblies/Assembly-CSharp*.dll
+
+# —— IDE ——
+.vs/
+.idea/
+*.suo
+
+# —— 系统 ——
+Thumbs.db
+desktop.ini

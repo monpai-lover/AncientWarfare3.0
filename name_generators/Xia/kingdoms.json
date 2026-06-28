@@ -1,0 +1,11 @@
+[
+    {
+        "id": "Xia_kingdom",
+        "templates": [
+            {
+                "format": "{中文国名前缀}",
+                "weight": 5
+            }
+        ]
+    }
+]

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<DefineConstants>DEBUG;TRACE;一米_中文名</DefineConstants>
+		<RootNamespace>AncientWarfare3</RootNamespace>
+		<AssemblyName>AncientWarfare3</AssemblyName>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>11</LangVersion>
+		<FileAlignment>512</FileAlignment>
+		<!-- 不自动包含 obj/bin 等; 仅编译 Code 下源码 -->
+		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+	</PropertyGroup>
+
+	<!-- ========================================================================
+	     DLL 引用根路径 (绝对路径)。游戏更新或换机时只改这里。
+	       WorldBoxManaged : 新版游戏 Managed 目录, 提供 Unity / 第三方 DLL
+	       NewModDir       : F:\WorldBox New Mod 工作区, 提供 publicized / NML / 0Harmony
+	     ======================================================================== -->
+	<PropertyGroup>
+		<WorldBoxManaged>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed</WorldBoxManaged>
+		<NewModDir>F:\WorldBox New Mod</NewModDir>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="Code\**\*.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="mod.json" />
+		<Content Include="icon.png" />
+	</ItemGroup>
+
+	<!-- 游戏本体 (publicized: 所有成员 public, 供编译引用) -->
+	<ItemGroup>
+		<Reference Include="Assembly-CSharp">
+			<HintPath>$(NewModDir)\AssemblyPublicizer\publicized_assemblies\Assembly-CSharp_publicized.dll</HintPath>
+		</Reference>
+		<Reference Include="NeoModLoader">
+			<HintPath>$(NewModDir)\NeoModLoader.dll</HintPath>
+		</Reference>
+		<Reference Include="0Harmony">
+			<HintPath>$(NewModDir)\0Harmony.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<!-- 一米_中文名 (Chinese_Name): 编译期引用; 运行时靠 NML 源码加载 -->
+	<ItemGroup>
+		<Reference Include="Chinese_Name">
+			<HintPath>$(NewModDir)\Chinese_Name.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<!-- Unity 引擎与第三方库 (来自新版游戏 Managed) -->
+	<ItemGroup>
+		<Reference Include="UnityEngine">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.PhysicsModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.PhysicsModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.Physics2DModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.Physics2DModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.IMGUIModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.IMGUIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.TextRenderingModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UI">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.UI.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UIModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.UIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.ImageConversionModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.ImageConversionModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.AssetBundleModule">
+			<HintPath>$(WorldBoxManaged)\UnityEngine.AssetBundleModule.dll</HintPath>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>$(WorldBoxManaged)\Newtonsoft.Json.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+</Project>

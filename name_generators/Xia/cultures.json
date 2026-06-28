@@ -1,0 +1,11 @@
+[
+
+    {
+        "id": "Xia_culture",
+        "templates": [
+            {
+                "format": "$village_origin$#文化#"
+            }
+        ]
+    }
+]

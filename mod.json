@@ -1,0 +1,14 @@
+{
+    "name": "Ancient Warfare 3",
+    "author": "GoatDie#4068",
+    "version": "0.1.0",
+    "description": "Ancient Warfare 3.0 - rebuilt for the new WorldBox version. Xia dynasty civilization, Mandate of Heaven, policies, vassalage and more.",
+    "iconPath": "icon.png",
+    "RepoUrl": "https://github.com/goatdie/AncientWarfare3.0",
+    "GUID": "ANCIENTWARFARE3",
+    "Dependencies": [],
+    "OptionalDependencies": [
+        "一米_中文名"
+    ],
+    "IncompatibleWith": []
+}

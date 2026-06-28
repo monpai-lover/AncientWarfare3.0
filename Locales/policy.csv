@@ -1,0 +1,18 @@
+key,cz,en
+InPlanning,策划中,In Planning
+InProgress,执行中,In Progress
+Completed,已完成,Completed
+start_slaves,开启奴隶制,Start Slavery
+start_slaves_desc,推动奴隶制改革\n更高的生产力，更多的士兵人口,Higher productivity， more soldiers
+control_slaves,强化奴隶控制,Enforce Slavery
+control_slaves_desc,防止奴隶暴动\n更多的奴隶人口，但届时暴动强度更大,More slaves， but Stronger rebellions
+name_integration,姓氏合流,Family，Clan Name Integration
+name_integration_desc,让姓氏归一\n从此不分姓氏,Integration between two name types
+kingdom_yearname,改元,Change Year Name
+kingdom_yearname_desc,更换年号\n旧年号使用已久是时候换一个了,It's time to change it
+change_capital,迁都,Change Capital
+change_capital_desc,迁改都城\n换一个新国都,It's time to change it
+title_upgrade,提升爵位,Title Promotion
+title_upgrade_desc,上表请奏\n提升爵位,It's time to change it
+start_halfaristocrat,开使从奴隶制向封建制过度,Change Slavery to Semi-Aristocrat
+start_halfaristocrat_desc,奴隶制已经不能满足我们了\n我们需要更高的生产力，更多的人口,Higher productivity， more population
