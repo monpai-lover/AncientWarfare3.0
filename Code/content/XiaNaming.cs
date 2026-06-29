@@ -1,5 +1,4 @@
 #if 一米_中文名
-using System;
 using System.Collections.Generic;
 using Chinese_Name;
 using NeoModLoader.General;
@@ -11,12 +10,14 @@ namespace AncientWarfare3.content
     ///     夏朝中文命名接入(仅在编译符号 一米_中文名 启用时)。
     ///     移植自 AW2 Code/CustomNameGenerator.cs。
     ///
-    ///     职责:
+    ///     职责(阶段2 后已收窄):
     ///     1. 注册 mod 自带的 name_generators/Xia(国名/城名/文化/氏族 json)与 lib 词库目录;
-    ///     2. 注册 Xia_name 人名生成器(姓+名/千字文);
-    ///     3. 追加 "default" actor 参数获取器,处理姓(血统姓)与氏(clan_name)。
+    ///     2. 注册 Xia_name 人名生成器 —— 只产"单名/双名"素材(不带姓)。
     ///
-    ///     无中文名时:本文件整体不编译,Xia 直接沿用 clone human 的 name_template_sets,不做中文处理。
+    ///     姓/氏的赋予、父系继承、贵族晋升、显示名拼接 全部交给 core/lineage/LineageService,
+    ///     本文件不再写 family_name/clan_name(那会与谱系系统冲突)。
+    ///     无中文名时:本文件整体不编译,Xia 沿用 clone human 命名;姓氏逻辑仍由 LineageService 跑
+    ///     (用 LineageNamePool 内置古姓/氏池,不依赖中文名 mod 词库)。
     /// </summary>
     internal static class XiaNaming
     {
@@ -37,48 +38,19 @@ namespace AncientWarfare3.content
 
         private static void InitActorNameGenerator()
         {
+            // 阶段2 起:Xia_name 只生成"单名/双名"素材(不带姓),姓/氏拼接交给 LineageService。
+            // 这样游戏内真名 = 单名,符合任务书"平民只单名、贵族才有姓氏"的基线。
             var generator = new XiaActorNameGenerator("Xia_name", "default");
-            generator.AddTemplate("$family_name${中文名字}", 1);
-            generator.AddTemplate("$family_name${中文名字}{中文名字}", 1);
             generator.AddTemplate("{中文名字}{千字文}", 1);
             generator.AddTemplate("{千字文}", 1);
+            generator.AddTemplate("{中文名字}", 1);
             CN_NameGeneratorLibrary.Submit(generator);
 
-            ParameterGetters.PutActorParameterGetter("default",
-                (Action<Actor, Dictionary<string, string>>)Delegate.Combine(
-                    ParameterGetters.GetActorParameterGetter("default"),
-                    (Action<Actor, Dictionary<string, string>>)ActorParameterGetter));
+            // 不再追加写 family_name/clan_name 的 ParameterGetter ——
+            // 姓氏的赋予/继承/显示完全由 core/lineage/LineageService 负责(出生 hook + 晋升 + ApplyDisplayName)。
         }
 
-        /// <summary>姓/氏参数注入:从词库取氏,写入 actor.data 的 family/clan/chinese_family_name。</summary>
-        private static void ActorParameterGetter(Actor pActor, Dictionary<string, string> pParameters)
-        {
-            pActor.data.get("family_name", out string familyName, "");
-            pActor.data.get("clan_name", out string clanName, "");
-            pActor.data.get("chinese_family_name", out string chineseFamilyName, "");
-
-            if (string.IsNullOrEmpty(familyName) && string.IsNullOrEmpty(clanName) &&
-                string.IsNullOrEmpty(chineseFamilyName))
-            {
-                familyName = WordLibraryManager.GetRandomWord("氏");
-                clanName = familyName;
-                pActor.data.set("chinese_family_name", familyName);
-                pActor.data.set("family_name", familyName);
-                pActor.data.set("clan_name", familyName);
-            }
-            else if (string.IsNullOrEmpty(familyName) && string.IsNullOrEmpty(clanName) &&
-                     !string.IsNullOrEmpty(chineseFamilyName))
-            {
-                familyName = chineseFamilyName;
-                pActor.data.set("family_name", familyName);
-                pActor.data.set("clan_name", familyName);
-            }
-
-            pParameters["family_name"] = familyName ?? "";
-            pParameters["clan_name"] = string.IsNullOrEmpty(clanName) ? (familyName ?? "") : clanName;
-        }
-
-        /// <summary>Xia 人名生成器:有姓用带姓模板,无姓用千字文模板。</summary>
+        /// <summary>Xia 人名生成器:只产单名/双名,姓氏由 LineageService 后置拼接。</summary>
         private class XiaActorNameGenerator : CN_NameGeneratorAsset
         {
             public XiaActorNameGenerator(string pId, string pParameterGetter)
@@ -95,12 +67,7 @@ namespace AncientWarfare3.content
 
             public override string GenerateName(Dictionary<string, string> pParameters)
             {
-                if (pParameters.ContainsKey("family_name") && !string.IsNullOrEmpty(pParameters["family_name"]))
-                {
-                    return templates[Random.Range(0, 2)].GenerateName(pParameters);
-                }
-
-                return templates[Random.Range(2, 4)].GenerateName(pParameters);
+                return templates[Random.Range(0, templates.Count)].GenerateName(pParameters);
             }
         }
     }
