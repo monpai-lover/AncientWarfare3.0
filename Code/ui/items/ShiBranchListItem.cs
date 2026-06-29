@@ -54,8 +54,7 @@ namespace AncientWarfare3.ui.items
         private void OnClick()
         {
             if (_shiId < 0) return;
-            // Task 6 接好大树窗后改为 windows.FamilyTreeWindow.OpenBigTree(_shiId)
-            ModClass.LogInfo("[AW3] 点击氏支 shi_id=" + _shiId + "(大树待 Task 6)");
+            windows.FamilyTreeWindow.OpenBigTree(_shiId);
         }
     }
 }
