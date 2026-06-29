@@ -28,6 +28,9 @@ namespace AncientWarfare3
             XiaNaming.Init();
 #endif
 
+            // 阶段5:姓族 UI —— 自定义 tab + 入口按钮(窗口靠 Harmony patch + showWindow 打开)
+            ui.AW_LineageTab.Init();
+
             LogInfo("Ancient Warfare 3.0 loaded — batch A (Xia race).");
         }
 
