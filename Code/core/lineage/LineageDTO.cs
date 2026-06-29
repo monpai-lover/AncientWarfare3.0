@@ -53,6 +53,17 @@ namespace AncientWarfare3.core.lineage
         public bool is_alive;
         public string status;
 
+        public string clan_name;     // 氏(显示用)
+        public double birth_time;
+        public double death_time;    // -1 表示在世/未记录
+        public string kingdom_name;
+        public string city_name;
+        public long   shi_id = -1;
+        public int    noble_distance = 99;
+        public int    head;          // 头像数据(可选,用于自绘头像)
+        public int    skin;
+        public int    skin_set;
+
         public List<FamilyTreeNode> parents = new();
         public List<FamilyTreeNode> children = new();
     }

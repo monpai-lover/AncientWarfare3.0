@@ -120,6 +120,49 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        /// <summary>取某氏支的始祖 actor id(ShiBranch.FOUNDER_ACTOR_ID)。无则 -1。</summary>
+        public static long GetShiBranchFounderId(long pShiId)
+        {
+            var db = DB;
+            if (db == null) return -1;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT IFNULL(FOUNDER_ACTOR_ID, -1) FROM {ShiBranchTableItem.GetTableName()} WHERE SHI_ID=@s LIMIT 1";
+            cmd.Parameters.AddWithValue("@s", pShiId);
+            var o = cmd.ExecuteScalar();
+            return o == null ? -1 : (long)o;
+        }
+
+        /// <summary>取单个氏支信息(含统计)。无则 null。</summary>
+        public static ShiBranchInfo GetShiBranchInfo(long pShiId)
+        {
+            var db = DB;
+            if (db == null) return null;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID " +
+                $"FROM {ShiBranchTableItem.GetTableName()} WHERE SHI_ID=@s LIMIT 1";
+            cmd.Parameters.AddWithValue("@s", pShiId);
+            ShiBranchInfo info = null;
+            using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    info = new ShiBranchInfo
+                    {
+                        shi_id = reader.GetInt64(0),
+                        lineage_id = reader.GetInt64(1),
+                        clan_name = SafeStr(reader, 2),
+                        source_type = SafeStr(reader, 3),
+                        created_time = reader.GetDouble(4),
+                        founder_actor_id = reader.GetInt64(5)
+                    };
+                }
+            }
+            if (info != null) FillShiCounts(info);
+            return info;
+        }
+
         private static void FillShiCounts(ShiBranchInfo pShi)
         {
             var db = DB;
@@ -240,7 +283,7 @@ namespace AncientWarfare3.core.lineage
             return ids;
         }
 
-        /// <summary>构造单个节点。活人优先用 actor 当前态,否则查档案。</summary>
+        /// <summary>构造单个节点。活人优先用 actor 当前态,否则查档案。两路都填齐 UI 字段。</summary>
         private static FamilyTreeNode BuildNode(long pId)
         {
             var live = World.world?.units?.get(pId);
@@ -248,13 +291,23 @@ namespace AncientWarfare3.core.lineage
             {
                 live.data.get("display_name", out string disp, "");
                 live.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);
+                live.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+                live.data.get(LineageKeys.SHI_ID, out long shi, -1L);
+                live.data.get(LineageKeys.NOBLE_DISTANCE, out long nd, 99L);
                 return new FamilyTreeNode
                 {
                     id = pId,
                     display_name = string.IsNullOrEmpty(disp) ? live.getName() : disp,
                     sex = live.isSexMale() ? 0 : 1,
                     is_alive = true,
-                    status = st
+                    status = st,
+                    clan_name = clan,
+                    shi_id = shi,
+                    noble_distance = (int)nd,
+                    birth_time = live.data.created_time,
+                    death_time = -1,
+                    kingdom_name = live.kingdom?.name ?? "",
+                    city_name = live.city?.data?.name ?? ""
                 };
             }
 
@@ -266,7 +319,17 @@ namespace AncientWarfare3.core.lineage
                 display_name = string.IsNullOrEmpty(row.display_name) ? row.given_name : row.display_name,
                 sex = row.sex,
                 is_alive = row.is_alive != 0,
-                status = row.status
+                status = row.status,
+                clan_name = row.clan_name ?? "",
+                shi_id = row.shi_id,
+                noble_distance = row.noble_distance,
+                birth_time = row.birth_time,
+                death_time = row.death_time,
+                kingdom_name = row.kingdom_name ?? "",
+                city_name = row.city_name ?? "",
+                head = row.head,
+                skin = row.skin,
+                skin_set = row.skin_set
             };
         }
 
