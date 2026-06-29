@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.db;
 using AncientWarfare3.utils;
+using Random = UnityEngine.Random;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -148,6 +149,28 @@ namespace AncientWarfare3.core.lineage
 
         // ───────────────────────────── 晋升 ─────────────────────────────
 
+        /// <summary>
+        ///     成为城主时的统一入口(分流):
+        ///     - 无谱系 → 基线 OnActorPromoted(建姓族+氏支,初次贵族)。
+        ///     - 已有谱系(父系继承来的)且有贵族父亲 → OnNobleChildFounding(多余 male 子嗣分封新氏支,
+        ///       长子/继承人留原氏)。
+        ///     国王(setKing)不走分流,直接 OnActorPromoted —— 国王是大宗,不"分封"。
+        /// </summary>
+        public static void OnCityLeaderAppointed(Actor pActor)
+        {
+            if (!IsXia(pActor)) return;
+
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
+            if (lineageId < 0)
+            {
+                OnActorPromoted(pActor, NobleTrigger.CityLeader); // 无谱系:基线建姓族+氏支
+                return;
+            }
+
+            // 已有谱系:尝试分封(内部会判长子/继承人则不分)。分封同时刷新贵族身份。
+            OnNobleChildFounding(pActor);
+        }
+
         /// <summary>成为国王/城主/成名者时赋予或刷新贵族身份。由晋升 Hook 调用。</summary>
         public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger)
         {
@@ -175,10 +198,8 @@ namespace AncientWarfare3.core.lineage
             long lineageId = LineageIdAllocator.NextLineageId();
             InsertLineageGroup(lineageId, familyName, pActor);
 
-            // 2) 氏支:优先城市名/国名作氏,失败再随机氏
-            string clanName = GenerateShiName(pActor);
-            string sourceType = clanName != null ? ShiSourceType.ENFEOFFED : ShiSourceType.RANDOM;
-            if (clanName == null) clanName = LineageNamePool.RandomShi();
+            // 2) 氏支:合流前 50% 随机氏 / 50% 城名首字(见 GenerateShiName)
+            (string clanName, string sourceType) = GenerateShiName(pActor);
             if (pTrigger == NobleTrigger.Figure) sourceType = ShiSourceType.SPECIAL_FIGURE;
 
             long shiId = LineageIdAllocator.NextShiId();
@@ -192,16 +213,114 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, familyName);
         }
 
-        /// <summary>氏名生成:用城名首字 / 国名首字作氏(封地优先);拿不到返回 null 让调用方随机。</summary>
-        private static string GenerateShiName(Actor pActor)
+        /// <summary>
+        ///     氏支分封:已有氏支贵族的"多余成年 male 子嗣"去新 city 当 leader 时,
+        ///     从父姓族**分出新氏支**(同姓不同氏,source=enfeoffed 封地)。
+        ///     长子/继承人(父亲活 male 子嗣里出生最早者)留原氏不分。
+        ///     由 AW_PromotionPatch.SetLeader_Postfix 在"已有谱系者再当 leader"时调用。
+        /// </summary>
+        public static void OnNobleChildFounding(Actor pChild)
         {
-            string cityName = pActor.city?.data?.name;
-            if (!string.IsNullOrEmpty(cityName)) return FirstChar(cityName);
+            if (!IsXia(pChild)) return;
 
-            string kingdomName = pActor.kingdom?.name;
-            if (!string.IsNullOrEmpty(kingdomName)) return FirstChar(kingdomName);
+            // 必须已有姓族(从父系继承来的)才谈"分封";否则交给基线 EnsureLineageForNoble。
+            pChild.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
+            if (lineageId < 0) return;
+
+            Actor father = FindNobleFather(pChild);
+
+            // 长子/继承人(或找不到贵族父亲)留原氏不分封,但当了城主仍刷新贵族身份。
+            bool canEnfeoff = father != null && !IsEldestSon(father, pChild);
+
+            if (canEnfeoff)
+            {
+                // 从父姓族分出新氏支(同姓不同氏)
+                (string clanName, string sourceType) = GenerateShiName(pChild);
+                long shiId = LineageIdAllocator.NextShiId();
+                InsertShiBranch(shiId, lineageId, clanName, pChild, sourceType);
+
+                pChild.data.set(LineageKeys.SHI_ID, shiId);
+                pChild.data.set(LineageKeys.CLAN_NAME, clanName);
+            }
+
+            // 无论是否分封,城主本人都是当代贵族:距离归零、加 guizu。
+            pChild.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            pChild.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            if (!pChild.hasTrait(LineageKeys.TRAIT_GUIZU)) pChild.addTrait(LineageKeys.TRAIT_GUIZU);
+
+            ApplyDisplayName(pChild);
+            ArchiveActor(pChild, pAlive: true);
+        }
+
+        /// <summary>
+        ///     是否"分封候选"=可去新城开新氏支、应更积极建城的多余 male 子嗣:
+        ///     Xia∧成年∧male∧有谱系∧有贵族父亲∧非长子(继承人)。
+        ///     模块 B(分封)与模块 E(积极建城)共用。
+        /// </summary>
+        public static bool IsEnfeoffmentCandidate(Actor pActor)
+        {
+            if (!IsXia(pActor)) return false;
+            if (!pActor.isAdult() || !pActor.isSexMale()) return false;
+
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
+            if (lineageId < 0) return false;
+
+            Actor father = FindNobleFather(pActor);
+            if (father == null) return false;
+
+            return !IsEldestSon(father, pActor); // 长子留原氏,不是分封候选
+        }
+
+        /// <summary>找 pChild 的有谱系父亲:取 parent 里男性且有 lineage_id 的一方。</summary>
+        private static Actor FindNobleFather(Actor pChild)
+        {
+            foreach (long pid in new[] { pChild.data.parent_id_1, pChild.data.parent_id_2 })
+            {
+                if (pid < 0) continue;
+                var p = World.world.units.get(pid);
+                if (p == null || !p.isSexMale()) continue;
+                p.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
+                if (lid >= 0) return p;
+            }
 
             return null;
+        }
+
+        /// <summary>pChild 是否为父亲活 male 子嗣里出生最早者(=继承人/长子,留原氏)。</summary>
+        private static bool IsEldestSon(Actor pFather, Actor pChild)
+        {
+            Actor eldest = null;
+            double eldestTime = double.MaxValue;
+            foreach (var c in pFather.getChildren(pOnlyCurrentFamily: false))
+            {
+                if (c == null || c.isRekt() || !c.isSexMale()) continue;
+                if (c.data.created_time < eldestTime)
+                {
+                    eldestTime = c.data.created_time;
+                    eldest = c;
+                }
+            }
+
+            return eldest == pChild;
+        }
+
+        /// <summary>
+        ///     氏名生成(合流前规则):50% 从词库随机取氏(source=random),
+        ///     50% 取所在城名第一个字作氏(source=enfeoffed 封地)。
+        ///     城名取不到时回退随机氏。返回 (氏名, 来源类型)。
+        /// </summary>
+        private static (string clanName, string sourceType) GenerateShiName(Actor pActor)
+        {
+            bool useCityName = Random.value < 0.5f;
+            if (useCityName)
+            {
+                string cityFirst = FirstChar(pActor.city?.data?.name);
+                if (!string.IsNullOrEmpty(cityFirst))
+                    return (cityFirst, ShiSourceType.ENFEOFFED);
+                // 城名取不到 → 回退随机氏
+            }
+
+            return (LineageNamePool.RandomShi(), ShiSourceType.RANDOM);
         }
 
         private static string FirstChar(string pName)

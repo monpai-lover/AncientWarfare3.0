@@ -5,11 +5,11 @@ namespace AncientWarfare3.patch
 {
     /// <summary>
     ///     贵族晋升:Postfix City.setLeader / Kingdom.setKing。
-    ///     成为城主/国王时,若是 Xia 则赋予或刷新贵族身份(建姓族/氏支、加 guizu、距离归零)。
+    ///     - 城主(setLeader)走分流 OnCityLeaderAppointed:无谱系→初次贵族建姓族+氏支;
+    ///       已有谱系(父系继承)→多余 male 子嗣分封新氏支(长子/继承人留原氏)。
+    ///     - 国王(setKing)是大宗,不分封,直接 OnActorPromoted 赋/刷新贵族身份。
     ///
-    ///     pNew/pFromLoad 为 true(读档恢复)时不应重复晋升,但 LineageService.EnsureLineageForNoble
-    ///     已对"已有谱系"幂等(直接沿用),故读档安全。
-    ///
+    ///     读档/重复设置安全:已有谱系幂等(EnsureLineageForNoble 直接 return,只刷新身份)。
     ///     Postfix 注入,不接管原方法。
     /// </summary>
     [HarmonyPatch]
@@ -20,7 +20,7 @@ namespace AncientWarfare3.patch
         public static void SetLeader_Postfix(Actor pActor)
         {
             if (pActor == null || !LineageService.IsXia(pActor)) return;
-            LineageService.OnActorPromoted(pActor, NobleTrigger.CityLeader);
+            LineageService.OnCityLeaderAppointed(pActor);
         }
 
         [HarmonyPostfix]

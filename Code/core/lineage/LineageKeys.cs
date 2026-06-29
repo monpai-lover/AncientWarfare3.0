@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.lineage
         public const string NOBLE_DISTANCE = "aw_noble_distance";     // 距最近贵族祖先的父系代数,本人贵族=0
         public const string NAME_INTEGRATED = "aw_name_integrated";   // 是否被合流规则处理过(bool)
         public const string LINEAGE_STATUS = "aw_lineage_status";     // none/noble/common_lineage/slave_lineage
+        public const string EAGER_BUILDER = "aw_eager_builder";       // 积极建城候选(多余 male 子嗣) flag,bool
 
         // kingdom.data
         public const string KINGDOM_INTEGRATED = "aw_name_integrated"; // 该国是否完成姓氏合流(bool)
@@ -25,6 +26,12 @@ namespace AncientWarfare3.core.lineage
 
         // noble_distance 达到该值且本人非贵族 → 退回平民,移除 guizu
         public const int NOBLE_DECAY_DISTANCE = 3;
+
+        // ── kingdom.data 自定义字段(随存档序列化) ──
+        public const string KINGDOM_HEIR_ID = "aw_heir_id";          // 继承人 actor id(long)
+        public const string KINGDOM_YEAR_NAME = "aw_year_name";      // 年号中间字(string)
+        public const string KINGDOM_YEAR_START = "aw_year_start";    // 年号起始 world_time(double)
+        public const string KINGDOM_TITLE = "aw_title";              // 头衔等级(int,见 KingdomTitle)
     }
 
     /// <summary>姓族身份状态。</summary>
