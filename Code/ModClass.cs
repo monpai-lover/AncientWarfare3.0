@@ -17,6 +17,9 @@ namespace AncientWarfare3
             // 注册 Harmony 补丁(扫描本程序集所有 [HarmonyPatch])
             new Harmony(GUID).PatchAll();
 
+            // 通用夺舍工具:扫描 [MethodReplace] 用 Transpiler 重定向目标方法体(保留 Prefix/Postfix 链)
+            utils.HarmonyTools.ReplaceMethods();
+
             // 批A:夏朝 Xia 种族 / 王国 / 贴图
             XiaContent.Init();
 

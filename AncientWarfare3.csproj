@@ -51,6 +51,13 @@
 		</Reference>
 	</ItemGroup>
 
+	<!-- SQLite (姓族/氏支/家族树档案持久化): 随 mod 一起分发, 来自本仓库 Assemblies -->
+	<ItemGroup>
+		<Reference Include="System.Data.SQLite">
+			<HintPath>Assemblies\System.Data.SQLite.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
 	<!-- Unity 引擎与第三方库 (来自新版游戏 Managed) -->
 	<ItemGroup>
 		<Reference Include="UnityEngine">
