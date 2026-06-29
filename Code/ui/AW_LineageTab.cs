@@ -38,8 +38,7 @@ namespace AncientWarfare3.ui
 
         private static void OpenOverview()
         {
-            // Task 3 接好窗口后改为 ScrollWindow.showWindow(AW_LineageWindowIds.OVERVIEW)
-            ModClass.LogInfo("[AW3] 姓族列表按钮点击(总览窗待 Task 3 接入)");
+            windows.LineageOverviewWindow.Open();
         }
     }
 }
