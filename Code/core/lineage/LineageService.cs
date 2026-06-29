@@ -214,25 +214,19 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     氏支分封:已有氏支贵族的"多余成年 male 子嗣"去新 city 当 leader 时,
-        ///     从父姓族**分出新氏支**(同姓不同氏,source=enfeoffed 封地)。
-        ///     长子/继承人(父亲活 male 子嗣里出生最早者)留原氏不分。
+        ///     氏支分封:符合分封条件的子嗣去新 city 当 leader 时,从父姓族**分出新氏支**
+        ///     (同姓不同氏,source=enfeoffed)。分封条件见 IsEnfeoffmentCandidate(严格:仅 king 子辈、
+        ///     本宗有冗余、非长子)。不符合者留原氏,但当了城主仍刷新贵族身份。
         ///     由 AW_PromotionPatch.SetLeader_Postfix 在"已有谱系者再当 leader"时调用。
         /// </summary>
         public static void OnNobleChildFounding(Actor pChild)
         {
             if (!IsXia(pChild)) return;
 
-            // 必须已有姓族(从父系继承来的)才谈"分封";否则交给基线 EnsureLineageForNoble。
             pChild.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return;
 
-            Actor father = FindNobleFather(pChild);
-
-            // 长子/继承人(或找不到贵族父亲)留原氏不分封,但当了城主仍刷新贵族身份。
-            bool canEnfeoff = father != null && !IsEldestSon(father, pChild);
-
-            if (canEnfeoff)
+            if (IsEnfeoffmentCandidate(pChild))
             {
                 // 从父姓族分出新氏支(同姓不同氏)
                 (string clanName, string sourceType) = GenerateShiName(pChild);
@@ -253,9 +247,12 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     是否"分封候选"=可去新城开新氏支、应更积极建城的多余 male 子嗣:
-        ///     Xia∧成年∧male∧有谱系∧有贵族父亲∧非长子(继承人)。
-        ///     模块 B(分封)与模块 E(积极建城)共用。
+        ///     是否"分封候选"(模块 B 分封 + 模块 E 积极建城共用,严格化以防本宗绝嗣):
+        ///     ① Xia∧成年∧male∧有谱系;
+        ///     ② 父亲必须是**当前国王**(只分 king 的子辈,孙辈不分 —— 孙辈等其父即位成大宗后才轮到);
+        ///     ③ 非长子(父亲活 male 子嗣里出生最早者留本宗作继承人);
+        ///     ④ **本宗冗余保护**:父亲的同氏支(留原氏)成年活 male 必须 ≥2,才允许把第 3 个起的分出去
+        ///        —— 即长子 + 至少一个备胎留本宗,避免本宗只剩独苗易绝嗣。
         /// </summary>
         public static bool IsEnfeoffmentCandidate(Actor pActor)
         {
@@ -268,7 +265,41 @@ namespace AncientWarfare3.core.lineage
             Actor father = FindNobleFather(pActor);
             if (father == null) return false;
 
-            return !IsEldestSon(father, pActor); // 长子留原氏,不是分封候选
+            // ② 只分当前国王的子辈
+            if (!IsCurrentKing(father)) return false;
+
+            // ③ 长子留本宗
+            if (IsEldestSon(father, pActor)) return false;
+
+            // ④ 本宗冗余保护:除申请人 pActor 外,本宗(与父同氏支)还须留 ≥2 个成年活 male
+            //    (长子 + 至少一个备胎),才允许把 pActor 分出去 —— 防本宗剩独苗绝嗣。
+            if (CountHomeBranchAdultMales(father, pExclude: pActor) < 2) return false;
+
+            return true;
+        }
+
+        /// <summary>father 是否当前所在国家的在位国王。</summary>
+        private static bool IsCurrentKing(Actor pFather)
+        {
+            return pFather.isKing() || pFather.kingdom?.king == pFather;
+        }
+
+        /// <summary>
+        ///     数本宗冗余:父亲的活成年 male 子嗣里,与父亲同氏支(留原氏、未分封出去)的数量,
+        ///     **排除 pExclude(申请分封者自己)**。≥2 表示申请人分走后本宗仍有长子+备胎,不致绝嗣。
+        /// </summary>
+        private static int CountHomeBranchAdultMales(Actor pFather, Actor pExclude = null)
+        {
+            pFather.data.get(LineageKeys.SHI_ID, out long fatherShi, -1);
+            int count = 0;
+            foreach (var c in pFather.getChildren(pOnlyCurrentFamily: false))
+            {
+                if (c == null || c == pExclude || c.isRekt() || !c.isSexMale() || !c.isAdult()) continue;
+                c.data.get(LineageKeys.SHI_ID, out long childShi, -1);
+                if (childShi == fatherShi) count++; // 同父氏支 = 仍在本宗
+            }
+
+            return count;
         }
 
         /// <summary>找 pChild 的有谱系父亲:取 parent 里男性且有 lineage_id 的一方。</summary>
