@@ -5,19 +5,20 @@ using UnityEngine.UI;
 
 namespace AncientWarfare3.ui.items
 {
-    /// <summary>姓族总览的一行:姓名 + 总/存活/贵族/氏支数。点击进入该姓氏支列表。</summary>
-    internal class LineageListItem : AbstractListWindowItem<SurnameOverview>
+    /// <summary>氏支列表的一行:氏支名 + 总/存活/成立年/贵族数。点击进入该氏支大树。</summary>
+    internal class ShiBranchListItem : AbstractListWindowItem<ShiBranchInfo>
     {
         private Text _label;
         private Button _button;
-        private string _familyName;
+        private long _shiId = -1;
 
-        public override void Setup(SurnameOverview pObject)
+        public override void Setup(ShiBranchInfo pObject)
         {
             EnsureUi();
-            _familyName = pObject.family_name;
+            _shiId = pObject.shi_id;
+            int years = Date.getYearsSince(pObject.created_time);
             _label.text =
-                $"{pObject.family_name}   总{pObject.total} 活{pObject.alive} 贵{pObject.noble} 氏{pObject.shi_count}";
+                $"{pObject.clan_name}   总{pObject.total} 活{pObject.alive} 立{years}年 贵{pObject.noble}";
         }
 
         private void EnsureUi()
@@ -52,8 +53,9 @@ namespace AncientWarfare3.ui.items
 
         private void OnClick()
         {
-            if (string.IsNullOrEmpty(_familyName)) return;
-            windows.ShiBranchListWindow.OpenFor(_familyName);
+            if (_shiId < 0) return;
+            // Task 6 接好大树窗后改为 windows.FamilyTreeWindow.OpenBigTree(_shiId)
+            ModClass.LogInfo("[AW3] 点击氏支 shi_id=" + _shiId + "(大树待 Task 6)");
         }
     }
 }
