@@ -16,7 +16,8 @@ namespace AncientWarfare3.ui.items
     {
         private const int AVATAR = 30;     // 头像框边长
         private const int NODE_W = 70;     // 节点宽
-        private const int NODE_H = 56;     // 节点高(头像+名字)
+        private const int NODE_H = 64;     // 节点高(头像+名字,留足名字空间不与头像重叠)
+        private const int NAME_GAP = 8;    // 名字与头像底的间隙(头像旗帜会向下外溢,需多留)
 
         private static UiUnitAvatarElement _avatarPrefab; // 懒克隆自 unit 窗的 avatar element
 
@@ -79,7 +80,7 @@ namespace AncientWarfare3.ui.items
             nrect.anchorMin = new Vector2(0.5f, 1f); nrect.anchorMax = new Vector2(0.5f, 1f);
             nrect.pivot = new Vector2(0.5f, 1f);
             nrect.sizeDelta = new Vector2(NODE_W + 20, 14);
-            nrect.anchoredPosition = new Vector2(0, -(AVATAR + 1));
+            nrect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP)); // 往下挪,避开头像与外溢旗帜
             _nameText = nameObj.GetComponent<Text>();
             _nameText.font = LocalizedTextManager.current_font;
             _nameText.fontSize = 9;
@@ -180,6 +181,9 @@ namespace AncientWarfare3.ui.items
                 // 活人:show 内部 avatarLoader.load + kingdomBanner.load(国家色) + clanBanner.load(氏族色)。
                 // **不要再 tint** —— 旧 bug:SetAvatarTint 遍历所有子 Image,把刚 load 的旗帜配色冲成白色。
                 _avatar.show(live);
+                // clan 旗帜"有时白":原版 ClanBanner 图标用 getColorBanner(),部分颜色的 banner 色近白
+                // (colors_general.json 里有 #FFFEF9 等)→ 随机分到就发白。统一用饱和主色重染,保证永远有色。
+                FixClanBannerColor(live);
                 return;
             }
 
@@ -199,6 +203,26 @@ namespace AncientWarfare3.ui.items
             {
                 TintAvatarBodyOnly(DeadTint);
             }
+        }
+
+        /// <summary>
+        ///     修 clan 旗帜"有时白":原版 ClanBanner 图标(part_icon)用 getColorBanner(),
+        ///     而 colors_general.json 里部分颜色的 banner 色近白(#FFFEF9 等)→ 氏族随机分到就发白。
+        ///     这里在 show 之后,把 clanBanner 的背景+图标都重染成氏族**饱和主色**(getColorMainSecond),
+        ///     保证旗帜永远有明显颜色。part_background/part_icon 是 BannerGeneric protected 字段(publicized 可访问)。
+        /// </summary>
+        private void FixClanBannerColor(Actor pActor)
+        {
+            var cb = _avatar.clanBanner;
+            if (cb == null || !cb.gameObject.activeSelf) return;
+            var clan = pActor.clan;
+            if (clan == null) return;
+
+            Color main = clan.getColor().getColorMainSecond();
+            if (cb.part_background != null)
+                cb.part_background.color = new Color(main.r, main.g, main.b, cb.part_background.color.a);
+            if (cb.part_icon != null)
+                cb.part_icon.color = new Color(main.r, main.g, main.b, cb.part_icon.color.a);
         }
 
         /// <summary>死者国家旗帜还原:活国 kingdomBanner.load(kingdom)(含配色);亡国用存档 kingdom_color 手工染色。</summary>

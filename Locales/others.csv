@@ -1,39 +1,43 @@
-key,cz,ch,en
-Xia,夏,夏,Xia
-Xias,夏人,夏人,Xia
-item_ji,戟,戟,Kiak
-item_ge,戈,戈,Kuai
-item_binfa,孙子兵法,孫子兵法,SuantzuPiangPiwap
-tianming,天命,天命,Mandate of God
-tianminggo,天命,天命,Mandate of God
-public_year_name,盒历,盒曆,Box Calendar
-year_name_format,$year_name$$year_number$年,$year_name$$year_number$年,$year_name$ Year at $year_number$
-first_year_number,元,元,First
-moh_desc_common,天命如常,天命如常,Mandate of God is steady
-vassels,附庸,附庸,Vassels
-status_title_tianming0,天命稳定,天命稳定,Mandate of God is steady
-status_description_tianming0,天命帝国正处于稳定发展的时期,天命帝国正处于稳定发展的时期,The empire now is steadily developing
-status_title_tianmingm1,天命摇摇欲坠,天命摇摇欲坠,Mandate of God is declining
-status_description_tianmingm1,天命不稳定，已经有崩溃之势,天命不稳定，已经有崩溃之势,The empire is now declining
-moh_desc_bad,天命摇摇欲坠,天命摇摇欲坠,Mandate of God is declining
-moh_desc_common,天命如常,天命如常,Mandate of God is steady
-moh_desc_good,天命稳定发展,天命稳定发展,Mandate of God is steadily developing
-village_statistics_heir,继承人,繼承人,Heir
-vasselsrebel,不忠的藩屬,不忠的藩屬,not loyal vassal
-aw_lineage_overview Title,姓族总览,姓族總覽,Lineage Overview
-aw_shi_list Title,氏支列表,氏支列表,Branches
-aw_family_tree Title,家族树,家族樹,Family Tree
-aw_identity,身份,身份,Identity
-aw_family_name,姓,姓,Surname
-aw_clan_name,氏,氏,Clan
-aw_family_tree_entry,家族树,家族樹,Family Tree
-aw_view_family_tree,查看该人的家族树,查看該人的家族樹,View this person's family tree
-aw_year_name,年号,年號,Era Name
-aw_kingdom_title,爵位,爵位,Title
-aw_heir,继承人,繼承人,Heir
-aw_lineage_overview_btn,姓族总览,姓族總覽,Lineage Overview
-aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,查看所有姓與氏支的譜系檔案,View all surname and branch lineage archives
-xia,夏人,夏人,Xia
-xia_description,点击地图生成一个夏人单位,點擊地圖生成一個夏人單位,Click on the map to spawn a Xia unit
-AW3 Lineage,姓族档案,姓族檔案,Lineage Archive
-AW3 Lineage Description,夏朝姓族 / 氏支 / 家族树档案,夏朝姓族 / 氏支 / 家族樹檔案,Xia surname / branch / family tree archive
+key,cz,en,ch
+Xia,夏,Xia,夏
+Xias,夏人,Xia,夏人
+item_ji,戟,Kiak,戟
+item_ge,戈,Kuai,戈
+item_binfa,孙子兵法,SuantzuPiangPiwap,孫子兵法
+ji_description,戟:戈矛合一的青铜长兵，挥击附青色斩击。,Ji: a bronze polearm combining dagger-axe and spear.,戟：戈矛合一的青銅長兵，揮擊附青色斬擊。
+ge_description,戈:勾啄并用的青铜长兵，暴击更高。,Ge: a bronze dagger-axe with higher critical chance.,戈：勾啄並用的青銅長兵，暴擊更高。
+binfa_description,孙子兵法:传世兵书，佩之大幅增益军略。,The Art of War: a legendary text greatly boosting warfare.,孫子兵法：傳世兵書，佩之大幅增益軍略。
+tianming,天命,Mandate of God,天命
+tianminggo,天命,Mandate of God,天命
+public_year_name,盒历,Box Calendar,盒曆
+year_name_format,$year_name$$year_number$年,$year_name$ Year at $year_number$,$year_name$$year_number$年
+first_year_number,元,First,元
+moh_desc_common,天命如常,Mandate of God is steady,天命如常
+vassels,附庸,Vassels,附庸
+status_title_tianming0,天命稳定,Mandate of God is steady,天命穩定
+status_description_tianming0,天命帝国正处于稳定发展的时期,The empire now is steadily developing,天命帝國正處於穩定發展的時期
+status_title_tianmingm1,天命摇摇欲坠,Mandate of God is declining,天命搖搖欲墜
+status_description_tianmingm1,天命不稳定，已经有崩溃之势,The empire is now declining,天命不穩定，已經有崩潰之勢
+moh_desc_bad,天命摇摇欲坠,Mandate of God is declining,天命搖搖欲墜
+moh_desc_good,天命稳定发展,Mandate of God is steadily developing,天命穩定發展
+village_statistics_heir,继承人,Heir,繼承人
+vasselsrebel,不忠的藩属,not loyal vassal,不忠的藩屬
+aw_lineage_overview Title,姓族总览,Lineage Overview,姓族總覽
+aw_shi_list Title,氏支列表,Branches,氏支列表
+aw_family_tree Title,家族树,Family Tree,家族樹
+aw_identity,身份,Identity,身份
+aw_family_name,姓,Surname,姓
+aw_clan_name,氏,Clan,氏
+aw_family_tree_entry,家族树,Family Tree,家族樹
+aw_view_family_tree,查看该人的家族树,View this person's family tree,查看該人的家族樹
+aw_year_name,年号,Era Name,年號
+aw_kingdom_title,爵位,Title,爵位
+aw_heir,继承人,Heir,繼承人
+aw_lineage_overview_btn,姓族总览,Lineage Overview,姓族總覽
+aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,View all surname and branch lineage archives,查看所有姓與氏支的譜系檔案
+xia,夏人,Xia,夏人
+xia_description,点击地图生成一个夏人单位,Click on the map to spawn a Xia unit,點擊地圖生成一個夏人單位
+AW3 Lineage,姓族档案,Lineage Archive,姓族檔案
+AW3 Lineage Description,夏朝姓族 / 氏支 / 家族树档案,Xia surname / branch / family tree archive,夏朝姓族 / 氏支 / 家族樹檔案
+aw_toggle_figure,历史人物降临,Historical Figures,歷史人物降臨
+aw_toggle_figure Description,开关历史人物(姬发/嬴政/刘邦/曹丕/司马炎)按序降临,Toggle whether historical figures spawn in order,開關歷史人物(姬發/嬴政/劉邦/曹丕/司馬炎)按序降臨

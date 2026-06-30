@@ -18,7 +18,7 @@ namespace AncientWarfare3.ui.windows
     {
         private const int DEFAULT_DEPTH = 2;
         private const int NODE_W = 70;
-        private const int NODE_H = 56;
+        private const int NODE_H = 64; // 与 FamilyTreeNodeView.NODE_H 一致(名字下移后增高)
         private const int H_GAP = 12;
         private const int V_GAP = 34;
         private const int PAD = 12;

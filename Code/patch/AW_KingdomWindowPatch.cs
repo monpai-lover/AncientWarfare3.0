@@ -59,71 +59,65 @@ namespace AncientWarfare3.patch
         }
 
         /// <summary>
-        ///     年号:克隆 mottoInput(NameInput)放其正下方。复用 motto 的字体/背景框/布局,
-        ///     只把文本设为年号、设国家色、禁用编辑。按名查重(刷新只更新文本/颜色/可见性)。
+        ///     年号:克隆 motto 的 **textField(那个纯 Text 子物体)** 放其正下方。
+        ///     不克隆整个 NameInput(含 InputField/Mask,绝对定位+裁剪导致之前年号跑偏/消失);
+        ///     textField 是已正确定位的 Text,克隆它、做兄弟、localPosition.y 下移一行最稳。
+        ///     每次刷新重设位置/文本/颜色;无年号则隐藏。
         /// </summary>
         private static void PlaceYearUnderMotto(KingdomWindow pWindow, Kingdom pKingdom)
         {
             NameInput motto = pWindow.mottoInput;
-            if (motto == null) return;
-            Transform parent = motto.transform.parent;
+            if (motto == null || motto.textField == null) return;
+            Transform mottoTextTr = motto.textField.transform;
+            Transform parent = mottoTextTr.parent;
             if (parent == null) return;
 
             string yearName = YearNameService.GetYearName(pKingdom);
 
             Transform existing = parent.Find(YEAR_OBJ);
-            NameInput yearInput;
+            Text yearText;
             if (existing != null)
             {
-                yearInput = existing.GetComponent<NameInput>();
+                yearText = existing.GetComponent<Text>();
             }
             else
             {
-                // 克隆 motto 控件(连同 InputField + Text 子结构、背景框、布局)。
-                var clone = Object.Instantiate(motto.gameObject, parent);
+                // 克隆 motto 的 textField(纯 Text,布局/字体/对齐天然继承)
+                var clone = Object.Instantiate(motto.textField.gameObject, parent);
                 clone.name = YEAR_OBJ;
-                yearInput = clone.GetComponent<NameInput>();
-
-                // 紧跟 motto 之后
-                clone.transform.SetSiblingIndex(motto.transform.GetSiblingIndex() + 1);
-
-                // motto 是锚定/绝对定位,克隆体与 motto 同位置 → 会重叠(用户反馈"年号和 motto 叠一起")。
-                // 把年号克隆体的 RectTransform 在 motto 基础上**往下偏移一行**(motto 高度 + 间距),落到其下方。
-                var mottoRect = motto.GetComponent<RectTransform>();
-                var yearRect = clone.GetComponent<RectTransform>();
-                if (mottoRect != null && yearRect != null)
-                {
-                    float drop = mottoRect.rect.height + 4f; // motto 高 + 4 间距
-                    yearRect.anchorMin = mottoRect.anchorMin;
-                    yearRect.anchorMax = mottoRect.anchorMax;
-                    yearRect.pivot = mottoRect.pivot;
-                    yearRect.sizeDelta = mottoRect.sizeDelta;
-                    yearRect.anchoredPosition = mottoRect.anchoredPosition + new Vector2(0f, -drop);
-                }
-
-                // 禁用编辑:年号不可改(只作展示)。
-                if (yearInput != null && yearInput.inputField != null)
-                {
-                    yearInput.inputField.interactable = false;
-                    yearInput.inputField.readOnly = true;
-                    // 去掉克隆继承来的任何输入监听(克隆体可能带 prefab 上的回调)
-                    yearInput.inputField.onValueChanged.RemoveAllListeners();
-                    yearInput.inputField.onEndEdit.RemoveAllListeners();
-                }
+                yearText = clone.GetComponent<Text>();
+                // 去掉克隆可能带的 LocalizedText 组件(否则会把年号当本地化键)
+                var loc = clone.GetComponent<LocalizedText>();
+                if (loc != null) Object.Destroy(loc);
             }
 
-            if (yearInput == null) return;
+            if (yearText == null) return;
+
+            // 位置:每次刷新重设。复制 motto textField 的 RectTransform,localPosition.y 下移一行。
+            var mottoRect = motto.textField.GetComponent<RectTransform>();
+            var yearRect = yearText.GetComponent<RectTransform>();
+            if (mottoRect != null && yearRect != null)
+            {
+                yearRect.anchorMin = mottoRect.anchorMin;
+                yearRect.anchorMax = mottoRect.anchorMax;
+                yearRect.pivot = mottoRect.pivot;
+                yearRect.sizeDelta = mottoRect.sizeDelta;
+                float drop = mottoRect.rect.height;
+                if (drop < 12f) drop = 18f;
+                Vector3 lp = mottoRect.localPosition;
+                lp.y -= drop + 2f;
+                yearRect.localPosition = lp;
+            }
 
             if (string.IsNullOrEmpty(yearName))
             {
-                yearInput.gameObject.SetActive(false);
+                yearText.gameObject.SetActive(false);
                 return;
             }
 
-            yearInput.gameObject.SetActive(true);
-            yearInput.setText(yearName);
-            if (yearInput.textField != null)
-                yearInput.textField.color = pKingdom.getColor().getColorText();
+            yearText.gameObject.SetActive(true);
+            yearText.text = yearName;
+            yearText.color = pKingdom.getColor().getColorText();
         }
     }
 }

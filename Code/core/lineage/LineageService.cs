@@ -352,7 +352,7 @@ namespace AncientWarfare3.core.lineage
         {
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
 
-            bool useCityName = Random.value < 0.5f;
+            bool useCityName = LineageNamePool.Rng.NextDouble() < 0.5; // 私有RNG,避免全局序列被固定播种
             if (useCityName)
             {
                 string cityFirst = FirstChar(pActor.city?.data?.name); // 取城名时只取 city 首字(单字)
@@ -514,7 +514,7 @@ namespace AncientWarfare3.core.lineage
 
         // ──────────────────────── 内部:写姓族/氏支/国家状态 ────────────────────────
 
-        private static void InsertLineageGroup(long pLineageId, string pFamilyName, Actor pFounder)
+        internal static void InsertLineageGroup(long pLineageId, string pFamilyName, Actor pFounder)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
@@ -529,7 +529,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("IS_EXTINCT", 0));
         }
 
-        private static void InsertShiBranch(long pShiId, long pLineageId, string pClanName, Actor pFounder,
+        internal static void InsertShiBranch(long pShiId, long pLineageId, string pClanName, Actor pFounder,
             string pSourceType)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;

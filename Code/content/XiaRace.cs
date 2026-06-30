@@ -54,7 +54,7 @@ namespace AncientWarfare3.content
 
             // —— 文明属性(蓝图 1.1)——
             Xia.civ_base_cities = 1;             // 旧 civ_baseCities
-            Xia.civ_base_army_multiplier = 0.5f; // 旧 civ_base_army_mod:军事起步弱
+            Xia.civ_base_army_multiplier = 1.2f; // 军事加强:原 0.5(军事起步弱)→ 1.2,军队规模略强于原版(默认 0.35)
             Xia.production = new[] { "bread", "pie", "tea" };
 
             // —— 外观 ——
@@ -75,9 +75,32 @@ namespace AncientWarfare3.content
             Xia.name_taxonomic_genus = "homo";
             Xia.name_taxonomic_species = "sapiens";
 
+            // —— 基因(genome):夏人战斗/文明属性的真正来源 ——
+            // 根因(H18 属性弱):原版种族的 health/damage/speed/warfare 等都来自 addGenome(基因),
+            //   而非 base_stats。human 段显式 addGenome(health100/damage15/speed15/warfare3...);
+            //   夏人 clone 自 $civ_advanced_unit$ 模板(非 clone human),模板本身没 addGenome →
+            //   genome 近乎空 → 夏人战斗属性走最低默认,显著弱于 human。这里给夏人一套略强于 human
+            //   的基因(华夏先进文明:体质/军略/治理/智力全面高一档),addGenome 对已存在 part 是累加。
+            Xia.addGenome(
+                ("health", 130f),       // human 100
+                ("stamina", 120f),      // human 100
+                ("mutation", 1f),
+                ("lifespan", 90f),      // human 70(与下方 base_stats lifespan 对齐)
+                ("damage", 20f),        // human 15
+                ("speed", 16f),         // human 15(略快)
+                ("offspring", 6f),      // human 5
+                ("diplomacy", 5f),      // human 3
+                ("warfare", 5f),        // human 3(军略更强)
+                ("stewardship", 5f),    // human 3
+                ("intelligence", 5f));  // human 3
+
             // —— 单位寿命/繁衍(旧 unit_Xia:max_age 90 / max_children 6)——
+            // base_stats 与 genome 是两套机制,这里保留直接的 base_stats 寿命/繁衍上限。
             Xia.base_stats["lifespan"] = 90f;
             Xia.base_stats["offspring"] = 6f;
+
+            // —— 军事:不再"起步弱"。原 civ_base_army_multiplier=0.5(AW2 蓝图设的军事起步弱),
+            //   现提到 1.2 让夏朝军队规模略强于原版(默认 0.35)。 ——
 
             // —— 贴图接入:逐帧 png 目录(NML ResourcesPatch 自动注入 GameResources)——
             XiaTextures.BindRaceTextures(Xia, TEXTURE_PATH);

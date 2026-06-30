@@ -18,6 +18,14 @@ namespace AncientWarfare3.patch
         public static void Die_Prefix(Actor __instance)
         {
             if (__instance == null || __instance.data == null) return;
+
+            // 历史人物死亡门:figure 死 → 解锁严格顺序的下一位(独立于 IsXia,先处理)。
+            if (__instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIRST) ||
+                __instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIGURE))
+            {
+                content.figures.HistoricalFigureService.OnFigureDied(__instance);
+            }
+
             if (!LineageService.IsXia(__instance)) return;
 
             LineageService.ArchiveActor(__instance, pAlive: false);

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using Random = UnityEngine.Random;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -8,9 +7,17 @@ namespace AncientWarfare3.core.lineage
     ///     古姓 / 氏 名池。直接读 mod 自带的 name_generators/lib/姓.txt 与 氏.txt,
     ///     不依赖"一米_中文名" mod 的 WordLibraryManager —— 后端血缘逻辑独立可用。
     ///     若文件缺失则退化为内置兜底池,保证 LineageService 不会因取不到姓氏而崩。
+    ///
+    ///     ⚠ 取样**必须用 mod 私有 System.Random**,不能用 UnityEngine.Random:
+    ///     世界生成期 MapBox 会 `Random.InitState(Random.Range(...))` 用引擎默认态重新播种全局 RNG,
+    ///     每次冷启动新档得到**同一种子→同一随机序列**→ RandomShi 每档恒取同一下标(实测恒为"慕容")。
+    ///     私有 System.Random(默认时钟种子)不受全局 InitState 影响,跨档真随机。
     /// </summary>
     internal static class LineageNamePool
     {
+        /// <summary>mod 私有 RNG:用时钟种子,不受 MapBox 的 Random.InitState 固定播种影响。</summary>
+        public static readonly System.Random Rng = new System.Random();
+
         private static List<string> _surnames; // 姓(上古血统姓)
         private static List<string> _shiNames; // 氏(后天族名池)
 
@@ -27,13 +34,13 @@ namespace AncientWarfare3.core.lineage
         public static string RandomSurname()
         {
             var list = Surnames;
-            return list[Random.Range(0, list.Count)];
+            return list[Rng.Next(list.Count)];
         }
 
         public static string RandomShi()
         {
             var list = ShiNames;
-            return list[Random.Range(0, list.Count)];
+            return list[Rng.Next(list.Count)];
         }
 
         private static List<string> LoadOrFallback(string pFileName, string[] pFallback)

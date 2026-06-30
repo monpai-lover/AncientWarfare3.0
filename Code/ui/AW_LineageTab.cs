@@ -43,6 +43,13 @@ namespace AncientWarfare3.ui
                 SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
             tab.AddPowerButton(GROUP_CREATURE, spawnButton);
 
+            // 历史人物开关(toggle 按钮,绑定 aw_toggle_figure power;默认开,见 HistoricalFigureService)。
+            // 关闭后 TrySpawnOn 早退,不再生成历史人物。
+            PowerButton figureToggle = PowerButtonCreator.CreateToggleButton(
+                content.figures.HistoricalFigureService.TOGGLE_POWER_ID,
+                SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
+            if (figureToggle != null) tab.AddPowerButton(GROUP_CREATURE, figureToggle);
+
             tab.UpdateLayout();
         }
 

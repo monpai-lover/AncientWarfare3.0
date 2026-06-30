@@ -139,15 +139,27 @@ namespace AncientWarfare3.content
             }
         }
 
-        /// <summary>校验夏朝建筑贴图存在;缺(library_Xia/market_Xia)则把 sprite_path 直指 human 源建筑贴图,回退外观。</summary>
+        /// <summary>
+        ///     校验夏朝建筑贴图存在;缺则回退到 human 源建筑的**已知有效贴图键**(防主贴图 null 崩)。
+        ///     根因(Player.log 海量 DynamicSprites.getRecoloredBuilding null):之前用 `src.main_path + src.id`
+        ///     拼回退路径,但 human 源建筑的 main_path 是默认 "buildings/" 而非 "buildings/civ_main/human/",
+        ///     拼出的键无图 → loadBuildingSprites 的 list_main 为空 → calculateMainSprite 返回 null
+        ///     → getRecoloredBuilding(null) 每帧崩。这里直接用确定存在的 civ_main/human/{src.id} 键。
+        ///     (library_Xia/market_Xia 现已复制 human 贴图到 Xia 目录,正常不会走回退;此处仅防御。)
+        /// </summary>
         private static void EnsureSpritesOrFallback(BuildingAsset b, BuildingAsset src)
         {
             Sprite[] list = SpriteTextureLoader.getSpriteList(b.main_path + b.id);
             if (list != null && list.Length > 0) return;
 
-            // loadBuildingSpriteList 优先用 sprite_path(BuildingAsset.cs:686),指向 human 源建筑贴图键。
-            b.sprite_path = string.IsNullOrEmpty(src.sprite_path) ? (src.main_path + src.id) : src.sprite_path;
-            ModClass.LogWarning("XiaArchitecture: 建筑 '" + b.id + "' 无专属贴图,回退 human 外观(" + b.sprite_path + ")。");
+            // 回退:直指 human 源建筑在 civ_main 下的真实贴图目录(确定有 main_0)。
+            string humanKey = "buildings/civ_main/human/" + src.id;
+            Sprite[] humanList = SpriteTextureLoader.getSpriteList(humanKey);
+            if (humanList == null || humanList.Length == 0)
+                humanKey = "buildings/civ_main/human/house_human_0"; // 兜底:house 必然存在
+
+            b.sprite_path = humanKey;
+            ModClass.LogWarning("XiaArchitecture: 建筑 '" + b.id + "' 无专属贴图,回退 human 外观(" + humanKey + ")。");
         }
     }
 }

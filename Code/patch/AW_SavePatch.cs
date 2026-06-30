@@ -28,6 +28,7 @@ namespace AncientWarfare3.patch
         {
             if (string.IsNullOrEmpty(pPath)) return;
             LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
+            FigureStateStore.Load(); // DB 已切到该存档的库 → 刷新历史人物生成状态内存缓存
         }
 
         [HarmonyPostfix]
@@ -35,6 +36,7 @@ namespace AncientWarfare3.patch
         public static void GenerateNewMap_Postfix()
         {
             LineageArchiveManager.Instance.CreateDataBase();
+            FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
         }
     }
 }

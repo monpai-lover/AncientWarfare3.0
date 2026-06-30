@@ -27,10 +27,18 @@ namespace AncientWarfare3.content
             // 新版剑基础模板是 "$sword"(带 $ 前缀;"sword" 只是武器池/组名,非真实 item)
             ItemAsset ji = AssetManager.items.clone("ji", "$sword");
             ji.path_icon = "ui/Icons/items/icon_ji";
+            // clone 自 $sword 会继承 equipment_subtype="sword" → 标题键回退成 item_sword(显示"剑")。
+            // 显式设 translation_key 让标题用我们的键 item_ji(=戟)。getLocaleID() 里 translation_key 优先。
+            ji.translation_key = "item_ji";
             // ⚠ ji/ge clone 自 $sword,继承 is_pool_weapon=true。但 mod 在原版 ItemLibrary.post_init()
             //   跑完后才注册,post_init 不会回头补处理新物品 → path_gameplay_sprite 停留在 null,
             //   进图时 loadSprites() 拿 null 去字典 TryGetValue 直接崩(ArgumentNullException: key)。
             //   这里手动补设 post_init 漏掉的那步:地图武器贴图路径(贴图已从 AW2 继承到 items/weapons/)。
+            // ⚠ 在手位置(pivot):NML 加载散 PNG 时 pivot 硬编码=(0.5,0.5)=画布中心,
+            //   会让手抓在武器中段而非握把端 → 武器上浮。原版武器靠 .meta 自定义 pivot 把"握把端"
+            //   设为手锚点。我们用 NML 官方机制:在贴图同目录放 sprites.json 设 PivotX/PivotY
+            //   (见 GameResources/items/weapons/w_ji/sprites.json,pivot=(0.6875,0.1) 对准底部柄列),
+            //   PixelsPerUnit=1 保持武器原始大小不变。无需改代码/改贴图像素。
             ji.path_gameplay_sprite = "items/weapons/w_ji";
             ji.name_class = "item_class_weapon";
             ji.equipment_type = EquipmentType.Weapon;
@@ -48,6 +56,7 @@ namespace AncientWarfare3.content
             // ===== 戈 ge(clone 剑基础模板,暴击翻倍)=====
             ItemAsset ge = AssetManager.items.clone("ge", "$sword");
             ge.path_icon = "ui/Icons/items/icon_ge";
+            ge.translation_key = "item_ge"; // 同 ji:避免标题回退成 item_sword(剑)
             ge.path_gameplay_sprite = "items/weapons/w_ge"; // 同 ji:补 post_init 漏设的地图武器贴图路径,避免 null 崩
             ge.name_class = "item_class_weapon";
             ge.equipment_type = EquipmentType.Weapon;
@@ -66,6 +75,7 @@ namespace AncientWarfare3.content
             // 新版护符基础模板是 "$amulet"(带 $ 前缀,旧版 "_accessory" 已变)
             ItemAsset binfa = AssetManager.items.clone("binfa", "$amulet");
             binfa.path_icon = "ui/Icons/items/icon_binfa";
+            binfa.translation_key = "item_binfa"; // 避免标题回退成 item_amulet
             binfa.name_class = "item_class_accessory";
             binfa.equipment_type = EquipmentType.Amulet;
             binfa.quality = Rarity.R3_Legendary;
