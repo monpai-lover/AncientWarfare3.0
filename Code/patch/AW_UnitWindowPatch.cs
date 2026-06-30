@@ -34,15 +34,15 @@ namespace AncientWarfare3.patch
 
             bool integrated = IsKingdomIntegrated(actor);
 
-            // 身份行
-            __instance.showStatRow("aw_identity", IdentityText(status));
+            // 身份行(label 经本地化键"身份"显示,value 原样中文;showStatRow 只本地化 label)
+            ShowRawRow(__instance, "aw_identity", IdentityText(status));
 
             bool isNoble = status == LineageStatus.NOBLE;
 
             // 姓行(合流前贵族显示,点→该姓氏支列表)
             if (!integrated && isNoble && !string.IsNullOrEmpty(family))
             {
-                var kvf = __instance.showStatRow("aw_family_name", family);
+                var kvf = ShowRawRow(__instance, "aw_family_name", family);
                 if (kvf != null)
                 {
                     string f = family;
@@ -53,7 +53,7 @@ namespace AncientWarfare3.patch
             // 氏行(合流前贵族 或 合流后所有人;点→氏族大树)
             if ((isNoble || integrated) && !string.IsNullOrEmpty(clan) && shiId >= 0)
             {
-                var kvf = __instance.showStatRow("aw_clan_name", clan);
+                var kvf = ShowRawRow(__instance, "aw_clan_name", clan);
                 if (kvf != null)
                 {
                     long s = shiId;
@@ -61,14 +61,18 @@ namespace AncientWarfare3.patch
                 }
             }
 
-            // 家族树按钮行(有谱系者一律有,点→本人家族树,back 到本氏支)
-            var treeRow = __instance.showStatRow("aw_family_tree_entry", "查看家族树");
-            if (treeRow != null)
-            {
-                long center = actor.data.id;
-                long backShi = shiId;
-                treeRow.on_click_value = () => FamilyTreeWindow.OpenFamilyTree(center, backShi);
-            }
+            // 家族树入口已移到 unit 窗侧栏按钮(AW_UnitTabPatch),此处不再加 stats 行。
+        }
+
+        /// <summary>
+        ///     加一行:label(pId)经本地化键显示(年号/氏 等),value 原样(中文名)。
+        ///     ⚠ StatsRowsContainer.showStatRow:70 只对 **pId(label)** 做 LM.getText,value 永远原样
+        ///     (`pValue.ToString()`,:89)。故 pLocalize **必须 true**(否则 label 显示成 aw_clan_name 原始键),
+        ///     value 不会因此被当本地化键(不会 missing text)。
+        /// </summary>
+        private static KeyValueField ShowRawRow(UnitWindow pWindow, string pId, string pValue)
+        {
+            return pWindow.showStatRow(pId, pValue);
         }
 
         private static bool IsKingdomIntegrated(Actor pActor)

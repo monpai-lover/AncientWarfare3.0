@@ -27,6 +27,11 @@ namespace AncientWarfare3.content
             // 新版剑基础模板是 "$sword"(带 $ 前缀;"sword" 只是武器池/组名,非真实 item)
             ItemAsset ji = AssetManager.items.clone("ji", "$sword");
             ji.path_icon = "ui/Icons/items/icon_ji";
+            // ⚠ ji/ge clone 自 $sword,继承 is_pool_weapon=true。但 mod 在原版 ItemLibrary.post_init()
+            //   跑完后才注册,post_init 不会回头补处理新物品 → path_gameplay_sprite 停留在 null,
+            //   进图时 loadSprites() 拿 null 去字典 TryGetValue 直接崩(ArgumentNullException: key)。
+            //   这里手动补设 post_init 漏掉的那步:地图武器贴图路径(贴图已从 AW2 继承到 items/weapons/)。
+            ji.path_gameplay_sprite = "items/weapons/w_ji";
             ji.name_class = "item_class_weapon";
             ji.equipment_type = EquipmentType.Weapon;
             ji.material = "bronze";
@@ -43,6 +48,7 @@ namespace AncientWarfare3.content
             // ===== 戈 ge(clone 剑基础模板,暴击翻倍)=====
             ItemAsset ge = AssetManager.items.clone("ge", "$sword");
             ge.path_icon = "ui/Icons/items/icon_ge";
+            ge.path_gameplay_sprite = "items/weapons/w_ge"; // 同 ji:补 post_init 漏设的地图武器贴图路径,避免 null 崩
             ge.name_class = "item_class_weapon";
             ge.equipment_type = EquipmentType.Weapon;
             ge.material = "bronze";

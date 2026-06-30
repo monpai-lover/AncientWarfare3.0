@@ -16,7 +16,9 @@ namespace AncientWarfare3.content
     public static class XiaRace
     {
         public const string ID = "Xia";
-        public const string TEXTURE_PATH = "actors/races/Xia/";
+        // 贴图根路径已统一到 Cultiway 标准 actors/species/civs/{id}/(原 actors/races/Xia/)。
+        // 子目录名仍保留 AW2 命名(unit_male_1 等),由 XiaTextures.BindSkinArrays 扫描对齐。
+        public const string TEXTURE_PATH = "actors/species/civs/Xia/";
 
         public static ActorAsset asset;
 
@@ -35,12 +37,20 @@ namespace AncientWarfare3.content
             // —— 王国关联 ——
             Xia.kingdom_id_wild = "nomads_Xia";
             Xia.kingdom_id_civilization = ID;
-            Xia.banner_id = "Xia";
+            // 旗帜:新版从 banners_kingdoms/{banner_id}/background|icon 扫贴图(KingdomBannerLibrary.loadNewAssetRuntime)。
+            // 夏朝旗帜贴图放 GameResources/banners_kingdoms/Xia/(继承自 AW2)。**防御**:贴图缺失会导致
+            // backgrounds 空 → Kingdom.getElementBackground 取 backgrounds[0] 越界(每帧名牌渲染崩 ArgumentOutOfRange),
+            // 原版 post_init(ActorAssetLibrary:1308)只 log 不回退。故此处校验贴图存在,缺则回退 human 旗帜。
+            Xia.banner_id =
+                SpriteTextureLoader.getSpriteList(KingdomBannerLibrary.getFullPathBackground("Xia")).Length > 0
+                    ? "Xia"
+                    : "human";
 
-            // —— 建筑 ——(暂复用 human 建筑集,批D 再做夏朝专属建筑)
-            Xia.architecture_id = "human";
-            Xia.architecture_asset = AssetManager.architecture_library.get("human");
-            Xia.build_order_template_id = "build_order_advanced";
+            // —— 建筑 ——(夏朝专属 architecture,见 XiaArchitecture;在本 Init 之前已注册)
+            Xia.architecture_id = "Xia";
+            Xia.architecture_asset = AssetManager.architecture_library.get("Xia")
+                                     ?? AssetManager.architecture_library.get("human"); // 兜底
+            Xia.build_order_template_id = "build_order_advanced"; // 种族建造技术树,与建筑外观无关,保留
 
             // —— 文明属性(蓝图 1.1)——
             Xia.civ_base_cities = 1;             // 旧 civ_baseCities
@@ -51,6 +61,14 @@ namespace AncientWarfare3.content
             Xia.color_hex = "#33724D";
             Xia.color = Toolbox.makeColor("#33724D");
             Xia.zombie_color_hex = "#00AD2C";
+
+            // check_flip 兜底:原版 ActorAssetLibrary.linkAssets(L957)给 check_flip==null 的 asset 补默认委托,
+            // 但 mod 在 OnModLoad clone 注册晚于 linkAssets → Xia 漏补 → 移动时 asset.check_flip(this) 抛
+            // NullReferenceException(Actor.checkFlip / ActorMovement.cs:91)。手动补与原版同款默认委托。
+            if (Xia.check_flip == null)
+            {
+                Xia.check_flip = (BaseSimObject pObj, WorldTile pTile) => true;
+            }
 
             // —— 分类学(沿用 human 谱系)——
             Xia.cloneTaxonomyFromForSapiens("human");

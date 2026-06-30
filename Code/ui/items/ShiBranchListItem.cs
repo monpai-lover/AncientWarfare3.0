@@ -27,23 +27,41 @@ namespace AncientWarfare3.ui.items
 
             var rect = gameObject.GetComponent<RectTransform>();
             if (rect == null) rect = gameObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(220, 24);
+            rect.sizeDelta = new Vector2(220, 28);
 
             var le = gameObject.GetComponent<LayoutElement>();
             if (le == null) le = gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 24;
-            le.preferredHeight = 24;
+            le.minHeight = 28;
+            le.preferredHeight = 28;
+
+            // 背景框
+            var bg = gameObject.GetComponent<Image>();
+            if (bg == null) bg = gameObject.AddComponent<Image>();
+            bg.sprite = SpriteTextureLoader.getSprite("ui/special/buttonRed");
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(1f, 1f, 1f, 0.5f);
 
             _button = gameObject.GetComponent<Button>();
             if (_button == null) _button = gameObject.AddComponent<Button>();
             _button.onClick.AddListener(OnClick);
+
+            // 左侧氏支图标(用氏族图标)
+            var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconObj.transform.SetParent(transform, false);
+            var irect = iconObj.GetComponent<RectTransform>();
+            irect.anchorMin = new Vector2(0f, 0.5f); irect.anchorMax = new Vector2(0f, 0.5f);
+            irect.pivot = new Vector2(0f, 0.5f);
+            irect.sizeDelta = new Vector2(22, 22); irect.anchoredPosition = new Vector2(4, 0);
+            var icon = iconObj.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite("ui/icons/iconClan");
+            icon.preserveAspect = true;
 
             var textObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
             textObj.transform.SetParent(transform, false);
             var trect = textObj.GetComponent<RectTransform>();
             trect.anchorMin = Vector2.zero;
             trect.anchorMax = Vector2.one;
-            trect.sizeDelta = Vector2.zero;
+            trect.offsetMin = new Vector2(30, 0); trect.offsetMax = new Vector2(-4, 0);
             _label = textObj.GetComponent<Text>();
             _label.font = LocalizedTextManager.current_font;
             _label.fontSize = 11;

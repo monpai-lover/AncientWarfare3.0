@@ -14,8 +14,9 @@ namespace AncientWarfare3.ui.windows
         {
             _contextFamilyName = pFamilyName ?? "";
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.SHI_LIST);
-            ScrollWindow.showWindow(AW_LineageWindowIds.SHI_LIST);
-            if (Instance != null && Instance.gameObject.activeInHierarchy) Instance.Refresh();
+            // 已是当前窗(换姓再点)→ 只刷新;否则打开(pBlockSame=true 防叠栈)。OnNormalEnable 也会刷新。
+            AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.SHI_LIST,
+                () => { if (Instance != null) Instance.Refresh(); });
         }
 
         protected override void Init() { }

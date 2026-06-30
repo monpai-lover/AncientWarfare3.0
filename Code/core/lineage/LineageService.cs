@@ -56,15 +56,20 @@ namespace AncientWarfare3.core.lineage
             ArchiveActor(pBaby, pAlive: true);
         }
 
-        /// <summary>确保有单名 aw_given_name(取当前游戏名作单名兜底)。</summary>
+        /// <summary>
+        ///     确保有单名 aw_given_name(取当前游戏名首字作单名)。
+        ///     合流前个人名一律单字(任务书:姓氏合流之前所有人只取一个字符),
+        ///     故无论游戏名是单/双/三字,这里都收窄为**首字**。已写过的不覆盖(幂等)。
+        /// </summary>
         private static void EnsureGivenName(Actor pActor)
         {
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             if (!string.IsNullOrEmpty(given)) return;
 
-            // 用游戏已生成的名字作单名素材;中文名 mod 在时这里通常已是单名/双名。
+            // 用游戏已生成的名字取首字作单名(中文 BMP 单字,Substring(0,1) 安全)。
             string raw = pActor.getName();
-            pActor.data.set(LineageKeys.GIVEN_NAME, string.IsNullOrEmpty(raw) ? "" : raw);
+            string single = FirstChar(raw) ?? "";
+            pActor.data.set(LineageKeys.GIVEN_NAME, single);
         }
 
         /// <summary>
@@ -339,19 +344,27 @@ namespace AncientWarfare3.core.lineage
         ///     氏名生成(合流前规则):50% 从词库随机取氏(source=random),
         ///     50% 取所在城名第一个字作氏(source=enfeoffed 封地)。
         ///     城名取不到时回退随机氏。返回 (氏名, 来源类型)。
+        ///     **取自城名时只取 city 第一个字**(单字);**随机氏池保留原样**——复氏(慕容/夏后…)允许整取。
+        ///     **氏 ≠ 姓**:生成的氏若与本人 family_name 相同(城名首字恰为姓、或随机池命中姓字),
+        ///     则重 roll 随机氏直到不同(有限次兜底),避免"氏取成姓的字符"。
         /// </summary>
         private static (string clanName, string sourceType) GenerateShiName(Actor pActor)
         {
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+
             bool useCityName = Random.value < 0.5f;
             if (useCityName)
             {
-                string cityFirst = FirstChar(pActor.city?.data?.name);
-                if (!string.IsNullOrEmpty(cityFirst))
+                string cityFirst = FirstChar(pActor.city?.data?.name); // 取城名时只取 city 首字(单字)
+                if (!string.IsNullOrEmpty(cityFirst) && cityFirst != family)
                     return (cityFirst, ShiSourceType.ENFEOFFED);
-                // 城名取不到 → 回退随机氏
+                // 城名取不到或与姓同字 → 回退随机氏(下方保证≠姓;复氏原样保留)
             }
 
-            return (LineageNamePool.RandomShi(), ShiSourceType.RANDOM);
+            string shi = LineageNamePool.RandomShi(); // 随机氏原样(复氏如慕容/夏后整取,不收窄)
+            for (int i = 0; i < 8 && !string.IsNullOrEmpty(family) && shi == family; i++)
+                shi = LineageNamePool.RandomShi();
+            return (shi, ShiSourceType.RANDOM);
         }
 
         private static string FirstChar(string pName)
@@ -426,6 +439,11 @@ namespace AncientWarfare3.core.lineage
             }
 
             pActor.data.set("display_name", display);
+
+            // 把全名写回游戏内真名(否则晋升/合流后地图/窗口仍显旧名 —— 用户反馈"始祖变贵族后名字没变")。
+            // 调用方均为 Postfix(出生/晋升/合流/衰落),非出生中途,setName 安全不递归。
+            if (!string.IsNullOrEmpty(display) && pActor.getName() != display)
+                pActor.setName(display);
         }
 
         // ───────────────────────────── 归档 ─────────────────────────────

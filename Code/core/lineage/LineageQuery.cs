@@ -306,7 +306,9 @@ namespace AncientWarfare3.core.lineage
                     noble_distance = (int)nd,
                     birth_time = live.data.created_time,
                     death_time = -1,
+                    kingdom_id = live.kingdom?.id ?? -1,
                     kingdom_name = live.kingdom?.name ?? "",
+                    kingdom_color = live.kingdom?.getColor()?.color_text ?? "",
                     city_name = live.city?.data?.name ?? ""
                 };
             }
@@ -325,7 +327,9 @@ namespace AncientWarfare3.core.lineage
                 noble_distance = row.noble_distance,
                 birth_time = row.birth_time,
                 death_time = row.death_time,
+                kingdom_id = row.kingdom_id,
                 kingdom_name = row.kingdom_name ?? "",
+                kingdom_color = row.kingdom_color ?? "",
                 city_name = row.city_name ?? "",
                 head = row.head,
                 skin = row.skin,

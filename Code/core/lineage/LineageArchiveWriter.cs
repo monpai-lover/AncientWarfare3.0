@@ -39,6 +39,7 @@ namespace AncientWarfare3.core.lineage
             double birth = pActor.data.created_time;
             long kingdomId = pActor.kingdom?.id ?? -1;
             string kingdomName = pActor.kingdom?.name ?? "";
+            string kingdomColor = pActor.kingdom?.getColor()?.color_text ?? "";
             long cityId = pActor.city?.data?.id ?? -1;
             string cityName = pActor.city?.data?.name ?? "";
             long clanId = pActor.clan?.data?.id ?? -1;
@@ -73,6 +74,8 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("IS_ALIVE", pAlive ? 1 : 0)
                 };
                 if (!pAlive) cols.Add(ColumnVal.Create("DEATH_TIME", LineageService.CurTime()));
+                // 仅在能取到国家颜色时更新,避免亡国/无国的死亡 upsert 把已存色覆盖成空(用户要求亡国不丢色)。
+                if (!string.IsNullOrEmpty(kingdomColor)) cols.Add(ColumnVal.Create("KINGDOM_COLOR", kingdomColor));
 
                 db.UpdateValue(table,
                     new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", id) },
@@ -95,6 +98,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("NAME_INTEGRATED", integrated ? 1 : 0),
                 ColumnVal.Create("KINGDOM_ID", kingdomId),
                 ColumnVal.Create("KINGDOM_NAME", kingdomName),
+                ColumnVal.Create("KINGDOM_COLOR", kingdomColor),
                 ColumnVal.Create("CITY_ID", cityId),
                 ColumnVal.Create("CITY_NAME", cityName),
                 ColumnVal.Create("ORIGINAL_CLAN_ID", clanId),

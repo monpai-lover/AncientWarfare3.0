@@ -11,7 +11,8 @@ namespace AncientWarfare3.ui.windows
         public static void Open()
         {
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.OVERVIEW);
-            ScrollWindow.showWindow(AW_LineageWindowIds.OVERVIEW);
+            AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.OVERVIEW,
+                () => { if (Instance != null) Instance.Refresh(); });
         }
 
         protected override void Init()

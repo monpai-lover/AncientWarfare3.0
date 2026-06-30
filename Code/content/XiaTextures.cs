@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace AncientWarfare3.content
@@ -28,6 +30,13 @@ namespace AncientWarfare3.content
             // has_advanced_textures=true 才会按职业(战士/国王/领袖)区分贴图,人形种族需要。
             pAsset.has_advanced_textures = true;
             pAsset.render_heads_for_babies = false;
+
+            // ⚠ 核心修复(PixelBag 越界根因):新版种族靠 skin_citizen_* 数组(子目录名)定位多套皮肤,
+            //   单位 spawn 时按同一随机索引取 male/female/warrior 三数组对应项,拼 base+skinName 加载贴图。
+            //   clone($civ_advanced_unit$) 继承的默认值是 ["male_1"…"male_10"](无 unit_ 前缀),
+            //   与 AW2 实际目录名 unit_male_1 对不上 → 拼出不存在路径 → 拿空 sprite 数组 → 下游按帧索引越界崩。
+            //   照搬 Cultiway 范式:动态扫 mod 磁盘目录得到真实皮肤名,天然对齐、天然等长。
+            BindSkinArrays(pAsset, pBasePath);
 
             var tex = new ActorTextureSubAsset(pBasePath, pAsset.has_advanced_textures);
             pAsset.texture_asset = tex;
@@ -63,6 +72,54 @@ namespace AncientWarfare3.content
                 tex.shadow_texture_baby = pAsset.shadow_texture_baby;
                 tex.loadShadow();
             }
+        }
+
+        /// <summary>
+        ///     设 skin_citizen_male/female/warrior 三数组(平民/战士多套皮肤的子目录名)。
+        ///     动态扫 mod 磁盘 GameResources/&lt;pBasePath&gt; 下 unit_male_*/unit_female_*/unit_warrior_* 子目录,
+        ///     得到与磁盘一致的真实皮肤名。三数组**必须等长**(Subspecies 用同一随机索引取三者,长度不一会越界),
+        ///     故按三者最小数量截齐。任一类扫不到则整体回退到单皮肤,绝不留空数组(空数组同样会越界)。
+        /// </summary>
+        private static void BindSkinArrays(ActorAsset pAsset, string pBasePath)
+        {
+            string root = ModClass.Instance.GetDeclaration().FolderPath + "/GameResources/" + pBasePath;
+
+            string[] males = ScanSkins(root, "unit_male_");
+            string[] females = ScanSkins(root, "unit_female_");
+            string[] warriors = ScanSkins(root, "unit_warrior_");
+
+            // 三者等长截齐(同一 skin_id 索引三数组)。任一为空则全部回退单皮肤。
+            int count = Math.Min(males.Length, Math.Min(females.Length, warriors.Length));
+            if (count <= 0)
+            {
+                pAsset.skin_citizen_male = new[] { "unit_male_1" };
+                pAsset.skin_citizen_female = new[] { "unit_female_1" };
+                pAsset.skin_warrior = new[] { "unit_warrior_1" };
+                ModClass.LogWarning("Xia skin 目录扫描为空,回退单皮肤 unit_*_1。检查 " + root);
+                return;
+            }
+
+            pAsset.skin_citizen_male = males.Take(count).ToArray();
+            pAsset.skin_citizen_female = females.Take(count).ToArray();
+            pAsset.skin_warrior = warriors.Take(count).ToArray();
+        }
+
+        /// <summary>扫给定根目录下以 pPrefix 开头的子目录名(仅目录名,不含路径),按编号自然排序。</summary>
+        private static string[] ScanSkins(string pRoot, string pPrefix)
+        {
+            if (!Directory.Exists(pRoot)) return Array.Empty<string>();
+            return Directory.GetDirectories(pRoot)
+                .Select(d => new DirectoryInfo(d).Name)
+                .Where(n => n.StartsWith(pPrefix, StringComparison.Ordinal))
+                .OrderBy(n => ParseTrailingNumber(n, pPrefix))
+                .ToArray();
+        }
+
+        /// <summary>取目录名末尾编号(unit_male_10→10),用于自然排序(避免 _10 排到 _2 前)。</summary>
+        private static int ParseTrailingNumber(string pName, string pPrefix)
+        {
+            string tail = pName.Substring(pPrefix.Length);
+            return int.TryParse(tail, out int n) ? n : int.MaxValue;
         }
     }
 }

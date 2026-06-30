@@ -101,6 +101,7 @@ namespace AncientWarfare3.core.db
                 File.Copy(savedDb, runtime, overwrite: true);
                 _db = new SQLiteConnection("data source=" + runtime);
                 _db.Open();
+                EnsureLoadedSchema(); // 注册表元信息 + 旧档案幂等补列(否则 Insert 抛 KeyNotFound / no such column)
                 InitializeSuccessful = true;
             }
             catch (Exception e)
@@ -140,8 +141,29 @@ namespace AncientWarfare3.core.db
             if (File.Exists(path)) File.Delete(path);
         }
 
-        /// <summary>反射扫描本程序集所有 [TableDef] 类,按字段类型建表。</summary>
+        /// <summary>反射扫描本程序集所有 [TableDef] 类,按字段类型**建表**(新库用)。</summary>
         private void InitializeTables()
+        {
+            foreach (var (tableName, cols) in EnumerateTableSchemas())
+                if (cols.Count > 0) _db.CreateTable(tableName, cols);
+        }
+
+        /// <summary>
+        ///     从存档**加载已有库**后调用:① 注册表元信息(_tableInfos,否则 Insert 抛 KeyNotFound);
+        ///     ② 幂等补列(旧版本存档缺新代码加的列,如 KINGDOM_COLOR,补上避免 INSERT no such column)。
+        /// </summary>
+        private void EnsureLoadedSchema()
+        {
+            foreach (var (tableName, cols) in EnumerateTableSchemas())
+            {
+                if (cols.Count == 0) continue;
+                SQLiteHelper.RegisterTable(tableName, cols);
+                _db.AddMissingColumns(tableName, cols);
+            }
+        }
+
+        /// <summary>反射出每个 [TableDef] 类对应的 (表名, 列定义)。建表 / 补列共用。</summary>
+        private static IEnumerable<(string, List<SQLiteHelper.ColumnDef>)> EnumerateTableSchemas()
         {
             var types = Assembly.GetExecutingAssembly().GetTypes();
             foreach (var type in types)
@@ -174,8 +196,7 @@ namespace AncientWarfare3.core.db
                         attribute.IsNotNull, attribute.DefaultValue, attribute.Check)
                 ).ToList();
 
-                if (cols.Count > 0)
-                    _db.CreateTable(table_def.Name, cols);
+                yield return (table_def.Name, cols);
             }
         }
     }

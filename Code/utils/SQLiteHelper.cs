@@ -210,6 +210,43 @@ namespace AncientWarfare3.utils
             _tableInfos[pTableName] = new TableInfo(pTableName, pCols);
         }
 
+        /// <summary>
+        ///     仅注册表元信息(_tableInfos),不执行 CREATE —— 用于从存档**加载已有库**时,
+        ///     让 Insert/UpdateValue 能拿到 prepare 语句(否则 _tableInfos 为空,Insert 抛 KeyNotFound)。
+        /// </summary>
+        public static void RegisterTable(string pTableName, List<ColumnDef> pCols)
+        {
+            _tableInfos[pTableName] = new TableInfo(pTableName, pCols);
+        }
+
+        /// <summary>
+        ///     幂等补列:对已存在的表,PRAGMA 取现有列,把 pCols 里缺的列 ALTER TABLE ADD COLUMN 补上。
+        ///     用于存档由旧版本(无新列)迁到新版本(代码加了字段)时,避免 INSERT 报 no such column。
+        ///     SQLite 的 ADD COLUMN 不支持加 PRIMARY KEY/UNIQUE,这里只补普通列(新加字段都是普通列)。
+        /// </summary>
+        public static void AddMissingColumns(this SQLiteConnection pThis, string pTableName, List<ColumnDef> pCols)
+        {
+            if (pThis == null) return;
+
+            var existing = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            using (var cmd = new SQLiteCommand(pThis))
+            {
+                cmd.CommandText = $"PRAGMA table_info({pTableName})";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read()) existing.Add(reader.GetString(1)); // 列1 = name
+            }
+            if (existing.Count == 0) return; // 表不存在(理论上加载库都有),交给上层建表
+
+            foreach (var col in pCols)
+            {
+                if (existing.Contains(col.Name)) continue;
+                if (col.IsPrimary) continue; // 主键不能 ADD COLUMN
+                using var cmd = new SQLiteCommand(pThis);
+                cmd.CommandText = $"ALTER TABLE {pTableName} ADD COLUMN {col.Name} {col.ValueType}";
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         private class TableInfo
         {
             public readonly Dictionary<string, string> ColumnNameToConstraintParamName = new();

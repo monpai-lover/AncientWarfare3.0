@@ -1,4 +1,5 @@
 #if 一米_中文名
+using System;
 using System.Collections.Generic;
 using Chinese_Name;
 using NeoModLoader.General;
@@ -26,14 +27,129 @@ namespace AncientWarfare3.content
         {
             string modPath = ModClass.Instance.GetDeclaration().FolderPath;
 
+            // 消除 "duplicate asset - overwriting" 警告:ChineseName(OptionalDependency,先加载)的 default
+            // 包自带同名 Xia_city/clan/culture/kingdom/name 生成器。AW3 后注册同名会触发游戏基类
+            // AssetLibrary.add 的 overwriting 日志(AssetLibrary.cs:69)。提交前先**静默移除**已存在的同名条目
+            // (直接清 dict/list,不走 add),这样 AW3 注册时 dict 无同名 → 不再打警告。AW3 模板与 ChineseName
+            // 不同(用中文城名上/下、中文国名前缀),是有意覆盖,故必须用 AW3 版本而非复用。
+            RemoveExistingGenerators("Xia_city", "Xia_clan", "Xia_culture", "Xia_kingdom", "Xia_name");
+
             CN_NameGeneratorLibrary.SubmitDirectoryToLoad(modPath + "/name_generators/Xia");
             WordLibraryManager.SubmitDirectoryToLoad(modPath + "/name_generators/lib");
 
             InitActorNameGenerator();
+            OverrideClanParameterGetter();
 
             LM.AddToCurrentLocale("familyname", "姓");
             LM.AddToCurrentLocale("clanname", "氏");
             LM.ApplyLocale();
+        }
+
+        /// <summary>
+        ///     修复"原版 Clan(氏族)命名把姓当氏":ChineseName 的 Xia_clan 模板用 $founder_family_name$,
+        ///     其 default_clan_parameter_getter 把该参数填成 actor.data["chinese_family_name"](=我们的**姓**)
+        ///     → 氏族名变成 "城名+姓+家/氏/族"(如 泾阳滕家,滕是姓不是氏)。
+        ///     这里覆盖 clan 参数 getter:对 Xia,founder_family_name 改填该人**氏(clan_name)**;
+        ///     非 Xia 或无氏时回退原行为(姓)。ParameterGetters 是 Chinese_Name.dll 的 public API,可直接覆盖 "default"。
+        /// </summary>
+        private static void OverrideClanParameterGetter()
+        {
+            try
+            {
+                ParameterGetters.PutClanParameterGetter("default", (pClan, pActor, pParameters) =>
+                {
+                    pParameters["race"] = pClan.data.original_actor_asset;
+                    pParameters["founder_home"] = string.IsNullOrEmpty(pClan.data.founder_city_name)
+                        ? pClan.data.founder_kingdom_name
+                        : pClan.data.founder_city_name;
+
+                    // 优先取"氏"(clan_name);无氏回退"姓"(chinese_family_name),保证模板有值。
+                    string shi = ResolveClanShi(pClan, pActor);
+                    pParameters["founder_family_name"] = string.IsNullOrEmpty(shi) ? "无名" : shi;
+                });
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("覆盖 Clan 命名参数 getter 失败(氏族名可能仍用姓): " + e.Message);
+            }
+        }
+
+        /// <summary>取氏族命名用的"氏":pActor 优先;motto 路径 pActor==null 时遍历 clan 成员找第一个有氏者。</summary>
+        private static string ResolveClanShi(Clan pClan, Actor pActor)
+        {
+            if (pActor != null)
+            {
+                pActor.data.get("clan_name", out string clan, "");
+                if (!string.IsNullOrEmpty(clan)) return clan;
+                pActor.data.get("chinese_family_name", out string fam, "");
+                return fam; // 无氏回退姓
+            }
+
+            foreach (var unit in pClan.units)
+            {
+                unit.data.get("clan_name", out string clan, "");
+                if (!string.IsNullOrEmpty(clan)) return clan;
+            }
+            foreach (var unit in pClan.units)
+            {
+                unit.data.get("chinese_family_name", out string fam, "");
+                if (!string.IsNullOrEmpty(fam)) return fam;
+            }
+            return "";
+        }
+
+        /// <summary>
+        ///     从 CN_NameGeneratorLibrary 静默移除指定 id 的已注册生成器。
+        ///     用于消除 AW3 覆盖 ChineseName 同名 Xia 生成器时的 overwriting 警告——AW3 提交前先清掉旧的。
+        ///     Chinese_Name.dll 非 publicized,Instance(internal)/dict/list(protected)编译期不可访问,故用反射。
+        /// </summary>
+        private static void RemoveExistingGenerators(params string[] pIds)
+        {
+            try
+            {
+                var libType = typeof(CN_NameGeneratorLibrary);
+                // internal static CN_NameGeneratorLibrary Instance
+                var instanceField = libType.GetField("Instance",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Public);
+                object lib = instanceField?.GetValue(null);
+                if (lib == null) return;
+
+                // protected Dictionary<string,T> dict; protected List<T> list (AssetLibrary<T> 基类)
+                var dict = GetMemberValue(lib, "dict") as System.Collections.IDictionary;
+                var list = GetMemberValue(lib, "list") as System.Collections.IList;
+                if (dict == null) return;
+
+                foreach (string id in pIds)
+                {
+                    if (!dict.Contains(id)) continue;
+                    object asset = dict[id];
+                    dict.Remove(id);
+                    list?.Remove(asset);
+                }
+            }
+            catch (Exception e)
+            {
+                // 反射失败不影响功能(只是 overwriting 警告仍会出现),不崩。
+                ModClass.LogWarning("移除 ChineseName 同名 Xia 生成器失败(overwriting 警告将保留): " + e.Message);
+            }
+        }
+
+        /// <summary>反射取字段或属性值(沿继承链向上找,含 protected/private)。</summary>
+        private static object GetMemberValue(object pObj, string pName)
+        {
+            var t = pObj.GetType();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+            while (t != null)
+            {
+                var f = t.GetField(pName, flags);
+                if (f != null) return f.GetValue(pObj);
+                var p = t.GetProperty(pName, flags);
+                if (p != null) return p.GetValue(pObj);
+                t = t.BaseType;
+            }
+            return null;
         }
 
         private static void InitActorNameGenerator()

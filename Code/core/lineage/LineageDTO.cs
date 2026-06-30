@@ -56,7 +56,9 @@ namespace AncientWarfare3.core.lineage
         public string clan_name;     // 氏(显示用)
         public double birth_time;
         public double death_time;    // -1 表示在世/未记录
+        public long   kingdom_id = -1; // 所属国 id(用于名字着色 / banner 跳转;已亡国仍存 id 但 get 返 null)
         public string kingdom_name;
+        public string kingdom_color;   // 所属国文字色 hex(随档案存,亡国后名字仍用此色)
         public string city_name;
         public long   shi_id = -1;
         public int    noble_distance = 99;

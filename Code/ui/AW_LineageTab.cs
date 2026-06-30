@@ -5,13 +5,16 @@ using NeoModLoader.General.UI.Tab;
 namespace AncientWarfare3.ui
 {
     /// <summary>
-    ///     自定义「姓族」分栏 tab + 「姓族列表」按钮(照搬 AW2 TabManager 写法,NML 新版 API)。
-    ///     由 ModClass.OnModLoad 末尾调用 Init()。
+    ///     自定义「姓族」分栏 tab。两个 group:
+    ///     - lineage:「姓族总览」按钮(Click,打开 LineageOverviewWindow)
+    ///     - creature:「生成 Xia」神力按钮(GodPower,点地图生成夏人,照搬 AW2 spawn_xia)
+    ///     tab 顶图标用夏朝专属 iconXias(对齐 AW2)。由 ModClass.OnModLoad 调用 Init()。
     /// </summary>
     internal static class AW_LineageTab
     {
         private const string TAB_ID = "AW3Lineage";
-        private const string GROUP = "lineage";
+        private const string GROUP_LINEAGE = "lineage";
+        private const string GROUP_CREATURE = "creature";
         private static bool _inited;
 
         public static void Init()
@@ -21,18 +24,25 @@ namespace AncientWarfare3.ui
 
             PowersTab tab = TabManager.CreateTab(
                 TAB_ID,
-                "AW3 Lineage",
-                "Ancient Warfare 3 lineage / surname archive",
-                SpriteTextureLoader.getSprite("ui/icons/iconClan"));
+                "AW3 Lineage",               // titleKey:本地化键(others.csv 注册→姓族档案)
+                "AW3 Lineage Description",   // descKey:hover 描述键(others.csv 注册)
+                SpriteTextureLoader.getSprite("ui/Icons/iconXias")); // tab 图标:夏朝专属(对齐 AW2)
 
-            tab.SetLayout(new List<string> { GROUP });
+            tab.SetLayout(new List<string> { GROUP_LINEAGE, GROUP_CREATURE });
 
+            // 姓族总览(Click 按钮,图标 iconClan 区分于生成按钮)
             PowerButton overviewButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_lineage_overview_btn",
                 () => OpenOverview(),
                 SpriteTextureLoader.getSprite("ui/icons/iconClan"));
+            tab.AddPowerButton(GROUP_LINEAGE, overviewButton);
 
-            tab.AddPowerButton(GROUP, overviewButton);
+            // 生成 Xia 神力(GodPower 按钮,id 必须 = power id "spawn_xia";power 已在 GodPowerLibrary.Init 注册)
+            PowerButton spawnButton = PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.SPAWN_XIA,
+                SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
+            tab.AddPowerButton(GROUP_CREATURE, spawnButton);
+
             tab.UpdateLayout();
         }
 

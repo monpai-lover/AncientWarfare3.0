@@ -28,6 +28,12 @@ namespace AncientWarfare3
             XiaNaming.Init();
 #endif
 
+            // 神力:spawn_xia 生成夏人单位(必须在 AW_LineageTab 之前,因 tab 按钮按 id 查 power)
+            GodPowerLibrary.Init();
+
+            // 自定义 "aw_raw" tooltip type:动态文本(人名/生卒)原样显示不本地化,避免刷 missing text。
+            ui.AW_RawTooltip.Init();
+
             // 阶段5:姓族 UI —— 自定义 tab + 入口按钮(窗口靠 Harmony patch + showWindow 打开)
             ui.AW_LineageTab.Init();
 

@@ -20,3 +20,20 @@ moh_desc_common,天命如常,天命如常,Mandate of God is steady
 moh_desc_good,天命稳定发展,天命稳定发展,Mandate of God is steadily developing
 village_statistics_heir,继承人,繼承人,Heir
 vasselsrebel,不忠的藩屬,不忠的藩屬,not loyal vassal
+aw_lineage_overview Title,姓族总览,姓族總覽,Lineage Overview
+aw_shi_list Title,氏支列表,氏支列表,Branches
+aw_family_tree Title,家族树,家族樹,Family Tree
+aw_identity,身份,身份,Identity
+aw_family_name,姓,姓,Surname
+aw_clan_name,氏,氏,Clan
+aw_family_tree_entry,家族树,家族樹,Family Tree
+aw_view_family_tree,查看该人的家族树,查看該人的家族樹,View this person's family tree
+aw_year_name,年号,年號,Era Name
+aw_kingdom_title,爵位,爵位,Title
+aw_heir,继承人,繼承人,Heir
+aw_lineage_overview_btn,姓族总览,姓族總覽,Lineage Overview
+aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,查看所有姓與氏支的譜系檔案,View all surname and branch lineage archives
+xia,夏人,夏人,Xia
+xia_description,点击地图生成一个夏人单位,點擊地圖生成一個夏人單位,Click on the map to spawn a Xia unit
+AW3 Lineage,姓族档案,姓族檔案,Lineage Archive
+AW3 Lineage Description,夏朝姓族 / 氏支 / 家族树档案,夏朝姓族 / 氏支 / 家族樹檔案,Xia surname / branch / family tree archive

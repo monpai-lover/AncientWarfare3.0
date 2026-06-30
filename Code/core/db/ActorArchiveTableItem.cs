@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.db
 
         public long   kingdom_id = -1;
         public string kingdom_name;
+        public string kingdom_color;  // 所属国文字色 hex(随档案存,亡国后名字仍用此色,不丢国家颜色)
         public long   city_id = -1;
         public string city_name;
         public long   original_clan_id = -1;

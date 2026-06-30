@@ -2,8 +2,9 @@ namespace AncientWarfare3.content
 {
     /// <summary>
     ///     夏朝 Xia 内容注册总入口。由 <c>ModClass.OnModLoad</c> 调用。
-    ///     注册顺序:特质组 → 特质 → 状态 → 物品 → 王国 → 种族
-    ///     (状态先于物品[qingAttack 引用];特质组先于特质;王国先于种族[kingdom_id 引用])。
+    ///     注册顺序:特质组 → 特质 → 状态 → 物品 → 王国 → 建筑 → 种族
+    ///     (状态先于物品[qingAttack 引用];特质组先于特质;王国先于种族[kingdom_id 引用];
+    ///      建筑[architecture]先于种族[race 引用 architecture_id="Xia"])。
     /// </summary>
     public static class XiaContent
     {
@@ -17,8 +18,9 @@ namespace AncientWarfare3.content
             XiaStatus.Init();
             XiaItems.Init();
 
-            // 批A:王国 + 种族
+            // 批A:王国 + 建筑 + 种族
             XiaKingdom.Init();
+            XiaArchitecture.Init();
             XiaRace.Init();
         }
     }
