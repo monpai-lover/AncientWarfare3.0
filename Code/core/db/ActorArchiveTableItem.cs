@@ -42,5 +42,12 @@ namespace AncientWarfare3.core.db
         public int    head;
         public int    skin;
         public int    skin_set;
+
+        // 死者画像重建用:存生前真实表现型(不存则默认 0 = Xia 绿僵尸异常肤色)。
+        public int    phenotype_index;
+        public int    phenotype_shade;
+
+        // 称王分封:该人若称王建新国/夺别国开了新氏支,记新支 id(原氏族树显示"建立分支X氏"+点击跳转)。无则 -1。
+        [TableItemDef(pDefaultValue: "-1")] public long founded_branch_shi_id;
     }
 }

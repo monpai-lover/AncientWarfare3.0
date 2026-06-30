@@ -16,6 +16,21 @@ namespace AncientWarfare3.content
     public static class XiaRace
     {
         public const string ID = "Xia";
+        internal static readonly string[] HumanLikeSubspeciesTraits =
+        {
+            "reproduction_strategy_viviparity",
+            "gestation_long",
+            "reproduction_sexual",
+            "bad_genes",
+            "advanced_hippocampus",
+            "stomach",
+            "amygdala",
+            "wernicke_area",
+            "diet_omnivore",
+            "polyphasic_sleep",
+            "nocturnal_dormancy"
+        };
+
         // 贴图根路径已统一到 Cultiway 标准 actors/species/civs/{id}/(原 actors/races/Xia/)。
         // 子目录名仍保留 AW2 命名(unit_male_1 等),由 XiaTextures.BindSkinArrays 扫描对齐。
         public const string TEXTURE_PATH = "actors/species/civs/Xia/";
@@ -38,13 +53,11 @@ namespace AncientWarfare3.content
             Xia.kingdom_id_wild = "nomads_Xia";
             Xia.kingdom_id_civilization = ID;
             // 旗帜:新版从 banners_kingdoms/{banner_id}/background|icon 扫贴图(KingdomBannerLibrary.loadNewAssetRuntime)。
-            // 夏朝旗帜贴图放 GameResources/banners_kingdoms/Xia/(继承自 AW2)。**防御**:贴图缺失会导致
-            // backgrounds 空 → Kingdom.getElementBackground 取 backgrounds[0] 越界(每帧名牌渲染崩 ArgumentOutOfRange),
-            // 原版 post_init(ActorAssetLibrary:1308)只 log 不回退。故此处校验贴图存在,缺则回退 human 旗帜。
-            Xia.banner_id =
-                SpriteTextureLoader.getSpriteList(KingdomBannerLibrary.getFullPathBackground("Xia")).Length > 0
-                    ? "Xia"
-                    : "human";
+            // 夏朝旗帜贴图放 GameResources/banners_kingdoms/Xia/(继承自 AW2,F 盘 background/icon 齐全)。
+            // **不在此预读 getSpriteList 校验**:OnModLoad 时机 mod 资源未注册进 Unity Resources,预读会把空数组
+            // 永久缓存进 SpriteTextureLoader(与建筑崩溃同一毒化机制,见 XiaArchitecture),反使旗帜真图加载不出。
+            // banner 加载(loadNewAssetRuntime)走同一 getSpriteList 缓存,故直接信任 "Xia"、由游戏运行时懒加载。
+            Xia.banner_id = "Xia";
 
             // —— 建筑 ——(夏朝专属 architecture,见 XiaArchitecture;在本 Init 之前已注册)
             Xia.architecture_id = "Xia";
@@ -89,10 +102,22 @@ namespace AncientWarfare3.content
                 ("damage", 20f),        // human 15
                 ("speed", 16f),         // human 15(略快)
                 ("offspring", 6f),      // human 5
+                // ⚠ birth_rate 必须显式给(每帧繁殖 BabyMaker.cs:123 用 (int)stats["birth_rate"] 决定额外子女数)。
+                //   原版各文明种族 genome 都显式设(human/orc=3~5);夏人 clone 模板未继承 → 漏设则基础≈0,
+                //   叠加贵族 guizu 的小数后 (int) 取整成 0 → **贵族/平民几乎不生育**(用户实测生育数=0 的真凶之一)。
+                ("birth_rate", 4f),     // human 3,夏人略高(多子)
                 ("diplomacy", 5f),      // human 3
                 ("warfare", 5f),        // human 3(军略更强)
                 ("stewardship", 5f),    // human 3
                 ("intelligence", 5f));  // human 3
+
+            // Clone from $civ_advanced_unit$ does not include human's species traits.
+            // Without reproduction_sexual/viviparity, Xia units can join cities,
+            // raising population, while the normal child-birth path never runs.
+            foreach (string traitId in HumanLikeSubspeciesTraits)
+            {
+                Xia.addSubspeciesTrait(traitId);
+            }
 
             // —— 单位寿命/繁衍(旧 unit_Xia:max_age 90 / max_children 6)——
             // base_stats 与 genome 是两套机制,这里保留直接的 base_stats 寿命/繁衍上限。

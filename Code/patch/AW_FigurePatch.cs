@@ -17,12 +17,22 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_FigurePatch
     {
-        // ① 出生 → 尝试降临
+        // ① 出生(spawn 路径)→ 尝试降临
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), "newCreature")]
         public static void NewCreature_Postfix(Actor __instance)
         {
-            HistoricalFigureService.TrySpawnOn(__instance);
+            HistoricalFigureService.TrySpawnOn(__instance, "newCreature");
+        }
+
+        // ①b 出生(繁殖路径)→ 尝试降临。
+        //   繁殖婴儿走 createBabyActorFromData,**不经过 newCreature**(全库仅 createNewUnit 调 newCreature),
+        //   只钩 newCreature 会漏掉所有繁殖人口 → 历史人物降临窗口极窄(基本不出)。这里补钩繁殖统一点。
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BabyHelper), nameof(BabyHelper.applyParentsMeta))]
+        public static void ApplyParentsMeta_Figure_Postfix(Actor pBaby)
+        {
+            HistoricalFigureService.TrySpawnOn(pBaby, "baby");
         }
 
         // ② 成为 king → 套用预留国名(周/秦/…)
@@ -32,6 +42,9 @@ namespace AncientWarfare3.patch
         {
             if (__instance == null || pActor == null) return;
             HistoricalFigureService.OnFigureKingBecame(__instance, pActor);
+
+            // 编年史:换君(国家)+ 成王(人物,若入谱贵族)。
+            core.lineage.ChronicleEvents.OnKingChanged(__instance, pActor);
         }
 
         // ③ 小地图图标:历史人物(first 特质,存活)头顶画 minimap_figure,国家色着色
@@ -54,15 +67,17 @@ namespace AncientWarfare3.patch
                     if (unit == null || !unit.isAlive()) continue;
                     if (unit.current_tile == null) continue; // 防 current_position 取空崩/堆 (0,0)
                     if (!unit.hasTrait(HistoricalFigureService.TRAIT_FIRST)) continue;
-                    // 国王皇冠图标由原版 drawKings 画了,历史人物图标只画"非当前国王"的,避免叠图。
-                    if (kingdom.king == unit) continue;
+                    // 历史人物成为国王/城主后,改由原版皇冠/城主图标表示 → figure 图标不再画(避免叠图 + 用户要求)。
+                    if (unit.isKing() || unit.isCityLeader()) continue;
 
                     Vector3 pos = unit.current_position;
                     pos.y -= 3f;
 
                     QuantumSprite qs = pAsset.group_system.getNext();
                     if (qs == null) continue;
-                    qs.setPosOnly(ref pos);
+                    // ⚠ 用 set(pos, scale) 而非 setPosOnly:setPosOnly 不设缩放 → 图标用默认/上次 scale 显得超大。
+                    //   原版 drawKings 走 drawQuantumSprite→next.set(pos, base_scale)(QuantumSpriteAsset.base_scale=0.2f)。
+                    qs.set(ref pos, pAsset.base_scale);
                     Sprite colored = DynamicSprites.getIcon(baseIcon, kingdom.getColor());
                     qs.setSprite(colored);
                 }

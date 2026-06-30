@@ -1,5 +1,3 @@
-using Random = UnityEngine.Random;
-
 namespace AncientWarfare3.core.lineage
 {
     /// <summary>
@@ -16,6 +14,9 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class YearNameService
     {
+        // mod 私有随机:绝不用 UnityEngine.Random(被 MapBox 世界生成固定播种,见 aw3-random-seed-pitfall)。
+        private static readonly System.Random Rng = new System.Random();
+
         // 帝国两字年号的雅字池(内置兜底,不依赖中文名 mod)。
         private static readonly string[] ERA_CHARS =
         {
@@ -52,8 +53,8 @@ namespace AncientWarfare3.core.lineage
         /// <summary>取两个不重复的雅字(避免"建建"叠字)。</summary>
         private static string TwoDistinctEraChars()
         {
-            int i = Random.Range(0, ERA_CHARS.Length);
-            int j = Random.Range(0, ERA_CHARS.Length - 1);
+            int i = Rng.Next(0, ERA_CHARS.Length);
+            int j = Rng.Next(0, ERA_CHARS.Length - 1);
             if (j >= i) j++; // 跳过 i,保证 j != i
             return ERA_CHARS[i] + ERA_CHARS[j];
         }

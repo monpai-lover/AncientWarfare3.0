@@ -20,6 +20,9 @@ namespace AncientWarfare3.core.lineage
 
         // kingdom.data
         public const string KINGDOM_INTEGRATED = "aw_name_integrated"; // 该国是否完成姓氏合流(bool)
+        public const string CHRONICLE_LAST_KING_ID = "aw_chronicle_last_king"; // 编年史:该国上次登记的王 id(防同王重复记换君)
+        // 称王分封:称王者 actor.data 上标记"我建立的新氏支 id"(原氏族树在他的位置显示"建立分支X氏"+点击跳转新支用)。
+        public const string FOUNDED_BRANCH_SHI_ID = "aw_founded_branch_shi"; // long,无则 -1
 
         // 贵族特质 id(批B XiaTraits 注册)
         public const string TRAIT_GUIZU = "guizu";
@@ -29,6 +32,7 @@ namespace AncientWarfare3.core.lineage
 
         // ── kingdom.data 自定义字段(随存档序列化) ──
         public const string KINGDOM_HEIR_ID = "aw_heir_id";          // 继承人 actor id(long)
+        public const string IS_HEIR = "aw_is_heir";                  // actor.data:本人是否当前某国继承人(bool,unit_heir 皮肤 + minimap 用)
         public const string KINGDOM_YEAR_NAME = "aw_year_name";      // 年号中间字(string)
         public const string KINGDOM_YEAR_START = "aw_year_start";    // 年号起始 world_time(double)
         public const string KINGDOM_TITLE = "aw_title";              // 头衔等级(int,见 KingdomTitle)
@@ -59,5 +63,6 @@ namespace AncientWarfare3.core.lineage
         public const string RANDOM = "random";             // 随机
         public const string INTEGRATION = "integration";   // 合流
         public const string SPECIAL_FIGURE = "special_figure"; // 名人/降临
+        public const string KING_FOUNDED = "king_founded"; // 称王分封(建新国/夺别国 → 脱离原氏开新支)
     }
 }

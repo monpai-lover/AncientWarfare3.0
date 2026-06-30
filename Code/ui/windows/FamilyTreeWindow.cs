@@ -16,7 +16,6 @@ namespace AncientWarfare3.ui.windows
     /// </summary>
     internal class FamilyTreeWindow : AbstractWindow<FamilyTreeWindow>
     {
-        private const int DEFAULT_DEPTH = 2;
         private const int NODE_W = 70;
         private const int NODE_H = 64; // 与 FamilyTreeNodeView.NODE_H 一致(名字下移后增高)
         private const int H_GAP = 12;
@@ -31,6 +30,7 @@ namespace AncientWarfare3.ui.windows
         private static long _backShiId = -1;
 
         private readonly HashSet<long> _expanded = new HashSet<long>();
+        private readonly HashSet<long> _foldDecided = new HashSet<long>(); // 已定过默认折叠状态的节点(防手动 toggle 后被自动规则覆盖)
         private readonly List<FamilyTreeNodeView> _spawned = new List<FamilyTreeNodeView>();
         private readonly List<GameObject> _lines = new List<GameObject>();
         private Transform _canvas;
@@ -167,10 +167,48 @@ namespace AncientWarfare3.ui.windows
             float totalW = root.subtreeWidth;
             // 居中:树宽不足视口宽时整体右移居中。
             float startX = PAD + Mathf.Max(0f, (VIEWPORT_W - totalW) / 2f);
-            LayoutAndRender(root, startX, PAD, totalW);
+
+            // 小树:本人若有父母,先在顶部画父母行,本人树整体下移一层腾出空间。
+            bool hasParents = _mode == Mode.Family && root.parents.Count > 0;
+            float bodyTopY = PAD + (hasParents ? NODE_H + V_GAP : 0f);
+
+            LayoutAndRender(root, startX, bodyTopY, totalW);
+
+            if (hasParents) RenderParentsRow(root);
 
             float canvasW = Mathf.Max(VIEWPORT_W, totalW + PAD * 2);
             _canvasRect.sizeDelta = new Vector2(canvasW, _maxDepthY + NODE_H + PAD);
+        }
+
+        /// <summary>小树:在本人节点正上方画父母行(1~2 个),并连线到本人。点击父母 → 以其为中心重开小树(上溯)。</summary>
+        private void RenderParentsRow(TreeLayoutNode pRoot)
+        {
+            int n = pRoot.parents.Count;
+            float rowWidth = n * NODE_W + (n - 1) * H_GAP;
+            float startX = pRoot.centerX - rowWidth / 2f;
+            float parentY = PAD; // 顶部行
+
+            for (int i = 0; i < n; i++)
+            {
+                FamilyTreeNode pData = pRoot.parents[i];
+                float cx = startX + NODE_W / 2f + i * (NODE_W + H_GAP);
+
+                var view = FamilyTreeNodeView.Create(_canvas);
+                long pid = pData.id;
+                // 父母节点:点击 → 以父母为中心重开小树(继续上溯);本身再带 ▲(若其还有父母)。
+                System.Action onUp = LineageQuery.GetParentIds(pid).Count > 0
+                    ? (System.Action)(() => OpenFamilyTree(pid, _backShiId)) : null;
+                view.Bind(pData, (_) => OpenFamilyTree(pid, _backShiId),
+                    null, false, false, onUp, null);
+                var rect = view.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0, 1); rect.anchorMax = new Vector2(0, 1);
+                rect.pivot = new Vector2(0.5f, 1f);
+                rect.anchoredPosition = new Vector2(cx, -parentY);
+                _spawned.Add(view);
+
+                // 连线:父母底 → 本人顶
+                DrawConnector(cx, parentY + NODE_H, pRoot.centerX, pRoot.topY);
+            }
         }
 
         private class TreeLayoutNode
@@ -182,14 +220,22 @@ namespace AncientWarfare3.ui.windows
             public float subtreeWidth;
             public float centerX;
             public float topY;
+            // 小树根专用:本人的父母节点(画在本人正上方一层,可点击上溯)。
+            public List<FamilyTreeNode> parents = new List<FamilyTreeNode>();
         }
 
-        // 小树:本人为根(可上下溯),子女为子树。
+        // 小树:本人为根(父母画在上方、子女为子树)。
         private TreeLayoutNode BuildFamilyRoot()
         {
             var center = LineageQuery.GetFamilyTree(_centerActorId);
             if (center == null) return null;
             var root = new TreeLayoutNode { data = center, expanded = true };
+
+            // 父母:GetFamilyTree 已填 center.parents(死人查档案,活人实时),直接保留画在本人上方。
+            //   用户报"往上查不到父母" → 不再只靠根节点 ▲ 跳转,直接在小树里把父母画出来。
+            foreach (var p in center.parents)
+                if (p != null) root.parents.Add(p);
+
             var childIds = LineageQuery.GetChildIds(center.id);
             root.hasChildren = childIds.Count > 0;
             foreach (var cid in childIds)
@@ -209,23 +255,61 @@ namespace AncientWarfare3.ui.windows
         {
             var rootData = BuildTreeNodeData(_rootActorId);
             if (rootData == null) return null;
-            PreExpand(_rootActorId, 0);
+            _expanded.Add(_rootActorId);            // 根始终展开(其余按自动折叠规则首次决定)
             return BuildLayoutNode(rootData, 0);
         }
 
+        /// <summary>
+        ///     懒加载构建:**折叠节点不查 SQL、不建子节点**(node.expanded=false 时直接返回,不递归)。
+        ///     展开节点才查直接子代 + 递归建子节点;每个子节点首次出现时按"自动折叠规则"(ProbeBranch,只看一层)
+        ///     决定其初始展开/折叠 —— 全死 OR 无 king/leader/heir 的分支默认折叠(用户定调,省性能)。
+        /// </summary>
         private TreeLayoutNode BuildLayoutNode(FamilyTreeNode pData, int pDepth)
         {
             var node = new TreeLayoutNode { data = pData };
-            var childIds = LineageQuery.GetChildIds(pData.id);
-            node.hasChildren = childIds.Count > 0;
+
+            // 称王分封:若该节点开了新氏支(founded_branch_shi_id>=0)且**不是当前这棵树的根**,
+            //   则其子嗣只记在新支 → 原树里把他当叶子(不展开子代,改由"建支:X氏"徽标点击跳新支)。
+            //   注:他自己作为新支根打开时(_rootActorId==他)正常展开子代。
+            if (pData.founded_branch_shi_id >= 0 && pData.id != _rootActorId)
+            {
+                node.hasChildren = false;
+                node.expanded = false;
+                return node;
+            }
+
+            // 轻量探测(只看一层子代):决定 hasChildren(显 +/−)与默认折叠。不递归全树。
+            var probe = LineageQuery.ProbeBranch(pData.id);
+            node.hasChildren = probe.has_children;
+
+            // 首次见到该节点 → 按规则定默认折叠状态(之后用户手动 toggle 进 _expanded/_collapsedDecided 不再被覆盖)。
+            if (node.hasChildren && !_foldDecided.Contains(pData.id))
+            {
+                _foldDecided.Add(pData.id);
+                bool autoExpand = probe.any_alive && probe.any_important; // 有活人 且 有重要人物 → 默认展开
+                if (autoExpand) _expanded.Add(pData.id);
+                else _expanded.Remove(pData.id);
+            }
+
             node.expanded = _expanded.Contains(pData.id);
+
+            // 仅展开时才查子代 + 建节点(折叠 = 零查询零节点,真懒加载)。
             if (node.expanded)
-                foreach (var cid in childIds)
+                foreach (var cid in LineageQuery.GetChildIds(pData.id))
                 {
                     var cd = BuildTreeNodeData(cid);
-                    if (cd != null) node.children.Add(BuildLayoutNode(cd, pDepth + 1));
+                    if (cd == null) continue;
+                    // 平民/奴隶不进氏族大树(用户定调:族谱仍记录,但大树不绘制 —— 只能在自己家庭树上溯找到老祖)。
+                    if (IsCommonerStatus(cd.status)) continue;
+                    node.children.Add(BuildLayoutNode(cd, pDepth + 1));
                 }
             return node;
+        }
+
+        /// <summary>是否平民/奴隶身份(氏族大树跳过,不绘制)。</summary>
+        private static bool IsCommonerStatus(string pStatus)
+        {
+            return pStatus == LineageStatus.COMMON || pStatus == LineageStatus.SLAVE;
         }
 
         private void MeasureWidth(TreeLayoutNode pNode)
@@ -279,13 +363,7 @@ namespace AncientWarfare3.ui.windows
             System.Action onUp = null, onDown = null;
             if (_mode == Mode.Family && isRoot)
             {
-                // 小树根节点:可上溯(有父)/下溯(有子)
-                var parents = LineageQuery.GetParentIds(pNode.data.id);
-                if (parents.Count > 0)
-                {
-                    long up = parents[0];
-                    onUp = () => OpenFamilyTree(up, _backShiId);
-                }
+                // 小树根节点:父母已在上方独立行画出并可点击上溯,这里不再重复 ▲(避免冗余);保留 ▼ 下溯。
                 if (pNode.hasChildren)
                 {
                     var kids = LineageQuery.GetChildIds(pNode.data.id);
@@ -331,16 +409,9 @@ namespace AncientWarfare3.ui.windows
             _lines.Add(obj);
         }
 
-        private void PreExpand(long pId, int pDepth)
-        {
-            if (pDepth >= DEFAULT_DEPTH) return;
-            _expanded.Add(pId);
-            foreach (var cid in LineageQuery.GetChildIds(pId))
-                PreExpand(cid, pDepth + 1);
-        }
-
         private void ToggleExpand(long pId)
         {
+            _foldDecided.Add(pId); // 用户手动操作 → 标记已决定,自动折叠规则不再覆盖
             if (_expanded.Contains(pId)) _expanded.Remove(pId);
             else _expanded.Add(pId);
             Rebuild();

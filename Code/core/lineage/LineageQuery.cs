@@ -133,6 +133,19 @@ namespace AncientWarfare3.core.lineage
             return o == null ? -1 : (long)o;
         }
 
+        /// <summary>取某氏支的 origin_kingdom_id(始祖建支时的国)。无则 -1。称王分封触发判定用。</summary>
+        public static long GetShiOriginKingdom(long pShiId)
+        {
+            var db = DB;
+            if (db == null) return -1;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT IFNULL(ORIGIN_KINGDOM_ID, -1) FROM {ShiBranchTableItem.GetTableName()} WHERE SHI_ID=@s LIMIT 1";
+            cmd.Parameters.AddWithValue("@s", pShiId);
+            var o = cmd.ExecuteScalar();
+            return o == null ? -1 : (long)o;
+        }
+
         /// <summary>取单个氏支信息(含统计)。无则 null。</summary>
         public static ShiBranchInfo GetShiBranchInfo(long pShiId)
         {
@@ -238,10 +251,11 @@ namespace AncientWarfare3.core.lineage
             var center = BuildNode(pCenterActorId);
             if (center == null) return null;
 
-            // 父母:用 FamilyEdge 反查(child=center 的 parent),活人优先 actor,死人查档案
+            // 父母:用 FamilyEdge 反查(child=center 的 parent),活人优先 actor,死人查档案。
+            //   BuildNode 失败(父母非 Xia / 无档案)时补**占位节点**,保证上溯链不断(用户报"往上查不到父母")。
             foreach (var pid in GetParentIds(pCenterActorId))
             {
-                var pn = BuildNode(pid);
+                var pn = BuildNode(pid) ?? BuildPlaceholderNode(pid);
                 if (pn != null) center.parents.Add(pn);
             }
 
@@ -283,6 +297,61 @@ namespace AncientWarfare3.core.lineage
             return ids;
         }
 
+        /// <summary>
+        ///     氏族大树折叠探测:只看 pNodeId 的**直接子代一层**(不递归全树),返回是否有子代/有活人/有重要人物。
+        ///     用于决定该节点默认是否折叠:全死 OR 无 king/leader/heir → 自动折叠(用户定调:省性能,折叠的不展开)。
+        ///     轻量:只取直接子代 id + 对活人查运行时职业标记;死人只算 archive 行(不算重要,只算"存在")。
+        /// </summary>
+        public static BranchProbe ProbeBranch(long pNodeId)
+        {
+            var probe = new BranchProbe();
+            var childIds = GetChildIds(pNodeId);
+            if (childIds.Count == 0) return probe;
+
+            var units = World.world?.units;
+            foreach (long cid in childIds)
+            {
+                var live = units?.get(cid);
+                bool liveValid = live != null && !live.isRekt() && live.isAlive();
+
+                // 平民/奴隶不进氏族大树 → 探测里也跳过(否则会显示展开+号却展开为空)。
+                string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(cid);
+                if (status == LineageStatus.COMMON || status == LineageStatus.SLAVE) continue;
+
+                probe.has_children = true; // 至少有一个大树可见(非平民)子代
+
+                if (liveValid)
+                {
+                    probe.any_alive = true;
+                    live.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+                    if (live.isKing() || live.isCityLeader() || isHeir)
+                    {
+                        probe.any_important = true;
+                        return probe; // 已确认重要,提前返回
+                    }
+                }
+            }
+            return probe;
+        }
+
+        private static string GetLiveStatus(Actor pLive)
+        {
+            pLive.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);
+            return st;
+        }
+
+        /// <summary>轻量取档案 status(死者/不在场用,只读一列)。无则 none。</summary>
+        private static string GetArchivedStatus(long pId)
+        {
+            var db = DB;
+            if (db == null) return LineageStatus.NONE;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText = $"SELECT IFNULL(STATUS,'{LineageStatus.NONE}') FROM {ActorArchiveTableItem.GetTableName()} WHERE ID=@id LIMIT 1";
+            cmd.Parameters.AddWithValue("@id", pId);
+            var o = cmd.ExecuteScalar();
+            return o == null ? LineageStatus.NONE : o.ToString();
+        }
+
         /// <summary>构造单个节点。活人优先用 actor 当前态,否则查档案。两路都填齐 UI 字段。</summary>
         private static FamilyTreeNode BuildNode(long pId)
         {
@@ -293,7 +362,9 @@ namespace AncientWarfare3.core.lineage
                 live.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);
                 live.data.get(LineageKeys.CLAN_NAME, out string clan, "");
                 live.data.get(LineageKeys.SHI_ID, out long shi, -1L);
-                live.data.get(LineageKeys.NOBLE_DISTANCE, out long nd, 99L);
+                // ⚠ NOBLE_DISTANCE 是用 set(key,int) 写入的(LineageService:111),必须 get<int> 读,
+                //   用 get<long> 会类型失配返默认 99 → 活人 tooltip 永远不显示"距贵族N代"(用户报"只有死人有")。
+                live.data.get(LineageKeys.NOBLE_DISTANCE, out int nd, 99);
                 return new FamilyTreeNode
                 {
                     id = pId,
@@ -303,13 +374,17 @@ namespace AncientWarfare3.core.lineage
                     status = st,
                     clan_name = clan,
                     shi_id = shi,
-                    noble_distance = (int)nd,
+                    noble_distance = nd,
                     birth_time = live.data.created_time,
                     death_time = -1,
                     kingdom_id = live.kingdom?.id ?? -1,
                     kingdom_name = live.kingdom?.name ?? "",
                     kingdom_color = live.kingdom?.getColor()?.color_text ?? "",
-                    city_name = live.city?.data?.name ?? ""
+                    city_name = live.city?.data?.name ?? "",
+                    head = live.data.head,
+                    phenotype_index = live.data.phenotype_index,
+                    phenotype_shade = live.data.phenotype_shade,
+                    founded_branch_shi_id = ReadLiveFoundedBranch(live)
                 };
             }
 
@@ -333,8 +408,46 @@ namespace AncientWarfare3.core.lineage
                 city_name = row.city_name ?? "",
                 head = row.head,
                 skin = row.skin,
-                skin_set = row.skin_set
+                skin_set = row.skin_set,
+                phenotype_index = row.phenotype_index,
+                phenotype_shade = row.phenotype_shade,
+                founded_branch_shi_id = row.founded_branch_shi_id
             };
+        }
+
+        /// <summary>父母占位节点:BuildNode 失败(非 Xia / 无档案)时,用 live actor 最小信息建节点,保证上溯链不断。
+        /// 无 live actor(纯陌生 id)则返 null。</summary>
+        private static FamilyTreeNode BuildPlaceholderNode(long pId)
+        {
+            var live = World.world?.units?.get(pId);
+            if (live == null) return null;
+            return new FamilyTreeNode
+            {
+                id = pId,
+                display_name = live.getName(),
+                sex = live.isSexMale() ? 0 : 1,
+                is_alive = !live.isRekt(),
+                status = LineageStatus.NONE,
+                clan_name = "",
+                shi_id = -1,
+                noble_distance = 99,
+                birth_time = live.data.created_time,
+                death_time = -1,
+                kingdom_id = live.kingdom?.id ?? -1,
+                kingdom_name = live.kingdom?.name ?? "",
+                kingdom_color = live.kingdom?.getColor()?.color_text ?? "",
+                city_name = live.city?.data?.name ?? "",
+                head = live.data.head,
+                phenotype_index = live.data.phenotype_index,
+                phenotype_shade = live.data.phenotype_shade
+            };
+        }
+
+        /// <summary>读活人 actor.data 上的"称王分封新支 id"(无则 -1)。</summary>
+        private static long ReadLiveFoundedBranch(Actor pLive)
+        {
+            pLive.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long shi, -1L);
+            return shi;
         }
 
         // ─────────────────────── helpers ───────────────────────

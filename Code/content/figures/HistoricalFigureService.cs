@@ -115,33 +115,49 @@ namespace AncientWarfare3.content.figures
 
         // ───────────────────────── 生成 ─────────────────────────
 
-        /// <summary>由 AW_FigurePatch 在新单位出生(Actor.newCreature Postfix)后调用。门槛检查 + 掷骰 + 降临。</summary>
-        public static void TrySpawnOn(Actor pActor)
+        /// <summary>诊断开关:定位"历史人物不自然产生"时设 true,会 LogInfo 每个早退原因 + 触发源。定位后关回 false。</summary>
+        public static bool DiagnoseSpawn = true;
+
+        /// <summary>由 AW_FigurePatch 在新单位出生(newCreature / applyParentsMeta Postfix)后调用。门槛检查 + 掷骰 + 降临。
+        /// pSource 仅用于诊断日志标注触发路径(newCreature=神力/城市补人;baby=繁殖)。</summary>
+        public static void TrySpawnOn(Actor pActor, string pSource = "?")
         {
             // —— cheap guard,按代价从低到高 ——
-            if (!Enabled) return;
-            if (pActor?.data == null || !pActor.isAlive()) return;
-            if (!LineageService.IsXia(pActor)) return;
-            if (!pActor.isKingdomCiv()) return;                 // 必须文明单位
-            if (pActor.hasTrait(TRAIT_FIGURE) || pActor.hasTrait(TRAIT_FIRST)) return;
+            if (!Enabled) { Diag(pSource, "toggle 关闭"); return; }
+            // ⚠ 不能用 !isAlive() 卡:繁殖 baby 在 applyParentsMeta 钩点(makeBaby 中途)可能尚未注册为 alive
+            //   (BabyMaker 后续才设性别/营养/标记),isAlive() 可能为假 → 历史人物永远不走繁殖路径降临
+            //   (= 用户报"只能神力刷,不自然产生"的根因之一)。放宽为 data!=null 且非 rekt(已死/无效)。
+            if (pActor?.data == null || pActor.isRekt()) { Diag(pSource, "actor 空/已死"); return; }
+            if (!LineageService.IsXia(pActor)) return; // 非夏人:沉默(每帧大量非夏单位,不刷日志)
+            // ⚠ 不能用 isKingdomCiv()(=kingdom.isCiv()):Actor.newCreature() 里 kingdom 被设为 null
+            //   (Actor.cs:1048),此钩为 newCreature Postfix,kingdom 恒 null → isKingdomCiv 恒 false/NullRef
+            //   → 历史人物**永远不生成**(根因)。改用种族文明标志 asset.civ(对齐 AW2 的 race.civilization,不依赖 kingdom)。
+            if (pActor.asset == null || !pActor.asset.civ) { Diag(pSource, "asset 非 civ:" + (pActor.asset?.id ?? "null")); return; }
+            if (pActor.hasTrait(TRAIT_FIGURE) || pActor.hasTrait(TRAIT_FIRST)) { Diag(pSource, "已是 figure"); return; }
 
             // —— 存活互斥 + 天命国 ——
-            if (FigureStateStore.AnyAliveFigure()) return;      // 已有 figure 存活
-            if (HasMandateKingdom()) return;                    // 留桩=false
+            if (FigureStateStore.AnyAliveFigure()) { Diag(pSource, "已有 figure 存活(互斥)"); return; }
+            if (HasMandateKingdom()) { Diag(pSource, "天命国阻断"); return; }
 
             // —— 严格顺序:取当前应生成的那个人 ——
             int idx = FigureStateStore.NextSpawnableIndex();
-            if (idx < 0) return;                                // 没有可生成的(前一个还活着 / 全生成完)
+            if (idx < 0) { Diag(pSource, "NextSpawnableIndex=-1(前一个还活着/全生成完)"); return; }
             var def = HistoricalFigureDef.Get(idx);
             if (def == null) return;
 
             // —— 合流门:刘邦起需世上已有夏人国完成姓氏合流 ——
-            if (def.RequiresIntegration && !AnyXiaKingdomIntegrated()) return;
+            if (def.RequiresIntegration && !AnyXiaKingdomIntegrated()) { Diag(pSource, def.Key + " 需姓氏合流未满足"); return; }
 
             // —— 掷骰(私有 Random) ——
-            if (Rng.NextDouble() >= def.Chance) return;
+            if (Rng.NextDouble() >= def.Chance) { Diag(pSource, def.Key + " 掷骰未中(chance=" + def.Chance + ")"); return; }
 
+            ModClass.LogInfo($"历史人物命中:source={pSource} idx={idx} key={def.Key}");
             ApplyFigure(pActor, def, idx);
+        }
+
+        private static void Diag(string pSource, string pReason)
+        {
+            if (DiagnoseSpawn) ModClass.LogInfo($"[FigureDiag] source={pSource} 早退:{pReason}");
         }
 
         /// <summary>世上是否有任意夏人国家完成姓氏合流(合流门用)。</summary>
@@ -165,6 +181,10 @@ namespace AncientWarfare3.content.figures
             pActor.setHealth(FIGURE_HEALTH);
             pActor.data.favorite = true;
 
+            // 历史人物(姬发/嬴政/刘邦/曹丕/司马炎)均为男性,性别固定为男
+            // (须在 OnActorPromoted→ApplyDisplayName 之前,后者按性别拼名:男=氏+名,女=名+姓)。
+            pActor.data.sex = ActorSex.Male;
+
             // 2) 注入预设姓氏(不走随机):先手建姓族+氏支拿 id,再 set 字段,再晋升。
             //    必须先 set LINEAGE_ID,EnsureLineageForNoble 见已有谱系即跳过随机生成(LineageService.cs:199)。
             long lineageId = LineageIdAllocator.NextLineageId();
@@ -187,6 +207,11 @@ namespace AncientWarfare3.content.figures
 
             // 5) 世界日志公告:特殊人物$ren$降临这个世界($ren$=带国色的人名)。
             AnnounceFigure(pActor);
+
+            // 编年史:历史人物降临 = 一次"出生"事件(预设姓名已就绪)。
+            core.lineage.HistoryWriter.RecordPerson(
+                pActor.data.id, pActor.kingdom, pActor.getName(), "birth",
+                pActor.getName() + " 降临世间");
 
             ModClass.LogInfo($"历史人物降临:{pDef.Key}(序号 {pIndex},国名预留 {pDef.KingdomName})");
         }

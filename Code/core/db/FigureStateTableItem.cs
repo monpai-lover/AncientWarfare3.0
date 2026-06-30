@@ -132,7 +132,9 @@ namespace AncientWarfare3.core.db
                 long aid = _actorId[i];
                 if (aid < 0) continue;
                 var actor = units.get(aid);
-                if (actor == null || !actor.isAlive()) MarkDead(i);
+                // 用 isRekt()(真销毁/移除)而非 !isAlive():新生 figure baby 可能瞬时 isAlive()==false,
+                // 用 !isAlive() 会把刚降临的 baby 误判为死 → 提前解锁下一位 + 互斥失效。
+                if (actor == null || actor.isRekt()) MarkDead(i);
             }
         }
 

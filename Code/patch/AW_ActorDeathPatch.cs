@@ -29,6 +29,15 @@ namespace AncientWarfare3.patch
             if (!LineageService.IsXia(__instance)) return;
 
             LineageService.ArchiveActor(__instance, pAlive: false);
+
+            // 编年史:仅入谱贵族记死亡事件(死亡前 kingdom/data 仍完整)。
+            __instance.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
+            if (lid >= 0)
+            {
+                string name = __instance.getName();
+                HistoryWriter.RecordPerson(
+                    __instance.data.id, __instance.kingdom, name, "death", name + " 逝世");
+            }
         }
     }
 }

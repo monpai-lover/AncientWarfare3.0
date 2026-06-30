@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int nobleDist, 99);
             pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
             pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated, false);
+            pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedBranchShi, -1); // 称王分封:开的新支 id,无则 -1
 
             string name = pActor.getName();
             if (string.IsNullOrEmpty(given)) given = name;
@@ -47,6 +48,8 @@ namespace AncientWarfare3.core.lineage
             long parent2 = pActor.data.parent_id_2;
             int generation = pActor.data.generation;
             int head = pActor.data.head;
+            int phenotypeIndex = pActor.data.phenotype_index;   // 死者画像重建用真实肤色 phenotype
+            int phenotypeShade = pActor.data.phenotype_shade;
 
             bool exists = db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ID", id));
 
@@ -71,6 +74,9 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("PARENT_ID_2", parent2),
                     ColumnVal.Create("GENERATION", generation),
                     ColumnVal.Create("HEAD", head),
+                    ColumnVal.Create("PHENOTYPE_INDEX", phenotypeIndex),
+                    ColumnVal.Create("PHENOTYPE_SHADE", phenotypeShade),
+                    ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", foundedBranchShi),
                     ColumnVal.Create("IS_ALIVE", pAlive ? 1 : 0)
                 };
                 if (!pAlive) cols.Add(ColumnVal.Create("DEATH_TIME", LineageService.CurTime()));
@@ -110,7 +116,10 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("IS_ALIVE", pAlive ? 1 : 0),
                 ColumnVal.Create("HEAD", head),
                 ColumnVal.Create("SKIN", 0),
-                ColumnVal.Create("SKIN_SET", 0));
+                ColumnVal.Create("SKIN_SET", 0),
+                ColumnVal.Create("PHENOTYPE_INDEX", phenotypeIndex),
+                ColumnVal.Create("PHENOTYPE_SHADE", phenotypeShade),
+                ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", foundedBranchShi));
         }
     }
 }

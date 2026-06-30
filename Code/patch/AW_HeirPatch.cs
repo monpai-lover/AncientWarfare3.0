@@ -35,7 +35,9 @@ namespace AncientWarfare3.patch
         {
             if (__instance?.data == null) return;
 
-            // 新王即位:清旧继承人,重选,换年号。
+            // 新王即位:先称王分封(建新国/夺别国→开新氏支,可能改氏名)→ 再清/重选继承人 → 换年号(可能用氏名)。
+            if (__instance.king != null)
+                LineageService.OnKingFoundBranch(__instance, __instance.king);
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             YearNameService.OnNewKing(__instance);

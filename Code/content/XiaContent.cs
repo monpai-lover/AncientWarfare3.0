@@ -18,8 +18,9 @@ namespace AncientWarfare3.content
             XiaStatus.Init();
             XiaItems.Init();
 
-            // 批A:王国 + 建筑 + 种族
+            // 批A:王国 + 船 + 建筑 + 种族
             XiaKingdom.Init();
+            XiaBoats.Init();        // 船先于建筑(架构 actor_asset_id_trading/transport 引用船 id)
             XiaArchitecture.Init();
             XiaRace.Init();
 

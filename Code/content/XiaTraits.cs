@@ -71,9 +71,13 @@ namespace AncientWarfare3.content
             zhuhou.base_stats["health"] = 5f;       // 旧 mod_health +5
             zhuhou.base_stats["stewardship"] = 5f;
 
-            // guizu 贵族:生育+35
+            // guizu 贵族:多子(birth_rate +2)。
+            // ⚠ 新版 birth_rate 是**整数额外子女尝试次数**(BabyMaker.cs:123 用 (int)stats["birth_rate"]),
+            //   base_stats 经 mergeStats **累加**到 stats。AW2 旧值 0.35(fertility+35%)在新版整数语义下
+            //   累加后被 (int) 取整丢弃 → 贵族 birth_rate 实际 0 → **贵族不生育**(已修:种族 genome 补 birth_rate=4,
+            //   贵族再 +2 = 6,取整 6 → 贵族多子)。小数一律不能用于 birth_rate。
             var guizu = NewSocialIdentity("guizu", "ui/Icons/traits/iconguizu");
-            guizu.base_stats["birth_rate"] = 0.35f; // 旧 fertility +35
+            guizu.base_stats["birth_rate"] = 2f;
 
             // slave 奴隶:不出生(rate_birth=0)、世袭(rate_inherit=100)、周期强制职业=Slave
             var slave = NewSocialIdentity("slave", "ui/policy/start_slaves");

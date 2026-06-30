@@ -25,6 +25,10 @@ vasselsrebel,不忠的藩属,not loyal vassal,不忠的藩屬
 aw_lineage_overview Title,姓族总览,Lineage Overview,姓族總覽
 aw_shi_list Title,氏支列表,Branches,氏支列表
 aw_family_tree Title,家族树,Family Tree,家族樹
+aw_history Title,编年史,Chronicle,編年史
+aw_kingdom_roster Title,万国史,All Kingdoms,萬國史
+aw_kingdom_roster_btn,万国史,All Kingdoms,萬國史
+aw_kingdom_roster_btn Description,查看世界所有王国(含已亡国)的历史,View history of every kingdom incl. fallen ones,查看世界所有王國(含已亡國)的歷史
 aw_identity,身份,Identity,身份
 aw_family_name,姓,Surname,姓
 aw_clan_name,氏,Clan,氏
@@ -40,4 +44,14 @@ xia_description,点击地图生成一个夏人单位,Click on the map to spawn a
 AW3 Lineage,姓族档案,Lineage Archive,姓族檔案
 AW3 Lineage Description,夏朝姓族 / 氏支 / 家族树档案,Xia surname / branch / family tree archive,夏朝姓族 / 氏支 / 家族樹檔案
 aw_toggle_figure,历史人物降临,Historical Figures,歷史人物降臨
-aw_toggle_figure Description,开关历史人物(姬发/嬴政/刘邦/曹丕/司马炎)按序降临,Toggle whether historical figures spawn in order,開關歷史人物(姬發/嬴政/劉邦/曹丕/司馬炎)按序降臨
+aw_toggle_figure_description,开关历史人物(姬发/嬴政/刘邦/曹丕/司马炎)按序降临,Toggle whether historical figures spawn in order,開關歷史人物(姬發/嬴政/劉邦/曹丕/司馬炎)按序降臨
+aw_policy_state_placeholder,阶级,Class,階級
+aw_policy_exec_placeholder,国策,Policy,國策
+aw_label_king,国王,King,國王
+aw_label_heir,继承人,Heir,繼承人
+aw_biography_entry,人物传记,Biography,人物傳記
+aw_view_biography,查看该人的生平编年史,View this person's chronicle,查看該人的生平編年史
+aw_kingdom_history_entry,国家历史,Kingdom History,國家歷史
+aw_view_kingdom_history,查看该国的历史编年史,View this kingdom's chronicle,查看該國的歷史編年史
+aw_city_history_entry,城市历史,City History,城市歷史
+aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史

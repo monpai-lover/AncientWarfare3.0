@@ -37,6 +37,14 @@ namespace AncientWarfare3.ui
                 SpriteTextureLoader.getSprite("ui/icons/iconClan"));
             tab.AddPowerButton(GROUP_LINEAGE, overviewButton);
 
+            // 全王国列表(含亡国)按钮 —— 用户指定放本自定义 tab(有神力按钮的这个),非 kingdom 窗。
+            PowerButton rosterButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_kingdom_roster_btn",
+                () => OpenRoster(),
+                SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"));
+            tab.AddPowerButton(GROUP_LINEAGE, rosterButton);
+
             // 生成 Xia 神力(GodPower 按钮,id 必须 = power id "spawn_xia";power 已在 GodPowerLibrary.Init 注册)
             PowerButton spawnButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.SPAWN_XIA,
@@ -56,6 +64,11 @@ namespace AncientWarfare3.ui
         private static void OpenOverview()
         {
             windows.LineageOverviewWindow.Open();
+        }
+
+        private static void OpenRoster()
+        {
+            windows.KingdomRosterWindow.Open();
         }
     }
 }

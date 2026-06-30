@@ -21,7 +21,8 @@ namespace AncientWarfare3.ui.items
 
         private static UiUnitAvatarElement _avatarPrefab; // 懒克隆自 unit 窗的 avatar element
 
-        private UiUnitAvatarElement _avatar;
+        private UiUnitAvatarElement _avatar;       // 活人头像(原版控件,带旗帜/点击)
+        private Image _deadPortrait;               // 死者静态画像(纯数据合成 + 灰度,不引用活对象)
         private Button _avatarButton;
         private TipButton _avatarTip;
         private Text _nameText;
@@ -29,6 +30,9 @@ namespace AncientWarfare3.ui.items
         private Button _downButton;        // 下溯(到子)
         private Button _toggleButton;      // 展开/折叠(大树)
         private Text _toggleText;
+        private GameObject _branchBadge;   // 称王分封"建立分支X氏"提示徽标(点击跳新支大树)
+        private Text _branchBadgeText;
+        private Button _branchBadgeButton;
 
         private static readonly Color DeadTint = new Color(0.6f, 0.6f, 0.6f, 1f);
 
@@ -67,6 +71,18 @@ namespace AncientWarfare3.ui.items
                 _avatar.gameObject.SetActive(true);
             }
 
+            // 死者静态画像 Image(纯数据合成 + 灰度,与活人头像同位置叠放,按节点死活切换显隐)。
+            var deadObj = new GameObject("DeadPortrait", typeof(RectTransform), typeof(Image));
+            deadObj.transform.SetParent(holder.transform, false);
+            var drt = deadObj.GetComponent<RectTransform>();
+            drt.anchorMin = new Vector2(0.5f, 0.5f); drt.anchorMax = new Vector2(0.5f, 0.5f);
+            drt.pivot = new Vector2(0.5f, 0.5f); drt.anchoredPosition = Vector2.zero;
+            drt.sizeDelta = new Vector2(AVATAR, AVATAR);
+            _deadPortrait = deadObj.GetComponent<Image>();
+            _deadPortrait.preserveAspect = true;
+            _deadPortrait.raycastTarget = false;
+            deadObj.SetActive(false);
+
             // 点击 + tooltip 挂在 holder(覆盖整个头像区)
             var img = holder.AddComponent<Image>();
             img.color = new Color(0, 0, 0, 0); // 透明,仅作点击区
@@ -90,6 +106,28 @@ namespace AncientWarfare3.ui.items
             _upButton = MakeArrow("Up", new Vector2(0.5f, 1f), new Vector2(0, 2), "▲");
             _downButton = MakeArrow("Down", new Vector2(0.5f, 0f), new Vector2(0, -2), "▼");
             _toggleButton = MakeToggle();
+            BuildBranchBadge();
+        }
+
+        /// <summary>称王分封徽标:名字下方一行"建支:X氏"(青色),点击跳转新支大树。默认隐藏,Bind 按数据显隐。</summary>
+        private void BuildBranchBadge()
+        {
+            var obj = new GameObject("BranchBadge", typeof(RectTransform), typeof(Text), typeof(Button));
+            obj.transform.SetParent(transform, false);
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 1f); rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(NODE_W + 20, 12);
+            rect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP + 13)); // 名字下方再一行
+            _branchBadgeText = obj.GetComponent<Text>();
+            _branchBadgeText.font = LocalizedTextManager.current_font;
+            _branchBadgeText.fontSize = 8;
+            _branchBadgeText.alignment = TextAnchor.UpperCenter;
+            _branchBadgeText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _branchBadgeText.color = new Color(0.4f, 0.85f, 0.95f, 1f); // 青色链接感
+            _branchBadgeButton = obj.GetComponent<Button>();
+            _branchBadge = obj;
+            obj.SetActive(false);
         }
 
         private Button MakeArrow(string pName, Vector2 pAnchor, Vector2 pOffset, string pGlyph)
@@ -154,6 +192,31 @@ namespace AncientWarfare3.ui.items
             {
                 _toggleButton.gameObject.SetActive(false);
             }
+
+            // 称王分封:该节点开了新氏支 → 显示"建支:X氏",点击跳转新支大树。
+            BindBranchBadge(pNode);
+        }
+
+        /// <summary>绑定"建立分支X氏"徽标:节点有 founded_branch_shi_id 时显示并可点击跳新支大树;否则隐藏。</summary>
+        private void BindBranchBadge(FamilyTreeNode pNode)
+        {
+            if (_branchBadge == null) return;
+            _branchBadgeButton.onClick.RemoveAllListeners();
+
+            long branchShi = pNode.founded_branch_shi_id;
+            if (branchShi < 0)
+            {
+                _branchBadge.SetActive(false);
+                return;
+            }
+
+            // 取新支氏名(查 ShiBranch 档案);取不到则用占位。
+            var info = LineageQuery.GetShiBranchInfo(branchShi);
+            string clanName = info != null && !string.IsNullOrEmpty(info.clan_name) ? info.clan_name : "新支";
+            _branchBadgeText.text = "▸建支:" + clanName + "氏";
+            _branchBadge.SetActive(true);
+            _branchBadgeButton.onClick.AddListener(() =>
+                AncientWarfare3.ui.windows.FamilyTreeWindow.OpenBigTree(branchShi));
         }
 
         private void SetArrow(Button pBtn, Action pAction)
@@ -170,39 +233,169 @@ namespace AncientWarfare3.ui.items
             }
         }
 
-        // ── 头像渲染:活人 show(actor)(自带国家/氏族旗帜配色);死人手工 ActorAvatarData + 国家旗帜还原 + 头像灰度 ──
+        // ── 头像渲染 ──
+        //   活人:原版 UiUnitAvatarElement.show(actor)(带边框/旗帜/点击,实时,avatarLoader 启用)。
+        //   死者:**同一个 _avatar 外壳**(边框+旗帜与活人一致),画像用存档 sex/head/skin 数据经
+        //        ActorAvatarData.setData(**pIsStopIdleAnimation=true** 强制静态)复现 → load 走 showStatic
+        //        立即定格首帧,**不引用活 Actor、不走动画 Update**(再 avatarLoader.enabled=false 硬停双保险,
+        //        根治旧的 _unit_sprites[idx] 越界崩),整体头像本体置灰。
         private void RenderAvatar(FamilyTreeNode pNode)
         {
             if (_avatar == null) return;
+            if (_deadPortrait != null) _deadPortrait.gameObject.SetActive(false); // 弃用独立死像,统一走 _avatar 外壳
+            _avatar.gameObject.SetActive(true);
 
             Actor live = World.world?.units?.get(pNode.id);
-            if (live != null && !live.isRekt())
+            // 必须 isAlive():死者在世界里可能仍有 actor 但 !isRekt(),走 show(live) 会触发 loader 的 showDied()
+            // 渲染 _died_sprite(墓碑/僵尸占位)。真死者一律走下方静态重建分支。
+            bool alive = live != null && !live.isRekt() && live.isAlive();
+
+            if (alive)
             {
-                // 活人:show 内部 avatarLoader.load + kingdomBanner.load(国家色) + clanBanner.load(氏族色)。
-                // **不要再 tint** —— 旧 bug:SetAvatarTint 遍历所有子 Image,把刚 load 的旗帜配色冲成白色。
+                _avatar.enabled = true;                                 // 恢复控件刷新(死者分支会关掉)
+                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true; // 恢复活人动画
                 _avatar.show(live);
-                // clan 旗帜"有时白":原版 ClanBanner 图标用 getColorBanner(),部分颜色的 banner 色近白
-                // (colors_general.json 里有 #FFFEF9 等)→ 随机分到就发白。统一用饱和主色重染,保证永远有色。
                 FixClanBannerColor(live);
                 return;
             }
 
-            // 死者:手工 ActorAvatarData 还原贴图 + 还原国家旗帜 + 仅头像本体置灰(旗帜保留配色)。
+            // 死者:**完全脱离 UiUnitAvatarElement**(它强耦合 live Actor:OnDisable 清 _actor、
+            //   IRefreshElement 刷新与 tooltip 都走 _actor;死者 getActor()==null → 框架刷新时画像消失/出错,
+            //   这正是用户报的"死人画像 getActor 返回 null"根因)。改用独立 _deadPortrait Image 直接显示
+            //   我们用存档 phenotype 自行合成的**静态 Xia 上色 sprite**,不依赖任何 live actor。
+            _avatar.avatarLoader.enabled = false;                  // 停 loader Update
+            _avatar.enabled = false;                               // 停控件自身刷新(IRefreshElement),杜绝 null-actor 刷新
+            HideAvatarBody();                                      // 关掉原版控件的单位贴图/底图标(留 _deadPortrait 接管)
+
             try
             {
-                var data = BuildDeadAvatarData(pNode);
-                if (data != null) _avatar.avatarLoader.load(data, false);
-
-                LoadDeadKingdomBanner(pNode);     // 国家旗帜:活国实时 load / 亡国用存档色手工还原
-                if (_avatar.clanBanner != null)   // 氏族旗帜:死人无 clan 对象(未存 clan_id),隐藏
+                Sprite dead = BuildDeadSprite(pNode);
+                if (dead != null && _deadPortrait != null)
+                {
+                    _deadPortrait.gameObject.SetActive(true);
+                    _deadPortrait.sprite = dead;
+                    _deadPortrait.color = DeadTint;                // 整体灰度(死者)
+                }
+                LoadDeadKingdomBanner(pNode);                      // 国旗帜:活国实时 / 亡国存档色(仍用 _avatar 的 banner 子物体)
+                if (_avatar.clanBanner != null)                    // 死人无 clan 对象 → 隐藏氏族旗帜
                     _avatar.clanBanner.gameObject.SetActive(false);
+            }
+            catch { /* 合成失败:留空头像 + 灰名,不崩 */ }
+        }
 
-                TintAvatarBodyOnly(DeadTint);     // 只灰头像本体,跳过 banner 子树(保旗帜色)
-            }
-            catch
+        /// <summary>关掉原版控件的单位贴图/底图标本体(保留 kingdomBanner 子树供死者旗帜用),让 _deadPortrait 接管画像。</summary>
+        private void HideAvatarBody()
+        {
+            if (_avatar == null) return;
+            var loader = _avatar.avatarLoader;
+            if (loader != null)
             {
-                TintAvatarBodyOnly(DeadTint);
+                if (loader._actor_image != null) loader._actor_image.enabled = false;
+                if (loader._item_image != null) loader._item_image.enabled = false;
             }
+            if (_avatar.unit_type_bg != null) _avatar.unit_type_bg.gameObject.SetActive(false);
+            if (_avatar._tile_graphics_1 != null) _avatar._tile_graphics_1.enabled = false;
+            if (_avatar._tile_graphics_2 != null) _avatar._tile_graphics_2.enabled = false;
+        }
+
+        /// <summary>用存档数据(sex/head/phenotype)合成一张**静态上色 Xia sprite**,不引用 live Actor。
+        /// 走 getContainerForUI(取 Xia 逐帧贴图容器)→ walking 首帧 → getColoredSprite(按存档 phenotype 上色)。</summary>
+        private static Sprite BuildDeadSprite(FamilyTreeNode pNode)
+        {
+            var data = BuildDeadAvatarData(pNode);
+            if (data == null || data.asset == null) return null;
+            if (data.asset.has_override_sprite) return data.asset.get_override_sprite(null);
+
+            var container = DynamicActorSpriteCreatorUI.getContainerForUI(
+                data.asset, data.is_adult, data.getTextureAsset(),
+                data.mutation_skin_asset, data.is_egg, data.egg_asset);
+            if (container?.walking?.frames == null || container.walking.frames.Length == 0) return null;
+
+            Sprite baseFrame = container.walking.frames[0];
+            return data.getColoredSprite(baseFrame, container); // 内部用 data.phenotype_* 上 Xia 真实肤色
+        }
+
+        /// <summary>用死者存档数据(sex/head id)构造 ActorAvatarData(无 live Actor)。
+        /// pIsStopIdleAnimation=true → avatarLoader.load 走 showStatic 定格静态首帧,不触发动画 Update 越界。</summary>
+        private static ActorAvatarData BuildDeadAvatarData(FamilyTreeNode pNode)
+        {
+            ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
+            if (xia == null) return null;
+
+            ColorAsset color = null;
+            if (!string.IsNullOrEmpty(pNode.kingdom_color))
+                color = ColorAsset.getExistingColorAsset(pNode.kingdom_color);
+
+            var data = new ActorAvatarData();
+            data.setData(
+                xia,                                   // asset
+                null,                                  // mutation
+                pNode.sex == 0 ? ActorSex.Male : ActorSex.Female,
+                pNode.id,                              // actor id(头部随机种子;有 head id 时不用)
+                pNode.head >= 0 ? pNode.head : 0,      // head id
+                null,                                  // sprite_head(loader 填)
+                pNode.phenotype_index,                 // phenotype_index(生前真实肤色,0 会被上成僵尸绿)
+                pNode.phenotype_shade,                 // phenotype_skin_shade
+                color,                                 // kingdom color
+                false,                                 // is_egg
+                false, false, false,                   // king / warrior / wise
+                null,                                  // egg_asset
+                true,                                  // is_adult(死者按成年画)
+                false,                                 // is_lying
+                false,                                 // is_touching_liquid
+                false,                                 // is_inside_boat
+                false,                                 // is_hovering
+                false,                                 // is_immovable
+                false,                                 // is_unconscious
+                true,                                  // ⚠ is_stop_idle_animation = true → 强制 showStatic 静态首帧
+                null,                                  // item renderer
+                (int)pNode.id,                         // hash
+                null, null);                           // statuses
+            return data;
+        }
+
+        /// <summary>死者国旗帜:活国 kingdomBanner.load(kingdom)(含配色);亡国用存档 kingdom_color 手工染色;无则隐藏。</summary>
+        private void LoadDeadKingdomBanner(FamilyTreeNode pNode)
+        {
+            if (_avatar.kingdomBanner == null) return;
+            Kingdom k = (pNode.kingdom_id >= 0) ? World.world?.kingdoms?.get(pNode.kingdom_id) : null;
+            if (k != null && !k.isRekt())
+            {
+                _avatar.kingdomBanner.gameObject.SetActive(true);
+                _avatar.kingdomBanner.load(k);
+            }
+            else if (!string.IsNullOrEmpty(pNode.kingdom_color))
+            {
+                _avatar.kingdomBanner.gameObject.SetActive(true);
+                Color c = Toolbox.makeColor(pNode.kingdom_color);
+                foreach (var img in _avatar.kingdomBanner.GetComponentsInChildren<Image>(true))
+                    img.color = new Color(c.r, c.g, c.b, img.color.a);
+            }
+            else
+            {
+                _avatar.kingdomBanner.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>只把头像本体(unit 贴图/底图标/tile)置灰,跳过 kingdomBanner/clanBanner 子树(保旗帜配色)。</summary>
+        private void TintAvatarBodyOnly(Color pColor)
+        {
+            if (_avatar == null) return;
+            Transform kb = _avatar.kingdomBanner != null ? _avatar.kingdomBanner.transform : null;
+            Transform cb = _avatar.clanBanner != null ? _avatar.clanBanner.transform : null;
+            foreach (var img in _avatar.GetComponentsInChildren<Image>(true))
+            {
+                if (IsUnder(img.transform, kb) || IsUnder(img.transform, cb)) continue;
+                img.color = new Color(pColor.r, pColor.g, pColor.b, img.color.a);
+            }
+        }
+
+        private static bool IsUnder(Transform pNode, Transform pAncestor)
+        {
+            if (pAncestor == null) return false;
+            for (Transform t = pNode; t != null; t = t.parent)
+                if (t == pAncestor) return true;
+            return false;
         }
 
         /// <summary>
@@ -225,85 +418,6 @@ namespace AncientWarfare3.ui.items
                 cb.part_icon.color = new Color(main.r, main.g, main.b, cb.part_icon.color.a);
         }
 
-        /// <summary>死者国家旗帜还原:活国 kingdomBanner.load(kingdom)(含配色);亡国用存档 kingdom_color 手工染色。</summary>
-        private void LoadDeadKingdomBanner(FamilyTreeNode pNode)
-        {
-            if (_avatar.kingdomBanner == null) return;
-
-            Kingdom k = (pNode.kingdom_id >= 0) ? World.world?.kingdoms?.get(pNode.kingdom_id) : null;
-            if (k != null && !k.isRekt())
-            {
-                _avatar.kingdomBanner.gameObject.SetActive(true);
-                _avatar.kingdomBanner.load(k); // 含国家配色
-            }
-            else if (!string.IsNullOrEmpty(pNode.kingdom_color))
-            {
-                // 亡国:旗帜底图保留 prefab 自带,只把背景/图标染回存档国家色(近似还原)。
-                _avatar.kingdomBanner.gameObject.SetActive(true);
-                Color c = Toolbox.makeColor(pNode.kingdom_color);
-                foreach (var img in _avatar.kingdomBanner.GetComponentsInChildren<Image>(true))
-                    img.color = new Color(c.r, c.g, c.b, img.color.a);
-            }
-            else
-            {
-                _avatar.kingdomBanner.gameObject.SetActive(false);
-            }
-        }
-
-        /// <summary>仅把头像本体(unit 贴图、底图标、tile)置灰,**跳过 kingdomBanner/clanBanner 子树**,
-        /// 否则会把旗帜的国家/氏族配色冲掉。</summary>
-        private void TintAvatarBodyOnly(Color pColor)
-        {
-            if (_avatar == null) return;
-            Transform kb = _avatar.kingdomBanner != null ? _avatar.kingdomBanner.transform : null;
-            Transform cb = _avatar.clanBanner != null ? _avatar.clanBanner.transform : null;
-            foreach (var img in _avatar.GetComponentsInChildren<Image>(true))
-            {
-                if (IsUnder(img.transform, kb) || IsUnder(img.transform, cb)) continue; // 跳过旗帜
-                img.color = new Color(pColor.r, pColor.g, pColor.b, img.color.a);
-            }
-        }
-
-        private static bool IsUnder(Transform pNode, Transform pAncestor)
-        {
-            if (pAncestor == null) return false;
-            for (Transform t = pNode; t != null; t = t.parent)
-                if (t == pAncestor) return true;
-            return false;
-        }
-
-        /// <summary>用存档字段手工构造死者 ActorAvatarData(无 live Actor)。</summary>
-        private static ActorAvatarData BuildDeadAvatarData(FamilyTreeNode pNode)
-        {
-            ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
-            if (xia == null) return null;
-
-            ColorAsset color = null;
-            if (!string.IsNullOrEmpty(pNode.kingdom_color))
-                color = ColorAsset.getExistingColorAsset(pNode.kingdom_color);
-
-            var data = new ActorAvatarData();
-            data.setData(
-                xia,                                   // asset
-                null,                                  // mutation
-                pNode.sex == 0 ? ActorSex.Male : ActorSex.Female,
-                pNode.id,                              // actor id
-                pNode.head >= 0 ? pNode.head : 0,      // head id
-                null,                                  // sprite_head(loader 填)
-                0,                                     // phenotype_index
-                0,                                     // phenotype_skin_shade
-                color,                                 // kingdom color
-                false,                                 // is_egg
-                false, false, false,                   // king/warrior/wise
-                null,                                  // egg_asset
-                true,                                  // is_adult(死者按成年画)
-                false, false, false, false, false, false, false, // 各状态
-                null,                                  // item renderer
-                (int)pNode.id,                         // hash
-                null, null);                           // statuses
-            return data;
-        }
-
         private static Color ResolveNameColor(FamilyTreeNode pNode)
         {
             Color baseColor = Color.white;
@@ -317,15 +431,45 @@ namespace AncientWarfare3.ui.items
             return baseColor;
         }
 
+        /// <summary>节点 tooltip 正文:多行丰富信息(身份/性别 · 氏族 · 国/城 · 生卒 · 代)。空字段省略该行。</summary>
         private static string BuildActorTip(FamilyTreeNode pNode)
         {
-            string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time).ToString() : "?";
-            string life = pNode.is_alive
-                ? "(" + birth + "- )"
-                : "(" + birth + "-" + (pNode.death_time > 0 ? Date.getYear(pNode.death_time).ToString() : "?") + ")";
+            var sb = new System.Text.StringBuilder();
+
+            // 行1:身份 · 性别 · 状态(在世/已故)
             string identity = IdentityLabel(pNode.status);
-            string kn = string.IsNullOrEmpty(pNode.kingdom_name) ? "" : ("  " + pNode.kingdom_name);
-            return pNode.display_name + " " + life + " " + identity + kn;
+            string sex = pNode.sex == 0 ? "男" : "女";
+            string alive = pNode.is_alive ? "在世" : "已故";
+            string line1 = JoinNonEmpty(" · ", identity, sex, alive);
+            if (line1.Length > 0) sb.AppendLine(line1);
+
+            // 行2:氏(clan_name)
+            if (!string.IsNullOrEmpty(pNode.clan_name))
+                sb.AppendLine("氏:" + pNode.clan_name);
+
+            // 行3:国 · 城
+            string kc = JoinNonEmpty("  ",
+                string.IsNullOrEmpty(pNode.kingdom_name) ? "" : "国:" + pNode.kingdom_name,
+                string.IsNullOrEmpty(pNode.city_name) ? "" : "居:" + pNode.city_name);
+            if (kc.Length > 0) sb.AppendLine(kc);
+
+            // 行4:生卒
+            string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time) + "年" : "?";
+            string death = pNode.is_alive ? "—" : (pNode.death_time > 0 ? Date.getYear(pNode.death_time) + "年" : "?");
+            sb.AppendLine("生:" + birth + "   卒:" + death);
+
+            // 行5:距贵族代数(noble_distance:本人贵族=0)
+            if (pNode.noble_distance >= 0 && pNode.noble_distance < 99)
+                sb.Append(pNode.noble_distance == 0 ? "贵族本支" : ("距贵族 " + pNode.noble_distance + " 代"));
+
+            return sb.ToString().TrimEnd('\n', '\r');
+        }
+
+        private static string JoinNonEmpty(string pSep, params string[] pParts)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var s in pParts) if (!string.IsNullOrEmpty(s)) parts.Add(s);
+            return string.Join(pSep, parts.ToArray());
         }
 
         private static void SetTip(TipButton pTip, GameObject pOwner, string pTitle, string pDesc)
@@ -344,9 +488,10 @@ namespace AncientWarfare3.ui.items
 
         private static string IdentityLabel(string pStatus)
         {
-            if (pStatus == LineageStatus.NOBLE) return "贵";
-            if (pStatus == LineageStatus.COMMON) return "平";
-            if (pStatus == LineageStatus.SLAVE) return "奴";
+            // 返回完整身份词(调用方不再 +"族",否则"平民"会变"平族")。
+            if (pStatus == LineageStatus.NOBLE) return "贵族";
+            if (pStatus == LineageStatus.COMMON) return "平民";
+            if (pStatus == LineageStatus.SLAVE) return "奴隶";
             return "";
         }
 

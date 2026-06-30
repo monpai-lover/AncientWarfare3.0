@@ -1,4 +1,5 @@
 using AncientWarfare3.core.db;
+using AncientWarfare3.content;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -28,7 +29,9 @@ namespace AncientWarfare3.patch
         {
             if (string.IsNullOrEmpty(pPath)) return;
             LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
+            XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load(); // DB 已切到该存档的库 → 刷新历史人物生成状态内存缓存
+            core.lineage.KingdomArchiveWriter.BackfillAll(); // 老存档/已有王国立即进万国史名册
         }
 
         [HarmonyPostfix]
@@ -36,6 +39,7 @@ namespace AncientWarfare3.patch
         public static void GenerateNewMap_Postfix()
         {
             LineageArchiveManager.Instance.CreateDataBase();
+            XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
         }
     }

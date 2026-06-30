@@ -44,6 +44,50 @@ namespace AncientWarfare3.core.lineage
         public long shi_id;
     }
 
+    /// <summary>王国档案条目(全王国列表用)。从 KingdomArchive 表读,含旗帜重建所需快照。</summary>
+    internal class KingdomArchiveInfo
+    {
+        public long   kingdom_id;
+        public string kingdom_name;
+        public string color_text;
+        public int    color_id;
+        public int    banner_icon_id;
+        public int    banner_background_id;
+        public string banner_id;
+        public bool   is_alive;
+        public double founded_time;
+        public double destroyed_time;
+    }
+
+    /// <summary>一个朝代时期(国家历史分段折叠用)。有王=一个王统治期;无王=一段空位期(按时间区间)。</summary>
+    internal class ReignPeriod
+    {
+        public bool   has_king;
+        public string king_name;
+        public double start_time;
+        public double end_time = -1;       // -1 = 至今/未结束
+        public string year_prefix_snapshot; // 该段起始事件的 year_prefix 快照(含年号+纪年,亡国也准)
+        public System.Collections.Generic.List<HistoryEntry> events = new System.Collections.Generic.List<HistoryEntry>();
+    }
+
+    /// <summary>编年史列表统一行:或是朝代段头(可折叠),或是一条事件。国家史用段头分组;人物/城市史只用事件行。</summary>
+    internal class HistoryRow
+    {
+        public bool   is_header;       // true=朝代段头,false=事件行
+        public string text;            // 显示文本(段头标题 / 事件正文)
+        public bool   expanded;        // 段头:当前是否展开(决定 +/− 与其事件是否显示)
+        public int    reign_index = -1; // 段头:对应 ReignPeriod 序号(toggle 用)
+        public bool   dim;             // 事件行缩进/淡显(归属某段)
+    }
+
+    /// <summary>氏族大树分支折叠探测结果(只看一层子代的轻量标记,不递归全查)。</summary>
+    internal class BranchProbe
+    {
+        public bool has_children;   // 有直接子代(决定是否显示 +/− 折叠钮)
+        public bool any_alive;      // 直接子代里有活人(全死则自动折叠)
+        public bool any_important;  // 直接子代里有 king / city leader / heir(无重要人物则自动折叠)
+    }
+
     /// <summary>家族树三层节点(父母 / 本人 / 子女)。死者用 SQL 档案渲染。</summary>
     internal class FamilyTreeNode
     {
@@ -65,6 +109,9 @@ namespace AncientWarfare3.core.lineage
         public int    head;          // 头像数据(可选,用于自绘头像)
         public int    skin;
         public int    skin_set;
+        public int    phenotype_index;   // 死者画像重建用真实肤色(活人从 actor 实时取)
+        public int    phenotype_shade;
+        public long   founded_branch_shi_id = -1; // 称王分封:该人开的新氏支 id(原树显示"建立分支X氏"+点击跳转)。无则 -1
 
         public List<FamilyTreeNode> parents = new();
         public List<FamilyTreeNode> children = new();

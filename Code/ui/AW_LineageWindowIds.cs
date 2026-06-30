@@ -6,6 +6,8 @@ namespace AncientWarfare3.ui
         public const string OVERVIEW = "aw_lineage_overview";   // 姓族总览(列所有姓)
         public const string SHI_LIST = "aw_shi_list";           // 某姓的氏支列表
         public const string FAMILY_TREE = "aw_family_tree";     // 家族树/氏族大树(双模式)
+        public const string HISTORY = "aw_history";             // 编年史(人物传记/国家历史/城市易主,三来源)
+        public const string KINGDOM_ROSTER = "aw_kingdom_roster"; // 全王国列表(含亡国)
 
         /// <summary>
         ///     安全打开窗口,避免重复入栈(用户反馈"反复点击开多次、Esc 退不完")。

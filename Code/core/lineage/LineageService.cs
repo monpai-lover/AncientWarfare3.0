@@ -54,6 +54,20 @@ namespace AncientWarfare3.core.lineage
             RecordFamilyEdges(pBaby);
             ApplyDisplayName(pBaby);
             ArchiveActor(pBaby, pAlive: true);
+
+            // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
+            RecordBirthEvent(pBaby);
+        }
+
+        /// <summary>入谱贵族出生 → PersonBiography 记一条 birth 事件(无谱系者不记)。</summary>
+        private static void RecordBirthEvent(Actor pActor)
+        {
+            if (pActor?.data == null || !IsXia(pActor)) return;
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
+            if (lid < 0) return; // 仅入谱贵族家系
+
+            string name = pActor.getName();
+            HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name, "birth", name + " 出生");
         }
 
         /// <summary>
@@ -73,22 +87,22 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     父系继承:取男性一方的父母作"父亲"(都非男则取有谱系一方),继承其
-        ///     lineage/shi/family/clan,noble_distance=父+1;父亲无谱系则本人也无谱系
-        ///     (合流前不从母亲继承,任务书 §2)。
+        ///     谱系继承:**双系**——优先有谱系的父系,父系无谱系则退母系(用户要"贵族生的孩子自动变贵族",
+        ///     不再严格父系丢母系血统)。继承 lineage/shi/family/clan,noble_distance=源+1;
+        ///     继承后调 RefreshNobleStatus 按距离统一加/移 guizu 贵族特质。
         /// </summary>
         private static void InheritFromParents(Actor pActor, Actor pParent1, Actor pParent2)
         {
-            Actor father = PickFather(pParent1, pParent2);
-            if (father == null) return;
+            Actor source = PickLineageSource(pParent1, pParent2);
+            if (source == null) return;
 
-            father.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
-            if (lid < 0) return; // 父亲无谱系
+            source.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
+            if (lid < 0) return; // 来源无谱系(双系都无)→ 本人暂无谱系
 
-            father.data.get(LineageKeys.SHI_ID, out long sid, -1);
-            father.data.get(LineageKeys.FAMILY_NAME, out string fam, "");
-            father.data.get(LineageKeys.CLAN_NAME, out string clan, "");
-            father.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
+            source.data.get(LineageKeys.SHI_ID, out long sid, -1);
+            source.data.get(LineageKeys.FAMILY_NAME, out string fam, "");
+            source.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            source.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
 
             pActor.data.set(LineageKeys.LINEAGE_ID, lid);
             pActor.data.set(LineageKeys.SHI_ID, sid);
@@ -97,13 +111,19 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
             pActor.data.set(LineageKeys.LINEAGE_STATUS,
                 dist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
+
+            // 按 noble_distance 统一加/移 guizu 贵族特质(继承的贵族子代也享生育加成,与晋升路径对齐)。
+            RefreshNobleStatus(pActor);
         }
 
-        /// <summary>从两个父母里挑"父亲":优先男性;都非男(或缺失)则取有谱系的一方。</summary>
-        private static Actor PickFather(Actor pParent1, Actor pParent2)
+        /// <summary>
+        ///     选谱系继承来源(双系):优先"有谱系的父系"(男性),父系无谱系退"有谱系的母系",都无则任一有谱系方,否则 null。
+        ///     旧 PickFather 因"父亲是男性就选中"会让无谱系父亲挡住有谱系母亲 → 母系贵族孩子丢血统,故改双系。
+        /// </summary>
+        private static Actor PickLineageSource(Actor pParent1, Actor pParent2)
         {
-            if (pParent1 != null && pParent1.isSexMale()) return pParent1;
-            if (pParent2 != null && pParent2.isSexMale()) return pParent2;
+            if (pParent1 != null && pParent1.isSexMale() && HasLineageData(pParent1)) return pParent1;
+            if (pParent2 != null && pParent2.isSexMale() && HasLineageData(pParent2)) return pParent2;
             if (pParent1 != null && HasLineageData(pParent1)) return pParent1;
             if (pParent2 != null && HasLineageData(pParent2)) return pParent2;
             return null;
@@ -249,6 +269,56 @@ namespace AncientWarfare3.core.lineage
 
             ApplyDisplayName(pChild);
             ArchiveActor(pChild, pAlive: true);
+        }
+
+        /// <summary>
+        ///     称王分封:某人称王且**建新国/夺别国**(新王所在国 ≠ 其当前氏支的 origin_kingdom_id)时,
+        ///     从原氏支 + 原版 clan 脱离,**开一个新氏支**(KING_FOUNDED)成为新支始祖;子嗣此后继承新 SHI_ID 只进新支。
+        ///     原氏族树保留他的位置 + 标记 FOUNDED_BRANCH_SHI_ID(供"建立分支X氏"提示 + 点击跳转新支)。
+        ///     **本国内继位不触发**(新王国 == origin_kingdom_id,大宗本国传承)。
+        ///     由 setKing Postfix 调用(AW_HeirPatch / 新 patch)。
+        /// </summary>
+        public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing)
+        {
+            if (pKingdom?.data == null || pKing?.data == null) return;
+            if (!IsXia(pKing)) return;
+
+            pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
+            if (lineageId < 0) return; // 无谱系(非贵族血统),不分封
+
+            pKing.data.get(LineageKeys.SHI_ID, out long curShiId, -1);
+            if (curShiId < 0) return;
+
+            // 触发判定:新王所在国 != 当前氏支的 origin_kingdom_id → 建新国/夺别国 → 分封。
+            long originKingdom = LineageQuery.GetShiOriginKingdom(curShiId);
+            if (originKingdom == pKingdom.id) return; // 本国内继位,大宗传承,不开新支
+
+            // 幂等:已为"这个国"开过支(标记 == 当前国对应的新支)则不重复。
+            pKing.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedShi, -1);
+            if (foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id) return;
+
+            // 1) 原版 clan:从旧 clan 脱离,新建以国王为创始人的 clan。
+            try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); } catch { /* clan 新建失败不致命 */ }
+
+            // 2) 开新氏支(同姓族 lineageId,新氏名按国/城生成)。
+            (string clanName, _) = GenerateShiName(pKing);
+            long newShiId = LineageIdAllocator.NextShiId();
+            InsertShiBranch(newShiId, lineageId, clanName, pKing, ShiSourceType.KING_FOUNDED);
+
+            // 3) 国王改挂新氏支,成为新支始祖(距离归零、贵族、改氏名)。
+            pKing.data.set(LineageKeys.SHI_ID, newShiId);
+            pKing.data.set(LineageKeys.CLAN_NAME, clanName);
+            pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+
+            // 4) 在国王 data 上标记"建立的新支 id"(原氏族树在他位置显示"建立分支X氏"+点击跳转用)。
+            pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
+
+            ApplyDisplayName(pKing);          // 氏变 → 重拼显示名
+            ArchiveActor(pKing, pAlive: true);
+
+            ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{clanName}」(shi={newShiId},脱离旧支 {curShiId})。");
         }
 
         /// <summary>
