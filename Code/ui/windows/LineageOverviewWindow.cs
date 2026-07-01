@@ -17,7 +17,7 @@ namespace AncientWarfare3.ui.windows
 
         protected override void Init()
         {
-            // 无额外初始化;列表内容在 OnNormalEnable 刷新。
+            // 使用原版列表窗尺寸。
         }
 
         public override void OnNormalEnable()

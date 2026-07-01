@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public const string NAME_INTEGRATED = "aw_name_integrated";   // 是否被合流规则处理过(bool)
         public const string LINEAGE_STATUS = "aw_lineage_status";     // none/noble/common_lineage/slave_lineage
         public const string EAGER_BUILDER = "aw_eager_builder";       // 积极建城候选(多余 male 子嗣) flag,bool
+        public const string DEATH_CAUSE = "aw_death_cause";            // 死因快照,用于死者档案 tooltip
 
         // kingdom.data
         public const string KINGDOM_INTEGRATED = "aw_name_integrated"; // 该国是否完成姓氏合流(bool)

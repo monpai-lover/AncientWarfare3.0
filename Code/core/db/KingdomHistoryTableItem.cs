@@ -13,8 +13,16 @@ namespace AncientWarfare3.core.db
         public long   kingdom_id = -1;   // 关联 Kingdom.id
         public double world_time;
         public string year_prefix;
+        public string year_prefix_rich = "";
         public string subject_name;      // 事件发生时国名快照
+        public string subject_color = "";
         public string content;
+        public string content_rich = "";
         public string event_type;        // found / rule_change / destroyed
+        public long   context_kingdom_id = -1;
+        public string context_kingdom_name = "";
+        public string context_kingdom_color = "";
+        public string target_type = "";
+        [TableItemDef(pDefaultValue: "-1")] public long target_id = -1;
     }
 }

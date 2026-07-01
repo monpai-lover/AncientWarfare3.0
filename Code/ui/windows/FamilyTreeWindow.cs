@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace AncientWarfare3.ui.windows
     /// <summary>
     ///     家族树(小树)/ 氏族大树(大树)。纵向居中多叉树。
     ///     - 大树:以氏支始祖为根整株,懒加载折叠(+/−);点节点 → 打开该人的**小家庭树**。
-    ///     - 小树:以某人为中心(父母-本人-子女);点节点 → 打开该人 **inspect 单位窗**;
+    ///     - 小树:以某人为中心(父母-本人-子女);点根节点 → 打开本人 inspect,点非根节点 → 以该人为新根重开小树;
     ///       节点带上/下溯箭头(有父显▲跳到父、有子显▼跳到长子,重开以其为中心的小树)。
     ///     - 标题按模式区分:大树="氏族大树",小树="家族树"。
     /// </summary>
@@ -18,10 +19,13 @@ namespace AncientWarfare3.ui.windows
     {
         private const int NODE_W = 70;
         private const int NODE_H = 64; // 与 FamilyTreeNodeView.NODE_H 一致(名字下移后增高)
-        private const int H_GAP = 12;
+        private const int H_GAP = 6;
         private const int V_GAP = 34;
         private const int PAD = 12;
-        private const float VIEWPORT_W = 232f; // NML 滚动视口宽(用于居中)
+        private const float WINDOW_W = 480f;
+        private const float WINDOW_H = 310f;
+        private const float VIEWPORT_W = 430f; // 加宽后的滚动视口宽(用于居中)
+        private const float VIEWPORT_H = 230f;
 
         private enum Mode { Family, BigTree }
         private static Mode _mode;
@@ -37,8 +41,11 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _canvasRect;
         private Button _backButton;
         private Text _backText;
+        private Button _expandButton;
+        private Button _collapseButton;
         private Text _titleText;
         private float _maxDepthY;
+        private long _lastTreeRootId = -1;
 
         public static void OpenBigTree(long pShiId)
         {
@@ -83,6 +90,8 @@ namespace AncientWarfare3.ui.windows
 
         protected override void Init()
         {
+            ConfigureWideTreeWindow();
+
             var canvasObj = new GameObject("TreeCanvas", typeof(RectTransform));
             canvasObj.transform.SetParent(ContentTransform, false);
             _canvasRect = canvasObj.GetComponent<RectTransform>();
@@ -114,6 +123,9 @@ namespace AncientWarfare3.ui.windows
             var sw = GetComponent<ScrollWindow>();
             if (sw != null) _titleText = sw.titleText;
 
+            _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(-104, -28), ExpandAllLiveBranches);
+            _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(-52, -28), CollapseAllBranches);
+
             // "回氏族大树"按钮(窗口底部居中,小树模式可见)
             var btnObj = new GameObject("BackToBigTree", typeof(RectTransform), typeof(Image), typeof(Button));
             btnObj.transform.SetParent(BackgroundTransform, false);
@@ -124,8 +136,7 @@ namespace AncientWarfare3.ui.windows
             brect.sizeDelta = new Vector2(120, 18);
             brect.anchoredPosition = new Vector2(0, 12);
             var bg = btnObj.GetComponent<Image>();
-            bg.sprite = SpriteTextureLoader.getSprite("ui/special/button");
-            bg.type = Image.Type.Sliced;
+            AW_UIStyle.ApplyButton(bg, 0.95f);
             _backButton = btnObj.GetComponent<Button>();
             _backButton.onClick.AddListener(OnBack);
             var txtObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -137,7 +148,75 @@ namespace AncientWarfare3.ui.windows
             _backText.fontSize = 10;
             _backText.alignment = TextAnchor.MiddleCenter;
             _backText.color = Color.white;
-            _backText.text = "← 回氏族大树";
+            _backText.text = AW_L10n.Text("aw_back_big_tree", "← 回氏族大树");
+        }
+
+        private void ConfigureWideTreeWindow()
+        {
+            var bgRect = BackgroundTransform.GetComponent<RectTransform>();
+            if (bgRect != null) bgRect.sizeDelta = new Vector2(WINDOW_W, WINDOW_H);
+
+            Transform close = BackgroundTransform.parent != null ? BackgroundTransform.parent.Find("CloseBackground") : null;
+            if (close != null) close.localPosition = new Vector3(WINDOW_W / 2f - 20f, WINDOW_H / 2f - 12f);
+
+            Transform titleBg = BackgroundTransform.Find("TitleBackground");
+            var titleRect = titleBg != null ? titleBg.GetComponent<RectTransform>() : null;
+            if (titleRect != null)
+            {
+                titleRect.sizeDelta = new Vector2(WINDOW_W * 0.5f, 30f);
+                titleBg.localPosition = new Vector3(0, WINDOW_H / 2f - 16f);
+            }
+
+            var sw = GetComponent<ScrollWindow>();
+            if (sw?.titleText != null)
+            {
+                sw.titleText.transform.localPosition = new Vector3(0, WINDOW_H / 2f - 16f);
+                var tr = sw.titleText.GetComponent<RectTransform>();
+                if (tr != null) tr.sizeDelta = new Vector2(WINDOW_W * 0.46f, 28f);
+            }
+
+            Transform scroll = BackgroundTransform.Find("Scroll View");
+            var scrollRect = scroll != null ? scroll.GetComponent<RectTransform>() : null;
+            if (scrollRect != null)
+            {
+                scrollRect.sizeDelta = new Vector2(VIEWPORT_W, VIEWPORT_H);
+                scroll.localPosition = new Vector3(0, -18f, 0);
+            }
+
+            Transform viewport = BackgroundTransform.Find("Scroll View/Viewport");
+            var viewRect = viewport != null ? viewport.GetComponent<RectTransform>() : null;
+            if (viewRect != null) viewRect.sizeDelta = new Vector2(VIEWPORT_W, VIEWPORT_H);
+        }
+
+        private Button MakeToolbarButton(string pName, string pText, Vector2 pTopRightOffset, System.Action pAction)
+        {
+            var obj = new GameObject(pName, typeof(RectTransform), typeof(Image), typeof(Button));
+            obj.transform.SetParent(BackgroundTransform, false);
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(46, 18);
+            rect.anchoredPosition = pTopRightOffset;
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
+
+            var btn = obj.GetComponent<Button>();
+            btn.onClick.AddListener(() => pAction?.Invoke());
+
+            var txtObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            txtObj.transform.SetParent(obj.transform, false);
+            var trect = txtObj.GetComponent<RectTransform>();
+            trect.anchorMin = Vector2.zero;
+            trect.anchorMax = Vector2.one;
+            trect.offsetMin = Vector2.zero;
+            trect.offsetMax = Vector2.zero;
+            var txt = txtObj.GetComponent<Text>();
+            txt.font = LocalizedTextManager.current_font;
+            txt.fontSize = 10;
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.color = Color.white;
+            txt.text = pText;
+            return btn;
         }
 
         public override void OnNormalEnable()
@@ -158,13 +237,19 @@ namespace AncientWarfare3.ui.windows
             ClearSpawned();
             _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
             _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
-            _titleText.text = _mode == Mode.BigTree ? "氏族大树" : "家族树";
+            bool showTreeTools = false;
+            if (_expandButton != null) _expandButton.gameObject.SetActive(showTreeTools);
+            if (_collapseButton != null) _collapseButton.gameObject.SetActive(showTreeTools);
+            _titleText.text = _mode == Mode.BigTree
+                ? AW_L10n.Text("aw_clan_big_tree", "氏族大树")
+                : AW_L10n.Text("aw_family_tree_short", "家族树");
 
             TreeLayoutNode root = (_mode == Mode.Family) ? BuildFamilyRoot() : BuildBigTreeRoot();
             if (root == null) return;
 
             MeasureWidth(root);
-            float totalW = root.subtreeWidth;
+            float siblingRowW = _mode == Mode.Family ? GetSiblingRowWidth(root) : 0f;
+            float totalW = Mathf.Max(root.subtreeWidth, siblingRowW);
             // 居中:树宽不足视口宽时整体右移居中。
             float startX = PAD + Mathf.Max(0f, (VIEWPORT_W - totalW) / 2f);
 
@@ -172,9 +257,11 @@ namespace AncientWarfare3.ui.windows
             bool hasParents = _mode == Mode.Family && root.parents.Count > 0;
             float bodyTopY = PAD + (hasParents ? NODE_H + V_GAP : 0f);
 
-            LayoutAndRender(root, startX, bodyTopY, totalW);
+            float rootStartX = startX + (totalW - root.subtreeWidth) / 2f;
+            LayoutAndRender(root, rootStartX, bodyTopY, root.subtreeWidth);
 
             if (hasParents) RenderParentsRow(root);
+            if (_mode == Mode.Family && root.siblings.Count > 0) RenderSiblingsRow(root);
 
             float canvasW = Mathf.Max(VIEWPORT_W, totalW + PAD * 2);
             _canvasRect.sizeDelta = new Vector2(canvasW, _maxDepthY + NODE_H + PAD);
@@ -211,6 +298,117 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
+        private void RenderSiblingsRow(TreeLayoutNode pRoot)
+        {
+            if (pRoot == null || pRoot.siblings.Count == 0) return;
+
+            var left = new List<FamilyTreeNode>();
+            var right = new List<FamilyTreeNode>();
+            foreach (var sibling in pRoot.siblings)
+            {
+                if (IsOlderThanCenter(sibling, pRoot.data)) left.Add(sibling);
+                else right.Add(sibling);
+            }
+
+            left.Sort(CompareByBirth);
+            right.Sort(CompareByBirth);
+
+            float y = pRoot.topY;
+            float leftStart = pRoot.centerX - NODE_W / 2f - H_GAP - left.Count * NODE_W - Mathf.Max(0, left.Count - 1) * H_GAP;
+            for (int i = 0; i < left.Count; i++)
+                SpawnFamilySideNode(left[i], leftStart + NODE_W / 2f + i * (NODE_W + H_GAP), y);
+
+            float rightStart = pRoot.centerX + NODE_W / 2f + H_GAP;
+            for (int i = 0; i < right.Count; i++)
+                SpawnFamilySideNode(right[i], rightStart + NODE_W / 2f + i * (NODE_W + H_GAP), y);
+        }
+
+        private void SpawnFamilySideNode(FamilyTreeNode pData, float pCenterX, float pTopY)
+        {
+            var view = FamilyTreeNodeView.Create(_canvas);
+            long id = pData.id;
+            view.Bind(pData, (_) => OpenFamilyTree(id, _backShiId),
+                null, false, false, null, null);
+            var rect = view.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 1);
+            rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(pCenterX, -pTopY);
+            _spawned.Add(view);
+        }
+
+        private static float GetSiblingRowWidth(TreeLayoutNode pRoot)
+        {
+            if (pRoot == null || pRoot.siblings.Count == 0) return 0f;
+            int left = 0;
+            int right = 0;
+            foreach (var sibling in pRoot.siblings)
+            {
+                if (IsOlderThanCenter(sibling, pRoot.data)) left++;
+                else right++;
+            }
+            return Mathf.Max(GetSiblingSideExtent(left), GetSiblingSideExtent(right)) * 2f;
+        }
+
+        private static float GetSiblingSideExtent(int pCount)
+        {
+            float extent = NODE_W / 2f;
+            if (pCount <= 0) return extent;
+            return extent + H_GAP + pCount * NODE_W + (pCount - 1) * H_GAP;
+        }
+
+        private static void AddSiblingNodes(TreeLayoutNode pRoot, FamilyTreeNode pCenter)
+        {
+            if (pRoot == null || pCenter == null) return;
+            var seen = new HashSet<long>();
+            foreach (long parentId in LineageQuery.GetParentIds(pCenter.id))
+            {
+                foreach (long childId in LineageQuery.GetChildIds(parentId))
+                {
+                    if (childId == pCenter.id || !seen.Add(childId)) continue;
+                    var sibling = LineageQuery.GetFamilyTree(childId);
+                    if (sibling == null) continue;
+                    sibling.parents.Clear();
+                    sibling.children.Clear();
+                    sibling.relation_label = BuildSiblingRelationLabel(sibling, pCenter);
+                    pRoot.siblings.Add(sibling);
+                }
+            }
+            pRoot.siblings.Sort(CompareByBirth);
+        }
+
+        private static string BuildSiblingRelationLabel(FamilyTreeNode pSibling, FamilyTreeNode pCenter)
+        {
+            bool older = IsOlderThanCenter(pSibling, pCenter);
+            if (pSibling.sex == 0)
+                return older
+                    ? AW_L10n.Text("aw_relation_older_brother", "兄")
+                    : AW_L10n.Text("aw_relation_younger_brother", "弟");
+            return older
+                ? AW_L10n.Text("aw_relation_older_sister", "姐")
+                : AW_L10n.Text("aw_relation_younger_sister", "妹");
+        }
+
+        private static bool IsOlderThanCenter(FamilyTreeNode pSibling, FamilyTreeNode pCenter)
+        {
+            if (pSibling == null || pCenter == null) return false;
+            if (pSibling.birth_time > 0 && pCenter.birth_time > 0 &&
+                !Mathf.Approximately((float)pSibling.birth_time, (float)pCenter.birth_time))
+                return pSibling.birth_time < pCenter.birth_time;
+            return pSibling.id < pCenter.id;
+        }
+
+        private static int CompareByBirth(FamilyTreeNode pLeft, FamilyTreeNode pRight)
+        {
+            double lb = pLeft?.birth_time ?? 0;
+            double rb = pRight?.birth_time ?? 0;
+            int cmp = lb.CompareTo(rb);
+            if (cmp != 0) return cmp;
+            long lid = pLeft?.id ?? -1;
+            long rid = pRight?.id ?? -1;
+            return lid.CompareTo(rid);
+        }
+
         private class TreeLayoutNode
         {
             public FamilyTreeNode data;
@@ -220,6 +418,7 @@ namespace AncientWarfare3.ui.windows
             public float subtreeWidth;
             public float centerX;
             public float topY;
+            public List<FamilyTreeNode> siblings = new List<FamilyTreeNode>();
             // 小树根专用:本人的父母节点(画在本人正上方一层,可点击上溯)。
             public List<FamilyTreeNode> parents = new List<FamilyTreeNode>();
         }
@@ -230,11 +429,19 @@ namespace AncientWarfare3.ui.windows
             var center = LineageQuery.GetFamilyTree(_centerActorId);
             if (center == null) return null;
             var root = new TreeLayoutNode { data = center, expanded = true };
+            center.relation_label = AW_L10n.Text("aw_relation_self", "本人");
 
             // 父母:GetFamilyTree 已填 center.parents(死人查档案,活人实时),直接保留画在本人上方。
             //   用户报"往上查不到父母" → 不再只靠根节点 ▲ 跳转,直接在小树里把父母画出来。
             foreach (var p in center.parents)
-                if (p != null) root.parents.Add(p);
+                if (p != null)
+                {
+                    p.relation_label = p.sex == 0
+                        ? AW_L10n.Text("aw_relation_father", "父")
+                        : AW_L10n.Text("aw_relation_mother", "母");
+                    root.parents.Add(p);
+                }
+            AddSiblingNodes(root, center);
 
             var childIds = LineageQuery.GetChildIds(center.id);
             root.hasChildren = childIds.Count > 0;
@@ -242,11 +449,16 @@ namespace AncientWarfare3.ui.windows
             {
                 var cn = BuildTreeNodeData(cid);
                 if (cn != null)
+                {
+                    cn.relation_label = cn.sex == 0
+                        ? AW_L10n.Text("aw_relation_son", "子")
+                        : AW_L10n.Text("aw_relation_daughter", "女");
                     root.children.Add(new TreeLayoutNode
                     {
                         data = cn, expanded = false,
                         hasChildren = LineageQuery.GetChildIds(cid).Count > 0
                     });
+                }
             }
             return root;
         }
@@ -255,7 +467,17 @@ namespace AncientWarfare3.ui.windows
         {
             var rootData = BuildTreeNodeData(_rootActorId);
             if (rootData == null) return null;
-            _expanded.Add(_rootActorId);            // 根始终展开(其余按自动折叠规则首次决定)
+            if (_lastTreeRootId != _rootActorId)
+            {
+                _expanded.Clear();
+                _foldDecided.Clear();
+                _lastTreeRootId = _rootActorId;
+            }
+            if (!_foldDecided.Contains(_rootActorId))
+            {
+                _foldDecided.Add(_rootActorId);
+                _expanded.Remove(_rootActorId);
+            }
             return BuildLayoutNode(rootData, 0);
         }
 
@@ -267,6 +489,7 @@ namespace AncientWarfare3.ui.windows
         private TreeLayoutNode BuildLayoutNode(FamilyTreeNode pData, int pDepth)
         {
             var node = new TreeLayoutNode { data = pData };
+            pData.tree_generation = pDepth + 1;
 
             // 称王分封:若该节点开了新氏支(founded_branch_shi_id>=0)且**不是当前这棵树的根**,
             //   则其子嗣只记在新支 → 原树里把他当叶子(不展开子代,改由"建支:X氏"徽标点击跳新支)。
@@ -286,9 +509,7 @@ namespace AncientWarfare3.ui.windows
             if (node.hasChildren && !_foldDecided.Contains(pData.id))
             {
                 _foldDecided.Add(pData.id);
-                bool autoExpand = probe.any_alive && probe.any_important; // 有活人 且 有重要人物 → 默认展开
-                if (autoExpand) _expanded.Add(pData.id);
-                else _expanded.Remove(pData.id);
+                _expanded.Remove(pData.id);
             }
 
             node.expanded = _expanded.Contains(pData.id);
@@ -371,7 +592,7 @@ namespace AncientWarfare3.ui.windows
                 }
             }
 
-            view.Bind(pNode.data, OnNodeClick,
+            view.Bind(pNode.data, isRoot ? OnNodeClick : OnFamilyNodeClick,
                 (_mode == Mode.BigTree && pNode.hasChildren) ? (System.Action)(() => ToggleExpand(pNode.data.id)) : null,
                 pNode.hasChildren, pNode.expanded, onUp, onDown);
 
@@ -417,7 +638,61 @@ namespace AncientWarfare3.ui.windows
             Rebuild();
         }
 
-        // 点节点头像:大树→开该人小家庭树;小树→打开该人 inspect 单位窗(活人)。
+        private void ExpandAllLiveBranches()
+        {
+            if (_mode != Mode.BigTree || _rootActorId < 0) return;
+            _expanded.Clear();
+            _foldDecided.Clear();
+            _expanded.Add(_rootActorId);
+            ExpandLiveRecursive(_rootActorId, 0);
+            Rebuild();
+        }
+
+        private void CollapseAllBranches()
+        {
+            if (_mode != Mode.BigTree || _rootActorId < 0) return;
+            _expanded.Clear();
+            _foldDecided.Clear();
+            MarkCollapsedRecursive(_rootActorId, 0);
+            Rebuild();
+        }
+
+        private void ExpandLiveRecursive(long pActorId, int pDepth)
+        {
+            if (pDepth > 64) return;
+            _foldDecided.Add(pActorId);
+            var probe = LineageQuery.ProbeBranch(pActorId);
+            if (!probe.has_children) return;
+            if (pActorId == _rootActorId || probe.any_descendant_alive)
+                _expanded.Add(pActorId);
+            else
+                return;
+
+            foreach (long cid in LineageQuery.GetChildIds(pActorId))
+            {
+                var child = BuildTreeNodeData(cid);
+                if (child == null || IsCommonerStatus(child.status)) continue;
+                if (child.founded_branch_shi_id >= 0 && child.id != _rootActorId) continue;
+                if (child.is_alive || LineageQuery.HasAliveDescendant(child.id))
+                    ExpandLiveRecursive(child.id, pDepth + 1);
+                else
+                    _foldDecided.Add(child.id);
+            }
+        }
+
+        private void MarkCollapsedRecursive(long pActorId, int pDepth)
+        {
+            if (pDepth > 64) return;
+            _foldDecided.Add(pActorId);
+            foreach (long cid in LineageQuery.GetChildIds(pActorId))
+            {
+                var child = BuildTreeNodeData(cid);
+                if (child == null || IsCommonerStatus(child.status)) continue;
+                MarkCollapsedRecursive(child.id, pDepth + 1);
+            }
+        }
+
+        // 点节点头像:大树→开该人小家庭树;小树根→打开 inspect。
         private void OnNodeClick(long pActorId)
         {
             if (_mode == Mode.BigTree)
@@ -429,6 +704,12 @@ namespace AncientWarfare3.ui.windows
             var actor = World.world?.units?.get(pActorId);
             if (actor != null && !actor.isRekt())
                 ActionLibrary.openUnitWindow(actor);
+        }
+
+        // 小树非根节点:父母/子女/同辈节点点击都切换为目标作为新根,便于连续溯源。
+        private void OnFamilyNodeClick(long pActorId)
+        {
+            OpenFamilyTree(pActorId, _backShiId);
         }
 
         private FamilyTreeNode BuildTreeNodeData(long pId)

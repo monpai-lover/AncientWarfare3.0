@@ -30,14 +30,17 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPriority(Priority.Low)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
-        public static void SetKing_Postfix(Kingdom __instance)
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
+            if (pFromLoad) return;
             if (__instance?.data == null) return;
 
             // 新王即位:先称王分封(建新国/夺别国→开新氏支,可能改氏名)→ 再清/重选继承人 → 换年号(可能用氏名)。
-            if (__instance.king != null)
-                LineageService.OnKingFoundBranch(__instance, __instance.king);
+            Actor king = pActor ?? __instance.king;
+            if (king != null)
+                LineageService.OnKingFoundBranch(__instance, king);
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             YearNameService.OnNewKing(__instance);

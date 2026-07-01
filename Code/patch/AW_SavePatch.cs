@@ -30,8 +30,9 @@ namespace AncientWarfare3.patch
             if (string.IsNullOrEmpty(pPath)) return;
             LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
             XiaSubspeciesRepair.EnsureWorldTraits();
-            FigureStateStore.Load(); // DB 已切到该存档的库 → 刷新历史人物生成状态内存缓存
-            core.lineage.KingdomArchiveWriter.BackfillAll(); // 老存档/已有王国立即进万国史名册
+            FigureStateStore.Load();
+            core.lineage.KingdomArchiveWriter.BackfillAll();
+            core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
         }
 
         [HarmonyPostfix]

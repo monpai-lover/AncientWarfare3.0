@@ -19,7 +19,10 @@ namespace AncientWarfare3.ui.windows
                 () => { if (Instance != null) Instance.Refresh(); });
         }
 
-        protected override void Init() { }
+        protected override void Init()
+        {
+            // 使用原版列表窗尺寸。
+        }
 
         public override void OnNormalEnable()
         {
@@ -29,6 +32,7 @@ namespace AncientWarfare3.ui.windows
         public void Refresh()
         {
             ClearList();
+            KingdomArchiveWriter.BackfillAll();
             var list = HistoryQuery.GetAllKingdoms();
             foreach (var k in list) AddItemToList(k);
         }

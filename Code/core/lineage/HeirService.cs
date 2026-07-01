@@ -21,7 +21,7 @@ namespace AncientWarfare3.core.lineage
 
             Actor heir = FindHeir(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
-            if (heir?.data != null) heir.data.set(LineageKeys.IS_HEIR, true);
+            SetHeirFlag(heir, true);
         }
 
         /// <summary>清掉 kingdom 当前登记继承人 actor 的 IS_HEIR 标记(若该 actor 仍在)。</summary>
@@ -30,7 +30,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long oldId, -1L);
             if (oldId < 0) return;
             var old = World.world.units.get(oldId);
-            if (old?.data != null) old.data.set(LineageKeys.IS_HEIR, false);
+            SetHeirFlag(old, false);
         }
 
         /// <summary>
@@ -56,13 +56,20 @@ namespace AncientWarfare3.core.lineage
             ClearOldHeirFlag(pKingdom);
             Actor heir = FindHeir(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
-            if (heir?.data != null) heir.data.set(LineageKeys.IS_HEIR, true);
+            SetHeirFlag(heir, true);
             return heir;
         }
 
         public static bool HasHeir(Kingdom pKingdom)
         {
             return GetHeir(pKingdom) != null;
+        }
+
+        public static bool IsCurrentHeir(Kingdom pKingdom, Actor pActor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return false;
+            Actor heir = GetHeir(pKingdom);
+            return heir?.data != null && heir.data.id == pActor.data.id;
         }
 
         public static void ClearHeir(Kingdom pKingdom)
@@ -72,26 +79,59 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, -1L);
         }
 
-        /// <summary>选最合适继承人:**优先国王直系成年子女**(男性优先、接近成年优先);
-        /// 无合格子女则 fallback 到 royal_clan 成员。无候选返回 null。</summary>
+        private static void SetHeirFlag(Actor pActor, bool pValue)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.IS_HEIR, out bool oldValue, false);
+            if (oldValue == pValue) return;
+            pActor.data.set(LineageKeys.IS_HEIR, pValue);
+            pActor.clearGraphicsFully();
+        }
+
+        /// <summary>选最合适继承人:优先国王**直系成年儿子(长子优先=created_time最小)**;
+        /// 无合格儿子再找长女;两者都没有才 fallback 到 royal_clan。</summary>
         private static Actor FindHeir(Kingdom pKingdom)
         {
             Actor king = pKingdom.king;
 
-            // 1) 优先:国王的直系成年子女(getChildren(false)=所有家庭的活子女)。儿子优先于女儿。
             if (king != null)
             {
-                Actor best = PickClosest(king.getChildren(false), king, pPreferMale: true);
-                if (best != null) return best;
+                // 儿子优先:长子(created_time 最小的合格成年儿子)
+                Actor eldest = PickEldest(king.getChildren(false), king, pMaleOnly: true);
+                if (eldest != null) return eldest;
+
+                // 无合格儿子:长女
+                Actor eldestDaughter = PickEldest(king.getChildren(false), king, pMaleOnly: false);
+                if (eldestDaughter != null) return eldestDaughter;
             }
 
-            // 2) fallback:royal_clan 成员(原逻辑)。
+            // fallback:royal_clan 成员(按|age-18|选)。
             long royalClanId = pKingdom.data.royal_clan_id;
             if (royalClanId < 0) return null;
             var clan = World.world.clans.get(royalClanId);
             if (clan == null) return null;
 
             return PickClosest(new List<Actor>(clan.units), king, pPreferMale: false);
+        }
+
+        /// <summary>从直系子女中选长子/长女(created_time最小=最早出生)。pMaleOnly=true 只选儿子。</summary>
+        private static Actor PickEldest(System.Collections.Generic.IEnumerable<Actor> pCandidates,
+            Actor pKing, bool pMaleOnly)
+        {
+            Actor eldest = null;
+            double earliestTime = double.MaxValue;
+            foreach (var c in pCandidates)
+            {
+                if (!IsSuitableHeir(c, pKing)) continue;
+                if (pMaleOnly && !c.isSexMale()) continue;
+                if (!pMaleOnly && c.isSexMale()) continue; // 女儿轮时跳过男
+                if (c.data.created_time < earliestTime)
+                {
+                    earliestTime = c.data.created_time;
+                    eldest = c;
+                }
+            }
+            return eldest;
         }
 
         /// <summary>从候选里挑:合格(活∧非王∧成年∧非疯)中 |age-18| 最小;pPreferMale 时男性获 -1000 偏置(必优先于女性)。</summary>

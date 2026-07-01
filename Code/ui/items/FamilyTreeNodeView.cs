@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -26,6 +27,7 @@ namespace AncientWarfare3.ui.items
         private Button _avatarButton;
         private TipButton _avatarTip;
         private Text _nameText;
+        private Text _relationText;
         private Button _upButton;          // 上溯(到父)
         private Button _downButton;        // 下溯(到子)
         private Button _toggleButton;      // 展开/折叠(大树)
@@ -103,6 +105,22 @@ namespace AncientWarfare3.ui.items
             _nameText.alignment = TextAnchor.UpperCenter;
             _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
+            var relObj = new GameObject("RelationLabel", typeof(RectTransform), typeof(Text));
+            relObj.transform.SetParent(transform, false);
+            var rrect = relObj.GetComponent<RectTransform>();
+            rrect.anchorMin = new Vector2(0.5f, 1f); rrect.anchorMax = new Vector2(0.5f, 1f);
+            rrect.pivot = new Vector2(1f, 0.5f);
+            rrect.sizeDelta = new Vector2(24, 12);
+            rrect.anchoredPosition = new Vector2(-18, -8);
+            _relationText = relObj.GetComponent<Text>();
+            _relationText.font = LocalizedTextManager.current_font;
+            _relationText.fontSize = 9;
+            _relationText.alignment = TextAnchor.MiddleRight;
+            _relationText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _relationText.color = new Color(0.95f, 0.86f, 0.55f, 1f);
+            _relationText.raycastTarget = false;
+            relObj.SetActive(false);
+
             _upButton = MakeArrow("Up", new Vector2(0.5f, 1f), new Vector2(0, 2), "▲");
             _downButton = MakeArrow("Down", new Vector2(0.5f, 0f), new Vector2(0, -2), "▼");
             _toggleButton = MakeToggle();
@@ -146,14 +164,28 @@ namespace AncientWarfare3.ui.items
 
         private Button MakeToggle()
         {
-            var obj = new GameObject("Toggle", typeof(RectTransform), typeof(Text), typeof(Button));
+            var obj = new GameObject("Toggle", typeof(RectTransform), typeof(Image), typeof(Button));
             obj.transform.SetParent(transform, false);
             var rect = obj.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(1f, 1f); rect.anchorMax = new Vector2(1f, 1f); rect.pivot = new Vector2(0f, 1f);
-            rect.sizeDelta = new Vector2(12, 12); rect.anchoredPosition = new Vector2(2, 0);
-            _toggleText = obj.GetComponent<Text>();
-            _toggleText.font = LocalizedTextManager.current_font; _toggleText.fontSize = 12;
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(16, 16);
+            rect.anchoredPosition = new Vector2(28, -18);
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
+
+            var textObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            textObj.transform.SetParent(obj.transform, false);
+            var trect = textObj.GetComponent<RectTransform>();
+            trect.anchorMin = Vector2.zero;
+            trect.anchorMax = Vector2.one;
+            trect.offsetMin = Vector2.zero;
+            trect.offsetMax = Vector2.zero;
+            _toggleText = textObj.GetComponent<Text>();
+            _toggleText.font = LocalizedTextManager.current_font;
+            _toggleText.fontSize = 11;
             _toggleText.alignment = TextAnchor.MiddleCenter; _toggleText.color = Color.white;
+            _toggleText.raycastTarget = false;
             obj.SetActive(false);
             return obj.GetComponent<Button>();
         }
@@ -170,6 +202,12 @@ namespace AncientWarfare3.ui.items
             string sex = pNode.sex == 0 ? "♂" : "♀";
             _nameText.text = pNode.display_name + sex;
             _nameText.color = ResolveNameColor(pNode);
+            if (_relationText != null)
+            {
+                string relation = pNode.relation_label ?? "";
+                _relationText.text = relation;
+                _relationText.gameObject.SetActive(!string.IsNullOrEmpty(relation));
+            }
 
             long id = pNode.id;
             _avatarButton.onClick.RemoveAllListeners();
@@ -184,7 +222,7 @@ namespace AncientWarfare3.ui.items
             _toggleButton.onClick.RemoveAllListeners();
             if (pHasChildren && pOnToggle != null)
             {
-                _toggleText.text = pExpanded ? "−" : "+";
+                _toggleText.text = pExpanded ? "-" : "+";
                 _toggleButton.gameObject.SetActive(true);
                 _toggleButton.onClick.AddListener(() => pOnToggle.Invoke());
             }
@@ -210,10 +248,17 @@ namespace AncientWarfare3.ui.items
                 return;
             }
 
-            // 取新支氏名(查 ShiBranch 档案);取不到则用占位。
+            // 取新支氏名 + 创建城(查 ShiBranch 档案);格式:建支:cityname X氏。
             var info = LineageQuery.GetShiBranchInfo(branchShi);
-            string clanName = info != null && !string.IsNullOrEmpty(info.clan_name) ? info.clan_name : "新支";
-            _branchBadgeText.text = "▸建支:" + clanName + "氏";
+            string clanName = info != null && !string.IsNullOrEmpty(info.clan_name)
+                ? info.clan_name
+                : AW_L10n.Text("aw_new_branch", "新支");
+            string cityName = info != null && !string.IsNullOrEmpty(info.origin_city_name) ? info.origin_city_name : "";
+            string prefix = AW_L10n.Text("aw_branch_badge_prefix", "▸建支:");
+            string suffix = AW_L10n.Text("aw_shi_suffix", "氏");
+            _branchBadgeText.text = string.IsNullOrEmpty(cityName)
+                ? prefix + clanName + suffix
+                : prefix + cityName + " " + clanName + suffix;
             _branchBadge.SetActive(true);
             _branchBadgeButton.onClick.AddListener(() =>
                 AncientWarfare3.ui.windows.FamilyTreeWindow.OpenBigTree(branchShi));
@@ -276,9 +321,8 @@ namespace AncientWarfare3.ui.items
                     _deadPortrait.sprite = dead;
                     _deadPortrait.color = DeadTint;                // 整体灰度(死者)
                 }
-                LoadDeadKingdomBanner(pNode);                      // 国旗帜:活国实时 / 亡国存档色(仍用 _avatar 的 banner 子物体)
-                if (_avatar.clanBanner != null)                    // 死人无 clan 对象 → 隐藏氏族旗帜
-                    _avatar.clanBanner.gameObject.SetActive(false);
+                LoadDeadKingdomBanner(pNode);                      // 国旗帜:活国实时 / 亡国用 KingdomArchive 重建
+                LoadDeadClanBanner(pNode);                         // 氏族旗帜:活 Clan / 人物档案快照重建
             }
             catch { /* 合成失败:留空头像 + 灰名,不崩 */ }
         }
@@ -310,6 +354,7 @@ namespace AncientWarfare3.ui.items
                 data.asset, data.is_adult, data.getTextureAsset(),
                 data.mutation_skin_asset, data.is_egg, data.egg_asset);
             if (container?.walking?.frames == null || container.walking.frames.Length == 0) return null;
+            data.head_id = SafeHeadId(data.sex, data.head_id, container);
 
             Sprite baseFrame = container.walking.frames[0];
             return data.getColoredSprite(baseFrame, container); // 内部用 data.phenotype_* 上 Xia 真实肤色
@@ -322,9 +367,7 @@ namespace AncientWarfare3.ui.items
             ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
             if (xia == null) return null;
 
-            ColorAsset color = null;
-            if (!string.IsNullOrEmpty(pNode.kingdom_color))
-                color = ColorAsset.getExistingColorAsset(pNode.kingdom_color);
+            ColorAsset color = KingdomFlagBuilder.ResolveColor(pNode.kingdom_color, pNode.kingdom_color_id);
 
             var data = new ActorAvatarData();
             data.setData(
@@ -364,17 +407,141 @@ namespace AncientWarfare3.ui.items
                 _avatar.kingdomBanner.gameObject.SetActive(true);
                 _avatar.kingdomBanner.load(k);
             }
-            else if (!string.IsNullOrEmpty(pNode.kingdom_color))
+            else if (!string.IsNullOrEmpty(pNode.kingdom_banner_id))
             {
                 _avatar.kingdomBanner.gameObject.SetActive(true);
-                Color c = Toolbox.makeColor(pNode.kingdom_color);
-                foreach (var img in _avatar.kingdomBanner.GetComponentsInChildren<Image>(true))
-                    img.color = new Color(c.r, c.g, c.b, img.color.a);
+                KingdomFlagBuilder.Build(pNode.kingdom_banner_id, pNode.kingdom_banner_icon_id,
+                    pNode.kingdom_banner_background_id, pNode.kingdom_color, pNode.kingdom_color_id,
+                    BannerBackground(_avatar.kingdomBanner), BannerIcon(_avatar.kingdomBanner));
             }
             else
             {
                 _avatar.kingdomBanner.gameObject.SetActive(false);
             }
+        }
+
+        private void LoadDeadClanBanner(FamilyTreeNode pNode)
+        {
+            var cb = _avatar.clanBanner;
+            if (cb == null) return;
+
+            Clan liveClan = pNode.original_clan_id >= 0 ? World.world?.clans?.get(pNode.original_clan_id) : null;
+            if (liveClan != null && !liveClan.hasDied())
+            {
+                cb.gameObject.SetActive(true);
+                cb.load(liveClan);
+                Color main = liveClan.getColor().getColorMainSecond();
+                PaintClanBanner(cb, main);
+                return;
+            }
+
+            if (pNode.clan_banner_background_id >= 0 && pNode.clan_banner_icon_id >= 0)
+            {
+                cb.gameObject.SetActive(true);
+                BuildClanFlag(pNode, BannerBackground(cb), BannerIcon(cb));
+                return;
+            }
+
+            cb.gameObject.SetActive(false);
+        }
+
+        private static int SafeHeadId(ActorSex pSex, int pHeadId, AnimationContainerUnit pContainer)
+        {
+            if (pHeadId < 0 || pContainer == null) return -1;
+            Sprite[] heads = pSex == ActorSex.Male ? pContainer.heads_male : pContainer.heads_female;
+            if (heads == null || heads.Length == 0) return -1;
+            return pHeadId < heads.Length ? pHeadId : -1;
+        }
+
+        private static Image BannerBackground(KingdomBanner pBanner)
+        {
+            return pBanner?.part_background ??
+                   pBanner?.transform.FindRecursive("Background")?.GetComponent<Image>();
+        }
+
+        private static Image BannerIcon(KingdomBanner pBanner)
+        {
+            return pBanner?.part_icon ??
+                   pBanner?.transform.FindRecursive("Icon")?.GetComponent<Image>();
+        }
+
+        private static Image BannerBackground(ClanBanner pBanner)
+        {
+            return pBanner?.part_background ??
+                   pBanner?.transform.FindRecursive("Background")?.GetComponent<Image>();
+        }
+
+        private static Image BannerIcon(ClanBanner pBanner)
+        {
+            return pBanner?.part_icon ??
+                   pBanner?.transform.FindRecursive("Icon")?.GetComponent<Image>();
+        }
+
+        private static void BuildClanFlag(FamilyTreeNode pNode, Image pBackground, Image pIcon)
+        {
+            ColorAsset color = ResolveClanColor(pNode.clan_color_text, pNode.clan_color_id);
+            Color main = color != null ? color.getColorMainSecond() : Color.white;
+
+            if (pBackground != null)
+            {
+                Sprite bg = SafeClanBackground(pNode.clan_banner_background_id);
+                pBackground.enabled = bg != null;
+                if (bg != null)
+                {
+                    pBackground.sprite = bg;
+                    pBackground.color = new Color(main.r, main.g, main.b, pBackground.color.a);
+                }
+            }
+
+            if (pIcon != null)
+            {
+                Sprite icon = SafeClanIcon(pNode.clan_banner_icon_id);
+                pIcon.enabled = icon != null;
+                if (icon != null)
+                {
+                    pIcon.sprite = icon;
+                    pIcon.color = new Color(main.r, main.g, main.b, pIcon.color.a);
+                }
+            }
+        }
+
+        private static ColorAsset ResolveClanColor(string pColorText, int pColorId)
+        {
+            ColorAsset color = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(pColorText))
+                    color = ColorAsset.getExistingColorAsset(pColorText);
+            }
+            catch { color = null; }
+            if (color == null && pColorId >= 0)
+            {
+                try { color = AssetManager.clan_colors_library.getColorByIndex(pColorId); }
+                catch { color = null; }
+            }
+            return color;
+        }
+
+        private static Sprite SafeClanBackground(int pId)
+        {
+            if (pId < 0) return null;
+            try { return AssetManager.clan_banners_library.getSpriteBackground(pId); }
+            catch { return null; }
+        }
+
+        private static Sprite SafeClanIcon(int pId)
+        {
+            if (pId < 0) return null;
+            try { return AssetManager.clan_banners_library.getSpriteIcon(pId); }
+            catch { return null; }
+        }
+
+        private static void PaintClanBanner(ClanBanner pBanner, Color pColor)
+        {
+            Image bg = BannerBackground(pBanner);
+            Image icon = BannerIcon(pBanner);
+            if (bg != null) bg.color = new Color(pColor.r, pColor.g, pColor.b, bg.color.a);
+            if (icon != null) icon.color = new Color(pColor.r, pColor.g, pColor.b, icon.color.a);
         }
 
         /// <summary>只把头像本体(unit 贴图/底图标/tile)置灰,跳过 kingdomBanner/clanBanner 子树(保旗帜配色)。</summary>
@@ -438,31 +605,64 @@ namespace AncientWarfare3.ui.items
 
             // 行1:身份 · 性别 · 状态(在世/已故)
             string identity = IdentityLabel(pNode.status);
-            string sex = pNode.sex == 0 ? "男" : "女";
-            string alive = pNode.is_alive ? "在世" : "已故";
+            string sex = pNode.sex == 0
+                ? AW_L10n.Text("aw_sex_male", "男")
+                : AW_L10n.Text("aw_sex_female", "女");
+            string alive = pNode.is_alive
+                ? AW_L10n.Text("aw_alive_state", "在世")
+                : AW_L10n.Text("aw_dead_state", "已故");
             string line1 = JoinNonEmpty(" · ", identity, sex, alive);
             if (line1.Length > 0) sb.AppendLine(line1);
 
             // 行2:氏(clan_name)
             if (!string.IsNullOrEmpty(pNode.clan_name))
-                sb.AppendLine("氏:" + pNode.clan_name);
+                sb.AppendLine(AW_L10n.Text("aw_shi_label", "氏:") + pNode.clan_name);
 
             // 行3:国 · 城
             string kc = JoinNonEmpty("  ",
-                string.IsNullOrEmpty(pNode.kingdom_name) ? "" : "国:" + pNode.kingdom_name,
-                string.IsNullOrEmpty(pNode.city_name) ? "" : "居:" + pNode.city_name);
+                string.IsNullOrEmpty(pNode.kingdom_name) ? "" : AW_L10n.Text("aw_actor_kingdom_label", "国:") + pNode.kingdom_name,
+                string.IsNullOrEmpty(pNode.city_name) ? "" : AW_L10n.Text("aw_residence_label", "居:") + pNode.city_name);
             if (kc.Length > 0) sb.AppendLine(kc);
 
             // 行4:生卒
-            string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time) + "年" : "?";
-            string death = pNode.is_alive ? "—" : (pNode.death_time > 0 ? Date.getYear(pNode.death_time) + "年" : "?");
-            sb.AppendLine("生:" + birth + "   卒:" + death);
+            string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time) + AW_L10n.Text("aw_year_suffix", "年") : "?";
+            string death = pNode.is_alive ? "—" : (pNode.death_time > 0 ? Date.getYear(pNode.death_time) + AW_L10n.Text("aw_year_suffix", "年") : "?");
+            sb.AppendLine(AW_L10n.Text("aw_birth_label", "生:") + birth + "   " +
+                          AW_L10n.Text("aw_death_label", "卒:") + death);
 
             // 行5:距贵族代数(noble_distance:本人贵族=0)
+            int age = CalculateAge(pNode);
+            if (age >= 0)
+                sb.AppendLine(AW_L10n.Text("aw_age_label", "年龄:") + age +
+                              AW_L10n.Text("aw_age_suffix", "岁"));
+
+            if (pNode.tree_generation > 0)
+                sb.AppendLine(AW_L10n.Text("aw_generation_label", "辈分:") +
+                              AW_L10n.Text("aw_generation_prefix", "第") +
+                              pNode.tree_generation +
+                              AW_L10n.Text("aw_generation_suffix", "代"));
+
+            if (!pNode.is_alive && !string.IsNullOrEmpty(pNode.death_cause))
+                sb.AppendLine(AW_L10n.Text("aw_death_cause_label", "死因:") + pNode.death_cause);
+
             if (pNode.noble_distance >= 0 && pNode.noble_distance < 99)
-                sb.Append(pNode.noble_distance == 0 ? "贵族本支" : ("距贵族 " + pNode.noble_distance + " 代"));
+                sb.Append(pNode.noble_distance == 0
+                    ? AW_L10n.Text("aw_noble_branch_root", "贵族本支")
+                    : AW_L10n.Text("aw_noble_distance_prefix", "距贵族 ") +
+                      pNode.noble_distance +
+                      AW_L10n.Text("aw_noble_distance_suffix", " 代"));
 
             return sb.ToString().TrimEnd('\n', '\r');
+        }
+
+        private static int CalculateAge(FamilyTreeNode pNode)
+        {
+            if (pNode == null || pNode.birth_time <= 0) return -1;
+            double end = pNode.is_alive
+                ? (World.world != null ? World.world.getCurWorldTime() : pNode.birth_time)
+                : pNode.death_time;
+            if (end <= 0) return -1;
+            return System.Math.Max(0, Date.getYear(end) - Date.getYear(pNode.birth_time));
         }
 
         private static string JoinNonEmpty(string pSep, params string[] pParts)
@@ -489,9 +689,9 @@ namespace AncientWarfare3.ui.items
         private static string IdentityLabel(string pStatus)
         {
             // 返回完整身份词(调用方不再 +"族",否则"平民"会变"平族")。
-            if (pStatus == LineageStatus.NOBLE) return "贵族";
-            if (pStatus == LineageStatus.COMMON) return "平民";
-            if (pStatus == LineageStatus.SLAVE) return "奴隶";
+            if (pStatus == LineageStatus.NOBLE) return AW_L10n.Text("aw_identity_noble", "贵族");
+            if (pStatus == LineageStatus.COMMON) return AW_L10n.Text("aw_identity_common", "平民");
+            if (pStatus == LineageStatus.SLAVE) return AW_L10n.Text("aw_identity_slave", "奴隶");
             return "";
         }
 

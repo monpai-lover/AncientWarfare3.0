@@ -17,6 +17,7 @@ namespace AncientWarfare3.content
             // 批C:状态 + 物品
             XiaStatus.Init();
             XiaItems.Init();
+            XiaClanBanners.Init();
 
             // 批A:王国 + 船 + 建筑 + 种族
             XiaKingdom.Init();

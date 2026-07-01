@@ -1,6 +1,9 @@
 using AncientWarfare3.content;
 using HarmonyLib;
 using NeoModLoader.api;
+using System;
+using System.Linq;
+using System.Reflection;
 
 namespace AncientWarfare3
 {
@@ -15,7 +18,7 @@ namespace AncientWarfare3
         protected override void OnModLoad()
         {
             // 注册 Harmony 补丁(扫描本程序集所有 [HarmonyPatch])
-            new Harmony(GUID).PatchAll();
+            PatchHarmonyByClass();
 
             // 通用夺舍工具:扫描 [MethodReplace] 用 Transpiler 重定向目标方法体(保留 Prefix/Postfix 链)
             utils.HarmonyTools.ReplaceMethods();
@@ -38,6 +41,40 @@ namespace AncientWarfare3
             ui.AW_LineageTab.Init();
 
             LogInfo("Ancient Warfare 3.0 loaded — batch A (Xia race).");
+        }
+
+        private void PatchHarmonyByClass()
+        {
+            var harmony = new Harmony(GUID);
+            var patchTypes = Assembly.GetExecutingAssembly().GetTypes()
+                .Where(HasHarmonyPatch)
+                .OrderBy(t => t.FullName);
+
+            foreach (var type in patchTypes)
+            {
+                try
+                {
+                    harmony.CreateClassProcessor(type).Patch();
+                    LogInfo("Harmony patch OK: " + type.FullName);
+                }
+                catch (Exception e)
+                {
+                    LogWarning("Harmony patch FAIL: " + type.FullName);
+                    LogWarning(e.ToString());
+                    throw;
+                }
+            }
+        }
+
+        private static bool HasHarmonyPatch(Type pType)
+        {
+            if (pType.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0)
+                return true;
+
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic |
+                                       BindingFlags.Static | BindingFlags.Instance;
+            return pType.GetMethods(flags)
+                .Any(m => m.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0);
         }
 
         public void Reload()

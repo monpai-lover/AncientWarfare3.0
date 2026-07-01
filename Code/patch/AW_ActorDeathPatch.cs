@@ -3,23 +3,18 @@ using HarmonyLib;
 
 namespace AncientWarfare3.patch
 {
-    /// <summary>
-    ///     死亡归档:Prefix Actor.die —— 在死亡逻辑执行前(city/kingdom/clan 等数据仍完整)
-    ///     把该 actor 的完整档案 upsert 进 SQLite 并标记死亡。
-    ///     参考 Cultiway 同样用 Prefix 钩 Actor.die(PatchActor.cs)。
-    ///
-    ///     不接管原方法(无 return false),只在死亡前读数据归档,原死亡流程照常执行。
-    /// </summary>
     [HarmonyPatch]
     public static class AW_ActorDeathPatch
     {
+        internal static long DyingKingActorId = -1L;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "die")]
-        public static void Die_Prefix(Actor __instance)
+        public static void Die_Prefix(Actor __instance, AttackType pType)
         {
-            if (__instance == null || __instance.data == null) return;
+            if (__instance?.data == null) return;
+            if (!__instance.isAlive()) return;
 
-            // 历史人物死亡门:figure 死 → 解锁严格顺序的下一位(独立于 IsXia,先处理)。
             if (__instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIRST) ||
                 __instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIGURE))
             {
@@ -28,15 +23,64 @@ namespace AncientWarfare3.patch
 
             if (!LineageService.IsXia(__instance)) return;
 
+            EnsureDeathCause(__instance, pType);
             LineageService.ArchiveActor(__instance, pAlive: false);
 
-            // 编年史:仅入谱贵族记死亡事件(死亡前 kingdom/data 仍完整)。
+            if (__instance.isKing() && __instance.kingdom != null)
+            {
+                DyingKingActorId = __instance.data.id;
+                ChronicleEvents.OnKingDied(__instance.kingdom, __instance);
+            }
+
             __instance.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
             if (lid >= 0)
             {
                 string name = __instance.getName();
+                __instance.data.get(LineageKeys.DEATH_CAUSE, out string cause, "");
+                string causeText = string.IsNullOrEmpty(cause) ? "" : "\uFF08\u6B7B\u56E0\uFF1A" + cause + "\uFF09";
                 HistoryWriter.RecordPerson(
-                    __instance.data.id, __instance.kingdom, name, "death", name + " 逝世");
+                    __instance.data.id, __instance.kingdom, name,
+                    PersonEvent.DEATH,
+                    HistoryText.Actor(__instance, name) + " \u901D\u4E16" + causeText,
+                    ChronicleCategory.LIFE);
+            }
+
+            ChronicleEvents.OnBondDeath(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "die")]
+        public static void Die_Postfix(Actor __instance)
+        {
+            if (__instance?.data != null && DyingKingActorId == __instance.data.id)
+                DyingKingActorId = -1L;
+        }
+
+        private static void EnsureDeathCause(Actor pActor, AttackType pType)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.DEATH_CAUSE, out string existing, "");
+            if (!string.IsNullOrEmpty(existing)) return;
+            pActor.data.set(LineageKeys.DEATH_CAUSE, DescribeDeathType(pType));
+        }
+
+        private static string DescribeDeathType(AttackType pType)
+        {
+            switch (pType)
+            {
+                case AttackType.Age: return "\u81EA\u7136\u8001\u6B7B";
+                case AttackType.Starvation: return "\u9965\u997F\u800C\u6B7B";
+                case AttackType.Plague:
+                case AttackType.Infection:
+                case AttackType.Tumor:
+                case AttackType.AshFever: return "\u75C5\u75AB\u800C\u6B7B";
+                case AttackType.Poison: return "\u4E2D\u6BD2\u800C\u6B7B";
+                case AttackType.Drowning: return "\u6EBA\u4EA1";
+                case AttackType.Gravity: return "\u5760\u843D\u800C\u6B7B";
+                case AttackType.Divine: return "\u795E\u529B\u6240\u6740";
+                case AttackType.Metamorphosis: return "\u5F02\u53D8\u6D88\u4EA1";
+                case AttackType.None: return "\u81EA\u7136\u6B7B\u4EA1";
+                default: return "\u6B7B\u4EA1";
             }
         }
     }

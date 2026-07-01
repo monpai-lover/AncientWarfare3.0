@@ -28,6 +28,10 @@ namespace AncientWarfare3.core.db
         public long   city_id = -1;
         public string city_name;
         public long   original_clan_id = -1;
+        public string clan_color_text;
+        [TableItemDef(pDefaultValue: "-1")] public int clan_color_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public int clan_banner_icon_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public int clan_banner_background_id = -1;
 
         public long   parent_id_1 = -1;
         public long   parent_id_2 = -1;
@@ -36,6 +40,7 @@ namespace AncientWarfare3.core.db
 
         public double birth_time;
         [TableItemDef(pDefaultValue: "-1")] public double death_time;
+        public string death_cause = "";
         public int    is_alive = 1;       // 1 存活 / 0 已死
         public int    name_integrated;    // 是否被合流规则处理过
 

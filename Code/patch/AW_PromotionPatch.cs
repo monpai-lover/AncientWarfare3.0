@@ -15,18 +15,37 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_PromotionPatch
     {
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(City), nameof(City.setLeader))]
-        public static void SetLeader_Postfix(Actor pActor)
+        public static bool SetLeader_HeirGuard_Prefix(City __instance, Actor pActor, bool pNew, out bool __state)
         {
-            if (pActor == null || !LineageService.IsXia(pActor)) return;
-            LineageService.OnCityLeaderAppointed(pActor);
+            __state = false;
+            if (!pNew) return true;
+            if (pActor == null || !LineageService.IsXia(pActor)) return true;
+
+            Kingdom kingdom = __instance?.kingdom ?? pActor.kingdom;
+            if (!HeirService.IsCurrentHeir(kingdom, pActor)) return true;
+
+            __state = true;
+            return false;
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
-        public static void SetKing_Postfix(Actor pActor)
+        [HarmonyPatch(typeof(City), nameof(City.setLeader))]
+        public static void SetLeader_Postfix(Actor pActor, bool pNew, bool __state)
         {
+            if (__state) return;
+            if (pActor == null || !LineageService.IsXia(pActor)) return;
+            LineageService.OnCityLeaderAppointed(pActor);
+            if (pNew) ChronicleEvents.OnBecomeLeader(pActor); // 编年史:仅新任命记(pNew=false 是读档/复位,不重复记)
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.High)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
+        {
+            if (pFromLoad) return;
             if (pActor == null || !LineageService.IsXia(pActor)) return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
         }

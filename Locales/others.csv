@@ -55,3 +55,81 @@ aw_kingdom_history_entry,国家历史,Kingdom History,國家歷史
 aw_view_kingdom_history,查看该国的历史编年史,View this kingdom's chronicle,查看該國的歷史編年史
 aw_city_history_entry,城市历史,City History,城市歷史
 aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史
+aw_tree_expand,展开,Expand,展開
+aw_tree_collapse,收缩,Collapse,收縮
+aw_back_big_tree,← 回氏族大树,← Clan Tree,← 回氏族大樹
+aw_clan_big_tree,氏族大树,Clan Tree,氏族大樹
+aw_family_tree_short,家族树,Family Tree,家族樹
+aw_history_filter_all,全部,All,全部
+aw_history_filter_life,人生,Life,人生
+aw_history_filter_honor,荣耀,Honor,榮耀
+aw_history_filter_clan,氏族,Clan,氏族
+aw_history_filter_war,战事,War,戰事
+aw_history_filter_bond,羁绊,Bonds,羈絆
+aw_history_early_period,早期,Early Period,早期
+aw_history_no_owner,无所属,No Owner,無所屬
+aw_history_no_king_period,无王时期,No-King Period,無王時期
+aw_view_king_biography,查看君主传记：,View Ruler Biography:,查看君主傳記：
+aw_until_now,至今,Present,至今
+aw_history_event,历史事件,Historical Event,歷史事件
+aw_history_type,类型：,Type:,類型：
+aw_history_time,时间：,Time:,時間：
+aw_dead_kingdom_mark,[已亡],[Fallen],[已亡]
+aw_kingdom,王国,Kingdom,王國
+aw_founder_label,开创者:,Founder:,開創者:
+aw_capital_label,首都:,Capital:,首都:
+aw_founded_label,建立:,Founded:,建立:
+aw_destroyed_label,灭亡:,Destroyed:,滅亡:
+aw_duration_label,存续:,Duration:,存續:
+aw_status_label,状态:,Status:,狀態:
+aw_surviving,存续,Surviving,存續
+aw_extinct,已亡,Fallen,已亡
+aw_total_prefix,共,Total ,共
+aw_year_suffix,年, years,年
+aw_total,总,Total,總
+aw_alive_short,活,Alive,活
+aw_established_short,立,Est.,立
+aw_noble_short,贵,Noble,貴
+aw_shi_branch,氏支,Branch,氏支
+aw_shi_suffix,氏, Clan,氏
+aw_kingdom_suffix,国, Kingdom,國
+aw_at_prefix,于,at,於
+aw_established,建立,founded,建立
+aw_shi_label,氏:,Clan:,氏:
+aw_origin_kingdom_label,创建国:,Origin Kingdom:,創建國:
+aw_origin_city_label,创建城:,Origin City:,創建城:
+aw_created_time_label,创建时间:,Created:,創建時間:
+aw_current_label,当前:,Current:,當前:
+aw_alive_people_suffix, 人在世，, alive and , 人在世，
+aw_noble_people_suffix, 名贵族, nobles, 名貴族
+aw_new_branch,新支,New Branch,新支
+aw_branch_badge_prefix,▸建支:,▸Branch: ,▸建支:
+aw_sex_male,男,Male,男
+aw_sex_female,女,Female,女
+aw_alive_state,在世,Alive,在世
+aw_dead_state,已故,Dead,已故
+aw_actor_kingdom_label,国:,Kingdom:,國:
+aw_residence_label,居:,City:,居:
+aw_birth_label,生:,Born:,生:
+aw_death_label,卒:,Died:,卒:
+aw_age_label,年龄:,Age:,年齡:
+aw_age_suffix,岁, years old,歲
+aw_generation_label,辈分:,Generation:,輩分:
+aw_generation_prefix,第,#,第
+aw_generation_suffix,代, ,代
+aw_death_cause_label,死因:,Cause of death:,死因:
+aw_noble_branch_root,贵族本支,Noble root branch,貴族本支
+aw_noble_distance_prefix,距贵族 ,Noble distance: ,距貴族 
+aw_noble_distance_suffix, 代, generations, 代
+aw_identity_noble,贵族,Noble,貴族
+aw_identity_common,平民,Commoner,平民
+aw_identity_slave,奴隶,Slave,奴隸
+aw_relation_self,本人,Self,本人
+aw_relation_father,父,Father,父
+aw_relation_mother,母,Mother,母
+aw_relation_son,子,Son,子
+aw_relation_daughter,女,Daughter,女
+aw_relation_older_brother,兄,Older Brother,兄
+aw_relation_younger_brother,弟,Younger Brother,弟
+aw_relation_older_sister,姐,Older Sister,姐
+aw_relation_younger_sister,妹,Younger Sister,妹

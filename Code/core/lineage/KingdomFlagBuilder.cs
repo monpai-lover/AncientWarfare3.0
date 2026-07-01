@@ -46,10 +46,17 @@ namespace AncientWarfare3.core.lineage
         public static ColorAsset ResolveColor(string pColorText, int pColorId)
         {
             ColorAsset color = null;
-            if (!string.IsNullOrEmpty(pColorText))
-                color = ColorAsset.getExistingColorAsset(pColorText);
-            if (color == null)
-                color = AssetManager.kingdom_colors_library.getColorByIndex(pColorId);
+            try
+            {
+                if (!string.IsNullOrEmpty(pColorText))
+                    color = ColorAsset.getExistingColorAsset(pColorText);
+            }
+            catch { color = null; }
+            if (color == null && pColorId >= 0)
+            {
+                try { color = AssetManager.kingdom_colors_library.getColorByIndex(pColorId); }
+                catch { color = null; }
+            }
             return color;
         }
 

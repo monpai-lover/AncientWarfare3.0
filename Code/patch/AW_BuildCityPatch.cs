@@ -1,4 +1,4 @@
-using AncientWarfare3.core.lineage;
+﻿using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -19,7 +19,7 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.canBuildNewCity))]
-        public static void CanBuildNewCity_Postfix(Actor __instance)
+        public static void CanBuildNewCity_Postfix(Actor __instance, ref bool __result)
         {
             if (__instance?.data == null) return;
             if (!LineageService.IsXia(__instance)) return;

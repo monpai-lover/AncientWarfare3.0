@@ -157,6 +157,12 @@ namespace AncientWarfare3.core.db
             foreach (var (tableName, cols) in EnumerateTableSchemas())
             {
                 if (cols.Count == 0) continue;
+                if (!_db.TableExists(tableName))
+                {
+                    _db.CreateTable(tableName, cols);
+                    continue;
+                }
+
                 SQLiteHelper.RegisterTable(tableName, cols);
                 _db.AddMissingColumns(tableName, cols);
             }

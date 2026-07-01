@@ -26,25 +26,23 @@ namespace AncientWarfare3.patch
         }
 
         // ①b 出生(繁殖路径)→ 尝试降临。
-        //   繁殖婴儿走 createBabyActorFromData,**不经过 newCreature**(全库仅 createNewUnit 调 newCreature),
-        //   只钩 newCreature 会漏掉所有繁殖人口 → 历史人物降临窗口极窄(基本不出)。这里补钩繁殖统一点。
+        //   makeBaby Postfix 在父母元数据、性别、营养等 baby 初始化完成后触发,避免后续原版流程覆盖 figure 预设。
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BabyHelper), nameof(BabyHelper.applyParentsMeta))]
-        public static void ApplyParentsMeta_Figure_Postfix(Actor pBaby)
+        [HarmonyPatch(typeof(BabyMaker), nameof(BabyMaker.makeBaby))]
+        public static void MakeBaby_Figure_Postfix(Actor __result)
         {
-            HistoricalFigureService.TrySpawnOn(pBaby, "baby");
+            HistoricalFigureService.TrySpawnOn(__result, "baby_final");
         }
 
         // ② 成为 king → 套用预留国名(周/秦/…)
         [HarmonyPostfix]
+        [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
-        public static void SetKing_Postfix(Kingdom __instance, Actor pActor)
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
+            if (pFromLoad) return;
             if (__instance == null || pActor == null) return;
             HistoricalFigureService.OnFigureKingBecame(__instance, pActor);
-
-            // 编年史:换君(国家)+ 成王(人物,若入谱贵族)。
-            core.lineage.ChronicleEvents.OnKingChanged(__instance, pActor);
         }
 
         // ③ 小地图图标:历史人物(first 特质,存活)头顶画 minimap_figure,国家色着色

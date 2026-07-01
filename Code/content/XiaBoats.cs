@@ -42,15 +42,12 @@ namespace AncientWarfare3.content
             // clone 继承 is_boat / boat_type / default_attack / decisions 等;船身贴图按新 id 懒加载 actors/boats/{pNewId}/。
             ActorAsset boat = AssetManager.actor_library.clone(pNewId, pFromId);
 
-            // ⚠ 关闭 has_sprite_renderer(默认 true)——船**不走普通单位 sprite 渲染**,而走 Boat 组件
-            //   (Actor.cs:687 is_boat→addChildSimple(new Boat()),用 boat_texture_id 懒加载 actors/boats/{id}/)。
-            //   保持 true 会让 preloadMainUnitSprites(:1323-1327)对船调 texture_asset.preloadSprites():
-            //     - mod 晚于 post_init clone → texture_asset 为 null → 加载期 NullReferenceException;
-            //     - 或借 human texture_asset 占位 → 其 texture_path_main 指向 actors/species/heads_male →
-    //       校验"对 boat_*_Xia 不存在"刷 logAssetError 警告。
-            //   设 false 后 :1323 直接 continue 跳过、BatchActors:105 也跳过普通 sprite 批渲染,船照常用 Boat 渲染。
-            //   既不崩也无警告,船身贴图不受影响。
-            boat.has_sprite_renderer = false;
+            // 船的贴图由 Boat 组件按 actors/boats/{id}/ 懒加载。这里仍要保留普通 sprite renderer
+            // 和 override 标记,否则 BatchActors 会把它排除在可显示/可刷新的船资产列表之外。
+            boat.has_sprite_renderer = true;
+            boat.has_override_sprite = boat.get_override_sprite != null;
+            var boats = AssetManager.actor_library.list_only_boat_assets;
+            if (boats != null && !boats.Contains(boat)) boats.Add(boat);
         }
     }
 }

@@ -116,7 +116,7 @@ namespace AncientWarfare3.content.figures
         // ───────────────────────── 生成 ─────────────────────────
 
         /// <summary>诊断开关:定位"历史人物不自然产生"时设 true,会 LogInfo 每个早退原因 + 触发源。定位后关回 false。</summary>
-        public static bool DiagnoseSpawn = true;
+        public static bool DiagnoseSpawn = false;
 
         /// <summary>由 AW_FigurePatch 在新单位出生(newCreature / applyParentsMeta Postfix)后调用。门槛检查 + 掷骰 + 降临。
         /// pSource 仅用于诊断日志标注触发路径(newCreature=神力/城市补人;baby=繁殖)。</summary>
@@ -211,7 +211,7 @@ namespace AncientWarfare3.content.figures
             // 编年史:历史人物降临 = 一次"出生"事件(预设姓名已就绪)。
             core.lineage.HistoryWriter.RecordPerson(
                 pActor.data.id, pActor.kingdom, pActor.getName(), "birth",
-                pActor.getName() + " 降临世间");
+                core.lineage.HistoryText.Actor(pActor) + " 降临世间");
 
             ModClass.LogInfo($"历史人物降临:{pDef.Key}(序号 {pIndex},国名预留 {pDef.KingdomName})");
         }

@@ -60,6 +60,7 @@ namespace AncientWarfare3.content
             tex.texture_head_king = pBasePath + "heads_special/head_king";
             tex.texture_heads_old_male = pBasePath + "heads_special/head_old_male";
             tex.texture_heads_old_female = pBasePath + "heads_special/head_old_female";
+            tex.has_old_heads = true;
 
             tex.prevent_unconscious_rotation = pAsset.prevent_unconscious_rotation;
             tex.render_heads_for_children = false;

@@ -70,12 +70,45 @@ namespace AncientWarfare3.utils
             using var cmd = new SQLiteCommand(pThis);
             cmd.CommandText = table.InsertPrepareCMD;
             cmd.Prepare();
+            var provided = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in pValues)
             {
-                cmd.Parameters.AddWithValue(table.ColumnNameToParamName[value.Name], value.Value);
+                provided[value.Name] = value.Value;
+            }
+
+            foreach (var col in table.ColumnDefs)
+            {
+                object value = provided.TryGetValue(col.Name, out object supplied)
+                    ? supplied
+                    : DefaultValueFor(col);
+                cmd.Parameters.AddWithValue(table.ColumnNameToParamName[col.Name], value ?? DBNull.Value);
             }
 
             cmd.ExecuteNonQuery();
+        }
+
+        private static object DefaultValueFor(ColumnDef pCol)
+        {
+            if (!string.IsNullOrEmpty(pCol.Default))
+            {
+                switch (pCol.ValueType)
+                {
+                    case ColumnType.INTEGER:
+                        return long.TryParse(pCol.Default, out long i) ? i : 0L;
+                    case ColumnType.REAL:
+                        return double.TryParse(pCol.Default, out double d) ? d : 0.0;
+                    case ColumnType.TEXT:
+                        return pCol.Default;
+                }
+            }
+
+            switch (pCol.ValueType)
+            {
+                case ColumnType.INTEGER: return 0L;
+                case ColumnType.REAL: return 0.0;
+                case ColumnType.TEXT: return "";
+                default: return DBNull.Value;
+            }
         }
 
         public static bool CheckKeyExist(this SQLiteConnection pThis, string pTableName,
@@ -217,6 +250,16 @@ namespace AncientWarfare3.utils
         public static void RegisterTable(string pTableName, List<ColumnDef> pCols)
         {
             _tableInfos[pTableName] = new TableInfo(pTableName, pCols);
+        }
+
+        public static bool TableExists(this SQLiteConnection pThis, string pTableName)
+        {
+            if (pThis == null || string.IsNullOrEmpty(pTableName)) return false;
+            using var cmd = new SQLiteCommand(pThis);
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name";
+            cmd.Parameters.AddWithValue("@name", pTableName);
+            object result = cmd.ExecuteScalar();
+            return result != null && result != DBNull.Value && Convert.ToInt64(result) > 0;
         }
 
         /// <summary>

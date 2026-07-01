@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.lineage
     internal static class LineageService
     {
         public const string XIA_ASSET_ID = "Xia";
+        private const int MIN_SHI_ALIVE_FOR_NEW_BRANCH = 8;
+        private const int MIN_HOME_BRANCH_ADULT_MALES_AFTER_BRANCH = 2;
 
         public static bool IsXia(Actor pActor)
         {
@@ -67,7 +69,8 @@ namespace AncientWarfare3.core.lineage
             if (lid < 0) return; // 仅入谱贵族家系
 
             string name = pActor.getName();
-            HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name, "birth", name + " 出生");
+            HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name, "birth",
+                HistoryText.Actor(pActor, name) + " 出生");
         }
 
         /// <summary>
@@ -93,6 +96,11 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         private static void InheritFromParents(Actor pActor, Actor pParent1, Actor pParent2)
         {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1);
+            if (existingLineageId >= 0) return;
+            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return;
+
             Actor source = PickLineageSource(pParent1, pParent2);
             if (source == null) return;
 
@@ -286,8 +294,12 @@ namespace AncientWarfare3.core.lineage
             pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return; // 无谱系(非贵族血统),不分封
 
+            if (IsHistoricalFigure(pKing)) return;          // 历史人物保留预设姓氏/氏名,不能被称王分支改名
+            if (IsLineageRootFounder(pKing, lineageId)) return; // 总姓族老祖本身就是根,不再强制拆出新氏
+
             pKing.data.get(LineageKeys.SHI_ID, out long curShiId, -1);
             if (curShiId < 0) return;
+            if (LineageQuery.CountAliveInShi(curShiId) < MIN_SHI_ALIVE_FOR_NEW_BRANCH) return;
 
             // 触发判定:新王所在国 != 当前氏支的 origin_kingdom_id → 建新国/夺别国 → 分封。
             long originKingdom = LineageQuery.GetShiOriginKingdom(curShiId);
@@ -315,10 +327,28 @@ namespace AncientWarfare3.core.lineage
             // 4) 在国王 data 上标记"建立的新支 id"(原氏族树在他位置显示"建立分支X氏"+点击跳转用)。
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
 
+            // 5) 重命名新建的原版 clan(此时 CLAN_NAME 已就绪,王族命名=国名+氏+"氏")。
+            //    newClan Postfix 时氏未就绪已跳过,这里补上。
+            RenameClanByLeader(pKing.clan, pKing);
+
             ApplyDisplayName(pKing);          // 氏变 → 重拼显示名
             ArchiveActor(pKing, pAlive: true);
+            pKing.clearGraphicsFully();
 
             ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{clanName}」(shi={newShiId},脱离旧支 {curShiId})。");
+        }
+
+        private static bool IsHistoricalFigure(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (FigureStateStore.IndexOfActor(pActor.data.id) >= 0) return true;
+            return pActor.hasTrait("figure");
+        }
+
+        private static bool IsLineageRootFounder(Actor pActor, long pLineageId)
+        {
+            if (pActor?.data == null || pLineageId < 0) return false;
+            return LineageQuery.GetLineageFounderId(pLineageId) == pActor.data.id;
         }
 
         /// <summary>
@@ -336,6 +366,9 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return false;
+            pActor.data.get(LineageKeys.SHI_ID, out long actorShiId, -1);
+            if (actorShiId < 0) return false;
+            if (LineageQuery.CountAliveInShi(actorShiId) < MIN_SHI_ALIVE_FOR_NEW_BRANCH) return false;
 
             Actor father = FindNobleFather(pActor);
             if (father == null) return false;
@@ -343,12 +376,17 @@ namespace AncientWarfare3.core.lineage
             // ② 只分当前国王的子辈
             if (!IsCurrentKing(father)) return false;
 
+            // 当前继承人留本宗,不能被外派分封。继承人并不总等于最早出生的男嗣:
+            // 未成年/疯狂/失格子嗣会被 HeirService 排除,所以必须按继承系统的当前结果判断。
+            if (HeirService.IsCurrentHeir(father.kingdom, pActor)) return false;
+
             // ③ 长子留本宗
             if (IsEldestSon(father, pActor)) return false;
 
-            // ④ 本宗冗余保护:除申请人 pActor 外,本宗(与父同氏支)还须留 ≥2 个成年活 male
-            //    (长子 + 至少一个备胎),才允许把 pActor 分出去 —— 防本宗剩独苗绝嗣。
-            if (CountHomeBranchAdultMales(father, pExclude: pActor) < 2) return false;
+            // ④ 本宗冗余保护:除申请人 pActor 外,本宗(与父同氏支)还须留 ≥1 个成年活 male
+            //    (长子即可),才允许把 pActor 分出去 —— 防本宗绝嗣。
+            //    原阈值 ≥2(长子+备胎)过严,王有2子时第二子永远无法分封,改为 ≥1。
+            if (CountHomeBranchAdultMales(father, pExclude: pActor) < MIN_HOME_BRANCH_ADULT_MALES_AFTER_BRANCH) return false;
 
             return true;
         }
@@ -442,6 +480,33 @@ namespace AncientWarfare3.core.lineage
             return string.IsNullOrEmpty(pName) ? null : pName.Substring(0, 1);
         }
 
+        // ──────────────────────────── 原版 clan 命名 ────────────────────────────
+
+        /// <summary>
+        ///     按领袖身份重命名一个原版 Clan 的显示名(覆盖游戏默认随机名):
+        ///     - 领袖是国王 → 国名(全名) + 氏 + "氏"(如"周幸氏")。
+        ///     - 领袖非国王 → 城市名(全名) + 氏 + "氏"(如"某城幸氏")。
+        ///     氏取领袖的 CLAN_NAME 字段;地名取领袖当前 kingdom/city 全名。
+        ///     领袖非 Xia、或氏/地名任一取不到 → 不改名(保留原版名,避免拼出残缺名)。
+        ///     幂等:同名不重复 setName。
+        /// </summary>
+        public static void RenameClanByLeader(Clan pClan, Actor pLeader)
+        {
+            if (pClan?.data == null || pLeader?.data == null) return;
+            if (!IsXia(pLeader)) return;
+
+            pLeader.data.get(LineageKeys.CLAN_NAME, out string shi, "");
+            if (string.IsNullOrEmpty(shi)) return; // 氏未就绪(如称王分封 newClan 早于 set),等后续显式重命名
+
+            bool isKing = pLeader.isKing();
+            string place = isKing ? pLeader.kingdom?.name : pLeader.city?.data?.name;
+            if (string.IsNullOrEmpty(place)) return; // 地名取不到,保留原版名
+
+            string newName = place + shi + "氏";
+            if (pClan.data.name == newName) return;   // 幂等
+            try { pClan.setName(newName); } catch { /* 改名失败不致命 */ }
+        }
+
         // ──────────────────────────── 身份衰落 ────────────────────────────
 
         /// <summary>按 noble_distance 添加/移除 guizu。距离≥3 且本人非当前贵族 → 退回平民。</summary>
@@ -487,24 +552,28 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(given)) given = pActor.getName();
 
             string display;
-            bool integrated = IsKingdomIntegrated(pActor.kingdom);
 
-            if (integrated)
+            if (status == LineageStatus.NOBLE)
             {
-                // 合流后:氏 + 名(无旧氏者应已在合流时补氏)
-                display = string.IsNullOrEmpty(clan) ? given : clan + given;
-            }
-            else if (status == LineageStatus.NOBLE && !string.IsNullOrEmpty(family))
-            {
-                // 合流前贵族:男 氏+名,女 名+姓
+                // 贵族沿用旧规则:男用氏(无氏则姓)+名,女用名+姓。
                 if (pActor.isSexMale())
-                    display = (string.IsNullOrEmpty(clan) ? family : clan) + given;
+                {
+                    string prefix = !string.IsNullOrEmpty(clan) ? clan : family;
+                    display = !string.IsNullOrEmpty(prefix) ? prefix + given : given;
+                }
                 else
-                    display = given + family;
+                {
+                    display = !string.IsNullOrEmpty(family) ? given + family : given;
+                }
+            }
+            else if (!string.IsNullOrEmpty(clan))
+            {
+                // 有氏的平民/奴隶:男女一致 氏+名。
+                display = clan + given;
             }
             else
             {
-                // 平民 / 奴隶 / 无谱系:单名
+                // 无氏平民 / 奴隶 / 无谱系:单名
                 display = given;
             }
 
@@ -588,14 +657,15 @@ namespace AncientWarfare3.core.lineage
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
+            var origin = ResolveOriginIds(pFounder);
             db.Insert(LineageGroupTableItem.GetTableName(),
                 ColumnVal.Create("LINEAGE_ID", pLineageId),
                 ColumnVal.Create("FAMILY_NAME", pFamilyName),
                 ColumnVal.Create("FOUNDER_ACTOR_ID", pFounder.data.id),
                 ColumnVal.Create("FOUNDER_NAME", pFounder.getName()),
                 ColumnVal.Create("CREATED_TIME", CurTime()),
-                ColumnVal.Create("ORIGIN_KINGDOM_ID", pFounder.kingdom?.id ?? -1),
-                ColumnVal.Create("ORIGIN_CITY_ID", pFounder.city?.data?.id ?? -1),
+                ColumnVal.Create("ORIGIN_KINGDOM_ID", origin.kingdomId),
+                ColumnVal.Create("ORIGIN_CITY_ID", origin.cityId),
                 ColumnVal.Create("IS_EXTINCT", 0));
         }
 
@@ -604,17 +674,27 @@ namespace AncientWarfare3.core.lineage
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
+            var origin = ResolveOriginIds(pFounder);
             db.Insert(ShiBranchTableItem.GetTableName(),
                 ColumnVal.Create("SHI_ID", pShiId),
                 ColumnVal.Create("LINEAGE_ID", pLineageId),
                 ColumnVal.Create("CLAN_NAME", pClanName),
                 ColumnVal.Create("FOUNDER_ACTOR_ID", pFounder.data.id),
                 ColumnVal.Create("SOURCE_TYPE", pSourceType),
-                ColumnVal.Create("ORIGIN_KINGDOM_ID", pFounder.kingdom?.id ?? -1),
-                ColumnVal.Create("ORIGIN_CITY_ID", pFounder.city?.data?.id ?? -1),
+                ColumnVal.Create("ORIGIN_KINGDOM_ID", origin.kingdomId),
+                ColumnVal.Create("ORIGIN_CITY_ID", origin.cityId),
                 ColumnVal.Create("ORIGIN_ORIGINAL_CLAN_ID", pFounder.clan?.data?.id ?? -1),
                 ColumnVal.Create("CREATED_TIME", CurTime()),
                 ColumnVal.Create("IS_EXTINCT", 0));
+        }
+
+        private static (long kingdomId, long cityId) ResolveOriginIds(Actor pFounder)
+        {
+            long cityId = pFounder?.city?.data?.id ?? -1;
+            Kingdom kingdom = pFounder?.kingdom ?? pFounder?.city?.kingdom;
+            if (cityId < 0 && kingdom?.capital?.data != null) cityId = kingdom.capital.data.id;
+            long kingdomId = kingdom?.id ?? -1;
+            return (kingdomId, cityId);
         }
 
         private static void UpsertKingdomState(Kingdom pKingdom, bool pIntegrated)

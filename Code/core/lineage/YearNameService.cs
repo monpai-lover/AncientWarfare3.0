@@ -34,8 +34,9 @@ namespace AncientWarfare3.core.lineage
 
             string yearName = MakeYearNameStem(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_NAME, yearName);
-            // BaseSystemData 自定义字段只有 float 重载(无 double),world_time 存 float 足够。
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_START, (float)World.world.getCurWorldTime());
+            // 纪元记录:换年号即开新纪元(EraRecordWriter 内部关旧开新)。
+            EraRecordWriter.OnEraChanged(pKingdom, yearName);
         }
 
         /// <summary>年号词干(不含年份)。帝国=两字雅号;普通=国号+头衔单字+王名首字。</summary>
@@ -46,7 +47,9 @@ namespace AncientWarfare3.core.lineage
 
             string kingdomName = pKingdom.name ?? "";
             string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pKingdom));
-            string kingFirst = FirstChar(pKingdom.king.getName());
+            // 王名字取本名 GIVEN_NAME(存好的单名"发"),不取 getName()——后者被 ApplyDisplayName
+            // 拼成"氏+名"(如"幸发"),FirstChar 会取到氏("幸")而非名,致年号误成"周伯幸"。
+            string kingFirst = FirstChar(GivenNameOf(pKingdom.king));
             return kingdomName + titleChar + kingFirst;
         }
 
@@ -75,6 +78,14 @@ namespace AncientWarfare3.core.lineage
         private static string FirstChar(string pName)
         {
             return string.IsNullOrEmpty(pName) ? "" : pName.Substring(0, 1);
+        }
+
+        /// <summary>王的本名单字(存档 GIVEN_NAME,如"发")。缺失时退回 getName()(老档兜底)。</summary>
+        private static string GivenNameOf(Actor pKing)
+        {
+            if (pKing?.data == null) return pKing?.getName() ?? "";
+            pKing.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+            return string.IsNullOrEmpty(given) ? pKing.getName() : given;
         }
     }
 }

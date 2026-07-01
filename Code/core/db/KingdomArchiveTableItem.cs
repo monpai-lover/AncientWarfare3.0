@@ -18,6 +18,11 @@ namespace AncientWarfare3.core.db
         public int    banner_background_id;  // 旗帜背景 id
         public string banner_id;             // 旗帜集 id(= ActorAsset.banner_id,如 "Xia")
 
+        [TableItemDef(pDefaultValue: "-1")] public long founder_actor_id = -1;
+        public string founder_name;
+        [TableItemDef(pDefaultValue: "-1")] public long capital_city_id = -1;
+        public string capital_city_name;
+
         public int    is_alive = 1;          // 1 存活 / 0 已亡
         public double founded_time;
         [TableItemDef(pDefaultValue: "-1")] public double destroyed_time;

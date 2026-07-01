@@ -234,14 +234,21 @@ namespace AncientWarfare3.ui.windows
                 if (hasKing) _kingAvatar.show(kingdom.king);
             }
 
-            // 继承人列(头像 + "继承人"标签):有继承人整列显示并 show(heir)(自带点击跳转),
-            //   无继承人整列隐藏 —— **不画也不占位**,横排其余项不会被顶移(根治"继承人顶替国王位")。
+            // 继承人列(头像 + "继承人"标签):**列容器始终保留占位**(SetActive(true)),
+            //   使横排恒为 [国王34][中列108][继承人34] 三项对称,中列年号框落在窗口正中
+            //   (根治"整排偏移不居中")。无继承人时只隐藏列内头像+标签,不整列 SetActive(false)
+            //   —— 否则该列宽度从横排消失,MiddleCenter 使剩余两项整体偏移。
+            //   国王列独立(左),继承人列独立(右),不会互相顶替。
             if (_heirCol != null && _heirAvatar != null)
             {
+                _heirCol.SetActive(true);
                 Actor heir = HeirService.GetHeir(kingdom);
                 bool hasHeir = heir != null && !heir.isRekt();
-                _heirCol.SetActive(hasHeir);
-                if (hasHeir) _heirAvatar.show(heir);
+                if (hasHeir) { _heirAvatar.gameObject.SetActive(true); _heirAvatar.show(heir); }
+                else _heirAvatar.gameObject.SetActive(false);
+                // 无继承人时隐藏"继承人"文字标签(留空头像位占位即可,不显文字)。
+                Transform heirLabel = _heirCol.transform.Find("Label");
+                if (heirLabel != null) heirLabel.gameObject.SetActive(hasHeir);
             }
         }
     }

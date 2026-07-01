@@ -24,6 +24,7 @@ namespace AncientWarfare3.patch
             if (__result?.data == null) return;
             if (!LineageService.IsXia(__result)) return;
             LineageService.ApplyDisplayName(__result); // 性别已定 → 重算走正确性别分支
+            LineageService.ArchiveActor(__result, pAlive: true);
         }
     }
 }
