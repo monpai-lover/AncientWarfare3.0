@@ -33,16 +33,18 @@ namespace AncientWarfare3.ui.windows
 
         public static void OpenPerson(long pActorId)
         {
+            Source previous = _source;
             _source = Source.Person;
-            if (Instance != null && _contextId != pActorId) _personFilter = "";
+            if (Instance != null && (previous != Source.Person || _contextId != pActorId)) _personFilter = "";
             _contextId = pActorId;
             OpenInternal();
         }
 
         public static void OpenKingdom(long pKingdomId)
         {
+            Source previous = _source;
             _source = Source.Kingdom;
-            if (Instance != null && _contextId != pKingdomId)
+            if (Instance != null && (previous != Source.Kingdom || _contextId != pKingdomId))
             {
                 Instance._expandedDynasties.Clear();
                 Instance._expandedReigns.Clear();
@@ -54,8 +56,14 @@ namespace AncientWarfare3.ui.windows
 
         public static void OpenCity(long pCityId)
         {
+            Source previous = _source;
             _source = Source.City;
-            if (Instance != null && _contextId != pCityId) { Instance._expandedReigns.Clear(); Instance._seeded = false; }
+            if (Instance != null && (previous != Source.City || _contextId != pCityId))
+            {
+                Instance._expandedDynasties.Clear();
+                Instance._expandedReigns.Clear();
+                Instance._seeded = false;
+            }
             _contextId = pCityId;
             OpenInternal();
         }
@@ -93,6 +101,12 @@ namespace AncientWarfare3.ui.windows
             {
                 if (actorId >= 0) OpenPerson(actorId);
             };
+            HistoryListItem.OnActorFamilyTree = actorId =>
+            {
+                if (actorId < 0) return;
+                long shiId = LineageQuery.GetActorShiId(actorId);
+                FamilyTreeWindow.OpenFamilyTree(actorId, shiId);
+            };
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.HISTORY,
                 () => { if (Instance != null) Instance.Refresh(); });
         }
@@ -126,12 +140,6 @@ namespace AncientWarfare3.ui.windows
             if (!_seeded)
             {
                 _seeded = true;
-                for (int d = 0; d < _dynasties.Count; d++)
-                {
-                    _expandedDynasties.Add(d);
-                    for (int r = 0; r < _dynasties[d].reigns.Count; r++)
-                        _expandedReigns.Add(d * 1000 + r); // 朝代d×1000+王段r唯一编码
-                }
             }
             for (int di = 0; di < _dynasties.Count; di++)
             {
@@ -181,7 +189,6 @@ namespace AncientWarfare3.ui.windows
             if (!_seeded)
             {
                 _seeded = true;
-                for (int j = 0; j < _reigns.Count; j++) _expandedReigns.Add(j);
             }
             for (int i = 0; i < _reigns.Count; i++)
             {
@@ -211,6 +218,16 @@ namespace AncientWarfare3.ui.windows
 
         private void RefreshPerson()
         {
+            AddItemToList(new HistoryRow
+            {
+                is_action = true,
+                action_kind = "family_tree",
+                action_actor_id = _contextId,
+                text = AW_L10n.Text("aw_action_family_tree", "\u5B9A\u4F4D\u65CF\u8C31"),
+                tooltip_title = AW_L10n.Text("aw_action_family_tree", "\u5B9A\u4F4D\u65CF\u8C31"),
+                tooltip_desc = AW_L10n.Text("aw_action_family_tree_desc", "\u6253\u5F00\u8BE5\u4EBA\u7684\u5BB6\u5EAD\u6811")
+            });
+
             // 渲染分类筛选条（一行6个 toggle，用 is_filter=true 标记）
             AddItemToList(new HistoryRow
             {
@@ -238,18 +255,50 @@ namespace AncientWarfare3.ui.windows
         private static string BuildDynastyTitle(DynastyView pDyn)
         {
             string span = YearSpan(pDyn.start_time, pDyn.end_time);
-            string name = string.IsNullOrEmpty(pDyn.dynasty_name)
-                ? AW_L10n.Text("aw_history_early_period", "\u65E9\u671F")
-                : pDyn.dynasty_name;
+            string name = BuildDynastyDisplayName(pDyn);
             string color = string.IsNullOrEmpty(pDyn.dynasty_color) ? pDyn.kingdom_color : pDyn.dynasty_color;
             return RichName("【" + name + "】", color) + " " + span;
+        }
+
+        private static string BuildDynastyDisplayName(DynastyView pDyn)
+        {
+            if (pDyn != null && !string.IsNullOrEmpty(pDyn.clan_name))
+            {
+                string ruleName = pDyn.clan_name +
+                    AW_L10n.Text("aw_shi_suffix", "\u6C0F") +
+                    AW_L10n.Text("aw_dynasty_rule_suffix", "\u7EDF\u6CBB");
+                return string.IsNullOrEmpty(pDyn.origin_city_name)
+                    ? ruleName
+                    : pDyn.origin_city_name + " " + ruleName;
+            }
+
+            if (pDyn != null && !string.IsNullOrEmpty(pDyn.dynasty_name))
+            {
+                string oldName = pDyn.dynasty_name;
+                return oldName.EndsWith("\u671D") && oldName.Length > 1
+                    ? oldName.Substring(0, oldName.Length - 1) + "\u6C0F\u7EDF\u6CBB"
+                    : oldName;
+            }
+
+            return AW_L10n.Text("aw_history_early_period", "\u65E9\u671F");
         }
 
         private static string BuildReignTitle(ReignPeriod pReign)
         {
             string span = YearSpan(pReign.start_time, pReign.end_time);
             if (pReign.is_city_period)
-                return RichName(pReign.has_king ? pReign.king_name : AW_L10n.Text("aw_history_no_owner", "\u65E0\u6240\u5C5E"), pReign.period_color) + " · " + span;
+            {
+                string owner = string.IsNullOrEmpty(pReign.owner_name)
+                    ? AW_L10n.Text("aw_history_no_owner", "\u65E0\u6240\u5C5E")
+                    : pReign.owner_name;
+                string ownerPart = RichName(owner, string.IsNullOrEmpty(pReign.owner_color) ? pReign.period_color : pReign.owner_color);
+                if (!pReign.has_king)
+                    return ownerPart + " · " + span;
+
+                string prefix = HistoryWriter.NormalizeYearPrefix(pReign.year_prefix_snapshot, pReign.start_time);
+                string era = string.IsNullOrEmpty(prefix) ? "" : RichName(prefix, pReign.period_color) + " · ";
+                return era + RichName(DisplayKingName(pReign), DisplayKingColor(pReign)) + " · " + ownerPart + " · " + span;
+            }
 
             if (pReign.has_king)
             {
@@ -332,10 +381,52 @@ namespace AncientWarfare3.ui.windows
         {
             string type = string.IsNullOrEmpty(pEntry.event_type) ? "" : AW_L10n.Text("aw_history_type", "\u7C7B\u578B\uFF1A") + pEntry.event_type + "\n";
             string time = AW_L10n.Text("aw_history_time", "\u65F6\u95F4\uFF1A") + HistoryWriter.NormalizeYearPrefix(pEntry.year_prefix, pEntry.world_time) + "\n";
+            string snapshot = _source == Source.Person ? BuildPersonSnapshotTooltip(pEntry) : "";
             string content = !string.IsNullOrEmpty(pEntry.content_rich)
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
-            return type + time + content;
+            if (pEntry.event_type == KingdomEvent.POSTHUMOUS && pEntry.target_type == "actor" && pEntry.target_id >= 0)
+            {
+                string extra = PosthumousTitleService.BuildTooltip(pEntry.target_id);
+                if (!string.IsNullOrEmpty(extra))
+                    return type + time + snapshot + content + "\n\n" + extra;
+            }
+            return type + time + snapshot + content;
+        }
+
+        private static string BuildPersonSnapshotTooltip(HistoryEntry pEntry)
+        {
+            if (pEntry == null) return "";
+            var sb = new System.Text.StringBuilder();
+            if (pEntry.age_at_event >= 0)
+                sb.Append(AW_L10n.Text("aw_history_age_at_event", "\u65F6\u5E74\uFF1A"))
+                    .Append(pEntry.age_at_event)
+                    .Append(AW_L10n.Text("aw_age_suffix", "\u5C81"))
+                    .Append("\n");
+            string role = !string.IsNullOrEmpty(pEntry.role_label) ? pEntry.role_label : RoleLabel(pEntry.role_snapshot);
+            if (!string.IsNullOrEmpty(role))
+                sb.Append(AW_L10n.Text("aw_history_role_at_event", "\u5F53\u65F6\u8EAB\u4EFD\uFF1A"))
+                    .Append(role)
+                    .Append("\n");
+            return sb.ToString();
+        }
+
+        private static string RoleLabel(string pRole)
+        {
+            switch (pRole)
+            {
+                case "king": return AW_L10n.Text("aw_role_king", "\u541B\u4E3B");
+                case "city_leader": return AW_L10n.Text("aw_role_city_leader", "\u57CE\u4E3B");
+                case "clan_chief": return AW_L10n.Text("aw_role_clan_chief", "\u6C0F\u65CF\u5BB6\u4E3B");
+                case "royal_guard_captain": return AW_L10n.Text("aw_role_royal_guard_captain", "\u7981\u536B\u519B\u7EDF\u9886");
+                case "royal_guard": return AW_L10n.Text("aw_role_royal_guard", "\u7981\u536B\u519B");
+                case "slave": return AW_L10n.Text("aw_role_slave", "\u5974\u96B6");
+                case "warrior": return AW_L10n.Text("aw_role_warrior", "\u58EB\u5175");
+                case "noble": return AW_L10n.Text("aw_role_noble", "\u8D35\u65CF");
+                case "common_lineage": return AW_L10n.Text("aw_role_common_lineage", "\u6709\u6C0F\u5E73\u6C11");
+                case "common": return AW_L10n.Text("aw_role_common", "\u5E73\u6C11");
+                default: return "";
+            }
         }
 
         protected override AbstractListWindowItem<HistoryRow> CreateItemPrefab()

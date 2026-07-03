@@ -19,6 +19,10 @@ namespace AncientWarfare3.core.lineage
         public string kingdom_name = ""; // 城市史专用:所属国名快照(归属期分段用)
         public string kingdom_color = "";
         public string category = "";     // 人物史专用:life/honor/clan/war/bond(UI 筛选用)
+        public int    age_at_event = -1;
+        public int    is_king_at_event = 0;
+        public string role_snapshot = "";
+        public string role_label = "";
         public long   context_kingdom_id = -1;
         public string context_kingdom_name = "";
         public string context_kingdom_color = "";
@@ -43,7 +47,8 @@ namespace AncientWarfare3.core.lineage
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 "SELECT EVENT_ID, WORLD_TIME, YEAR_PREFIX, YEAR_PREFIX_RICH, SUBJECT_NAME, SUBJECT_COLOR, " +
-                "CONTENT, CONTENT_RICH, EVENT_TYPE, CATEGORY, CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, " +
+                "CONTENT, CONTENT_RICH, EVENT_TYPE, CATEGORY, AGE_AT_EVENT, IS_KING_AT_EVENT, ROLE_SNAPSHOT, ROLE_LABEL, " +
+                "CONTEXT_KINGDOM_ID, CONTEXT_KINGDOM_NAME, CONTEXT_KINGDOM_COLOR, " +
                 "TARGET_TYPE, TARGET_ID " +
                 $"FROM {PersonBiographyTableItem.GetTableName()} WHERE ACTOR_ID=@id ORDER BY WORLD_TIME ASC, EVENT_ID ASC";
             cmd.Parameters.AddWithValue("@id", pActorId);
@@ -63,11 +68,15 @@ namespace AncientWarfare3.core.lineage
                     content_rich = SafeStr(reader, 7),
                     event_type   = SafeStr(reader, 8),
                     category     = SafeStr(reader, 9),
-                    context_kingdom_id = reader.IsDBNull(10) ? -1 : reader.GetInt64(10),
-                    context_kingdom_name = SafeStr(reader, 11),
-                    context_kingdom_color = SafeStr(reader, 12),
-                    target_type = SafeStr(reader, 13),
-                    target_id = reader.IsDBNull(14) ? -1 : reader.GetInt64(14)
+                    age_at_event = ToInt(reader, 10, -1),
+                    is_king_at_event = ToInt(reader, 11),
+                    role_snapshot = SafeStr(reader, 12),
+                    role_label = SafeStr(reader, 13),
+                    context_kingdom_id = reader.IsDBNull(14) ? -1 : reader.GetInt64(14),
+                    context_kingdom_name = SafeStr(reader, 15),
+                    context_kingdom_color = SafeStr(reader, 16),
+                    target_type = SafeStr(reader, 17),
+                    target_id = reader.IsDBNull(18) ? -1 : reader.GetInt64(18)
                 };
                 if (IsDuplicateDeathEntry(entry, seenDeathEvents)) continue;
                 result.Add(entry);
@@ -86,7 +95,80 @@ namespace AncientWarfare3.core.lineage
 
         public static List<HistoryEntry> ReadKingdom(long pKingdomId)
         {
-            return Read(KingdomHistoryTableItem.GetTableName(), "KINGDOM_ID", pKingdomId);
+            var result = Read(KingdomHistoryTableItem.GetTableName(), "KINGDOM_ID", pKingdomId);
+            NormalizeFigureFoundEvent(pKingdomId, result);
+            RemoveSimpleKingDeathCoveredByPosthumous(result);
+            FilterNonXiaKingdomEvents(pKingdomId, result);
+            return result;
+        }
+
+        private static void NormalizeFigureFoundEvent(long pKingdomId, List<HistoryEntry> pEntries)
+        {
+            if (pEntries == null || pEntries.Count == 0) return;
+            if (!FigureStateStore.TryGetAppliedKingdomName(pKingdomId, out string appliedName)) return;
+
+            Kingdom live = World.world?.kingdoms?.get(pKingdomId);
+            string liveColor = HistoryColors.FromKingdom(live);
+
+            foreach (var entry in pEntries)
+            {
+                if (entry == null || entry.event_type != KingdomEvent.FOUND) continue;
+
+                string color = liveColor;
+                if (string.IsNullOrEmpty(color)) color = entry.context_kingdom_color;
+                if (string.IsNullOrEmpty(color)) color = entry.subject_color;
+
+                HistoryText text = HistoryText.Colored(appliedName, color) + " 建立";
+                entry.subject_name = appliedName;
+                entry.context_kingdom_name = appliedName;
+                entry.content = text.Plain;
+                entry.content_rich = text.Rich;
+                if (!string.IsNullOrEmpty(color))
+                {
+                    entry.subject_color = color;
+                    entry.context_kingdom_color = color;
+                }
+            }
+        }
+
+        private static void RemoveSimpleKingDeathCoveredByPosthumous(List<HistoryEntry> pEntries)
+        {
+            if (pEntries == null || pEntries.Count == 0) return;
+
+            var posthumousTimes = new HashSet<string>();
+            foreach (var entry in pEntries)
+            {
+                if (entry?.event_type != KingdomEvent.POSTHUMOUS) continue;
+                posthumousTimes.Add(TimeKey(entry.world_time));
+            }
+            if (posthumousTimes.Count == 0) return;
+
+            pEntries.RemoveAll(entry =>
+                entry != null &&
+                entry.event_type == KingdomEvent.KING_DIED &&
+                posthumousTimes.Contains(TimeKey(entry.world_time)));
+        }
+
+        private static string TimeKey(double pTime)
+        {
+            return pTime.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void FilterNonXiaKingdomEvents(long pKingdomId, List<HistoryEntry> pEntries)
+        {
+            if (IsXiaKingdomHistory(pKingdomId)) return;
+            if (pEntries == null) return;
+            pEntries.RemoveAll(entry =>
+                entry != null &&
+                (entry.event_type == KingdomEvent.DYNASTY_CHANGE ||
+                 entry.event_type == KingdomEvent.ERA_CHANGE ||
+                 entry.event_type == KingdomEvent.POSTHUMOUS));
+            foreach (var entry in pEntries)
+            {
+                if (entry == null) continue;
+                entry.year_prefix = "";
+                entry.year_prefix_rich = "";
+            }
         }
 
         public static List<HistoryEntry> ReadCity(long pCityId)
@@ -127,6 +209,7 @@ namespace AncientWarfare3.core.lineage
                     target_id = reader.IsDBNull(15) ? -1 : reader.GetInt64(15)
                 });
             }
+            ClearNonXiaEventYearPrefixes(result);
             return result;
         }
 
@@ -260,16 +343,12 @@ namespace AncientWarfare3.core.lineage
                     if (p.end_time < 0 && p.start_time <= destroyedTime)
                         p.end_time = destroyedTime;
             }
+            ClearNonXiaReignDecoration(pKingdomId, periods);
             return periods;
         }
 
         /// <summary>
-        ///     城市历史按"归属期"分段:城市隶属于同一个王国的连续时期为一段。
-        ///     - 切分点 = kingdom_name 相对上一事件发生变化(建城 city_found 是首段起点;
-        ///       每次易主 city_transfer 到新国 → 开新段)。
-        ///     - 段的 king_name 复用为"所属国名";has_king = 国名非空(中立/野城为空 → 无归属期)。
-        ///     - 段 end = 下一段起始事件 world_time;末段 end=-1(至今)。
-        ///     - is_city_period=true 供 UI 按"国名·起止年"渲染段头。
+        ///     城市历史按"所属国 + 当时君主在位期"分段。城市换所属国或所属国换君主都会开启新段。
         /// </summary>
         public static List<ReignPeriod> GetCityPeriods(long pCityId)
         {
@@ -277,32 +356,114 @@ namespace AncientWarfare3.core.lineage
             var periods = new List<ReignPeriod>();
             if (events.Count == 0) return periods;
 
+            var reignCache = new Dictionary<long, List<ReignPeriod>>();
             ReignPeriod current = null;
-            string curKingdom = null; // 尚未建段的哨兵(用 !=,首事件必开段)
+            string currentKey = "";
+            long ownerId = -1;
+            double ownerStart = events[0].world_time;
 
             foreach (var e in events)
             {
-                string owner = e.kingdom_name ?? "";
-                // 所属国变化(含首事件 current==null)→ 关旧段、开新段。
-                if (current == null || owner != curKingdom)
+                long eventOwnerId = e.context_kingdom_id;
+                string eventOwnerName = !string.IsNullOrEmpty(e.context_kingdom_name) ? e.context_kingdom_name : (e.kingdom_name ?? "");
+                string eventOwnerColor = !string.IsNullOrEmpty(e.context_kingdom_color) ? e.context_kingdom_color : e.kingdom_color;
+                string ownerToken = eventOwnerId >= 0 ? eventOwnerId.ToString() : eventOwnerName;
+                string currentOwnerToken = ownerId >= 0 ? ownerId.ToString() : (current?.owner_name ?? "");
+                if (current == null || ownerToken != currentOwnerToken)
                 {
-                    if (current != null) current.end_time = e.world_time;
+                    ownerId = eventOwnerId;
+                    ownerStart = e.world_time;
+                }
+
+                ReignPeriod reign = FindReignAt(eventOwnerId, e.world_time, reignCache);
+                string key = ownerToken + "|" + (reign == null ? "owner" : (reign.king_actor_id + "@" + reign.start_time.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
+                if (current == null || key != currentKey)
+                {
+                    double start = ownerStart;
+                    if (reign != null && reign.start_time > start) start = reign.start_time;
+                    if (current != null) current.end_time = start;
+                    string periodPrefix = (reign != null && System.Math.Abs(start - reign.start_time) < 0.001)
+                        ? reign.year_prefix_snapshot
+                        : e.year_prefix;
+
                     current = new ReignPeriod
                     {
                         is_city_period = true,
-                        has_king = !string.IsNullOrEmpty(owner),
-                        king_name = owner,
-                        king_color = e.kingdom_color,
-                        start_time = e.world_time,
-                        year_prefix_snapshot = e.year_prefix,
-                        period_color = e.kingdom_color
+                        has_king = reign != null,
+                        king_name = reign?.king_name ?? "",
+                        king_color = reign?.king_color ?? eventOwnerColor,
+                        king_actor_id = reign?.king_actor_id ?? -1,
+                        posthumous_title = reign?.posthumous_title ?? "",
+                        posthumous_color = reign?.posthumous_color ?? "",
+                        start_time = start,
+                        end_time = reign?.end_time ?? -1,
+                        year_prefix_snapshot = periodPrefix,
+                        owner_name = eventOwnerName,
+                        owner_color = eventOwnerColor,
+                        period_color = eventOwnerColor
                     };
                     periods.Add(current);
-                    curKingdom = owner;
+                    currentKey = key;
                 }
                 current.events.Add(e);
             }
             return periods;
+        }
+
+        private static ReignPeriod FindReignAt(long pKingdomId, double pTime,
+            Dictionary<long, List<ReignPeriod>> pCache)
+        {
+            if (pKingdomId < 0) return null;
+            if (!pCache.TryGetValue(pKingdomId, out var reigns))
+            {
+                reigns = ReadReignRows(pKingdomId);
+                pCache[pKingdomId] = reigns;
+            }
+            ReignPeriod best = null;
+            foreach (var r in reigns)
+            {
+                bool afterStart = pTime >= r.start_time;
+                bool beforeEnd = r.end_time < 0 || pTime < r.end_time;
+                if (afterStart && beforeEnd) best = r;
+            }
+            return best;
+        }
+
+        private static List<ReignPeriod> ReadReignRows(long pKingdomId)
+        {
+            var result = new List<ReignPeriod>();
+            var db = DB;
+            if (db == null || pKingdomId < 0) return result;
+            if (!IsXiaKingdomHistory(pKingdomId)) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT KING_ACTOR_ID, KING_NAME, KING_COLOR, START_TIME, END_TIME, " +
+                    $"YEAR_NAME_STEM, YEAR_NAME_COLOR, POSTHUMOUS_TITLE, POSTHUMOUS_COLOR " +
+                    $"FROM {KingdomReignTableItem.GetTableName()} WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    string stem = SafeStr(r, 5);
+                    result.Add(new ReignPeriod
+                    {
+                        has_king = true,
+                        king_actor_id = ToLong(r, 0, -1),
+                        king_name = SafeStr(r, 1),
+                        king_color = SafeStr(r, 2),
+                        start_time = ToDouble(r, 3, 0),
+                        end_time = ToDouble(r, 4, -1),
+                        year_prefix_snapshot = string.IsNullOrEmpty(stem) ? "" : stem + "\u5143\u5E74",
+                        period_color = SafeStr(r, 6),
+                        posthumous_title = SafeStr(r, 7),
+                        posthumous_color = SafeStr(r, 8)
+                    });
+                }
+            }
+            catch { }
+            return result;
         }
 
         /// <summary>
@@ -351,11 +512,13 @@ namespace AncientWarfare3.core.lineage
             var result = new List<DynastyView>();
             var db = DB;
             if (db == null) return result;
+            if (!IsXiaKingdomHistory(pKingdomId)) return result;
             try
             {
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText =
-                    $"SELECT DYNASTY_ID, DYNASTY_NAME, DYNASTY_COLOR, KINGDOM_COLOR, START_TIME, END_TIME " +
+                    $"SELECT DYNASTY_ID, DYNASTY_NAME, DYNASTY_COLOR, KINGDOM_COLOR, START_TIME, END_TIME, " +
+                    $"IFNULL(SHI_ID, -1), IFNULL(CLAN_NAME, '') " +
                     $"FROM {DynastyPeriodTableItem.GetTableName()} " +
                     $"WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
@@ -369,10 +532,13 @@ namespace AncientWarfare3.core.lineage
                         dynasty_color = SafeStr(reader, 2),
                         kingdom_color = SafeStr(reader, 3),
                         start_time    = reader.GetDouble(4),
-                        end_time      = reader.GetDouble(5)
+                        end_time      = reader.GetDouble(5),
+                        shi_id        = ToLong(reader, 6, -1),
+                        clan_name     = SafeStr(reader, 7)
                     });
             }
             catch { }
+            FillDynastyOrigins(result);
             double destroyedTime = GetKingdomDestroyedTime(pKingdomId);
             if (destroyedTime >= 0)
             {
@@ -381,6 +547,19 @@ namespace AncientWarfare3.core.lineage
                         d.end_time = destroyedTime;
             }
             return result;
+        }
+
+        private static void FillDynastyOrigins(List<DynastyView> pDynasties)
+        {
+            if (pDynasties == null) return;
+            foreach (var dyn in pDynasties)
+            {
+                if (dyn == null || dyn.shi_id < 0) continue;
+                var shi = LineageQuery.GetShiBranchInfo(dyn.shi_id);
+                if (shi == null) continue;
+                if (string.IsNullOrEmpty(dyn.clan_name)) dyn.clan_name = shi.clan_name ?? "";
+                if (string.IsNullOrEmpty(dyn.origin_city_name)) dyn.origin_city_name = shi.origin_city_name ?? "";
+            }
         }
 
         private static double GetKingdomDestroyedTime(long pKingdomId)
@@ -420,6 +599,7 @@ namespace AncientWarfare3.core.lineage
         {
             var db = DB;
             if (db == null) return;
+            if (!IsXiaKingdomHistory(pKingdomId)) return;
             try
             {
                 using var cmd = new SQLiteCommand(db);
@@ -491,7 +671,90 @@ namespace AncientWarfare3.core.lineage
                     target_id = reader.IsDBNull(13) ? -1 : reader.GetInt64(13)
                 });
             }
+            SortHistoryEntries(result);
             return result;
+        }
+
+        private static void SortHistoryEntries(List<HistoryEntry> pEntries)
+        {
+            if (pEntries == null || pEntries.Count <= 1) return;
+            pEntries.Sort(CompareHistoryEntries);
+        }
+
+        private static int CompareHistoryEntries(HistoryEntry pLeft, HistoryEntry pRight)
+        {
+            if (ReferenceEquals(pLeft, pRight)) return 0;
+            if (pLeft == null) return 1;
+            if (pRight == null) return -1;
+
+            int time = pLeft.world_time.CompareTo(pRight.world_time);
+            if (time != 0) return time;
+
+            int priority = EventSortPriority(pLeft.event_type).CompareTo(EventSortPriority(pRight.event_type));
+            if (priority != 0) return priority;
+
+            return pLeft.event_id.CompareTo(pRight.event_id);
+        }
+
+        private static int EventSortPriority(string pEventType)
+        {
+            switch (pEventType)
+            {
+                case KingdomEvent.FOUND: return 0;
+                case KingdomEvent.ERA_CHANGE: return 10;
+                case KingdomEvent.RULE_CHANGE: return 20;
+                case KingdomEvent.DYNASTY_CHANGE: return 30;
+                default: return 100;
+            }
+        }
+
+        private static bool IsXiaKingdomHistory(long pKingdomId)
+        {
+            if (pKingdomId < 0) return false;
+
+            Kingdom live = World.world?.kingdoms?.get(pKingdomId);
+            if (live?.data != null) return LineageService.IsXiaKingdom(live);
+
+            var db = DB;
+            if (db == null) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(BANNER_ID, '') FROM {KingdomArchiveTableItem.GetTableName()} " +
+                    $"WHERE KINGDOM_ID=@kid LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                object value = cmd.ExecuteScalar();
+                string bannerId = value == null || value == System.DBNull.Value ? "" : value.ToString();
+                return bannerId == LineageService.XIA_ASSET_ID;
+            }
+            catch { return false; }
+        }
+
+        private static void ClearNonXiaReignDecoration(long pKingdomId, List<ReignPeriod> pPeriods)
+        {
+            if (IsXiaKingdomHistory(pKingdomId)) return;
+            if (pPeriods == null) return;
+            foreach (var period in pPeriods)
+            {
+                if (period == null) continue;
+                period.year_prefix_snapshot = "";
+                period.king_actor_id = -1;
+                period.posthumous_title = "";
+                period.posthumous_color = "";
+            }
+        }
+
+        private static void ClearNonXiaEventYearPrefixes(List<HistoryEntry> pEntries)
+        {
+            if (pEntries == null) return;
+            foreach (var entry in pEntries)
+            {
+                if (entry == null || entry.context_kingdom_id < 0) continue;
+                if (IsXiaKingdomHistory(entry.context_kingdom_id)) continue;
+                entry.year_prefix = "";
+                entry.year_prefix_rich = "";
+            }
         }
 
         private static string SafeStr(SQLiteDataReader pReader, int pOrdinal)
@@ -501,7 +764,12 @@ namespace AncientWarfare3.core.lineage
 
         private static int ToInt(SQLiteDataReader pReader, int pOrdinal)
         {
-            return pReader.IsDBNull(pOrdinal) ? 0 : (int)pReader.GetInt64(pOrdinal);
+            return ToInt(pReader, pOrdinal, 0);
+        }
+
+        private static int ToInt(SQLiteDataReader pReader, int pOrdinal, int pDefault)
+        {
+            return pReader.IsDBNull(pOrdinal) ? pDefault : (int)pReader.GetInt64(pOrdinal);
         }
 
         private static long ToLong(SQLiteDataReader pReader, int pOrdinal, long pDefault = 0)

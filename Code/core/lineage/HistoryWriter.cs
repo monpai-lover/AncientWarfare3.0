@@ -83,10 +83,95 @@ namespace AncientWarfare3.core.lineage
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
             string pSubjectName, string pEventType, HistoryText pContent, string pCategory, HistoryTarget pTarget)
         {
+            var extra = new System.Collections.Generic.List<ColumnVal>
+            {
+                ColumnVal.Create("ACTOR_ID", pActorId),
+                ColumnVal.Create("CATEGORY", pCategory ?? "")
+            };
+            extra.AddRange(BuildPersonSnapshotColumns(pActorId));
+
             Insert(PersonBiographyTableItem.GetTableName(), pContextKingdom, pEventType, pContent, pSubjectName,
                 pTarget.IsValid ? pTarget : HistoryTarget.Actor(pActorId),
-                ColumnVal.Create("ACTOR_ID", pActorId),
-                ColumnVal.Create("CATEGORY", pCategory ?? ""));
+                extra.ToArray());
+        }
+
+        private static ColumnVal[] BuildPersonSnapshotColumns(long pActorId)
+        {
+            int age = -1;
+            int isKing = 0;
+            string role = "";
+
+            Actor actor = GetActor(pActorId);
+            if (actor?.data != null)
+            {
+                try { age = actor.getAge(); } catch { age = -1; }
+                try { isKing = actor.isKing() ? 1 : 0; } catch { isKing = 0; }
+                role = ResolveRoleSnapshot(actor);
+            }
+
+            return new[]
+            {
+                ColumnVal.Create("AGE_AT_EVENT", age),
+                ColumnVal.Create("IS_KING_AT_EVENT", isKing),
+                ColumnVal.Create("ROLE_SNAPSHOT", role ?? ""),
+                ColumnVal.Create("ROLE_LABEL", RoleLabel(role))
+            };
+        }
+
+        private static Actor GetActor(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private static string ResolveRoleSnapshot(Actor pActor)
+        {
+            if (pActor?.data == null) return "";
+            try { if (pActor.isKing()) return "king"; } catch { }
+            try { if (pActor.isCityLeader()) return "city_leader"; } catch { }
+            try { if (pActor.clan != null && pActor.clan.getChief() == pActor) return "clan_chief"; } catch { }
+
+            try
+            {
+                pActor.data.get(LineageKeys.ROYAL_GUARD_CAPTAIN, out bool captain, false);
+                if (captain) return "royal_guard_captain";
+                pActor.data.get(LineageKeys.ROYAL_GUARD, out bool guard, false);
+                if (guard) return "royal_guard";
+            }
+            catch { }
+
+            try
+            {
+                if (pActor.hasTrait(LineageKeys.TRAIT_SLAVE)) return "slave";
+                pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
+                if (status == LineageStatus.SLAVE) return "slave";
+                if (pActor.isWarrior()) return "warrior";
+                if (status == LineageStatus.NOBLE || ChronicleGate.IsNobleActor(pActor)) return "noble";
+                if (status == LineageStatus.COMMON) return "common_lineage";
+            }
+            catch { }
+
+            try { if (pActor.isWarrior()) return "warrior"; } catch { }
+            return "common";
+        }
+
+        private static string RoleLabel(string pRole)
+        {
+            switch (pRole)
+            {
+                case "king": return "君主";
+                case "city_leader": return "城主";
+                case "clan_chief": return "氏族家主";
+                case "royal_guard_captain": return "禁卫军统领";
+                case "royal_guard": return "禁卫军";
+                case "slave": return "奴隶";
+                case "warrior": return "士兵";
+                case "noble": return "贵族";
+                case "common_lineage": return "有氏平民";
+                case "common": return "平民";
+                default: return "";
+            }
         }
 
         public static void RecordKingdom(Kingdom pKingdom, string pEventType, string pContent)
