@@ -1,292 +1,171 @@
-# AncientWarfare 3.0（AW3.0）
+# AncientWarfare 3.0 - 总进度与路线图
 
-> WorldBox mod。游戏 **v0.51.2** · **NeoModLoader (NML)** · C# **.NET Framework 4.8** · 主题：**中国夏朝**。
-> 在新版 WorldBox 上**重新开发**的模组（不移植 AW2 旧码，参考其设计在新版架构上重写）。
-
-完整接手说明见 **[HANDOFF.md](HANDOFF.md)**（架构 / 各系统 / 关键坑 / 文件清单 / 待测试项）。
-
----
-
-## ✅ 已实现功能
-
-### 夏朝种族 Xia
-- clone 注册的文明种族，逐帧 png 贴图（`actors/species/civs/Xia/`），男女平民/战士多套皮肤 + 头型。
-- 专属**建筑**(`XiaArchitecture`，含市场/大厅等升级链 + 旗帜/贴图)、**船**(`XiaBoats`)、**物品**(戟/戈/兵法)、**特质**、**王国**(Xia/nomads_Xia) + **年号系统**。
-- 地图色 #33724D，生成神力 `spawn_xia`。
-
-### 姓族谱系系统（核心）
-- **姓(family) / 氏(clan) / 氏支(shi branch)** 三级,双系继承,贵族距离衰落(距贵族≥3代退平民)。
-- **称王分封**:称王且建新国/夺别国时脱离原氏支开新支,原氏族树标注「建支:X氏」可点击跳转,子嗣只进新支。
-- **氏族大树**(全谱) + **家族树**(三层,可上下溯):大树懒加载 + 自动折叠(折叠不查 SQL,全死/无重要人物自动收起);平民不进大树只家庭树可见。
-- 命名规则:合流前 贵族男=氏+名/贵族女=名+姓/平民=单名,合流后统一氏+名。
-- 死者画像用存档数据(phenotype/head)静态重建,不引用活对象。
-
-### 继承人系统
-- `HeirService` + Harmony 接管继位(有继承人则直接即位)。现任合格则稳定不乱换。
-- 继承人专属 **unit_heir 皮肤** + **minimap 图标**;KingdomWindow 顶部国王/继承人头像 + 文字标签 + 年号框。
-
-### 历史人物降临
-- 姬发→嬴政→刘邦→曹丕→司马炎,严格顺序 + 存活互斥 + SQLite 持久化。成王套国名(周/秦/汉/魏/晋) + minimap_figure 图标 + toggle 开关。
-
-### 编年史 / 历史系统
-- **人物传记 / 国家历史 / 城市易主** 三事件表,年份(通用年+国家年号纪年)在前 + 内容在后。
-- **万国史**:全王国列表(含已亡国),每行旗帜+国名(国家色)+亡国标记,亡国旗帜从存档数据重建。
-- **朝代分段**:国家史按统治时期折叠——有王段=年号+实际纪年+王名+起止年,无王段=时间区间(如"13-18年")。
-- 入口:unit 窗(家族树+人物传记)、kingdom 窗(本国历史)、city 窗(城市历史)右 tab;万国史在自定义姓族 tab。
-
-### 持久化
-- 自定义 `[TableDef]` SQLite 表(10 张)随存档持久化,反射自动建表 + 自动迁移加列。读档自动修复/补全。
-
-### 后续待办
-- **天命改元联动**:天命系统完成后,重大事件可触发当前天命皇帝更换新年号;改元必须写入国家历史,历史查询时间段也要按新年号/统治期进一步分段。目前天命系统未做,本项只登记待办。
+> 本文件是 AW3.0 的**单一进度真相**：记录当前仓库已经落地的系统、已接入但仍需现场验证的系统、以及后续要做的系统。
+> AW3.0 是在新版 WorldBox 0.51.2 + NeoModLoader/Harmony/.NET 4.8 上对 AncientWarfare2.0 的重写，不是直接移植。
+> 主题：中国上古夏人文明 + 姓族谱系 + 王国历史 + 政治、军事、奴隶制、天命王朝等深度系统。
+>
+> 更新日期：2026-07-03
 
 ---
 
-## 构建
+## 状态标记
 
-```
-& "C:\Program Files\dotnet\dotnet.exe" build
-```
-F 盘 0 警 0 错即合格。详见 HANDOFF.md §0。
-
----
-
-> 以下为项目初期的 **AW2 功能蓝图**(逐一梳理旧项目 AncientWarfare2.0 作为重构蓝本),保留作设计参考。**实际已实现状态以上方"已实现功能" + HANDOFF.md 为准。**
-
-<details>
-<summary>📜 AW2 功能蓝图（原始重构蓝本，点击展开）</summary>
-
-# AW3.0 功能蓝图（基于 AncientWarfare2.0 全功能梳理）
-
-> 本文档把旧项目 **AncientWarfare2.0（AW2）** 的全部功能逐一梳理，作为新模组 **AW3.0** 在新版 WorldBox 上**重新开发/重构**的蓝本。
-> AW3.0 不再移植旧代码，而是在新版游戏架构上重写。分批做，先做最简单的 **race（种族）→ trait（特质）→ item（物品）**。
-
----
-
-## 0. 总体设计与主题
-
-AW2 是一个以**中国上古夏朝**为主题、深度改造 WorldBox 政治/军事系统的大型 mod。核心玩法支柱：
-
-| 支柱 | 一句话 |
+| 标记 | 含义 |
 |---|---|
-| **夏朝文明 (Xia)** | 新增种族 + 单位 + 建筑 + 命名 + 神力，自成体系 |
-| **天命系统 (MoH)** | 全世界同时只有一个"天命王朝"，天命值动态升降，崩溃则天下大乱、群雄逐鹿 |
-| **政策/阶级系统** | 王国按状态机从奴隶制→封建→帝制演进，状态决定城市 AI 行为 |
-| **附庸/宗主 (Vassal)** | 王国可成为他国附庸，颜色/外交/战争联动，含独立战/吞并战 |
-| **奴隶制** | 捕奴→繁殖→奴隶军，独立的奴隶经济与军事层 |
-| **城市税收与科技** | 非首都向首都缴税，城市研究科技树解锁政策 |
-| **历史记录** | 全程 SQLite 入库，提供编年史/王国史窗口 |
-| **中文命名** | 集成"一米中文名"mod，姓/氏/名/国号/年号/城名全套中文生成 |
-
-**架构模式**：AW2 用"夺舍 + 扩展数据"——把原版 Manager 替换为 AW_ 版本（继承+override+MethodReplace），扩展字段放 `addition_data`（BaseSystemData 子类）。
-**⚠️ AW3.0 重构注意**：新版 Manager 创建机制 `getNextObject()=new TObject()` 非 virtual，夺舍只能走 `loadObject`（virtual）路径；id 体系从 string 改为 **long**；`UnitGroup→Army`、`MapText→NameplateText`、`MapIconLibrary→QuantumSpriteLibrary` 等大量类改名。建议 AW3.0 尽量**少夺舍、多用游戏官方扩展点**（PlotAsset 委托、Asset 配置、Harmony patch），降低对原版内部结构的耦合。
+| ✅ | 核心功能已落地，常规后续只剩调参、补素材或小修 |
+| 🟡 | 已有代码和 UI 框架，但仍在现场验证、修 bug 或补数据 |
+| ⏳ | 留桩或仅设计完成，主体系统未开始 |
 
 ---
 
-## 1. 内容库（AW3.0 优先重做：race → trait → item）
+## 总览
 
-### 1.1 种族 RacesLibrary —— 夏朝 Xia
-
-**新增种族 `Xia`**（clone from `human`），关键属性：
-
-| 属性 | 值 |
-|---|---|
-| civ_base_army_mod | 0.5（军事起步弱）|
-| civ_base_zone_range | 15 |
-| civ_baseCities | 1 |
-| hateRaces | ["orc"]（天敌兽人）|
-| production | bread, pie, tea |
-| 偏好武器 | sword×10, ge×10, bow×5 |
-| 偏好属性 | diplomacy/warfare/stewardship/intelligence 各×1 |
-| 偏好食物 | bread/fish/tea 各×1 |
-| path_icon | "ui/Icons/iconXias" |
-| main_texture_path | "races/Xia/" |
-| nomad_kingdom_id | "nomads_Xia" |
-| banner_id | "Xia" |
-| 皮肤 | 男/女平民各10、战士10 |
-| 氏族资源 | 背景17种、图标22种 |
-
-附带操作：克隆命名生成器 `Xia_name`（from human_name）、`cloneBuildingKeys(human→Xia)`；四个原版种族的 `name_template_kingdom` 改为 `Xia_kingdom`（中文名启用时各种族用专属模板）。
-关联 patch：`ActorAnimationLoader.loadAnimationBoat`（Xia 船动画路径替换）、`BannerLoaderClans.create`（氏族旗帜框）。
-
-### 1.2 特质 TraitLibrary（7 特质 + 2 特质组）
-
-**特质组**：`aw2`（蓝 #3BAFFF）、`aw_social_identity`（橙 #FF9300，组内互斥）。
-
-| 特质 id | 组 | 关键效果 | special_effect |
-|---|---|---|---|
-| `figure` | aw2 | mod_health+15, stewardship+10 | — |
-| `天命` | aw2 | stewardship+150, dipl+15, war+14, int+14 | `Actionlib.checkP`（天命状态检定）|
-| `first` | aw2 | dipl+15, war+14, int+14 | `tianmingP`（自动篡位，驱动天命继承）|
-| `formerking` | aw2 | — | `Actionlib.former` |
-| `禁卫军` | aw2 | scale+0.03, health+2, damage+25, speed+15, knockback_reduction+100 | — |
-| `rebel` | aw2 | sameTraitMod=20, health+2, dipl+35, stew+35, war+4 | `Actionlib.rebelkingdom`（义军抱团）|
-| `zhuhou`（诸侯）| social_identity | mod_health+5, stewardship+5 | — |
-| `guizu`（贵族）| social_identity | fertility+35 | — |
-| `slave`（奴隶）| social_identity | birth=0, inherit=100（世袭）, interval=3 | 周期性强制职业=Slave |
-
-逻辑要点：`first.tianmingP` —— >17岁且有国/城的非国王，没诸侯特质则尝试 `historical_character_usurpation` 篡位；全种族只留1个 first；篡位有 10 年冷却（`LastUsurpationYears`）。
-
-### 1.3 物品 ItemLibrary（3 物品）
-
-| id | 类型 | 关键属性 |
+| 支柱 | 当前状态 | 说明 |
 |---|---|---|
-| `ji`（戟）| Weapon (clone sword) | damage10, atk_speed-1, crit3%, knockback_red0.1, val800, mat[bronze,copper], 命中施加 `qing` 状态(0.5s) |
-| `ge`（戈）| Weapon | 同戟但 crit6%（翻倍）|
-| `binfa`（兵法）| Legendary Amulet | warfare+20, crit+3, val2000, mat[bronze] |
-
-另：四个原版种族各批量加 ji/ge/binfa 偏好（×7）；`gold` 资源上限提到 50000（Main.cs 里另设为 99999999，以代码为准）。
-`qingAttack` 回调 → 施加 `qing` 状态，对应 XiaTower 的 `FireArrow` 投射物贴图复用。
-
-### 1.4 其他内容库（后续批次）
-
-- **ProfessionLibrary**：`slave`（奴隶，can_capture）、`heir`（继承人）。枚举 `AWUnitProfession{Null,Baby,Unit,King,Leader,Warrior,Heir,Slave}`。
-- **ActorAssetLibrary**：`unit_Xia`（成年，11头型，地图色#33724D，max_age90,max_children6）、`baby_Xia`（成长为 unit_Xia）、色系 `xia_default`（#FFC984→#543E2C 黄棕肤）。
-- **BuildingLibrary / BuildingAssetLibrary**：全套 `xxx_Xia`（血量×3、免火/酸/龙卷风、不随王国染色）+ 升级链(house0-5/hall0-2/windmill0-1)；**XiaTower**（火箭塔，1000血，6连发 FireArrow，priority114514，不可燃，建边境）。
-- **GodPowerLibrary**：`spawn_xia`（召唤夏人）、`vassal`/`vassal_remove`（设/解附庸）、`vassal_zones`（附庸地图层）。
-- **StatusEffectLibrary**：`tianming0`（天命兴盛:armor+10,damage+60,免击退,5s）、`tianmingm1`（天命衰退）、`qing`（清扫特效0.5s）。
-- **ProjectileLibrary**：`FireArrow`（火箭,抛物线,speed15,不改地形）。
-- **WarTypeLibrary**：`tianming`/`tianmingrebel`/`reclaim`/`vassal_war`/`independence_war`（各自 alliance_join 不同）。
-- **LoyaltyLibrary**：`tianming`忠诚（天命兴衰影响城市忠诚）、`tianminggo`（天命国-200外交)、`vassels`（附庸+500~1000)、`vasselsrebel`（附庸超宗主-200)。
-- **KingdomAssetLibrary**：`Xia`/`nomads_Xia` 王国（tag civ+Xia，友好human/Xia/neutral/good，敌对bandits）；human/nomads_human 加 Xia 友好。
-- **UnitGroupTypeLibrary**：`convention`(10)/`guards`(5)/`slaves`(20)。
+| **夏人文明 Xia** | ✅ 基本完成 | 种族、建筑、贴图、神力、命名、语言、亚种、船复用和老年头等都已接入；近期已修复 Xia/human 混血导致原版 human asset 读取 `unit_*` 皮肤名的崩溃风险。 |
+| **中文命名与亚种命名** | 🟡 已接入 | Xia 与 human 区分命名，Xia 皮肤对外改用原版 `male_*`/`female_*`/`warrior_*` 名称，磁盘资源仍保留 `unit_*`，由 `XiaTexturePatch` 映射。亚种命名还需继续现场观察，避免“夏人人”等重复后缀。 |
+| **姓族、氏支、家族树、氏族大树** | 🟡 主体完成 | SQLite 档案、姓/氏/名、分支、继承、家族树、氏族树、亡者画像、tooltip、定位入口已落地；仍在持续优化折叠、定位、关系标注、城市分组和性能。 |
+| **历史人物降临** | 🟡 主体完成 | 姬发、嬴政、刘邦、曹丕、司马炎按序生成并持久化；预设姓氏、收藏、世界消息、建国改名、历史记录已接入。`minimap_figure` 图标已有 patch，仍需游戏内回归确认。天命门仍留空。 |
+| **王国史、城市史、人物传记、谥号** | 🟡 主体完成 | `KingdomHistory`、`CityHistory`、`PersonBiography`、`DynastyPeriod`、`KingdomReign`、`PosthumousTitle` 等表已落地；国家史/城市史/传记窗口已有 UI。仍需补齐更多事件元数据、颜色快照和现场一致性验证。 |
+| **祖源分析** | 🟡 已接入 | unit inspect 右侧入口、社会谱系祖源、贵族血脉追溯、遗传亚种祖源、父系/母系标记已接入；窗口滚动、未知祖源显示和混血非贵族追溯仍需继续验证。 |
+| **国策、科技、常态决策** | 🟡 已接入框架 | 王国政策状态、政治点、科技点、科技树、社会国策树、常态决策、AI 自动选择、Human 手动启用、研发槽、继承进度、国家面板入口已落地；目前主要是 UI 排版、平衡和现场 QA。 |
+| **科技地图模式** | 🟡 已接入 | 神力栏地图模式、科技等级颜色、tooltip、地图脏刷新机制已接入；仍需现场确认颜色覆盖稳定，不回退为王国原色。 |
+| **奴隶制与奴隶军** | 🟡 已接入 | 国家级奴隶制开关、捕奴、城破俘奴、奴隶出生继承、奴隶婚配限制、奴隶军、奴隶将领排除、军功转平民、奴隶劳役和历史记录已接入；需要继续调捕奴频率、AI 行为和记录噪音。 |
+| **禁卫军** | 🟡 已接入 | 每国一支禁卫军、最多 20 人、至少 20% 贵族、贵族统领、跟随并巡逻护卫 king、威胁拦截、普通军队隔离和命名已接入；需要现场调护卫距离、军队列表显示和战时行为。 |
+| **士兵退伍与不再征召** | 🟡 已接入 | 使用原版 `veteran`，另加 AW3 退伍标记，老兵不再普通征召，并写入个人/城市历史；还需现场验证边界年龄和军队刷新。 |
+| **继承人保护** | 🟡 已接入 | 分封、城主、军队、奴隶捕手、禁卫等候选都逐步排除继承人；兄弟姐妹继承人会重新优先从 king 子嗣里取选。仍需继续测原版 city leader 选择分支。 |
+| **城市税收与城市科技经济** | ⏳ 未做主体 | 当前有王国科技点和政策点，但“非首都向首都缴税、城市级研究、城市经济专门化”还没有完整主体。 |
+| **天命系统 MoH** | ⏳ 留桩 | 暂时不做。历史人物的“无天命国”条件保持桩，改元、天命皇帝、天命王朝宗庙等列入后续。 |
+| **附庸/宗主系统** | ⏳ 未做 | 附庸关系、颜色、外交、战争联动、独立战、吞并战仍未开始。 |
 
 ---
 
-## 2. 核心玩法系统
+## 已落地系统详单
 
-### 2.1 天命 MoH（utils/MoH/MoHTools.cs + AW_KingdomManager.MoH.cs）
+### 1. 项目骨架与工具链
 
-- 全世界唯一"天命王国"，国王有 `first` 特质，称"朝"。天命值 `MOH_Value` 范围 [-30, 100]，初始30。
-- **每年增减**：无战+1/有敌-1/未称霸-2/希望纪元+2/绝望灰烬混沌纪元-20/国王有first+5/国王≤24岁-1/国王智力≤5 -1/王室人口≤2 -1。
-- 降到下限 → `MoHKingdomBoom()`：天命国所有非首都城市触发 rebellion Plot，分裂成叛乱政权，清天命。
-- **天命战争**：`whisper_of_war` 打天命国 → 转 `tianming` 战争类型；双方首都归一方则该方胜、设新天命、转交邻接城市。
-- **起义军 Rebel**：天命崩溃后产生 Rebel 国，Rebel 内战占领速度×8，快速决出新霸主。
-- **称帝**：无天命时，控制原天命城市≥65% 且最强者称帝建新朝，国王得 first，改年号。
-- SQLite `MOH` 表记录天命起止。
+- `ModClass` 入口执行 Harmony patch。
+- F 盘开发目录使用 `dotnet build` 验证，环境变量 `DOTNET_ROLL_FORWARD=Major`。
+- SQLite 档案库通过 `[TableDef]` 反射自动建表和自动补列。
+- 存档钩子通过 `AW_SavePatch` 统一保存、加载、新世界建库。
 
-### 2.2 政策/阶级系统（core/kingdom_policies/）
+### 2. Xia 文明
 
-- 王国持多种 `PolicyStateType` 状态（social_level/army_main_soldiers/city_organization/name_organization/enfeoffment_type），存 `current_states` 字典。
-- **状态机**（AW_Kingdom.UpdateForPolicy 每帧）：政策完成→从队列取下一个或用 `policy_finder` 找→Planning→InProgress→Completed→切状态。状态切换时所有城市 `clearJob` 重选任务。
-- **政策链**：default →(start_slaves)→ slaveowner →(start_halfaristocrat)→ halfaristocrat →(base_enfeoffment)→ enfeoffment_base →(favor_order/continuous_enfeoffment[需科技])→ 推恩令/无限分封。支线：control_slaves/slaves_army/name_integration(姓氏合流)/change_capital(迁都)/title_upgrade(升爵)。
-- **爵位** Baron→Marquis→Duke→King→Emperor，影响 getMaxCities(+0/+2/+4/+8/+16) 和显示（帝+天命="朝"，帝+former="残部"，Rebel="义军"）。
-- 政策状态决定城市 `city_task_list`（城市 AI 能做的任务）和 `calc_kingdom_strength`（国力算法）。
+- `XiaRace` 基于新版文明单位克隆，接入 Xia 种族、神力、语言、肤色、亚种命名、寿命和基础属性。
+- `XiaTextures` 绑定 Xia 单位皮肤数组，磁盘目录仍使用 `unit_male_*`、`unit_female_*`、`unit_warrior_*`。
+- 对外 skin 名已改为原版兼容的 `male_*`、`female_*`、`warrior_*`，避免 Xia subspecies 混入 human asset 时触发原版贴图空帧崩溃。
+- `XiaTexturePatch` 将 Xia 自身贴图路径再映射回 `unit_*` 资源目录；`unit_king`、`unit_leader`、`unit_child`、`unit_heir`、`unit_slave` 仍是 Xia 专用资源名。
+- `XiaArchitecture` 已接入 Xia 建筑资源和升级链，之前因建筑配置导致的建国卡死已作为重点回归项。
 
-### 2.3 附庸/宗主（AW_Kingdom.Vassal.cs）
+### 3. 姓族与谱系
 
-- `SetVassal(lord)`：存原色→设 suzerain_id→入 lord.vassals→清 Rebel→记 VASSAL 表→变宗主色→结束双方战争→随宗主入盟。
-- `RemoveSuzerain()`：恢复原色。`GetRootSuzerain()` 链式查根（带循环保护）。
-- **战争联动**（AW_WarManager.newWar）：宗主参战附庸跟随，附庸参战宗主+兄弟附庸跟随（攻防四种情况）。
-- 附庸地图模式：同根宗主城市同色渲染（独立线程）。
-- 相关 Plot：vassal_war（臣服战）/Independence_War（独立战，附庸对宗主好感<950）/absorb_vassal（吞并附庸，关系>10年+军力够）/active_vassal（弱国主动求附庸）。
+- `LineageService` 负责姓族创建、氏支创建、继承、命名、分支、姓氏合流状态、贵族身份和归档。
+- `ActorArchive`、`LineageGroup`、`ShiBranch`、`FamilyEdge`、`KingdomLineageState` 等表用于随档持久化。
+- 家族树和氏族大树支持死人画像重建、tooltip、父母/兄弟姐妹关系、辈分、死亡信息、社会身份、王国/城市上下文。
+- 氏支总览正在从“按姓”转向“按城市/王国上下文”组织，以兼容姓氏合流后的显示。
+- 仍需持续修复：折叠默认状态、分支定位、历史人物从父母宗族树划出、女性国王建支后的本人和子女字段刷新、分支创建条件调参。
 
-### 2.4 城市税收与科技（AW_City.cs / .Tech.cs）
+### 4. 历史人物
 
-- **税收**（updateAge）：gold_in_tax=人口/2，减军队/建筑/无房支出=gold_change。非首都按忠诚度向首都缴 gold_change/2（忠诚<-100不缴，>100全额，中间按比例）。
-- **奴隶口粮**：城市有奴隶则取总食物10%作口粮 `food_count_for_slaves_this_year`。
-- **科技**：`AW_CityTechAsset`（前置/分支/cost/rank/职业要求/research_action）。市民工作时 `PushResearchThrough` 推进研究，完成入 `own_tech`、解锁分支。农业(husbandry/irrigate)、工业(pottery/mining/...iron)、政策科技(解锁推恩令等)。
+- `HistoricalFigureService` 和 `FigureStateTableItem` 已实现严格顺序、存活互斥、死亡解锁和随档持久化。
+- 历史人物预设姓氏和国名：姬发/周、嬴政/秦、刘邦/汉、曹丕/魏、司马炎/晋。
+- 降临时写入 `figure`、`first`、收藏、1500 health 和世界日志消息。
+- 成为 king 时套用预留国名，并写入王国历史和朝代/统治期相关记录。
+- `AW_FigurePatch` 已 patch 小地图绘制 `minimap_figure`，但近期现场仍发现图标显示不稳定，需要优先回归。
 
-### 2.5 战争/联盟/军事组
+### 5. 王国史、城市史、传记、谥号
 
-- **AW_War**：记录开战城市快照、攻防首都；天命战争结算 ResolveTianmingWar。AW_WarTypeAsset 加 checkvictory/togglecapture。
-- **AW_Alliance**：王国入盟时附庸随入。
-- **AW_UnitGroup**（→新版 Army）：城市可有多类型军团（convention/guards/slaves），各有 max_count、领袖查找委托、创建回调。SetCity 迁移整组，城市 army 指向最大组。
+- 核心表：`KingdomHistory`、`CityHistory`、`PersonBiography`、`DynastyPeriod`、`EraPeriod`、`KingdomReign`、`WarRecord`、`PosthumousTitle`。
+- 核心服务：`HistoryWriter`、`ChronicleEvents`、`HistoryQuery`、`DynastyRecordWriter`、`ReignRecordWriter`、`EraRecordWriter`、`WarRecordWriter`。
+- 已记录：建国、灭国、迁都、建城、国王更替、继承、分支、奴隶、奴隶军、退伍、禁卫军、战争、谥号等。
+- 谥号系统已做普通王国路线，按民生、疆域、战功、秩序、结局分项评定；太祖、高祖、世祖、烈祖等庙号和双字天命谥号留给未来天命王朝。
+- 待补强：`age_at_event`、`role_snapshot`、`original_kingdom_name`、`end_reason` 等显式快照字段，减少 UI 事后推导导致的错误。
 
-### 2.6 事件/历史 SQLite（core/events/ + table_items/）
+### 6. 国策、科技、常态决策
 
-- EventsManager 单例管 SQLite（临时 .tmp.db），反射扫 `[TableDef]` 自动建表。CityPopRecordManager 单独库按城市建表记人口。
-- 表：Kingdom/City/War/Alliance/Actor/KingRule/MOH/VASSAL/USURPATION/INTEGRATION/CAPITALCHANGE/KingdomChangeName/KingdomChangeYear/CityChangeName/KingdomWar/CityPopComposition。
-- 触发点：新建/消亡对象、即位/卸任、改元、天命得失、篡位、兼并、迁都、附庸建/解/吸收。
+- `KingdomPolicyService`：政治点、科技点、当前科技、当前国策、当前决策、进度推进、完成状态、政体切换。
+- `KingdomPolicyAI`：AI 在空槽时选择科技、社会国策和常态决策。
+- `KingdomPolicyInheritanceService`：新独立王国继承原地区或母国科技/政策进度，避免白板国家。
+- `KingdomPolicyWindow`：科技树、社会国策树、常态决策、研发槽、tooltip、强制切换政体和 Human 手动启用。
+- 已有节点包括：文字、陶铸、青铜铸造、铁铸犁、井田测量、粮仓会计、车战训练、城防、礼乐、分封研究；户籍编户、开启奴隶制、徭役、强化奴隶控制、奴隶军、贵族议政、宗庙祭祀、姓氏合流、军功授爵、分封路线、律令雏形、废奴制等。
+- 常态决策已有：改元、上表请封/升级爵位、迁都、整饬奴隶等。
 
----
+### 7. 奴隶制、奴隶军、退伍
 
-## 3. AI 行为树（ai/）
+- `SlaveService` 实现奴隶身份、奴隶制国家开关、奴隶军开关、奴隶出生继承、奴隶捕获、城破俘奴、奴隶劳役、粮食配额、军功释放。
+- 捕奴职业和行为：`SlaveryContent`、`BehFindSlaveCaptureTarget`、`BehCatchTargetAsSlave`。
+- 军队规则：奴隶军目标约 80% 奴隶，奴隶不能当将领，将领替换逻辑已 patch。
+- 退伍规则：老兵到年龄阈值后标记退伍，不再被征召，个人和城市历史记录退伍。
+- 历史记录原则：国家层面只记重要奴隶事件和战争结算俘奴摘要；普通奴隶、退伍、禁卫个人经历主要写人物传记和城市史。
 
-**Actor 行为**：FindSlaveToCatchAround（扫描周围8格血<50%无Clan的敌方平民）→ CatchTargetAsSlave（俘虏:加slave特质+跨城转移+设奴隶职业）→ SubmitSlaves（回城交付）；FindTileKing/RawGoToTileTarget（禁卫军跟国王）。
-**City 行为**：BehProduceNobles（贵族在原Clan内繁衍,速率×4）、BehProduceSlaves（奴隶+贫民繁殖,生的还是奴隶）、BehCheckSlaveJobs（派奴隶活+维持捕手编制≤3）、BehCheckSlaveArmy（组奴隶军团）、BehCheckGuard（贵族组禁卫军,换青铜戟甲）、BehCheckRetirement（老兵≥70%寿命退役加veteran）。
-**Kingdom 行为**（追加到 do_checks）：CheckHeir（维护继承人）、CheckNewCapital（迁都）、CheckPromotion（每50年升爵）。
-**Job/Task**：slave_catcher/king_guard/slave_warrior 公民职业；`CityJobLibrary.CheckAndGetCityJob(policyState)` 按政策状态动态拼装城市任务链（**政策驱动 AI 的核心**）。
+### 8. 禁卫军
 
----
+- `RoyalGuardService` 限制每国最多 20 人，至少 20% 贵族，统领必须贵族。
+- 禁卫军不作为普通军队主动出击，主要在 king 周围跟随、巡逻、拦截近身威胁。
+- 与普通军队隔离，避免禁卫军被原版征召和换将逻辑吞掉。
+- `RoyalGuardState` 持久化禁卫军状态，历史记录写人物传记/城市史，国家史只保留建军级事件。
 
-## 4. Harmony 补丁（patch/）
+### 9. 祖源分析
 
-| Patch | 目标 | 类型 | 作用 |
-|---|---|---|---|
-| ActorPatch | ActorBase.nextJobActor | MethodReplace | 重写职业→任务映射（支持mod职业）|
-| ActorPatch | ActorBase.taskSwitchedAction | Postfix | 工作时按智力推进科研 |
-| CitiesManagerPatch | CitiesManager.buildNewCity | Postfix | 新城入库 |
-| ClanManagerPatch | ClanManager.checkActionKing | Postfix | 触发收复/附庸/独立/吞并 Plot |
-| ClanManagerPatch | ClanManager.tryPlotWar | MethodReplace | AI优先收复失地 |
-| ClanManagerPatch | ClanManager.tryPlot{Join,Dissolve,New}Alliance | Prefix | 仅宗主可外交结盟 |
-| DiplomacyManagerPatch | DiplomacyManager.findSupremeKingdom | Transpiler | 称霸计算含附庸军力 |
-| KingdomHeirPatch | KingdomBehCheckKing.findKing | Prefix | 有继承人则直接即位 |
-| KingdomHeirPatch | MapIconLibrary.drawLeaders | Postfix | 小地图画太子标记 |
-| KingdomManagerPatch | KingdomManager.makeNewCivKingdom | Postfix | 新王国入库 |
-| MapIconPatch | MapIconLibrary.drawArmies | MethodReplace | 画多类型军团图标 |
-| MapIconPatch | MapIconManager.updateScaleEffect / drawCursorZones | Transpiler | 附庸地图模式高亮 |
-| PathFinderPatch | PathfinderTools.tryToGetSimplePath / AStarFinder.FindPath | MethodReplace | 修浅水卡顿+道路加速(cost0.01) |
-| PlotPatch | Plot.isSameType | Postfix | 同plot_type判为同类 |
-| WolrdLogPatch | WorldLogMessageExtensions.getFormatedText | Postfix | mod事件日志富文本(天命/篡位/附庸战等14种)|
-| SlavesPatch | CityBehProduceUnit.findPossibleParents | MethodReplace | 排除奴隶参与自由人生育 |
-| SlavesPatch | Actor.consumeCityFoodItem | Transpiler | 奴隶吃配给粮，不足无心情加成 |
-| MoHCorePatch | MapText.showTextKingdom | Postfix | 天命国城市名牌特殊图标 |
-| NamePatch(中文名) | Clan.createClan/addUnit/getMaxMembers, WindowCreatureInfo.OnEnable | Postfix/Prefix | 姓氏命名+贵族特质+Clan上限20+信息窗显示姓氏 |
+- `AncestryAnalysisService` 同时做社会谱系祖源和遗传亚种祖源。
+- 支持追溯已经死亡、曾经是贵族或贵族后裔但当前不在族谱上的人物。
+- unit inspect 右侧 tab 进入祖源分析窗口，显示贵族血脉、已识别祖先、未知比例、常染色体祖源、父系/母系标记。
+- 混血 Xia/human 的追溯逻辑已按“社会谱系 + 亚种遗传”方向设计，仍需现场验证非贵族后代数据完整性。
 
-**自定义机制 `[MethodReplace]`**（attributes/ + utils/HarmonyTools.cs）：用 Transpiler 整体替换目标方法体（丢弃原IL，跳转到替换方法）。OnLoad 时全程序集扫描注册。支持静态/实例方法（参数位移兼容 this）。**⚠️ AW3.0 慎用——nameof 只校验名不校验签名，新版改签名会运行时静默失效。**
+### 10. 科技地图模式
+
+- `TechMapModeService`、`TechMapLayer`、`AW_TechMapModePatch` 已接入地图模式。
+- 神力栏按钮开启后按王国科技等级着色，tooltip 显示科技等级、完成科技、当前研发、科技点。
+- 当前重点验证点：颜色必须使用科技等级红绿渐变，不能被王国原色覆盖。
 
 ---
 
-## 5. UI（ui/）
+## 当前优先修复清单
 
-- **TabManager**：AW2 标签页（spawn_xia召唤/vassal设解附庸/天命面板/王国历史/附庸列表/附庸地图层/历史名人开关）。
-- **KingdomWindow 扩展**（KingdomWindowAdditionComponent，Postfix 注入）：国王头像+年号+当前社会形态+执行中国策+太子头像+宗主旗帜+历史/政策树按钮。
-- **KingdomMoHWindow**：天命面板（国王/年号/天命描述/社会状态/国策队列/可选国策，消耗10天命入队）。
-- **KingdomHistoryWindow**：编年史（左历任君主列表，右5标签，Review已实现:即位/改元/天命/篡位/兼并/迁都/附庸全时间线）。
-- **KingdomPolicyGraphWindow / CityTechGraphWindow**：政策树/科技树 DAG 图（拓扑排序布局）。
-- **Prefab**：PolicyButton/StateButton/Tooltip/KingRuleHistoryItem/SimpleText/CityTechButton。
-
----
-
-## 6. 命名系统（中文名集成，#if 一米_中文名）
-
-- **Xia 生成器**（name_generators/Xia/）：Xia_name（姓+名/千字文，代码注册）、Xia_kingdom（中文国名前缀）、Xia_city（真实城名 或 上字+下字）、Xia_clan（家乡+姓氏+家/氏/族）、Xia_culture（发源地+文化）。
-- **词库**（name_generators/lib/）：中文名字(1133)、中文国名前缀(~200)、城名上(59)/下(129)、国号前/后(各18)、姓(~40 先秦八姓)、氏(~400 百家姓)。
-- **姓 vs 氏**：姓=上古血统姓(姬姒嬴)，氏=后天族名(赵钱司马,=clan_name)。
-- **SpecialFigure 历史名人**（钩 ActorManager.spawnPopPoint）：姬发80%(姓姬国周)、嬴政/刘邦/曹丕/司马炎各0.5%；注入姓氏+1500血+figure+first特质，全局各一次。另钩 drawKings 画名人小地图图标。
+1. **Xia/human 混血回归**：确认新生儿不再触发 `Actor.calculateMainSprite()` 空帧/null 崩溃；确认老存档 subspecies cache 能正确使用新 skin 名。
+2. **历史人物 minimap 标记**：确认非 king、非 leader 的历史人物也能显示 `minimap_figure`，且不会只显示 favorite 图标。
+3. **科技地图颜色**：确认地图模式启用后区域颜色来自科技等级，而不是王国原色。
+4. **祖源分析窗口**：确认窗口宽度、滚动、文本不消失，Xia/human 混血非贵族也能追溯祖源。
+5. **国策科技窗口**：继续按“上科技树、下社会国策树、常态决策独立研发槽”的结构整理 UI，确保拖动和滚轮缩放的是内容而不是窗口大小。
+6. **姓族树性能**：所有可折叠氏族树默认折叠，只展开当前定位路径；全死人分支自动收缩。
+7. **历史记录快照**：补齐事件年龄、角色、颜色、原国名、结束原因，减少“死者显示在世”“国名被改后记录仍旧名”等问题。
+8. **建筑升级链现场测试**：确认 Xia 建国后不会卡死，且会建设高级住宅、市场等升级建筑。
 
 ---
 
-## 7. 启动流程（Main.cs）
+## 后续大系统
 
-- **OnLoad**：Configure→初始化常量类→BaseInstPredictor.init→HarmonyTools.ReplaceMethods（扫 MethodReplace）。
-- **Awake**：本地化→中文名生成器+词库→实例化所有内容库(Task/Job/Trait/Race/Item/Building...)→各 AW_Manager.init→注册资产库→政策post_init→TabManager/WindowManager/MapMode init。
-- **Start**：禁用原版 inspect_unit/village/kingdom 窗口→加载Xia旗帜→patchHarmony（注册全部Harmony patch）。
-- **Update**：检测新种族补皮肤；EventsManager 懒加载。
-- **Reload**：重载本地化。
+### 1. 天命系统 MoH
 
----
+- 暂时留空，不进入当前实现批次。
+- 后续内容：全世界唯一天命王朝、天命值、天命转移、天下大乱、天命战争、天命皇帝改元、天命王朝庙号和更高级谥号。
+- 历史人物的“无天命国”条件目前是桩，未来由 MoH 接管。
 
-## 8. AW3.0 重构建议（分批路线）
+### 2. 附庸/宗主系统
 
-按用户指定"先简单后复杂"，建议批次：
+- 未开始。
+- 后续内容：附庸关系、宗主保护、附庸参战、独立战争、吞并战争、附庸保留颜色或叠加宗主标记。
 
-1. **批A — race 夏朝种族**：在新版重建 Xia 种族 + unit_Xia/baby_Xia + xia_default 色系 + 王国 Xia/nomads_Xia。用新版 `Subspecies`/`ActorAsset`/`raceLibrary`(查新名) API。【最先做】
-2. **批B — trait 特质**：2 特质组 + 9 特质。新版 Trait API 基本兼容，注意 special_effect 委托签名。
-3. **批C — item 物品**：ji/ge/binfa + 武器偏好 + qing 状态联动。
-4. **批D — 建筑/单位/神力/投射物**：XiaTower、建筑升级链、spawn_xia、FireArrow。
-5. **批E — 命名系统**：Xia 生成器 + 词库 + 中文名集成 + SpecialFigure（依赖中文名 mod 1.5.0）。
-6. **批F — 天命系统**：MoH 全套（值/战争/起义/称帝）——核心但复杂。
-7. **批G — 政策/阶级**：状态机 + 政策链 + 爵位 + 城市 AI 政策驱动。
-8. **批H — 附庸/宗主**：SetVassal/战争联动/地图模式/独立吞并战。
-9. **批I — 奴隶制 + 税收科技**：捕奴 AI + 奴隶军 + 缴税 + 科技树。
-10. **批J — UI + 历史记录**：各窗口 + SQLite 编年史。
+### 3. 城市税收与经济科技
 
-**每批原则**：优先用新版官方扩展点（PlotAsset 委托、Asset 配置、标准 Harmony patch），少做深度夺舍；id 用 long；每批 `dotnet build -t:Rebuild --no-incremental` 验证 0 错误，再由用户跑游戏验证运行。
+- 王国级科技点和政治点已存在，但城市级税收和城市研究主体未做。
+- 后续内容：非首都向首都输送资源、城市角色、城市科技贡献、城市史经济事件。
+
+### 4. 更完整的王朝时代系统
+
+- 年号已有基础，改元决策已有入口。
+- 后续需要和天命系统、重大事件、查询时间段联动：例如“周伯发6年(6年3月21日)”这种年月日精确格式，以及按年号/君主期分段查询。
 
 ---
 
-*本蓝图由通读 AW2 全 194 文件 / 16561 行生成。细节数值以旧代码为准，可随时回查 `F:\WorldBox New Mod\AncientWarfare2.0-main\Code`。*
+## 工程约定
 
-</details>
+- 新版 API 真相优先级：AssetRipper 源码 > F 盘编译验证 > ilspycmd 辅助判断。
+- 本项目只做 F 盘开发目录验证，不做 D 盘 DLL 部署验证。
+- mod 随机使用私有 `System.Random`，不使用 `UnityEngine.Random`。
+- 本地化 CSV 的中文字段标点尽量使用全角；每行半角逗号数必须和表头列数一致。
+- 贴图 pivot 优先用同目录 `sprites.json` 控制，不通过缩放原 PNG 解决所有问题。
+- 持久化新数据优先新增 `[TableDef]` 表项，让 `LineageArchiveManager` 自动建表/补列。
+- Harmony patch 优先 Postfix 和小范围 Prefix，尽量不完整接管原版方法。
+- 任何 UI 变更都要按原版 WorldBox 风格按钮、tooltip、可读布局和低性能成本处理。
+
