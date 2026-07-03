@@ -518,7 +518,8 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText =
                     $"SELECT DYNASTY_ID, DYNASTY_NAME, DYNASTY_COLOR, KINGDOM_COLOR, START_TIME, END_TIME, " +
-                    $"IFNULL(SHI_ID, -1), IFNULL(CLAN_NAME, ''), IFNULL(ORIGINAL_KINGDOM_NAME, ''), IFNULL(END_REASON, '') " +
+                    $"IFNULL(SHI_ID, -1), IFNULL(CLAN_NAME, ''), IFNULL(FOUNDER_KING_ACTOR_ID, -1), " +
+                    $"IFNULL(ORIGINAL_KINGDOM_NAME, ''), IFNULL(END_REASON, '') " +
                     $"FROM {DynastyPeriodTableItem.GetTableName()} " +
                     $"WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
@@ -535,8 +536,10 @@ namespace AncientWarfare3.core.lineage
                         end_time      = reader.GetDouble(5),
                         shi_id        = ToLong(reader, 6, -1),
                         clan_name     = SafeStr(reader, 7),
-                        original_kingdom_name = SafeStr(reader, 8),
-                        end_reason    = SafeStr(reader, 9)
+                        founder_king_actor_id = ToLong(reader, 8, -1),
+                        founder_king_name = ReadActorName(ToLong(reader, 8, -1)),
+                        original_kingdom_name = SafeStr(reader, 9),
+                        end_reason    = SafeStr(reader, 10)
                     });
             }
             catch { }
@@ -566,6 +569,27 @@ namespace AncientWarfare3.core.lineage
                 if (string.IsNullOrEmpty(dyn.clan_name)) dyn.clan_name = shi.clan_name ?? "";
                 if (string.IsNullOrEmpty(dyn.origin_city_name)) dyn.origin_city_name = shi.origin_city_name ?? "";
             }
+        }
+
+        private static string ReadActorName(long pActorId)
+        {
+            if (pActorId < 0) return "";
+            Actor live = World.world?.units?.get(pActorId);
+            if (live?.data != null) return live.getName();
+
+            var db = DB;
+            if (db == null) return "";
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(DISPLAY_NAME, '') FROM {ActorArchiveTableItem.GetTableName()} " +
+                    $"WHERE ID=@id LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                object value = cmd.ExecuteScalar();
+                return value == null || value == System.DBNull.Value ? "" : value.ToString();
+            }
+            catch { return ""; }
         }
 
         private static double GetKingdomDestroyedTime(long pKingdomId)

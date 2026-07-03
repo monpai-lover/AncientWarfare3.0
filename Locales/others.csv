@@ -1,4 +1,26 @@
 key,cz,en,ch
+aw_dynasty_rule_suffix,统治, rule,統治
+aw_history_age_at_event,时年:,Age:,時年：
+aw_history_role_at_event,当时身份:,Role then:,當時身份：
+aw_age_suffix,岁, years old,歲
+aw_role_king,君主,Ruler,君主
+aw_role_city_leader,城主,City leader,城主
+aw_role_clan_chief,氏族家主,Clan chief,氏族家主
+aw_role_royal_guard_captain,禁卫军统领,Royal guard captain,禁衛軍統領
+aw_role_royal_guard,禁卫军,Royal guard,禁衛軍
+aw_role_slave,奴隶,Slave,奴隸
+aw_role_warrior,士兵,Soldier,士兵
+aw_role_noble,贵族,Noble,貴族
+aw_role_common_lineage,有氏平民,Lineage commoner,有氏平民
+aw_role_common,平民,Commoner,平民
+aw_dynasty_original_kingdom,建立时国名:,Original kingdom:,建立時國名：
+aw_dynasty_founder,建立者:,Founder:,建立者：
+aw_dynasty_duration,存续时间:,Duration:,存續時間：
+aw_dynasty_end_reason,结束原因:,End reason:,結束原因：
+aw_dynasty_end_replaced,改朝换代,Dynasty replaced,改朝換代
+aw_dynasty_end_kingdom_fell,国家灭亡,Kingdom destroyed,國家滅亡
+aw_dynasty_end_unknown_successor,王室断绝,Royal line ended,王室斷絕
+aw_dynasty_end_unknown,未记录,Unrecorded,未記錄
 Xia,夏,Xia,夏
 Xias,夏人,Xia,夏人
 item_ji,戟,Kiak,戟
@@ -18,6 +40,8 @@ status_title_tianming0,天命稳定,Mandate of God is steady,天命穩定
 status_description_tianming0,天命帝国正处于稳定发展的时期,The empire now is steadily developing,天命帝國正處於穩定發展的時期
 status_title_tianmingm1,天命摇摇欲坠,Mandate of God is declining,天命搖搖欲墜
 status_description_tianmingm1,天命不稳定，已经有崩溃之势,The empire is now declining,天命不穩定，已經有崩潰之勢
+status_title_qing,青芒,Qing Flash,青芒
+status_description_qing,青铜兵器划出的短暂锋芒,A brief flash from a bronze weapon,青銅兵器劃出的短暫鋒芒
 moh_desc_bad,天命摇摇欲坠,Mandate of God is declining,天命搖搖欲墜
 moh_desc_good,天命稳定发展,Mandate of God is steadily developing,天命穩定發展
 village_statistics_heir,继承人,Heir,繼承人
@@ -30,6 +54,7 @@ aw_kingdom_roster Title,万国史,All Kingdoms,萬國史
 aw_kingdom_roster_btn,万国史,All Kingdoms,萬國史
 aw_kingdom_roster_btn Description,查看世界所有王国(含已亡国)的历史,View history of every kingdom incl. fallen ones,查看世界所有王國(含已亡國)的歷史
 aw_identity,身份,Identity,身份
+aw_social_title_label,身份:,Title:,身份:
 aw_family_name,姓,Surname,姓
 aw_clan_name,氏,Clan,氏
 aw_family_tree_entry,家族树,Family Tree,家族樹
@@ -88,11 +113,18 @@ aw_total_prefix,共,Total ,共
 aw_year_suffix,年, years,年
 aw_total,总,Total,總
 aw_alive_short,活,Alive,活
+aw_family_short,姓,Sur,姓
+aw_shi_short,氏,Br,氏
 aw_established_short,立,Est.,立
 aw_noble_short,贵,Noble,貴
+aw_surname_lineage,姓族,Surname Lineage,姓族
+aw_family_suffix,姓, Surname,姓
+aw_family_label,姓:,Surname:,姓:
 aw_shi_branch,氏支,Branch,氏支
 aw_shi_suffix,氏, Clan,氏
 aw_kingdom_suffix,国, Kingdom,國
+aw_city_label,城市:,City:,城市:
+aw_earliest_record_label,最早记录:,Earliest Record:,最早記錄:
 aw_at_prefix,于,at,於
 aw_established,建立,founded,建立
 aw_shi_label,氏:,Clan:,氏:
@@ -102,6 +134,7 @@ aw_created_time_label,创建时间:,Created:,創建時間:
 aw_current_label,当前:,Current:,當前:
 aw_alive_people_suffix, 人在世，, alive and , 人在世，
 aw_noble_people_suffix, 名贵族, nobles, 名貴族
+aw_branch_count_suffix, 个氏支, branches, 個氏支
 aw_new_branch,新支,New Branch,新支
 aw_branch_badge_prefix,▸建支:,▸Branch: ,▸建支:
 aw_sex_male,男,Male,男

@@ -136,6 +136,8 @@ namespace AncientWarfare3.core.lineage
         public long   shi_id = -1;
         public string clan_name = "";
         public string origin_city_name = "";
+        public long   founder_king_actor_id = -1;
+        public string founder_king_name = "";
         public string original_kingdom_name = "";
         public string end_reason = "";
         public double start_time;

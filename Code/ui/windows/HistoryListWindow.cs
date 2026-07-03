@@ -150,7 +150,9 @@ namespace AncientWarfare3.ui.windows
                 {
                     is_header = true, dynasty_index = di,
                     expanded = dynExp,
-                    text = BuildDynastyTitle(dyn)
+                    text = BuildDynastyTitle(dyn),
+                    tooltip_title = BuildDynastyDisplayName(dyn),
+                    tooltip_desc = BuildDynastyTooltip(dyn)
                 });
                 if (!dynExp) continue;
                 for (int ri = 0; ri < dyn.reigns.Count; ri++)
@@ -281,6 +283,39 @@ namespace AncientWarfare3.ui.windows
             }
 
             return AW_L10n.Text("aw_history_early_period", "\u65E9\u671F");
+        }
+
+        private static string BuildDynastyTooltip(DynastyView pDyn)
+        {
+            if (pDyn == null) return "";
+            var sb = new System.Text.StringBuilder();
+            if (!string.IsNullOrEmpty(pDyn.original_kingdom_name))
+                sb.Append(AW_L10n.Text("aw_dynasty_original_kingdom", "\u5EFA\u7ACB\u65F6\u56FD\u540D\uFF1A"))
+                    .Append(pDyn.original_kingdom_name)
+                    .Append("\n");
+            if (!string.IsNullOrEmpty(pDyn.founder_king_name))
+                sb.Append(AW_L10n.Text("aw_dynasty_founder", "\u5EFA\u7ACB\u8005\uFF1A"))
+                    .Append(pDyn.founder_king_name)
+                    .Append("\n");
+            sb.Append(AW_L10n.Text("aw_dynasty_duration", "\u5B58\u7EED\u65F6\u95F4\uFF1A"))
+                .Append(YearSpan(pDyn.start_time, pDyn.end_time))
+                .Append("\n");
+            sb.Append(AW_L10n.Text("aw_dynasty_end_reason", "\u7ED3\u675F\u539F\u56E0\uFF1A"))
+                .Append(EndReasonLabel(pDyn.end_reason, pDyn.end_time))
+                .Append("\n");
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string EndReasonLabel(string pReason, double pEndTime)
+        {
+            if (pEndTime < 0) return AW_L10n.Text("aw_until_now", "\u81F3\u4ECA");
+            switch (pReason)
+            {
+                case "dynasty_replaced": return AW_L10n.Text("aw_dynasty_end_replaced", "\u6539\u671D\u6362\u4EE3");
+                case "kingdom_fell": return AW_L10n.Text("aw_dynasty_end_kingdom_fell", "\u56FD\u5BB6\u706D\u4EA1");
+                case "unknown_successor": return AW_L10n.Text("aw_dynasty_end_unknown_successor", "\u738B\u5BA4\u65AD\u7EDD");
+                default: return AW_L10n.Text("aw_dynasty_end_unknown", "\u672A\u8BB0\u5F55");
+            }
         }
 
         private static string BuildReignTitle(ReignPeriod pReign)
