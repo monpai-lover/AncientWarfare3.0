@@ -11,7 +11,7 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class HeirService
     {
-        /// <summary>重选继承人并写入 kingdom.data。新王即位后调用。同步维护 actor.data 的 IS_HEIR 标记(unit_heir 皮肤 + minimap 用)。</summary>
+        /// <summary>重选继承人并写入 kingdom.data。新王即位后调用。同步维护 actor.data 的 IS_HEIR 标记(heir 皮肤 + minimap 用)。</summary>
         public static void RefreshHeir(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
@@ -42,14 +42,19 @@ namespace AncientWarfare3.core.lineage
         public static Actor GetHeir(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return null;
+            Actor king = pKingdom.king;
+            Actor directChildHeir = FindDirectChildHeir(king);
 
             // 1) 现任继承人仍合格 → 保持不变(稳定,不乱换)。
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long curId, -1L);
             if (curId >= 0)
             {
                 var cur = World.world.units.get(curId);
-                if (cur != null && IsSuitableHeir(cur, pKingdom.king))
-                    return cur;
+                if (cur != null && IsSuitableHeir(cur, king))
+                {
+                    if (directChildHeir == null || IsDirectChildOf(cur, king))
+                        return cur;
+                }
             }
 
             // 2) 现任失格/无 → 重选并写回缓存。同步维护 IS_HEIR 标记(旧清、新设)。
@@ -96,13 +101,8 @@ namespace AncientWarfare3.core.lineage
 
             if (king != null)
             {
-                // 儿子优先:长子(created_time 最小的合格成年儿子)
-                Actor eldest = PickEldest(king.getChildren(false), king, pMaleOnly: true);
-                if (eldest != null) return eldest;
-
-                // 无合格儿子:长女
-                Actor eldestDaughter = PickEldest(king.getChildren(false), king, pMaleOnly: false);
-                if (eldestDaughter != null) return eldestDaughter;
+                Actor directChildHeir = FindDirectChildHeir(king);
+                if (directChildHeir != null) return directChildHeir;
             }
 
             // fallback:royal_clan 成员(按|age-18|选)。
@@ -112,6 +112,25 @@ namespace AncientWarfare3.core.lineage
             if (clan == null) return null;
 
             return PickClosest(new List<Actor>(clan.units), king, pPreferMale: false);
+        }
+
+        private static Actor FindDirectChildHeir(Actor pKing)
+        {
+            if (pKing?.data == null) return null;
+
+            // 儿子优先:长子(created_time 最小的合格成年儿子)
+            Actor eldest = PickEldest(pKing.getChildren(false), pKing, pMaleOnly: true);
+            if (eldest != null) return eldest;
+
+            // 无合格儿子:长女
+            return null;
+        }
+
+        private static bool IsDirectChildOf(Actor pActor, Actor pParent)
+        {
+            if (pActor?.data == null || pParent?.data == null) return false;
+            long parentId = pParent.data.id;
+            return pActor.data.parent_id_1 == parentId || pActor.data.parent_id_2 == parentId;
         }
 
         /// <summary>从直系子女中选长子/长女(created_time最小=最早出生)。pMaleOnly=true 只选儿子。</summary>
@@ -158,6 +177,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor == null || pActor.isRekt()) return false;
             if (pActor == pKing) return false;
+            if (!pActor.isSexMale()) return false;
             if (pActor.isKing()) return false;
             if (!pActor.isAdult()) return false;
             if (pActor.hasTrait("madness")) return false;

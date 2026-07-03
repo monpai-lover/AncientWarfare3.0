@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.becomeLoversWith))]
         public static void BecomeLoversWith_Postfix(Actor __instance, Actor pTarget)
         {
+            LineageService.OnBecameLovers(__instance, pTarget);
             ChronicleEvents.OnBecameLovers(__instance, pTarget);
         }
     }

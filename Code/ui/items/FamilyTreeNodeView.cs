@@ -17,8 +17,10 @@ namespace AncientWarfare3.ui.items
     {
         private const int AVATAR = 30;     // 头像框边长
         private const int NODE_W = 70;     // 节点宽
-        private const int NODE_H = 64;     // 节点高(头像+名字,留足名字空间不与头像重叠)
+        private const int NODE_H = 78;     // 节点高(头像+名字+社会地位,留足空间不与徽标重叠)
         private const int NAME_GAP = 8;    // 名字与头像底的间隙(头像旗帜会向下外溢,需多留)
+        private const int XIA_DEAD_AVATAR_ADULT_AGE = 16;
+        private const int DEAD_BABY_AVATAR = 22;
 
         private static UiUnitAvatarElement _avatarPrefab; // 懒克隆自 unit 窗的 avatar element
 
@@ -27,6 +29,7 @@ namespace AncientWarfare3.ui.items
         private Button _avatarButton;
         private TipButton _avatarTip;
         private Text _nameText;
+        private Text _socialText;
         private Text _relationText;
         private Button _upButton;          // 上溯(到父)
         private Button _downButton;        // 下溯(到子)
@@ -105,6 +108,22 @@ namespace AncientWarfare3.ui.items
             _nameText.alignment = TextAnchor.UpperCenter;
             _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
+            var socialObj = new GameObject("SocialTitle", typeof(RectTransform), typeof(Text));
+            socialObj.transform.SetParent(transform, false);
+            var srect = socialObj.GetComponent<RectTransform>();
+            srect.anchorMin = new Vector2(0.5f, 1f); srect.anchorMax = new Vector2(0.5f, 1f);
+            srect.pivot = new Vector2(0.5f, 1f);
+            srect.sizeDelta = new Vector2(NODE_W + 24, 12);
+            srect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP + 13));
+            _socialText = socialObj.GetComponent<Text>();
+            _socialText.font = LocalizedTextManager.current_font;
+            _socialText.fontSize = 8;
+            _socialText.alignment = TextAnchor.UpperCenter;
+            _socialText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _socialText.color = new Color(0.95f, 0.86f, 0.55f, 1f);
+            _socialText.raycastTarget = false;
+            socialObj.SetActive(false);
+
             var relObj = new GameObject("RelationLabel", typeof(RectTransform), typeof(Text));
             relObj.transform.SetParent(transform, false);
             var rrect = relObj.GetComponent<RectTransform>();
@@ -136,7 +155,7 @@ namespace AncientWarfare3.ui.items
             rect.anchorMin = new Vector2(0.5f, 1f); rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.sizeDelta = new Vector2(NODE_W + 20, 12);
-            rect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP + 13)); // 名字下方再一行
+            rect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP + 25)); // 社会地位下方再一行
             _branchBadgeText = obj.GetComponent<Text>();
             _branchBadgeText.font = LocalizedTextManager.current_font;
             _branchBadgeText.fontSize = 8;
@@ -200,13 +219,22 @@ namespace AncientWarfare3.ui.items
             RenderAvatar(pNode);
 
             string sex = pNode.sex == 0 ? "♂" : "♀";
-            _nameText.text = pNode.display_name + sex;
+            string relation = pNode.relation_label ?? "";
+            string self = AW_L10n.Text("aw_relation_self", "\u672C\u4EBA");
+            string relationPrefix = !string.IsNullOrEmpty(relation) && relation != self ? relation + " " : "";
+            _nameText.text = relationPrefix + pNode.display_name + sex;
             _nameText.color = ResolveNameColor(pNode);
+            if (_socialText != null)
+            {
+                bool hasSocialTitle = !string.IsNullOrEmpty(pNode.social_title);
+                _socialText.text = hasSocialTitle ? pNode.social_title : "";
+                _socialText.color = ResolveSocialColor(pNode);
+                _socialText.gameObject.SetActive(hasSocialTitle);
+            }
             if (_relationText != null)
             {
-                string relation = pNode.relation_label ?? "";
-                _relationText.text = relation;
-                _relationText.gameObject.SetActive(!string.IsNullOrEmpty(relation));
+                _relationText.text = "";
+                _relationText.gameObject.SetActive(false);
             }
 
             long id = pNode.id;
@@ -250,6 +278,11 @@ namespace AncientWarfare3.ui.items
 
             // 取新支氏名 + 创建城(查 ShiBranch 档案);格式:建支:cityname X氏。
             var info = LineageQuery.GetShiBranchInfo(branchShi);
+            if (info == null || info.founder_actor_id != pNode.id || info.source_type != ShiSourceType.KING_FOUNDED)
+            {
+                _branchBadge.SetActive(false);
+                return;
+            }
             string clanName = info != null && !string.IsNullOrEmpty(info.clan_name)
                 ? info.clan_name
                 : AW_L10n.Text("aw_new_branch", "新支");
@@ -317,6 +350,7 @@ namespace AncientWarfare3.ui.items
                 Sprite dead = BuildDeadSprite(pNode);
                 if (dead != null && _deadPortrait != null)
                 {
+                    ApplyDeadPortraitLayout(pNode);
                     _deadPortrait.gameObject.SetActive(true);
                     _deadPortrait.sprite = dead;
                     _deadPortrait.color = DeadTint;                // 整体灰度(死者)
@@ -325,6 +359,25 @@ namespace AncientWarfare3.ui.items
                 LoadDeadClanBanner(pNode);                         // 氏族旗帜:活 Clan / 人物档案快照重建
             }
             catch { /* 合成失败:留空头像 + 灰名,不崩 */ }
+        }
+
+        private void ApplyDeadPortraitLayout(FamilyTreeNode pNode)
+        {
+            if (_deadPortrait == null) return;
+            var rect = _deadPortrait.GetComponent<RectTransform>();
+            if (rect == null) return;
+
+            bool baby = ShouldUseDeadBabyLayout(pNode);
+            float size = baby ? DEAD_BABY_AVATAR : AVATAR;
+            rect.sizeDelta = new Vector2(size, size);
+            rect.anchoredPosition = baby ? new Vector2(0f, -1f) : Vector2.zero;
+            rect.localScale = Vector3.one;
+        }
+
+        private static bool ShouldUseDeadBabyLayout(FamilyTreeNode pNode)
+        {
+            ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
+            return xia != null && xia.has_baby_form && !ShouldRenderDeadAsAdult(pNode, xia);
         }
 
         /// <summary>关掉原版控件的单位贴图/底图标本体(保留 kingdomBanner 子树供死者旗帜用),让 _deadPortrait 接管画像。</summary>
@@ -383,7 +436,7 @@ namespace AncientWarfare3.ui.items
                 false,                                 // is_egg
                 false, false, false,                   // king / warrior / wise
                 null,                                  // egg_asset
-                true,                                  // is_adult(死者按成年画)
+                ShouldRenderDeadAsAdult(pNode, xia),   // is_adult
                 false,                                 // is_lying
                 false,                                 // is_touching_liquid
                 false,                                 // is_inside_boat
@@ -395,6 +448,14 @@ namespace AncientWarfare3.ui.items
                 (int)pNode.id,                         // hash
                 null, null);                           // statuses
             return data;
+        }
+
+        private static bool ShouldRenderDeadAsAdult(FamilyTreeNode pNode, ActorAsset pAsset)
+        {
+            if (pAsset == null || !pAsset.has_baby_form) return true;
+            int age = CalculateAge(pNode);
+            if (age < 0) return true;
+            return age >= XIA_DEAD_AVATAR_ADULT_AGE;
         }
 
         /// <summary>死者国旗帜:活国 kingdomBanner.load(kingdom)(含配色);亡国用存档 kingdom_color 手工染色;无则隐藏。</summary>
@@ -598,6 +659,22 @@ namespace AncientWarfare3.ui.items
             return baseColor;
         }
 
+        private static Color ResolveSocialColor(FamilyTreeNode pNode)
+        {
+            if (pNode == null) return new Color(0.95f, 0.86f, 0.55f, 1f);
+            if (!string.IsNullOrEmpty(pNode.social_title_color))
+            {
+                try
+                {
+                    Color c = Toolbox.makeColor(pNode.social_title_color);
+                    if (!pNode.is_alive) c *= DeadTint;
+                    return c;
+                }
+                catch { }
+            }
+            return ResolveNameColor(pNode);
+        }
+
         /// <summary>节点 tooltip 正文:多行丰富信息(身份/性别 · 氏族 · 国/城 · 生卒 · 代)。空字段省略该行。</summary>
         private static string BuildActorTip(FamilyTreeNode pNode)
         {
@@ -624,7 +701,10 @@ namespace AncientWarfare3.ui.items
                 string.IsNullOrEmpty(pNode.city_name) ? "" : AW_L10n.Text("aw_residence_label", "居:") + pNode.city_name);
             if (kc.Length > 0) sb.AppendLine(kc);
 
-            // 行4:生卒
+            if (!string.IsNullOrEmpty(pNode.social_title))
+                sb.AppendLine(AW_L10n.Text("aw_social_title_label", "\u8EAB\u4EFD:") + pNode.social_title);
+
+            // 生卒
             string birth = pNode.birth_time > 0 ? Date.getYear(pNode.birth_time) + AW_L10n.Text("aw_year_suffix", "年") : "?";
             string death = pNode.is_alive ? "—" : (pNode.death_time > 0 ? Date.getYear(pNode.death_time) + AW_L10n.Text("aw_year_suffix", "年") : "?");
             sb.AppendLine(AW_L10n.Text("aw_birth_label", "生:") + birth + "   " +
@@ -658,11 +738,21 @@ namespace AncientWarfare3.ui.items
         private static int CalculateAge(FamilyTreeNode pNode)
         {
             if (pNode == null || pNode.birth_time <= 0) return -1;
-            double end = pNode.is_alive
-                ? (World.world != null ? World.world.getCurWorldTime() : pNode.birth_time)
-                : pNode.death_time;
-            if (end <= 0) return -1;
-            return System.Math.Max(0, Date.getYear(end) - Date.getYear(pNode.birth_time));
+
+            Actor live = World.world?.units?.get(pNode.id);
+            if (live != null && !live.isRekt() && live.isAlive())
+                return System.Math.Max(0, live.getAge());
+
+            double end;
+            if (pNode.death_time > 0)
+                end = pNode.death_time;
+            else if (pNode.is_alive && World.world != null)
+                end = World.world.getCurWorldTime();
+            else
+                return -1;
+
+            int baseYears = end <= pNode.birth_time ? 0 : Date.getYear0(end - pNode.birth_time);
+            return System.Math.Max(0, baseYears + pNode.age_overgrowth);
         }
 
         private static string JoinNonEmpty(string pSep, params string[] pParts)

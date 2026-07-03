@@ -1,3 +1,6 @@
+using System;
+using UnityEngine;
+
 namespace AncientWarfare3.content
 {
     /// <summary>
@@ -22,6 +25,9 @@ namespace AncientWarfare3.content
                 locale_id = "status_title_qing",
                 locale_description = "status_description_qing"
             };
+            Sprite[] sprites = SpriteTextureLoader.getSpriteList("effects/qing");
+            qing.sprite_list = sprites ?? Array.Empty<Sprite>();
+            qing.get_sprites_count = (_, effect) => effect?.sprite_list?.Length ?? 0;
             AssetManager.status.add(qing);
         }
     }

@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnEraChanged(Kingdom pKingdom, string pNewStem)
         {
             if (!Ready || pKingdom?.data == null) return;
+            if (!LineageService.IsXiaKingdom(pKingdom)) return;
             CloseOpenEra(pKingdom.id);
             if (string.IsNullOrEmpty(pNewStem)) return;
 

@@ -21,9 +21,13 @@ namespace AncientWarfare3.content
 
             // 批A:王国 + 船 + 建筑 + 种族
             XiaKingdom.Init();
+            DiplomacyContent.Init();
             XiaBoats.Init();        // 船先于建筑(架构 actor_asset_id_trading/transport 引用船 id)
             XiaArchitecture.Init();
+            XiaNameSets.Init();
             XiaRace.Init();
+            SlaveryContent.Init();
+            GuardContent.Init();
 
             // 历史人物降临(姬发/嬴政/刘邦/曹丕/司马炎):注册开关 toggle + 世界日志资产。
             // 依赖 figure/first 特质(XiaTraits 已注册在前),放最后。

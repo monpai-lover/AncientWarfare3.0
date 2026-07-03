@@ -19,6 +19,8 @@ namespace AncientWarfare3.core.db
         public long   lineage_id = -1;
         public long   shi_id = -1;
         public string asset_id;       // 种族(应为 Xia)
+        [TableItemDef(pDefaultValue: "-1")] public long subspecies_id = -1;
+        public string subspecies_name = "";
         public int    sex;            // 0/1
         public string status = "none"; // none/noble/common_lineage/slave_lineage
 
@@ -27,6 +29,8 @@ namespace AncientWarfare3.core.db
         public string kingdom_color;  // 所属国文字色 hex(随档案存,亡国后名字仍用此色,不丢国家颜色)
         public long   city_id = -1;
         public string city_name;
+        public string social_title = "";
+        public string social_title_color = "";
         public long   original_clan_id = -1;
         public string clan_color_text;
         [TableItemDef(pDefaultValue: "-1")] public int clan_color_id = -1;
@@ -37,6 +41,10 @@ namespace AncientWarfare3.core.db
         public long   parent_id_2 = -1;
         public int    generation;
         public int    noble_distance;
+        [TableItemDef(pDefaultValue: "0")] public int ever_noble_blood = 0;
+        [TableItemDef(pDefaultValue: "-1")] public long noble_origin_actor_id = -1;
+        public string noble_origin_name = "";
+        [TableItemDef(pDefaultValue: "99")] public int noble_origin_distance = 99;
 
         public double birth_time;
         [TableItemDef(pDefaultValue: "-1")] public double death_time;
@@ -47,6 +55,7 @@ namespace AncientWarfare3.core.db
         public int    head;
         public int    skin;
         public int    skin_set;
+        [TableItemDef(pDefaultValue: "1")] public int age_overgrowth = 1;
 
         // 死者画像重建用:存生前真实表现型(不存则默认 0 = Xia 绿僵尸异常肤色)。
         public int    phenotype_index;

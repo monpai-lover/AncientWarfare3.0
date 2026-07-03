@@ -232,7 +232,7 @@ namespace AncientWarfare3.core.lineage
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
             while (reader.Read())
             {
-                result.Add(new KingdomArchiveInfo
+                var item = new KingdomArchiveInfo
                 {
                     kingdom_id = reader.GetInt64(0),
                     kingdom_name = SafeStr(reader, 1),
@@ -248,10 +248,31 @@ namespace AncientWarfare3.core.lineage
                     is_alive = ToInt(reader, 11) != 0,
                     founded_time = ToDouble(reader, 12, 0),
                     destroyed_time = ToDouble(reader, 13, -1)
-                });
+                };
+                if (ShouldShowKingdomArchiveRow(item)) result.Add(item);
             }
             foreach (var item in result) FillCapitalFallback(item);
             return result;
+        }
+
+        private static bool ShouldShowKingdomArchiveRow(KingdomArchiveInfo pInfo)
+        {
+            if (pInfo == null || pInfo.kingdom_id < 0) return false;
+            if (string.Equals(pInfo.kingdom_name, "neutral", System.StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(pInfo.banner_id, "neutral", System.StringComparison.OrdinalIgnoreCase)) return false;
+
+            Kingdom live = World.world?.kingdoms?.get(pInfo.kingdom_id);
+            if (live?.data == null) return true;
+            try
+            {
+                if (live.isNeutral()) return false;
+                if (!live.isCiv()) return false;
+            }
+            catch
+            {
+                return false;
+            }
+            return true;
         }
 
         private static void FillCapitalFallback(KingdomArchiveInfo pInfo)
@@ -544,6 +565,7 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             FillDynastyOrigins(result);
+            result = MergeAdjacentDynasties(result);
             double destroyedTime = GetKingdomDestroyedTime(pKingdomId);
             if (destroyedTime >= 0)
             {
@@ -556,6 +578,62 @@ namespace AncientWarfare3.core.lineage
                     }
             }
             return result;
+        }
+
+        private static List<DynastyView> MergeAdjacentDynasties(List<DynastyView> pDynasties)
+        {
+            var merged = new List<DynastyView>();
+            if (pDynasties == null || pDynasties.Count == 0) return merged;
+
+            foreach (var dyn in pDynasties)
+            {
+                if (dyn == null) continue;
+                if (merged.Count > 0 && IsSameDynastyFamily(merged[merged.Count - 1], dyn))
+                {
+                    MergeDynastyInto(merged[merged.Count - 1], dyn);
+                    continue;
+                }
+                merged.Add(dyn);
+            }
+
+            for (int i = 0; i < merged.Count; i++)
+                merged[i].dynasty_index = i;
+            return merged;
+        }
+
+        private static bool IsSameDynastyFamily(DynastyView pLeft, DynastyView pRight)
+        {
+            if (pLeft == null || pRight == null) return false;
+            if (pLeft.shi_id >= 0 && pLeft.shi_id == pRight.shi_id) return true;
+            if (string.IsNullOrEmpty(pLeft.clan_name) || string.IsNullOrEmpty(pRight.clan_name)) return false;
+            if (!string.Equals(pLeft.clan_name, pRight.clan_name, System.StringComparison.Ordinal)) return false;
+
+            long leftLineage = GetDynastyLineageId(pLeft);
+            long rightLineage = GetDynastyLineageId(pRight);
+            return leftLineage < 0 || rightLineage < 0 || leftLineage == rightLineage;
+        }
+
+        private static void MergeDynastyInto(DynastyView pTarget, DynastyView pSource)
+        {
+            if (pTarget == null || pSource == null) return;
+
+            if (pSource.end_time < 0 || pTarget.end_time < 0 || pSource.end_time > pTarget.end_time)
+                pTarget.end_time = pSource.end_time;
+            pTarget.end_reason = pSource.end_reason ?? "";
+
+            if (pTarget.shi_id < 0) pTarget.shi_id = pSource.shi_id;
+            if (string.IsNullOrEmpty(pTarget.clan_name)) pTarget.clan_name = pSource.clan_name;
+            if (string.IsNullOrEmpty(pTarget.origin_city_name)) pTarget.origin_city_name = pSource.origin_city_name;
+            if (string.IsNullOrEmpty(pTarget.dynasty_color)) pTarget.dynasty_color = pSource.dynasty_color;
+            if (string.IsNullOrEmpty(pTarget.kingdom_color)) pTarget.kingdom_color = pSource.kingdom_color;
+            if (string.IsNullOrEmpty(pTarget.original_kingdom_name)) pTarget.original_kingdom_name = pSource.original_kingdom_name;
+        }
+
+        private static long GetDynastyLineageId(DynastyView pDynasty)
+        {
+            if (pDynasty == null || pDynasty.shi_id < 0) return -1;
+            var shi = LineageQuery.GetShiBranchInfo(pDynasty.shi_id);
+            return shi?.lineage_id ?? -1;
         }
 
         private static void FillDynastyOrigins(List<DynastyView> pDynasties)

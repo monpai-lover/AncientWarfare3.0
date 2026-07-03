@@ -1,45 +1,95 @@
 namespace AncientWarfare3.core.lineage
 {
-    /// <summary>
-    ///     actor.data / kingdom.data 上 AW3 姓氏系统使用的自定义字段键(随存档序列化)。
-    ///     沿用 AW2 兼容命名(family_name/clan_name/chinese_family_name),其余用 aw_ 前缀。
-    /// </summary>
     internal static class LineageKeys
     {
-        public const string FAMILY_NAME = "family_name";              // 姓(血统姓)
-        public const string CLAN_NAME = "clan_name";                  // 氏(AW3 的氏,非原版 Clan)
-        public const string CHINESE_FAMILY_NAME = "chinese_family_name"; // 中文命名兼容字段
+        public const string FAMILY_NAME = "family_name";
+        public const string CLAN_NAME = "clan_name";
+        public const string CHINESE_FAMILY_NAME = "chinese_family_name";
 
-        public const string GIVEN_NAME = "aw_given_name";             // 单名(所有改全名操作的基底)
-        public const string LINEAGE_ID = "aw_lineage_id";             // 姓族谱系 id(long)
-        public const string SHI_ID = "aw_shi_id";                     // 氏支 id(long)
-        public const string NOBLE_DISTANCE = "aw_noble_distance";     // 距最近贵族祖先的父系代数,本人贵族=0
-        public const string NAME_INTEGRATED = "aw_name_integrated";   // 是否被合流规则处理过(bool)
-        public const string LINEAGE_STATUS = "aw_lineage_status";     // none/noble/common_lineage/slave_lineage
-        public const string EAGER_BUILDER = "aw_eager_builder";       // 积极建城候选(多余 male 子嗣) flag,bool
-        public const string DEATH_CAUSE = "aw_death_cause";            // 死因快照,用于死者档案 tooltip
+        public const string GIVEN_NAME = "aw_given_name";
+        public const string LINEAGE_ID = "aw_lineage_id";
+        public const string SHI_ID = "aw_shi_id";
+        public const string NOBLE_DISTANCE = "aw_noble_distance";
+        public const string EVER_NOBLE_BLOOD = "aw_ever_noble_blood";
+        public const string NOBLE_ORIGIN_ACTOR_ID = "aw_noble_origin_actor_id";
+        public const string NOBLE_ORIGIN_NAME = "aw_noble_origin_name";
+        public const string NOBLE_ORIGIN_DISTANCE = "aw_noble_origin_distance";
+        public const string NAME_INTEGRATED = "aw_name_integrated";
+        public const string LINEAGE_STATUS = "aw_lineage_status";
+        public const string EAGER_BUILDER = "aw_eager_builder";
+        public const string DEATH_CAUSE = "aw_death_cause";
 
-        // kingdom.data
-        public const string KINGDOM_INTEGRATED = "aw_name_integrated"; // 该国是否完成姓氏合流(bool)
-        public const string CHRONICLE_LAST_KING_ID = "aw_chronicle_last_king"; // 编年史:该国上次登记的王 id(防同王重复记换君)
-        // 称王分封:称王者 actor.data 上标记"我建立的新氏支 id"(原氏族树在他的位置显示"建立分支X氏"+点击跳转新支用)。
-        public const string FOUNDED_BRANCH_SHI_ID = "aw_founded_branch_shi"; // long,无则 -1
+        public const string KINGDOM_INTEGRATED = "aw_name_integrated";
+        public const string CHRONICLE_LAST_KING_ID = "aw_chronicle_last_king";
+        public const string FOUNDED_BRANCH_SHI_ID = "aw_founded_branch_shi";
+        public const string MATRILOCAL_IN_LAW = "aw_matrilocal_in_law";
+        public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
+        public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
+        public const string VASSAL_RELATION_ID = "aw_vassal_relation_id";
 
-        // 贵族特质 id(批B XiaTraits 注册)
         public const string TRAIT_GUIZU = "guizu";
+        public const string TRAIT_ZHUHOU = "zhuhou";
+        public const string TRAIT_SLAVE = "slave";
+        public const string TRAIT_VETERAN = "veteran";
+        public const string TRAIT_GUARD = "\u7981\u536B\u519B";
+        public const string SLAVERY_ENABLED = "aw_slavery_enabled";
+        public const string CHRONICLE_LAST_ORIGINAL_CLAN_ID = "aw_chronicle_last_original_clan";
 
-        // noble_distance 达到该值且本人非贵族 → 退回平民,移除 guizu
+        public const string RETIRED_SOLDIER = "aw_retired_soldier";
+        public const string SLAVE_SINCE = "aw_slave_since";
+        public const string SLAVE_REASON = "aw_slave_reason";
+        public const string SLAVE_CAPTURED_BY = "aw_slave_captured_by";
+        public const string SLAVE_SOLDIER = "aw_slave_soldier";
+        public const string SOLDIER_SERVICE_START_TIME = "aw_soldier_service_start_time";
+        public const string SLAVE_MERIT = "aw_slave_merit";
+        public const string FREEDMAN = "aw_freedman";
+        public const string SLAVE_ARMY_ENABLED = "aw_slave_army_enabled";
+        public const string SLAVE_ARMY_RECORDED = "aw_slave_army_recorded";
+        public const string SLAVE_LABOR_RECORDED = "aw_slave_labor_recorded";
+        public const string SLAVE_FOOD_YEAR = "aw_slave_food_year";
+        public const string SLAVE_FOOD_QUOTA = "aw_slave_food_quota";
+
+        public const string ROYAL_GUARD = "aw_royal_guard";
+        public const string ROYAL_GUARD_CAPTAIN = "aw_royal_guard_captain";
+        public const string ROYAL_GUARD_KINGDOM_ID = "aw_royal_guard_kingdom_id";
+        public const string ROYAL_GUARD_NAME = "aw_royal_guard_name";
+        public const string ROYAL_GUARD_ARMY_ID = "aw_royal_guard_army_id";
+        public const string ROYAL_GUARD_RECORDED = "aw_royal_guard_recorded";
+        public const string ROYAL_GUARD_LAST_CHECK = "aw_royal_guard_last_check";
+
+        public const string POLICY_CLASS_STATE = "aw_policy_class_state";
+        public const string POLICY_ARMY_STATE = "aw_policy_army_state";
+        public const string POLICY_NAME_STATE = "aw_policy_name_state";
+        public const string POLICY_ENFEOFFMENT_STATE = "aw_policy_enfeoffment_state";
+        public const string POLICY_POINTS = "aw_policy_points";
+        public const string TECH_POINTS = "aw_tech_points";
+        public const string POLICY_CURRENT = "aw_policy_current";
+        public const string POLICY_PROGRESS = "aw_policy_progress";
+        public const string TECH_CURRENT = "aw_tech_current";
+        public const string TECH_PROGRESS = "aw_tech_progress";
+        public const string POLICY_COMPLETED = "aw_policy_completed";
+        public const string TECH_COMPLETED = "aw_tech_completed";
+        public const string DECISION_CURRENT = "aw_decision_current";
+        public const string DECISION_PROGRESS = "aw_decision_progress";
+        public const string DECISION_COMPLETED = "aw_decision_completed";
+        public const string POLICY_LAST_YEAR = "aw_policy_last_year";
+        public const string POLICY_ENABLED = "aw_policy_enabled";
+        public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";
+        public const string POLICY_AI_LAST_DECISION_YEAR = "aw_policy_ai_last_decision_year";
+        public const string POLICY_AI_LAST_PROMOTION_YEAR = "aw_policy_ai_last_promotion_year";
+        public const string POLICY_AI_LAST_CAPITAL_MOVE_YEAR = "aw_policy_ai_last_capital_move_year";
+        public const string POLICY_AI_LAST_SLAVE_CONTROL_YEAR = "aw_policy_ai_last_slave_control_year";
+        public const string POLICY_AI_LAST_ROYAL_EXPANSION_YEAR = "aw_policy_ai_last_royal_expansion_year";
+
         public const int NOBLE_DECAY_DISTANCE = 3;
 
-        // ── kingdom.data 自定义字段(随存档序列化) ──
-        public const string KINGDOM_HEIR_ID = "aw_heir_id";          // 继承人 actor id(long)
-        public const string IS_HEIR = "aw_is_heir";                  // actor.data:本人是否当前某国继承人(bool,unit_heir 皮肤 + minimap 用)
-        public const string KINGDOM_YEAR_NAME = "aw_year_name";      // 年号中间字(string)
-        public const string KINGDOM_YEAR_START = "aw_year_start";    // 年号起始 world_time(double)
-        public const string KINGDOM_TITLE = "aw_title";              // 头衔等级(int,见 KingdomTitle)
+        public const string KINGDOM_HEIR_ID = "aw_heir_id";
+        public const string IS_HEIR = "aw_is_heir";
+        public const string KINGDOM_YEAR_NAME = "aw_year_name";
+        public const string KINGDOM_YEAR_START = "aw_year_start";
+        public const string KINGDOM_TITLE = "aw_title";
     }
 
-    /// <summary>姓族身份状态。</summary>
     internal static class LineageStatus
     {
         public const string NONE = "none";
@@ -48,22 +98,20 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE = "slave_lineage";
     }
 
-    /// <summary>贵族晋升触发来源。</summary>
     internal enum NobleTrigger
     {
-        King,        // 成为国王
-        CityLeader,  // 成为城主
-        Figure       // 重要成名者 / 历史人物降临
+        King,
+        CityLeader,
+        Figure
     }
 
-    /// <summary>氏支来源类型(ShiBranch.source_type)。</summary>
     internal static class ShiSourceType
     {
-        public const string ENFEOFFED = "enfeoffed";       // 封地
-        public const string INHERITED = "inherited";       // 继承
-        public const string RANDOM = "random";             // 随机
-        public const string INTEGRATION = "integration";   // 合流
-        public const string SPECIAL_FIGURE = "special_figure"; // 名人/降临
-        public const string KING_FOUNDED = "king_founded"; // 称王分封(建新国/夺别国 → 脱离原氏开新支)
+        public const string ENFEOFFED = "enfeoffed";
+        public const string INHERITED = "inherited";
+        public const string RANDOM = "random";
+        public const string INTEGRATION = "integration";
+        public const string SPECIAL_FIGURE = "special_figure";
+        public const string KING_FOUNDED = "king_founded";
     }
 }

@@ -18,12 +18,55 @@ namespace AncientWarfare3.core.lineage
     internal static class LineageService
     {
         public const string XIA_ASSET_ID = "Xia";
+        private const string HUMAN_ASSET_ID = "human";
         private const int MIN_SHI_ALIVE_FOR_NEW_BRANCH = 8;
         private const int MIN_HOME_BRANCH_ADULT_MALES_AFTER_BRANCH = 2;
+        private const int MAX_PROMOTION_DESCENDANT_SYNC = 512;
 
         public static bool IsXia(Actor pActor)
         {
             return pActor?.asset != null && pActor.asset.id == XIA_ASSET_ID;
+        }
+
+        public static bool IsXiaKingdom(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            if (pKingdom.asset?.id == XIA_ASSET_ID) return true;
+
+            ActorAsset actorAsset = null;
+            try { actorAsset = pKingdom.getActorAsset(); }
+            catch { actorAsset = null; }
+            return actorAsset?.id == XIA_ASSET_ID || actorAsset?.banner_id == XIA_ASSET_ID;
+        }
+
+        public static bool IsHuman(Actor pActor)
+        {
+            return pActor?.asset != null && pActor.asset.id == HUMAN_ASSET_ID;
+        }
+
+        public static bool IsXiaHumanPair(Actor pA, Actor pB)
+        {
+            return (IsXia(pA) && IsHuman(pB)) || (IsHuman(pA) && IsXia(pB));
+        }
+
+        public static bool HasOriginalClan(Actor pActor)
+        {
+            return IsXia(pActor) && pActor.hasClan() && pActor.clan?.data != null;
+        }
+
+        public static bool HasTraceableFamily(Actor pActor)
+        {
+            if (pActor?.data == null || !IsXia(pActor)) return false;
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
+            return lineageId >= 0 || HasOriginalClan(pActor);
+        }
+
+        public static void EnsureOriginalClanArchived(Actor pActor, bool pRecordHistory = true)
+        {
+            if (!HasOriginalClan(pActor)) return;
+            ArchiveActor(pActor, pAlive: true);
+            if (pRecordHistory)
+                ChronicleEvents.OnJoinedOriginalClan(pActor, pActor.clan);
         }
 
         // ───────────────────────────── 出生 ─────────────────────────────
@@ -53,12 +96,43 @@ namespace AncientWarfare3.core.lineage
 
             EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
+            SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
+            PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
             RecordFamilyEdges(pBaby);
             ApplyDisplayName(pBaby);
             ArchiveActor(pBaby, pAlive: true);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);
+        }
+
+        public static void OnMixedAncestryBorn(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null) return;
+            if (!IsMixedXiaHumanFamily(pBaby, pParent1, pParent2)) return;
+
+            ArchiveTraceableActor(pParent1, pAlive: true);
+            ArchiveTraceableActor(pParent2, pAlive: true);
+            RecordFamilyEdges(pBaby);
+            ArchiveTraceableActor(pBaby, pAlive: true);
+        }
+
+        public static bool HasTraceableArchive(Actor pActor)
+        {
+            return pActor?.data != null && LineageArchiveReader.ReadRow(pActor.data.id) != null;
+        }
+
+        public static void ArchiveTraceableActor(Actor pActor, bool pAlive)
+        {
+            if (!IsXia(pActor) && !IsHuman(pActor)) return;
+            LineageArchiveWriter.Upsert(pActor, pAlive, pTraceOnly: true);
+        }
+
+        private static bool IsMixedXiaHumanFamily(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            bool hasXia = IsXia(pBaby) || IsXia(pParent1) || IsXia(pParent2);
+            bool hasHuman = IsHuman(pBaby) || IsHuman(pParent1) || IsHuman(pParent2);
+            return hasXia && hasHuman;
         }
 
         /// <summary>入谱贵族出生 → PersonBiography 记一条 birth 事件(无谱系者不记)。</summary>
@@ -101,27 +175,13 @@ namespace AncientWarfare3.core.lineage
             if (existingLineageId >= 0) return;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return;
 
-            Actor source = PickLineageSource(pParent1, pParent2);
-            if (source == null) return;
+            Actor source = PickCompletePatrilinealSource(pParent1, pParent2);
+            if (source != null && TryInheritLineageFromSource(pActor, source, pRequireClan: true)) return;
 
-            source.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
-            if (lid < 0) return; // 来源无谱系(双系都无)→ 本人暂无谱系
+            if (TryInheritLooseClanFromFather(pActor, pParent1, pParent2)) return;
 
-            source.data.get(LineageKeys.SHI_ID, out long sid, -1);
-            source.data.get(LineageKeys.FAMILY_NAME, out string fam, "");
-            source.data.get(LineageKeys.CLAN_NAME, out string clan, "");
-            source.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
-
-            pActor.data.set(LineageKeys.LINEAGE_ID, lid);
-            pActor.data.set(LineageKeys.SHI_ID, sid);
-            pActor.data.set(LineageKeys.FAMILY_NAME, fam);
-            pActor.data.set(LineageKeys.CLAN_NAME, clan);
-            pActor.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
-            pActor.data.set(LineageKeys.LINEAGE_STATUS,
-                dist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
-
-            // 按 noble_distance 统一加/移 guizu 贵族特质(继承的贵族子代也享生育加成,与晋升路径对齐)。
-            RefreshNobleStatus(pActor);
+            source = PickPatrilinealSource(pParent1, pParent2);
+            if (source != null) TryInheritLineageFromSource(pActor, source, pRequireClan: false);
         }
 
         /// <summary>
@@ -130,17 +190,224 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         private static Actor PickLineageSource(Actor pParent1, Actor pParent2)
         {
-            if (pParent1 != null && pParent1.isSexMale() && HasLineageData(pParent1)) return pParent1;
-            if (pParent2 != null && pParent2.isSexMale() && HasLineageData(pParent2)) return pParent2;
-            if (pParent1 != null && HasLineageData(pParent1)) return pParent1;
-            if (pParent2 != null && HasLineageData(pParent2)) return pParent2;
+            return PickPatrilinealSource(pParent1, pParent2);
+        }
+
+        private static Actor PickCompleteLineageSource(Actor pParent1, Actor pParent2)
+        {
+            return PickCompletePatrilinealSource(pParent1, pParent2);
+        }
+
+        private static Actor PickPatrilinealSource(Actor pParent1, Actor pParent2)
+        {
+            Actor father = PickFather(pParent1, pParent2);
+            if (father != null && HasLineageData(father)) return father;
+            return null;
+        }
+
+        private static Actor PickCompletePatrilinealSource(Actor pParent1, Actor pParent2)
+        {
+            Actor father = PickFather(pParent1, pParent2);
+            if (father != null && HasCompleteLineageData(father)) return father;
+            return null;
+        }
+
+        private static Actor PickFather(Actor pParent1, Actor pParent2)
+        {
+            if (pParent1 != null && pParent1.isSexMale()) return pParent1;
+            if (pParent2 != null && pParent2.isSexMale()) return pParent2;
             return null;
         }
 
         private static bool HasLineageData(Actor pActor)
         {
+            if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
             return lid >= 0;
+        }
+
+        private static bool HasCompleteLineageData(Actor pActor)
+        {
+            if (!HasLineageData(pActor)) return false;
+            pActor.data.get(LineageKeys.SHI_ID, out long sid, -1);
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            return sid >= 0 && !string.IsNullOrEmpty(clan);
+        }
+
+        private static bool TryInheritLineageFromSource(Actor pChild, Actor pSource, bool pRequireClan)
+        {
+            if (pChild?.data == null || pSource?.data == null) return false;
+            pSource.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
+            if (lid < 0) return false;
+
+            pSource.data.get(LineageKeys.SHI_ID, out long sid, -1);
+            pSource.data.get(LineageKeys.FAMILY_NAME, out string fam, "");
+            pSource.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pSource.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
+
+            if (pRequireClan && (sid < 0 || string.IsNullOrEmpty(clan))) return false;
+
+            pChild.data.set(LineageKeys.LINEAGE_ID, lid);
+            if (sid >= 0) pChild.data.set(LineageKeys.SHI_ID, sid);
+            if (!string.IsNullOrEmpty(fam))
+            {
+                pChild.data.set(LineageKeys.FAMILY_NAME, fam);
+                pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, fam);
+            }
+            if (!string.IsNullOrEmpty(clan)) pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            pChild.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
+            pChild.data.set(LineageKeys.LINEAGE_STATUS,
+                dist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
+            PropagateNobleBloodFromSource(pChild, pSource);
+
+            // 按 noble_distance 统一加/移 guizu 贵族特质(继承的贵族子代也享生育加成,与晋升路径对齐)。
+            RefreshNobleStatus(pChild);
+            return true;
+        }
+
+        private static bool TryInheritLooseClanFromParents(Actor pChild, Actor pParent1, Actor pParent2)
+        {
+            return TryInheritLooseClanFromFather(pChild, pParent1, pParent2);
+        }
+
+        private static bool TryInheritLooseClanFromFather(Actor pChild, Actor pParent1, Actor pParent2)
+        {
+            Actor source = PickLooseClanFather(pParent1, pParent2);
+            if (source?.data == null || pChild?.data == null) return false;
+
+            source.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            if (string.IsNullOrEmpty(clan)) return false;
+            source.data.get(LineageKeys.FAMILY_NAME, out string fam, "");
+            source.data.get(LineageKeys.LINEAGE_ID, out long lid, -1);
+            source.data.get(LineageKeys.SHI_ID, out long sid, -1);
+            source.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
+
+            if (lid >= 0) pChild.data.set(LineageKeys.LINEAGE_ID, lid);
+            if (sid >= 0) pChild.data.set(LineageKeys.SHI_ID, sid);
+            if (!string.IsNullOrEmpty(fam))
+            {
+                pChild.data.set(LineageKeys.FAMILY_NAME, fam);
+                pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, fam);
+            }
+            pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            if (lid >= 0)
+            {
+                pChild.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
+                pChild.data.set(LineageKeys.LINEAGE_STATUS,
+                    dist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
+                PropagateNobleBloodFromSource(pChild, source);
+                RefreshNobleStatus(pChild);
+            }
+            source.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated, false);
+            if (integrated) pChild.data.set(LineageKeys.NAME_INTEGRATED, true);
+            return true;
+        }
+
+        private static Actor PickLooseClanSource(Actor pParent1, Actor pParent2)
+        {
+            return PickLooseClanFather(pParent1, pParent2);
+        }
+
+        private static Actor PickLooseClanFather(Actor pParent1, Actor pParent2)
+        {
+            Actor father = PickFather(pParent1, pParent2);
+            if (father != null && HasClanName(father)) return father;
+            return null;
+        }
+
+        private static bool HasClanName(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            return !string.IsNullOrEmpty(clan);
+        }
+
+        private static void PropagateNobleBloodFromParents(Actor pChild, Actor pParent1, Actor pParent2)
+        {
+            if (pChild?.data == null) return;
+
+            bool hasBest = false;
+            long bestOriginId = -1L;
+            string bestOriginName = "";
+            int bestDistance = 99;
+
+            if (TryReadNobleBloodSource(pParent1, out long id1, out string name1, out int distance1))
+            {
+                hasBest = true;
+                bestOriginId = id1;
+                bestOriginName = name1;
+                bestDistance = distance1 + 1;
+            }
+
+            if (TryReadNobleBloodSource(pParent2, out long id2, out string name2, out int distance2))
+            {
+                int childDistance = distance2 + 1;
+                if (!hasBest || childDistance < bestDistance)
+                {
+                    hasBest = true;
+                    bestOriginId = id2;
+                    bestOriginName = name2;
+                    bestDistance = childDistance;
+                }
+            }
+
+            if (hasBest)
+                SetNobleBloodSnapshot(pChild, bestOriginId, bestOriginName, bestDistance);
+        }
+
+        private static void PropagateNobleBloodFromSource(Actor pChild, Actor pSource)
+        {
+            if (pChild?.data == null) return;
+            if (TryReadNobleBloodSource(pSource, out long originId, out string originName, out int distance))
+                SetNobleBloodSnapshot(pChild, originId, originName, distance + 1);
+        }
+
+        private static bool TryReadNobleBloodSource(Actor pSource, out long pOriginId,
+            out string pOriginName, out int pDistance)
+        {
+            pOriginId = -1L;
+            pOriginName = "";
+            pDistance = 99;
+            if (pSource?.data == null) return false;
+
+            pSource.data.get(LineageKeys.EVER_NOBLE_BLOOD, out bool ever, false);
+            if (ever)
+            {
+                pSource.data.get(LineageKeys.NOBLE_ORIGIN_ACTOR_ID, out pOriginId, -1L);
+                pSource.data.get(LineageKeys.NOBLE_ORIGIN_NAME, out pOriginName, "");
+                pSource.data.get(LineageKeys.NOBLE_ORIGIN_DISTANCE, out pDistance, 99);
+                return pOriginId >= 0 || !string.IsNullOrEmpty(pOriginName);
+            }
+
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pSource.data.id);
+            if (row != null && row.ever_noble_blood != 0)
+            {
+                pOriginId = row.noble_origin_actor_id;
+                pOriginName = row.noble_origin_name ?? "";
+                pDistance = row.noble_origin_distance;
+                return pOriginId >= 0 || !string.IsNullOrEmpty(pOriginName);
+            }
+
+            pSource.data.get(LineageKeys.NOBLE_DISTANCE, out int nobleDistance, 99);
+            pSource.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
+            if (nobleDistance == 0 && status == LineageStatus.NOBLE)
+            {
+                pOriginId = pSource.data.id;
+                pOriginName = pSource.getName() ?? "";
+                pDistance = 0;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void SetNobleBloodSnapshot(Actor pActor, long pOriginId, string pOriginName, int pDistance)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.set(LineageKeys.EVER_NOBLE_BLOOD, true);
+            pActor.data.set(LineageKeys.NOBLE_ORIGIN_ACTOR_ID, pOriginId);
+            pActor.data.set(LineageKeys.NOBLE_ORIGIN_NAME, pOriginName ?? "");
+            pActor.data.set(LineageKeys.NOBLE_ORIGIN_DISTANCE, pDistance);
         }
 
         /// <summary>把 parent_id_1/2 写入 FamilyEdge 持久亲子边表(死后家族树仍可绘制)。</summary>
@@ -208,6 +475,8 @@ namespace AncientWarfare3.core.lineage
         public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger)
         {
             if (!IsXia(pActor)) return;
+            if (SlaveService.IsSlave(pActor))
+                SlaveService.FreeSlave(pActor, "promoted");
 
             EnsureLineageForNoble(pActor, pTrigger);
 
@@ -218,6 +487,7 @@ namespace AncientWarfare3.core.lineage
 
             ApplyDisplayName(pActor);
             ArchiveActor(pActor, pAlive: true);
+            SyncExistingChildrenAfterLineageChange(pActor);
         }
 
         /// <summary>无谱系贵族:随机古姓建姓族,按封地/城/国生成氏建氏支;已有谱系则沿用。</summary>
@@ -258,6 +528,7 @@ namespace AncientWarfare3.core.lineage
 
             pChild.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return;
+            pChild.data.get(LineageKeys.SHI_ID, out long previousShiId, -1);
 
             if (IsEnfeoffmentCandidate(pChild))
             {
@@ -268,6 +539,7 @@ namespace AncientWarfare3.core.lineage
 
                 pChild.data.set(LineageKeys.SHI_ID, shiId);
                 pChild.data.set(LineageKeys.CLAN_NAME, clanName);
+                MoveExistingDescendantsToBranch(pChild, lineageId, previousShiId, shiId, clanName);
             }
 
             // 无论是否分封,城主本人都是当代贵族:距离归零、加 guizu。
@@ -277,6 +549,7 @@ namespace AncientWarfare3.core.lineage
 
             ApplyDisplayName(pChild);
             ArchiveActor(pChild, pAlive: true);
+            SyncExistingChildrenAfterLineageChange(pChild);
         }
 
         /// <summary>
@@ -290,6 +563,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
             if (!IsXia(pKing)) return;
+            pKing.data.get(LineageKeys.IS_HEIR, out bool wasHeir, false);
+            if (wasHeir) return;
+            if (HeirService.IsCurrentHeir(pKingdom, pKing)) return;
 
             pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return; // 无谱系(非贵族血统),不分封
@@ -334,8 +610,272 @@ namespace AncientWarfare3.core.lineage
             ApplyDisplayName(pKing);          // 氏变 → 重拼显示名
             ArchiveActor(pKing, pAlive: true);
             pKing.clearGraphicsFully();
+            int movedDescendants = MoveExistingDescendantsToBranch(pKing, lineageId, curShiId, newShiId, clanName);
+            SyncExistingChildrenAfterLineageChange(pKing);
+            if (movedDescendants > 0)
+                ModClass.LogInfo($"Moved {movedDescendants} existing descendants to shi={newShiId}.");
 
             ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{clanName}」(shi={newShiId},脱离旧支 {curShiId})。");
+        }
+
+        private static void SyncExistingChildrenAfterLineageChange(Actor pParent)
+        {
+            if (pParent?.data == null || !IsXia(pParent)) return;
+            if (!HasLineageData(pParent)) return;
+
+            var childIds = new HashSet<long>(LineageQuery.GetChildIds(pParent.data.id));
+            try
+            {
+                foreach (var child in pParent.getChildren(pOnlyCurrentFamily: false))
+                    if (child?.data != null) childIds.Add(child.data.id);
+            }
+            catch { }
+
+            int synced = 0;
+            var visited = new HashSet<long>();
+            foreach (long childId in childIds)
+            {
+                if (synced >= MAX_PROMOTION_DESCENDANT_SYNC) break;
+                SyncDescendantFromParentRecursive(pParent, childId, visited, ref synced);
+            }
+        }
+
+        private static void SyncDescendantFromParentRecursive(Actor pParent, long pChildId, HashSet<long> pVisited,
+            ref int pSynced)
+        {
+            if (pParent?.data == null || pChildId < 0 || !pVisited.Add(pChildId)) return;
+            if (pSynced >= MAX_PROMOTION_DESCENDANT_SYNC) return;
+
+            Actor child = World.world?.units?.get(pChildId);
+            if (child?.data != null && IsXia(child) && !child.isRekt())
+            {
+                if (!ShouldChildFollowParentLine(child, pParent)) return;
+
+                bool sameLine = IsSameLineage(child, pParent);
+                bool changed = TrySyncLiveChildFromParent(child, pParent);
+                if (changed) pSynced++;
+
+                if (changed || sameLine || IsSameLineage(child, pParent))
+                {
+                    foreach (long grandChildId in LineageQuery.GetChildIds(child.data.id))
+                    {
+                        if (pSynced >= MAX_PROMOTION_DESCENDANT_SYNC) break;
+                        SyncDescendantFromParentRecursive(child, grandChildId, pVisited, ref pSynced);
+                    }
+                }
+                return;
+            }
+
+            var row = LineageArchiveReader.ReadRow(pChildId);
+            if (row == null) return;
+            if (!ShouldArchivedChildFollowParentLine(row, pParent)) return;
+            if (TrySyncArchivedChildFromParent(row, pParent)) pSynced++;
+        }
+
+        private static bool ShouldChildFollowParentLine(Actor pChild, Actor pParent)
+        {
+            if (pChild?.data == null || pParent?.data == null) return false;
+            long parentId = pParent.data.id;
+            bool listedParent = pChild.data.parent_id_1 == parentId || pChild.data.parent_id_2 == parentId;
+            if (!listedParent) return false;
+            if (pParent.isSexMale()) return true;
+
+            Actor father = FindFatherOfChild(pChild);
+            if (father?.data == null) return false;
+            father.data.get(LineageKeys.MATRILOCAL_IN_LAW, out bool inLaw, false);
+            father.data.get(LineageKeys.MATRILOCAL_WIFE_ID, out long wifeId, -1L);
+            return inLaw && wifeId == parentId;
+        }
+
+        private static bool ShouldArchivedChildFollowParentLine(ActorArchiveTableItem pChild, Actor pParent)
+        {
+            if (pChild == null || pParent?.data == null) return false;
+            long parentId = pParent.data.id;
+            bool listedParent = pChild.parent_id_1 == parentId || pChild.parent_id_2 == parentId;
+            return listedParent && pParent.isSexMale();
+        }
+
+        private static Actor FindFatherOfChild(Actor pChild)
+        {
+            if (pChild?.data == null) return null;
+            foreach (long pid in new[] { pChild.data.parent_id_1, pChild.data.parent_id_2 })
+            {
+                if (pid < 0) continue;
+                Actor parent = World.world?.units?.get(pid);
+                if (parent != null && parent.isSexMale()) return parent;
+            }
+            return null;
+        }
+
+        private static bool TrySyncLiveChildFromParent(Actor pChild, Actor pParent)
+        {
+            if (pChild?.data == null || pParent?.data == null) return false;
+            if (pChild.hasTrait("figure") || pChild.hasTrait("first")) return false;
+
+            pParent.data.get(LineageKeys.LINEAGE_ID, out long parentLineage, -1L);
+            pParent.data.get(LineageKeys.SHI_ID, out long parentShi, -1L);
+            if (parentLineage < 0 || parentShi < 0) return false;
+
+            pChild.data.get(LineageKeys.LINEAGE_ID, out long childLineage, -1L);
+            if (childLineage >= 0 && childLineage != parentLineage) return false;
+
+            pParent.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pParent.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pParent.data.get(LineageKeys.NOBLE_DISTANCE, out int parentDist, 0);
+
+            pChild.data.get(LineageKeys.SHI_ID, out long oldShi, -1L);
+            pChild.data.get(LineageKeys.CLAN_NAME, out string oldClan, "");
+            bool changed = childLineage != parentLineage || oldShi != parentShi || oldClan != clan;
+
+            EnsureGivenName(pChild);
+            pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
+            pChild.data.set(LineageKeys.SHI_ID, parentShi);
+            if (!string.IsNullOrEmpty(family))
+            {
+                pChild.data.set(LineageKeys.FAMILY_NAME, family);
+                pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
+            }
+            if (!string.IsNullOrEmpty(clan)) pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            pChild.data.set(LineageKeys.NOBLE_DISTANCE, parentDist + 1);
+            pChild.data.set(LineageKeys.LINEAGE_STATUS,
+                parentDist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
+            PropagateNobleBloodFromSource(pChild, pParent);
+            RefreshNobleStatus(pChild);
+            ApplyDisplayName(pChild);
+            RecordFamilyEdges(pChild);
+            ArchiveActor(pChild, pAlive: true);
+            try { pChild.clearGraphicsFully(); } catch { }
+            return changed;
+        }
+
+        private static bool TrySyncArchivedChildFromParent(ActorArchiveTableItem pChild, Actor pParent)
+        {
+            if (pChild == null || pParent?.data == null) return false;
+            pParent.data.get(LineageKeys.LINEAGE_ID, out long parentLineage, -1L);
+            pParent.data.get(LineageKeys.SHI_ID, out long parentShi, -1L);
+            if (parentLineage < 0 || parentShi < 0) return false;
+            if (pChild.lineage_id >= 0 && pChild.lineage_id != parentLineage) return false;
+
+            pParent.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+            pParent.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+            pParent.data.get(LineageKeys.NOBLE_DISTANCE, out int parentDist, 0);
+            if (pChild.lineage_id == parentLineage && pChild.shi_id == parentShi && pChild.clan_name == clan)
+                return false;
+
+            var db = LineageArchiveManager.Instance?.OperatingDB;
+            if (db == null) return false;
+
+            pChild.family_name = family ?? "";
+            pChild.clan_name = clan ?? "";
+            pChild.lineage_id = parentLineage;
+            pChild.shi_id = parentShi;
+            pChild.noble_distance = parentDist + 1;
+            pChild.status = parentDist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE
+                ? LineageStatus.COMMON
+                : LineageStatus.NOBLE;
+
+            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pChild.id) },
+                ColumnVal.Create("LINEAGE_ID", pChild.lineage_id),
+                ColumnVal.Create("SHI_ID", pChild.shi_id),
+                ColumnVal.Create("FAMILY_NAME", pChild.family_name),
+                ColumnVal.Create("CLAN_NAME", pChild.clan_name),
+                ColumnVal.Create("NOBLE_DISTANCE", pChild.noble_distance),
+                ColumnVal.Create("STATUS", pChild.status),
+                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pChild, pChild.clan_name)));
+            return true;
+        }
+
+        private static bool IsSameLineage(Actor pActor, Actor pSource)
+        {
+            if (pActor?.data == null || pSource?.data == null) return false;
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long actorLineage, -1L);
+            pSource.data.get(LineageKeys.LINEAGE_ID, out long sourceLineage, -1L);
+            return actorLineage >= 0 && actorLineage == sourceLineage;
+        }
+
+        private static int MoveExistingDescendantsToBranch(Actor pFounder, long pLineageId, long pOldShiId,
+            long pNewShiId, string pClanName)
+        {
+            if (pFounder?.data == null || pLineageId < 0 || pOldShiId < 0 || pNewShiId < 0) return 0;
+            if (pOldShiId == pNewShiId || string.IsNullOrEmpty(pClanName)) return 0;
+
+            int moved = 0;
+            var visited = new HashSet<long>();
+            foreach (long childId in LineageQuery.GetChildIds(pFounder.data.id))
+                moved += MoveDescendantToBranchRecursive(childId, pLineageId, pOldShiId, pNewShiId, pClanName, visited);
+            return moved;
+        }
+
+        private static int MoveDescendantToBranchRecursive(long pActorId, long pLineageId, long pOldShiId,
+            long pNewShiId, string pClanName, HashSet<long> pVisited)
+        {
+            if (pActorId < 0 || !pVisited.Add(pActorId)) return 0;
+
+            int moved = 0;
+            var live = World.world?.units?.get(pActorId);
+            if (live?.data != null && IsXia(live) && !live.isRekt())
+            {
+                live.data.get(LineageKeys.LINEAGE_ID, out long liveLineageId, -1L);
+                live.data.get(LineageKeys.SHI_ID, out long liveShiId, -1L);
+                if (liveLineageId != pLineageId || liveShiId != pOldShiId) return 0;
+                live.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long liveFoundedBranch, -1L);
+                if (liveFoundedBranch >= 0) return 0;
+
+                live.data.set(LineageKeys.SHI_ID, pNewShiId);
+                live.data.set(LineageKeys.CLAN_NAME, pClanName);
+                ApplyDisplayName(live);
+                ArchiveActor(live, pAlive: true);
+                try { live.clearGraphicsFully(); } catch { }
+                moved++;
+            }
+            else
+            {
+                var row = LineageArchiveReader.ReadRow(pActorId);
+                if (row == null || row.lineage_id != pLineageId || row.shi_id != pOldShiId) return 0;
+                if (row.founded_branch_shi_id >= 0) return 0;
+
+                UpdateArchivedActorBranch(row, pNewShiId, pClanName);
+                moved++;
+            }
+
+            foreach (long childId in LineageQuery.GetChildIds(pActorId))
+                moved += MoveDescendantToBranchRecursive(childId, pLineageId, pOldShiId, pNewShiId, pClanName, pVisited);
+            return moved;
+        }
+
+        private static void UpdateArchivedActorBranch(ActorArchiveTableItem pRow, long pNewShiId, string pClanName)
+        {
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null || pRow == null) return;
+
+            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pRow.id) },
+                ColumnVal.Create("SHI_ID", pNewShiId),
+                ColumnVal.Create("CLAN_NAME", pClanName),
+                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pRow, pClanName)));
+        }
+
+        private static string BuildArchivedDisplayName(ActorArchiveTableItem pRow, string pClanName)
+        {
+            string given = pRow.given_name ?? "";
+            if (string.IsNullOrEmpty(given)) given = pRow.display_name ?? "";
+            if (string.IsNullOrEmpty(given)) return "";
+
+            string family = pRow.family_name ?? "";
+            string status = pRow.status ?? LineageStatus.NONE;
+            if (status == LineageStatus.NOBLE)
+            {
+                if (pRow.sex == 0)
+                {
+                    string prefix = !string.IsNullOrEmpty(pClanName) ? pClanName : family;
+                    return !string.IsNullOrEmpty(prefix) ? prefix + given : given;
+                }
+
+                return !string.IsNullOrEmpty(family) ? given + family : given;
+            }
+
+            return !string.IsNullOrEmpty(pClanName) ? pClanName + given : given;
         }
 
         private static bool IsHistoricalFigure(Actor pActor)
@@ -368,6 +908,7 @@ namespace AncientWarfare3.core.lineage
             if (lineageId < 0) return false;
             pActor.data.get(LineageKeys.SHI_ID, out long actorShiId, -1);
             if (actorShiId < 0) return false;
+            if (!AncientWarfare3.core.policy.KingdomPolicyService.IsEnfeoffmentActive(pActor.kingdom)) return false;
             if (LineageQuery.CountAliveInShi(actorShiId) < MIN_SHI_ALIVE_FOR_NEW_BRANCH) return false;
 
             Actor father = FindNobleFather(pActor);
@@ -640,6 +1181,8 @@ namespace AncientWarfare3.core.lineage
         public static bool CanFallInLoveByLineage(Actor pA, Actor pB)
         {
             if (!IsXia(pA) || !IsXia(pB)) return true;
+            if (!SlaveService.CanFallInLoveByStatus(pA, pB)) return false;
+            if (SlaveService.AreBothSlaves(pA, pB)) return true;
 
             // 任一方所在国已合流 → 不再限制
             if (IsKingdomIntegrated(pA.kingdom) || IsKingdomIntegrated(pB.kingdom)) return true;
@@ -649,6 +1192,44 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(fa) || string.IsNullOrEmpty(fb)) return true;
 
             return fa != fb; // 同姓 → false(不可)
+        }
+
+        public static void OnBecameLovers(Actor pA, Actor pB)
+        {
+            TryApplyMatrilocalInLaw(pA, pB);
+            TryApplyMatrilocalInLaw(pB, pA);
+        }
+
+        private static void TryApplyMatrilocalInLaw(Actor pHusband, Actor pWife)
+        {
+            if (!IsXia(pHusband) || !IsXia(pWife)) return;
+            if (!pHusband.isSexMale() || pWife.isSexMale()) return;
+            if (!HasCompleteLineageData(pWife)) return;
+
+            pHusband.data.get(LineageKeys.LINEAGE_ID, out long husbandLineage, -1L);
+            if (husbandLineage >= 0) return;
+
+            if (!TryInheritLineageFromSource(pHusband, pWife, pRequireClan: true)) return;
+            pHusband.data.set(LineageKeys.MATRILOCAL_IN_LAW, true);
+            pHusband.data.set(LineageKeys.MATRILOCAL_WIFE_ID, pWife.data.id);
+            ApplyDisplayName(pHusband);
+            ArchiveActor(pHusband, pAlive: true);
+            try { pHusband.clearGraphicsFully(); } catch { }
+        }
+
+        public static bool CanFallInLoveByXiaHuman(Actor pA, Actor pB)
+        {
+            if (!IsXiaHumanPair(pA, pB)) return false;
+            if (pA?.data == null || pB?.data == null) return false;
+            if (!SlaveService.CanFallInLoveByStatus(pA, pB)) return false;
+            if (pA.hasLover() || pB.hasLover()) return false;
+            if (!pA.isAdult() || !pB.isAdult()) return false;
+            if (!pA.isBreedingAge() || !pB.isBreedingAge()) return false;
+            if (pA.subspecies == null || pB.subspecies == null) return false;
+            if (!pA.subspecies.needs_mate || !pB.subspecies.needs_mate) return false;
+            if (!pA.subspecies.isPartnerSuitableForReproduction(pA, pB)) return false;
+            if (pA.isRelatedTo(pB)) return false;
+            return true;
         }
 
         // ──────────────────────── 内部:写姓族/氏支/国家状态 ────────────────────────

@@ -13,6 +13,15 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_LovePatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.canFallInLoveWith))]
+        public static bool CanFallInLoveWith_Prefix(Actor __instance, Actor pTarget, ref bool __result)
+        {
+            if (!LineageService.IsXiaHumanPair(__instance, pTarget)) return true;
+            __result = LineageService.CanFallInLoveByXiaHuman(__instance, pTarget);
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.canFallInLoveWith))]
         public static void CanFallInLoveWith_Postfix(Actor __instance, Actor pTarget, ref bool __result)

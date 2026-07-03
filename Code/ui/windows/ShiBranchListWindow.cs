@@ -9,12 +9,23 @@ namespace AncientWarfare3.ui.windows
     internal class ShiBranchListWindow : AbstractListWindow<ShiBranchListWindow, ShiBranchInfo>
     {
         private static string _contextFamilyName = "";
+        private static long _contextCityId = -1;
 
         public static void OpenFor(string pFamilyName)
         {
             _contextFamilyName = pFamilyName ?? "";
+            _contextCityId = -1;
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.SHI_LIST);
             // 已是当前窗(换姓再点)→ 只刷新;否则打开(pBlockSame=true 防叠栈)。OnNormalEnable 也会刷新。
+            AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.SHI_LIST,
+                () => { if (Instance != null) Instance.Refresh(); });
+        }
+
+        public static void OpenForCity(long pCityId)
+        {
+            _contextFamilyName = "";
+            _contextCityId = pCityId;
+            if (Instance == null) CreateAndInit(AW_LineageWindowIds.SHI_LIST);
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.SHI_LIST,
                 () => { if (Instance != null) Instance.Refresh(); });
         }
@@ -32,6 +43,12 @@ namespace AncientWarfare3.ui.windows
         public void Refresh()
         {
             ClearList();
+            if (_contextCityId >= 0)
+            {
+                var cityList = LineageQuery.GetShiBranchesByCity(_contextCityId);
+                foreach (var s in cityList) AddItemToList(s);
+                return;
+            }
             if (string.IsNullOrEmpty(_contextFamilyName)) return;
             var list = LineageQuery.GetShiBranches(_contextFamilyName);
             foreach (var s in list) AddItemToList(s);

@@ -1,0 +1,19 @@
+[
+    {
+        "id": "Xia_language",
+        "templates": [
+            {
+                "format": "{Xia语言前缀}#语#",
+                "weight": 5
+            },
+            {
+                "format": "{Xia语言雅称}",
+                "weight": 3
+            },
+            {
+                "format": "{Xia语言地望}#雅言#",
+                "weight": 2
+            }
+        ]
+    }
+]

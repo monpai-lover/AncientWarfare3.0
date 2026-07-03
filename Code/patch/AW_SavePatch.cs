@@ -30,6 +30,9 @@ namespace AncientWarfare3.patch
             if (string.IsNullOrEmpty(pPath)) return;
             LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
             XiaSubspeciesRepair.EnsureWorldTraits();
+#if 一米_中文名
+            XiaNamingRepair.EnsureWorldNames();
+#endif
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
@@ -41,6 +44,9 @@ namespace AncientWarfare3.patch
         {
             LineageArchiveManager.Instance.CreateDataBase();
             XiaSubspeciesRepair.EnsureWorldTraits();
+#if 一米_中文名
+            XiaNamingRepair.EnsureWorldNames();
+#endif
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
         }
     }

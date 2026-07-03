@@ -1,0 +1,19 @@
+[
+    {
+        "id": "Xia_subspecies",
+        "templates": [
+            {
+                "format": "{Xia亚种前缀}#夏人#",
+                "weight": 5
+            },
+            {
+                "format": "{Xia亚种地望}#夏人#",
+                "weight": 4
+            },
+            {
+                "format": "{Xia亚种雅称}",
+                "weight": 2
+            }
+        ]
+    }
+]

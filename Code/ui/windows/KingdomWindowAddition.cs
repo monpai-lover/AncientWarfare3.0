@@ -1,5 +1,8 @@
 using System.Linq;
+using AncientWarfare3.content.policies;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+using AncientWarfare3.ui;
 using NeoModLoader.General.UI.Window.Layout;
 using NeoModLoader.General.UI.Window.Utils.Extensions;
 using UnityEngine;
@@ -29,6 +32,15 @@ namespace AncientWarfare3.ui.windows
         private KingdomWindow _window;
         private GameObject _middle;
         private Text _yearText;
+        private Text _policyStateText;
+        private Text _policyExecText;
+        private Text _policyDecisionText;
+        private Image _policyStateIcon;
+        private Image _policyExecIcon;
+        private Image _policyDecisionIcon;
+        private TipButton _policyStateTip;
+        private TipButton _policyExecTip;
+        private TipButton _policyDecisionTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -86,9 +98,12 @@ namespace AncientWarfare3.ui.windows
             middleBar.AddChild(yearBox);
 
             var policyRow = middleBar.BeginHoriGroup(new Vector2(108, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
-            // TODO(国策系统):占位字换成「当前阶级状态」与「执行中国策」的真实显示。
-            policyRow.AddChild(BuildPolicyBox("PolicyState", new Vector2(52, 16), "aw_policy_state_placeholder"));
-            policyRow.AddChild(BuildPolicyBox("PolicyExec", new Vector2(52, 16), "aw_policy_exec_placeholder"));
+            policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(34, 16),
+                "ui/icons/iconDiplomacy", out _policyStateText, out _policyStateIcon, out _policyStateTip, OpenClassStateWindow));
+            policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(34, 16),
+                "ui/icons/iconKnowledge", out _policyExecText, out _policyExecIcon, out _policyExecTip, OpenResearchWindow));
+            policyRow.AddChild(BuildPolicyIconButton("PolicyDecision", new Vector2(34, 16),
+                "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
@@ -132,6 +147,25 @@ namespace AncientWarfare3.ui.windows
             _middle = middle;
             _yearText = middle.GetComponentsInChildren<Text>(true)
                               .FirstOrDefault(t => t.transform.parent != null && t.transform.parent.name == "Year");
+            CachePolicyBox(middle.transform.FindRecursive("PolicyState"), out _policyStateText, out _policyStateIcon,
+                out _policyStateTip, OpenClassStateWindow);
+            CachePolicyBox(middle.transform.FindRecursive("PolicyExec"), out _policyExecText, out _policyExecIcon,
+                out _policyExecTip, OpenResearchWindow);
+            Transform decision = middle.transform.FindRecursive("PolicyDecision");
+            if (decision == null)
+            {
+                Transform row = middle.transform.FindRecursive("PolicyExec")?.parent;
+                if (row != null)
+                {
+                    GameObject obj = BuildPolicyIconButton("PolicyDecision", new Vector2(34, 16),
+                        "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow);
+                    obj.transform.SetParent(row, false);
+                }
+            }
+            else
+            {
+                CachePolicyBox(decision, out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow);
+            }
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
             _kingAvatar = avatars.FirstOrDefault(a => a.name == "AW_KingAvatar") ?? (avatars.Length > 0 ? avatars[0] : null);
@@ -191,16 +225,282 @@ namespace AncientWarfare3.ui.windows
         }
 
         /// <summary>国策占位框:带框 + 浅色占位本地化字(留桩)。</summary>
-        private GameObject BuildPolicyBox(string name, Vector2 size, string localeKey)
+        private GameObject BuildPolicyBox(string name, Vector2 size, out Text text, out TipButton tip,
+            System.Action pClick)
         {
-            var box = BuildBox(name, size, out Text text);
-            var loc = text.gameObject.AddComponent<LocalizedText>();
-            loc.setKeyAndUpdate(localeKey);
-            text.color = new Color(1f, 1f, 1f, 0.45f);
+            var box = BuildBox(name, size, out text);
+            text.color = Color.white;
+            text.fontSize = 8;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 1;
+            text.resizeTextMaxSize = 8;
+
+            var button = box.GetComponent<Button>() ?? box.AddComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pClick?.Invoke());
+
+            tip = box.GetComponent<TipButton>() ?? box.AddComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
             return box;
         }
 
+        private GameObject BuildPolicyIconButton(string name, Vector2 size, string iconPath, out Text text,
+            out Image icon,
+            out TipButton tip, System.Action pClick)
+        {
+            var box = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement),
+                typeof(Button), typeof(TipButton));
+            var rt = box.GetComponent<RectTransform>();
+            rt.sizeDelta = size;
+            box.transform.localScale = Vector3.one;
+
+            AW_UIStyle.ApplyButton(box.GetComponent<Image>(), 0.95f);
+
+            var le = box.GetComponent<LayoutElement>();
+            le.minWidth = size.x; le.preferredWidth = size.x;
+            le.minHeight = size.y; le.preferredHeight = size.y;
+
+            var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconObj.transform.SetParent(box.transform, false);
+            var irt = iconObj.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.sizeDelta = new Vector2(12, 12);
+            irt.anchoredPosition = new Vector2(2, 0);
+            icon = iconObj.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(iconPath)
+                          ?? SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
+                          ?? SpriteTextureLoader.getSprite("ui/special/button");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            var tObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            tObj.transform.SetParent(box.transform, false);
+            var tr = tObj.GetComponent<RectTransform>();
+            tr.anchorMin = Vector2.zero;
+            tr.anchorMax = Vector2.one;
+            tr.offsetMin = new Vector2(15, 0);
+            tr.offsetMax = new Vector2(-2, 0);
+            text = tObj.GetComponent<Text>();
+            text.alignment = TextAnchor.MiddleCenter;
+            text.font = LocalizedTextManager.current_font;
+            text.fontSize = 8;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 1;
+            text.resizeTextMaxSize = 8;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.color = Color.white;
+
+            var button = box.GetComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pClick?.Invoke());
+
+            tip = box.GetComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            return box;
+        }
+
+        private void CachePolicyBox(Transform pBox, out Text pText, out Image pIcon, out TipButton pTip, System.Action pClick)
+        {
+            pText = null;
+            pIcon = null;
+            pTip = null;
+            if (pBox == null) return;
+            pText = pBox.GetComponentsInChildren<Text>(true).FirstOrDefault();
+            Transform icon = pBox.Find("Icon");
+            pIcon = icon != null ? icon.GetComponent<Image>() : null;
+
+            var button = pBox.GetComponent<Button>() ?? pBox.gameObject.AddComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pClick?.Invoke());
+
+            pTip = pBox.GetComponent<TipButton>() ?? pBox.gameObject.AddComponent<TipButton>();
+            pTip.type = AW_RawTooltip.TYPE;
+        }
+
+        private void OpenClassStateWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom == null || kingdom.isRekt()) return;
+            KingdomPolicyWindow.OpenClassState(kingdom.id);
+        }
+
+        private void OpenResearchWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom == null || kingdom.isRekt()) return;
+            KingdomPolicyWindow.OpenResearch(kingdom.id);
+        }
+
+        private void OpenDecisionWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom == null || kingdom.isRekt()) return;
+            KingdomPolicyWindow.OpenDecision(kingdom.id);
+        }
+
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
+
+        private void RefreshPolicyBoxes(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom))
+            {
+                SetPolicyIcon(_policyStateIcon, "ui/icons/iconDiplomacy");
+                SetPolicyIcon(_policyExecIcon, "ui/icons/iconKnowledge");
+                SetPolicyIcon(_policyDecisionIcon, "ui/icons/iconPlotsList");
+                if (_policyStateText != null)
+                {
+                    _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
+                    _policyStateText.color = pKingdom.getColor().getColorText();
+                }
+                if (_policyExecText != null)
+                {
+                    _policyExecText.text = AW_L10n.Text("aw_policy_research_short", "\u7814");
+                    _policyExecText.color = Color.white;
+                }
+                if (_policyDecisionText != null)
+                {
+                    _policyDecisionText.text = AW_L10n.Text("aw_policy_decision_short", "\u4EE4");
+                    _policyDecisionText.color = Color.white;
+                }
+
+                bool supported = KingdomPolicyService.CanUsePolicySystem(pKingdom);
+                string title = supported
+                    ? AW_L10n.Text("aw_policy_disabled", "\u56FD\u7B56\u672A\u542F\u7528")
+                    : AW_L10n.Text("aw_policy_unsupported", "\u5F53\u524D\u7269\u79CD\u4E0D\u652F\u6301AW3\u56FD\u7B56");
+                string desc = supported
+                    ? AW_L10n.Text("aw_policy_click_to_enable", "\u70B9\u51FB\u8FDB\u5165\u56FD\u7B56\u7A97\u53E3\uFF0C\u53EF\u4EE5\u4E3AHuman\u56FD\u5BB6\u624B\u52A8\u542F\u7528\u3002")
+                    : AW_L10n.Text("aw_policy_unsupported_desc", "\u76EE\u524DAW3\u56FD\u7B56\u53EA\u5BF9Xia\u9ED8\u8BA4\u542F\u7528\uFF0CHuman\u9700\u624B\u52A8\u5F00\u542F\u3002");
+                SetPolicyTip(_policyStateTip, title, desc);
+                SetPolicyTip(_policyExecTip, title, desc);
+                SetPolicyTip(_policyDecisionTip, title, desc);
+                return;
+            }
+
+            KingdomPolicyService.EnsureInitialized(pKingdom);
+            RefreshPolicyButtonIcons(pKingdom);
+
+            string classId = KingdomPolicyService.GetClassId(pKingdom);
+            string className = AW_L10n.Text(KingdomPolicyService.GetClassLocaleKey(classId), ClassFallbackName(classId));
+            if (_policyStateText != null)
+            {
+                _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
+                _policyStateText.color = pKingdom.getColor().getColorText();
+            }
+
+            string current = BuildCurrentPolicyText(pKingdom);
+            if (_policyExecText != null)
+            {
+                _policyExecText.text = AW_L10n.Text("aw_policy_research_short", "\u7814");
+                _policyExecText.color = Color.white;
+            }
+
+            string decision = BuildCurrentDecisionText(pKingdom);
+            if (_policyDecisionText != null)
+            {
+                _policyDecisionText.text = AW_L10n.Text("aw_policy_decision_short", "\u4EE4");
+                _policyDecisionText.color = Color.white;
+            }
+
+            string pointText = AW_L10n.Text("aw_policy_points_short", "\u653F") + ":" +
+                               Mathf.FloorToInt(KingdomPolicyService.GetPoliticalPoints(pKingdom)) + "  " +
+                               AW_L10n.Text("aw_tech_points_short", "\u6280") + ":" +
+                               Mathf.FloorToInt(KingdomPolicyService.GetTechPoints(pKingdom));
+            SetPolicyTip(_policyStateTip, AW_L10n.Text("aw_policy_class_state", "\u653F\u6CBB\u72B6\u6001"), className + "\n" + pointText);
+            SetPolicyTip(_policyExecTip, AW_L10n.Text("aw_policy_current_research", "\u5F53\u524D\u7814\u53D1"), current + "\n" + pointText);
+            SetPolicyTip(_policyDecisionTip, AW_L10n.Text("aw_policy_decisions", "\u5E38\u6001\u51B3\u7B56"), decision + "\n" + pointText);
+        }
+
+        private static string BuildCurrentPolicyText(Kingdom pKingdom)
+        {
+            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
+            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            string techName = tech == null ? "" : AW_L10n.Text(tech.NameKey, tech.FallbackName);
+            string socialName = social == null ? "" : AW_L10n.Text(social.NameKey, social.FallbackName);
+            if (string.IsNullOrEmpty(techName) && string.IsNullOrEmpty(socialName))
+                return AW_L10n.Text("aw_policy_idle", "\u5F85\u5B9A");
+            if (string.IsNullOrEmpty(techName)) return socialName;
+            if (string.IsNullOrEmpty(socialName)) return techName;
+            return techName + "/" + socialName;
+        }
+
+        private static string BuildCurrentDecisionText(Kingdom pKingdom)
+        {
+            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            return decision == null
+                ? AW_L10n.Text("aw_policy_no_current_decision", "\u5F53\u524D\u6CA1\u6709\u51B3\u7B56")
+                : AW_L10n.Text(decision.NameKey, decision.FallbackName);
+        }
+
+        private void RefreshPolicyButtonIcons(Kingdom pKingdom)
+        {
+            string classId = KingdomPolicyService.GetClassId(pKingdom);
+            SetPolicyIcon(_policyStateIcon, ClassIconPath(classId));
+            SetPolicyIcon(_policyExecIcon, CurrentResearchIcon(pKingdom));
+            SetPolicyIcon(_policyDecisionIcon, CurrentDecisionIcon(pKingdom));
+        }
+
+        private static string CurrentResearchIcon(Kingdom pKingdom)
+        {
+            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
+            if (tech != null && !string.IsNullOrEmpty(tech.IconPath)) return tech.IconPath;
+
+            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            if (social != null && !string.IsNullOrEmpty(social.IconPath)) return social.IconPath;
+
+            return "ui/icons/iconKnowledge";
+        }
+
+        private static string CurrentDecisionIcon(Kingdom pKingdom)
+        {
+            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            if (decision != null && !string.IsNullOrEmpty(decision.IconPath)) return decision.IconPath;
+            return "ui/icons/iconPlotsList";
+        }
+
+        private static string ClassIconPath(string pClassId)
+        {
+            if (pClassId == KingdomPolicyDefs.ClassSlaveOwner) return "ui/policy/start_slaves";
+            if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "ui/policy/start_halfaristocrat";
+            if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "ui/policy/base_enfeoffment";
+            if (pClassId == KingdomPolicyDefs.ClassReform) return "ui/icons/iconPeace";
+            return "ui/icons/iconDiplomacy";
+        }
+
+        private static void SetPolicyIcon(Image pIcon, string pIconPath)
+        {
+            if (pIcon == null) return;
+            Sprite sprite = SpriteTextureLoader.getSprite(pIconPath)
+                            ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
+                            ?? SpriteTextureLoader.getSprite("ui/special/button");
+            if (sprite == null) return;
+            pIcon.sprite = sprite;
+            pIcon.enabled = true;
+            pIcon.preserveAspect = true;
+        }
+
+        private static string ClassFallbackName(string pClassId)
+        {
+            if (pClassId == KingdomPolicyDefs.ClassSlaveOwner) return "\u5974\u96B6\u5236";
+            if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "\u534A\u8D35\u65CF\u5236";
+            if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "\u5C01\u5EFA\u8D35\u65CF";
+            if (pClassId == KingdomPolicyDefs.ClassReform) return "\u6539\u9769\u5236";
+            return "\u90E8\u843D\u5236";
+        }
+
+        private static void SetPolicyTip(TipButton pTip, string pTitle, string pDesc)
+        {
+            if (pTip == null) return;
+            pTip.enabled = true;
+            pTip.type = AW_RawTooltip.TYPE;
+            pTip.hoverAction = () =>
+                Tooltip.show(pTip.gameObject, AW_RawTooltip.TYPE,
+                    new TooltipData { tip_name = pTitle ?? "", tip_description = pDesc ?? "" });
+        }
 
         private void Refresh()
         {
@@ -227,6 +527,7 @@ namespace AncientWarfare3.ui.windows
             }
 
             // 国王列(头像 + "国王"标签):有王整列显示,无王整列隐藏。
+            RefreshPolicyBoxes(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {
                 bool hasKing = kingdom.hasKing();

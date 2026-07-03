@@ -33,10 +33,12 @@ namespace AncientWarfare3.core.lineage
             if (!LineageService.IsXiaKingdom(pKingdom)) return;
 
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
+            string newClanName = ResolveDynastyClanName(pNewKing, newShiId);
             long curShiId = GetCurrentDynastyShiId(pKingdom.id);
+            string curClanName = GetCurrentDynastyClanName(pKingdom.id);
 
-            // 同氏族继续，不切朝代
-            if (curShiId >= 0 && curShiId == newShiId) return;
+            // 同一氏连续统治不切段；同氏新分支仍属于同一个“X氏统治”时期。
+            if (IsSameDynastyFamily(curShiId, curClanName, newShiId, newClanName)) return;
 
             // 关旧朝代
             string closeReason = (newShiId < 0 || !LineageService.IsXia(pNewKing))
@@ -46,8 +48,7 @@ namespace AncientWarfare3.core.lineage
             if (newShiId < 0 || !LineageService.IsXia(pNewKing)) return;
 
             // 开新朝代
-            pNewKing.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
-            string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, clanName);
+            string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, newClanName);
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string dynastyColor = HistoryColors.FromClan(pNewKing.clan, pKingdom);
             if (string.IsNullOrEmpty(dynastyColor)) dynastyColor = kingdomColor;
@@ -64,7 +65,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("KINGDOM_COLOR",           kingdomColor),
                     ColumnVal.Create("DYNASTY_INDEX",           idx),
                     ColumnVal.Create("SHI_ID",                  newShiId),
-                    ColumnVal.Create("CLAN_NAME",               clanName ?? ""),
+                    ColumnVal.Create("CLAN_NAME",               newClanName ?? ""),
                     ColumnVal.Create("FOUNDER_KING_ACTOR_ID",   pNewKing.data.id),
                     ColumnVal.Create("DYNASTY_NAME",            dynastyName),
                     ColumnVal.Create("DYNASTY_COLOR",           dynastyColor),
@@ -76,6 +77,36 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.Colored(dynastyName, dynastyColor) + " \u5F00\u59CB");
             }
             catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " + e.Message); }
+        }
+
+        private static bool IsSameDynastyFamily(long pCurrentShiId, string pCurrentClanName,
+            long pNewShiId, string pNewClanName)
+        {
+            if (pCurrentShiId >= 0 && pCurrentShiId == pNewShiId) return true;
+            if (string.IsNullOrEmpty(pCurrentClanName) || string.IsNullOrEmpty(pNewClanName)) return false;
+            if (!string.Equals(pCurrentClanName, pNewClanName, StringComparison.Ordinal)) return false;
+
+            long currentLineage = GetShiLineageId(pCurrentShiId);
+            long newLineage = GetShiLineageId(pNewShiId);
+            return currentLineage < 0 || newLineage < 0 || currentLineage == newLineage;
+        }
+
+        private static string ResolveDynastyClanName(Actor pKing, long pShiId)
+        {
+            string clanName = "";
+            try { pKing?.data?.get(LineageKeys.CLAN_NAME, out clanName, ""); } catch { clanName = ""; }
+            if (!string.IsNullOrEmpty(clanName)) return clanName;
+            if (pShiId < 0) return "";
+
+            var shi = LineageQuery.GetShiBranchInfo(pShiId);
+            return shi?.clan_name ?? "";
+        }
+
+        private static long GetShiLineageId(long pShiId)
+        {
+            if (pShiId < 0) return -1;
+            var shi = LineageQuery.GetShiBranchInfo(pShiId);
+            return shi?.lineage_id ?? -1;
         }
 
         private static string BuildRulePeriodName(Actor pKing, Kingdom pKingdom, long pShiId, string pClanName)
@@ -141,6 +172,21 @@ namespace AncientWarfare3.core.lineage
                 return (v == null || v == DBNull.Value) ? -1L : Convert.ToInt64(v);
             }
             catch { return -1; }
+        }
+
+        private static string GetCurrentDynastyClanName(long pKingdomId)
+        {
+            if (!Ready) return "";
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = $"SELECT IFNULL(CLAN_NAME, '') FROM {TABLE} " +
+                                  $"WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                object v = cmd.ExecuteScalar();
+                return (v == null || v == DBNull.Value) ? "" : v.ToString();
+            }
+            catch { return ""; }
         }
 
         private static int CountDynasties(long pKingdomId)

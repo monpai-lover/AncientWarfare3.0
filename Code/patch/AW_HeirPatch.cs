@@ -22,6 +22,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(SuccessionTool), nameof(SuccessionTool.getKingFromRoyalClan))]
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
+            if (!LineageService.IsXiaKingdom(pKingdom)) return true;
             var heir = HeirService.GetHeir(pKingdom);
             if (heir == null) return true; // 无继承人,放行原版选王
 
@@ -36,11 +37,14 @@ namespace AncientWarfare3.patch
         {
             if (pFromLoad) return;
             if (__instance?.data == null) return;
+            if (!LineageService.IsXiaKingdom(__instance)) return;
 
             // 新王即位:先称王分封(建新国/夺别国→开新氏支,可能改氏名)→ 再清/重选继承人 → 换年号(可能用氏名)。
             Actor king = pActor ?? __instance.king;
             if (king != null)
+            {
                 LineageService.OnKingFoundBranch(__instance, king);
+            }
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             YearNameService.OnNewKing(__instance);

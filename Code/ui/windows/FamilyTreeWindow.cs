@@ -18,7 +18,7 @@ namespace AncientWarfare3.ui.windows
     internal class FamilyTreeWindow : AbstractWindow<FamilyTreeWindow>
     {
         private const int NODE_W = 70;
-        private const int NODE_H = 64; // 与 FamilyTreeNodeView.NODE_H 一致(名字下移后增高)
+        private const int NODE_H = 78; // 与 FamilyTreeNodeView.NODE_H 一致(名字+社会地位+徽标)
         private const int H_GAP = 6;
         private const int V_GAP = 34;
         private const int PAD = 12;
@@ -32,20 +32,35 @@ namespace AncientWarfare3.ui.windows
         private static long _centerActorId = -1;
         private static long _rootActorId = -1;
         private static long _backShiId = -1;
+        private static long _locateActorId = -1;
+        private static bool _showHalfSiblingRelations = false;
 
         private readonly HashSet<long> _expanded = new HashSet<long>();
         private readonly HashSet<long> _foldDecided = new HashSet<long>(); // 已定过默认折叠状态的节点(防手动 toggle 后被自动规则覆盖)
         private readonly List<FamilyTreeNodeView> _spawned = new List<FamilyTreeNodeView>();
         private readonly List<GameObject> _lines = new List<GameObject>();
+        private readonly List<FamilyTreeNodeView> _nodePool = new List<FamilyTreeNodeView>();
+        private readonly List<GameObject> _linePool = new List<GameObject>();
         private Transform _canvas;
         private RectTransform _canvasRect;
         private Button _backButton;
         private Text _backText;
         private Button _expandButton;
         private Button _collapseButton;
+        private Button _halfSiblingButton;
+        private Text _halfSiblingText;
         private Text _titleText;
         private float _maxDepthY;
         private long _lastTreeRootId = -1;
+        private const int MAX_AUTO_EXPAND_VISITS = 160;
+        private readonly Dictionary<long, List<long>> _childIdsCache = new Dictionary<long, List<long>>();
+        private readonly Dictionary<long, BranchProbe> _probeCache = new Dictionary<long, BranchProbe>();
+        private readonly Dictionary<long, bool> _aliveDescendantCache = new Dictionary<long, bool>();
+        private int _autoExpandVisited;
+        private bool _locateFound;
+        private Vector2 _locateTarget;
+        private bool _preservePanOnNextRebuild;
+        private Vector2 _savedPanBeforeRebuild;
 
         public static void OpenBigTree(long pShiId)
         {
@@ -54,7 +69,23 @@ namespace AncientWarfare3.ui.windows
             _mode = Mode.BigTree;
             _rootActorId = founder;
             _backShiId = pShiId;
+            _locateActorId = -1;
             EnsureCreated();
+            Instance?.ResetBigTreeDefault(founder);
+            ShowOrRefresh(false);
+        }
+
+        public static void OpenBigTreeLocate(long pActorId, long pShiId)
+        {
+            if (pShiId < 0) pShiId = LineageQuery.GetActorShiId(pActorId);
+            long founder = LineageQuery.GetShiBranchFounderId(pShiId);
+            if (founder < 0) return;
+            _mode = Mode.BigTree;
+            _rootActorId = founder;
+            _backShiId = pShiId;
+            _locateActorId = pActorId;
+            EnsureCreated();
+            Instance?.SeedLocateExpansion(pActorId, founder);
             ShowOrRefresh(false);
         }
 
@@ -63,7 +94,9 @@ namespace AncientWarfare3.ui.windows
             _mode = Mode.Family;
             _centerActorId = pCenterActorId;
             _backShiId = pShiIdForBackButton;
+            _locateActorId = -1;
             EnsureCreated();
+            Instance?.ResetQueryCache();
             ShowOrRefresh(false);
         }
 
@@ -125,6 +158,9 @@ namespace AncientWarfare3.ui.windows
 
             _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(-104, -28), ExpandAllLiveBranches);
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(-52, -28), CollapseAllBranches);
+            _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(-156, -28), ToggleHalfSiblingRelations);
+            _halfSiblingText = _halfSiblingButton != null ? _halfSiblingButton.GetComponentInChildren<Text>() : null;
+            UpdateHalfSiblingButtonText();
 
             // "回氏族大树"按钮(窗口底部居中,小树模式可见)
             var btnObj = new GameObject("BackToBigTree", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -229,17 +265,82 @@ namespace AncientWarfare3.ui.windows
 
         private void OnBack()
         {
-            if (_backShiId >= 0) OpenBigTree(_backShiId);
+            long currentShi = LineageQuery.GetActorShiId(_centerActorId);
+            if (currentShi < 0) currentShi = _backShiId;
+            if (currentShi >= 0) OpenBigTreeLocate(_centerActorId, currentShi);
+        }
+
+        private void ToggleHalfSiblingRelations()
+        {
+            _showHalfSiblingRelations = !_showHalfSiblingRelations;
+            UpdateHalfSiblingButtonText();
+            ResetQueryCache();
+            Rebuild();
+        }
+
+        private void UpdateHalfSiblingButtonText()
+        {
+            if (_halfSiblingText == null) return;
+            _halfSiblingText.text = _showHalfSiblingRelations
+                ? AW_L10n.Text("aw_tree_half_sibling_on", "\u534A\u80DE\u5F00")
+                : AW_L10n.Text("aw_tree_half_sibling_off", "\u534A\u80DE\u5173");
+        }
+
+        private void ResetBigTreeDefault(long pFounderId)
+        {
+            _expanded.Clear();
+            _foldDecided.Clear();
+            _foldDecided.Add(pFounderId);
+            _lastTreeRootId = pFounderId;
+            _locateFound = false;
+            _locateTarget = Vector2.zero;
+            ResetQueryCache();
+        }
+
+        private void SeedLocateExpansion(long pActorId, long pFounderId)
+        {
+            _expanded.Clear();
+            _foldDecided.Clear();
+            _lastTreeRootId = pFounderId;
+            _locateFound = false;
+            _locateTarget = Vector2.zero;
+            ResetQueryCache();
+
+            var path = LineageQuery.GetAncestorPathToFounder(pActorId, pFounderId);
+            if (path.Count == 0)
+            {
+                _foldDecided.Add(pFounderId);
+                _expanded.Add(pFounderId);
+                return;
+            }
+
+            foreach (long id in path)
+                _foldDecided.Add(id);
+            for (int i = 0; i < path.Count - 1; i++)
+                _expanded.Add(path[i]);
         }
 
         private void Rebuild()
         {
+            bool preservePan = _preservePanOnNextRebuild && _locateActorId < 0;
+            Vector2 savedPan = _savedPanBeforeRebuild;
+            _preservePanOnNextRebuild = false;
+
             ClearSpawned();
-            _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
+            _locateFound = false;
+            _locateTarget = Vector2.zero;
+            if (!preservePan)
+                _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
             _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
             bool showTreeTools = false;
+            if (_backButton != null)
+                _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
+            if (_backText != null)
+                _backText.text = AW_L10n.Text("aw_locate_clan_tree", "\u5B9A\u4F4D\u6C0F\u65CF\u5927\u6811");
             if (_expandButton != null) _expandButton.gameObject.SetActive(showTreeTools);
             if (_collapseButton != null) _collapseButton.gameObject.SetActive(showTreeTools);
+            if (_halfSiblingButton != null) _halfSiblingButton.gameObject.SetActive(_mode == Mode.Family);
+            UpdateHalfSiblingButtonText();
             _titleText.text = _mode == Mode.BigTree
                 ? AW_L10n.Text("aw_clan_big_tree", "氏族大树")
                 : AW_L10n.Text("aw_family_tree_short", "家族树");
@@ -265,9 +366,21 @@ namespace AncientWarfare3.ui.windows
 
             float canvasW = Mathf.Max(VIEWPORT_W, totalW + PAD * 2);
             _canvasRect.sizeDelta = new Vector2(canvasW, _maxDepthY + NODE_H + PAD);
+            ApplyLocatePan();
+            if (preservePan)
+                _canvasRect.anchoredPosition = savedPan;
         }
 
         /// <summary>小树:在本人节点正上方画父母行(1~2 个),并连线到本人。点击父母 → 以其为中心重开小树(上溯)。</summary>
+        private void ApplyLocatePan()
+        {
+            if (_mode != Mode.BigTree || _locateActorId < 0 || !_locateFound || _canvasRect == null) return;
+
+            float x = VIEWPORT_W * 0.5f - _locateTarget.x;
+            float y = _locateTarget.y + NODE_H * 0.5f - VIEWPORT_H * 0.5f;
+            _canvasRect.anchoredPosition = new Vector2(x, y);
+        }
+
         private void RenderParentsRow(TreeLayoutNode pRoot)
         {
             int n = pRoot.parents.Count;
@@ -280,7 +393,7 @@ namespace AncientWarfare3.ui.windows
                 FamilyTreeNode pData = pRoot.parents[i];
                 float cx = startX + NODE_W / 2f + i * (NODE_W + H_GAP);
 
-                var view = FamilyTreeNodeView.Create(_canvas);
+                var view = AcquireNode();
                 long pid = pData.id;
                 // 父母节点:点击 → 以父母为中心重开小树(继续上溯);本身再带 ▲(若其还有父母)。
                 System.Action onUp = LineageQuery.GetParentIds(pid).Count > 0
@@ -325,7 +438,7 @@ namespace AncientWarfare3.ui.windows
 
         private void SpawnFamilySideNode(FamilyTreeNode pData, float pCenterX, float pTopY)
         {
-            var view = FamilyTreeNodeView.Create(_canvas);
+            var view = AcquireNode();
             long id = pData.id;
             view.Bind(pData, (_) => OpenFamilyTree(id, _backShiId),
                 null, false, false, null, null);
@@ -357,24 +470,137 @@ namespace AncientWarfare3.ui.windows
             return extent + H_GAP + pCount * NODE_W + (pCount - 1) * H_GAP;
         }
 
-        private static void AddSiblingNodes(TreeLayoutNode pRoot, FamilyTreeNode pCenter)
+        private void AddSiblingNodes(TreeLayoutNode pRoot, FamilyTreeNode pCenter)
         {
             if (pRoot == null || pCenter == null) return;
             var seen = new HashSet<long>();
+            var centerFatherIds = CollectParentIdsBySex(pCenter, 0);
+            var centerMotherIds = CollectParentIdsBySex(pCenter, 1);
             foreach (long parentId in LineageQuery.GetParentIds(pCenter.id))
             {
-                foreach (long childId in LineageQuery.GetChildIds(parentId))
+                foreach (long childId in GetChildIdsCached(parentId))
                 {
                     if (childId == pCenter.id || !seen.Add(childId)) continue;
                     var sibling = LineageQuery.GetFamilyTree(childId);
                     if (sibling == null) continue;
+                    bool sharesFather = SharesKnownParent(sibling.parents, centerFatherIds, 0);
+                    bool sharesMother = SharesKnownParent(sibling.parents, centerMotherIds, 1);
+                    bool siblingHasFather = HasKnownParent(sibling.parents, 0);
+                    bool siblingHasMother = HasKnownParent(sibling.parents, 1);
+                    if (!_showHalfSiblingRelations && IsProvenHalfSibling(
+                            sharesFather, sharesMother,
+                            centerFatherIds.Count > 0, centerMotherIds.Count > 0,
+                            siblingHasFather, siblingHasMother))
+                        continue;
                     sibling.parents.Clear();
                     sibling.children.Clear();
-                    sibling.relation_label = BuildSiblingRelationLabel(sibling, pCenter);
+                    sibling.relation_label = _showHalfSiblingRelations
+                        ? BuildSiblingRelationLabel(sibling, pCenter,
+                            sharesFather, sharesMother,
+                            centerFatherIds.Count > 0, centerMotherIds.Count > 0,
+                            siblingHasFather, siblingHasMother)
+                        : BuildBasicSiblingRelationLabel(sibling, pCenter);
+                    ApplyTreeGeneration(sibling);
                     pRoot.siblings.Add(sibling);
                 }
             }
             pRoot.siblings.Sort(CompareByBirth);
+        }
+
+        private static HashSet<long> CollectParentIdsBySex(FamilyTreeNode pNode, int pSex)
+        {
+            var ids = new HashSet<long>();
+            if (pNode?.parents == null) return ids;
+            foreach (var parent in pNode.parents)
+            {
+                if (parent != null && parent.sex == pSex) ids.Add(parent.id);
+            }
+            return ids;
+        }
+
+        private static bool SharesKnownParent(List<FamilyTreeNode> pSiblingParents,
+            HashSet<long> pCenterParentIds, int pSex)
+        {
+            if (pSiblingParents == null || pCenterParentIds == null || pCenterParentIds.Count == 0) return false;
+            foreach (var parent in pSiblingParents)
+            {
+                if (parent != null && parent.sex == pSex && pCenterParentIds.Contains(parent.id)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasKnownParent(List<FamilyTreeNode> pParents, int pSex)
+        {
+            if (pParents == null) return false;
+            foreach (var parent in pParents)
+            {
+                if (parent != null && parent.sex == pSex) return true;
+            }
+            return false;
+        }
+
+        private static bool IsProvenHalfSibling(bool pSharedFather, bool pSharedMother,
+            bool pCenterHasFather, bool pCenterHasMother,
+            bool pSiblingHasFather, bool pSiblingHasMother)
+        {
+            return (pSharedFather && !pSharedMother && pCenterHasMother && pSiblingHasMother)
+                || (pSharedMother && !pSharedFather && pCenterHasFather && pSiblingHasFather);
+        }
+
+        private static string BuildBasicSiblingRelationLabel(FamilyTreeNode pSibling, FamilyTreeNode pCenter)
+        {
+            bool older = IsOlderThanCenter(pSibling, pCenter);
+            if (pSibling?.sex == 0)
+                return older
+                    ? AW_L10n.Text("aw_relation_older_brother", "\u5144")
+                    : AW_L10n.Text("aw_relation_younger_brother", "\u5F1F");
+            return older
+                ? AW_L10n.Text("aw_relation_older_sister", "\u59D0")
+                : AW_L10n.Text("aw_relation_younger_sister", "\u59B9");
+        }
+
+        private static string BuildSiblingRelationLabel(FamilyTreeNode pSibling, FamilyTreeNode pCenter,
+            bool pSharedFather, bool pSharedMother,
+            bool pCenterHasFather, bool pCenterHasMother,
+            bool pSiblingHasFather, bool pSiblingHasMother)
+        {
+            bool older = IsOlderThanCenter(pSibling, pCenter);
+            bool male = pSibling?.sex == 0;
+            if (pSharedFather && !pSharedMother && pCenterHasMother && pSiblingHasMother)
+            {
+                if (male)
+                    return older
+                        ? AW_L10n.Text("aw_relation_same_father_older_brother", "\u540C\u7236\u5F02\u6BCD\u5144")
+                        : AW_L10n.Text("aw_relation_same_father_younger_brother", "\u540C\u7236\u5F02\u6BCD\u5F1F");
+                return older
+                    ? AW_L10n.Text("aw_relation_same_father_older_sister", "\u540C\u7236\u5F02\u6BCD\u59D0")
+                    : AW_L10n.Text("aw_relation_same_father_younger_sister", "\u540C\u7236\u5F02\u6BCD\u59B9");
+            }
+            if (pSharedMother && !pSharedFather && pCenterHasFather && pSiblingHasFather)
+            {
+                if (male)
+                    return older
+                        ? AW_L10n.Text("aw_relation_same_mother_older_brother", "\u540C\u6BCD\u5F02\u7236\u5144")
+                        : AW_L10n.Text("aw_relation_same_mother_younger_brother", "\u540C\u6BCD\u5F02\u7236\u5F1F");
+                return older
+                    ? AW_L10n.Text("aw_relation_same_mother_older_sister", "\u540C\u6BCD\u5F02\u7236\u59D0")
+                    : AW_L10n.Text("aw_relation_same_mother_younger_sister", "\u540C\u6BCD\u5F02\u7236\u59B9");
+            }
+
+            if (male)
+                return older
+                    ? AW_L10n.Text("aw_relation_older_brother", "\u5144")
+                    : AW_L10n.Text("aw_relation_younger_brother", "\u5F1F");
+            return older
+                ? AW_L10n.Text("aw_relation_older_sister", "\u59D0")
+                : AW_L10n.Text("aw_relation_younger_sister", "\u59B9");
+        }
+
+        private static void ApplyTreeGeneration(FamilyTreeNode pNode)
+        {
+            if (pNode == null || pNode.tree_generation > 0) return;
+            int generation = LineageQuery.GetTreeGenerationInShi(pNode.id, pNode.shi_id);
+            if (generation > 0) pNode.tree_generation = generation;
         }
 
         private static string BuildSiblingRelationLabel(FamilyTreeNode pSibling, FamilyTreeNode pCenter)
@@ -429,6 +655,7 @@ namespace AncientWarfare3.ui.windows
             var center = LineageQuery.GetFamilyTree(_centerActorId);
             if (center == null) return null;
             var root = new TreeLayoutNode { data = center, expanded = true };
+            ApplyTreeGeneration(center);
             center.relation_label = AW_L10n.Text("aw_relation_self", "本人");
 
             // 父母:GetFamilyTree 已填 center.parents(死人查档案,活人实时),直接保留画在本人上方。
@@ -439,11 +666,12 @@ namespace AncientWarfare3.ui.windows
                     p.relation_label = p.sex == 0
                         ? AW_L10n.Text("aw_relation_father", "父")
                         : AW_L10n.Text("aw_relation_mother", "母");
+                    ApplyTreeGeneration(p);
                     root.parents.Add(p);
                 }
             AddSiblingNodes(root, center);
 
-            var childIds = LineageQuery.GetChildIds(center.id);
+            var childIds = GetChildIdsCached(center.id);
             root.hasChildren = childIds.Count > 0;
             foreach (var cid in childIds)
             {
@@ -453,10 +681,11 @@ namespace AncientWarfare3.ui.windows
                     cn.relation_label = cn.sex == 0
                         ? AW_L10n.Text("aw_relation_son", "子")
                         : AW_L10n.Text("aw_relation_daughter", "女");
+                    ApplyTreeGeneration(cn);
                     root.children.Add(new TreeLayoutNode
                     {
                         data = cn, expanded = false,
-                        hasChildren = LineageQuery.GetChildIds(cid).Count > 0
+                        hasChildren = GetChildIdsCached(cid).Count > 0
                     });
                 }
             }
@@ -469,6 +698,7 @@ namespace AncientWarfare3.ui.windows
             if (rootData == null) return null;
             if (_lastTreeRootId != _rootActorId)
             {
+                ResetQueryCache();
                 _expanded.Clear();
                 _foldDecided.Clear();
                 _lastTreeRootId = _rootActorId;
@@ -502,7 +732,7 @@ namespace AncientWarfare3.ui.windows
             }
 
             // 轻量探测(只看一层子代):决定 hasChildren(显 +/−)与默认折叠。不递归全树。
-            var probe = LineageQuery.ProbeBranch(pData.id);
+            var probe = ProbeBranchCached(pData.id);
             node.hasChildren = probe.has_children;
 
             // 首次见到该节点 → 按规则定默认折叠状态(之后用户手动 toggle 进 _expanded/_collapsedDecided 不再被覆盖)。
@@ -516,21 +746,21 @@ namespace AncientWarfare3.ui.windows
 
             // 仅展开时才查子代 + 建节点(折叠 = 零查询零节点,真懒加载)。
             if (node.expanded)
-                foreach (var cid in LineageQuery.GetChildIds(pData.id))
+                foreach (var cid in GetChildIdsCached(pData.id))
                 {
                     var cd = BuildTreeNodeData(cid);
                     if (cd == null) continue;
                     // 平民/奴隶不进氏族大树(用户定调:族谱仍记录,但大树不绘制 —— 只能在自己家庭树上溯找到老祖)。
-                    if (IsCommonerStatus(cd.status)) continue;
+                    if (IsHiddenInBigTreeStatus(cd.status)) continue;
                     node.children.Add(BuildLayoutNode(cd, pDepth + 1));
                 }
             return node;
         }
 
         /// <summary>是否平民/奴隶身份(氏族大树跳过,不绘制)。</summary>
-        private static bool IsCommonerStatus(string pStatus)
+        private static bool IsHiddenInBigTreeStatus(string pStatus)
         {
-            return pStatus == LineageStatus.COMMON || pStatus == LineageStatus.SLAVE;
+            return pStatus == LineageStatus.SLAVE;
         }
 
         private void MeasureWidth(TreeLayoutNode pNode)
@@ -578,7 +808,13 @@ namespace AncientWarfare3.ui.windows
 
         private void SpawnNode(TreeLayoutNode pNode)
         {
-            var view = FamilyTreeNodeView.Create(_canvas);
+            var view = AcquireNode();
+            if (_mode == Mode.BigTree && _locateActorId >= 0 && pNode.data.id == _locateActorId)
+            {
+                pNode.data.relation_label = AW_L10n.Text("aw_tree_locate_target", "\u76EE\u6807");
+                _locateFound = true;
+                _locateTarget = new Vector2(pNode.centerX, pNode.topY);
+            }
 
             bool isRoot = (_mode == Mode.Family) && pNode.data.id == _centerActorId;
             System.Action onUp = null, onDown = null;
@@ -587,7 +823,7 @@ namespace AncientWarfare3.ui.windows
                 // 小树根节点:父母已在上方独立行画出并可点击上溯,这里不再重复 ▲(避免冗余);保留 ▼ 下溯。
                 if (pNode.hasChildren)
                 {
-                    var kids = LineageQuery.GetChildIds(pNode.data.id);
+                    var kids = GetChildIdsCached(pNode.data.id);
                     if (kids.Count > 0) { long down = kids[0]; onDown = () => OpenFamilyTree(down, _backShiId); }
                 }
             }
@@ -614,9 +850,7 @@ namespace AncientWarfare3.ui.windows
 
         private void DrawLine(float x1, float y1, float x2, float y2)
         {
-            var obj = new GameObject("Line", typeof(RectTransform), typeof(Image));
-            obj.transform.SetParent(_canvas, false);
-            obj.transform.SetAsFirstSibling();
+            var obj = AcquireLine();
             var rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0, 1);
             rect.anchorMax = new Vector2(0, 1);
@@ -632,48 +866,56 @@ namespace AncientWarfare3.ui.windows
 
         private void ToggleExpand(long pId)
         {
+            _locateActorId = -1;
             _foldDecided.Add(pId); // 用户手动操作 → 标记已决定,自动折叠规则不再覆盖
             if (_expanded.Contains(pId)) _expanded.Remove(pId);
             else _expanded.Add(pId);
+            PreservePanForNextRebuild();
             Rebuild();
         }
 
         private void ExpandAllLiveBranches()
         {
+            _locateActorId = -1;
             if (_mode != Mode.BigTree || _rootActorId < 0) return;
+            ResetQueryCache();
             _expanded.Clear();
             _foldDecided.Clear();
             _expanded.Add(_rootActorId);
+            _autoExpandVisited = 0;
             ExpandLiveRecursive(_rootActorId, 0);
             Rebuild();
         }
 
         private void CollapseAllBranches()
         {
+            _locateActorId = -1;
             if (_mode != Mode.BigTree || _rootActorId < 0) return;
             _expanded.Clear();
             _foldDecided.Clear();
-            MarkCollapsedRecursive(_rootActorId, 0);
+            _foldDecided.Add(_rootActorId);
+            ResetQueryCache();
             Rebuild();
         }
 
         private void ExpandLiveRecursive(long pActorId, int pDepth)
         {
             if (pDepth > 64) return;
+            if (_autoExpandVisited++ >= MAX_AUTO_EXPAND_VISITS) return;
             _foldDecided.Add(pActorId);
-            var probe = LineageQuery.ProbeBranch(pActorId);
+            var probe = ProbeBranchCached(pActorId);
             if (!probe.has_children) return;
             if (pActorId == _rootActorId || probe.any_descendant_alive)
                 _expanded.Add(pActorId);
             else
                 return;
 
-            foreach (long cid in LineageQuery.GetChildIds(pActorId))
+            foreach (long cid in GetChildIdsCached(pActorId))
             {
                 var child = BuildTreeNodeData(cid);
-                if (child == null || IsCommonerStatus(child.status)) continue;
+                if (child == null || IsHiddenInBigTreeStatus(child.status)) continue;
                 if (child.founded_branch_shi_id >= 0 && child.id != _rootActorId) continue;
-                if (child.is_alive || LineageQuery.HasAliveDescendant(child.id))
+                if (child.is_alive || HasAliveDescendantCached(child.id))
                     ExpandLiveRecursive(child.id, pDepth + 1);
                 else
                     _foldDecided.Add(child.id);
@@ -684,10 +926,10 @@ namespace AncientWarfare3.ui.windows
         {
             if (pDepth > 64) return;
             _foldDecided.Add(pActorId);
-            foreach (long cid in LineageQuery.GetChildIds(pActorId))
+            foreach (long cid in GetChildIdsCached(pActorId))
             {
                 var child = BuildTreeNodeData(cid);
-                if (child == null || IsCommonerStatus(child.status)) continue;
+                if (child == null || IsHiddenInBigTreeStatus(child.status)) continue;
                 MarkCollapsedRecursive(child.id, pDepth + 1);
             }
         }
@@ -721,13 +963,102 @@ namespace AncientWarfare3.ui.windows
             return n;
         }
 
+        private void ResetQueryCache()
+        {
+            _childIdsCache.Clear();
+            _probeCache.Clear();
+            _aliveDescendantCache.Clear();
+            _autoExpandVisited = 0;
+        }
+
+        private List<long> GetChildIdsCached(long pActorId)
+        {
+            if (!_childIdsCache.TryGetValue(pActorId, out var ids))
+            {
+                ids = LineageQuery.GetChildIds(pActorId);
+                _childIdsCache[pActorId] = ids;
+            }
+            return ids;
+        }
+
+        private BranchProbe ProbeBranchCached(long pActorId)
+        {
+            if (!_probeCache.TryGetValue(pActorId, out var probe))
+            {
+                probe = LineageQuery.ProbeBranch(pActorId);
+                _probeCache[pActorId] = probe;
+            }
+            return probe;
+        }
+
+        private bool HasAliveDescendantCached(long pActorId)
+        {
+            if (!_aliveDescendantCache.TryGetValue(pActorId, out bool value))
+            {
+                value = LineageQuery.HasAliveDescendant(pActorId);
+                _aliveDescendantCache[pActorId] = value;
+            }
+            return value;
+        }
+
         private void ClearSpawned()
         {
-            foreach (var v in _spawned) if (v != null) Destroy(v.gameObject);
+            foreach (var v in _spawned)
+            {
+                if (v == null) continue;
+                v.gameObject.SetActive(false);
+                _nodePool.Add(v);
+            }
             _spawned.Clear();
-            foreach (var l in _lines) if (l != null) Destroy(l);
+            foreach (var l in _lines)
+            {
+                if (l == null) continue;
+                l.SetActive(false);
+                _linePool.Add(l);
+            }
             _lines.Clear();
             _maxDepthY = 0;
+        }
+
+        private FamilyTreeNodeView AcquireNode()
+        {
+            while (_nodePool.Count > 0)
+            {
+                int index = _nodePool.Count - 1;
+                var view = _nodePool[index];
+                _nodePool.RemoveAt(index);
+                if (view == null) continue;
+                view.transform.SetParent(_canvas, false);
+                view.gameObject.SetActive(true);
+                return view;
+            }
+            return FamilyTreeNodeView.Create(_canvas);
+        }
+
+        private GameObject AcquireLine()
+        {
+            GameObject obj = null;
+            while (_linePool.Count > 0)
+            {
+                int index = _linePool.Count - 1;
+                obj = _linePool[index];
+                _linePool.RemoveAt(index);
+                if (obj != null) break;
+            }
+
+            if (obj == null)
+                obj = new GameObject("Line", typeof(RectTransform), typeof(Image));
+
+            obj.transform.SetParent(_canvas, false);
+            obj.transform.SetAsFirstSibling();
+            obj.SetActive(true);
+            return obj;
+        }
+
+        private void PreservePanForNextRebuild()
+        {
+            _preservePanOnNextRebuild = true;
+            _savedPanBeforeRebuild = _canvasRect != null ? _canvasRect.anchoredPosition : Vector2.zero;
         }
     }
 }

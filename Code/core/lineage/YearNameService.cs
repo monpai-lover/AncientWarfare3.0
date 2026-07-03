@@ -30,7 +30,14 @@ namespace AncientWarfare3.core.lineage
         /// <summary>新王即位时换年号。由 setKing Postfix 调用。</summary>
         public static void OnNewKing(Kingdom pKingdom)
         {
+            ChangeYearName(pKingdom);
+        }
+
+        /// <summary>主动改元。用于常态决策和未来天命大事件。</summary>
+        public static void ChangeYearName(Kingdom pKingdom)
+        {
             if (pKingdom?.data == null || pKingdom.king == null) return;
+            if (!LineageService.IsXiaKingdom(pKingdom)) return;
 
             string yearName = MakeYearNameStem(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_NAME, yearName);
@@ -66,6 +73,7 @@ namespace AncientWarfare3.core.lineage
         public static string GetYearName(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return "";
+            if (!LineageService.IsXiaKingdom(pKingdom)) return "";
             pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string stem, "");
             if (string.IsNullOrEmpty(stem)) return "";
 

@@ -1,0 +1,34 @@
+key,cz,en,ch
+aw_tech_level_mapmode,科技地图,Technology Map,科技地圖
+aw_tech_level_mapmode Description,按国家科技等级从红到绿显示,Show kingdoms from red to green by technology level,按國家科技等級從紅到綠顯示
+aw_tech_level_mapmode_description,按国家科技等级从红到绿显示,Show kingdoms from red to green by technology level,按國家科技等級從紅到綠顯示
+aw_tech_mapmode_tooltip,科技地图,Technology Map,科技地圖
+aw_tech_mapmode_level,科技等级,Tech Level,科技等級
+aw_tech_mapmode_completed,已完成科技,Completed Techs,已完成科技
+aw_tech_mapmode_current,当前研发,Current Research,當前研發
+aw_tech_mapmode_points,科技点,Tech Points,科技點
+aw_tech_mapmode_idle,无当前科技,No current tech,無當前科技
+aw_vassal_mapmode,附庸地图,Vassal Map,附庸地圖
+aw_vassal_mapmode Description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
+aw_vassal_mapmode_description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
+aw_vassal_mapmode_tooltip,附庸地图,Vassal Map,附庸地圖
+aw_vassal_set,创建附庸,Create Vassal,建立附庸
+aw_vassal_set Description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國
+aw_vassal_remove,解除附庸,Remove Vassal,解除附庸
+aw_vassal_remove Description,选择附庸国以解除宗主关系,Select a vassal to remove suzerain relation,選擇附庸國以解除宗主關係
+aw_ancestry_analysis Title,祖源分析,Ancestry Analysis,祖源分析
+aw_ancestry_entry,祖源分析,Ancestry Analysis,祖源分析
+aw_view_ancestry,查看该人物的血脉祖源构成,View this actor's ancestry composition,查看該人物的血脈祖源構成
+aw_ancestry_identity,身份,Identity,身份
+aw_ancestry_noble_blood,贵族血脉,Noble Blood,貴族血脈
+aw_ancestry_no_noble_blood,未发现贵族血脉,No noble blood found,未發現貴族血脈
+aw_ancestry_depth,追溯代数,Trace Depth,追溯代數
+aw_ancestry_known,已识别祖先,Known Ancestors,已識別祖先
+aw_ancestry_unknown,未知祖源,Unknown Ancestry,未知祖源
+aw_ancestry_social_section,社会谱系祖源,Social Lineage Ancestry,社會譜系祖源
+aw_ancestry_genetic_section,遗传亚种祖源,Genetic Subspecies Ancestry,遺傳亞種祖源
+aw_ancestry_autosomal,常染色体祖源,Autosomal Ancestry,常染色體祖源
+aw_ancestry_paternal_marker,父系标记,Paternal Marker,父系標記
+aw_ancestry_maternal_marker,母系标记,Maternal Marker,母系標記
+aw_ancestry_marker_unknown,未知,Unknown,未知
+aw_ancestry_no_traceable,暂无可追溯祖源,No traceable ancestry,暫無可追溯祖源

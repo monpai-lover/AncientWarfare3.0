@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
             if (pKingdom?.data == null || pNewKing?.data == null) return;
+            if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
@@ -39,6 +40,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomFounded(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.FOUND,
                 HistoryText.Kingdom(pKingdom) + " 建立");
             KingdomArchiveWriter.Upsert(pKingdom); // 建国快照(名/旗/颜色/建国时间)
@@ -48,10 +50,13 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomDestroyed(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.DESTROYED,
                 HistoryText.Kingdom(pKingdom) + " 灭亡");
             KingdomArchiveWriter.EnsureRow(pKingdom);
+            RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
+            VassalService.OnKingdomDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）
             Actor king = pKingdom.king;
             ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "kingdom_fell", king);
@@ -106,8 +111,36 @@ namespace AncientWarfare3.core.lineage
             if (pNewKingdom == null) return;
             if (pOldKingdom == pNewKingdom) return;                 // 无变化不记
 
+            bool oldArchivable = KingdomArchiveWriter.IsArchivable(pOldKingdom);
+            bool newArchivable = KingdomArchiveWriter.IsArchivable(pNewKingdom);
+            if (!oldArchivable && !newArchivable) return;
+
             string oldName = pOldKingdom.name;
             string newName = pNewKingdom.name;
+            if (!oldArchivable || !newArchivable)
+            {
+                if (oldArchivable)
+                {
+                    HistoryWriter.RecordCity(pCity, pOldKingdom, CityEvent.CITY_TRANSFER,
+                        HistoryText.City(pCity, pOldKingdom) + " \u8131\u79BB" +
+                        HistoryText.Kingdom(pOldKingdom, oldName) + "\uFF0C\u6210\u4E3A\u65E0\u6240\u5C5E\u57CE\u5E02");
+                    HistoryWriter.RecordKingdom(pOldKingdom, KingdomEvent.CITY_LOST,
+                        HistoryText.PlainText("\u5931\u53BB ") + HistoryText.City(pCity, pOldKingdom) +
+                        "\uFF08\u57CE\u5E02\u5E9F\u5F03\u6216\u65E0\u6240\u5C5E\uFF09");
+                    KingdomArchiveWriter.Upsert(pOldKingdom);
+                }
+                else
+                {
+                    HistoryWriter.RecordCity(pCity, pNewKingdom, CityEvent.CITY_TRANSFER,
+                        HistoryText.City(pCity, pNewKingdom) + " \u5F52\u5C5E" +
+                        HistoryText.Kingdom(pNewKingdom, newName));
+                    HistoryWriter.RecordKingdom(pNewKingdom, KingdomEvent.CITY_GAINED,
+                        HistoryText.PlainText("\u593A\u5F97 ") + HistoryText.City(pCity, pNewKingdom) +
+                        "\uFF08\u539F\u4E3A\u65E0\u6240\u5C5E\u57CE\u5E02\uFF09");
+                    KingdomArchiveWriter.Upsert(pNewKingdom);
+                }
+                return;
+            }
             HistoryWriter.RecordCity(pCity, pNewKingdom, CityEvent.CITY_TRANSFER,
                 HistoryText.City(pCity, pNewKingdom) + " 由 " + HistoryText.Kingdom(pOldKingdom, oldName) +
                 " 易主至 " + HistoryText.Kingdom(pNewKingdom, newName));
@@ -380,16 +413,25 @@ namespace AncientWarfare3.core.lineage
         public static void OnWarSlavesCaptured(Kingdom pKingdom, City pCity, string pCityName, int pSlaveCount)
         {
             if (pSlaveCount <= 0) return;
+            bool hasCity = IsHistoryCityValid(pCity);
+            HistoryText cityText = HistoryText.City(pCity, pKingdom,
+                string.IsNullOrEmpty(pCityName) ? "\u67D0\u57CE" : pCityName);
             if (pKingdom?.data != null)
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ENSLAVED,
-                    HistoryText.Kingdom(pKingdom) + " 在战争结算中俘获奴隶 " + pSlaveCount.ToString() +
-                    " 名，安置于 " + HistoryText.City(pCity, pKingdom, pCityName),
-                    pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pKingdom));
+                    HistoryText.Kingdom(pKingdom) + " \u5728\u6218\u4E89\u7ED3\u7B97\u4E2D\u4FD8\u83B7\u5974\u96B6 " + pSlaveCount.ToString() +
+                    " \u540D\uFF0C\u5B89\u7F6E\u4E8E " + cityText,
+                    hasCity ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pKingdom));
 
-            if (pCity?.data != null)
+            if (hasCity)
                 HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.ENSLAVED,
-                    HistoryText.City(pCity, pKingdom, pCityName) + " 安置战争俘获奴隶 " +
-                    pSlaveCount.ToString() + " 名");
+                    cityText + " \u5B89\u7F6E\u6218\u4E89\u4FD8\u83B7\u5974\u96B6 " +
+                    pSlaveCount.ToString() + " \u540D");
+        }
+
+        private static bool IsHistoryCityValid(City pCity)
+        {
+            try { return pCity?.data != null && pCity.data.id >= 0; }
+            catch { return false; }
         }
 
         public static void OnRoyalGuardFormed(Kingdom pKingdom, string pGuardName)

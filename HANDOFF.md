@@ -27,7 +27,8 @@ AW3.0 = 在**新版 WorldBox 上重构的新模组**(不从 AW2 移植,但参考
 3. **继承人系统**:`HeirService` + `AW_HeirPatch`。kingdom.data 存 heir_id,Harmony 接管继位。unit_heir 皮肤 + minimap 图标。
 4. **历史人物降临**:`content/figures/`。姬发/嬴政/刘邦/曹丕/司马炎,严格顺序 + 持久化。
 5. **编年史 / 历史系统**:`HistoryWriter`/`HistoryQuery`/`ChronicleEvents` + 三事件表 + 王国档案表。人物传记/国家历史/城市易主 + 万国史(全王国列表)+ 朝代分段。
-6. **UI**:NML `AbstractWindow`/`AbstractListWindow` + 自定义 tab(`AW_LineageTab`,带神力按钮)。
+6. **国策 / 科技 / 决策**:`KingdomPolicyService` + `KingdomPolicyDefs`。Xia 默认启用,Human 可手动启用;政治点/科技点按国王能力和国力增长;非天命/非附庸的 AW2 效果已接入到政策状态、奴隶制、奴隶口粮、奴隶军、迁都、升爵。
+7. **UI**:NML `AbstractWindow`/`AbstractListWindow` + 自定义 tab(`AW_LineageTab`,带神力按钮)。
 
 ---
 
@@ -83,6 +84,7 @@ AW3.0 = 在**新版 WorldBox 上重构的新模组**(不从 AW2 移植,但参考
 - 读:`HistoryQuery`(ReadPerson/Kingdom/City + **GetAllKingdoms** + **GetKingdomReigns** 朝代分段)。
 - **王国档案**:`KingdomArchiveWriter`(Upsert 建国/换君,MarkDestroyed 亡国,BackfillAll 读档补全)。`KingdomFlagBuilder` 从存档值重建旗帜(背景+图标+配色),**不引用活 Kingdom**,亡国安全。
 - **朝代分段**:`GetKingdomReigns` 从 KingdomHistory 的 rule_change 事件切朝代;有王段=年号(纪年快照)+王名+起止年;无王段=时间区间"13-18年"。
+- **普通谥号**:`PosthumousTitleService` + `PosthumousTitleDefs`。非天命君主按民生/疆域/战功/秩序/结局评分,写 `PosthumousTitle` 和 `KingdomReign.posthumous_title`,国家史 posthumous 行 target 指向 actor,tooltip 显示评分明细。普通谥号只用“国名前缀+谥字+爵位后缀”,不生成太祖/高祖/世祖/烈祖等庙号。
 
 ---
 
@@ -159,6 +161,7 @@ AW3.0 = 在**新版 WorldBox 上重构的新模组**(不从 AW2 移植,但参考
 4. **kingdom/city 窗 "Tabs Right" 存在性**:运行时核实(不存在则按钮不显示,不崩)。
 5. **老存档**:KingdomArchive 靠 BackfillAll 补全现有活国;**亡国若在本更新前就亡了,无档案行**(无法回溯,可接受)。
 6. **朝代分段依赖 rule_change 事件**:若某国从未记过换君(如建国即玩家删),只有 found 段。
+7. **天命/附庸延期边界**:AW2 的天命值成本、天命国专属政策、天命大事件改元,以及附庸领土计入升爵/国力、附庸外交战争联动,当前只在 README 待做登记,不要误判为已实现。太祖/高祖/世祖/烈祖/中宗/肃宗/宪宗等庙号也属于未来天命王朝系统,不要放进普通谥号池。
 
 ---
 

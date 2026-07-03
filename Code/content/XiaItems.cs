@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace AncientWarfare3.content
 {
@@ -70,6 +71,8 @@ namespace AncientWarfare3.content
             ge.path_slash_animation = "qing";
             ge.action_attack_target =
                 (AttackAction)Delegate.Combine(ge.action_attack_target, new AttackAction(QingAttack));
+            EnsureGameplaySprites(ji);
+            EnsureGameplaySprites(ge);
 
             // ===== 兵法 binfa(传奇护符)=====
             // 新版护符基础模板是 "$amulet"(带 $ 前缀,旧版 "_accessory" 已变)
@@ -93,7 +96,7 @@ namespace AncientWarfare3.content
             {
                 ActorAsset race = AssetManager.actor_library.get(raceId);
                 if (race == null) continue;
-                race.default_weapons = Append(race.default_weapons, "ji", "ge", "binfa");
+                race.default_weapons = Append(race.default_weapons, "ji", "ge");
             }
 
             // 金币上限提高(蓝图 1.3:gold 50000)
@@ -106,6 +109,15 @@ namespace AncientWarfare3.content
             var list = new List<string>(pBase ?? Array.Empty<string>());
             list.AddRange(pAdd);
             return list.ToArray();
+        }
+
+        private static void EnsureGameplaySprites(ItemAsset pItem)
+        {
+            if (pItem == null || string.IsNullOrEmpty(pItem.path_gameplay_sprite)) return;
+            if (pItem.gameplay_sprites != null && pItem.gameplay_sprites.Length > 0) return;
+
+            Sprite[] sprites = SpriteTextureLoader.getSpriteList(pItem.path_gameplay_sprite);
+            pItem.gameplay_sprites = sprites ?? Array.Empty<Sprite>();
         }
 
         /// <summary>命中目标时施加 qing 状态(青色清扫特效 0.5s)。</summary>

@@ -198,4 +198,50 @@ namespace AncientWarfare3.core.lineage
         public List<FamilyTreeNode> parents = new();
         public List<FamilyTreeNode> children = new();
     }
+
+    internal sealed class AncestryContribution
+    {
+        public string key = "";
+        public string label = "";
+        public string kind = "";
+        public float percent;
+        public long source_actor_id = -1;
+        public string source_actor_name = "";
+        public string color = "";
+    }
+
+    internal sealed class NobleBloodEvidence
+    {
+        public bool has_noble_blood;
+        public long origin_actor_id = -1;
+        public string origin_name = "";
+        public int distance = 99;
+        public string reason = "";
+    }
+
+    internal sealed class AncestryMarker
+    {
+        public bool known;
+        public string label = "";
+        public long source_actor_id = -1;
+        public string source_actor_name = "";
+        public int distance = 99;
+    }
+
+    internal sealed class AncestryReport
+    {
+        public long actor_id = -1;
+        public string actor_name = "";
+        public string identity = "";
+        public int max_depth;
+        public int known_ancestors;
+        public float unknown_percent;
+        public float genetic_unknown_percent;
+        public string autosomal_summary = "";
+        public AncestryMarker paternal_marker = new AncestryMarker();
+        public AncestryMarker maternal_marker = new AncestryMarker();
+        public NobleBloodEvidence noble_blood = new NobleBloodEvidence();
+        public List<AncestryContribution> contributions = new List<AncestryContribution>();
+        public List<AncestryContribution> genetic_contributions = new List<AncestryContribution>();
+    }
 }

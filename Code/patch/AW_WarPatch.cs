@@ -18,6 +18,7 @@ namespace AncientWarfare3.patch
         {
             if (__result?.data == null) return;
             WarRecordWriter.OnWarStart(__result);
+            VassalService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -34,6 +35,7 @@ namespace AncientWarfare3.patch
         {
             if (pWar?.data == null) return;
             WarRecordWriter.OnWarEnd(pWar, pWinner);
+            ApplyDiplomacyWarResult(pWar, pWinner);
 
             Kingdom atk = pWar.getMainAttacker();
             Kingdom def = pWar.getMainDefender();
@@ -42,6 +44,11 @@ namespace AncientWarfare3.patch
                 ChronicleEvents.OnWarEnd(atk, def, def?.name ?? "未知", result);
             if (def?.data != null)
                 ChronicleEvents.OnWarEnd(def, atk, atk?.name ?? "未知", result);
+        }
+
+        private static void ApplyDiplomacyWarResult(War pWar, WarWinner pWinner)
+        {
+            VassalService.OnWarEnded(pWar, pWinner);
         }
 
         private static string GetWarTypeName(War pWar)

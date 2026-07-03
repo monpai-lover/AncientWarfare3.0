@@ -62,6 +62,127 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        /// <summary>按城市聚合姓族概览。默认总览用这个视角,姓氏合流后也能按聚落查看氏支分布。</summary>
+        public static List<SurnameOverview> GetCityLineageOverview()
+        {
+            var result = new List<SurnameOverview>();
+            var db = DB;
+            if (db == null) return result;
+
+            var byCity = new Dictionary<long, SurnameOverview>();
+            var familiesByCity = new Dictionary<long, HashSet<long>>();
+            foreach (var branch in ReadShiBranches(""))
+            {
+                FillShiCounts(branch);
+                FillShiOrigin(branch);
+                BackfillShiOrigin(branch);
+                if (branch.origin_city_id < 0) continue;
+
+                if (!byCity.TryGetValue(branch.origin_city_id, out var overview))
+                {
+                    overview = new SurnameOverview
+                    {
+                        is_city_overview = true,
+                        city_id = branch.origin_city_id,
+                        city_name = branch.origin_city_name,
+                        city_kingdom_id = branch.origin_kingdom_id,
+                        city_kingdom_name = branch.origin_kingdom_name,
+                        city_kingdom_color = branch.origin_kingdom_color,
+                        earliest_time = branch.created_time,
+                        created_time = branch.created_time
+                    };
+                    byCity.Add(branch.origin_city_id, overview);
+                    familiesByCity.Add(branch.origin_city_id, new HashSet<long>());
+                }
+
+                overview.total += branch.total;
+                overview.alive += branch.alive;
+                overview.noble += branch.noble;
+                overview.shi_count++;
+                if (overview.earliest_time <= 0 || branch.created_time < overview.earliest_time)
+                {
+                    overview.earliest_time = branch.created_time;
+                    overview.created_time = branch.created_time;
+                }
+                if (string.IsNullOrEmpty(overview.city_name)) overview.city_name = branch.origin_city_name;
+                if (overview.city_kingdom_id < 0) overview.city_kingdom_id = branch.origin_kingdom_id;
+                if (string.IsNullOrEmpty(overview.city_kingdom_name)) overview.city_kingdom_name = branch.origin_kingdom_name;
+                if (string.IsNullOrEmpty(overview.city_kingdom_color)) overview.city_kingdom_color = branch.origin_kingdom_color;
+                familiesByCity[branch.origin_city_id].Add(branch.lineage_id);
+            }
+
+            foreach (var pair in byCity)
+            {
+                pair.Value.family_count = familiesByCity.TryGetValue(pair.Key, out var families) ? families.Count : 0;
+                FillCityOverviewMeta(pair.Value);
+                result.Add(pair.Value);
+            }
+            result.Sort((a, b) =>
+            {
+                int alive = b.alive.CompareTo(a.alive);
+                if (alive != 0) return alive;
+                int total = b.total.CompareTo(a.total);
+                if (total != 0) return total;
+                return string.Compare(a.city_name ?? "", b.city_name ?? "", System.StringComparison.Ordinal);
+            });
+            return result;
+        }
+
+        private static void FillCityOverviewMeta(SurnameOverview pOverview)
+        {
+            if (pOverview == null || pOverview.city_id < 0) return;
+
+            City liveCity = World.world?.cities?.get(pOverview.city_id);
+            if (liveCity?.data != null && liveCity.isAlive())
+            {
+                pOverview.city_name = liveCity.data.name ?? "";
+                Kingdom kingdom = liveCity.kingdom;
+                if (kingdom?.data != null && !kingdom.isRekt())
+                {
+                    pOverview.city_kingdom_id = kingdom.id;
+                    pOverview.city_kingdom_name = kingdom.name ?? "";
+                    pOverview.city_kingdom_color = HistoryColors.FromKingdom(kingdom);
+                    return;
+                }
+            }
+
+            string resolvedCity = ResolveCityName(pOverview.city_id);
+            if (!string.IsNullOrEmpty(resolvedCity)) pOverview.city_name = resolvedCity;
+
+            FillCityKingdomFromArchive(pOverview);
+            ResolveKingdomArchive(pOverview.city_kingdom_id, out string kingdomName, out string kingdomColor);
+            if (!string.IsNullOrEmpty(kingdomName)) pOverview.city_kingdom_name = kingdomName;
+            if (!string.IsNullOrEmpty(kingdomColor)) pOverview.city_kingdom_color = kingdomColor;
+        }
+
+        private static void FillCityKingdomFromArchive(SurnameOverview pOverview)
+        {
+            var db = DB;
+            if (db == null || pOverview == null || pOverview.city_id < 0) return;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(CITY_NAME, ''), IFNULL(KINGDOM_ID, -1), IFNULL(KINGDOM_NAME, ''), IFNULL(KINGDOM_COLOR, '') " +
+                    $"FROM {ActorArchiveTableItem.GetTableName()} WHERE CITY_ID=@cid " +
+                    $"ORDER BY IS_ALIVE DESC, BIRTH_TIME DESC, ID DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@cid", pOverview.city_id);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return;
+
+                string cityName = SafeStr(r, 0);
+                long kingdomId = ToLong(r, 1, -1);
+                string kingdomName = SafeStr(r, 2);
+                string kingdomColor = SafeStr(r, 3);
+
+                if (string.IsNullOrEmpty(pOverview.city_name)) pOverview.city_name = cityName;
+                if (pOverview.city_kingdom_id < 0 && kingdomId >= 0) pOverview.city_kingdom_id = kingdomId;
+                if (string.IsNullOrEmpty(pOverview.city_kingdom_name)) pOverview.city_kingdom_name = kingdomName;
+                if (string.IsNullOrEmpty(pOverview.city_kingdom_color)) pOverview.city_kingdom_color = kingdomColor;
+            }
+            catch { }
+        }
+
         private static int CountShiOfSurname(string pFamilyName, string pLineageTable, string pShiTable)
         {
             var db = DB;
@@ -216,6 +337,28 @@ namespace AncientWarfare3.core.lineage
                     $"WHERE CITY_ID=@cid ORDER BY WORLD_TIME ASC, EVENT_ID ASC LIMIT 1";
                 cmd.Parameters.AddWithValue("@cid", pCityId);
                 object o = cmd.ExecuteScalar();
+                string name = o == null || o == System.DBNull.Value ? "" : o.ToString();
+                if (!string.IsNullOrEmpty(name)) return name;
+            }
+            catch { }
+
+            return ResolveCityNameFromActorArchive(pCityId);
+        }
+
+        private static string ResolveCityNameFromActorArchive(long pCityId)
+        {
+            if (pCityId < 0) return "";
+            var db = DB;
+            if (db == null) return "";
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(CITY_NAME, '') FROM {ActorArchiveTableItem.GetTableName()} " +
+                    $"WHERE CITY_ID=@cid AND IFNULL(CITY_NAME, '')<>'' " +
+                    $"ORDER BY IS_ALIVE DESC, BIRTH_TIME ASC, ID ASC LIMIT 1";
+                cmd.Parameters.AddWithValue("@cid", pCityId);
+                object o = cmd.ExecuteScalar();
                 return o == null || o == System.DBNull.Value ? "" : o.ToString();
             }
             catch { return ""; }
@@ -267,6 +410,28 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        public static List<ShiBranchInfo> GetShiBranchesByCity(long pCityId)
+        {
+            var result = new List<ShiBranchInfo>();
+            var db = DB;
+            if (db == null || pCityId < 0) return result;
+
+            foreach (var s in ReadShiBranches(""))
+            {
+                FillShiCounts(s);
+                FillShiOrigin(s);
+                BackfillShiOrigin(s);
+                if (s.origin_city_id == pCityId) result.Add(s);
+            }
+            result.Sort((a, b) =>
+            {
+                int clan = string.Compare(a.clan_name ?? "", b.clan_name ?? "", System.StringComparison.Ordinal);
+                if (clan != 0) return clan;
+                return a.created_time.CompareTo(b.created_time);
+            });
+            return result;
+        }
+
         /// <summary>取某氏支的始祖 actor id(ShiBranch.FOUNDER_ACTOR_ID)。无则 -1。</summary>
         public static long GetShiBranchFounderId(long pShiId)
         {
@@ -281,6 +446,63 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>取某姓族总始祖 actor id(LineageGroup.FOUNDER_ACTOR_ID)。无则 -1。</summary>
+        public static long GetActorShiId(long pActorId)
+        {
+            if (pActorId < 0) return -1;
+            var live = World.world?.units?.get(pActorId);
+            if (live?.data != null)
+            {
+                live.data.get(LineageKeys.SHI_ID, out long liveShiId, -1L);
+                if (liveShiId >= 0) return liveShiId;
+            }
+
+            var row = LineageArchiveReader.ReadRow(pActorId);
+            return row != null ? row.shi_id : -1;
+        }
+
+        public static List<long> GetAncestorPathToFounder(long pActorId, long pFounderId)
+        {
+            var path = new List<long>();
+            if (pActorId < 0 || pFounderId < 0) return path;
+
+            var visited = new HashSet<long>();
+            if (!FindAncestorPathToFounder(pActorId, pFounderId, visited, path, 0, 96))
+            {
+                path.Clear();
+                return path;
+            }
+
+            path.Reverse();
+            return path;
+        }
+
+        public static int GetTreeGenerationInShi(long pActorId, long pShiId)
+        {
+            if (pActorId < 0) return 0;
+            if (pShiId < 0) pShiId = GetActorShiId(pActorId);
+            long founder = GetShiBranchFounderId(pShiId);
+            if (founder < 0) return 0;
+            var path = GetAncestorPathToFounder(pActorId, founder);
+            return path.Count;
+        }
+
+        private static bool FindAncestorPathToFounder(long pCurrentId, long pFounderId,
+            HashSet<long> pVisited, List<long> pPath, int pDepth, int pMaxDepth)
+        {
+            if (pDepth > pMaxDepth || !pVisited.Add(pCurrentId)) return false;
+            pPath.Add(pCurrentId);
+            if (pCurrentId == pFounderId) return true;
+
+            foreach (long parentId in GetParentIds(pCurrentId))
+            {
+                if (FindAncestorPathToFounder(parentId, pFounderId, pVisited, pPath, pDepth + 1, pMaxDepth))
+                    return true;
+            }
+
+            pPath.RemoveAt(pPath.Count - 1);
+            return false;
+        }
+
         public static long GetLineageFounderId(long pLineageId)
         {
             var db = DB;
@@ -375,15 +597,17 @@ namespace AncientWarfare3.core.lineage
             return o == null || o == System.DBNull.Value ? -1 : System.Convert.ToInt64(o);
         }
 
-        private static void FillShiCounts(ShiBranchInfo pShi)
+        private static void FillShiCounts(ShiBranchInfo pShi, long pCityId = -1)
         {
             var db = DB;
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 $"SELECT COUNT(*), SUM(IS_ALIVE), " +
                 $"SUM(CASE WHEN STATUS='{LineageStatus.NOBLE}' AND IS_ALIVE=1 THEN 1 ELSE 0 END) " +
-                $"FROM {ActorArchiveTableItem.GetTableName()} WHERE SHI_ID=@s";
+                $"FROM {ActorArchiveTableItem.GetTableName()} WHERE SHI_ID=@s" +
+                (pCityId >= 0 ? " AND CITY_ID=@cid" : "");
             cmd.Parameters.AddWithValue("@s", pShi.shi_id);
+            if (pCityId >= 0) cmd.Parameters.AddWithValue("@cid", pCityId);
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
             if (reader.Read())
             {
@@ -398,6 +622,7 @@ namespace AncientWarfare3.core.lineage
             if (pShi == null) return;
             FillShiOriginFromFounderArchive(pShi);
             FillShiOriginFromLiveFounder(pShi);
+            FillShiOriginFromMemberArchive(pShi);
 
             ResolveKingdomArchive(pShi.origin_kingdom_id, out string kingdomName, out string kingdomColor);
             if (!string.IsNullOrEmpty(kingdomName)) pShi.origin_kingdom_name = kingdomName;
@@ -405,6 +630,60 @@ namespace AncientWarfare3.core.lineage
 
             string cityName = ResolveCityName(pShi.origin_city_id);
             if (!string.IsNullOrEmpty(cityName)) pShi.origin_city_name = cityName;
+        }
+
+        private static List<ShiBranchInfo> ReadShiBranches(string pWhereSql)
+        {
+            var result = new List<ShiBranchInfo>();
+            var db = DB;
+            if (db == null) return result;
+
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"FROM {ShiBranchTableItem.GetTableName()} " +
+                pWhereSql +
+                $" ORDER BY CREATED_TIME ASC, SHI_ID ASC";
+
+            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                result.Add(new ShiBranchInfo
+                {
+                    shi_id = reader.GetInt64(0),
+                    lineage_id = reader.GetInt64(1),
+                    clan_name = SafeStr(reader, 2),
+                    source_type = SafeStr(reader, 3),
+                    created_time = reader.GetDouble(4),
+                    founder_actor_id = reader.GetInt64(5),
+                    origin_kingdom_id = ToLong(reader, 6, -1),
+                    origin_city_id = ToLong(reader, 7, -1)
+                });
+            }
+            return result;
+        }
+
+        private static void BackfillShiOrigin(ShiBranchInfo pShi)
+        {
+            var db = DB;
+            if (db == null || pShi == null || pShi.shi_id < 0) return;
+            if (pShi.origin_city_id < 0 && pShi.origin_kingdom_id < 0) return;
+
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"UPDATE {ShiBranchTableItem.GetTableName()} SET " +
+                    $"ORIGIN_CITY_ID=CASE WHEN IFNULL(ORIGIN_CITY_ID, -1)<0 AND @cid>=0 THEN @cid ELSE ORIGIN_CITY_ID END, " +
+                    $"ORIGIN_KINGDOM_ID=CASE WHEN IFNULL(ORIGIN_KINGDOM_ID, -1)<0 AND @kid>=0 THEN @kid ELSE ORIGIN_KINGDOM_ID END " +
+                    $"WHERE SHI_ID=@sid";
+                cmd.Parameters.AddWithValue("@cid", pShi.origin_city_id);
+                cmd.Parameters.AddWithValue("@kid", pShi.origin_kingdom_id);
+                cmd.Parameters.AddWithValue("@sid", pShi.shi_id);
+                cmd.ExecuteNonQuery();
+            }
+            catch { }
         }
 
         private static void FillShiOriginFromFounderArchive(ShiBranchInfo pShi)
@@ -459,6 +738,40 @@ namespace AncientWarfare3.core.lineage
             if (pShi.origin_city_id < 0 && city?.data != null) pShi.origin_city_id = city.data.id;
             if (string.IsNullOrEmpty(pShi.origin_city_name) && city?.data != null)
                 pShi.origin_city_name = city.data.name ?? "";
+        }
+
+        private static void FillShiOriginFromMemberArchive(ShiBranchInfo pShi)
+        {
+            if (pShi == null || pShi.shi_id < 0) return;
+            if (pShi.origin_city_id >= 0 && !string.IsNullOrEmpty(pShi.origin_city_name)) return;
+            var db = DB;
+            if (db == null) return;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(KINGDOM_ID, -1), IFNULL(KINGDOM_NAME, ''), IFNULL(KINGDOM_COLOR, ''), " +
+                    $"IFNULL(CITY_ID, -1), IFNULL(CITY_NAME, '') " +
+                    $"FROM {ActorArchiveTableItem.GetTableName()} " +
+                    $"WHERE SHI_ID=@sid AND (IFNULL(CITY_ID, -1)>=0 OR IFNULL(CITY_NAME, '')<>'') " +
+                    $"ORDER BY IS_ALIVE DESC, BIRTH_TIME ASC, ID ASC LIMIT 1";
+                cmd.Parameters.AddWithValue("@sid", pShi.shi_id);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return;
+
+                long kingdomId = ToLong(r, 0, -1);
+                string kingdomName = SafeStr(r, 1);
+                string kingdomColor = SafeStr(r, 2);
+                long cityId = ToLong(r, 3, -1);
+                string cityName = SafeStr(r, 4);
+
+                if (pShi.origin_kingdom_id < 0 && kingdomId >= 0) pShi.origin_kingdom_id = kingdomId;
+                if (string.IsNullOrEmpty(pShi.origin_kingdom_name)) pShi.origin_kingdom_name = kingdomName;
+                if (string.IsNullOrEmpty(pShi.origin_kingdom_color)) pShi.origin_kingdom_color = kingdomColor;
+                if (pShi.origin_city_id < 0 && cityId >= 0) pShi.origin_city_id = cityId;
+                if (string.IsNullOrEmpty(pShi.origin_city_name)) pShi.origin_city_name = cityName;
+            }
+            catch { }
         }
 
         // ─────────────────────── 成员列表(某姓 / 某氏支) ───────────────────────
@@ -612,7 +925,7 @@ namespace AncientWarfare3.core.lineage
 
                 // 平民/奴隶不进氏族大树 → 探测里也跳过(否则会显示展开+号却展开为空)。
                 string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(cid);
-                if (status == LineageStatus.COMMON || status == LineageStatus.SLAVE) continue;
+                if (status == LineageStatus.SLAVE) continue;
 
                 probe.has_children = true; // 至少有一个大树可见(非平民)子代
 
@@ -647,9 +960,8 @@ namespace AncientWarfare3.core.lineage
                     $"JOIN descendants d ON e.PARENT_ID=d.ID) " +
                     $"SELECT EXISTS(SELECT 1 FROM descendants d " +
                     $"JOIN {ActorArchiveTableItem.GetTableName()} a ON a.ID=d.ID " +
-                    $"WHERE a.IS_ALIVE=1 AND IFNULL(a.STATUS,'')<>@common AND IFNULL(a.STATUS,'')<>@slave LIMIT 1)";
+                    $"WHERE a.IS_ALIVE=1 AND IFNULL(a.STATUS,'')<>@slave LIMIT 1)";
                 cmd.Parameters.AddWithValue("@id", pNodeId);
-                cmd.Parameters.AddWithValue("@common", LineageStatus.COMMON);
                 cmd.Parameters.AddWithValue("@slave", LineageStatus.SLAVE);
                 object o = cmd.ExecuteScalar();
                 return o != null && o != System.DBNull.Value && System.Convert.ToInt64(o) != 0;
@@ -679,7 +991,9 @@ namespace AncientWarfare3.core.lineage
         private static FamilyTreeNode BuildNode(long pId)
         {
             var live = World.world?.units?.get(pId);
-            if (live != null && LineageService.IsXia(live))
+            var row = LineageArchiveReader.ReadRow(pId);
+            bool archiveDead = IsArchivedDead(row);
+            if (!archiveDead && IsAliveActor(live) && LineageService.IsXia(live))
             {
                 live.data.get("display_name", out string disp, "");
                 live.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);
@@ -688,6 +1002,7 @@ namespace AncientWarfare3.core.lineage
                 // ⚠ NOBLE_DISTANCE 是用 set(key,int) 写入的(LineageService:111),必须 get<int> 读,
                 //   用 get<long> 会类型失配返默认 99 → 活人 tooltip 永远不显示"距贵族N代"(用户报"只有死人有")。
                 live.data.get(LineageKeys.NOBLE_DISTANCE, out int nd, 99);
+                var kingdomSnapshot = ResolveLiveKingdomSnapshot(live, row);
                 var node = new FamilyTreeNode
                 {
                     id = pId,
@@ -700,31 +1015,34 @@ namespace AncientWarfare3.core.lineage
                     noble_distance = nd,
                     birth_time = live.data.created_time,
                     death_time = -1,
-                    kingdom_id = live.kingdom?.id ?? -1,
-                    kingdom_name = live.kingdom?.name ?? "",
-                    kingdom_color = live.kingdom?.getColor()?.color_text ?? "",
+                    kingdom_id = kingdomSnapshot.kingdomId,
+                    kingdom_name = kingdomSnapshot.kingdomName,
+                    kingdom_color = kingdomSnapshot.kingdomColor,
                     original_clan_id = live.clan?.data?.id ?? -1,
-                    city_name = live.city?.data?.name ?? "",
+                    city_name = ResolveLiveCityName(live, row),
                     head = live.data.head,
+                    age_overgrowth = live.data.age_overgrowth,
                     phenotype_index = live.data.phenotype_index,
                     phenotype_shade = live.data.phenotype_shade,
                     death_cause = ReadLiveDeathCause(live),
                     founded_branch_shi_id = ResolveFoundedBranch(live, pId, ReadLiveFoundedBranch(live))
                 };
                 ApplyFoundedBranchDisplay(node, live);
+                ApplyLiveSocialTitle(node, live);
                 FillKingdomFlagSnapshot(node);
                 FillLiveClanFlagSnapshot(node, live.clan);
                 return node;
             }
 
-            var row = LineageArchiveReader.ReadRow(pId);
             if (row == null) return null;
+            bool liveKnownDead = live?.data != null && (!live.isAlive() || live.isRekt());
+            bool archivedAlive = row.is_alive != 0 && row.death_time <= 0 && !liveKnownDead;
             var archived = new FamilyTreeNode
             {
                 id = pId,
                 display_name = string.IsNullOrEmpty(row.display_name) ? row.given_name : row.display_name,
                 sex = row.sex,
-                is_alive = row.is_alive != 0,
+                is_alive = archivedAlive,
                 status = row.status,
                 clan_name = row.clan_name ?? "",
                 shi_id = row.shi_id,
@@ -736,19 +1054,23 @@ namespace AncientWarfare3.core.lineage
                 kingdom_color = row.kingdom_color ?? "",
                 original_clan_id = row.original_clan_id,
                 city_name = row.city_name ?? "",
+                social_title = row.social_title ?? "",
+                social_title_color = row.social_title_color ?? "",
                 head = row.head,
                 skin = row.skin,
                 skin_set = row.skin_set,
+                age_overgrowth = live?.data?.age_overgrowth ?? row.age_overgrowth,
                 phenotype_index = row.phenotype_index,
                 phenotype_shade = row.phenotype_shade,
                 clan_color_text = row.clan_color_text ?? "",
                 clan_color_id = row.clan_color_id,
                 clan_banner_icon_id = row.clan_banner_icon_id,
                 clan_banner_background_id = row.clan_banner_background_id,
-                death_cause = row.death_cause ?? "",
+                death_cause = NormalizeDeathCause(row.death_cause),
                 founded_branch_shi_id = ResolveFoundedBranch(null, pId, row.founded_branch_shi_id)
             };
             ApplyFoundedBranchDisplay(archived, null);
+            ApplyArchivedSocialTitle(archived);
             FillKingdomFlagSnapshot(archived);
             return archived;
         }
@@ -759,30 +1081,76 @@ namespace AncientWarfare3.core.lineage
         {
             var live = World.world?.units?.get(pId);
             if (live == null) return null;
+            var row = LineageArchiveReader.ReadRow(pId);
+            var kingdomSnapshot = ResolveLiveKingdomSnapshot(live, row);
             var node = new FamilyTreeNode
             {
                 id = pId,
                 display_name = live.getName(),
                 sex = live.isSexMale() ? 0 : 1,
-                is_alive = !live.isRekt(),
+                is_alive = IsAliveActor(live),
                 status = LineageStatus.NONE,
                 clan_name = "",
                 shi_id = -1,
                 noble_distance = 99,
                 birth_time = live.data.created_time,
                 death_time = -1,
-                kingdom_id = live.kingdom?.id ?? -1,
-                kingdom_name = live.kingdom?.name ?? "",
-                kingdom_color = live.kingdom?.getColor()?.color_text ?? "",
+                kingdom_id = kingdomSnapshot.kingdomId,
+                kingdom_name = kingdomSnapshot.kingdomName,
+                kingdom_color = kingdomSnapshot.kingdomColor,
                 original_clan_id = live.clan?.data?.id ?? -1,
-                city_name = live.city?.data?.name ?? "",
+                city_name = ResolveLiveCityName(live, row),
                 head = live.data.head,
+                age_overgrowth = live.data.age_overgrowth,
                 phenotype_index = live.data.phenotype_index,
-                phenotype_shade = live.data.phenotype_shade
+                phenotype_shade = live.data.phenotype_shade,
+                death_cause = ReadLiveDeathCause(live)
             };
+            ApplyLiveSocialTitle(node, live);
             FillKingdomFlagSnapshot(node);
             FillLiveClanFlagSnapshot(node, live.clan);
             return node;
+        }
+
+        private static bool IsAliveActor(Actor pActor)
+        {
+            return pActor?.data != null && !pActor.isRekt() && pActor.isAlive();
+        }
+
+        private static (long kingdomId, string kingdomName, string kingdomColor) ResolveLiveKingdomSnapshot(
+            Actor pLive, ActorArchiveTableItem pRow)
+        {
+            Kingdom kingdom = pLive?.kingdom;
+            if (ShouldUseArchivedKingdomForMad(pLive, kingdom, pRow))
+                return (pRow.kingdom_id, pRow.kingdom_name ?? "", pRow.kingdom_color ?? "");
+
+            return (kingdom?.id ?? pRow?.kingdom_id ?? -1L,
+                kingdom?.name ?? pRow?.kingdom_name ?? "",
+                kingdom?.getColor()?.color_text ?? pRow?.kingdom_color ?? "");
+        }
+
+        private static bool ShouldUseArchivedKingdomForMad(Actor pLive, Kingdom pKingdom, ActorArchiveTableItem pRow)
+        {
+            if (pRow == null) return false;
+            if (pRow.kingdom_id < 0 && string.IsNullOrEmpty(pRow.kingdom_name)) return false;
+            return (pLive?.hasTrait("madness") ?? false) || pKingdom?.asset?.id == "mad";
+        }
+
+        private static string ResolveLiveCityName(Actor pLive, ActorArchiveTableItem pRow)
+        {
+            City city = pLive?.city;
+            if (city == null && pLive?.data != null && pLive.data.cityID >= 0)
+                city = World.world?.cities?.get(pLive.data.cityID);
+
+            if (city?.data != null)
+                return city.data.name ?? "";
+
+            return pRow?.city_name ?? "";
+        }
+
+        private static bool IsArchivedDead(ActorArchiveTableItem pRow)
+        {
+            return pRow != null && (pRow.is_alive == 0 || pRow.death_time > 0);
         }
 
         /// <summary>读活人 actor.data 上的"称王分封新支 id"(无则 -1)。</summary>
@@ -796,7 +1164,13 @@ namespace AncientWarfare3.core.lineage
         {
             if (pLive?.data == null) return "";
             pLive.data.get(LineageKeys.DEATH_CAUSE, out string cause, "");
-            return cause ?? "";
+            return NormalizeDeathCause(cause);
+        }
+
+        private static string NormalizeDeathCause(string pCause)
+        {
+            if (string.IsNullOrEmpty(pCause)) return "";
+            return pCause == "\u6B7B\u4EA1" ? "\u672A\u77E5\u6B7B\u56E0" : pCause;
         }
 
         private static long ResolveFoundedBranch(Actor pLive, long pActorId, long pStoredShi)
@@ -813,7 +1187,16 @@ namespace AncientWarfare3.core.lineage
         {
             if (pNode == null || pNode.founded_branch_shi_id < 0) return;
             ShiBranchInfo info = GetShiBranchInfo(pNode.founded_branch_shi_id);
-            if (info == null || info.founder_actor_id != pNode.id) return;
+            if (info == null || info.founder_actor_id != pNode.id || info.source_type != ShiSourceType.KING_FOUNDED)
+            {
+                pNode.founded_branch_shi_id = -1;
+                if (pLive?.data != null)
+                {
+                    pLive.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
+                    LineageService.ArchiveActor(pLive, pAlive: true);
+                }
+                return;
+            }
 
             pNode.shi_id = info.shi_id;
             if (!string.IsNullOrEmpty(info.clan_name))
@@ -827,6 +1210,161 @@ namespace AncientWarfare3.core.lineage
             LineageService.ApplyDisplayName(pLive);
             LineageService.ArchiveActor(pLive, pAlive: true);
             pLive.clearGraphicsFully();
+        }
+
+        private static void ApplyLiveSocialTitle(FamilyTreeNode pNode, Actor pLive)
+        {
+            if (pNode == null || pLive?.data == null) return;
+
+            string color = pNode.kingdom_color;
+            if (string.IsNullOrEmpty(color)) color = pLive.kingdom?.getColor()?.color_text ?? "";
+
+            if (pLive.isKing())
+            {
+                string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
+                string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pLive.kingdom));
+                pNode.social_title = string.IsNullOrEmpty(kingdomName)
+                    ? "\u541B\u4E3B"
+                    : kingdomName + titleChar;
+                pNode.social_title_color = color;
+                return;
+            }
+
+            if (pLive.isCityLeader())
+            {
+                string cityName = pLive.city?.data?.name ?? pNode.city_name ?? "";
+                pNode.social_title = string.IsNullOrEmpty(cityName)
+                    ? "\u592A\u5B88"
+                    : cityName + " \u592A\u5B88";
+                pNode.social_title_color = color;
+                return;
+            }
+
+            pLive.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+            if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
+            {
+                string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
+                pNode.social_title = string.IsNullOrEmpty(kingdomName)
+                    ? "\u7EE7\u627F\u4EBA"
+                    : kingdomName + " \u7EE7\u627F\u4EBA";
+                pNode.social_title_color = color;
+            }
+        }
+
+        private static void ApplyArchivedSocialTitle(FamilyTreeNode pNode)
+        {
+            if (pNode == null) return;
+            if (TryGetPosthumousTitle(pNode.id, out string title, out string titleColor))
+            {
+                pNode.social_title = title;
+                pNode.social_title_color = string.IsNullOrEmpty(titleColor) ? pNode.kingdom_color : titleColor;
+                return;
+            }
+
+            if (WasKing(pNode.id))
+            {
+                pNode.social_title = string.IsNullOrEmpty(pNode.kingdom_name)
+                    ? "\u541B\u4E3B"
+                    : pNode.kingdom_name + " \u541B\u4E3B";
+                pNode.social_title_color = pNode.kingdom_color;
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(pNode.social_title))
+            {
+                if (string.IsNullOrEmpty(pNode.social_title_color))
+                    pNode.social_title_color = pNode.kingdom_color;
+                return;
+            }
+
+            if (TryGetArchivedLeaderColor(pNode.id, out string leaderColor))
+            {
+                pNode.social_title = string.IsNullOrEmpty(pNode.city_name)
+                    ? "\u592A\u5B88"
+                    : pNode.city_name + " \u592A\u5B88";
+                pNode.social_title_color = string.IsNullOrEmpty(leaderColor) ? pNode.kingdom_color : leaderColor;
+            }
+        }
+
+        private static bool TryGetArchivedLeaderColor(long pActorId, out string pColor)
+        {
+            pColor = "";
+            var db = DB;
+            if (db == null || pActorId < 0) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(CONTEXT_KINGDOM_COLOR, '') FROM {PersonBiographyTableItem.GetTableName()} " +
+                    $"WHERE ACTOR_ID=@id AND EVENT_TYPE=@event ORDER BY WORLD_TIME DESC, EVENT_ID DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                cmd.Parameters.AddWithValue("@event", PersonEvent.BECOME_LEADER);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return false;
+                pColor = SafeStr(r, 0);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static bool TryGetPosthumousTitle(long pActorId, out string pTitle, out string pColor)
+        {
+            pTitle = "";
+            pColor = "";
+            var db = DB;
+            if (db == null || pActorId < 0) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(FULL_TITLE, ''), IFNULL(FULL_TITLE_COLOR, '') " +
+                    $"FROM {PosthumousTitleTableItem.GetTableName()} " +
+                    $"WHERE ACTOR_ID=@id AND IFNULL(FULL_TITLE, '')<>'' " +
+                    $"ORDER BY DECIDED_TIME DESC, RECORD_ID DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (r.Read())
+                {
+                    pTitle = SafeStr(r, 0);
+                    pColor = SafeStr(r, 1);
+                    return !string.IsNullOrEmpty(pTitle);
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(POSTHUMOUS_TITLE, ''), IFNULL(POSTHUMOUS_COLOR, '') " +
+                    $"FROM {KingdomReignTableItem.GetTableName()} " +
+                    $"WHERE KING_ACTOR_ID=@id AND IFNULL(POSTHUMOUS_TITLE, '')<>'' " +
+                    $"ORDER BY END_TIME DESC, START_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return false;
+                pTitle = SafeStr(r, 0);
+                pColor = SafeStr(r, 1);
+                return !string.IsNullOrEmpty(pTitle);
+            }
+            catch { return false; }
+        }
+
+        private static bool WasKing(long pActorId)
+        {
+            var db = DB;
+            if (db == null || pActorId < 0) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT EXISTS(SELECT 1 FROM {KingdomReignTableItem.GetTableName()} " +
+                    $"WHERE KING_ACTOR_ID=@id LIMIT 1)";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                object o = cmd.ExecuteScalar();
+                return o != null && o != System.DBNull.Value && System.Convert.ToInt64(o) != 0;
+            }
+            catch { return false; }
         }
 
         private static void FillLiveClanFlagSnapshot(FamilyTreeNode pNode, Clan pClan)

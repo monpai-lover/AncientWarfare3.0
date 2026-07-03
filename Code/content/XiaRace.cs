@@ -31,8 +31,7 @@ namespace AncientWarfare3.content
             "nocturnal_dormancy"
         };
 
-        // 贴图根路径已统一到 Cultiway 标准 actors/species/civs/{id}/(原 actors/races/Xia/)。
-        // 子目录名仍保留 AW2 命名(unit_male_1 等),由 XiaTextures.BindSkinArrays 扫描对齐。
+        // 贴图根路径已统一到 Cultiway 标准 actors/species/civs/{id}/(原 actors/races/Xia/),子目录对齐原版 male_1/female_1/warrior_1 范式。
         public const string TEXTURE_PATH = "actors/species/civs/Xia/";
 
         public static ActorAsset asset;
@@ -45,9 +44,7 @@ namespace AncientWarfare3.content
             // —— 命名 / 本地化 ——
             Xia.name_locale = ID; // 本地化键 Xia(经 .Underscore() 查 creatures 域)
             Xia.icon = "iconXias";
-            Xia.name_template_sets = AssetLibrary<ActorAsset>.a<string>(
-                "human_default_set", "human_slavic_set", "human_germanic_set",
-                "human_rus_set", "human_posh_set", "human_folk_set");
+            Xia.name_template_sets = AssetLibrary<ActorAsset>.a<string>(XiaNameSets.DefaultSet);
 
             // —— 王国关联 ——
             Xia.kingdom_id_wild = "nomads_Xia";
@@ -119,10 +116,11 @@ namespace AncientWarfare3.content
                 Xia.addSubspeciesTrait(traitId);
             }
 
-            // —— 单位寿命/繁衍(旧 unit_Xia:max_age 90 / max_children 6)——
+            // —— 单位寿命/繁衍(旧 Xia:max_age 90 / max_children 6)——
             // base_stats 与 genome 是两套机制,这里保留直接的 base_stats 寿命/繁衍上限。
-            Xia.base_stats["lifespan"] = 90f;
-            Xia.base_stats["offspring"] = 6f;
+            // Keep lifespan/offspring in genome only; calculateStats adds genome and base_stats together.
+            Xia.base_stats["lifespan"] = 0f;
+            Xia.base_stats["offspring"] = 0f;
 
             // —— 军事:不再"起步弱"。原 civ_base_army_multiplier=0.5(AW2 蓝图设的军事起步弱),
             //   现提到 1.2 让夏朝军队规模略强于原版(默认 0.35)。 ——

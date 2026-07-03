@@ -128,6 +128,7 @@ namespace AncientWarfare3.content.figures
             //   (BabyMaker 后续才设性别/营养/标记),isAlive() 可能为假 → 历史人物永远不走繁殖路径降临
             //   (= 用户报"只能神力刷,不自然产生"的根因之一)。放宽为 data!=null 且非 rekt(已死/无效)。
             if (pActor?.data == null || pActor.isRekt()) { Diag(pSource, "actor 空/已死"); return; }
+            if (pActor.isBaby() || pActor.isEgg()) { Diag(pSource, "baby/egg blocked"); return; }
             if (!LineageService.IsXia(pActor)) return; // 非夏人:沉默(每帧大量非夏单位,不刷日志)
             // ⚠ 不能用 isKingdomCiv()(=kingdom.isCiv()):Actor.newCreature() 里 kingdom 被设为 null
             //   (Actor.cs:1048),此钩为 newCreature Postfix,kingdom 恒 null → isKingdomCiv 恒 false/NullRef
@@ -145,8 +146,12 @@ namespace AncientWarfare3.content.figures
             var def = HistoricalFigureDef.Get(idx);
             if (def == null) return;
 
-            // —— 合流门:刘邦起需世上已有夏人国完成姓氏合流 ——
-            if (def.RequiresIntegration && !AnyXiaKingdomIntegrated()) { Diag(pSource, def.Key + " 需姓氏合流未满足"); return; }
+            // —— 合流门:刘邦起需降临目标所在国完成姓氏合流 ——
+            if (def.RequiresIntegration && !IsSpawnKingdomIntegrated(pActor))
+            {
+                Diag(pSource, def.Key + " 需所在国姓氏合流未满足");
+                return;
+            }
 
             // —— 掷骰(私有 Random) ——
             if (Rng.NextDouble() >= def.Chance) { Diag(pSource, def.Key + " 掷骰未中(chance=" + def.Chance + ")"); return; }
@@ -160,16 +165,21 @@ namespace AncientWarfare3.content.figures
             if (DiagnoseSpawn) ModClass.LogInfo($"[FigureDiag] source={pSource} 早退:{pReason}");
         }
 
-        /// <summary>世上是否有任意夏人国家完成姓氏合流(合流门用)。</summary>
-        private static bool AnyXiaKingdomIntegrated()
+        /// <summary>刘邦起的合流门只看降临目标所在国,避免别国完成合流后误放行到未合流国家。</summary>
+        private static bool IsSpawnKingdomIntegrated(Actor pActor)
         {
-            if (World.world?.kingdoms == null) return false;
-            foreach (Kingdom k in World.world.kingdoms)
-            {
-                if (k == null || !k.isCiv()) continue;
-                if (LineageService.IsKingdomIntegrated(k)) return true;
-            }
-            return false;
+            Kingdom kingdom = ResolveSpawnKingdom(pActor);
+            return kingdom != null &&
+                   LineageService.IsXiaKingdom(kingdom) &&
+                   LineageService.IsKingdomIntegrated(kingdom);
+        }
+
+        private static Kingdom ResolveSpawnKingdom(Actor pActor)
+        {
+            if (pActor?.kingdom?.data != null && !pActor.kingdom.isRekt()) return pActor.kingdom;
+            Kingdom cityKingdom = pActor?.city?.kingdom;
+            if (cityKingdom?.data != null && !cityKingdom.isRekt()) return cityKingdom;
+            return null;
         }
 
         /// <summary>降临:设属性 + 注入预设姓氏 + 标记持久化 + 发世界日志。</summary>
@@ -198,6 +208,7 @@ namespace AncientWarfare3.content.figures
             pActor.data.set(LineageKeys.CLAN_NAME, pDef.ClanName);
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, pDef.FamilyName);
             pActor.data.set(LineageKeys.GIVEN_NAME, pDef.GivenName); // 名:发/政/邦/丕/炎
+            pActor.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
 
             // 3) 晋升为贵族(距离归零、guizu、状态 noble、ApplyDisplayName 拼回全名"姬发"、归档)。
             LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);

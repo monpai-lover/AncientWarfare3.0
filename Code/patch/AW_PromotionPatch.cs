@@ -22,6 +22,11 @@ namespace AncientWarfare3.patch
             __state = false;
             if (!pNew) return true;
             if (pActor == null || !LineageService.IsXia(pActor)) return true;
+            if (!pActor.isSexMale())
+            {
+                __state = true;
+                return false;
+            }
 
             Kingdom kingdom = __instance?.kingdom ?? pActor.kingdom;
             if (!HeirService.IsCurrentHeir(kingdom, pActor)) return true;
@@ -48,6 +53,16 @@ namespace AncientWarfare3.patch
             if (pFromLoad) return;
             if (pActor == null || !LineageService.IsXia(pActor)) return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
+        public static bool SetKing_MaleOnly_Prefix(Kingdom __instance, Actor pActor, bool pFromLoad)
+        {
+            if (pFromLoad) return true;
+            if (pActor == null || pActor.isSexMale()) return true;
+            if (!LineageService.IsXiaKingdom(__instance) && !LineageService.IsXia(pActor)) return true;
+            return false;
         }
     }
 }

@@ -214,6 +214,33 @@ namespace AncientWarfare3.core.db
         }
 
         /// <summary>找某 actor 对应的历史人物 index(成为 king/死亡时反查)。无则 -1。</summary>
+        public static bool TryGetAppliedKingdomName(long pKingdomId, out string pKingdomName)
+        {
+            EnsureLoaded();
+            pKingdomName = "";
+            if (pKingdomId < 0) return false;
+
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null) return false;
+
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    "SELECT IFNULL(KINGDOM_NAME_APPLIED, '') FROM " + Table +
+                    " WHERE KINGDOM_ID=@kid AND IFNULL(KINGDOM_NAME_APPLIED, '')<>'' LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                object value = cmd.ExecuteScalar();
+                pKingdomName = value == null || value == System.DBNull.Value ? "" : value.ToString();
+                return !string.IsNullOrEmpty(pKingdomName);
+            }
+            catch
+            {
+                pKingdomName = "";
+                return false;
+            }
+        }
+
         public static int IndexOfActor(long pActorId)
         {
             EnsureLoaded();

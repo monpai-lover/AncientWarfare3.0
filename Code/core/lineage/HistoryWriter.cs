@@ -28,12 +28,12 @@ namespace AncientWarfare3.core.lineage
 
         public static HistoryTarget Kingdom(Kingdom pKingdom)
         {
-            return new HistoryTarget("kingdom", pKingdom?.id ?? -1L);
+            return new HistoryTarget("kingdom", pKingdom?.data?.id ?? -1L);
         }
 
         public static HistoryTarget City(City pCity)
         {
-            return new HistoryTarget("city", pCity?.id ?? -1L);
+            return new HistoryTarget("city", pCity?.data?.id ?? -1L);
         }
 
         public static HistoryTarget From(string pType, long pId)
@@ -186,10 +186,10 @@ namespace AncientWarfare3.core.lineage
 
         public static void RecordKingdom(Kingdom pKingdom, string pEventType, HistoryText pContent, HistoryTarget pTarget)
         {
-            if (pKingdom == null) return;
+            if (pKingdom?.data == null) return;
             Insert(KingdomHistoryTableItem.GetTableName(), pKingdom, pEventType, pContent, pKingdom.name,
                 pTarget.IsValid ? pTarget : HistoryTarget.Kingdom(pKingdom),
-                ColumnVal.Create("KINGDOM_ID", pKingdom.id));
+                ColumnVal.Create("KINGDOM_ID", pKingdom.data.id));
         }
 
         public static void RecordCity(City pCity, Kingdom pContextKingdom, string pEventType, string pContent)
@@ -206,10 +206,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCity == null || pCity.data == null) return;
             // 额外写 KINGDOM_NAME 快照(该事件时城市所属国名),供城市史"归属期"分段切段用。
-            string kingdomName = pContextKingdom != null ? pContextKingdom.name : "";
+            string kingdomName = pContextKingdom?.data != null ? pContextKingdom.name : "";
             Insert(CityHistoryTableItem.GetTableName(), pContextKingdom, pEventType, pContent, pCity.data.name,
                 pTarget.IsValid ? pTarget : HistoryTarget.City(pCity),
-                ColumnVal.Create("CITY_ID", pCity.id),
+                ColumnVal.Create("CITY_ID", pCity.data.id),
                 ColumnVal.Create("KINGDOM_NAME", kingdomName ?? ""),
                 ColumnVal.Create("KINGDOM_COLOR", HistoryColors.FromKingdom(pContextKingdom)));
         }
@@ -270,7 +270,7 @@ namespace AncientWarfare3.core.lineage
             string prefix = BuildYearPrefix(t, pContextKingdom);
             string prefixRich = BuildYearPrefixRich(t, pContextKingdom);
             long eventId = NextEventId(db, pTable);
-            string contextName = pContextKingdom != null ? pContextKingdom.name : "";
+            string contextName = pContextKingdom?.data != null ? pContextKingdom.name : "";
             string contextColor = HistoryColors.FromKingdom(pContextKingdom);
             HistoryTarget target = ResolveTarget(pTarget, pContent);
 
@@ -287,7 +287,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CONTENT", pContent.Plain ?? ""),
                     ColumnVal.Create("CONTENT_RICH", pContent.Rich ?? ""),
                     ColumnVal.Create("EVENT_TYPE", pEventType ?? ""),
-                    ColumnVal.Create("CONTEXT_KINGDOM_ID", pContextKingdom != null ? pContextKingdom.id : -1L),
+                    ColumnVal.Create("CONTEXT_KINGDOM_ID", pContextKingdom?.data?.id ?? -1L),
                     ColumnVal.Create("CONTEXT_KINGDOM_NAME", contextName ?? ""),
                     ColumnVal.Create("CONTEXT_KINGDOM_COLOR", contextColor),
                     ColumnVal.Create("TARGET_TYPE", target.IsValid ? target.type : ""),

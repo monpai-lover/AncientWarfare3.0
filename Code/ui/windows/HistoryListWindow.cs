@@ -107,8 +107,10 @@ namespace AncientWarfare3.ui.windows
                 long shiId = LineageQuery.GetActorShiId(actorId);
                 FamilyTreeWindow.OpenFamilyTree(actorId, shiId);
             };
+            bool wasCurrent = ScrollWindow.isCurrentWindow(AW_LineageWindowIds.HISTORY);
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.HISTORY,
                 () => { if (Instance != null) Instance.Refresh(); });
+            if (!wasCurrent && Instance != null) Instance.Refresh();
         }
 
         protected override void Init()

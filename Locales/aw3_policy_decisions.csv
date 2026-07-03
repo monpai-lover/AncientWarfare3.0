@@ -1,0 +1,18 @@
+key,cz,en,ch
+aw_policy_state_short,政,State,政
+aw_policy_research_short,研,Research,研
+aw_policy_decision_short,令,Decision,令
+aw_policy_decisions,常态决策,Decisions,常態決策
+aw_policy_no_current_decision,当前没有决策,No active decision,目前沒有決策
+aw_policy_decision_section,可执行决策,Available Decisions,可執行決策
+aw_decision_points_short,令,Dec,令
+aw_decision_year_name,改元,Change Era,改元
+aw_decision_year_name_desc,重新颁布年号并记入国史,Issue a new era name and record it,重新頒布年號並記入國史
+aw_decision_title_upgrade,上表请封,Petition Rank,上表請封
+aw_decision_title_upgrade_desc,独立国家领土扩展达标后提升爵位,Raise an independent realm title after territorial expansion,獨立國家領土擴展達標後提升爵位
+aw_decision_royal_expansion,派子开疆,Royal Expansion,派子開疆
+aw_decision_royal_expansion_desc,在领地未达掌控上限时派遣合格王室子嗣建立新城,Send an eligible royal child to found a new city when the realm is below its control limit,在領地未達掌控上限時派遣合格王室子嗣建立新城
+aw_decision_change_capital,迁都,Move Capital,遷都
+aw_decision_change_capital_desc,非战时迁往更强的统治城市,Move the capital to a stronger city in peace,非戰時遷往更強的統治城市
+aw_decision_control_slaves,整饬奴隶,Discipline Slaves,整飭奴隸
+aw_decision_control_slaves_desc,重申奴隶管控与捕奴职责,Reinforce slave control and catcher duties,重申奴隸管控與捕奴職責

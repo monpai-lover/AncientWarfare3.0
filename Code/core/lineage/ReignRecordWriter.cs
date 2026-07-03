@@ -20,6 +20,15 @@ namespace AncientWarfare3.core.lineage
             public long KingActorId;
             public int StartPopulation;
             public int StartCityCount;
+            public int StartArmyCount;
+            public int EndPopulation;
+            public int EndCityCount;
+            public int EndArmyCount;
+            public int IsFounder;
+            public int WarWins;
+            public int WarLosses;
+            public int LostCapital;
+            public string DeathCause;
             public double StartTime;
 
             public bool IsValid => ReignId >= 0;
@@ -41,12 +50,15 @@ namespace AncientWarfare3.core.lineage
         public static void OpenReign(Kingdom pKingdom, Actor pNewKing)
         {
             if (!Ready || pKingdom?.data == null || pNewKing?.data == null) return;
+            if (!LineageService.IsXiaKingdom(pKingdom) || !LineageService.IsXia(pNewKing)) return;
             long reignId = TableIdAllocator.Next(DB, TABLE, "REIGN_ID");
             int idx = CountReigns(pKingdom.id) + 1;
             double now = World.world.getCurWorldTime();
             pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string stem, "");
             int pop = SafePopulation(pKingdom);
             int cities = SafeCityCount(pKingdom);
+            int armies = SafeArmyCount(pKingdom);
+            int isFounder = idx == 1 ? 1 : 0;
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string kingColor = HistoryColors.FromActor(pNewKing);
             try
@@ -67,9 +79,62 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("POSTHUMOUS_COLOR",   ""),
                     ColumnVal.Create("END_REASON",         ""),
                     ColumnVal.Create("START_POPULATION",   pop),
-                    ColumnVal.Create("START_CITY_COUNT",   cities));
+                    ColumnVal.Create("START_CITY_COUNT",   cities),
+                    ColumnVal.Create("START_ARMY_COUNT",   armies),
+                    ColumnVal.Create("END_POPULATION",     0),
+                    ColumnVal.Create("END_CITY_COUNT",     0),
+                    ColumnVal.Create("END_ARMY_COUNT",     0),
+                    ColumnVal.Create("IS_FOUNDER",         isFounder),
+                    ColumnVal.Create("WAR_WINS",           0),
+                    ColumnVal.Create("WAR_LOSSES",         0),
+                    ColumnVal.Create("LOST_CAPITAL",       0),
+                    ColumnVal.Create("DEATH_CAUSE",        ""));
             }
             catch (Exception e) { ModClass.LogWarning("ReignRecordWriter.OpenReign: " + e.Message); }
+        }
+
+        /// <summary>关闭该国当前 end_time=-1 的 reign,并写入结束快照。</summary>
+        public static ReignInfo CloseOpenReign(Kingdom pKingdom, string pReason, Actor pKing = null)
+        {
+            if (!Ready || pKingdom?.data == null) return ReignInfo.Empty;
+            ReignInfo open = ReadOpenReignInfo(pKingdom.id);
+            if (!open.IsValid) return ReignInfo.Empty;
+
+            int endPop = SafePopulation(pKingdom);
+            int endCities = SafeCityCount(pKingdom);
+            int endArmy = SafeArmyCount(pKingdom);
+            var (wins, losses) = WarRecordWriter.GetWarRecord(pKingdom.id, open.StartTime, World.world.getCurWorldTime());
+            string deathCause = ReadDeathCause(pKing);
+            int lostCapital = pReason == "kingdom_fell" ? 1 : 0;
+
+            try
+            {
+                DB.UpdateValue(TABLE,
+                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("REIGN_ID", open.ReignId) },
+                    ColumnVal.Create("END_TIME", World.world.getCurWorldTime()),
+                    ColumnVal.Create("END_REASON", pReason ?? ""),
+                    ColumnVal.Create("END_POPULATION", endPop),
+                    ColumnVal.Create("END_CITY_COUNT", endCities),
+                    ColumnVal.Create("END_ARMY_COUNT", endArmy),
+                    ColumnVal.Create("WAR_WINS", wins),
+                    ColumnVal.Create("WAR_LOSSES", losses),
+                    ColumnVal.Create("LOST_CAPITAL", lostCapital),
+                    ColumnVal.Create("DEATH_CAUSE", deathCause));
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("ReignRecordWriter.CloseOpenReign rich: " + e.Message);
+                return ReignInfo.Empty;
+            }
+
+            open.EndPopulation = endPop;
+            open.EndCityCount = endCities;
+            open.EndArmyCount = endArmy;
+            open.WarWins = wins;
+            open.WarLosses = losses;
+            open.LostCapital = lostCapital;
+            open.DeathCause = deathCause;
+            return open;
         }
 
         /// <summary>关闭该国当前 end_time=-1 的 reign。</summary>
@@ -136,7 +201,8 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
-                    $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME " +
+                    $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME, " +
+                    $"START_ARMY_COUNT, IS_FOUNDER " +
                     $"FROM {TABLE} WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
@@ -148,7 +214,9 @@ namespace AncientWarfare3.core.lineage
                     KingActorId = r.GetInt64(2),
                     StartPopulation = (int)r.GetInt64(3),
                     StartCityCount = (int)r.GetInt64(4),
-                    StartTime = r.GetDouble(5)
+                    StartTime = r.GetDouble(5),
+                    StartArmyCount = SafeInt64(r, 6),
+                    IsFounder = SafeInt64(r, 7)
                 };
             }
             catch { return ReignInfo.Empty; }
@@ -209,6 +277,35 @@ namespace AncientWarfare3.core.lineage
         private static int SafeCityCount(Kingdom k)
         {
             try { return k.cities?.Count ?? 0; } catch { return 0; }
+        }
+
+        private static int SafeArmyCount(Kingdom k)
+        {
+            try
+            {
+                if (k?.data == null) return 0;
+                int count = 0;
+                foreach (Actor unit in k.getUnits())
+                {
+                    if (unit?.data == null || unit.isRekt()) continue;
+                    if (unit.isWarrior()) count++;
+                }
+                return count;
+            }
+            catch { return 0; }
+        }
+
+        private static string ReadDeathCause(Actor pActor)
+        {
+            if (pActor?.data == null) return "";
+            pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "");
+            return cause ?? "";
+        }
+
+        private static int SafeInt64(SQLiteDataReader pReader, int pIndex)
+        {
+            try { return pReader.IsDBNull(pIndex) ? 0 : (int)pReader.GetInt64(pIndex); }
+            catch { return 0; }
         }
     }
 }

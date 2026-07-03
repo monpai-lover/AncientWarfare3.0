@@ -12,9 +12,24 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class KingdomArchiveWriter
     {
+        public static bool IsArchivable(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            try
+            {
+                if (pKingdom.isNeutral()) return false;
+                if (!pKingdom.isCiv()) return false;
+            }
+            catch
+            {
+                return false;
+            }
+            return true;
+        }
+
         public static void Upsert(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return;
+            if (!IsArchivable(pKingdom)) return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
 
@@ -93,7 +108,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>仅当档案无此王国行时,用当前(可能半失效)数据补一行兜底,不覆盖已有行。</summary>
         public static void EnsureRow(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return;
+            if (!IsArchivable(pKingdom)) return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
             string table = KingdomArchiveTableItem.GetTableName();
@@ -173,7 +188,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void MarkDestroyed(Kingdom pKingdom)
         {
-            if (pKingdom == null) return;
+            if (!IsArchivable(pKingdom)) return;
             Upsert(pKingdom);
             MarkDestroyed(pKingdom.id);
         }

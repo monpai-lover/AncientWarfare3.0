@@ -28,7 +28,7 @@ namespace AncientWarfare3.ui.windows
         private void Refresh()
         {
             ClearList();
-            var list = LineageQuery.GetSurnameOverview();
+            var list = LineageQuery.GetCityLineageOverview();
             foreach (var s in list)
             {
                 AddItemToList(s);

@@ -47,13 +47,14 @@ namespace AncientWarfare3.content
             var formerking = NewTrait("formerking", "ui/Icons/traits/iconformerking", XiaTraitGroups.AW2);
             // TODO[批F-天命]: action_special_effect = Actionlib.former
 
-            // 禁卫军:体型+0.03、血+2、伤害+25、速度+15、抗击退
+            // 禁卫军:小幅精锐加成，避免 AW2 版本的超模伤害/速度。
             var jinwei = NewTrait("禁卫军", "ui/Icons/traits/iconjinwei", XiaTraitGroups.AW2);
-            jinwei.base_stats["scale"] = 0.03f;
-            jinwei.base_stats["health"] = 2f;       // 旧 mod_health +2
-            jinwei.base_stats["damage"] = 25f;
-            jinwei.base_stats["speed"] = 15f;
-            jinwei.base_stats["knockback"] = -1f;   // 旧 knockback_reduction +100:抗击退
+            jinwei.base_stats["scale"] = 0.02f;
+            jinwei.base_stats["health"] = 8f;
+            jinwei.base_stats["damage"] = 4f;
+            jinwei.base_stats["warfare"] = 2f;
+            jinwei.base_stats["speed"] = 1f;
+            jinwei.base_stats["knockback"] = -0.1f;
 
             // rebel 反抗者:血+2、外交+35、政务+35、战争+4、同特质聚集。special_effect=义军抱团(批F)
             var rebel = NewTrait("rebel", "ui/Icons/traits/iconrebel", XiaTraitGroups.AW2);

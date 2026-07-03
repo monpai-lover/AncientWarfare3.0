@@ -66,8 +66,8 @@ aw_lineage_overview_btn,姓族总览,Lineage Overview,姓族總覽
 aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,View all surname and branch lineage archives,查看所有姓與氏支的譜系檔案
 xia,夏人,Xia,夏人
 xia_description,点击地图生成一个夏人单位,Click on the map to spawn a Xia unit,點擊地圖生成一個夏人單位
-AW3 Lineage,姓族档案,Lineage Archive,姓族檔案
-AW3 Lineage Description,夏朝姓族 / 氏支 / 家族树档案,Xia surname / branch / family tree archive,夏朝姓族 / 氏支 / 家族樹檔案
+AW3 Lineage,古代战争3.0(春秋),Ancient Warfare 3.0 (Spring and Autumn),古代戰爭3.0(春秋)
+AW3 Lineage Description,历史 / 国策 / 科技 / 姓族,History / Policies / Technology / Lineage,歷史 / 國策 / 科技 / 姓族
 aw_toggle_figure,历史人物降临,Historical Figures,歷史人物降臨
 aw_toggle_figure_description,开关历史人物(姬发/嬴政/刘邦/曹丕/司马炎)按序降临,Toggle whether historical figures spawn in order,開關歷史人物(姬發/嬴政/劉邦/曹丕/司馬炎)按序降臨
 aw_policy_state_placeholder,阶级,Class,階級

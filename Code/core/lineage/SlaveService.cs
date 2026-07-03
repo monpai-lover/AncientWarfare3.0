@@ -1,0 +1,869 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.content;
+using AncientWarfare3.core.db;
+using AncientWarfare3.utils;
+
+namespace AncientWarfare3.core.lineage
+{
+    internal static class SlaveService
+    {
+        private const float RETIREMENT_AGE_RATIO = 0.7f;
+        private const float SLAVE_ARMY_TARGET_PERCENT = 0.8f;
+        private const float CITY_FALL_SLAVE_RATIO = 0.10f;
+        private const float DIRECT_CAPTURE_HEALTH_RATIO = 0.85f;
+        private const float IMPORTANT_CAPTURE_HEALTH_RATIO = 0.45f;
+        private const float COMBAT_CAPTURE_WARRIOR_CHANCE = 0.28f;
+        private const float COMBAT_CAPTURE_CIVILIAN_CHANCE = 0.40f;
+        private const float COMBAT_CAPTURE_IMPORTANT_CHANCE = 0.08f;
+        private const float COMBAT_CAPTURE_CATCHER_BONUS = 0.25f;
+        private const int SLAVE_CATCHER_SEARCH_RADIUS = 80;
+        private const int MIN_SLAVES_FOR_SLAVE_ARMY = 3;
+        private const int MAX_CITY_FALL_SLAVES = 8;
+        private const int MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 5;
+        private const int SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 8;
+        private const int MERIT_FOR_FREEDOM = 8;
+        private static readonly System.Random Rng = new System.Random();
+        private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =
+            new Dictionary<long, List<PendingSlaveCaptureSummary>>();
+
+        private sealed class PendingSlaveCaptureSummary
+        {
+            public City city;
+            public string cityName;
+            public int count;
+        }
+
+        public static bool IsSlave(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (pActor.hasTrait(LineageKeys.TRAIT_SLAVE)) return true;
+            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
+            return status == LineageStatus.SLAVE;
+        }
+
+        public static bool AreBothSlaves(Actor pA, Actor pB)
+        {
+            return IsSlave(pA) && IsSlave(pB);
+        }
+
+        public static bool IsRetiredSoldier(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.RETIRED_SOLDIER, out bool retired, false);
+            return retired;
+        }
+
+        public static bool IsSlaveryEnabled(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.SLAVERY_ENABLED, out bool enabled, false);
+            return enabled;
+        }
+
+        public static void SetSlaveryEnabled(Kingdom pKingdom, bool pEnabled)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.SLAVERY_ENABLED, pEnabled);
+            if (!pEnabled)
+                pKingdom.data.set(LineageKeys.SLAVE_ARMY_ENABLED, false);
+        }
+
+        public static void SetSlaveArmyEnabled(Kingdom pKingdom, bool pEnabled)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.SLAVE_ARMY_ENABLED, pEnabled);
+            if (pEnabled)
+                SetSlaveryEnabled(pKingdom, true);
+        }
+
+        public static void EnforceSlaveControl(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || !IsSlaveryEnabled(pKingdom)) return;
+            foreach (City city in pKingdom.getCities())
+            {
+                AssignSlaveCatchers(city);
+                CheckCitySlaveLabor(city);
+                if (city != null && city.hasArmy())
+                {
+                    EnsureNonSlaveCaptain(city.getArmy());
+                    RenameArmyIfSlaveArmy(city.getArmy());
+                }
+            }
+        }
+
+        public static void ResetSlaveFoodQuota(City pCity)
+        {
+            if (pCity?.data == null) return;
+
+            int quota = CountSlaves(pCity) > 0 ? (int)(pCity.countFood() * 0.1f) : 0;
+            pCity.data.set(LineageKeys.SLAVE_FOOD_YEAR, Date.getCurrentYear());
+            pCity.data.set(LineageKeys.SLAVE_FOOD_QUOTA, quota);
+        }
+
+        public static bool CanConsumeCityFood(Actor pActor, City pCity)
+        {
+            if (!IsSlave(pActor)) return true;
+            if (pCity?.data == null) return false;
+
+            int year = Date.getCurrentYear();
+            pCity.data.get(LineageKeys.SLAVE_FOOD_YEAR, out int quotaYear, int.MinValue);
+            if (quotaYear != year)
+                ResetSlaveFoodQuota(pCity);
+
+            pCity.data.get(LineageKeys.SLAVE_FOOD_QUOTA, out int quota, 0);
+            if (quota <= 0) return false;
+
+            pCity.data.set(LineageKeys.SLAVE_FOOD_QUOTA, quota - 1);
+            return true;
+        }
+
+        public static bool CanBeSlaveCatcher(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (!IsSupportedSlaveryActor(pActor)) return false;
+            if (pActor.isRekt() || !pActor.isAdult()) return false;
+            if (pActor.isKing() || pActor.isCityLeader()) return false;
+            if (!IsSlaveryEnabled(pActor.kingdom)) return false;
+            if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
+            if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
+            if (HeirService.IsCurrentHeir(pActor.kingdom, pActor)) return false;
+            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
+            return true;
+        }
+
+        public static void AssignSlaveCatchers(City pCity)
+        {
+            if (pCity?.data == null) return;
+            Kingdom kingdom = pCity.kingdom;
+            if (kingdom?.data == null) return;
+            if (!IsSlaveryEnabled(kingdom)) return;
+            if (SlaveryContent.SlaveCatcherJob == null) return;
+            if (pCity.getUnitsTotal() < 15) return;
+            if (pCity.jobs.countCurrentJobs(SlaveryContent.SlaveCatcherJob) > 0) return;
+            if (!HasCaptureTargetForCity(pCity)) return;
+
+            pCity.jobs.addToJob(SlaveryContent.SlaveCatcherJob, 1);
+        }
+
+        public static Actor FindSlaveCaptureTarget(Actor pCatcher, int pSearchRadius)
+        {
+            if (!CanBeSlaveCatcher(pCatcher)) return null;
+            if (pCatcher.current_tile == null || pCatcher.kingdom == null) return null;
+
+            Actor best = null;
+            int bestDist = int.MaxValue;
+            int radius = Math.Max(pSearchRadius, SLAVE_CATCHER_SEARCH_RADIUS);
+            int maxDist = radius * radius;
+            using ListPool<Kingdom> enemies = pCatcher.kingdom.getEnemiesKingdoms();
+            foreach (Kingdom enemy in enemies)
+            {
+                if (enemy?.data == null) continue;
+                foreach (Actor target in enemy.getUnits())
+                {
+                    if (!CanCaptureTarget(pCatcher, target)) continue;
+                    int dist = Toolbox.SquaredDistTile(pCatcher.current_tile, target.current_tile);
+                    if (dist > maxDist || dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = target;
+                }
+            }
+            return best;
+        }
+
+        public static bool TryCaptureCombatTarget(Actor pTarget, BaseSimObject pAttacker, AttackType pAttackType)
+        {
+            if (pAttackType != AttackType.Weapon) return false;
+            if (pTarget?.data == null || pTarget.isRekt() || !pTarget.isAlive() || !pTarget.hasHealth()) return false;
+            if (!CanBeCapturedAsTarget(pTarget, pAllowImportantCapture: true)) return false;
+
+            Actor captor = pAttacker?.a;
+            if (captor?.data == null || captor == pTarget) return false;
+            if (captor.isRekt() || !captor.isAlive()) return false;
+            if (!IsSupportedSlaveryActor(captor)) return false;
+
+            Kingdom captorKingdom = captor.kingdom;
+            Kingdom targetKingdom = pTarget.kingdom;
+            if (captorKingdom?.data == null || targetKingdom?.data == null) return false;
+            if (captorKingdom == targetKingdom) return false;
+            if (!captorKingdom.isEnemy(targetKingdom)) return false;
+            if (!IsSlaveryEnabled(captorKingdom)) return false;
+            if (pTarget.current_tile != null && captor.current_tile != null &&
+                !pTarget.current_tile.isSameIsland(captor.current_tile)) return false;
+
+            float threshold = IsImportantCaptureTarget(pTarget)
+                ? IMPORTANT_CAPTURE_HEALTH_RATIO
+                : DIRECT_CAPTURE_HEALTH_RATIO;
+            if (pTarget.getHealthRatio() > threshold) return false;
+            if (!RollCombatCapture(captor, pTarget)) return false;
+
+            City city = captor.city ?? captorKingdom.capital;
+            if (city?.data == null) return false;
+
+            pTarget.cancelAllBeh();
+            pTarget.clearAttackTarget();
+            pTarget.beh_actor_target = null;
+            pTarget.attackedBy = null;
+            captor.clearAttackTarget();
+            if (captor.beh_actor_target == pTarget)
+                captor.beh_actor_target = null;
+            pTarget.joinCity(city);
+            pTarget.setHealth(Math.Max(1, pTarget.getMaxHealthPercent(0.2f)));
+
+            bool nationalRecord = IsImportantCaptureTarget(pTarget);
+            bool changed = Enslave(pTarget, "battlefield_capture", captor, city, captorKingdom,
+                pForceRecord: true, pForceNationalRecord: nationalRecord);
+            if (!changed) return false;
+
+            QueueWarSlaveCaptureSummary(captorKingdom, city, 1);
+            CheckCitySlaveLabor(city);
+            return true;
+        }
+
+        public static bool CaptureTargetAsSlave(Actor pCatcher, Actor pTarget)
+        {
+            if (!CanCaptureTarget(pCatcher, pTarget)) return false;
+
+            bool nationalRecord = IsImportantCaptureTarget(pTarget);
+            City city = pCatcher.city ?? pCatcher.kingdom?.capital;
+            Kingdom kingdom = pCatcher.kingdom ?? city?.kingdom;
+            if (city?.data == null || kingdom?.data == null) return false;
+
+            pTarget.joinCity(city);
+            bool changed = Enslave(pTarget, "captured", pCatcher, city, kingdom, pForceRecord: true,
+                pForceNationalRecord: nationalRecord);
+            if (changed)
+                QueueWarSlaveCaptureSummary(kingdom, city, 1);
+            CheckCitySlaveLabor(city);
+            return changed;
+        }
+
+        public static bool Enslave(Actor pActor, string pReason, Actor pCaptor = null,
+            City pContextCity = null, Kingdom pContextKingdom = null, bool pForceRecord = false,
+            bool pForceNationalRecord = false)
+        {
+            Kingdom contextKingdom = pContextKingdom ?? pActor?.kingdom ?? pContextCity?.kingdom;
+            if (!IsSlaveryEnabled(contextKingdom)) return false;
+            if (!CanBeEnslaved(pActor, pForceNationalRecord)) return false;
+
+            bool wasSlave = IsSlave(pActor);
+            ApplySlaveIdentity(pActor, pReason, pCaptor);
+            UpsertSlaveState(pActor, pActive: true, pContextCity, pContextKingdom);
+
+            if (!wasSlave || pForceRecord)
+                ChronicleEvents.OnEnslaved(pActor, pReason, pContextKingdom ?? pActor.kingdom,
+                    pContextCity ?? pActor.city, pForceNationalRecord);
+
+            CheckCitySlaveLabor(pContextCity ?? pActor.city);
+            return !wasSlave || pForceRecord;
+        }
+
+        public static void EnsureSlaveChild(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null) return;
+            if (!IsSupportedSlaveryActor(pBaby)) return;
+            if (!IsSlave(pParent1) && !IsSlave(pParent2)) return;
+
+            Enslave(pBaby, "born_slave", null, pBaby.city, pBaby.kingdom, pForceRecord: true);
+        }
+
+        public static bool FreeSlave(Actor pActor, string pReason)
+        {
+            if (pActor?.data == null || !IsSlave(pActor)) return false;
+
+            pActor.removeTrait(LineageKeys.TRAIT_SLAVE);
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
+            pActor.data.set(LineageKeys.FREEDMAN, true);
+
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
+            pActor.data.set(LineageKeys.LINEAGE_STATUS, lineageId >= 0 ? LineageStatus.COMMON : LineageStatus.NONE);
+
+            LineageService.ApplyDisplayName(pActor);
+            LineageService.ArchiveActor(pActor, pAlive: true);
+            pActor.clearGraphicsFully();
+
+            UpsertSlaveState(pActor, pActive: false, pActor.city, pActor.kingdom);
+            ChronicleEvents.OnFreedSlave(pActor, pReason, pActor.kingdom, pActor.city);
+            return true;
+        }
+
+        public static bool CanFallInLoveByStatus(Actor pA, Actor pB)
+        {
+            bool aSlave = IsSlave(pA);
+            bool bSlave = IsSlave(pB);
+            return aSlave == bSlave;
+        }
+
+        public static bool RetireIfNeeded(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (!IsSupportedSlaveryActor(pActor)) return false;
+            if (pActor.isRekt() || !pActor.isWarrior()) return false;
+            if (IsRetiredSoldier(pActor)) return false;
+
+            float lifespan = pActor.stats["lifespan"];
+            if (lifespan <= 0f) return false;
+            if (pActor.getAge() < lifespan * RETIREMENT_AGE_RATIO) return false;
+            if (!HasServedEnoughForRetirement(pActor)) return false;
+
+            pActor.stopBeingWarrior();
+            pActor.data.set(LineageKeys.RETIRED_SOLDIER, true);
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_VETERAN)) pActor.addTrait(LineageKeys.TRAIT_VETERAN);
+
+            LineageService.ArchiveActor(pActor, pAlive: true);
+            pActor.clearGraphicsFully();
+            UpsertSlaveState(pActor, IsSlave(pActor), pActor.city, pActor.kingdom);
+            ChronicleEvents.OnRetiredSoldier(pActor, pActor.kingdom, pActor.city);
+            return true;
+        }
+
+        private static void MarkSoldierServiceStarted(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME, (float)LineageService.CurTime());
+        }
+
+        private static bool HasServedEnoughForRetirement(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            float now = (float)LineageService.CurTime();
+            pActor.data.get(LineageKeys.SOLDIER_SERVICE_START_TIME, out float startTime, -1f);
+            if (startTime <= 0f || startTime > now)
+            {
+                pActor.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME, now);
+                if (IsSlave(pActor))
+                    UpsertSlaveState(pActor, true, pActor.city, pActor.kingdom);
+                return false;
+            }
+
+            int requiredYears = IsSlave(pActor)
+                ? SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT
+                : MIN_SERVICE_YEARS_BEFORE_RETIREMENT;
+            return Date.getYearsSince(startTime) >= requiredYears;
+        }
+
+        public static void CheckCityRetirements(City pCity)
+        {
+            if (pCity?.data == null) return;
+            foreach (Actor unit in new List<Actor>(pCity.getUnits()))
+                RetireIfNeeded(unit);
+        }
+
+        public static bool ShouldBlockConscription(City pCity, Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (!IsSupportedSlaveryActor(pActor)) return false;
+            if (IsRetiredSoldier(pActor)) return true;
+            if (!IsSlave(pActor)) return false;
+            if (!IsSlaveryEnabled(pActor.kingdom ?? pCity?.kingdom)) return true;
+
+            if (!CanUseSlaveArmy(pCity)) return true;
+
+            CountCityWarriors(pCity, out int totalWarriors, out int slaveWarriors, out int nonSlaveWarriors);
+            if (nonSlaveWarriors <= 0) return true;
+
+            int nextTotal = totalWarriors + 1;
+            int nextSlave = slaveWarriors + 1;
+            int maxSlaves = (int)Math.Ceiling(nextTotal * SLAVE_ARMY_TARGET_PERCENT);
+            return nextSlave > maxSlaves;
+        }
+
+        public static void OnMadeWarrior(City pCity, Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            if (!IsSupportedSlaveryActor(pActor)) return;
+
+            if (IsRetiredSoldier(pActor))
+            {
+                pActor.stopBeingWarrior();
+                return;
+            }
+
+            MarkSoldierServiceStarted(pActor);
+
+            if (!IsSlave(pActor)) return;
+            if (!IsSlaveryEnabled(pActor.kingdom ?? pCity?.kingdom))
+            {
+                pActor.stopBeingWarrior();
+                return;
+            }
+
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, true);
+            EnableSlaveArmy(pActor.kingdom ?? pCity?.kingdom);
+            UpsertSlaveState(pActor, pActive: true, pCity ?? pActor.city, pActor.kingdom ?? pCity?.kingdom);
+            RecordSlaveArmyFormation(pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
+            ChronicleEvents.OnSlaveEnlisted(pActor, pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
+        }
+
+        public static void TryPromoteSlaveByMerit(Actor pKiller, Actor pDead)
+        {
+            if (pKiller?.data == null || pDead?.data == null) return;
+            if (!IsSlave(pKiller)) return;
+
+            int points = 1;
+            if (ChronicleGate.IsImportant(pDead)) points = 4;
+            else if (pDead.isWarrior()) points = 2;
+
+            pKiller.data.get(LineageKeys.SLAVE_MERIT, out int merit, 0);
+            merit += points;
+            pKiller.data.set(LineageKeys.SLAVE_MERIT, merit);
+            UpsertSlaveState(pKiller, pActive: true, pKiller.city, pKiller.kingdom);
+
+            if (points >= 4 || merit >= MERIT_FOR_FREEDOM)
+                ChronicleEvents.OnSlaveMerit(pKiller, points, merit, pKiller.kingdom, pKiller.city);
+
+            if (merit >= MERIT_FOR_FREEDOM)
+                FreeSlave(pKiller, "military_merit");
+        }
+
+        public static void HandleCityCaptured(City pCity, Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (pCity?.data == null || pNewKingdom?.data == null) return;
+            if (pOldKingdom == null || pOldKingdom == pNewKingdom) return;
+            if (!IsSlaveryEnabled(pNewKingdom)) return;
+
+            var candidates = new List<Actor>();
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null) continue;
+                if (!unit.isAdult()) continue;
+                if (!CanBeEnslaved(unit)) continue;
+                candidates.Add(unit);
+            }
+
+            if (candidates.Count == 0) return;
+            int target = Math.Min(MAX_CITY_FALL_SLAVES, Math.Max(1, (int)Math.Ceiling(candidates.Count * CITY_FALL_SLAVE_RATIO)));
+            int enslaved = 0;
+            for (int i = 0; i < target && i < candidates.Count; i++)
+                if (Enslave(candidates[i], "city_fall", null, pCity, pNewKingdom))
+                    enslaved++;
+            QueueWarSlaveCaptureSummary(pNewKingdom, pCity, enslaved);
+        }
+
+        public static void FlushPendingWarSlaveCaptures(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            if (!PendingWarSlaveCaptures.TryGetValue(pKingdom.id, out List<PendingSlaveCaptureSummary> summaries))
+                return;
+
+            PendingWarSlaveCaptures.Remove(pKingdom.id);
+            foreach (PendingSlaveCaptureSummary summary in summaries)
+                ChronicleEvents.OnWarSlavesCaptured(pKingdom, summary.city, summary.cityName, summary.count);
+        }
+
+        private static void QueueWarSlaveCaptureSummary(Kingdom pKingdom, City pCity, int pCount)
+        {
+            if (pCount <= 0 || pKingdom?.data == null) return;
+            if (!PendingWarSlaveCaptures.TryGetValue(pKingdom.id, out List<PendingSlaveCaptureSummary> summaries))
+            {
+                summaries = new List<PendingSlaveCaptureSummary>();
+                PendingWarSlaveCaptures[pKingdom.id] = summaries;
+            }
+
+            long cityId = pCity?.data?.id ?? -1L;
+            foreach (PendingSlaveCaptureSummary summary in summaries)
+            {
+                long existingId = summary.city?.data?.id ?? -1L;
+                if (existingId != cityId) continue;
+                summary.count += pCount;
+                if (summary.city == null) summary.city = pCity;
+                if (string.IsNullOrEmpty(summary.cityName)) summary.cityName = pCity?.data?.name ?? "某城";
+                return;
+            }
+
+            summaries.Add(new PendingSlaveCaptureSummary
+            {
+                city = pCity,
+                cityName = pCity?.data?.name ?? "某城",
+                count = pCount
+            });
+        }
+
+        public static void CheckCitySlaveLabor(City pCity)
+        {
+            if (pCity?.data == null) return;
+            Kingdom kingdom = pCity.kingdom;
+            if (kingdom?.data == null) return;
+
+            int slaveCount = CountSlaves(pCity);
+            if (slaveCount <= 0) return;
+
+            pCity.data.get(LineageKeys.SLAVE_LABOR_RECORDED, out long recordedKingdomId, -1L);
+            if (recordedKingdomId == kingdom.id) return;
+            pCity.data.set(LineageKeys.SLAVE_LABOR_RECORDED, kingdom.id);
+
+            ChronicleEvents.OnSlaveLaborStarted(kingdom, pCity, slaveCount);
+        }
+
+        public static void PrepareArmyCaptain(ref Actor pActor, City pCity)
+        {
+            if (!IsSlave(pActor)) return;
+            Actor replacement = PickNonSlaveWarrior(pCity);
+            if (replacement == null)
+                replacement = TryRaiseNonSlaveCaptain(pCity);
+            if (replacement != null) pActor = replacement;
+        }
+
+        public static bool TryReplaceSlaveCaptain(Army pArmy, ref Actor pActor)
+        {
+            if (!IsSlave(pActor)) return true;
+
+            Actor replacement = PickNonSlaveWarrior(pArmy);
+            if (replacement == null) replacement = PickNonSlaveWarrior(pArmy?.getCity());
+            if (replacement == null) return false;
+
+            pActor = replacement;
+            return true;
+        }
+
+        public static void EnsureNonSlaveCaptain(Army pArmy)
+        {
+            if (pArmy == null) return;
+            Actor captain = pArmy.getCaptain();
+            if (!IsSlave(captain)) return;
+
+            Actor replacement = PickNonSlaveWarrior(pArmy);
+            if (replacement != null)
+                pArmy.setCaptain(replacement);
+        }
+
+        public static void RenameArmyIfSlaveArmy(Army pArmy)
+        {
+            if (pArmy == null) return;
+            RefreshArmyNames(pArmy.getKingdom());
+        }
+
+        public static void RefreshArmyNames(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+
+            var slaveArmies = new List<Army>();
+            foreach (City city in pKingdom.getCities())
+            {
+                if (city?.data == null || !city.hasArmy()) continue;
+                Army army = city.getArmy();
+                if (IsSlaveArmy(army))
+                    slaveArmies.Add(army);
+            }
+
+            for (int i = 0; i < slaveArmies.Count; i++)
+            {
+                Army army = slaveArmies[i];
+                string suffix = slaveArmies.Count == 1 ? "" : " " + (i + 1).ToString();
+                string name = (pKingdom.name ?? "") + " " + "\u5974\u96B6\u519B" + suffix;
+                if (army.data.name == name && army.data.custom_name) continue;
+                army.data.custom_name = true;
+                army.setName(name);
+            }
+        }
+
+        private static bool CanBeEnslaved(Actor pActor, bool pAllowImportantCapture = false)
+        {
+            if (pActor?.data == null) return false;
+            if (!IsSupportedSlaveryActor(pActor)) return false;
+            if (pActor.isRekt()) return false;
+            if ((pActor.isKing() || pActor.isCityLeader()) && !pAllowImportantCapture) return false;
+            if (HeirService.IsCurrentHeir(pActor.kingdom, pActor)) return false;
+            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
+            if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
+            if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
+            return true;
+        }
+
+        private static bool HasCaptureTargetForCity(City pCity)
+        {
+            if (pCity?.data == null || pCity.kingdom == null) return false;
+            WorldTile origin = pCity.getTile();
+            if (origin == null) return false;
+
+            using ListPool<Kingdom> enemies = pCity.kingdom.getEnemiesKingdoms();
+            foreach (Kingdom enemy in enemies)
+            {
+                if (enemy?.data == null) continue;
+                foreach (Actor target in enemy.getUnits())
+                {
+                    if (!CanBeCapturedAsTarget(target, pAllowImportantCapture: true)) continue;
+                    if (target.current_tile == null || !origin.isSameIsland(target.current_tile)) continue;
+                    if (Toolbox.SquaredDistTile(origin, target.current_tile) <=
+                        SLAVE_CATCHER_SEARCH_RADIUS * SLAVE_CATCHER_SEARCH_RADIUS) return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool CanCaptureTarget(Actor pCatcher, Actor pTarget)
+        {
+            if (!CanBeSlaveCatcher(pCatcher)) return false;
+            if (!CanBeCapturedAsTarget(pTarget, pAllowImportantCapture: true)) return false;
+            if (pCatcher.kingdom == null || pTarget.kingdom == null) return false;
+            if (pCatcher.kingdom == pTarget.kingdom) return false;
+            if (!pCatcher.kingdom.isEnemy(pTarget.kingdom)) return false;
+            if (pCatcher.current_tile == null || pTarget.current_tile == null) return false;
+            if (!pCatcher.current_tile.isSameIsland(pTarget.current_tile)) return false;
+            float threshold = IsImportantCaptureTarget(pTarget)
+                ? IMPORTANT_CAPTURE_HEALTH_RATIO
+                : DIRECT_CAPTURE_HEALTH_RATIO;
+            return pTarget.getHealthRatio() <= threshold;
+        }
+
+        private static bool RollCombatCapture(Actor pCaptor, Actor pTarget)
+        {
+            float chance = IsImportantCaptureTarget(pTarget)
+                ? COMBAT_CAPTURE_IMPORTANT_CHANCE
+                : pTarget.isWarrior()
+                    ? COMBAT_CAPTURE_WARRIOR_CHANCE
+                    : COMBAT_CAPTURE_CIVILIAN_CHANCE;
+
+            if (pCaptor != null && pCaptor.isCitizenJob(SlaveryContent.CITIZEN_JOB_SLAVE_CATCHER))
+                chance += COMBAT_CAPTURE_CATCHER_BONUS;
+
+            chance = Math.Max(0f, Math.Min(0.95f, chance));
+            return Rng.NextDouble() < chance;
+        }
+
+        private static bool CanBeCapturedAsTarget(Actor pTarget, bool pAllowImportantCapture = false)
+        {
+            if (!CanBeEnslaved(pTarget, pAllowImportantCapture)) return false;
+            if (!pTarget.isAdult()) return false;
+            if (ChronicleGate.IsImportant(pTarget) && !IsImportantCaptureTarget(pTarget)) return false;
+            return true;
+        }
+
+        private static bool IsImportantCaptureTarget(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
+            return pActor.isKing() || pActor.isCityLeader();
+        }
+
+        private static bool IsSlaveArmy(Army pArmy)
+        {
+            if (pArmy == null) return false;
+
+            int total = 0;
+            int slaves = 0;
+            foreach (Actor unit in pArmy.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt()) continue;
+                if (!unit.isWarrior()) continue;
+                total++;
+                if (IsSlave(unit)) slaves++;
+            }
+
+            if (total < MIN_SLAVES_FOR_SLAVE_ARMY) return false;
+            return slaves >= Math.Ceiling(total * SLAVE_ARMY_TARGET_PERCENT);
+        }
+
+        private static void ApplySlaveIdentity(Actor pActor, string pReason, Actor pCaptor)
+        {
+            if (RoyalGuardService.IsRoyalGuard(pActor))
+                RoyalGuardService.DismissGuard(pActor, "enslaved");
+
+            long now = (long)LineageService.CurTime();
+            pActor.data.get(LineageKeys.SLAVE_SINCE, out long since, -1L);
+            if (since < 0) pActor.data.set(LineageKeys.SLAVE_SINCE, now);
+
+            pActor.data.set(LineageKeys.SLAVE_REASON, pReason ?? "");
+            pActor.data.set(LineageKeys.SLAVE_CAPTURED_BY, pCaptor?.data?.id ?? -1L);
+            pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.SLAVE);
+            pActor.data.set(LineageKeys.NOBLE_DISTANCE, 99);
+
+            if (pActor.isWarrior()) pActor.stopBeingWarrior();
+            if (!pActor.hasTrait(LineageKeys.TRAIT_SLAVE)) pActor.addTrait(LineageKeys.TRAIT_SLAVE);
+            if (pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.removeTrait(LineageKeys.TRAIT_GUIZU);
+            if (pActor.hasTrait(LineageKeys.TRAIT_ZHUHOU)) pActor.removeTrait(LineageKeys.TRAIT_ZHUHOU);
+
+            BreakInvalidLover(pActor);
+            LineageService.ApplyDisplayName(pActor);
+            LineageService.ArchiveActor(pActor, pAlive: true);
+            pActor.clearGraphicsFully();
+        }
+
+        private static void BreakInvalidLover(Actor pActor)
+        {
+            Actor lover = pActor?.lover;
+            if (lover?.data == null) return;
+            if (CanFallInLoveByStatus(pActor, lover)) return;
+
+            pActor.setLover(null);
+            lover.setLover(null);
+            pActor.data.lover = -1L;
+            lover.data.lover = -1L;
+        }
+
+        private static bool CanUseSlaveArmy(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            Kingdom kingdom = pCity.kingdom;
+            if (!IsSlaveryEnabled(kingdom)) return false;
+            return IsSlaveArmyEnabled(kingdom) && CountSlaves(pCity) >= MIN_SLAVES_FOR_SLAVE_ARMY;
+        }
+
+        private static bool IsSlaveArmyEnabled(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.SLAVE_ARMY_ENABLED, out bool enabled, false);
+            return enabled;
+        }
+
+        private static void EnableSlaveArmy(Kingdom pKingdom)
+        {
+            SetSlaveArmyEnabled(pKingdom, true);
+        }
+
+        private static bool IsSupportedSlaveryActor(Actor pActor)
+        {
+            return LineageService.IsXia(pActor) || LineageService.IsHuman(pActor);
+        }
+
+        private static void RecordSlaveArmyFormation(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.SLAVE_ARMY_RECORDED, out bool recorded, false);
+            if (recorded) return;
+            pKingdom.data.set(LineageKeys.SLAVE_ARMY_RECORDED, true);
+            ChronicleEvents.OnSlaveArmyFormed(pKingdom, pCity);
+        }
+
+        private static int CountSlaves(City pCity)
+        {
+            if (pCity?.data == null) return 0;
+            int count = 0;
+            foreach (Actor unit in pCity.getUnits())
+                if (IsSlave(unit)) count++;
+            return count;
+        }
+
+        private static void CountCityWarriors(City pCity, out int pTotal, out int pSlaves, out int pNonSlaves)
+        {
+            pTotal = 0;
+            pSlaves = 0;
+            pNonSlaves = 0;
+            if (pCity?.data == null) return;
+
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt() || !unit.isWarrior()) continue;
+                pTotal++;
+                if (IsSlave(unit)) pSlaves++;
+                else pNonSlaves++;
+            }
+        }
+
+        private static Actor PickNonSlaveWarrior(City pCity)
+        {
+            if (pCity?.data == null) return null;
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt()) continue;
+                if (!unit.isWarrior()) continue;
+                if (IsSlave(unit)) continue;
+                return unit;
+            }
+            return null;
+        }
+
+        private static Actor TryRaiseNonSlaveCaptain(City pCity)
+        {
+            if (pCity?.data == null) return null;
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt()) continue;
+                if (unit.asset.is_boat || unit.isBaby()) continue;
+                if (unit.isWarrior()) continue;
+                if (IsSlave(unit) || IsRetiredSoldier(unit)) continue;
+                if (RoyalGuardService.IsRoyalGuard(unit)) continue;
+                if (HeirService.IsCurrentHeir(unit.kingdom, unit)) continue;
+                if (!pCity.checkCanMakeWarrior(unit)) continue;
+
+                pCity.makeWarrior(unit);
+                return unit.isWarrior() ? unit : null;
+            }
+            return null;
+        }
+
+        private static Actor PickNonSlaveWarrior(Army pArmy)
+        {
+            if (pArmy == null) return null;
+            foreach (Actor unit in pArmy.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt()) continue;
+                if (!unit.isWarrior()) continue;
+                if (unit.army != pArmy) continue;
+                if (IsSlave(unit)) continue;
+                return unit;
+            }
+            return null;
+        }
+
+        private static void UpsertSlaveState(Actor pActor, bool pActive, City pContextCity, Kingdom pContextKingdom)
+        {
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null || pActor?.data == null) return;
+
+            string table = SlaveStateTableItem.GetTableName();
+            Kingdom kingdom = pContextKingdom ?? pActor.kingdom ?? pContextCity?.kingdom;
+            City city = pContextCity ?? pActor.city;
+            pActor.data.get(LineageKeys.SLAVE_SINCE, out long sinceRaw, (long)LineageService.CurTime());
+            double since = sinceRaw;
+            pActor.data.get(LineageKeys.SLAVE_REASON, out string reason, "");
+            pActor.data.get(LineageKeys.SLAVE_CAPTURED_BY, out long capturedBy, -1L);
+            pActor.data.get(LineageKeys.SLAVE_MERIT, out int merit, 0);
+            pActor.data.get(LineageKeys.SLAVE_SOLDIER, out bool soldier, false);
+            pActor.data.get(LineageKeys.SOLDIER_SERVICE_START_TIME, out float soldierStart, -1f);
+            pActor.data.get(LineageKeys.FREEDMAN, out bool freedman, false);
+
+            var values = new[]
+            {
+                ColumnVal.Create("ACTOR_NAME", pActor.getName() ?? ""),
+                ColumnVal.Create("KINGDOM_ID", kingdom?.id ?? -1L),
+                ColumnVal.Create("KINGDOM_NAME", kingdom?.name ?? ""),
+                ColumnVal.Create("CITY_ID", city?.id ?? -1L),
+                ColumnVal.Create("CITY_NAME", city?.data?.name ?? ""),
+                ColumnVal.Create("ENSLAVED_TIME", since),
+                ColumnVal.Create("FREED_TIME", pActive ? -1.0 : LineageService.CurTime()),
+                ColumnVal.Create("REASON", reason ?? ""),
+                ColumnVal.Create("CAPTURED_BY_ACTOR_ID", capturedBy),
+                ColumnVal.Create("MERIT", merit),
+                ColumnVal.Create("ACTIVE", pActive ? 1 : 0),
+                ColumnVal.Create("SOLDIER", soldier ? 1 : 0),
+                ColumnVal.Create("SOLDIER_START_TIME", soldierStart),
+                ColumnVal.Create("FREEDMAN", freedman ? 1 : 0)
+            };
+
+            try
+            {
+                if (db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ACTOR_ID", pActor.data.id)))
+                {
+                    db.UpdateValue(table,
+                        new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ACTOR_ID", pActor.data.id) },
+                        values);
+                    return;
+                }
+
+                var insertValues = new List<ColumnVal> { ColumnVal.Create("ACTOR_ID", pActor.data.id) };
+                insertValues.AddRange(values);
+                db.Insert(table, insertValues.ToArray());
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("SlaveState upsert failed: " + e.Message);
+            }
+        }
+
+        public static string ReasonLabel(string pReason)
+        {
+            return pReason switch
+            {
+                "city_fall" => "城破被俘",
+                "captured" => "俘获",
+                "battlefield_capture" => "\u6218\u573A\u4FD8\u83B7",
+                "born_slave" => "奴籍所生",
+                "military_merit" => "军功释奴",
+                "promoted" => "因受任官职释奴",
+                _ => string.IsNullOrEmpty(pReason) ? "奴籍登记" : pReason
+            };
+        }
+    }
+}

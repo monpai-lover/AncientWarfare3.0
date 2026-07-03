@@ -16,10 +16,10 @@ namespace AncientWarfare3.patch
     {
         // 建国(newCivKingdom 是 internal,用字符串名避免可见性问题)
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Kingdom), "newCivKingdom")]
-        public static void NewCivKingdom_Postfix(Kingdom __instance)
+        [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.makeNewCivKingdom))]
+        public static void MakeNewCivKingdom_Postfix(Kingdom __result)
         {
-            ChronicleEvents.OnKingdomFounded(__instance);
+            ChronicleEvents.OnKingdomFounded(__result);
         }
 
         // 亡国(removeObject 是 KingdomManager 自身的 public override,typeof(KingdomManager) 正确)

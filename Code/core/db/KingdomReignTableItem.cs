@@ -23,5 +23,14 @@ namespace AncientWarfare3.core.db
         public string end_reason     = "";       // died / abdicated / deposed / kingdom_fell
         public int    start_population = 0;      // 开始时王国人口（综合国力谥号基准）
         public int    start_city_count = 0;      // 开始时城池数（综合国力谥号基准）
+        public int    start_army_count = 0;
+        public int    end_population = 0;
+        public int    end_city_count = 0;
+        public int    end_army_count = 0;
+        public int    is_founder = 0;
+        public int    war_wins = 0;
+        public int    war_losses = 0;
+        public int    lost_capital = 0;
+        public string death_cause = "";
     }
 }

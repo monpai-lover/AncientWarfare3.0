@@ -88,6 +88,7 @@ namespace AncientWarfare3.patch
         {
             if (pUnit?.data == null) return false;
             if (pUnit.data.id == pHeirId) return false;
+            if (!pUnit.isSexMale()) return false;
             return pUnit.isUnitFitToRule() && !pUnit.isKing() && !pUnit.isCityLeader() && pUnit.hasClan();
         }
 
@@ -95,6 +96,7 @@ namespace AncientWarfare3.patch
         {
             if (pUnit?.data == null) return false;
             if (pUnit.data.id == pHeirId) return false;
+            if (!pUnit.isSexMale()) return false;
             if (pUnit.isKing() || pUnit.isCityLeader()) return false;
             return pUnit.is_profession_citizen;
         }

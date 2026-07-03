@@ -26,13 +26,17 @@ namespace AncientWarfare3.patch
             Transform rail = __instance.transform.Find("Tabs Right");
             if (rail == null) return; // 无右栏:不强插,避免乱位(unit 窗有,kingdom 窗运行时核实)
 
-            long kingdomId = kingdom.id;
             Transform existing = rail.Find(BTN_NAME);
             Button btn = existing != null ? existing.GetComponent<Button>() : BuildButton(rail);
             if (existing != null) existing.gameObject.SetActive(true);
 
             btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(() => AncientWarfare3.ui.windows.HistoryListWindow.OpenKingdom(kingdomId));
+            btn.onClick.AddListener(() =>
+            {
+                Kingdom current = __instance != null ? __instance.meta_object : null;
+                if (current?.data == null || current.isRekt()) return;
+                AncientWarfare3.ui.windows.HistoryListWindow.OpenKingdom(current.id);
+            });
         }
 
         private static Button BuildButton(Transform pRail)

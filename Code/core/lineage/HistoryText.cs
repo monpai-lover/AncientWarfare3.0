@@ -43,14 +43,30 @@ namespace AncientWarfare3.core.lineage
         {
             string name = pKingdom?.name ?? pFallbackName ?? "";
             var text = Colored(name, HistoryColors.FromKingdom(pKingdom));
-            return new HistoryText(text.Plain, text.Rich, "kingdom", pKingdom?.id ?? -1L);
+            return new HistoryText(text.Plain, text.Rich, "kingdom", pKingdom?.data?.id ?? -1L);
         }
 
         public static HistoryText City(City pCity, Kingdom pContextKingdom = null, string pFallbackName = "")
         {
-            string name = pCity?.data?.name ?? pFallbackName ?? "";
-            var text = Colored(name, HistoryColors.FromCity(pCity, pContextKingdom));
-            return new HistoryText(text.Plain, text.Rich, "city", pCity?.id ?? -1L);
+            string name = pFallbackName ?? "";
+            long id = -1L;
+            bool valid = false;
+            try
+            {
+                if (pCity?.data != null)
+                {
+                    if (!string.IsNullOrEmpty(pCity.data.name)) name = pCity.data.name;
+                    id = pCity.data.id;
+                    valid = id >= 0;
+                }
+            }
+            catch
+            {
+                valid = false;
+            }
+
+            var text = Colored(name, HistoryColors.FromCity(valid ? pCity : null, pContextKingdom));
+            return new HistoryText(text.Plain, text.Rich, valid ? "city" : "", valid ? id : -1L);
         }
 
         public static HistoryText ClanName(string pName, Clan pClan, Kingdom pFallbackKingdom = null)

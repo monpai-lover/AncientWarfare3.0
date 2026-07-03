@@ -118,7 +118,6 @@ namespace AncientWarfare3.content
                 // 否则建筑 kingdom 仍指向 human 的 nomads,城市/野生归属可能错乱。
                 b.kingdom = "nomads_" + archId;
                 b.main_path = MAIN_PATH;
-                b.can_be_upgraded = false;
                 b.has_sprite_construction = true;
 
                 // re-key 升级链:clone 自 human 的 upgrade_to/upgraded_from 仍指向 *_human,
@@ -155,7 +154,12 @@ namespace AncientWarfare3.content
                         break;
                     case "order_library":     b.fundament = new BuildingFundament(2, 2, 2, 0); break;
                     case "order_docks_0":     b.upgrade_to = "docks_" + archId; b.can_be_upgraded = true; break;
-                    case "order_docks_1":     b.upgraded_from = "fishing_docks_" + archId; b.has_sprites_main_disabled = false; break;
+                    case "order_docks_1":
+                        b.upgraded_from = "fishing_docks_" + archId;
+                        b.upgrade_to = string.Empty;
+                        b.can_be_upgraded = false;
+                        b.has_sprites_main_disabled = false;
+                        break;
                     case "order_windmill_0":
                         b.fundament = new BuildingFundament(2, 2, 2, 0);
                         if (b.shadow) b.setShadow(0.4f, 0.38f, 0.47f);
@@ -167,6 +171,15 @@ namespace AncientWarfare3.content
                         // 前提:main_0 / construction_0 / ruin_0 都做成 160×160 画布(底部中心 pivot),否则未升的帧会变超小。
                         b.scale_base = new Vector3(0.046875f, 0.046875f, 0.25f);
                         break;
+                }
+
+                // 原版 docks_human 从 fishing_docks_human clone 而来,保留 upgrade_to=docks_human,
+                // 但用 can_be_upgraded=false 阻止继续升级。不能用 "upgrade_to 非空" 反推升级开关,
+                // 否则 docks_Xia 会变成 upgrade_to 自己,CityBehBuild.haveRequiredBuildings 进入死循环。
+                if (b.upgrade_to == b.id)
+                {
+                    b.upgrade_to = string.Empty;
+                    b.can_be_upgraded = false;
                 }
 
                 // 不在此预读校验贴图:OnModLoad 时机 mod 的 GameResources 尚未注册进 Unity Resources,
