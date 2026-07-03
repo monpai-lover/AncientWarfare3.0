@@ -518,7 +518,7 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText =
                     $"SELECT DYNASTY_ID, DYNASTY_NAME, DYNASTY_COLOR, KINGDOM_COLOR, START_TIME, END_TIME, " +
-                    $"IFNULL(SHI_ID, -1), IFNULL(CLAN_NAME, '') " +
+                    $"IFNULL(SHI_ID, -1), IFNULL(CLAN_NAME, ''), IFNULL(ORIGINAL_KINGDOM_NAME, ''), IFNULL(END_REASON, '') " +
                     $"FROM {DynastyPeriodTableItem.GetTableName()} " +
                     $"WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
@@ -534,7 +534,9 @@ namespace AncientWarfare3.core.lineage
                         start_time    = reader.GetDouble(4),
                         end_time      = reader.GetDouble(5),
                         shi_id        = ToLong(reader, 6, -1),
-                        clan_name     = SafeStr(reader, 7)
+                        clan_name     = SafeStr(reader, 7),
+                        original_kingdom_name = SafeStr(reader, 8),
+                        end_reason    = SafeStr(reader, 9)
                     });
             }
             catch { }
@@ -544,7 +546,11 @@ namespace AncientWarfare3.core.lineage
             {
                 foreach (var d in result)
                     if (d.end_time < 0 && d.start_time <= destroyedTime)
+                    {
                         d.end_time = destroyedTime;
+                        if (string.IsNullOrEmpty(d.end_reason))
+                            d.end_reason = DynastyRecordWriter.END_REASON_KINGDOM_FELL;
+                    }
             }
             return result;
         }

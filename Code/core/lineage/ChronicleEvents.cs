@@ -30,7 +30,7 @@ namespace AncientWarfare3.core.lineage
                     ChronicleCategory.HONOR);
 
             // 结构表：君主世系 + 朝代（先关旧 reign，再开新 reign）
-            ReignRecordWriter.CloseOpenReign(pKingdom.id, "replaced");
+            ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
             DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
             ReignRecordWriter.OpenReign(pKingdom, pNewKing);
         }
@@ -53,8 +53,11 @@ namespace AncientWarfare3.core.lineage
             KingdomArchiveWriter.EnsureRow(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）
-            ReignRecordWriter.CloseOpenReign(pKingdom.id, "kingdom_fell");
-            DynastyRecordWriter.CloseOpenDynasty(pKingdom.id);
+            Actor king = pKingdom.king;
+            ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "kingdom_fell", king);
+            if (king?.data != null)
+                PosthumousTitleService.OnReignEnded(pKingdom, king, "kingdom_fell", reign);
+            DynastyRecordWriter.CloseOpenDynasty(pKingdom.id, DynastyRecordWriter.END_REASON_KINGDOM_FELL);
             EraRecordWriter.CloseOpenEra(pKingdom.id);
         }
 
@@ -62,9 +65,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingDied(Kingdom pKingdom, Actor pKing)
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
-            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.KING_DIED,
-                HistoryText.Actor(pKing) + " 驾崩");
-            ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom.id, "died");
+            ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "died", pKing);
             PosthumousTitleService.OnReignEnded(pKingdom, pKing, "died", reign);
         }
 
@@ -78,7 +79,7 @@ namespace AncientWarfare3.core.lineage
             if (ChronicleGate.IsNobleActor(pKing))
                 HistoryWriter.RecordPerson(pKing.data.id, pKingdom, name,
                     PersonEvent.ABDICATE, HistoryText.Actor(pKing, name) + " 退位", ChronicleCategory.HONOR);
-            ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom.id, "abdicated");
+            ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "abdicated", pKing);
             PosthumousTitleService.OnReignEnded(pKingdom, pKing, "abdicated", reign);
         }
 
@@ -147,6 +148,7 @@ namespace AncientWarfare3.core.lineage
             if (pSelf?.data == null) return;
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_END,
                 HistoryText.PlainText("与 ") + HistoryText.Kingdom(pOpponent, pOpponentName) + " 的战争结束:" + pResult);
+            SlaveService.FlushPendingWarSlaveCaptures(pSelf);
         }
 
         // ───────────────────────── 人物事件(批1) ─────────────────────────
@@ -173,7 +175,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>封城主。</summary>
         public static void OnBecomeLeader(Actor pActor)
         {
-            if (!ChronicleGate.IsNobleActor(pActor)) return;
+            if (!ChronicleGate.IsNobleActor(pActor) && !LineageService.HasOriginalClan(pActor)) return;
             string name = pActor.getName();
             City city = pActor.city;
             string cityName = city?.data != null ? city.data.name : "某城";
@@ -186,7 +188,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>成为家主(氏族族长)。</summary>
         public static void OnBecomeClanChief(Actor pActor)
         {
-            if (!ChronicleGate.IsNobleActor(pActor)) return;
+            if (!ChronicleGate.IsNobleActor(pActor) && !LineageService.HasOriginalClan(pActor)) return;
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
                 PersonEvent.BECOME_CLAN_CHIEF, HistoryText.Actor(pActor, name) + " 成为家主", ChronicleCategory.CLAN);
@@ -195,10 +197,33 @@ namespace AncientWarfare3.core.lineage
         /// <summary>被逐出氏族。</summary>
         public static void OnExiledFromClan(Actor pActor)
         {
-            if (!ChronicleGate.IsNobleActor(pActor)) return;
+            if (pActor?.data == null || !LineageService.IsXia(pActor)) return;
+            pActor.data.set(LineageKeys.CHRONICLE_LAST_ORIGINAL_CLAN_ID, -1L);
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
                 PersonEvent.EXILED_CLAN, HistoryText.Actor(pActor, name) + " 被逐出氏族", ChronicleCategory.CLAN);
+        }
+
+        /// <summary>Original WorldBox clan membership, independent from AW lineage.</summary>
+        public static void OnJoinedOriginalClan(Actor pActor, Clan pClan)
+        {
+            if (pActor?.data == null || pClan?.data == null) return;
+            if (!LineageService.IsXia(pActor)) return;
+            if (AncientWarfare3.core.db.LineageArchiveManager.Instance.OperatingDB == null) return;
+
+            long clanId = pClan.data.id;
+            pActor.data.get(LineageKeys.CHRONICLE_LAST_ORIGINAL_CLAN_ID, out long lastClanId, -1L);
+            if (lastClanId == clanId) return;
+            pActor.data.set(LineageKeys.CHRONICLE_LAST_ORIGINAL_CLAN_ID, clanId);
+
+            string name = pActor.getName();
+            string clanName = string.IsNullOrEmpty(pClan.data.name) ? "\u6C0F\u65CF" : pClan.data.name;
+            HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
+                PersonEvent.JOINED_CLAN,
+                HistoryText.Actor(pActor, name) + " \u52A0\u5165\u6C0F\u65CF " +
+                HistoryText.ClanName(clanName, pClan, pActor.kingdom),
+                ChronicleCategory.CLAN,
+                HistoryTarget.Actor(pActor));
         }
 
         /// <summary>发动叛乱:人物记一条 + 原属国国家史记一条。</summary>
@@ -225,6 +250,221 @@ namespace AncientWarfare3.core.lineage
         /// <summary>
         ///     重要击杀:凶手是贵族 → 给凶手记一条;被杀者是王/城主/名人 → 额外给被杀者所属国国家史记一条。
         /// </summary>
+        public static void OnEnslaved(Actor pActor, string pReason, Kingdom pKingdom, City pCity,
+            bool pForceNationalRecord = false)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            string reason = SlaveService.ReasonLabel(pReason);
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.ENSLAVED,
+                HistoryText.Actor(pActor, name) + " 沦为奴隶（" + reason + "）",
+                ChronicleCategory.SOCIAL,
+                HistoryTarget.Actor(pActor));
+
+            if (kingdom?.data != null && (pForceNationalRecord || IsNationalSlaveEvent(pActor)))
+                HistoryWriter.RecordKingdom(kingdom, KingdomEvent.ENSLAVED,
+                    HistoryText.Actor(pActor, name) + " 被俘获为奴（" + reason + "）",
+                    HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.ENSLAVED,
+                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 被编入奴籍（" + reason + "）",
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnFreedSlave(Actor pActor, string pReason, Kingdom pKingdom, City pCity)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            string reason = SlaveService.ReasonLabel(pReason);
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.FREED_SLAVE,
+                HistoryText.Actor(pActor, name) + " 脱离奴籍，成为平民（" + reason + "）",
+                ChronicleCategory.SOCIAL,
+                HistoryTarget.Actor(pActor));
+
+            if (kingdom?.data != null && IsNationalSlaveEvent(pActor))
+                HistoryWriter.RecordKingdom(kingdom, KingdomEvent.FREED_SLAVE,
+                    HistoryText.Actor(pActor, name) + " 脱离奴籍（" + reason + "）",
+                    HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.FREED_SLAVE,
+                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 脱离奴籍（" + reason + "）",
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnRetiredSoldier(Actor pActor, Kingdom pKingdom, City pCity)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.RETIRED_SOLDIER,
+                HistoryText.Actor(pActor, name) + " 退伍为老兵，不再应征",
+                ChronicleCategory.WAR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.RETIRED_SOLDIER,
+                    HistoryText.Actor(pActor, name) + " 自 " + HistoryText.City(city, kingdom) + " 退伍",
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnSlaveEnlisted(Actor pActor, Kingdom pKingdom, City pCity)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.SLAVE_ENLISTED,
+                HistoryText.Actor(pActor, name) + " 以奴隶兵身份入伍",
+                ChronicleCategory.WAR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.SLAVE_ENLISTED,
+                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 被编入奴隶军",
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnSlaveMerit(Actor pActor, int pPoints, int pTotal, Kingdom pKingdom, City pCity)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+            string meritText = "立下军功 " + pPoints + " 点，累计 " + pTotal + " 点";
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.SLAVE_MERIT,
+                HistoryText.Actor(pActor, name) + meritText,
+                ChronicleCategory.WAR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.SLAVE_MERIT,
+                    HistoryText.Actor(pActor, name) + " 奴隶兵" + meritText,
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnSlaveArmyFormed(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.SLAVE_ARMY_FORMED,
+                HistoryText.Kingdom(pKingdom) + " 开始编组奴隶军");
+
+            if (pCity?.data != null)
+                HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.SLAVE_ARMY_FORMED,
+                    HistoryText.City(pCity, pKingdom) + " 开始编组奴隶军");
+        }
+
+        public static void OnSlaveLaborStarted(Kingdom pKingdom, City pCity, int pSlaveCount)
+        {
+            if (pCity?.data != null)
+                HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.SLAVE_LABOR_STARTED,
+                    HistoryText.City(pCity, pKingdom) + " 登记奴隶劳役，奴隶 " + pSlaveCount.ToString() + " 人");
+        }
+
+        public static void OnWarSlavesCaptured(Kingdom pKingdom, City pCity, string pCityName, int pSlaveCount)
+        {
+            if (pSlaveCount <= 0) return;
+            if (pKingdom?.data != null)
+                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ENSLAVED,
+                    HistoryText.Kingdom(pKingdom) + " 在战争结算中俘获奴隶 " + pSlaveCount.ToString() +
+                    " 名，安置于 " + HistoryText.City(pCity, pKingdom, pCityName),
+                    pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pKingdom));
+
+            if (pCity?.data != null)
+                HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.ENSLAVED,
+                    HistoryText.City(pCity, pKingdom, pCityName) + " 安置战争俘获奴隶 " +
+                    pSlaveCount.ToString() + " 名");
+        }
+
+        public static void OnRoyalGuardFormed(Kingdom pKingdom, string pGuardName)
+        {
+            if (pKingdom?.data == null) return;
+            string guardName = string.IsNullOrEmpty(pGuardName) ? "\u7981\u536B\u519B" : pGuardName;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ROYAL_GUARD_FORMED,
+                HistoryText.Kingdom(pKingdom) + " \u8BBE\u7ACB" + HistoryText.PlainText(guardName),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnRoyalGuardAppointed(Actor pActor, Kingdom pKingdom, City pCity,
+            string pGuardName, bool pCaptain)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+            string guardName = string.IsNullOrEmpty(pGuardName) ? "\u7981\u536B\u519B" : pGuardName;
+            string role = pCaptain ? "\u7EDF\u9886" : "\u5165\u9009";
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.ROYAL_GUARD_APPOINTED,
+                HistoryText.Actor(pActor, name) + " " + role + HistoryText.PlainText(guardName),
+                ChronicleCategory.WAR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.ROYAL_GUARD_APPOINTED,
+                    HistoryText.Actor(pActor, name) + " \u5728" + HistoryText.City(city, kingdom) +
+                    " " + role + HistoryText.PlainText(guardName),
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnRoyalGuardDismissed(Actor pActor, Kingdom pKingdom, City pCity, string pReason)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+            string reason = RoyalGuardReasonLabel(pReason);
+
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.ROYAL_GUARD_DISMISSED,
+                HistoryText.Actor(pActor, name) + " \u79BB\u5F00\u7981\u536B\u519B\uFF08" + reason + "\uFF09",
+                ChronicleCategory.WAR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.ROYAL_GUARD_DISMISSED,
+                    HistoryText.Actor(pActor, name) + " \u5728" + HistoryText.City(city, kingdom) +
+                    " \u79BB\u5F00\u7981\u536B\u519B\uFF08" + reason + "\uFF09",
+                    HistoryTarget.Actor(pActor));
+        }
+
+        private static bool IsNationalSlaveEvent(Actor pActor)
+        {
+            return pActor != null && (pActor.isKing() || pActor.isCityLeader() || ChronicleGate.IsImportant(pActor));
+        }
+
+        private static string RoyalGuardReasonLabel(string pReason)
+        {
+            return pReason switch
+            {
+                "died" => "\u6218\u6B7B\u6216\u8EAB\u6545",
+                "no_king" => "\u65E0\u5728\u4F4D\u541B\u4E3B",
+                "no_noble_captain" => "\u65E0\u8D35\u65CF\u7EDF\u9886",
+                "over_limit" => "\u540D\u989D\u8C03\u6574",
+                "invalid" => "\u8D44\u683C\u4E0D\u7B26",
+                "enslaved" => "\u6CA6\u4E3A\u5974\u96B6",
+                "became_leader" => "\u53D7\u4EFB\u57CE\u4E3B",
+                _ => string.IsNullOrEmpty(pReason) ? "\u79BB\u4EFB" : pReason
+            };
+        }
+
         public static void OnImportantKill(Actor pKiller, Actor pDead, Kingdom pDeadPrevKingdom)
         {
             if (pKiller?.data == null || pDead?.data == null) return;

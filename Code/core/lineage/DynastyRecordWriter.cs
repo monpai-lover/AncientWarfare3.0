@@ -12,6 +12,10 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class DynastyRecordWriter
     {
+        public const string END_REASON_REPLACED = "dynasty_replaced";
+        public const string END_REASON_KINGDOM_FELL = "kingdom_fell";
+        public const string END_REASON_UNKNOWN_SUCCESSOR = "unknown_successor";
+
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static string TABLE => DynastyPeriodTableItem.GetTableName();
@@ -26,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
             if (!Ready || pKingdom?.data == null || pNewKing?.data == null) return;
+            if (!LineageService.IsXiaKingdom(pKingdom)) return;
 
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             long curShiId = GetCurrentDynastyShiId(pKingdom.id);
@@ -34,13 +39,15 @@ namespace AncientWarfare3.core.lineage
             if (curShiId >= 0 && curShiId == newShiId) return;
 
             // 关旧朝代
-            CloseOpenDynasty(pKingdom.id);
+            string closeReason = (newShiId < 0 || !LineageService.IsXia(pNewKing))
+                ? END_REASON_UNKNOWN_SUCCESSOR
+                : END_REASON_REPLACED;
+            CloseOpenDynasty(pKingdom.id, closeReason);
+            if (newShiId < 0 || !LineageService.IsXia(pNewKing)) return;
 
             // 开新朝代
             pNewKing.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
-            string dynastyName = string.IsNullOrEmpty(clanName)
-                ? DYNASTY_CHARS[Rng.Next(DYNASTY_CHARS.Length)] + "朝"
-                : clanName + "朝";
+            string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, clanName);
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string dynastyColor = HistoryColors.FromClan(pNewKing.clan, pKingdom);
             if (string.IsNullOrEmpty(dynastyColor)) dynastyColor = kingdomColor;
@@ -61,15 +68,46 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("FOUNDER_KING_ACTOR_ID",   pNewKing.data.id),
                     ColumnVal.Create("DYNASTY_NAME",            dynastyName),
                     ColumnVal.Create("DYNASTY_COLOR",           dynastyColor),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_NAME",   pKingdom.name ?? ""),
                     ColumnVal.Create("START_TIME",              now),
-                    ColumnVal.Create("END_TIME",                -1.0));
+                    ColumnVal.Create("END_TIME",                -1.0),
+                    ColumnVal.Create("END_REASON",              ""));
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.DYNASTY_CHANGE,
-                    HistoryText.Colored(dynastyName, dynastyColor) + " 建立");
+                    HistoryText.Colored(dynastyName, dynastyColor) + " \u5F00\u59CB");
             }
             catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " + e.Message); }
         }
 
+        private static string BuildRulePeriodName(Actor pKing, Kingdom pKingdom, long pShiId, string pClanName)
+        {
+            string clanName = pClanName ?? "";
+            string cityName = "";
+
+            if (pShiId >= 0)
+            {
+                var shi = LineageQuery.GetShiBranchInfo(pShiId);
+                if (shi != null)
+                {
+                    if (string.IsNullOrEmpty(clanName)) clanName = shi.clan_name ?? "";
+                    cityName = shi.origin_city_name ?? "";
+                }
+            }
+
+            if (string.IsNullOrEmpty(cityName))
+                cityName = pKing?.city?.data?.name ?? pKingdom?.capital?.data?.name ?? "";
+            if (string.IsNullOrEmpty(clanName))
+                clanName = DYNASTY_CHARS[Rng.Next(DYNASTY_CHARS.Length)];
+
+            string ruleName = clanName + "\u6C0F\u7EDF\u6CBB";
+            return string.IsNullOrEmpty(cityName) ? ruleName : cityName + " " + ruleName;
+        }
+
         public static void CloseOpenDynasty(long pKingdomId)
+        {
+            CloseOpenDynasty(pKingdomId, "");
+        }
+
+        public static void CloseOpenDynasty(long pKingdomId, string pReason)
         {
             if (!Ready) return;
             try
@@ -83,7 +121,8 @@ namespace AncientWarfare3.core.lineage
                 long openId = Convert.ToInt64(v);
                 DB.UpdateValue(TABLE,
                     new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("DYNASTY_ID", openId) },
-                    ColumnVal.Create("END_TIME", World.world.getCurWorldTime()));
+                    ColumnVal.Create("END_TIME", World.world.getCurWorldTime()),
+                    ColumnVal.Create("END_REASON", pReason ?? ""));
             }
             catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.CloseOpenDynasty: " + e.Message); }
         }

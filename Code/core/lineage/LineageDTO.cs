@@ -5,6 +5,13 @@ namespace AncientWarfare3.core.lineage
     /// <summary>姓族总览条目(姓窗口列表用)。统计参考原版 ClanWindow:总/存活/贵族/氏支数。</summary>
     internal class SurnameOverview
     {
+        public bool is_city_overview;
+        public long city_id = -1;
+        public string city_name;
+        public long city_kingdom_id = -1;
+        public string city_kingdom_name;
+        public string city_kingdom_color;
+        public int family_count;
         public string family_name;
         public int total;          // 总人数(活+死)
         public int alive;          // 存活人数
@@ -94,6 +101,8 @@ namespace AncientWarfare3.core.lineage
         public double end_time = -1;
         public string year_prefix_snapshot;
         public bool   is_city_period;
+        public string owner_name = "";      // 城市史:该时期城市所属国名
+        public string owner_color = "";
         public string period_color = "";
         public System.Collections.Generic.List<HistoryEntry> events = new System.Collections.Generic.List<HistoryEntry>();
     }
@@ -109,6 +118,7 @@ namespace AncientWarfare3.core.lineage
         public int    reign_index = -1;
         public int    dynasty_index = -1;
         public long   action_actor_id = -1;
+        public string action_kind = "";
         public string target_type = "";
         public long   target_id = -1;
         public string tooltip_title = "";
@@ -123,6 +133,11 @@ namespace AncientWarfare3.core.lineage
         public string dynasty_name = "";
         public string dynasty_color = "";
         public string kingdom_color = "";
+        public long   shi_id = -1;
+        public string clan_name = "";
+        public string origin_city_name = "";
+        public string original_kingdom_name = "";
+        public string end_reason = "";
         public double start_time;
         public double end_time = -1;
         public System.Collections.Generic.List<ReignPeriod> reigns
@@ -163,11 +178,14 @@ namespace AncientWarfare3.core.lineage
         public int    clan_banner_icon_id = -1;
         public int    clan_banner_background_id = -1;
         public string city_name;
+        public string social_title = "";
+        public string social_title_color = "";
         public long   shi_id = -1;
         public int    noble_distance = 99;
         public int    head;          // 头像数据(可选,用于自绘头像)
         public int    skin;
         public int    skin_set;
+        public int    age_overgrowth = 1;
         public int    phenotype_index;   // 死者画像重建用真实肤色(活人从 actor 实时取)
         public int    phenotype_shade;
         public long   founded_branch_shi_id = -1; // 称王分封:该人开的新氏支 id(原树显示"建立分支X氏"+点击跳转)。无则 -1
