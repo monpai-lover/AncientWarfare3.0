@@ -143,6 +143,13 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
+                if (GeneralService.IsFiefHolder(pActor)) return "fief_holder";
+                if (GeneralService.IsGeneral(pActor)) return "general";
+            }
+            catch { }
+
+            try
+            {
                 if (pActor.hasTrait(LineageKeys.TRAIT_SLAVE)) return "slave";
                 pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
                 if (status == LineageStatus.SLAVE) return "slave";
@@ -165,6 +172,8 @@ namespace AncientWarfare3.core.lineage
                 case "clan_chief": return "氏族家主";
                 case "royal_guard_captain": return "禁卫军统领";
                 case "royal_guard": return "禁卫军";
+                case "fief_holder": return "封地大将";
+                case "general": return "大将";
                 case "slave": return "奴隶";
                 case "warrior": return "士兵";
                 case "noble": return "贵族";

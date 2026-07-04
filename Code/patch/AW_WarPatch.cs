@@ -12,6 +12,26 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_WarPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DiplomacyManager), "startWar",
+            new[] { typeof(Kingdom), typeof(Kingdom), typeof(WarTypeAsset), typeof(bool) })]
+        public static bool DiplomacyStartWar_Prefix(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pAsset,
+            ref War __result)
+        {
+            if (!WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender, pAsset)) return true;
+            __result = null;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(WarManager), nameof(WarManager.newWar))]
+        public static bool NewWar_Prefix(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType, ref War __result)
+        {
+            if (!WarDecisionService.ShouldBlockWarStart(pAttacker, pDefender, pType)) return true;
+            __result = null;
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.newWar))]
         public static void NewWar_Postfix(War __result)
@@ -19,6 +39,7 @@ namespace AncientWarfare3.patch
             if (__result?.data == null) return;
             WarRecordWriter.OnWarStart(__result);
             VassalService.OnWarStarted(__result);
+            MandateService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -35,7 +56,10 @@ namespace AncientWarfare3.patch
         {
             if (pWar?.data == null) return;
             WarRecordWriter.OnWarEnd(pWar, pWinner);
+            WarTerritoryService.OnWarEnded(pWar, pWinner);
             ApplyDiplomacyWarResult(pWar, pWinner);
+            MandateService.OnWarEnded(pWar, pWinner);
+            GeneralService.OnWarEnded(pWar, pWinner);
 
             Kingdom atk = pWar.getMainAttacker();
             Kingdom def = pWar.getMainDefender();

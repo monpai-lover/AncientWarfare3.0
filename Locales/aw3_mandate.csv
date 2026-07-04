@@ -1,0 +1,70 @@
+key,cz,en,ch
+aw_mandate_dynasty_title,天命王朝,Mandate Dynasty,天命王朝
+aw_mandate_dynasty Title,天命王朝,Mandate Dynasty,天命王朝
+aw_mandate_dynasty_btn,天命榜,Mandate,天命榜
+aw_mandate_dynasty_btn Description,查看当前天命王朝、皇帝、法理核心和近期天命记录,View the current Mandate dynasty emperor legal cores and recent records,查看当前天命王朝、皇帝、法理核心和近期天命记录
+aw_mandate_dynasty_mapmode,天命王朝地图,Mandate Realm Map,天命王朝地图
+aw_mandate_dynasty_mapmode Description,显示天命国及其天命附庸的区域,Show the Mandate realm and its vassal network,显示天命国及其天命附庸的区域
+aw_mandate_dynasty_mapmode_description,显示天命国及其天命附庸的区域,Show the Mandate realm and its vassal network,显示天命国及其天命附庸的区域
+aw_mandate_core_mapmode,天命法理地图,Mandate Core Map,天命法理地图
+aw_mandate_core_mapmode Description,显示天命王朝法理核心、已控制与失控区域,Show Mandate legal cores controlled and lost,显示天命王朝法理核心、已控制与失控区域
+aw_mandate_core_mapmode_description,显示天命王朝法理核心、已控制与失控区域,Show Mandate legal cores controlled and lost,显示天命王朝法理核心、已控制與失控區域
+aw_mandate_dynasty_mapmode_tooltip,天命王朝地图,Mandate Realm Map,天命王朝地图
+aw_mandate_core_mapmode_tooltip,天命法理地图,Mandate Core Map,天命法理地图
+aw_mandate_none,当前没有天命王朝,No Mandate dynasty,当前没有天命王朝
+aw_mandate_none_desc,最强的独立王国、历史人物王国，或控制旧天命法理核心的国家可以受命称帝。,A powerful independent realm historical figure realm or controller of old Mandate cores may claim the Mandate,最强的独立王国、历史人物王国，或控制旧天命法理核心的国家可以受命称帝。
+aw_mandate_kingdom,天命国,Mandate Realm,天命国
+aw_mandate_emperor,天命皇帝,Emperor,天命皇帝
+aw_mandate_value,天命值,Mandate,天命值
+aw_mandate_authority,皇权,Authority,皇权
+aw_mandate_prestige,王朝威望,Dynasty Prestige,王朝威望
+aw_mandate_core_control,法理控制,Core Control,法理控制
+aw_mandate_vassals,天命附庸,Vassals,天命附庸
+aw_mandate_crisis,天命状态,Mandate State,天命状态
+aw_mandate_recent_events,近期天命记录,Recent Mandate Records,近期天命记录
+aw_mandate_crisis_golden,盛世,Golden Age,盛世
+aw_mandate_crisis_stable,平稳,Stable,平稳
+aw_mandate_crisis_shaken,动摇,Shaken,动摇
+aw_mandate_crisis_lost,失德,Discredited,失德
+aw_mandate_crisis_collapse,崩解,Collapse,崩解
+aw_mandate_crisis_unknown,未知,Unknown,未知
+aw_policy_mandate_rites,天命礼制,Mandate Rites,天命礼制
+aw_policy_mandate_rites_desc,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。,Formalize Mandate rites sacrifices and era changes as a legitimacy framework,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。
+aw_policy_imperial_court,王朝朝廷,Imperial Court,王朝朝廷
+aw_policy_imperial_court_desc,建立面向诸侯和附庸的朝廷秩序，提高天命国的皇权与附庸控制能力。,Build an imperial court order for vassals and lords to strengthen authority,建立面向诸侯和附庸的朝廷秩序，提高天命国的皇权与附庸控制能力。
+aw_decision_claim_mandate,受命称帝,Claim Mandate,受命称帝
+aw_decision_claim_mandate_desc,当国力、爵位或历史人物条件达标时，宣布建立天命王朝。,Claim the Mandate when power rank title or historical figure conditions are met,当国力、爵位或历史人物条件达标时，宣布建立天命王朝。
+aw_decision_mandate_ritual,祭天整顿,Mandate Ritual,祭天整顿
+aw_decision_mandate_ritual_desc,消耗政治点数强化天命，小幅提升皇权和王朝威望。,Spend political points to reinforce Mandate authority and dynasty prestige,消耗政治点数强化天命，小幅提升皇权和王朝威望。
+aw_mandate_req_invalid,无效国家,Invalid realm,無效國家
+aw_mandate_req_no_king,没有在位君主,No reigning ruler,沒有在位君主
+aw_mandate_req_vassal,附庸国不能受命,Vassals cannot claim the Mandate,附庸國不能受命
+aw_mandate_req_unsupported,未接入天命体系,Not connected to the Mandate system,未接入天命體系
+aw_mandate_req_too_small,国家过小,Realm too small,國家過小
+aw_mandate_req_core_control,法理控制不足,Insufficient core control,法理控制不足
+aw_mandate_req_not_strongest,不是最强独立国,Not the strongest independent realm,不是最強獨立國
+aw_mandate_req_unknown,条件不足,Requirements not met,條件不足
+aw_mandate_history_title,天命史,Mandate History,天命史
+aw_mandate_history_empty,尚无天命史记录,No Mandate history recorded,尚无天命史记录
+aw_mandate_period,天命朝代,Mandate Period,天命朝代
+aw_mandate_reign_period,天命君主时期,Mandate Reign,天命君主时期
+aw_mandate_event,天命事件,Mandate Event,天命事件
+aw_mandate_no_emperor_period,无明确天子时期,No clear emperor period,无明确天子时期
+aw_view_emperor_biography,查看天子传记,View Emperor Biography,查看天子传记
+aw_view_emperor_biography_desc,打开该天命君主的人物传记,Open this Mandate ruler biography,打开该天命君主的人物传记
+aw_mandate_decision_slot,天朝决议,Mandate Decision,天朝决议
+aw_mandate_decision_idle,无当前决议,No current decision,无当前决议
+aw_mandate_decision_idle_desc,点击切换为可执行的天朝决议,Click to switch to an available Mandate decision,点击切换为可执行的天朝决议
+aw_mandate_decision_click_cycle,点击切换天朝决议,Click to cycle Mandate decision,点击切换天朝决议
+aw_mandate_decision_border_defense,整备边防,Reinforce Border Defense,整备边防
+aw_mandate_decision_border_defense_desc,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军,Prepare legal frontiers by building border walls and assigning border troops when manpower is sufficient,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军
+aw_mandate_decision_ritual,祭天整顿,Mandate Ritual,祭天整顿
+aw_mandate_decision_ritual_desc,由天子主持祭天和朝廷整顿，小幅恢复天命、皇权与王朝威望,The emperor conducts rites and court reforms to restore Mandate authority and prestige,由天子主持祭天和朝廷整顿，小幅恢复天命、皇权与王朝威望
+aw_mandate_decision_year_name,改元,Change Era Name,改元
+aw_mandate_decision_year_name_desc,在大事后颁布新年号，并写入天命史和国史,Issue a new era name after major events and record it in Mandate and kingdom history,在大事后颁布新年号，并写入天命史和国史
+aw_mandate_core_count,法理核心,Legal Cores,法理核心
+aw_mandate_end_replaced,天命更易,Mandate replaced,天命更易
+aw_mandate_end_low,天命崩解,Mandate collapsed,天命崩解
+aw_mandate_end_war_lost,天命战争失利,Lost Mandate war,天命战争失利
+aw_actor,人物,Actor,人物
+aw_city,城市,City,城市

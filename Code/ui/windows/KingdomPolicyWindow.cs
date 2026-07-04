@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.items;
@@ -704,8 +705,14 @@ namespace AncientWarfare3.ui.windows
             CreateProgressSlot("DecisionResearchProgress", pKingdom, decision, PolicyNodeKind.Decision,
                 TopLeft(barX, pY + 20f), new Vector2(barW, PROGRESS_H));
 
+            var warButton = CreateButtonBox("WarTargets", AW_L10n.Text("aw_war_targets", "\u6218\u4E89\u76EE\u6807"),
+                TopLeft(CONTENT_PAD_X, pY + 58f), new Vector2(132f, SUMMARY_H), Color.white,
+                () => WarDecisionTargetWindow.Open(pKingdom.id));
+            SetTip(warButton, AW_L10n.Text("aw_war_targets", "\u6218\u4E89\u76EE\u6807"),
+                AW_L10n.Text("aw_war_targets_desc", "\u67E5\u770B\u6838\u5FC3\u3001\u5BA3\u79F0\u3001\u5BA3\u6218\u7406\u7531\u548C\u6218\u4E89\u76EE\u7684\u3002"));
+
             return BuildSection(pKingdom, AW_L10n.Text("aw_policy_decision_section", "\u53EF\u6267\u884C\u51B3\u7B56"),
-                KingdomPolicyDefs.Decisions, pY + 58f);
+                KingdomPolicyDefs.Decisions, pY + 96f);
         }
 
         private float BuildSection(Kingdom pKingdom, string pTitle, IEnumerable<KingdomPolicyDef> pDefs, float pY)
@@ -1183,8 +1190,31 @@ namespace AncientWarfare3.ui.windows
                 var names = missing.Select(id => PolicyName(KingdomPolicyDefs.Get(id) ?? new KingdomPolicyDef { FallbackName = id, NameKey = id }));
                 lines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") + ": " + string.Join(", ", names.ToArray()));
             }
+            AddSpecialRequirementTooltipLines(lines, pKingdom, pDef);
 
             return string.Join("\n", lines.ToArray());
+        }
+
+        private static void AddSpecialRequirementTooltipLines(List<string> pLines, Kingdom pKingdom, KingdomPolicyDef pDef)
+        {
+            if (pDef?.Id != "aw_decision_claim_mandate") return;
+            if (MandateService.CanDeclareMandate(pKingdom, out string reason)) return;
+            pLines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") + ": " + MandateRequirementReason(reason));
+        }
+
+        private static string MandateRequirementReason(string pReason)
+        {
+            switch (pReason)
+            {
+                case "invalid": return AW_L10n.Text("aw_mandate_req_invalid", "\u65E0\u6548\u56FD\u5BB6");
+                case "no_king": return AW_L10n.Text("aw_mandate_req_no_king", "\u6CA1\u6709\u5728\u4F4D\u541B\u4E3B");
+                case "vassal": return AW_L10n.Text("aw_mandate_req_vassal", "\u9644\u5EB8\u56FD\u4E0D\u80FD\u53D7\u547D");
+                case "unsupported": return AW_L10n.Text("aw_mandate_req_unsupported", "\u672A\u63A5\u5165\u5929\u547D\u4F53\u7CFB");
+                case "too_small": return AW_L10n.Text("aw_mandate_req_too_small", "\u56FD\u5BB6\u8FC7\u5C0F");
+                case "core_control": return AW_L10n.Text("aw_mandate_req_core_control", "\u6CD5\u7406\u63A7\u5236\u4E0D\u8DB3");
+                case "not_strongest": return AW_L10n.Text("aw_mandate_req_not_strongest", "\u4E0D\u662F\u6700\u5F3A\u72EC\u7ACB\u56FD");
+                default: return string.IsNullOrEmpty(pReason) ? AW_L10n.Text("aw_mandate_req_unknown", "\u6761\u4EF6\u4E0D\u8DB3") : pReason;
+            }
         }
 
         private static void AddRequirementTooltipLines(List<string> pLines, KingdomPolicyDef pDef)
@@ -1251,6 +1281,7 @@ namespace AncientWarfare3.ui.windows
                     KingdomPolicyDefs.ClassHalfAristocrat => "\u534A\u8D35\u65CF\u5236",
                     KingdomPolicyDefs.ClassAristocrat => "\u5C01\u5EFA\u8D35\u65CF",
                     KingdomPolicyDefs.ClassReform => "\u6539\u9769\u5236",
+                    KingdomPolicyDefs.ClassRebel => "\u519C\u6C11\u4E49\u519B",
                     _ => "\u90E8\u843D\u5236"
                 });
         }
@@ -1265,6 +1296,8 @@ namespace AncientWarfare3.ui.windows
                 return AW_L10n.Text("aw_policy_class_aristocrat_desc", "\u8D35\u65CF\u548C\u6C0F\u652F\u6210\u4E3A\u5730\u65B9\u79E9\u5E8F\u6838\u5FC3\u3002");
             if (pClassId == KingdomPolicyDefs.ClassReform)
                 return AW_L10n.Text("aw_policy_class_reform_desc", "\u6539\u9769\u65E7\u5236\uFF0C\u63A8\u52A8\u5E9F\u5974\u548C\u66F4\u96C6\u4E2D\u7684\u56FD\u5BB6\u79E9\u5E8F\u3002");
+            if (pClassId == KingdomPolicyDefs.ClassRebel)
+                return AW_L10n.Text("aw_policy_class_peasant_rebel_desc", "\u4E49\u519B\u519B\u653F\u5E9C\u4E0D\u8BBE\u7981\u536B\u519B\uFF0C\u5E76\u52A8\u5458\u6210\u5E74\u7537\u6027\u4FDD\u536B\u8D77\u4E49\u3002");
             return AW_L10n.Text("aw_policy_class_default_desc", "\u4EE5\u57FA\u7840\u8840\u7F18\u548C\u805A\u843D\u79E9\u5E8F\u7EF4\u6301\u7684\u65E9\u671F\u56FD\u5BB6\u3002");
         }
 

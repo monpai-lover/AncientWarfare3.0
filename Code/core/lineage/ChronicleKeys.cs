@@ -34,6 +34,13 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_MERIT = "slave_merit";
         public const string ROYAL_GUARD_APPOINTED = "royal_guard_appointed";
         public const string ROYAL_GUARD_DISMISSED = "royal_guard_dismissed";
+        public const string MANDATE_REBEL_LEADER = "mandate_rebel_leader";
+        public const string XIAIZATION_ADOPTED = "xiaization_adopted";
+        public const string GENERAL_APPOINTED = "general_appointed";
+        public const string GENERAL_MERIT = "general_merit";
+        public const string FIEF_GRANTED = "fief_granted";
+        public const string GENERAL_RISK = "general_risk";
+        public const string GENERAL_REBELLION = "general_rebellion";
     }
 
     internal static class KingdomEvent
@@ -64,6 +71,17 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_DISMISSED = "royal_guard_dismissed";
         public const string POLICY_COMPLETED = "policy_completed";
         public const string TECH_COMPLETED = "tech_completed";
+        public const string MANDATE_REBELLION = "mandate_rebellion";
+        public const string MANDATE_CLAIMED = "mandate_claimed";
+        public const string MANDATE_BORDER_DEFENSE = "mandate_border_defense";
+        public const string FOREIGN_OCCUPATION = "foreign_occupation";
+        public const string CITY_TECH_ADOPTED = "city_tech_adopted";
+        public const string XIAIZATION_ADOPTED = "xiaization_adopted";
+        public const string GENERAL_APPOINTED = "general_appointed";
+        public const string GENERAL_MERIT = "general_merit";
+        public const string FIEF_GRANTED = "fief_granted";
+        public const string GENERAL_RISK = "general_risk";
+        public const string GENERAL_REBELLION = "general_rebellion";
     }
 
     internal static class CityEvent
@@ -80,5 +98,13 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_FORMED = "royal_guard_formed";
         public const string ROYAL_GUARD_APPOINTED = "royal_guard_appointed";
         public const string ROYAL_GUARD_DISMISSED = "royal_guard_dismissed";
+        public const string TECH_ADOPTED = "tech_adopted";
+        public const string FOREIGN_OCCUPATION = "foreign_occupation";
+        public const string CULTURE_ASSIMILATED = "culture_assimilated";
+        public const string MANDATE_BORDER_DEFENSE = "mandate_border_defense";
+        public const string XIAIZATION_PROGRESS = "xiaization_progress";
+        public const string FIEF_GRANTED = "fief_granted";
+        public const string GENERAL_RISK = "general_risk";
+        public const string GENERAL_REBELLION = "general_rebellion";
     }
 }

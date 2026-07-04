@@ -110,8 +110,8 @@ namespace AncientWarfare3.content.figures
             }
         }
 
-        /// <summary>天命国系统未做 —— 留桩,恒 false(不阻断生成)。日后接天命系统替换实现。</summary>
-        public static bool HasMandateKingdom() => false;
+        /// <summary>当前是否已有天命王朝。历史人物顺序生成会被现存天命国阻断。</summary>
+        public static bool HasMandateKingdom() => core.lineage.MandateService.Exists;
 
         // ───────────────────────── 生成 ─────────────────────────
 

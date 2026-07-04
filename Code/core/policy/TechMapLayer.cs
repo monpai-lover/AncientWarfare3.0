@@ -1,15 +1,14 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.policy
 {
     internal sealed class TechMapLayer : MapLayer
     {
-        private const float RefreshInterval = 1.0f;
         private static readonly Color32 Clear = new Color32(0, 0, 0, 0);
 
         private bool _dirty = true;
         private bool _wasActive;
-        private float _refreshTimer;
         private readonly Color _spriteColor = new Color(1f, 1f, 1f, 0.68f);
 
         public void MarkDirty()
@@ -44,12 +43,8 @@ namespace AncientWarfare3.core.policy
             sprRnd.enabled = true;
             sprRnd.color = _spriteColor;
 
-            _refreshTimer -= pElapsed;
-            if (_dirty || !_wasActive || _refreshTimer <= 0f)
-            {
+            if (_dirty || !_wasActive)
                 RedrawAll();
-                _refreshTimer = RefreshInterval;
-            }
 
             _wasActive = true;
         }
@@ -73,33 +68,30 @@ namespace AncientWarfare3.core.policy
                 }
             }
 
+            var colorCache = new Dictionary<long, Color32>();
             for (int i = 0; i < pixels.Length; i++)
-                pixels[i] = GetTileColor(i < tiles.Length ? tiles[i] : null);
+                pixels[i] = GetTileColor(i < tiles.Length ? tiles[i] : null, colorCache);
 
             updatePixels();
             _dirty = false;
         }
 
-        private static Color32 GetTileColor(WorldTile pTile)
+        private static Color32 GetTileColor(WorldTile pTile, Dictionary<long, Color32> pColorCache)
         {
-            Kingdom kingdom = GetKingdom(pTile);
-            if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) return Clear;
-            if (!KingdomPolicyService.CanUsePolicySystem(kingdom)) return Clear;
-
-            ColorAsset asset = TechMapModeService.GetColor(kingdom, null);
-            if (asset == null) return Clear;
-
-            Color32 color = asset.getColorMain32();
-            color.a = 215;
+            City city = GetCity(pTile);
+            if (city?.data == null || city.isRekt()) return Clear;
+            if (pColorCache.TryGetValue(city.id, out Color32 cached)) return cached;
+            Color32 color = CityTechService.GetCityMapColor(city);
+            pColorCache[city.id] = color;
             return color;
         }
 
-        private static Kingdom GetKingdom(WorldTile pTile)
+        private static City GetCity(WorldTile pTile)
         {
             TileZone zone = pTile?.zone;
             City city = zone?.city;
             if (city?.data == null || city.isRekt()) return null;
-            return city.kingdom;
+            return city;
         }
     }
 }

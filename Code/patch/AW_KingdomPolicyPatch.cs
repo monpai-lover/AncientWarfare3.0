@@ -11,8 +11,17 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.updateAge))]
         public static void UpdateAge_Postfix(Kingdom __instance)
         {
+            XiaizationService.OnKingdomYear(__instance);
             KingdomPolicyService.OnKingdomYear(__instance);
+            CityTechService.OnKingdomYear(__instance);
+            WarDecisionAI.OnKingdomYear(__instance);
             VassalAIService.OnKingdomYear(__instance);
+            MandateService.OnKingdomYear(__instance);
+            MandateDecisionService.OnKingdomYear(__instance);
+            MandateRebelService.OnKingdomYear(__instance);
+            MandateBorderDefenseService.OnKingdomYear(__instance);
+            ForeignOccupationService.OnKingdomYear(__instance);
+            GeneralService.OnKingdomYear(__instance);
         }
 
         [HarmonyPrefix]

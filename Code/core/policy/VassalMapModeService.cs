@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
-using HarmonyLib;
-using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
@@ -10,8 +8,8 @@ namespace AncientWarfare3.core.policy
     {
         public const string POWER_ID = "aw_vassal_mapmode";
 
-        private static VassalMapLayer _layer;
         [System.ThreadStatic] private static int _zoneColorOverrideDepth;
+        [System.ThreadStatic] private static Dictionary<long, IMetaObject> _zoneRootCache;
 
         public static bool IsActive()
         {
@@ -33,6 +31,21 @@ namespace AncientWarfare3.core.policy
         public static ColorAsset GetColor(Kingdom pKingdom, ColorAsset pFallback)
         {
             return VassalService.GetMapColor(pKingdom, pFallback);
+        }
+
+        public static IMetaObject GetRootMetaForZone(TileZone pZone)
+        {
+            City city = pZone?.city;
+            Kingdom kingdom = city?.kingdom;
+            if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) return null;
+
+            _zoneRootCache ??= new Dictionary<long, IMetaObject>();
+            if (_zoneRootCache.TryGetValue(kingdom.id, out IMetaObject cached)) return cached;
+
+            Kingdom root = VassalService.GetRootSuzerain(kingdom);
+            IMetaObject result = root?.data == null ? kingdom : root;
+            _zoneRootCache[kingdom.id] = result;
+            return result;
         }
 
         public static void BeginZoneColorOverride()
@@ -63,27 +76,23 @@ namespace AncientWarfare3.core.policy
         {
             try
             {
-                EnsureLayer();
-                _layer?.MarkDirty();
+                _zoneRootCache?.Clear();
+                HideLegacyLayer();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
         }
 
-        public static void EnsureLayer()
+        public static void HideLegacyLayer()
         {
             if (World.world == null) return;
-            _layer = World.world.GetComponentInChildren<VassalMapLayer>();
-            if (_layer == null)
-            {
-                var obj = new GameObject("[layer]AW3 Vassal Map", typeof(SpriteRenderer), typeof(VassalMapLayer));
-                obj.transform.SetParent(World.world.transform, false);
-                _layer = obj.GetComponent<VassalMapLayer>();
-                _layer.create();
-            }
+            VassalMapLayer layer = World.world.GetComponentInChildren<VassalMapLayer>();
+            layer?.HideImmediate();
+        }
 
-            RegisterLayer(_layer);
-            _layer?.HideImmediate();
+        public static void EnsureLayer()
+        {
+            HideLegacyLayer();
         }
 
         public static void DirtyMapIfActive()
@@ -92,17 +101,5 @@ namespace AncientWarfare3.core.policy
             DirtyMap();
         }
 
-        private static void RegisterLayer(MapLayer pLayer)
-        {
-            if (pLayer == null || World.world == null) return;
-            try
-            {
-                var list = AccessTools.Field(typeof(MapBox), "_map_layers")?.GetValue(World.world) as List<MapLayer>;
-                if (list != null && !list.Contains(pLayer)) list.Add(pLayer);
-            }
-            catch
-            {
-            }
-        }
     }
 }

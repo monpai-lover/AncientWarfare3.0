@@ -11,7 +11,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), "Start")]
         public static void MapBoxStart_Postfix()
         {
-            VassalMapModeService.EnsureLayer();
+            VassalMapModeService.HideLegacyLayer();
         }
 
         [HarmonyPostfix]
@@ -41,11 +41,13 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ZoneCalculator), nameof(ZoneCalculator.drawZoneMeta),
             new[] { typeof(TileZone), typeof(MetaTypeAsset), typeof(MetaZoneGetMetaSimple) })]
-        public static void ZoneCalculatorDrawZoneMeta_Prefix(MetaTypeAsset pMetaTypeAsset, ref bool __state)
+        public static void ZoneCalculatorDrawZoneMeta_Prefix(MetaTypeAsset pMetaTypeAsset,
+            ref MetaZoneGetMetaSimple pZoneGetDelegate, ref bool __state)
         {
             __state = false;
             if (!VassalMapModeService.IsActive()) return;
             if (pMetaTypeAsset?.map_mode != MetaType.Kingdom) return;
+            pZoneGetDelegate = VassalMapModeService.GetRootMetaForZone;
             VassalMapModeService.BeginZoneColorOverride();
             __state = true;
         }
@@ -67,22 +69,5 @@ namespace AncientWarfare3.patch
             __result = VassalMapModeService.GetColor(__instance, __result);
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(TooltipLibrary), "showKingdom")]
-        public static void ShowKingdom_Postfix(Tooltip pTooltip, string pType, TooltipData pData)
-        {
-            if (!VassalMapModeService.IsActive()) return;
-            Kingdom kingdom = pData?.kingdom;
-            if (kingdom?.data == null) return;
-
-            pTooltip.addLineBreak();
-            pTooltip.addLineText(
-                "aw_vassal_mapmode_tooltip",
-                VassalMapModeService.BuildTooltip(kingdom),
-                "#E8D28A",
-                pPercent: false,
-                pLocalize: true,
-                pLimitValue: 700);
-        }
     }
 }

@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.policy
         public const string POWER_ID = "aw_tech_level_mapmode";
         private static ColorAsset[] _colors;
         private static TechMapLayer _layer;
+        private static readonly Dictionary<long, ColorAsset> _kingdomColorCache = new Dictionary<long, ColorAsset>();
         [System.ThreadStatic] private static int _zoneColorOverrideDepth;
 
         public static bool IsActive()
@@ -44,10 +45,13 @@ namespace AncientWarfare3.core.policy
         public static ColorAsset GetColor(Kingdom pKingdom, ColorAsset pFallback)
         {
             if (pKingdom?.data == null || !KingdomPolicyService.CanUsePolicySystem(pKingdom)) return pFallback;
+            if (_kingdomColorCache.TryGetValue(pKingdom.id, out ColorAsset cached)) return cached ?? pFallback;
             EnsureColors();
             TechLevelReport report = KingdomPolicyService.GetTechLevelReport(pKingdom);
             int index = Mathf.Clamp(report.level - 1, 0, _colors.Length - 1);
-            return _colors[index] ?? pFallback;
+            ColorAsset result = _colors[index] ?? pFallback;
+            _kingdomColorCache[pKingdom.id] = result;
+            return result;
         }
 
         public static void BeginZoneColorOverride()
@@ -88,6 +92,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 EnsureLayer();
+                _kingdomColorCache.Clear();
                 _layer?.MarkDirty();
                 World.world?.zone_calculator?.dirtyAndClear();
             }

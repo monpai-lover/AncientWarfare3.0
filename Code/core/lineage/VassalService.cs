@@ -16,6 +16,32 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
+        internal sealed class KingdomDestroyWarCleanupState
+        {
+            public long destroyed_kingdom_id = -1L;
+            public readonly List<long> vassal_ids = new List<long>();
+            public readonly List<WarSideSnapshot> wars = new List<WarSideSnapshot>();
+        }
+
+        internal sealed class WarSideSnapshot
+        {
+            public War war;
+            public bool destroyed_was_attacker;
+            public bool destroyed_was_defender;
+        }
+
+        private sealed class ActiveRelationDetails
+        {
+            public string relation_type = "";
+            public int autonomy = 50;
+            public int tribute_rate = 10;
+            public int military_obligation = 50;
+            public double start_time = -1;
+            public long suzerain_id = -1;
+            public string suzerain_name = "";
+            public string suzerain_color = "";
+        }
+
         public static bool IsVassalKingdom(Kingdom pKingdom)
         {
             return GetSuzerainId(pKingdom) >= 0;
@@ -24,6 +50,120 @@ namespace AncientWarfare3.core.lineage
         public static bool IsSuzerain(Kingdom pKingdom)
         {
             return GetVassals(pKingdom).Count > 0;
+        }
+
+        public static string GetStatusShort(Kingdom pKingdom)
+        {
+            bool vassal = IsVassalKingdom(pKingdom);
+            bool suzerain = IsSuzerain(pKingdom);
+            if (vassal && suzerain) return "\u81E3+";
+            if (vassal) return "\u81E3";
+            if (suzerain) return "\u4E3B";
+            return "\u72EC";
+        }
+
+        public static string GetStatusTooltip(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            var lines = new List<string>();
+            lines.Add(BuildStatusTitle(pKingdom));
+            Kingdom suzerain = GetSuzerain(pKingdom);
+            if (suzerain?.data != null) lines.Add("\u5B97\u4E3B: " + suzerain.name);
+            List<Kingdom> direct = GetVassals(pKingdom);
+            List<Kingdom> total = GetVassals(pKingdom, pRecursive: true);
+            if (direct.Count > 0) lines.Add("\u76F4\u5C5E\u9644\u5EB8: " + direct.Count);
+            if (total.Count > direct.Count) lines.Add("\u9644\u5EB8\u4F53\u7CFB: " + total.Count);
+            int years = GetYearsSinceRelationStarted(pKingdom);
+            if (years >= 0) lines.Add("\u81E3\u5C5E\u5E74\u6570: " + years);
+            return string.Join("\n", lines.ToArray());
+        }
+
+        public static List<VassalRelationInfo> GetRelationView(Kingdom pContext)
+        {
+            var result = new List<VassalRelationInfo>();
+            if (pContext?.data == null || pContext.isRekt()) return result;
+
+            result.Add(BuildRelationRow(pContext, BuildContextRoleLabel(pContext), 0, isContext: true,
+                isChain: false, relationSubject: null));
+
+            Kingdom current = pContext;
+            int chainDepth = 1;
+            var visited = new HashSet<long> { pContext.id };
+            while (current?.data != null)
+            {
+                Kingdom suzerain = GetSuzerain(current);
+                if (suzerain?.data == null || suzerain.isRekt() || !visited.Add(suzerain.id)) break;
+                string role = chainDepth == 1 ? "\u76F4\u63A5\u5B97\u4E3B" : "\u4E0A\u7EA7\u5B97\u4E3B";
+                result.Add(BuildRelationRow(suzerain, role, chainDepth, isContext: false,
+                    isChain: true, relationSubject: current));
+                current = suzerain;
+                chainDepth++;
+            }
+
+            AddVassalRows(pContext, result, 1, new HashSet<long> { pContext.id });
+            return result;
+        }
+
+        public static KingdomDestroyWarCleanupState CaptureKingdomDestroyWarCleanup(Kingdom pKingdom)
+        {
+            var state = new KingdomDestroyWarCleanupState();
+            if (pKingdom?.data == null) return state;
+
+            state.destroyed_kingdom_id = pKingdom.id;
+            foreach (Kingdom vassal in GetVassals(pKingdom, pRecursive: true))
+            {
+                if (vassal?.data == null || vassal.isRekt()) continue;
+                if (!state.vassal_ids.Contains(vassal.id)) state.vassal_ids.Add(vassal.id);
+            }
+
+            try
+            {
+                foreach (War war in pKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    bool attacker = false;
+                    bool defender = false;
+                    try { attacker = war.isAttacker(pKingdom); } catch { attacker = false; }
+                    try { defender = war.isDefender(pKingdom); } catch { defender = false; }
+                    if (!attacker && !defender) continue;
+                    state.wars.Add(new WarSideSnapshot
+                    {
+                        war = war,
+                        destroyed_was_attacker = attacker,
+                        destroyed_was_defender = defender
+                    });
+                }
+            }
+            catch { }
+
+            return state;
+        }
+
+        public static void CleanupWarsAfterKingdomDestroyed(KingdomDestroyWarCleanupState pState)
+        {
+            if (pState == null || pState.vassal_ids.Count == 0 || pState.wars.Count == 0) return;
+
+            try
+            {
+                foreach (WarSideSnapshot snapshot in pState.wars)
+                {
+                    War war = snapshot?.war;
+                    if (war?.data == null || war.hasEnded()) continue;
+
+                    foreach (long vassalId in pState.vassal_ids.ToList())
+                    {
+                        if (war.hasEnded()) break;
+                        Kingdom vassal = FindKingdom(vassalId);
+                        if (vassal?.data == null || vassal.isRekt()) continue;
+                        if (!WarContainsOnDestroyedSide(war, vassal, snapshot)) continue;
+                        LeaveWarPeacefully(war, vassal);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.CleanupWarsAfterKingdomDestroyed: " + e.Message);
+            }
         }
 
         public static long GetSuzerainId(Kingdom pKingdom)
@@ -123,7 +263,7 @@ namespace AncientWarfare3.core.lineage
 
             pVassal.data.set(LineageKeys.VASSAL_SUZERAIN_ID, pSuzerain.id);
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, relationId);
-            RecordVassalSet(pVassal, pSuzerain);
+            RecordVassalSet(pVassal, pSuzerain, pReason);
             DirtyVassalMap();
             return true;
         }
@@ -171,10 +311,10 @@ namespace AncientWarfare3.core.lineage
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, -1L);
 
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_absorb",
-                HistoryText.Kingdom(pSuzerain) + " \u541E\u5E76\u9644\u5EB8 " + HistoryText.Kingdom(pVassal),
+                KingdomLabel(pSuzerain) + " \u541E\u5E76\u9644\u5EB8 " + KingdomLabel(pVassal),
                 HistoryTarget.Kingdom(pVassal));
             HistoryWriter.RecordKingdom(pVassal, "vassal_absorbed",
-                HistoryText.Kingdom(pVassal) + " \u88AB " + HistoryText.Kingdom(pSuzerain) + " \u541E\u5E76",
+                KingdomLabel(pVassal) + " \u88AB " + KingdomLabel(pSuzerain) + " \u541E\u5E76",
                 HistoryTarget.Kingdom(pSuzerain));
             DirtyVassalMap();
             return true;
@@ -221,7 +361,7 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (type == "reclaim" && pWinner == WarWinner.Attackers)
+            if (type == "reclaim" && pWinner == WarWinner.Attackers && !WarTerritoryService.HasWarGoal(pWar.data.id))
                 RoyalClaimService.OnReclaimWarWon(attacker, defender, pWar.data.id);
         }
 
@@ -310,7 +450,20 @@ namespace AncientWarfare3.core.lineage
         {
             Kingdom root = GetRootSuzerain(pKingdom);
             if (root?.data == null) return pFallback;
-            return root.getColor() ?? pFallback;
+            return DirectKingdomColor(root, pFallback);
+        }
+
+        private static ColorAsset DirectKingdomColor(Kingdom pKingdom, ColorAsset pFallback)
+        {
+            if (pKingdom?.data == null) return pFallback;
+            try
+            {
+                int colorId = pKingdom.data.color_id;
+                if (colorId >= 0)
+                    return AssetManager.kingdom_colors_library.getColorByIndex(colorId) ?? pFallback;
+            }
+            catch { }
+            return pFallback;
         }
 
         public static string BuildTooltip(Kingdom pKingdom)
@@ -356,6 +509,119 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static void AddVassalRows(Kingdom pSuzerain, List<VassalRelationInfo> pRows, int pDepth,
+            HashSet<long> pVisited)
+        {
+            foreach (Kingdom child in GetVassals(pSuzerain).OrderBy(k => k.name))
+            {
+                if (child?.data == null || child.isRekt()) continue;
+                if (!pVisited.Add(child.id)) continue;
+
+                string role = pDepth == 1 ? "\u76F4\u5C5E\u9644\u5EB8" : "\u9644\u5EB8";
+                pRows.Add(BuildRelationRow(child, role, pDepth, isContext: false,
+                    isChain: false, relationSubject: child));
+                AddVassalRows(child, pRows, pDepth + 1, pVisited);
+            }
+        }
+
+        private static VassalRelationInfo BuildRelationRow(Kingdom pKingdom, string pRole, int pDepth,
+            bool isContext, bool isChain, Kingdom relationSubject)
+        {
+            var row = new VassalRelationInfo
+            {
+                kingdom_id = pKingdom?.id ?? -1,
+                kingdom_name = pKingdom?.name ?? "",
+                color_text = HistoryColors.FromKingdom(pKingdom),
+                color_id = pKingdom?.data?.color_id ?? -1,
+                banner_icon_id = pKingdom?.data?.banner_icon_id ?? 0,
+                banner_background_id = pKingdom?.data?.banner_background_id ?? 0,
+                banner_id = pKingdom?.getActorAsset()?.banner_id ?? "",
+                depth = pDepth,
+                is_context = isContext,
+                is_chain_row = isChain,
+                is_vassal_row = !isContext && !isChain,
+                role_label = pRole ?? "",
+                cities = CountCities(pKingdom),
+                army = CountWarriors(pKingdom),
+                direct_vassals = GetVassals(pKingdom).Count,
+                total_vassals = GetVassals(pKingdom, pRecursive: true).Count
+            };
+
+            Kingdom relationKingdom = relationSubject ?? (IsVassalKingdom(pKingdom) ? pKingdom : null);
+            ActiveRelationDetails relation = ReadActiveRelationDetails(relationKingdom?.id ?? -1);
+            if (relation != null)
+            {
+                row.suzerain_id = relation.suzerain_id;
+                row.suzerain_name = relation.suzerain_name;
+                row.suzerain_color = relation.suzerain_color;
+                row.relation_type = relation.relation_type;
+                row.relation_reason_label = VassalGetReasonLabel(relation.relation_type);
+                row.autonomy = relation.autonomy;
+                row.tribute_rate = relation.tribute_rate;
+                row.military_obligation = relation.military_obligation;
+                row.start_time = relation.start_time;
+                row.years = YearsSince(relation.start_time);
+                row.relation_subject_name = relationKingdom?.name ?? "";
+            }
+
+            return row;
+        }
+
+        private static string BuildContextRoleLabel(Kingdom pKingdom)
+        {
+            bool vassal = IsVassalKingdom(pKingdom);
+            bool suzerain = IsSuzerain(pKingdom);
+            if (vassal && suzerain) return "\u672C\u56FD\u00B7\u9644\u5EB8\u5B97\u4E3B";
+            if (vassal) return "\u672C\u56FD\u00B7\u9644\u5EB8";
+            if (suzerain) return "\u672C\u56FD\u00B7\u5B97\u4E3B";
+            return "\u672C\u56FD\u00B7\u72EC\u7ACB";
+        }
+
+        private static string BuildStatusTitle(Kingdom pKingdom)
+        {
+            bool vassal = IsVassalKingdom(pKingdom);
+            bool suzerain = IsSuzerain(pKingdom);
+            if (vassal && suzerain) return "\u9644\u5EB8\u56FD\uFF0C\u5E76\u62E5\u6709\u4E0B\u7EA7\u9644\u5EB8";
+            if (vassal) return "\u9644\u5EB8\u56FD";
+            if (suzerain) return "\u5B97\u4E3B\u56FD";
+            return "\u72EC\u7ACB\u56FD\u5BB6";
+        }
+
+        private static ActiveRelationDetails ReadActiveRelationDetails(long pVassalId)
+        {
+            if (!Ready || pVassalId < 0) return null;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT RELATION_TYPE, AUTONOMY, TRIBUTE_RATE, MILITARY_OBLIGATION, START_TIME, " +
+                    $"SUZERAIN_ID, SUZERAIN_NAME, SUZERAIN_COLOR FROM {VassalRelationTableItem.GetTableName()} " +
+                    "WHERE VASSAL_ID=@v AND ACTIVE=1 AND END_TIME<0 ORDER BY START_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@v", pVassalId);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!reader.Read()) return null;
+                return new ActiveRelationDetails
+                {
+                    relation_type = reader.IsDBNull(0) ? "" : reader.GetString(0),
+                    autonomy = reader.IsDBNull(1) ? 50 : (int)reader.GetInt64(1),
+                    tribute_rate = reader.IsDBNull(2) ? 10 : (int)reader.GetInt64(2),
+                    military_obligation = reader.IsDBNull(3) ? 50 : (int)reader.GetInt64(3),
+                    start_time = reader.IsDBNull(4) ? -1 : reader.GetDouble(4),
+                    suzerain_id = reader.IsDBNull(5) ? -1 : reader.GetInt64(5),
+                    suzerain_name = reader.IsDBNull(6) ? "" : reader.GetString(6),
+                    suzerain_color = reader.IsDBNull(7) ? "" : reader.GetString(7)
+                };
+            }
+            catch { return null; }
+        }
+
+        private static int YearsSince(double pStartTime)
+        {
+            if (pStartTime < 0) return -1;
+            try { return Mathf.Max(0, Date.getCurrentYear() - Date.getYear(pStartTime)); }
+            catch { return -1; }
+        }
+
         private static void JoinLoyalVassalsToDefenders(War pWar, Kingdom pSuzerain, Kingdom pRebel)
         {
             foreach (Kingdom vassal in GetVassals(pSuzerain))
@@ -389,6 +655,37 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
+        private static bool WarContainsOnDestroyedSide(War pWar, Kingdom pVassal, WarSideSnapshot pSnapshot)
+        {
+            try
+            {
+                if (!pWar.hasKingdom(pVassal)) return false;
+            }
+            catch { return false; }
+
+            if (pSnapshot.destroyed_was_attacker)
+            {
+                try { if (pWar.isAttacker(pVassal)) return true; } catch { }
+            }
+
+            if (pSnapshot.destroyed_was_defender)
+            {
+                try { if (pWar.isDefender(pVassal)) return true; } catch { }
+            }
+
+            return false;
+        }
+
+        private static void LeaveWarPeacefully(War pWar, Kingdom pKingdom)
+        {
+            if (pWar?.data == null || pKingdom?.data == null || pWar.hasEnded()) return;
+            try { pWar.removeFromWar(pKingdom, pInPeace: true); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.LeaveWarPeacefully: " + e.Message);
+            }
+        }
+
         private static int CountWarriors(Kingdom pKingdom)
         {
             try { return pKingdom?.countTotalWarriors() ?? 0; }
@@ -407,13 +704,16 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
-        private static void RecordVassalSet(Kingdom pVassal, Kingdom pSuzerain)
+        private static void RecordVassalSet(Kingdom pVassal, Kingdom pSuzerain, string pReason)
         {
+            string reason = VassalSetReasonLabel(pReason);
             HistoryWriter.RecordKingdom(pVassal, "vassal_set",
-                HistoryText.Kingdom(pVassal) + " \u81E3\u5C5E\u4E8E " + HistoryText.Kingdom(pSuzerain),
+                KingdomLabel(pVassal) + " " + HistoryText.PlainText(reason) +
+                KingdomLabel(pSuzerain) + "\uFF0C\u6210\u4E3A\u9644\u5EB8",
                 HistoryTarget.Kingdom(pSuzerain));
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_get",
-                HistoryText.Kingdom(pSuzerain) + " \u6536 " + HistoryText.Kingdom(pVassal) + " \u4E3A\u9644\u5EB8",
+                KingdomLabel(pSuzerain) + " \u6536 " + KingdomLabel(pVassal) +
+                " \u4E3A\u9644\u5EB8\uFF08" + HistoryText.PlainText(VassalGetReasonLabel(pReason)) + "\uFF09",
                 HistoryTarget.Kingdom(pVassal));
         }
 
@@ -421,12 +721,12 @@ namespace AncientWarfare3.core.lineage
         {
             string verb = pReason == "independence_war" ? "\u901A\u8FC7\u72EC\u7ACB\u6218\u4E89\u8131\u79BB" : "\u8131\u79BB";
             HistoryWriter.RecordKingdom(pVassal, "vassal_end",
-                HistoryText.Kingdom(pVassal) + " " + verb + " " +
-                HistoryText.Kingdom(pSuzerain, "\u5B97\u4E3B\u56FD") + " \u72EC\u7ACB",
+                KingdomLabel(pVassal) + " " + verb + " " +
+                KingdomLabel(pSuzerain, "\u5B97\u4E3B\u56FD") + " \u72EC\u7ACB",
                 HistoryTarget.Kingdom(pSuzerain));
             if (pSuzerain?.data != null)
                 HistoryWriter.RecordKingdom(pSuzerain, "vassal_lost",
-                    HistoryText.Kingdom(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " + HistoryText.Kingdom(pVassal),
+                    KingdomLabel(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " + KingdomLabel(pVassal),
                     HistoryTarget.Kingdom(pVassal));
         }
 
@@ -434,8 +734,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pSuzerain?.data == null) return;
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_lost",
-                HistoryText.Kingdom(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " +
-                HistoryText.Kingdom(pVassal) + "\uFF08\u4EA1\u56FD\uFF09",
+                KingdomLabel(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " +
+                KingdomLabel(pVassal) + "\uFF08\u4EA1\u56FD\uFF09",
                 HistoryTarget.Kingdom(pVassal));
         }
 
@@ -443,10 +743,42 @@ namespace AncientWarfare3.core.lineage
         {
             if (pVassal?.data == null) return;
             HistoryWriter.RecordKingdom(pVassal, "vassal_end",
-                HistoryText.Kingdom(pVassal) + " \u56E0\u5B97\u4E3B " +
-                HistoryText.Kingdom(pSuzerain, "\u5B97\u4E3B\u56FD") +
+                KingdomLabel(pVassal) + " \u56E0\u5B97\u4E3B " +
+                KingdomLabel(pSuzerain, "\u5B97\u4E3B\u56FD") +
                 " \u706D\u4EA1\u800C\u6062\u590D\u72EC\u7ACB",
                 HistoryTarget.Kingdom(pSuzerain));
+        }
+
+        private static HistoryText KingdomLabel(Kingdom pKingdom, string pFallbackName = "")
+        {
+            string name = pKingdom?.name ?? pFallbackName ?? "";
+            return HistoryText.Colored(name, HistoryColors.FromKingdom(pKingdom));
+        }
+
+        private static string VassalSetReasonLabel(string pReason)
+        {
+            switch (pReason ?? "")
+            {
+                case "active_vassal": return "\u56E0\u5916\u90E8\u5A01\u80C1\u4E3B\u52A8\u81E3\u5C5E\u4E8E ";
+                case "vassal_war": return "\u6218\u8D25\u540E\u81E3\u5C5E\u4E8E ";
+                case "absorbed_reparent": return "\u56E0\u9644\u5EB8\u4F53\u7CFB\u91CD\u6574\u8F6C\u81E3\u5C5E\u4E8E ";
+                case "suzerain_fell_reparent": return "\u56E0\u65E7\u5B97\u4E3B\u706D\u4EA1\u6539\u81E3\u5C5E\u4E8E ";
+                case "manual": return "\u81E3\u5C5E\u4E8E ";
+                default: return "\u81E3\u5C5E\u4E8E ";
+            }
+        }
+
+        private static string VassalGetReasonLabel(string pReason)
+        {
+            switch (pReason ?? "")
+            {
+                case "active_vassal": return "\u4E3B\u52A8\u81E3\u5C5E";
+                case "vassal_war": return "\u6218\u4E89\u81E3\u670D";
+                case "absorbed_reparent": return "\u4F53\u7CFB\u91CD\u6574";
+                case "suzerain_fell_reparent": return "\u6539\u6295\u5B97\u4E3B";
+                case "manual": return "\u4E0A\u5E1D\u8BBE\u5B9A";
+                default: return "\u81E3\u5C5E";
+            }
         }
 
         private static void CloseRelation(long pRelationId, string pReason, bool absorbed)

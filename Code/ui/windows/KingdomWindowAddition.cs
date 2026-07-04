@@ -41,6 +41,8 @@ namespace AncientWarfare3.ui.windows
         private TipButton _policyStateTip;
         private TipButton _policyExecTip;
         private TipButton _policyDecisionTip;
+        private Text _vassalStatusText;
+        private TipButton _vassalStatusTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -80,7 +82,7 @@ namespace AncientWarfare3.ui.windows
                        ?? content.gameObject.AddComponent<AutoVertLayoutGroup>();
 
             // 中段横排 200×36(照 AW2 custom_part)。
-            var custom = root.BeginHoriGroup(new Vector2(200, 36), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
+            var custom = root.BeginHoriGroup(new Vector2(222, 36), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
             custom.name = MIDDLE_OBJ;
             _middle = custom.gameObject;
             // 插到 content_motto 兄弟位之后(新版 motto 在 content_motto 容器,非 AW2 的直接 MottoName)。
@@ -92,18 +94,20 @@ namespace AncientWarfare3.ui.windows
             custom.AddChild(_kingCol);
 
             // 中:竖排(年号框 + 一排两个国策占位框)。
-            var middleBar = custom.BeginVertGroup(new Vector2(108, 36), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
+            var middleBar = custom.BeginVertGroup(new Vector2(130, 36), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
 
-            GameObject yearBox = BuildBox("Year", new Vector2(108, 16), out _yearText);
+            GameObject yearBox = BuildBox("Year", new Vector2(130, 16), out _yearText);
             middleBar.AddChild(yearBox);
 
-            var policyRow = middleBar.BeginHoriGroup(new Vector2(108, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(34, 16),
+            var policyRow = middleBar.BeginHoriGroup(new Vector2(130, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
+            policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(32, 16),
                 "ui/icons/iconDiplomacy", out _policyStateText, out _policyStateIcon, out _policyStateTip, OpenClassStateWindow));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(34, 16),
+            policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(32, 16),
                 "ui/icons/iconKnowledge", out _policyExecText, out _policyExecIcon, out _policyExecTip, OpenResearchWindow));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyDecision", new Vector2(34, 16),
+            policyRow.AddChild(BuildPolicyIconButton("PolicyDecision", new Vector2(32, 16),
                 "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow));
+            policyRow.AddChild(BuildTextButton("VassalStatus", new Vector2(24, 16),
+                out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
@@ -165,6 +169,21 @@ namespace AncientWarfare3.ui.windows
             else
             {
                 CachePolicyBox(decision, out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow);
+            }
+            Transform vassal = middle.transform.FindRecursive("VassalStatus");
+            if (vassal == null)
+            {
+                Transform row = middle.transform.FindRecursive("PolicyDecision")?.parent;
+                if (row != null)
+                {
+                    GameObject obj = BuildTextButton("VassalStatus", new Vector2(24, 16),
+                        out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow);
+                    obj.transform.SetParent(row, false);
+                }
+            }
+            else
+            {
+                CacheTextButton(vassal, out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow);
             }
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
@@ -303,6 +322,49 @@ namespace AncientWarfare3.ui.windows
             return box;
         }
 
+        private GameObject BuildTextButton(string name, Vector2 size, out Text text, out TipButton tip,
+            System.Action pClick)
+        {
+            var box = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement),
+                typeof(Button), typeof(TipButton));
+            var rt = box.GetComponent<RectTransform>();
+            rt.sizeDelta = size;
+            box.transform.localScale = Vector3.one;
+
+            AW_UIStyle.ApplyButton(box.GetComponent<Image>(), 0.95f);
+
+            var le = box.GetComponent<LayoutElement>();
+            le.minWidth = size.x; le.preferredWidth = size.x;
+            le.minHeight = size.y; le.preferredHeight = size.y;
+
+            var tObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            tObj.transform.SetParent(box.transform, false);
+            var tr = tObj.GetComponent<RectTransform>();
+            tr.anchorMin = Vector2.zero;
+            tr.anchorMax = Vector2.one;
+            tr.offsetMin = Vector2.zero;
+            tr.offsetMax = Vector2.zero;
+            text = tObj.GetComponent<Text>();
+            text.alignment = TextAnchor.MiddleCenter;
+            text.font = LocalizedTextManager.current_font;
+            text.fontSize = 8;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 1;
+            text.resizeTextMaxSize = 9;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.color = Color.white;
+
+            var button = box.GetComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pClick?.Invoke());
+
+            tip = box.GetComponent<TipButton>();
+            tip.type = AW_RawTooltip.TYPE;
+            return box;
+        }
+
         private void CachePolicyBox(Transform pBox, out Text pText, out Image pIcon, out TipButton pTip, System.Action pClick)
         {
             pText = null;
@@ -312,6 +374,21 @@ namespace AncientWarfare3.ui.windows
             pText = pBox.GetComponentsInChildren<Text>(true).FirstOrDefault();
             Transform icon = pBox.Find("Icon");
             pIcon = icon != null ? icon.GetComponent<Image>() : null;
+
+            var button = pBox.GetComponent<Button>() ?? pBox.gameObject.AddComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pClick?.Invoke());
+
+            pTip = pBox.GetComponent<TipButton>() ?? pBox.gameObject.AddComponent<TipButton>();
+            pTip.type = AW_RawTooltip.TYPE;
+        }
+
+        private void CacheTextButton(Transform pBox, out Text pText, out TipButton pTip, System.Action pClick)
+        {
+            pText = null;
+            pTip = null;
+            if (pBox == null) return;
+            pText = pBox.GetComponentsInChildren<Text>(true).FirstOrDefault();
 
             var button = pBox.GetComponent<Button>() ?? pBox.gameObject.AddComponent<Button>();
             button.onClick.RemoveAllListeners();
@@ -340,6 +417,13 @@ namespace AncientWarfare3.ui.windows
             Kingdom kingdom = _window != null ? _window.meta_object : null;
             if (kingdom == null || kingdom.isRekt()) return;
             KingdomPolicyWindow.OpenDecision(kingdom.id);
+        }
+
+        private void OpenVassalWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom == null || kingdom.isRekt()) return;
+            VassalRelationWindow.Open(kingdom.id);
         }
 
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
@@ -415,6 +499,18 @@ namespace AncientWarfare3.ui.windows
             SetPolicyTip(_policyDecisionTip, AW_L10n.Text("aw_policy_decisions", "\u5E38\u6001\u51B3\u7B56"), decision + "\n" + pointText);
         }
 
+        private void RefreshVassalButton(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            if (_vassalStatusText != null)
+            {
+                _vassalStatusText.text = VassalService.GetStatusShort(pKingdom);
+                _vassalStatusText.color = pKingdom.getColor().getColorText();
+            }
+            SetPolicyTip(_vassalStatusTip, AW_L10n.Text("aw_vassal_relations", "\u9644\u5EB8\u5173\u7CFB"),
+                VassalService.GetStatusTooltip(pKingdom));
+        }
+
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
         {
             KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
@@ -468,6 +564,7 @@ namespace AncientWarfare3.ui.windows
             if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "ui/policy/start_halfaristocrat";
             if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "ui/policy/base_enfeoffment";
             if (pClassId == KingdomPolicyDefs.ClassReform) return "ui/icons/iconPeace";
+            if (pClassId == KingdomPolicyDefs.ClassRebel) return "ui/Icons/traits/iconrebel";
             return "ui/icons/iconDiplomacy";
         }
 
@@ -489,6 +586,7 @@ namespace AncientWarfare3.ui.windows
             if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "\u534A\u8D35\u65CF\u5236";
             if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "\u5C01\u5EFA\u8D35\u65CF";
             if (pClassId == KingdomPolicyDefs.ClassReform) return "\u6539\u9769\u5236";
+            if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
             return "\u90E8\u843D\u5236";
         }
 
@@ -528,6 +626,7 @@ namespace AncientWarfare3.ui.windows
 
             // 国王列(头像 + "国王"标签):有王整列显示,无王整列隐藏。
             RefreshPolicyBoxes(kingdom);
+            RefreshVassalButton(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {
                 bool hasKing = kingdom.hasKing();

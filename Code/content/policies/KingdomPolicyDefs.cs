@@ -39,6 +39,7 @@ namespace AncientWarfare3.content.policies
         public const string ClassHalfAristocrat = "halfaristocrat";
         public const string ClassAristocrat = "aristocrat";
         public const string ClassReform = "reform";
+        public const string ClassRebel = "peasant_rebel";
         public const string ArmyDefault = "default";
         public const string ArmySlaveSoldier = "slave_soldier";
         public const string NameDefault = "default";
@@ -54,7 +55,8 @@ namespace AncientWarfare3.content.policies
             ClassSlaveOwner,
             ClassHalfAristocrat,
             ClassAristocrat,
-            ClassReform
+            ClassReform,
+            ClassRebel
         };
 
         private static readonly KingdomPolicyDef[] _all =
@@ -437,6 +439,66 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_policy_mandate_rites",
+                Kind = PolicyNodeKind.Social,
+                NameKey = "aw_policy_mandate_rites",
+                DescKey = "aw_policy_mandate_rites_desc",
+                FallbackName = "\u5929\u547D\u793C\u5236",
+                FallbackDesc = "\u628A\u53D7\u547D\u3001\u796D\u5929\u548C\u6539\u5143\u7EB3\u5165\u56FD\u5BB6\u793C\u5236\uFF0C\u4E3A\u5929\u547D\u738B\u671D\u63D0\u4F9B\u5408\u6CD5\u6027\u6846\u67B6\u3002",
+                IconPath = "ui/Icons/traits/iconTianming",
+                Cost = 105f,
+                RequiredPolicies = new[] { "aw_policy_early_law", "aw_policy_ancestral_rites" },
+                RequiredTechs = new[] { "aw_tech_rites_music", "aw_tech_granary_accounting" },
+                ClassAfter = ClassAristocrat,
+                Column = 6,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_policy_adopt_xia_rites",
+                Kind = PolicyNodeKind.Social,
+                NameKey = "aw_policy_adopt_xia_rites",
+                DescKey = "aw_policy_adopt_xia_rites_desc",
+                FallbackName = "\u91C7\u590F\u793C",
+                FallbackDesc = "\u5165\u636E\u590F\u5730\u7684\u5916\u65CF\u738B\u56FD\u91C7\u7528\u590F\u5730\u793C\u5236\u3001\u671D\u4EEA\u548C\u6B63\u7EDF\u53D9\u4E8B\uFF0C\u964D\u4F4E\u6C11\u6028\u5E76\u63A5\u5165\u5929\u547D\u4F53\u7CFB\u3002",
+                IconPath = "ui/icons/iconCulture",
+                Cost = 70f,
+                Column = 6,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_policy_xia_law_institutions",
+                Kind = PolicyNodeKind.Social,
+                NameKey = "aw_policy_xia_law_institutions",
+                DescKey = "aw_policy_xia_law_institutions_desc",
+                FallbackName = "\u884C\u590F\u5236",
+                FallbackDesc = "\u4FDD\u7559\u5916\u65CF\u8840\u7EDF\u4E0E\u519B\u4E8B\u4F18\u52BF\uFF0C\u4F46\u5728\u5F8B\u4EE4\u3001\u7EAA\u5E74\u3001\u7235\u4F4D\u548C\u57CE\u9091\u7BA1\u7406\u4E0A\u6539\u884C\u590F\u5236\u3002",
+                IconPath = "ui/icons/iconKnowledge",
+                Cost = 96f,
+                RequiredPolicies = new[] { "aw_policy_adopt_xia_rites" },
+                RequiredTechs = new[] { "aw_tech_writing" },
+                Column = 7,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_policy_imperial_court",
+                Kind = PolicyNodeKind.Social,
+                NameKey = "aw_policy_imperial_court",
+                DescKey = "aw_policy_imperial_court_desc",
+                FallbackName = "\u738B\u671D\u671D\u5EF7",
+                FallbackDesc = "\u5EFA\u7ACB\u9762\u5411\u8BF8\u4FAF\u548C\u9644\u5EB8\u7684\u671D\u5EF7\u79E9\u5E8F\uFF0C\u63D0\u9AD8\u5929\u547D\u56FD\u7684\u7687\u6743\u4E0E\u9644\u5EB8\u7BA1\u63A7\u80FD\u529B\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 125f,
+                RequiredPolicies = new[] { "aw_policy_mandate_rites", "aw_policy_favor_order" },
+                RequiredTechs = new[] { "aw_tech_rites_music" },
+                ClassAfter = ClassAristocrat,
+                Column = 7,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_policy_abolish_slavery",
                 Kind = PolicyNodeKind.Social,
                 NameKey = "aw_policy_abolish_slavery",
@@ -450,6 +512,36 @@ namespace AncientWarfare3.content.policies
                 ClassAfter = ClassReform,
                 Column = 5,
                 Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_claim_mandate",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_claim_mandate",
+                DescKey = "aw_decision_claim_mandate_desc",
+                FallbackName = "\u53D7\u547D\u79F0\u5E1D",
+                FallbackDesc = "\u5F53\u56FD\u529B\u3001\u7235\u4F4D\u6216\u5386\u53F2\u4EBA\u7269\u6761\u4EF6\u8FBE\u6807\u65F6\uFF0C\u5BA3\u544A\u5EFA\u7ACB\u5929\u547D\u738B\u671D\u3002",
+                IconPath = "ui/Icons/traits/iconTianming",
+                Cost = 120f,
+                RequiredPolicies = new[] { "aw_policy_mandate_rites" },
+                Repeatable = true,
+                Column = 0,
+                Row = 1
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_mandate_ritual",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_mandate_ritual",
+                DescKey = "aw_decision_mandate_ritual_desc",
+                FallbackName = "\u796D\u5929\u6574\u987F",
+                FallbackDesc = "\u6D88\u8017\u653F\u6CBB\u70B9\u6570\u5F3A\u5316\u5929\u547D\uFF0C\u5C0F\u5E45\u63D0\u5347\u7687\u6743\u548C\u738B\u671D\u5A01\u671B\u3002",
+                IconPath = "ui/Icons/traits/iconTianming",
+                Cost = 55f,
+                RequiredPolicies = new[] { "aw_policy_mandate_rites" },
+                Repeatable = true,
+                Column = 1,
+                Row = 1
             },
             new KingdomPolicyDef
             {
@@ -521,6 +613,21 @@ namespace AncientWarfare3.content.policies
                 RequiredPolicies = new[] { "aw_policy_start_slavery" },
                 Repeatable = true,
                 Column = 4,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_appease_xia_cities",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_appease_xia_cities",
+                DescKey = "aw_decision_appease_xia_cities_desc",
+                FallbackName = "\u629A\u590F\u6C11",
+                FallbackDesc = "\u5B89\u629A\u5165\u636E\u7684\u590F\u5730\u57CE\u9091\uFF0C\u964D\u4F4E\u5916\u65CF\u5165\u5173\u5E26\u6765\u7684\u6C11\u6028\u4E0E\u4E49\u519B\u98CE\u9669\u3002",
+                IconPath = "ui/icons/iconPeace",
+                Cost = 45f,
+                RequiredPolicies = new[] { "aw_policy_adopt_xia_rites" },
+                Repeatable = true,
+                Column = 5,
                 Row = 0
             }
         };

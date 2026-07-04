@@ -84,6 +84,37 @@ namespace AncientWarfare3.core.lineage
         public double destroyed_time;
     }
 
+    internal class VassalRelationInfo
+    {
+        public long kingdom_id = -1;
+        public string kingdom_name = "";
+        public string color_text = "";
+        public int color_id = -1;
+        public int banner_icon_id;
+        public int banner_background_id;
+        public string banner_id = "";
+        public int depth;
+        public bool is_context;
+        public bool is_chain_row;
+        public bool is_vassal_row;
+        public string role_label = "";
+        public long suzerain_id = -1;
+        public string suzerain_name = "";
+        public string suzerain_color = "";
+        public string relation_type = "";
+        public string relation_reason_label = "";
+        public int autonomy = 50;
+        public int tribute_rate = 10;
+        public int military_obligation = 50;
+        public double start_time = -1;
+        public int years = -1;
+        public int cities;
+        public int army;
+        public int direct_vassals;
+        public int total_vassals;
+        public string relation_subject_name = "";
+    }
+
     /// <summary>
     ///     一个"时期"分段(历史分段折叠用),两用:
     ///     - 国家史:一段朝代。有王=一个王统治期(king_name=王名);无王=空位期(按时间区间)。
@@ -114,6 +145,7 @@ namespace AncientWarfare3.core.lineage
         public bool   is_filter;          // true=分类筛选条（人物传记顶部）
         public bool   is_action;          // true=操作按钮行（如国家史里打开君主传记）
         public string text;
+        public float  width;
         public bool   expanded;
         public int    reign_index = -1;
         public int    dynasty_index = -1;
@@ -243,5 +275,66 @@ namespace AncientWarfare3.core.lineage
         public NobleBloodEvidence noble_blood = new NobleBloodEvidence();
         public List<AncestryContribution> contributions = new List<AncestryContribution>();
         public List<AncestryContribution> genetic_contributions = new List<AncestryContribution>();
+    }
+
+    internal sealed class MandateHistoryEvent
+    {
+        public long event_id = -1;
+        public long period_id = -1;
+        public string event_type = "";
+        public long kingdom_id = -1;
+        public string kingdom_name = "";
+        public string kingdom_color = "";
+        public long actor_id = -1;
+        public string actor_name = "";
+        public long city_id = -1;
+        public string city_name = "";
+        public double world_time = -1;
+        public string year_prefix = "";
+        public int value_delta;
+        public int mandate_value;
+        public int imperial_authority;
+        public string content = "";
+    }
+
+    internal sealed class MandateReignView
+    {
+        public bool has_king;
+        public long king_actor_id = -1;
+        public string king_name = "";
+        public string king_color = "";
+        public string posthumous_title = "";
+        public string posthumous_color = "";
+        public string year_prefix_snapshot = "";
+        public double start_time = -1;
+        public double end_time = -1;
+        public readonly List<MandateHistoryEvent> events = new List<MandateHistoryEvent>();
+    }
+
+    internal sealed class MandatePeriodView
+    {
+        public int index;
+        public long period_id = -1;
+        public long kingdom_id = -1;
+        public string kingdom_name = "";
+        public string kingdom_color = "";
+        public int kingdom_color_id = -1;
+        public int banner_icon_id = -1;
+        public int banner_background_id = -1;
+        public string banner_id = "";
+        public string dynasty_name = "";
+        public long founder_actor_id = -1;
+        public string founder_name = "";
+        public double start_time = -1;
+        public double end_time = -1;
+        public string end_reason = "";
+        public int start_mandate;
+        public int end_mandate;
+        public int legal_core_count;
+        public string origin_type = "native";
+        public long rebel_origin_kingdom_id = -1;
+        public string rebel_origin_kingdom_name = "";
+        public string claimant_kind = "orthodox";
+        public readonly List<MandateReignView> reigns = new List<MandateReignView>();
     }
 }

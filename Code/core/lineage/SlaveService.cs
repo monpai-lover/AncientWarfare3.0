@@ -258,6 +258,17 @@ namespace AncientWarfare3.core.lineage
             return !wasSlave || pForceRecord;
         }
 
+        public static bool EnslaveByOccupation(Actor pActor, City pContextCity, Kingdom pOccupier,
+            bool pImportantRecord = false)
+        {
+            if (pActor?.data == null || pContextCity?.data == null || pOccupier?.data == null) return false;
+            if (!CanBeEnslaved(pActor, pImportantRecord)) return false;
+            if (!IsSlaveryEnabled(pOccupier))
+                SetSlaveryEnabled(pOccupier, true);
+            return Enslave(pActor, "foreign_occupation", null, pContextCity, pOccupier,
+                pForceRecord: true, pForceNationalRecord: pImportantRecord);
+        }
+
         public static void EnsureSlaveChild(Actor pBaby, Actor pParent1, Actor pParent2)
         {
             if (pBaby?.data == null) return;
@@ -859,6 +870,7 @@ namespace AncientWarfare3.core.lineage
                 "city_fall" => "城破被俘",
                 "captured" => "俘获",
                 "battlefield_capture" => "\u6218\u573A\u4FD8\u83B7",
+                "foreign_occupation" => "\u5916\u65CF\u5360\u9886",
                 "born_slave" => "奴籍所生",
                 "military_merit" => "军功释奴",
                 "promoted" => "因受任官职释奴",

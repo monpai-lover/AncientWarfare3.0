@@ -27,6 +27,7 @@ namespace AncientWarfare3.ui.items
         private Text _label;
         private LayoutElement _layout;
         private TipButton _tip;
+        private float _rowWidth = ROW_W;
         private int  _reignIndex   = -1;
         private int  _dynastyIndex = -1;
         private long _actionActorId = -1;
@@ -40,6 +41,7 @@ namespace AncientWarfare3.ui.items
         public override void Setup(HistoryRow pObject)
         {
             EnsureUi();
+            _rowWidth = pObject.width > 0f ? pObject.width : ROW_W;
             _isHeader   = pObject.is_header;
             _isFilter   = pObject.is_filter;
             _isAction   = pObject.is_action;
@@ -110,7 +112,7 @@ namespace AncientWarfare3.ui.items
 
             var rect = gameObject.GetComponent<RectTransform>();
             if (rect == null) rect = gameObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(ROW_W, 24);
+            rect.sizeDelta = new Vector2(_rowWidth, 24);
 
             var le = gameObject.GetComponent<LayoutElement>();
             if (le == null) le = gameObject.AddComponent<LayoutElement>();
@@ -146,9 +148,9 @@ namespace AncientWarfare3.ui.items
 
         private void ApplyRowHeight(bool pAllowWrap)
         {
-            float height = pAllowWrap ? EstimateHeight(_label.text) : 24f;
+            float height = pAllowWrap ? EstimateHeight(_label.text, _rowWidth) : 24f;
             var rect = gameObject.GetComponent<RectTransform>();
-            if (rect != null) rect.sizeDelta = new Vector2(ROW_W, height);
+            if (rect != null) rect.sizeDelta = new Vector2(_rowWidth, height);
             if (_layout != null)
             {
                 _layout.minHeight = height;
@@ -166,15 +168,16 @@ namespace AncientWarfare3.ui.items
                 _label.alignment = TextAnchor.UpperLeft;
         }
 
-        private static float EstimateHeight(string pText)
+        private static float EstimateHeight(string pText, float pWidth)
         {
             string plain = StripRich(pText ?? "");
+            float charsPerLine = Mathf.Max(18f, pWidth / 10f);
             int lines = 0;
             string[] parts = plain.Split('\n');
             foreach (string part in parts)
             {
                 int len = string.IsNullOrEmpty(part) ? 1 : part.Length;
-                lines += Mathf.Max(1, Mathf.CeilToInt(len / CHARS_PER_LINE));
+                lines += Mathf.Max(1, Mathf.CeilToInt(len / charsPerLine));
             }
             return Mathf.Max(24f, lines * 14f + 8f);
         }

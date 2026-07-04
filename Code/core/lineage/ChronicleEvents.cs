@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.lineage
             RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
             VassalService.OnKingdomDestroyed(pKingdom);
+            MandateService.OnKingdomDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）
             Actor king = pKingdom.king;
             ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "kingdom_fell", king);

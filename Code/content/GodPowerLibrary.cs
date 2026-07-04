@@ -15,7 +15,9 @@ namespace AncientWarfare3.content
         {
             RegisterSpawnXia();
             RegisterTechMapMode();
+            RegisterWarMapModes();
             RegisterVassalMapMode();
+            RegisterMandateMapModes();
             RegisterVassalPowers();
         }
 
@@ -81,6 +83,114 @@ namespace AncientWarfare3.content
                 toggle_action = _ => VassalMapModeService.DirtyMap()
             });
             VassalMapModeService.EnsureLayer();
+        }
+
+        private static void RegisterWarMapModes()
+        {
+            RegisterCoreMapMode();
+            RegisterClaimMapMode();
+        }
+
+        private static void RegisterCoreMapMode()
+        {
+            if (AssetManager.powers.get(WarCoreMapModeService.POWER_ID) != null)
+            {
+                WarCoreMapModeService.EnsureLayer();
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = WarCoreMapModeService.POWER_ID,
+                name = WarCoreMapModeService.POWER_ID,
+                path_icon = "ui/icons/iconMap",
+                map_modes_switch = true,
+                toggle_name = WarCoreMapModeService.POWER_ID,
+                force_map_mode = MetaType.Kingdom,
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = _ => WarCoreMapModeService.DirtyMap()
+            });
+            WarCoreMapModeService.EnsureLayer();
+        }
+
+        private static void RegisterClaimMapMode()
+        {
+            if (AssetManager.powers.get(WarClaimMapModeService.POWER_ID) != null)
+            {
+                WarClaimMapModeService.EnsureLayer();
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = WarClaimMapModeService.POWER_ID,
+                name = WarClaimMapModeService.POWER_ID,
+                path_icon = "ui/wars/war_reclaim",
+                map_modes_switch = true,
+                toggle_name = WarClaimMapModeService.POWER_ID,
+                force_map_mode = MetaType.Kingdom,
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = _ => WarClaimMapModeService.DirtyMap()
+            });
+            WarClaimMapModeService.EnsureLayer();
+        }
+
+        private static void RegisterMandateMapModes()
+        {
+            RegisterMandateDynastyMapMode();
+            RegisterMandateCoreMapMode();
+        }
+
+        private static void RegisterMandateDynastyMapMode()
+        {
+            if (AssetManager.powers.get(MandateDynastyMapModeService.POWER_ID) != null)
+            {
+                MandateDynastyMapModeService.EnsureLayer();
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = MandateDynastyMapModeService.POWER_ID,
+                name = MandateDynastyMapModeService.POWER_ID,
+                path_icon = "ui/Icons/traits/iconTianming",
+                map_modes_switch = true,
+                toggle_name = MandateDynastyMapModeService.POWER_ID,
+                force_map_mode = MetaType.Kingdom,
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = _ => MandateDynastyMapModeService.DirtyMap()
+            });
+            MandateDynastyMapModeService.EnsureLayer();
+        }
+
+        private static void RegisterMandateCoreMapMode()
+        {
+            if (AssetManager.powers.get(MandateCoreMapModeService.POWER_ID) != null)
+            {
+                MandateCoreMapModeService.EnsureLayer();
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = MandateCoreMapModeService.POWER_ID,
+                name = MandateCoreMapModeService.POWER_ID,
+                path_icon = "ui/icons/iconMap",
+                map_modes_switch = true,
+                toggle_name = MandateCoreMapModeService.POWER_ID,
+                force_map_mode = MetaType.Kingdom,
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = _ => MandateCoreMapModeService.DirtyMap()
+            });
+            MandateCoreMapModeService.EnsureLayer();
         }
 
         private static void RegisterVassalPowers()

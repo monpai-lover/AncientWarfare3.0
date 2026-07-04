@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -23,11 +24,21 @@ namespace AncientWarfare3.patch
         }
 
         // 亡国(removeObject 是 KingdomManager 自身的 public override,typeof(KingdomManager) 正确)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.removeObject))]
+        internal static void RemoveKingdom_Prefix(Kingdom pKingdom,
+            out VassalService.KingdomDestroyWarCleanupState __state)
+        {
+            __state = VassalService.CaptureKingdomDestroyWarCleanup(pKingdom);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.removeObject))]
-        public static void RemoveKingdom_Postfix(Kingdom pKingdom)
+        internal static void RemoveKingdom_Postfix(Kingdom pKingdom,
+            VassalService.KingdomDestroyWarCleanupState __state)
         {
             ChronicleEvents.OnKingdomDestroyed(pKingdom);
+            VassalService.CleanupWarsAfterKingdomDestroyed(__state);
         }
 
         // 城市易主(setKingdom 是 internal,用字符串名;Prefix 取旧国——原方法未执行,__instance.kingdom 仍是旧国)
@@ -47,6 +58,9 @@ namespace AncientWarfare3.patch
             if (pFromLoad) return;
             KingdomArchiveWriter.Upsert(__state);
             KingdomArchiveWriter.Upsert(__instance?.kingdom ?? pKingdom);
+            CityTechService.OnCityChangedKingdom(__instance, __instance?.kingdom ?? pKingdom);
+            ForeignOccupationService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
+            GeneralService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
         }
 
         [HarmonyPostfix]

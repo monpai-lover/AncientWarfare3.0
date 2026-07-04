@@ -1,16 +1,15 @@
 using AncientWarfare3.core.lineage;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
 {
     internal sealed class VassalMapLayer : MapLayer
     {
-        private const float RefreshInterval = 1.0f;
         private static readonly Color32 Clear = new Color32(0, 0, 0, 0);
 
         private bool _dirty = true;
         private bool _wasActive;
-        private float _refreshTimer;
         private readonly Color _spriteColor = new Color(1f, 1f, 1f, 0.66f);
 
         public void MarkDirty()
@@ -44,12 +43,8 @@ namespace AncientWarfare3.core.policy
             sprRnd.enabled = true;
             sprRnd.color = _spriteColor;
 
-            _refreshTimer -= pElapsed;
-            if (_dirty || !_wasActive || _refreshTimer <= 0f)
-            {
+            if (_dirty || !_wasActive)
                 RedrawAll();
-                _refreshTimer = RefreshInterval;
-            }
 
             _wasActive = true;
         }
@@ -73,23 +68,30 @@ namespace AncientWarfare3.core.policy
                 }
             }
 
+            var colorCache = new Dictionary<long, Color32>();
             for (int i = 0; i < pixels.Length; i++)
-                pixels[i] = GetTileColor(i < tiles.Length ? tiles[i] : null);
+                pixels[i] = GetTileColor(i < tiles.Length ? tiles[i] : null, colorCache);
 
             updatePixels();
             _dirty = false;
         }
 
-        private static Color32 GetTileColor(WorldTile pTile)
+        private static Color32 GetTileColor(WorldTile pTile, Dictionary<long, Color32> pColorCache)
         {
             Kingdom kingdom = GetKingdom(pTile);
             if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) return Clear;
+            if (pColorCache.TryGetValue(kingdom.id, out Color32 cached)) return cached;
 
             ColorAsset asset = VassalService.GetMapColor(kingdom, null);
-            if (asset == null) return Clear;
+            if (asset == null)
+            {
+                pColorCache[kingdom.id] = Clear;
+                return Clear;
+            }
 
             Color32 color = asset.getColorMain32();
             color.a = 218;
+            pColorCache[kingdom.id] = color;
             return color;
         }
 

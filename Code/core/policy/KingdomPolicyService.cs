@@ -84,7 +84,7 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             if (!IsSupportedPolicyKingdom(pKingdom)) return false;
 
-            bool defaultEnabled = LineageService.IsXiaKingdom(pKingdom);
+            bool defaultEnabled = XiaizationService.DefaultPolicyEnabled(pKingdom);
             pKingdom.data.get(LineageKeys.POLICY_ENABLED, out bool enabled, defaultEnabled);
             return enabled;
         }
@@ -92,7 +92,7 @@ namespace AncientWarfare3.core.policy
         public static bool IsPolicyAIEnabled(Kingdom pKingdom)
         {
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
-            bool defaultEnabled = LineageService.IsXiaKingdom(pKingdom);
+            bool defaultEnabled = XiaizationService.DefaultPolicyAIEnabled(pKingdom);
             pKingdom.data.get(LineageKeys.POLICY_AI_ENABLED, out bool enabled, defaultEnabled);
             return enabled;
         }
@@ -190,6 +190,7 @@ namespace AncientWarfare3.core.policy
         public static string GetClassId(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return KingdomPolicyDefs.ClassDefault;
+            if (MandateRebelService.IsRebelKingdom(pKingdom)) return KingdomPolicyDefs.ClassRebel;
             EnsureInitialized(pKingdom);
             pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string value, KingdomPolicyDefs.ClassDefault);
             return string.IsNullOrEmpty(value) ? KingdomPolicyDefs.ClassDefault : value;
@@ -197,6 +198,7 @@ namespace AncientWarfare3.core.policy
 
         public static string GetClassFallbackName(string pClassId)
         {
+            if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
             return pClassId switch
             {
                 KingdomPolicyDefs.ClassSlaveOwner => "奴隶制",
@@ -402,11 +404,32 @@ namespace AncientWarfare3.core.policy
         {
             if (pDef == null) yield break;
             foreach (string id in pDef.RequiredTechs ?? Array.Empty<string>())
+            {
+                if (ShouldIgnoreRequirement(pKingdom, pDef, PolicyNodeKind.Tech, id)) continue;
                 if (!IsCompleted(pKingdom, PolicyNodeKind.Tech, id))
                     yield return id;
+            }
             foreach (string id in pDef.RequiredPolicies ?? Array.Empty<string>())
+            {
+                if (ShouldIgnoreRequirement(pKingdom, pDef, PolicyNodeKind.Social, id)) continue;
                 if (!IsCompleted(pKingdom, PolicyNodeKind.Social, id))
                     yield return id;
+            }
+        }
+
+        private static bool ShouldIgnoreRequirement(Kingdom pKingdom, KingdomPolicyDef pDef,
+            PolicyNodeKind pKind, string pRequirementId)
+        {
+            return pDef?.Id == "aw_decision_claim_mandate" &&
+                   pKind == PolicyNodeKind.Social &&
+                   pRequirementId == "aw_policy_mandate_rites" &&
+                   IsHistoricalFigureKing(pKingdom);
+        }
+
+        private static bool IsHistoricalFigureKing(Kingdom pKingdom)
+        {
+            Actor king = pKingdom?.king;
+            return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
         }
 
         private static void AddYearlyPoints(Kingdom pKingdom)
@@ -452,11 +475,18 @@ namespace AncientWarfare3.core.policy
             if (points <= 0f) return;
 
             float progress = GetProgress(pKingdom, pKind);
-            float spend = Mathf.Min(points, Mathf.Min(MAX_YEARLY_SPEND, def.Cost - progress));
-            if (spend <= 0f) return;
+            float remaining = def.Cost - progress;
+            float rawSpend = Mathf.Min(points, MAX_YEARLY_SPEND);
+            float progressMultiplier = 1f;
+            if (pKind == PolicyNodeKind.Tech)
+                progressMultiplier = CityTechService.GetNeighborTechResearchBonus(pKingdom, def.Id);
+
+            float effectiveProgress = Mathf.Min(remaining, rawSpend * progressMultiplier);
+            float spend = progressMultiplier <= 0f ? effectiveProgress : effectiveProgress / progressMultiplier;
+            if (spend <= 0f || effectiveProgress <= 0f) return;
 
             points -= spend;
-            progress += spend;
+            progress += effectiveProgress;
             pKingdom.data.set(pointKey, points);
             pKingdom.data.set(ProgressKey(pKind), progress);
 
@@ -477,6 +507,8 @@ namespace AncientWarfare3.core.policy
             ApplyPolicyStateEffects(pKingdom, pDef);
 
             bool effectApplied = ApplyEffect(pKingdom, pDef);
+            if (pDef.Kind == PolicyNodeKind.Tech)
+                CityTechService.OnNationalTechCompleted(pKingdom, pDef);
             if (effectApplied && ShouldRecordGenericCompletion(pDef))
                 RecordCompletion(pKingdom, pDef);
             UpsertSnapshot(pKingdom);
@@ -505,6 +537,10 @@ namespace AncientWarfare3.core.policy
                     if (!pKingdom.hasKing()) return false;
                     YearNameService.ChangeYearName(pKingdom);
                     return true;
+                case "aw_decision_claim_mandate":
+                    return MandateService.TryDeclareMandate(pKingdom, "decision");
+                case "aw_decision_mandate_ritual":
+                    return MandateService.TryStabilizeMandate(pKingdom, 8, "mandate_ritual");
                 case "aw_decision_title_upgrade":
                     if (!CanPromoteTitle(pKingdom)) return false;
                     KingdomTitleService.PromoteTitle(pKingdom);
@@ -521,6 +557,7 @@ namespace AncientWarfare3.core.policy
                     SlaveService.EnforceSlaveControl(pKingdom);
                     return true;
                 default:
+                    if (XiaizationService.ApplyPolicyEffect(pKingdom, pDef)) return true;
                     return true;
             }
         }
@@ -554,6 +591,8 @@ namespace AncientWarfare3.core.policy
             {
                 case KingdomPolicyDefs.ClassSlaveOwner:
                     SlaveService.SetSlaveryEnabled(pKingdom, true);
+                    break;
+                case KingdomPolicyDefs.ClassRebel:
                     break;
                 case KingdomPolicyDefs.ClassDefault:
                 case KingdomPolicyDefs.ClassReform:
@@ -619,6 +658,10 @@ namespace AncientWarfare3.core.policy
             {
                 case "aw_decision_year_name":
                     return pKingdom.hasKing();
+                case "aw_decision_claim_mandate":
+                    return MandateService.CanDeclareMandate(pKingdom, out _);
+                case "aw_decision_mandate_ritual":
+                    return MandateService.CanStabilizeMandate(pKingdom);
                 case "aw_decision_title_upgrade":
                     return CanPromoteTitle(pKingdom);
                 case "aw_decision_royal_expansion":
@@ -630,6 +673,8 @@ namespace AncientWarfare3.core.policy
                     return SlaveService.IsSlaveryEnabled(pKingdom) ||
                            IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_start_slavery");
                 default:
+                    if (XiaizationService.IsXiaizationPolicy(pDef))
+                        return XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
                     return true;
             }
         }
@@ -808,7 +853,7 @@ namespace AncientWarfare3.core.policy
 
         private static bool IsSupportedPolicyKingdom(Kingdom pKingdom)
         {
-            return LineageService.IsXiaKingdom(pKingdom) || IsHumanKingdom(pKingdom);
+            return XiaizationService.CanUsePolicySystem(pKingdom);
         }
 
         private static bool IsHumanKingdom(Kingdom pKingdom)

@@ -67,22 +67,5 @@ namespace AncientWarfare3.patch
             __result = TechMapModeService.GetColor(__instance, __result);
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(TooltipLibrary), "showKingdom")]
-        public static void ShowKingdom_Postfix(Tooltip pTooltip, string pType, TooltipData pData)
-        {
-            if (!TechMapModeService.IsActive()) return;
-            Kingdom kingdom = pData?.kingdom;
-            if (kingdom?.data == null) return;
-
-            pTooltip.addLineBreak();
-            pTooltip.addLineText(
-                "aw_tech_mapmode_tooltip",
-                TechMapModeService.BuildTooltip(kingdom),
-                "#D8E889",
-                pPercent: false,
-                pLocalize: true,
-                pLimitValue: 500);
-        }
     }
 }

@@ -183,9 +183,7 @@ namespace AncientWarfare3.core.lineage
             if (pAttacker?.data == null || pDefender?.data == null) return false;
             if (pAttacker == pDefender || pAttacker.hasEnemies() || pDefender.hasEnemies()) return false;
 
-            WarTypeAsset asset = AssetManager.war_types_library.get(pWarType);
-            if (asset == null) return false;
-            try { return World.world.diplomacy.startWar(pAttacker, pDefender, asset) != null; }
+            try { return WarDecisionService.TryStartWar(pAttacker, pDefender, pWarType, pWarType); }
             catch { return false; }
         }
 

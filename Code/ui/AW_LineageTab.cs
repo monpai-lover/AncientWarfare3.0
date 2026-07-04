@@ -44,11 +44,42 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
             if (techMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, techMapButton);
 
+            PowerButton coreMapButton = PowerButtonCreator.CreateToggleButton(
+                WarCoreMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/icons/iconMap")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
+            if (coreMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, coreMapButton);
+
+            PowerButton claimMapButton = PowerButtonCreator.CreateToggleButton(
+                WarClaimMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/wars/war_reclaim")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
+            if (claimMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, claimMapButton);
+
             PowerButton vassalMapButton = PowerButtonCreator.CreateToggleButton(
                 VassalMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/wars/war_vassal")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
             if (vassalMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, vassalMapButton);
+
+            PowerButton mandateButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_mandate_dynasty_btn",
+                () => windows.MandateDynastyWindow.Open(),
+                SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
+                ?? SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
+            if (mandateButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateButton);
+
+            PowerButton mandateMapButton = PowerButtonCreator.CreateToggleButton(
+                MandateDynastyMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
+            if (mandateMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateMapButton);
+
+            PowerButton mandateCoreMapButton = PowerButtonCreator.CreateToggleButton(
+                MandateCoreMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/icons/iconMap")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
+            if (mandateCoreMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateCoreMapButton);
 
             PowerButton vassalSetButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.VASSAL_SET,

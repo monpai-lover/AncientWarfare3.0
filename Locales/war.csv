@@ -1,6 +1,20 @@
 key,cz,en
-war_type_tianming,天命战争,Ancient Warfare
-war_type_tianmingrebel,天命战争-起义,Ancient Warfare-Rebel
-war_type_reclaim,收复战争,Reclaim
-war_type_vassal_war,藩属战争,Vassal War
+war_type_aw_normal_war,普通战争,Normal War
+war_type_restoration_war,复国战争,Restoration War
+war_type_tianming,天命战争,Mandate War
+war_type_tianmingrebel,天命义军战争,Mandate Rebel War
+war_type_reclaim,收复战争,Reclaim War
+war_type_vassal_war,附庸战争,Vassal War
 war_type_independence_war,独立战争,Independence War
+war_type_general_rebellion_war,大将叛乱,General Rebellion
+war_type_fief_independence_war,封地独立战争,Fief Independence War
+aw_war_cb_core,核心,Core
+aw_war_cb_weak_claim,弱宣称,Weak Claim
+aw_war_cb_strong_claim,强宣称,Strong Claim
+aw_war_cb_pending,制造中,In Progress
+aw_war_goal_take_core_city,收复核心城市,Reclaim Core City
+aw_war_goal_press_claim_city,夺取宣称城市,Press City Claim
+aw_war_goal_force_vassal,强制臣服,Force Vassalage
+aw_war_goal_independence,脱离宗主,Independence
+aw_war_goal_restore_kingdom,复国,Restoration
+aw_war_goal_no_cb,强宣,No-CB

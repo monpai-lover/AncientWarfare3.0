@@ -4,15 +4,12 @@ using UnityEngine.UI;
 
 namespace AncientWarfare3.patch
 {
-    /// <summary>
-    ///     KingdomWindow 右侧栏加"国家历史"按钮(编年史入口)。
-    ///     Postfix showStatsRows(每次开窗刷新跑)。找 "Tabs Right" 容器,兜底用窗体根。
-    ///     点击 → HistoryListWindow.OpenKingdom(kingdom.id)。
-    /// </summary>
     [HarmonyPatch]
     public static class AW_KingdomTabPatch
     {
-        private const string BTN_NAME = "AW_KingdomHistoryTabButton";
+        private const string HISTORY_BTN_NAME = "AW_KingdomHistoryTabButton";
+        private const string VASSAL_BTN_NAME = "AW_KingdomVassalTabButton";
+        private const string WAR_BTN_NAME = "AW_KingdomWarTargetTabButton";
         private const int SIZE = 40;
 
         [HarmonyPostfix]
@@ -20,28 +17,54 @@ namespace AncientWarfare3.patch
         public static void ShowStatsRows_Postfix(KingdomWindow __instance)
         {
             if (__instance == null) return;
-            var kingdom = __instance.meta_object;
-            if (kingdom == null || kingdom.data == null) return;
+            Kingdom kingdom = __instance.meta_object;
+            if (kingdom?.data == null) return;
 
             Transform rail = __instance.transform.Find("Tabs Right");
-            if (rail == null) return; // 无右栏:不强插,避免乱位(unit 窗有,kingdom 窗运行时核实)
+            if (rail == null) return;
 
-            Transform existing = rail.Find(BTN_NAME);
-            Button btn = existing != null ? existing.GetComponent<Button>() : BuildButton(rail);
-            if (existing != null) existing.gameObject.SetActive(true);
-
-            btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(() =>
+            Button historyBtn = EnsureButton(rail, HISTORY_BTN_NAME, "ui/icons/iconKingdomList",
+                "aw_kingdom_history_entry", "aw_view_kingdom_history");
+            historyBtn.onClick.RemoveAllListeners();
+            historyBtn.onClick.AddListener(() =>
             {
                 Kingdom current = __instance != null ? __instance.meta_object : null;
                 if (current?.data == null || current.isRekt()) return;
                 AncientWarfare3.ui.windows.HistoryListWindow.OpenKingdom(current.id);
             });
+
+            Button vassalBtn = EnsureButton(rail, VASSAL_BTN_NAME, "ui/wars/war_vassal",
+                "aw_vassal_relations", "aw_view_vassal_relations");
+            vassalBtn.onClick.RemoveAllListeners();
+            vassalBtn.onClick.AddListener(() =>
+            {
+                Kingdom current = __instance != null ? __instance.meta_object : null;
+                if (current?.data == null || current.isRekt()) return;
+                AncientWarfare3.ui.windows.VassalRelationWindow.Open(current.id);
+            });
+
+            Button warBtn = EnsureButton(rail, WAR_BTN_NAME, "ui/wars/war_reclaim",
+                "aw_war_targets", "aw_view_war_targets");
+            warBtn.onClick.RemoveAllListeners();
+            warBtn.onClick.AddListener(() =>
+            {
+                Kingdom current = __instance != null ? __instance.meta_object : null;
+                if (current?.data == null || current.isRekt()) return;
+                AncientWarfare3.ui.windows.WarDecisionTargetWindow.Open(current.id);
+            });
         }
 
-        private static Button BuildButton(Transform pRail)
+        private static Button EnsureButton(Transform pRail, string pName, string pIconPath,
+            string pTipName, string pTipDesc)
         {
-            var obj = new GameObject(BTN_NAME, typeof(RectTransform), typeof(Image), typeof(Button), typeof(TipButton));
+            Transform existing = pRail.Find(pName);
+            if (existing != null)
+            {
+                existing.gameObject.SetActive(true);
+                return existing.GetComponent<Button>() ?? existing.gameObject.AddComponent<Button>();
+            }
+
+            var obj = new GameObject(pName, typeof(RectTransform), typeof(Image), typeof(Button), typeof(TipButton));
             obj.transform.SetParent(pRail, false);
             var rect = obj.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(SIZE, SIZE);
@@ -54,11 +77,13 @@ namespace AncientWarfare3.patch
             var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconObj.transform.SetParent(obj.transform, false);
             var irect = iconObj.GetComponent<RectTransform>();
-            irect.anchorMin = Vector2.zero; irect.anchorMax = Vector2.one;
-            irect.sizeDelta = new Vector2(-8, -8); irect.anchoredPosition = Vector2.zero;
+            irect.anchorMin = Vector2.zero;
+            irect.anchorMax = Vector2.one;
+            irect.sizeDelta = new Vector2(-8, -8);
+            irect.anchoredPosition = Vector2.zero;
             var icon = iconObj.GetComponent<Image>();
-            // 国家历史图标:AW2 风格 iconKingdomList。
-            icon.sprite = SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
+            icon.sprite = SpriteTextureLoader.getSprite(pIconPath)
+                          ?? SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
                           ?? SpriteTextureLoader.getSprite("ui/Icons/iconXias")
                           ?? SpriteTextureLoader.getSprite("ui/icons/iconClan");
             icon.preserveAspect = true;
@@ -66,7 +91,7 @@ namespace AncientWarfare3.patch
             var tip = obj.GetComponent<TipButton>();
             tip.type = "normal";
             tip.hoverAction = () => Tooltip.show(obj, "normal",
-                new TooltipData { tip_name = "aw_kingdom_history_entry", tip_description = "aw_view_kingdom_history" });
+                new TooltipData { tip_name = pTipName, tip_description = pTipDesc });
 
             return obj.GetComponent<Button>();
         }

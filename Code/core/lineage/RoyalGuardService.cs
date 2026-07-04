@@ -57,6 +57,13 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
 
             int now = (int)LineageService.CurTime();
+            if (MandateRebelService.IsRebelKingdom(pKingdom))
+            {
+                pKingdom.data.set(LineageKeys.ROYAL_GUARD_LAST_CHECK, now);
+                DismissKingdomGuards(pKingdom, "mandate_rebel");
+                return;
+            }
+
             if (!pForce)
             {
                 pKingdom.data.get(LineageKeys.ROYAL_GUARD_LAST_CHECK, out int lastCheck, -1);

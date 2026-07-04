@@ -53,6 +53,7 @@ namespace AncientWarfare3.core.policy
                 completed_decisions = ""
             };
 
+            CityTechService.AdjustInheritedSnapshotFromCities(pNewKingdom, dst);
             ClampProgressToDefinition(dst, PolicyNodeKind.Social);
             ClampProgressToDefinition(dst, PolicyNodeKind.Tech);
             KingdomPolicyService.ApplySnapshot(pNewKingdom, dst, pIncludeDecision: false);

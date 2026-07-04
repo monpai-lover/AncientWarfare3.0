@@ -14,8 +14,18 @@ aw_vassal_mapmode_description,按根宗主国颜色显示附庸体系,Show vassa
 aw_vassal_mapmode_tooltip,附庸地图,Vassal Map,附庸地圖
 aw_vassal_set,创建附庸,Create Vassal,建立附庸
 aw_vassal_set Description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國
+aw_vassal_set_description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國
 aw_vassal_remove,解除附庸,Remove Vassal,解除附庸
 aw_vassal_remove Description,选择附庸国以解除宗主关系,Select a vassal to remove suzerain relation,選擇附庸國以解除宗主關係
+aw_vassal_remove_description,选择附庸国以解除宗主关系,Select a vassal to remove suzerain relation,選擇附庸國以解除宗主關係
+aw_core_mapmode,核心地图,Core Map,核心地圖
+aw_core_mapmode Description,选择王国后显示核心领土和非核心领土,Select a kingdom to show cores and non-core holdings,選擇王國後顯示核心領土和非核心領土
+aw_core_mapmode_description,选择王国后显示核心领土和非核心领土,Select a kingdom to show cores and non-core holdings,選擇王國後顯示核心領土和非核心領土
+aw_core_mapmode_tooltip,核心地图,Core Map,核心地圖
+aw_claim_mapmode,宣称地图,Claim Map,宣稱地圖
+aw_claim_mapmode Description,选择王国后显示强宣称弱宣称和制造中的宣称,Select a kingdom to show strong weak and pending claims,選擇王國後顯示強宣稱弱宣稱和製造中的宣稱
+aw_claim_mapmode_description,选择王国后显示强宣称弱宣称和制造中的宣称,Select a kingdom to show strong weak and pending claims,選擇王國後顯示強宣稱弱宣稱和製造中的宣稱
+aw_claim_mapmode_tooltip,宣称地图,Claim Map,宣稱地圖
 aw_ancestry_analysis Title,祖源分析,Ancestry Analysis,祖源分析
 aw_ancestry_entry,祖源分析,Ancestry Analysis,祖源分析
 aw_view_ancestry,查看该人物的血脉祖源构成,View this actor's ancestry composition,查看該人物的血脈祖源構成

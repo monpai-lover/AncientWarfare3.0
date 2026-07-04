@@ -26,6 +26,31 @@ namespace AncientWarfare3.core.lineage
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
         public const string VASSAL_RELATION_ID = "aw_vassal_relation_id";
+        public const string MANDATE_PERIOD_ID = "aw_mandate_period_id";
+        public const string MANDATE_VALUE = "aw_mandate_value";
+        public const string MANDATE_AUTHORITY = "aw_mandate_authority";
+        public const string MANDATE_PRESTIGE = "aw_mandate_prestige";
+        public const string MANDATE_LAST_YEAR = "aw_mandate_last_year";
+        public const string MANDATE_ORIGIN_TYPE = "aw_mandate_origin_type";
+        public const string MANDATE_CLAIMANT_KIND = "aw_mandate_claimant_kind";
+        public const string MANDATE_MAP_MARKER_KIND = "aw_mandate_map_marker_kind";
+        public const string MANDATE_REBEL = "aw_mandate_rebel";
+        public const string MANDATE_REBEL_LEADER = "aw_mandate_rebel_leader";
+        public const string MANDATE_REBEL_BUFF_UNTIL = "aw_mandate_rebel_buff_until";
+        public const string MANDATE_REBEL_LAST_YEAR = "aw_mandate_rebel_last_year";
+        public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
+        public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
+        public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
+        public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
+        public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
+        public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";
+        public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
+        public const string FOREIGN_OCCUPATION_LAST_YEAR = "aw_foreign_occupation_last_year";
+        public const string FOREIGN_OCCUPATION_ID = "aw_foreign_occupation_id";
+        public const string CITY_ORIGINAL_KINGDOM_ID = "aw_city_original_kingdom_id";
+        public const string XIAIZATION_LEVEL = "aw_xiaization_level";
+        public const string XIAIZATION_LEGITIMACY = "aw_xiaization_legitimacy";
+        public const string XIAIZATION_LAST_YEAR = "aw_xiaization_last_year";
 
         public const string TRAIT_GUIZU = "guizu";
         public const string TRAIT_ZHUHOU = "zhuhou";
@@ -80,6 +105,14 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_AI_LAST_CAPITAL_MOVE_YEAR = "aw_policy_ai_last_capital_move_year";
         public const string POLICY_AI_LAST_SLAVE_CONTROL_YEAR = "aw_policy_ai_last_slave_control_year";
         public const string POLICY_AI_LAST_ROYAL_EXPANSION_YEAR = "aw_policy_ai_last_royal_expansion_year";
+        public const string POLICY_AI_LAST_XIA_APPEASE_YEAR = "aw_policy_ai_last_xia_appease_year";
+        public const string GENERAL_LAST_REFRESH_YEAR = "aw_general_last_refresh_year";
+        public const string GENERAL_LAST_FIEF_YEAR = "aw_general_last_fief_year";
+        public const string GENERAL_LAST_RISK_YEAR = "aw_general_last_risk_year";
+        public const string GENERAL_ACTIVE = "aw_general_active";
+        public const string GENERAL_MERIT = "aw_general_merit";
+        public const string GENERAL_FIEF_CITY_ID = "aw_general_fief_city_id";
+        public const string GENERAL_RISK_RECORDED_YEAR = "aw_general_risk_recorded_year";
 
         public const int NOBLE_DECAY_DISTANCE = 3;
 

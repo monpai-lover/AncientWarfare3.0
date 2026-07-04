@@ -51,6 +51,7 @@ aw_shi_list Title,氏支列表,Branches,氏支列表
 aw_family_tree Title,家族树,Family Tree,家族樹
 aw_history Title,编年史,Chronicle,編年史
 aw_kingdom_roster Title,万国史,All Kingdoms,萬國史
+aw_vassal_relations Title,附庸关系,Vassal Relations,附庸關係
 aw_kingdom_roster_btn,万国史,All Kingdoms,萬國史
 aw_kingdom_roster_btn Description,查看世界所有王国(含已亡国)的历史,View history of every kingdom incl. fallen ones,查看世界所有王國(含已亡國)的歷史
 aw_identity,身份,Identity,身份
@@ -78,6 +79,24 @@ aw_biography_entry,人物传记,Biography,人物傳記
 aw_view_biography,查看该人的生平编年史,View this person's chronicle,查看該人的生平編年史
 aw_kingdom_history_entry,国家历史,Kingdom History,國家歷史
 aw_view_kingdom_history,查看该国的历史编年史,View this kingdom's chronicle,查看該國的歷史編年史
+aw_vassal_relations,附庸关系,Vassal Relations,附庸關係
+aw_view_vassal_relations,查看该国的附庸体系,View this kingdom's vassal network,查看該國的附庸體系
+aw_city_short,城,City,城
+aw_army_short,军,Army,軍
+aw_vassal_years_short,臣,Vassal years,臣
+aw_vassal_count_short,附,Vassals,附
+aw_vassal_role,身份:,Role:,身份：
+aw_army_label,军力:,Army:,軍力：
+aw_vassal_direct_count,直属附庸:,Direct vassals:,直屬附庸：
+aw_vassal_total_count,附庸总数:,Total vassals:,附庸總數：
+aw_vassal_relation,臣属:,Relation:,臣屬：
+aw_vassal_reason,原因:,Reason:,原因：
+aw_vassal_started,开始:,Started:,開始：
+aw_vassal_years,臣属年数:,Years as vassal:,臣屬年數：
+aw_vassal_autonomy,自治度:,Autonomy:,自治度：
+aw_vassal_tribute,贡赋:,Tribute:,貢賦：
+aw_vassal_military,军役:,Military obligation:,軍役：
+aw_click_to_inspect_kingdom,点击跳转该国,Click to inspect this kingdom,點擊跳轉該國
 aw_city_history_entry,城市历史,City History,城市歷史
 aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史
 aw_tree_expand,展开,Expand,展開

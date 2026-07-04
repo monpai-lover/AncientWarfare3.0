@@ -39,6 +39,10 @@ namespace AncientWarfare3.core.policy
             "aw_policy_favor_order",
             "aw_policy_continuous_enfeoffment",
             "aw_policy_early_law",
+            "aw_policy_mandate_rites",
+            "aw_policy_imperial_court",
+            "aw_policy_adopt_xia_rites",
+            "aw_policy_xia_law_institutions",
             "aw_policy_abolish_slavery"
         };
 
@@ -101,6 +105,9 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     pKingdom.data.set(LineageKeys.POLICY_AI_LAST_SLAVE_CONTROL_YEAR, year);
                     break;
+                case "aw_decision_appease_xia_cities":
+                    pKingdom.data.set(LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR, year);
+                    break;
             }
         }
 
@@ -113,6 +120,10 @@ namespace AncientWarfare3.core.policy
         {
             switch (pDef.Id)
             {
+                case "aw_decision_claim_mandate":
+                    return 1200;
+                case "aw_decision_mandate_ritual":
+                    return MandateService.CanStabilizeMandate(pKingdom) ? 860 : 0;
                 case "aw_decision_title_upgrade":
                     return 1000;
                 case "aw_decision_royal_expansion":
@@ -121,6 +132,8 @@ namespace AncientWarfare3.core.policy
                     return CountCities(pKingdom) >= 2 ? 760 : 0;
                 case "aw_decision_control_slaves":
                     return SlaveService.IsSlaveryEnabled(pKingdom) ? 680 : 420;
+                case "aw_decision_appease_xia_cities":
+                    return XiaizationService.ScoreResearch(pKingdom, pDef);
                 case "aw_decision_year_name":
                     return ScoreYearNameDecision(pKingdom);
                 default:
@@ -135,6 +148,10 @@ namespace AncientWarfare3.core.policy
 
             switch (pDef.Id)
             {
+                case "aw_decision_claim_mandate":
+                    return !MandateService.Exists && MandateService.CanDeclareMandate(pKingdom, out _);
+                case "aw_decision_mandate_ritual":
+                    return MandateService.CanStabilizeMandate(pKingdom);
                 case "aw_decision_title_upgrade":
                     return YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_PROMOTION_YEAR, -99999) >= 10;
                 case "aw_decision_royal_expansion":
@@ -146,6 +163,9 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     return SlaveService.IsSlaveryEnabled(pKingdom) &&
                            YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_SLAVE_CONTROL_YEAR, -99999) >= 25;
+                case "aw_decision_appease_xia_cities":
+                    return YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR, -99999) >= 12 &&
+                           XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
                 case "aw_decision_year_name":
                     pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
                     return string.IsNullOrEmpty(yearName);
@@ -164,6 +184,7 @@ namespace AncientWarfare3.core.policy
         {
             int orderScore = 1000 - PreferredIndex(pDef) * 20;
             int context = 0;
+            context += XiaizationService.ScoreResearch(pKingdom, pDef);
 
             int cities = CountCities(pKingdom);
             int units = CountUnits(pKingdom);
@@ -193,6 +214,11 @@ namespace AncientWarfare3.core.policy
                     break;
                 case "aw_policy_name_integration":
                     context += 50;
+                    break;
+                case "aw_policy_mandate_rites":
+                case "aw_policy_imperial_court":
+                    if (KingdomTitleService.GetTitle(pKingdom) >= KingdomTitle.King || MandateService.Exists)
+                        context += 120;
                     break;
             }
 
