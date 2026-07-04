@@ -45,6 +45,7 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
+        public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string FOREIGN_OCCUPATION_LAST_YEAR = "aw_foreign_occupation_last_year";
         public const string FOREIGN_OCCUPATION_ID = "aw_foreign_occupation_id";
         public const string CITY_ORIGINAL_KINGDOM_ID = "aw_city_original_kingdom_id";

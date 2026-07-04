@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
             XiaizationService.OnKingdomYear(__instance);
             KingdomPolicyService.OnKingdomYear(__instance);
             CityTechService.OnKingdomYear(__instance);
+            CityEconomyService.OnKingdomYear(__instance);
             WarDecisionAI.OnKingdomYear(__instance);
             VassalAIService.OnKingdomYear(__instance);
             MandateService.OnKingdomYear(__instance);

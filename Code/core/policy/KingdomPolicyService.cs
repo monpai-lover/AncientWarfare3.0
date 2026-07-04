@@ -447,7 +447,8 @@ namespace AncientWarfare3.core.policy
             float king = 0f;
             if (pKingdom.hasKing() && pKingdom.king?.stats != null)
                 king = pKingdom.king.stats["stewardship"] * 0.05f + pKingdom.king.stats["diplomacy"] * 0.02f;
-            return Mathf.Clamp(2f + king + CountCities(pKingdom) * 0.35f + CountUnits(pKingdom) * 0.01f, 1f, 18f);
+            float cityEconomy = CityEconomyService.GetPolicyContribution(pKingdom);
+            return Mathf.Clamp(2f + king + CountCities(pKingdom) * 0.25f + CountUnits(pKingdom) * 0.008f + cityEconomy, 1f, 22f);
         }
 
         private static float CalcTechGain(Kingdom pKingdom)
@@ -455,7 +456,8 @@ namespace AncientWarfare3.core.policy
             float king = 0f;
             if (pKingdom.hasKing() && pKingdom.king?.stats != null)
                 king = pKingdom.king.stats["intelligence"] * 0.06f + pKingdom.king.stats["stewardship"] * 0.015f;
-            return Mathf.Clamp(1.5f + king + CountCities(pKingdom) * 0.25f + CountUnits(pKingdom) * 0.006f, 1f, 16f);
+            float cityEconomy = CityEconomyService.GetTechContribution(pKingdom);
+            return Mathf.Clamp(1.5f + king + CountCities(pKingdom) * 0.18f + CountUnits(pKingdom) * 0.004f + cityEconomy, 1f, 20f);
         }
 
         private static void AdvanceCurrent(Kingdom pKingdom, PolicyNodeKind pKind)
