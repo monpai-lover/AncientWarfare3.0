@@ -557,9 +557,16 @@ namespace AncientWarfare3.ui.windows
                 return prefix + ": " + NoCurrentText(pKind);
 
             float progress = KingdomPolicyService.GetProgress(pKingdom, pKind);
-            return prefix + ": " + PolicyName(pDef) + " " + Mathf.FloorToInt(progress) + "/" +
+            string line = prefix + ": " + PolicyName(pDef) + " " + Mathf.FloorToInt(progress) + "/" +
                    Mathf.CeilToInt(pDef.Cost) + " " +
                    Mathf.FloorToInt(KingdomPolicyService.GetProgressFraction(pKingdom, pDef) * 100f) + "%";
+            if (pKind == PolicyNodeKind.Decision)
+            {
+                string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
+                if (!string.IsNullOrEmpty(target)) line += "  " + target;
+            }
+
+            return line;
         }
 
         private static string ProgressTitle(KingdomPolicyDef pDef, PolicyNodeKind pKind)
@@ -608,6 +615,11 @@ namespace AncientWarfare3.ui.windows
                 AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F") + ": " + yearlyGain.ToString("0.0"),
                 AW_L10n.Text("aw_policy_estimated_years", "\u9884\u8BA1\u5E74\u6570") + ": " + years
             };
+            if (pKind == PolicyNodeKind.Decision)
+            {
+                string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
+                if (!string.IsNullOrEmpty(target)) lines.Insert(1, target);
+            }
             return string.Join("\n", lines.ToArray());
         }
 
@@ -1159,9 +1171,12 @@ namespace AncientWarfare3.ui.windows
         private static string BuildDecisionSummary(Kingdom pKingdom)
         {
             KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
-            return decision == null
-                ? AW_L10n.Text("aw_policy_no_current_decision", "\u65E0\u51B3\u7B56")
-                : PolicyName(decision);
+            if (decision == null)
+                return AW_L10n.Text("aw_policy_no_current_decision", "\u65E0\u51B3\u7B56");
+
+            string name = PolicyName(decision);
+            string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
+            return string.IsNullOrEmpty(target) ? name : name + " " + target;
         }
 
         private static string BuildNodeTooltip(Kingdom pKingdom, KingdomPolicyDef pDef, PolicyNodeStatus pStatus,
@@ -1178,9 +1193,16 @@ namespace AncientWarfare3.ui.windows
                 lines.Add(AW_L10n.Text("aw_policy_force_switch_hint", "\u70B9\u51FB\u5F3A\u5236\u5207\u6362\u4E3A\u5F53\u524D\u7814\u53D1"));
 
             if (pStatus == PolicyNodeStatus.Current)
+            {
                 lines.Add(AW_L10n.Text("aw_policy_progress", "\u8FDB\u5EA6") + ": " +
                           Mathf.FloorToInt(KingdomPolicyService.GetProgress(pKingdom, pDef.Kind)) + "/" +
                           Mathf.CeilToInt(pDef.Cost));
+                if (pDef.Kind == PolicyNodeKind.Decision)
+                {
+                    string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
+                    if (!string.IsNullOrEmpty(target)) lines.Add(target);
+                }
+            }
 
             AddRequirementTooltipLines(lines, pDef);
 

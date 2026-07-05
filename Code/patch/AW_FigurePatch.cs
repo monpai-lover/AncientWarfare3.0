@@ -1,5 +1,4 @@
 using AncientWarfare3.content.figures;
-using AncientWarfare3.core.db;
 using HarmonyLib;
 using UnityEngine;
 
@@ -35,38 +34,56 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawFavoritesMap")]
-        public static void DrawFavoritesMap_Postfix(QuantumSpriteAsset pAsset)
+        public static void DrawFavoritesMap_Figure_Postfix(QuantumSpriteAsset pAsset)
         {
-            if (!FigureStateStore.AnyAliveFigure()) return;
             if (pAsset?.group_system == null) return;
 
             Sprite baseIcon = SpriteTextureLoader.getSprite("civ/icons/minimap_figure");
             if (baseIcon == null) return;
 
-            var units = World.world?.units;
-            if (units == null) return;
-
-            Actor[] visible = units.visible_units_alive.array;
-            int count = units.visible_units_alive.count;
+            if (World.world?.units?.visible_units_with_favorite == null) return;
+            Actor[] visibleFavorites = World.world.units.visible_units_with_favorite.array;
+            int count = World.world.units.visible_units_with_favorite.count;
             for (int i = 0; i < count; i++)
             {
-                Actor unit = visible[i];
-                if (unit == null || !unit.isAlive()) continue;
-                if (unit.isInMagnet()) continue;
-                if (unit.current_tile == null || unit.current_zone == null || !unit.current_zone.visible) continue;
-                if (!unit.hasTrait(HistoricalFigureService.TRAIT_FIRST) &&
-                    !unit.hasTrait(HistoricalFigureService.TRAIT_FIGURE)) continue;
+                Actor unit = visibleFavorites[i];
+                if (unit == null || unit.kingdom == null) continue;
+
+                bool visibleZone = unit.current_zone != null && unit.current_zone.visible;
+                if (!HistoricalFigureMinimapRules.ShouldDrawIcon(
+                        unit.isAlive(),
+                        unit.isInMagnet(),
+                        unit.current_tile != null,
+                        visibleZone,
+                        unit.isKing(),
+                        unit.isCityLeader(),
+                        unit.hasTrait(HistoricalFigureService.TRAIT_FIGURE),
+                        unit.hasTrait(HistoricalFigureService.TRAIT_FIRST)))
+                    continue;
 
                 Vector3 pos = unit.current_position;
                 pos.y -= 3f;
 
                 QuantumSprite qs = pAsset.group_system.getNext();
                 if (qs == null) continue;
-                qs.set(ref pos, pAsset.base_scale);
-
-                ColorAsset color = unit.kingdom?.getColor();
-                qs.setSprite(color != null ? DynamicSprites.getIcon(baseIcon, color) : baseIcon);
+                qs.set(ref pos, GetMapIconScale(pAsset, unit.city));
+                qs.setSprite(DynamicSprites.getIcon(baseIcon, unit.kingdom.getColor()));
             }
+        }
+
+        private static float GetMapIconScale(QuantumSpriteAsset pAsset, City city)
+        {
+            float scale = pAsset.base_scale;
+            if (pAsset.add_camera_zoom_multiplier && MoveCamera.instance?.main_camera != null)
+            {
+                scale *= Mathf.Clamp(MoveCamera.instance.main_camera.orthographicSize / 30f,
+                    pAsset.add_camera_zoom_multiplier_min, pAsset.add_camera_zoom_multiplier_max);
+            }
+            if (pAsset.selected_city_scale)
+            {
+                scale *= city == null ? 0.5f : city.mark_scale_effect;
+            }
+            return scale;
         }
     }
 }

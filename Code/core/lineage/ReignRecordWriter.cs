@@ -30,6 +30,8 @@ namespace AncientWarfare3.core.lineage
             public int LostCapital;
             public string DeathCause;
             public double StartTime;
+            public double EndTime;
+            public int ReignIndex;
 
             public bool IsValid => ReignId >= 0;
 
@@ -103,7 +105,8 @@ namespace AncientWarfare3.core.lineage
             int endPop = SafePopulation(pKingdom);
             int endCities = SafeCityCount(pKingdom);
             int endArmy = SafeArmyCount(pKingdom);
-            var (wins, losses) = WarRecordWriter.GetWarRecord(pKingdom.id, open.StartTime, World.world.getCurWorldTime());
+            double endTime = World.world.getCurWorldTime();
+            var (wins, losses) = WarRecordWriter.GetWarRecord(pKingdom.id, open.StartTime, endTime);
             string deathCause = ReadDeathCause(pKing);
             int lostCapital = pReason == "kingdom_fell" ? 1 : 0;
 
@@ -111,7 +114,7 @@ namespace AncientWarfare3.core.lineage
             {
                 DB.UpdateValue(TABLE,
                     new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("REIGN_ID", open.ReignId) },
-                    ColumnVal.Create("END_TIME", World.world.getCurWorldTime()),
+                    ColumnVal.Create("END_TIME", endTime),
                     ColumnVal.Create("END_REASON", pReason ?? ""),
                     ColumnVal.Create("END_POPULATION", endPop),
                     ColumnVal.Create("END_CITY_COUNT", endCities),
@@ -134,6 +137,7 @@ namespace AncientWarfare3.core.lineage
             open.WarLosses = losses;
             open.LostCapital = lostCapital;
             open.DeathCause = deathCause;
+            open.EndTime = endTime;
             return open;
         }
 
@@ -202,7 +206,7 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
                     $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME, " +
-                    $"START_ARMY_COUNT, IS_FOUNDER " +
+                    $"START_ARMY_COUNT, IS_FOUNDER, REIGN_INDEX, END_TIME " +
                     $"FROM {TABLE} WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
@@ -216,7 +220,9 @@ namespace AncientWarfare3.core.lineage
                     StartCityCount = (int)r.GetInt64(4),
                     StartTime = r.GetDouble(5),
                     StartArmyCount = SafeInt64(r, 6),
-                    IsFounder = SafeInt64(r, 7)
+                    IsFounder = SafeInt64(r, 7),
+                    ReignIndex = SafeInt64(r, 8),
+                    EndTime = SafeDouble(r, 9)
                 };
             }
             catch { return ReignInfo.Empty; }
@@ -306,6 +312,12 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pReader.IsDBNull(pIndex) ? 0 : (int)pReader.GetInt64(pIndex); }
             catch { return 0; }
+        }
+
+        private static double SafeDouble(SQLiteDataReader pReader, int pIndex)
+        {
+            try { return pReader.IsDBNull(pIndex) ? -1.0 : Convert.ToDouble(pReader.GetValue(pIndex)); }
+            catch { return -1.0; }
         }
     }
 }

@@ -44,6 +44,7 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";
+        public const string MANDATE_SUCCESSION_CRISIS_YEAR = "aw_mandate_succession_crisis_year";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
         public const string FOREIGN_OCCUPATION_LAST_YEAR = "aw_foreign_occupation_last_year";
@@ -58,6 +59,7 @@ namespace AncientWarfare3.core.lineage
         public const string TRAIT_SLAVE = "slave";
         public const string TRAIT_VETERAN = "veteran";
         public const string TRAIT_GUARD = "\u7981\u536B\u519B";
+        public const string TRAIT_FIEF_SOLDIER = "aw_fief_soldier";
         public const string SLAVERY_ENABLED = "aw_slavery_enabled";
         public const string CHRONICLE_LAST_ORIGINAL_CLAN_ID = "aw_chronicle_last_original_clan";
 
@@ -74,6 +76,9 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_LABOR_RECORDED = "aw_slave_labor_recorded";
         public const string SLAVE_FOOD_YEAR = "aw_slave_food_year";
         public const string SLAVE_FOOD_QUOTA = "aw_slave_food_quota";
+        public const string SLAVE_RETIREMENT_LAST_CHECK = "aw_slave_retirement_last_check";
+        public const string SLAVE_LABOR_LAST_CHECK = "aw_slave_labor_last_check";
+        public const string SLAVE_CATCHER_LAST_CHECK = "aw_slave_catcher_last_check";
 
         public const string ROYAL_GUARD = "aw_royal_guard";
         public const string ROYAL_GUARD_CAPTAIN = "aw_royal_guard_captain";
@@ -98,6 +103,19 @@ namespace AncientWarfare3.core.lineage
         public const string DECISION_CURRENT = "aw_decision_current";
         public const string DECISION_PROGRESS = "aw_decision_progress";
         public const string DECISION_COMPLETED = "aw_decision_completed";
+        public const string DECISION_TARGET_KINGDOM_ID = "aw_decision_target_kingdom_id";
+        public const string DECISION_TARGET_KINGDOM_NAME = "aw_decision_target_kingdom_name";
+        public const string DECISION_PROJECT_TYPE = "aw_decision_project_type";
+        public const string DECISION_WAR_TYPE = "aw_decision_war_type";
+        public const string DECISION_WAR_GOAL_TYPE = "aw_decision_war_goal_type";
+        public const string DECISION_WAR_REASON_KEY = "aw_decision_war_reason_key";
+        public const string DECISION_WAR_REASON_LABEL = "aw_decision_war_reason_label";
+        public const string DECISION_WAR_TARGET_CITY_ID = "aw_decision_war_target_city_id";
+        public const string DECISION_WAR_TARGET_CITY_NAME = "aw_decision_war_target_city_name";
+        public const string DECISION_WAR_SOURCE_CLAIM_ID = "aw_decision_war_source_claim_id";
+        public const string DECISION_WAR_SOURCE_CORE_ID = "aw_decision_war_source_core_id";
+        public const string DECISION_WAR_RESTORATION_CLAIM_ID = "aw_decision_war_restoration_claim_id";
+        public const string DECISION_WAR_CLAIMANT_ACTOR_ID = "aw_decision_war_claimant_actor_id";
         public const string POLICY_LAST_YEAR = "aw_policy_last_year";
         public const string POLICY_ENABLED = "aw_policy_enabled";
         public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";
@@ -119,9 +137,26 @@ namespace AncientWarfare3.core.lineage
 
         public const string KINGDOM_HEIR_ID = "aw_heir_id";
         public const string IS_HEIR = "aw_is_heir";
+        public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
+        public const string KINGDOM_LEGITIMATE_SHI_ID = "aw_legitimate_shi_id";
+        public const string KINGDOM_LEGITIMATE_LINEAGE_ID = "aw_legitimate_lineage_id";
+        public const string KINGDOM_RESTORED_SHI_ID = "aw_restored_shi_id";
+        public const string KINGDOM_SUCCESSION_MODE = "aw_succession_mode";
+        public const string RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string KINGDOM_YEAR_NAME = "aw_year_name";
         public const string KINGDOM_YEAR_START = "aw_year_start";
         public const string KINGDOM_TITLE = "aw_title";
+    }
+
+    internal static class SuccessionMode
+    {
+        public const string NONE = "none";
+        public const string DIRECT = "direct";
+        public const string UNDERAGE_DIRECT = "underage_direct";
+        public const string REGISTERED = "registered";
+        public const string COLLATERAL_RESTORE = "collateral_restore";
+        public const string CLAN_FALLBACK = "clan_fallback";
+        public const string LEADER_FALLBACK = "leader_fallback";
     }
 
     internal static class LineageStatus

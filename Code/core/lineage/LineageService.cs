@@ -98,7 +98,7 @@ namespace AncientWarfare3.core.lineage
             InheritFromParents(pBaby, pParent1, pParent2);
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
-            RecordFamilyEdges(pBaby);
+            RecordFamilyEdges(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
             ArchiveActor(pBaby, pAlive: true);
 
@@ -113,7 +113,7 @@ namespace AncientWarfare3.core.lineage
 
             ArchiveTraceableActor(pParent1, pAlive: true);
             ArchiveTraceableActor(pParent2, pAlive: true);
-            RecordFamilyEdges(pBaby);
+            RecordFamilyEdges(pBaby, pParent1, pParent2);
             ArchiveTraceableActor(pBaby, pAlive: true);
         }
 
@@ -411,10 +411,19 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>把 parent_id_1/2 写入 FamilyEdge 持久亲子边表(死后家族树仍可绘制)。</summary>
-        private static void RecordFamilyEdges(Actor pActor)
+        private static void RecordFamilyEdges(Actor pActor, Actor pParent1 = null, Actor pParent2 = null)
         {
+            if (pActor?.data == null) return;
             long childId = pActor.data.id;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long childLineage, -1);
+
+            long explicitParent1 = pParent1?.data?.id ?? -1L;
+            long explicitParent2 = pParent2?.data?.id ?? -1L;
+            var parents = FamilyTreeRelationRules.MergeParentSlots(
+                pActor.data.parent_id_1, pActor.data.parent_id_2,
+                explicitParent1, explicitParent2);
+            pActor.data.parent_id_1 = parents.slot1;
+            pActor.data.parent_id_2 = parents.slot2;
 
             UpsertFamilyEdge(childId, pActor.data.parent_id_1, 1, childLineage);
             UpsertFamilyEdge(childId, pActor.data.parent_id_2, 2, childLineage);
@@ -561,29 +570,54 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing)
         {
+            OnKingFoundBranch(pKingdom, pKing, null, false);
+        }
+
+        public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing, Actor pPreviousKing,
+            bool pWasRegisteredHeir)
+        {
             if (pKingdom?.data == null || pKing?.data == null) return;
             if (!IsXia(pKing)) return;
             pKing.data.get(LineageKeys.IS_HEIR, out bool wasHeir, false);
-            if (wasHeir) return;
-            if (HeirService.IsCurrentHeir(pKingdom, pKing)) return;
-
+            bool registeredHeir = wasHeir || pWasRegisteredHeir;
+            bool currentHeir = HeirService.IsCurrentHeir(pKingdom, pKing);
+            long previousKingId = pPreviousKing?.data?.id ?? -1L;
+            pKingdom.data.get(LineageKeys.KINGDOM_PRE_SUCCESSION_KING_ID, out long recordedPreviousKingId, -1L);
+            bool directSuccession = IsDirectSuccessionFromPreviousKing(pPreviousKing, pKing) ||
+                                    LineageBranchRules.IsDirectSuccessionFromKnownKing(
+                                        pKing.data.parent_id_1,
+                                        pKing.data.parent_id_2,
+                                        previousKingId,
+                                        recordedPreviousKingId);
             pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
-            if (lineageId < 0) return; // 无谱系(非贵族血统),不分封
-
-            if (IsHistoricalFigure(pKing)) return;          // 历史人物保留预设姓氏/氏名,不能被称王分支改名
-            if (IsLineageRootFounder(pKing, lineageId)) return; // 总姓族老祖本身就是根,不再强制拆出新氏
-
             pKing.data.get(LineageKeys.SHI_ID, out long curShiId, -1);
-            if (curShiId < 0) return;
-            if (LineageQuery.CountAliveInShi(curShiId) < MIN_SHI_ALIVE_FOR_NEW_BRANCH) return;
+            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE, out string successionMode, SuccessionMode.NONE);
+            if (successionMode == SuccessionMode.COLLATERAL_RESTORE)
+            {
+                ApplyCollateralRestoration(pKingdom, pKing, pPreviousKing);
+                return;
+            }
 
-            // 触发判定:新王所在国 != 当前氏支的 origin_kingdom_id → 建新国/夺别国 → 分封。
-            long originKingdom = LineageQuery.GetShiOriginKingdom(curShiId);
-            if (originKingdom == pKingdom.id) return; // 本国内继位,大宗传承,不开新支
-
-            // 幂等:已为"这个国"开过支(标记 == 当前国对应的新支)则不重复。
+            long originKingdom = curShiId < 0 ? -1L : LineageQuery.GetShiOriginKingdom(curShiId);
             pKing.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedShi, -1);
-            if (foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id) return;
+            bool alreadyFoundedForKingdom = foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id;
+            bool shouldFound = LineageBranchRules.ShouldFoundKingBranch(
+                validKingdom: pKingdom.data != null,
+                isXiaKing: IsXia(pKing),
+                wasHeir: registeredHeir,
+                isCurrentHeir: currentHeir,
+                isDirectSuccessionFromPreviousKing: directSuccession,
+                isCollateralRestoration: successionMode == SuccessionMode.COLLATERAL_RESTORE,
+                hasLineage: lineageId >= 0,
+                hasShi: curShiId >= 0,
+                isHistoricalFigure: IsHistoricalFigure(pKing),
+                isLineageRootFounder: IsLineageRootFounder(pKing, lineageId),
+                aliveInCurrentShi: curShiId < 0 ? 0 : LineageQuery.CountAliveInShi(curShiId),
+                minAliveForNewBranch: MIN_SHI_ALIVE_FOR_NEW_BRANCH,
+                currentKingdomId: pKingdom.id,
+                originKingdomId: originKingdom,
+                alreadyFoundedForKingdom: alreadyFoundedForKingdom);
+            if (!shouldFound) return;
 
             // 1) 原版 clan:从旧 clan 脱离,新建以国王为创始人的 clan。
             try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); } catch { /* clan 新建失败不致命 */ }
@@ -616,6 +650,43 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogInfo($"Moved {movedDescendants} existing descendants to shi={newShiId}.");
 
             ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{clanName}」(shi={newShiId},脱离旧支 {curShiId})。");
+        }
+
+        private static void ApplyCollateralRestoration(Kingdom pKingdom, Actor pKing, Actor pPreviousKing)
+        {
+            if (pKingdom?.data == null || pKing?.data == null) return;
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID, out long legitimateLineage, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID, out long legitimateShi, -1L);
+            if (legitimateLineage < 0 || legitimateShi < 0) return;
+
+            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(legitimateShi);
+            string clanName = branch?.clan_name ?? "";
+            if (string.IsNullOrEmpty(clanName))
+                pKing.data.get(LineageKeys.CLAN_NAME, out clanName, "");
+
+            pKing.data.set(LineageKeys.LINEAGE_ID, legitimateLineage);
+            pKing.data.set(LineageKeys.SHI_ID, legitimateShi);
+            if (!string.IsNullOrEmpty(clanName)) pKing.data.set(LineageKeys.CLAN_NAME, clanName);
+            pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
+            pKing.data.set(LineageKeys.RESTORED_SHI_ID, legitimateShi);
+            pKingdom.data.set(LineageKeys.KINGDOM_RESTORED_SHI_ID, legitimateShi);
+            if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
+
+            ApplyDisplayName(pKing);
+            ArchiveActor(pKing, pAlive: true);
+            try { pKing.clearGraphicsFully(); } catch { }
+            SyncExistingChildrenAfterLineageChange(pKing);
+            ChronicleEvents.OnCollateralRestoration(pKingdom, pPreviousKing, pKing, branch);
+        }
+
+        private static bool IsDirectSuccessionFromPreviousKing(Actor pPreviousKing, Actor pNewKing)
+        {
+            if (pPreviousKing?.data == null || pNewKing?.data == null) return false;
+            if (pPreviousKing.data.id == pNewKing.data.id) return true;
+            long previousId = pPreviousKing.data.id;
+            return pNewKing.data.parent_id_1 == previousId || pNewKing.data.parent_id_2 == previousId;
         }
 
         private static void SyncExistingChildrenAfterLineageChange(Actor pParent)

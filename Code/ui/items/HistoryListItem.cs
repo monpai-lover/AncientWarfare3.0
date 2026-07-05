@@ -80,9 +80,12 @@ namespace AncientWarfare3.ui.items
             if (pObject.is_header)
             {
                 bool isDynasty = pObject.dynasty_index >= 0;
+                bool toggleable = pObject.dynasty_index >= 0 || pObject.reign_index >= 0;
                 string arrow = pObject.expanded ? "▼ " : "▶ ";
                 // 朝代段头缩进=0，王段段头缩进1个空格
                 string indent = isDynasty ? "" : "  ";
+                if (!toggleable) arrow = "";
+                indent = !toggleable || isDynasty ? "" : "  ";
                 _label.text = indent + arrow + pObject.text;
                 _label.fontStyle = FontStyle.Bold;
                 // 朝代段头橙色，王段段头金色

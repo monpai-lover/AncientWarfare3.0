@@ -79,6 +79,7 @@ namespace AncientWarfare3.patch
         public static void NewCityEvent_Postfix(City __instance)
         {
             ChronicleEvents.OnCityFounded(__instance);
+            CityTechService.OnCityFounded(__instance);
         }
     }
 }

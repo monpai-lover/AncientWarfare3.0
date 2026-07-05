@@ -118,27 +118,15 @@ namespace AncientWarfare3.core.policy
 
         private static int ScoreDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
-            switch (pDef.Id)
-            {
-                case "aw_decision_claim_mandate":
-                    return 1200;
-                case "aw_decision_mandate_ritual":
-                    return MandateService.CanStabilizeMandate(pKingdom) ? 860 : 0;
-                case "aw_decision_title_upgrade":
-                    return 1000;
-                case "aw_decision_royal_expansion":
-                    return RoyalExpansionDecisionService.CanExecute(pKingdom) ? 900 : 0;
-                case "aw_decision_change_capital":
-                    return CountCities(pKingdom) >= 2 ? 760 : 0;
-                case "aw_decision_control_slaves":
-                    return SlaveService.IsSlaveryEnabled(pKingdom) ? 680 : 420;
-                case "aw_decision_appease_xia_cities":
-                    return XiaizationService.ScoreResearch(pKingdom, pDef);
-                case "aw_decision_year_name":
-                    return ScoreYearNameDecision(pKingdom);
-                default:
-                    return 100;
-            }
+            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
+            return KingdomDecisionPriorityRules.ScoreDecision(
+                pDef.Id,
+                MandateService.CanStabilizeMandate(pKingdom),
+                RoyalExpansionDecisionService.CanExecute(pKingdom),
+                CountCities(pKingdom),
+                SlaveService.IsSlaveryEnabled(pKingdom),
+                XiaizationService.ScoreResearch(pKingdom, pDef),
+                string.IsNullOrEmpty(yearName));
         }
 
         private static bool ShouldAutoStartDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
@@ -166,6 +154,8 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_appease_xia_cities":
                     return YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_XIA_APPEASE_YEAR, -99999) >= 12 &&
                            XiaizationService.SpecialRequirementMet(pKingdom, pDef.Id);
+                case "aw_decision_fabricate_core":
+                    return WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom)?.data != null;
                 case "aw_decision_year_name":
                     pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
                     return string.IsNullOrEmpty(yearName);

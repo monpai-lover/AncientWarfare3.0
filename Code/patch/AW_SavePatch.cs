@@ -1,5 +1,6 @@
 using AncientWarfare3.core.db;
 using AncientWarfare3.content;
+using AncientWarfare3.ui.windows;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -35,6 +36,8 @@ namespace AncientWarfare3.patch
 #endif
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
+            ResetHistoryWindowsAfterArchiveSwitch();
+            core.lineage.WarPlotRedirectService.SweepExistingPlots();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
         }
 
@@ -43,11 +46,19 @@ namespace AncientWarfare3.patch
         public static void GenerateNewMap_Postfix()
         {
             LineageArchiveManager.Instance.CreateDataBase();
+            core.lineage.WarPlotRedirectService.SweepExistingPlots();
             XiaSubspeciesRepair.EnsureWorldTraits();
 #if 一米_中文名
             XiaNamingRepair.EnsureWorldNames();
 #endif
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
+            ResetHistoryWindowsAfterArchiveSwitch();
+        }
+
+        private static void ResetHistoryWindowsAfterArchiveSwitch()
+        {
+            try { HistoryListWindow.ResetWorldCache(); } catch { }
+            try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
         }
     }
 }

@@ -1,8 +1,8 @@
 namespace AncientWarfare3.core.lineage
 {
     /// <summary>
-    ///     历史记录文本:Plain 用于旧逻辑/搜索,Rich 用于 UI 上色显示。
-    ///     内容写入时保留两份,老存档没有 Rich 时仍显示 Plain。
+    ///     History record text: Plain is used by legacy/search paths, Rich is used by colored UI.
+    ///     Both are persisted; old saves without Rich can still fall back to Plain.
     /// </summary>
     public readonly struct HistoryText
     {
@@ -109,6 +109,19 @@ namespace AncientWarfare3.core.lineage
 
         public static string FromKingdom(Kingdom pKingdom)
         {
+            try
+            {
+                if (pKingdom?.data == null) return "";
+                int colorId = pKingdom.data.color_id;
+                if (colorId >= 0)
+                {
+                    ColorAsset direct = AssetManager.kingdom_colors_library.getColorByIndex(colorId);
+                    string directColor = Normalize(direct?.color_text);
+                    if (!string.IsNullOrEmpty(directColor)) return directColor;
+                }
+            }
+            catch { }
+
             try { return Normalize(pKingdom?.getColor()?.color_text); }
             catch { return ""; }
         }
@@ -146,7 +159,7 @@ namespace AncientWarfare3.core.lineage
         public static string EscapeRich(string pText)
         {
             if (string.IsNullOrEmpty(pText)) return "";
-            return pText.Replace("<", "＜").Replace(">", "＞");
+            return pText.Replace("<", "\uff1c").Replace(">", "\uff1e");
         }
     }
 }

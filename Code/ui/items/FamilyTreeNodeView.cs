@@ -332,7 +332,10 @@ namespace AncientWarfare3.ui.items
             {
                 _avatar.enabled = true;                                 // 恢复控件刷新(死者分支会关掉)
                 if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true; // 恢复活人动画
+                RestoreAvatarBody();
+                ResetAvatarRoleFrame();
                 _avatar.show(live);
+                RestoreAvatarBody();
                 FixClanBannerColor(live);
                 return;
             }
@@ -397,6 +400,27 @@ namespace AncientWarfare3.ui.items
 
         /// <summary>用存档数据(sex/head/phenotype)合成一张**静态上色 Xia sprite**,不引用 live Actor。
         /// 走 getContainerForUI(取 Xia 逐帧贴图容器)→ walking 首帧 → getColoredSprite(按存档 phenotype 上色)。</summary>
+        private void RestoreAvatarBody()
+        {
+            if (_avatar == null) return;
+            var loader = _avatar.avatarLoader;
+            if (loader != null)
+            {
+                if (loader._actor_image != null) loader._actor_image.enabled = true;
+                if (loader._item_image != null && loader._item_image.sprite != null)
+                    loader._item_image.enabled = true;
+            }
+            if (_avatar._tile_graphics_1 != null) _avatar._tile_graphics_1.enabled = true;
+            if (_avatar._tile_graphics_2 != null) _avatar._tile_graphics_2.enabled = true;
+        }
+
+        private void ResetAvatarRoleFrame()
+        {
+            if (_avatar?.unit_type_bg == null) return;
+            bool showDefault = FamilyTreePortraitFrameRules.ShouldShowRoleFrame(false, false, false);
+            _avatar.unit_type_bg.gameObject.SetActive(showDefault);
+        }
+
         private static Sprite BuildDeadSprite(FamilyTreeNode pNode)
         {
             var data = BuildDeadAvatarData(pNode);

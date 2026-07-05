@@ -113,6 +113,14 @@ namespace AncientWarfare3.core.lineage
             return pActor?.data == null ? 20 : ReadGeneralInt(pActor.data.id, "AMBITION_SCORE", 20);
         }
 
+        public static void RetireForSuccession(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            FiefService.RevokeActorFief(pActor, "succession");
+            EndGeneral(pActor, "succession");
+            pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+        }
+
         public static List<Actor> GetActiveGenerals(Kingdom pKingdom)
         {
             var result = new List<Actor>();
@@ -215,7 +223,7 @@ namespace AncientWarfare3.core.lineage
                          .OrderByDescending(GetMerit)
                          .ThenByDescending(CandidateScore))
             {
-                if (GetMerit(general) < 45) continue;
+                if (GetMerit(general) < FiefGrantRules.MinimumMeritForFief) continue;
                 if (FiefService.GetFiefCityId(general) >= 0) continue;
                 if (FiefService.TryGrantBestFief(pKingdom, general, "military_merit")) break;
             }

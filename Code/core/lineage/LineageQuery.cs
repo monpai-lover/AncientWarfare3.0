@@ -828,7 +828,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>以 centerActorId 为中心,返回三层节点(父母 / 本人 / 子女)。死者用 SQL 档案。</summary>
         public static FamilyTreeNode GetFamilyTree(long pCenterActorId)
         {
-            var center = BuildNode(pCenterActorId);
+            var center = BuildNode(pCenterActorId) ?? BuildPlaceholderNode(pCenterActorId);
             if (center == null) return null;
 
             // 父母:用 FamilyEdge 反查(child=center 的 parent),活人优先 actor,死人查档案。
@@ -842,7 +842,7 @@ namespace AncientWarfare3.core.lineage
             // 子女:FamilyEdge 正查(parent=center 的 child)
             foreach (var cid in GetChildIds(pCenterActorId))
             {
-                var cn = BuildNode(cid);
+                var cn = BuildNode(cid) ?? BuildPlaceholderNode(cid);
                 if (cn != null) center.children.Add(cn);
             }
 
@@ -851,30 +851,108 @@ namespace AncientWarfare3.core.lineage
 
         public static List<long> GetParentIds(long pChildId)
         {
-            var ids = new List<long>();
+            var edgeIds = new List<long>();
+            var archiveIds = new List<long>();
+            var liveIds = new List<long>();
             var db = DB;
-            if (db == null) return ids;
-            using var cmd = new SQLiteCommand(db);
-            cmd.CommandText =
-                $"SELECT PARENT_ID FROM {FamilyEdgeTableItem.GetTableName()} WHERE CHILD_ID=@c AND PARENT_ID>=0";
-            cmd.Parameters.AddWithValue("@c", pChildId);
-            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-            while (reader.Read()) ids.Add(reader.GetInt64(0));
-            return ids;
+            if (db != null)
+            {
+                using (var cmd = new SQLiteCommand(db))
+                {
+                    cmd.CommandText =
+                        $"SELECT PARENT_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
+                        $"WHERE CHILD_ID=@c AND PARENT_ID>=0 ORDER BY PARENT_SLOT ASC";
+                    cmd.Parameters.AddWithValue("@c", pChildId);
+                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                    while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
+                }
+
+                using (var cmd = new SQLiteCommand(db))
+                {
+                    cmd.CommandText =
+                        $"SELECT IFNULL(PARENT_ID_1, -1), IFNULL(PARENT_ID_2, -1) " +
+                        $"FROM {ActorArchiveTableItem.GetTableName()} WHERE ID=@id LIMIT 1";
+                    cmd.Parameters.AddWithValue("@id", pChildId);
+                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        archiveIds.Add(ToLong(reader, 0, -1));
+                        archiveIds.Add(ToLong(reader, 1, -1));
+                    }
+                }
+            }
+
+            Actor live = World.world?.units?.get(pChildId);
+            if (live?.data != null)
+            {
+                liveIds.Add(live.data.parent_id_1);
+                liveIds.Add(live.data.parent_id_2);
+            }
+
+            return FamilyTreeRelationRules.MergeRelationIds(edgeIds, archiveIds, liveIds);
         }
 
         public static List<long> GetChildIds(long pParentId)
         {
-            var ids = new List<long>();
+            var edgeIds = new List<long>();
+            var archiveIds = new List<long>();
+            var liveIds = new List<long>();
             var db = DB;
-            if (db == null) return ids;
-            using var cmd = new SQLiteCommand(db);
-            cmd.CommandText =
-                $"SELECT CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} WHERE PARENT_ID=@p";
-            cmd.Parameters.AddWithValue("@p", pParentId);
-            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-            while (reader.Read()) ids.Add(reader.GetInt64(0));
-            return ids;
+            if (db != null)
+            {
+                using (var cmd = new SQLiteCommand(db))
+                {
+                    cmd.CommandText =
+                        $"SELECT CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
+                        $"WHERE PARENT_ID=@p ORDER BY CREATED_TIME ASC, CHILD_ID ASC";
+                    cmd.Parameters.AddWithValue("@p", pParentId);
+                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                    while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
+                }
+
+                using (var cmd = new SQLiteCommand(db))
+                {
+                    cmd.CommandText =
+                        $"SELECT ID FROM {ActorArchiveTableItem.GetTableName()} " +
+                        $"WHERE PARENT_ID_1=@p OR PARENT_ID_2=@p " +
+                        $"ORDER BY BIRTH_TIME ASC, ID ASC";
+                    cmd.Parameters.AddWithValue("@p", pParentId);
+                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                    while (reader.Read()) archiveIds.Add(reader.GetInt64(0));
+                }
+            }
+
+            Actor parent = World.world?.units?.get(pParentId);
+            if (parent?.data != null)
+            {
+                try
+                {
+                    foreach (Actor child in parent.getChildren(pOnlyCurrentFamily: false))
+                    {
+                        if (child?.data != null) liveIds.Add(child.data.id);
+                    }
+                }
+                catch { }
+
+                if (liveIds.Count < parent.current_children_count)
+                    AddLiveChildrenByParentId(pParentId, liveIds);
+            }
+
+            return FamilyTreeRelationRules.MergeRelationIds(edgeIds, archiveIds, liveIds);
+        }
+
+        private static void AddLiveChildrenByParentId(long pParentId, List<long> pTarget)
+        {
+            if (pParentId < 0 || pTarget == null) return;
+            var units = World.world?.units;
+            if (units == null) return;
+
+            foreach (Actor unit in units)
+            {
+                if (unit?.data == null || unit.isRekt()) continue;
+                if (unit.data.parent_id_1 == pParentId || unit.data.parent_id_2 == pParentId)
+                    pTarget.Add(unit.data.id);
+            }
         }
 
         public static int CountKnownChildren(Actor pParent)
@@ -1080,7 +1158,7 @@ namespace AncientWarfare3.core.lineage
         private static FamilyTreeNode BuildPlaceholderNode(long pId)
         {
             var live = World.world?.units?.get(pId);
-            if (live == null) return null;
+            if (live?.data == null) return null;
             var row = LineageArchiveReader.ReadRow(pId);
             var kingdomSnapshot = ResolveLiveKingdomSnapshot(live, row);
             var node = new FamilyTreeNode
@@ -1226,6 +1304,24 @@ namespace AncientWarfare3.core.lineage
                 pNode.social_title = string.IsNullOrEmpty(kingdomName)
                     ? "\u541B\u4E3B"
                     : kingdomName + titleChar;
+                pNode.social_title_color = color;
+                return;
+            }
+
+            if (GeneralService.IsFiefHolder(pLive))
+            {
+                City fief = FiefService.GetFiefCity(pLive);
+                string cityName = fief?.data?.name ?? pLive.city?.data?.name ?? pNode.city_name ?? "";
+                pNode.social_title = string.IsNullOrEmpty(cityName)
+                    ? "\u5C01\u5730\u5927\u5C06"
+                    : cityName + " \u5C01\u5730\u5927\u5C06";
+                pNode.social_title_color = color;
+                return;
+            }
+
+            if (GeneralService.IsGeneral(pLive))
+            {
+                pNode.social_title = "\u5927\u5C06";
                 pNode.social_title_color = color;
                 return;
             }

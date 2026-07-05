@@ -1,20 +1,57 @@
-key,cz,en
-war_type_aw_normal_war,普通战争,Normal War
-war_type_restoration_war,复国战争,Restoration War
-war_type_tianming,天命战争,Mandate War
-war_type_tianmingrebel,天命义军战争,Mandate Rebel War
-war_type_reclaim,收复战争,Reclaim War
-war_type_vassal_war,附庸战争,Vassal War
-war_type_independence_war,独立战争,Independence War
-war_type_general_rebellion_war,大将叛乱,General Rebellion
-war_type_fief_independence_war,封地独立战争,Fief Independence War
-aw_war_cb_core,核心,Core
-aw_war_cb_weak_claim,弱宣称,Weak Claim
-aw_war_cb_strong_claim,强宣称,Strong Claim
-aw_war_cb_pending,制造中,In Progress
-aw_war_goal_take_core_city,收复核心城市,Reclaim Core City
-aw_war_goal_press_claim_city,夺取宣称城市,Press City Claim
-aw_war_goal_force_vassal,强制臣服,Force Vassalage
-aw_war_goal_independence,脱离宗主,Independence
-aw_war_goal_restore_kingdom,复国,Restoration
-aw_war_goal_no_cb,强宣,No-CB
+key,cz,en,ch
+war_type_aw_normal_war,普通战争,Normal War,普通戰爭
+war_name_aw_normal_war,普通战争,Normal War,普通戰爭
+war_type_restoration_war,复国战争,Restoration War,復國戰爭
+war_name_restoration_war,复国战争,Restoration War,復國戰爭
+war_type_reclaim,收复战争,Reclaim War,收復戰爭
+war_name_reclaim,收复战争,Reclaim War,收復戰爭
+war_type_vassal_war,附庸战争,Vassal War,附庸戰爭
+war_name_vassal_war,附庸战争,Vassal War,附庸戰爭
+war_type_independence_war,独立战争,Independence War,獨立戰爭
+war_name_independence_war,独立战争,Independence War,獨立戰爭
+war_type_tianming,天命战争,Mandate War,天命戰爭
+war_name_tianming,天命战争,Mandate War,天命戰爭
+war_type_tianmingrebel,义军天命战争,Rebel Mandate War,義軍天命戰爭
+war_name_tianmingrebel,义军天命战争,Rebel Mandate War,義軍天命戰爭
+war_type_general_rebellion_war,大将叛乱,General Rebellion,大將叛亂
+war_name_general_rebellion_war,大将叛乱,General Rebellion,大將叛亂
+war_type_fief_independence_war,封地独立战争,Fief Independence War,封地獨立戰爭
+war_name_fief_independence_war,封地独立战争,Fief Independence War,封地獨立戰爭
+aw_war_cb_core,核心,Core,核心
+aw_war_cb_weak_claim,弱宣称,Weak Claim,弱宣稱
+aw_war_cb_strong_claim,强宣称,Strong Claim,強宣稱
+aw_war_cb_pending,制造中,In Progress,製造中
+aw_war_goal_take_core_city,收复核心城市,Reclaim Core City,收復核心城市
+aw_war_goal_press_claim_city,夺取宣称城市,Press City Claim,奪取宣稱城市
+aw_war_goal_force_vassal,强制臣服,Force Vassalage,強制臣服
+aw_war_goal_independence,脱离宗主,Independence,脫離宗主
+aw_war_goal_restore_kingdom,复国,Restoration,復國
+aw_war_goal_no_cb,强宣,No CB,強宣
+aw_war_targets,战争目标,War Targets,戰爭目標
+aw_war_targets Title,战争目标,War Targets,戰爭目標
+aw_war_targets_title,战争目标,War Targets,戰爭目標
+aw_war_targets_desc,宣战理由与战争目标,Casus belli and war goals,宣戰理由與戰爭目標
+aw_war_no_targets,当前没有可用目标,No available targets,目前沒有可用目標
+aw_war_fabricate_core,制造核心,Fabricate Core,製造核心
+aw_war_fabricate_core_desc,在本国控制的非核心城市制造核心,Fabricate a core in a controlled non-core city,在本國控制的非核心城市製造核心
+aw_war_fabricate_weak_claim,制造弱宣称,Fabricate Weak Claim,製造弱宣稱
+aw_war_fabricate_strong_claim,制造强宣称,Fabricate Strong Claim,製造強宣稱
+aw_war_reclaim,收复核心,Reclaim Core,收復核心
+aw_war_reclaim_desc,收复该国占据的核心城市,Reclaim a core city held by the target,收復該國占據的核心城市
+aw_war_press_claim,按宣称宣战,Press Claim,按宣稱宣戰
+aw_war_press_claim_desc,按强弱宣称发动战争,Start a war using a strong or weak claim,按強弱宣稱發動戰爭
+aw_war_force_vassal,强制臣服,Force Vassalage,強制臣服
+aw_war_force_vassal_desc,迫使目标成为附庸,Force the target to become a vassal,迫使目標成為附庸
+aw_war_independence,独立战争,Independence War,獨立戰爭
+aw_war_independence_desc,对当前宗主发动独立战争,Start an independence war against the suzerain,對當前宗主發動獨立戰爭
+aw_war_restoration,复国战争,Restoration War,復國戰爭
+aw_war_restoration_desc,以亡国王室血统发起复国战争,Restore a fallen realm by royal bloodline,以亡國王室血統發起復國戰爭
+aw_war_no_cb,强宣,No CB War,強宣
+aw_war_no_cb_desc,无理由宣战,War without a valid casus belli,無理由宣戰
+aw_war_no_cb_cooldown,强宣冷却至,No-CB cooldown until,強宣冷卻至
+aw_war_no_cb_penalty,消耗政治点数并增加合法性、外交和叛乱风险惩罚,Costs political points and adds legitimacy diplomacy and rebellion penalties,消耗政治點數並增加合法性、外交和叛亂風險懲罰
+aw_war_target_action_project,筹备,Prepare,籌備
+aw_war_target_action_war,宣战,Declare,宣戰
+aw_war_target_city,目标城市：,Target city:,目標城市：
+aw_war_target_selected_kingdom,目标国：,Target realm:,目標國：
+aw_war_target_selected_city,选中城市：,Selected city:,選中城市：

@@ -20,7 +20,8 @@ namespace AncientWarfare3.patch
             if (pMetaObject.data.original_actor_asset != LineageService.XIA_ASSET_ID) return; // 只夏朝系
 
             var title = KingdomTitleService.GetTitle(pMetaObject);
-            string titleSuffix = KingdomTitleService.GetTitleString(title); // 伯国/侯国/...
+            bool isMandate = MandateService.IsMandateKingdom(pMetaObject);
+            string titleSuffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix((int)title, isMandate);
             if (string.IsNullOrEmpty(titleSuffix)) return;
 
             // 国名 + 国号后缀(如"晋伯国"),而非"伯晋"。is_full 才有完整文字(mini 名牌不动)。

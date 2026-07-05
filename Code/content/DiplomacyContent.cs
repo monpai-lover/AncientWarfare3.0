@@ -1,12 +1,17 @@
+using AncientWarfare3.core.lineage;
+
 namespace AncientWarfare3.content
 {
     internal static class DiplomacyContent
     {
         public static void Init()
         {
+            AddWarNameTemplate("war_reclaim", "收复战争,收复旧土之战");
+            AddWarNameTemplate("war_restoration", "复国战争,恢复旧统之战");
+
             AddWarType("aw_normal_war", "war_conquest", "war_type_aw_normal_war", "ui/wars/war_conquest", true);
             AddWarType("reclaim", "war_reclaim", "war_type_reclaim", "ui/wars/war_reclaim", true);
-            AddWarType("restoration_war", "war_reclaim", "war_type_restoration_war", "ui/wars/war_reclaim", true);
+            AddWarType("restoration_war", "war_restoration", "war_type_restoration_war", "ui/wars/war_reclaim", true);
             AddWarType("vassal_war", "war_conquest", "war_type_vassal_war", "ui/wars/war_vassal", false);
             AddWarType("independence_war", "war_conquest", "war_type_independence_war", "ui/wars/war_independent", false);
             AddWarType("tianming", "war_conquest", "war_type_tianming", "ui/Icons/traits/iconTianming", true);
@@ -21,25 +26,56 @@ namespace AncientWarfare3.content
         private static void AddWarType(string pId, string pNameTemplate, string pLocalizedType, string pIcon,
             bool pAllianceJoin, bool pRebellion = false)
         {
+            WarTypeAsset asset = null;
             try
             {
-                if (AssetManager.war_types_library.get(pId) != null) return;
+                asset = AssetManager.war_types_library.get(pId);
             }
             catch { }
 
-            var asset = new WarTypeAsset
+            bool add = asset == null;
+            if (asset == null)
+                asset = new WarTypeAsset { id = pId };
+
+            asset.name_template = WarTypeAssetRules.ResolveWarNameTemplate(pId, pNameTemplate);
+            asset.localized_type = pLocalizedType;
+            asset.localized_war_name = WarTypeAssetRules.ResolveWarNameLocale(pLocalizedType);
+            asset.path_icon = WarIconPathRules.ResolveWarIconPath(pId, pIcon);
+            asset.kingdom_for_name_attacker = true;
+            asset.forced_war = false;
+            asset.total_war = false;
+            asset.alliance_join = pAllianceJoin;
+            asset.rebellion = pRebellion;
+
+            if (add)
             {
-                id = pId,
-                name_template = pNameTemplate,
-                localized_type = pLocalizedType,
-                path_icon = pIcon,
-                kingdom_for_name_attacker = true,
-                forced_war = false,
-                total_war = false,
-                alliance_join = pAllianceJoin,
-                rebellion = pRebellion
-            };
-            AssetManager.war_types_library.add(asset);
+                AssetManager.war_types_library.add(asset);
+            }
+        }
+
+        private static void AddWarNameTemplate(string pId, string pWarNames)
+        {
+            NameGeneratorAsset asset = null;
+            try
+            {
+                asset = AssetManager.name_generator.get(pId);
+            }
+            catch { }
+
+            bool add = asset == null;
+            if (asset == null)
+                asset = new NameGeneratorAsset { id = pId };
+
+            asset.use_dictionary = true;
+            asset.replacer_kingdom = NameGeneratorReplacers.replaceKingdom;
+            asset.dict_parts = null;
+            asset.templates = null;
+            asset.addDictPart("kingdom_name", "$kingdom$");
+            asset.addDictPart("war", pWarNames);
+            asset.addTemplate("kingdom_name,war");
+
+            if (add)
+                AssetManager.name_generator.add(asset);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.content.policies;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
@@ -37,11 +38,44 @@ namespace AncientWarfare3.core.lineage
             Kingdom target = PickNormalWarTarget(pKingdom);
             if (target?.data == null) return;
             City targetCity = WarTerritoryService.FindFirstFabricationTargetCity(pKingdom, target);
-            long projectId = WarTerritoryService.CreateProject(pKingdom, target, targetCity,
-                WarTerritoryService.PROJECT_WEAK_CLAIM, WarDecisionService.WAR_NORMAL, "border_claim", 95.0);
-            if (projectId < 0) return;
+            if (!KingdomPolicyService.StartFabricationDecision(pKingdom, target, targetCity,
+                    WarTerritoryService.PROJECT_WEAK_CLAIM))
+                return;
             pKingdom.data.set(CLAIM_TARGET_ID, target.id);
             pKingdom.data.set(LAST_ACTION_YEAR, year);
+        }
+
+        public static bool TryQueueFromVanillaWarPlot(Actor pActor, Kingdom pPreferredTarget)
+        {
+            Kingdom kingdom = pActor?.kingdom;
+            if (!CanRunForPlotRedirect(kingdom)) return false;
+
+            if (!KingdomPolicyService.IsPolicyEnabledForKingdom(kingdom) &&
+                !KingdomPolicyService.SetPolicyEnabled(kingdom, true))
+                return false;
+
+            if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(kingdom, PolicyNodeKind.Decision)))
+                return true;
+
+            Kingdom target = IsUsableRedirectTarget(kingdom, pPreferredTarget)
+                ? pPreferredTarget
+                : PickNormalWarTarget(kingdom);
+            if (target?.data == null) return false;
+
+            WarTerritoryService.WarTargetOption option = PickBestImmediateOption(kingdom, target);
+            if (option != null)
+            {
+                bool queued = KingdomPolicyService.StartWarDecision(kingdom, option);
+                if (queued) kingdom.data.set(CLAIM_TARGET_ID, target.id);
+                return queued;
+            }
+
+            City targetCity = WarTerritoryService.FindFirstFabricationTargetCity(kingdom, target);
+            if (targetCity?.data == null) return false;
+            bool started = KingdomPolicyService.StartFabricationDecision(kingdom, target, targetCity,
+                WarTerritoryService.PROJECT_WEAK_CLAIM);
+            if (started) kingdom.data.set(CLAIM_TARGET_ID, target.id);
+            return started;
         }
 
         private static bool TryDeclarePreparedWar(Kingdom pKingdom)
@@ -72,7 +106,11 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (!StillWantsWar(pKingdom, target)) return false;
-            bool started = WarTerritoryService.TryDeclareClaimWar(pKingdom, target);
+            if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)))
+                return false;
+
+            WarTerritoryService.WarTargetOption option = PickBestImmediateOption(pKingdom, target);
+            bool started = option != null && KingdomPolicyService.StartWarDecision(pKingdom, option);
             if (started) pKingdom.data.set(CLAIM_TARGET_ID, -1L);
             return started;
         }
@@ -105,6 +143,28 @@ namespace AncientWarfare3.core.lineage
             }
 
             return best;
+        }
+
+        private static WarTerritoryService.WarTargetOption PickBestImmediateOption(Kingdom pKingdom, Kingdom pTarget)
+        {
+            WarTerritoryService.WarTargetOption best = null;
+            foreach (WarTerritoryService.WarTargetOption option in WarTerritoryService.BuildTargetOptions(pKingdom, pTarget))
+            {
+                if (option == null || option.goal_type == WarTerritoryService.GOAL_NO_CB) continue;
+                if (best == null || option.score > best.score) best = option;
+            }
+            return best;
+        }
+
+        private static bool IsUsableRedirectTarget(Kingdom pKingdom, Kingdom pTarget)
+        {
+            if (pKingdom?.data == null || pTarget?.data == null || pTarget == pKingdom ||
+                pTarget.isRekt() || !pTarget.isCiv() || pTarget.isNeutral())
+                return false;
+
+            Kingdom suzerain = VassalService.GetSuzerain(pKingdom);
+            if (suzerain == pTarget) return true;
+            return !WarTerritoryService.IsVassalDecisionOnlyTarget(pKingdom, pTarget);
         }
 
         private static bool StillWantsWar(Kingdom pKingdom, Kingdom pTarget)
@@ -160,6 +220,13 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return false;
             if (!pKingdom.hasKing() || pKingdom.hasEnemies()) return false;
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
+            return KingdomPolicyService.CanUsePolicySystem(pKingdom) || LineageService.IsXiaKingdom(pKingdom);
+        }
+
+        private static bool CanRunForPlotRedirect(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return false;
+            if (!pKingdom.hasKing() || pKingdom.hasEnemies()) return false;
             return KingdomPolicyService.CanUsePolicySystem(pKingdom) || LineageService.IsXiaKingdom(pKingdom);
         }
 

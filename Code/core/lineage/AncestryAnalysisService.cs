@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
 
@@ -8,6 +9,7 @@ namespace AncientWarfare3.core.lineage
     internal static class AncestryAnalysisService
     {
         private const int MAX_DEPTH = 8;
+        private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
 
         public static bool HasAnalyzableAncestry(Actor pActor)
         {
@@ -48,6 +50,7 @@ namespace AncientWarfare3.core.lineage
             report.actor_name = NameOf(actor, row, pActorId);
             report.identity = ResolveIdentity(actor, row);
             report.noble_blood = ResolveNobleBlood(pActorId, actor, row);
+            report.noble_ancestors = CollectNobleAncestors(pActorId);
 
             var social = new Dictionary<string, AncestryContribution>();
             AccumulateSocial(pActorId, 100f, 0, social, new HashSet<long>(), report);
@@ -397,6 +400,219 @@ namespace AncientWarfare3.core.lineage
             return new NobleBloodEvidence();
         }
 
+        private static List<NobleAncestorContribution> CollectNobleAncestors(long pRootActorId)
+        {
+            var result = new Dictionary<long, NobleAncestorContribution>();
+            var path = new HashSet<long>();
+            if (pRootActorId >= 0) path.Add(pRootActorId);
+
+            foreach (long parent in GetTraceParentIds(pRootActorId))
+                CollectNobleAncestor(parent, 1, result, path);
+
+            return result.Values
+                .OrderBy(x => x.distance)
+                .ThenByDescending(x => x.percent)
+                .ThenBy(x => x.actor_name)
+                .ToList();
+        }
+
+        private static void CollectNobleAncestor(long pActorId, int pDistance,
+            Dictionary<long, NobleAncestorContribution> pResult, HashSet<long> pPath)
+        {
+            if (pDistance > MAX_DEPTH || pActorId < 0 || !pPath.Add(pActorId)) return;
+
+            Actor actor = World.world?.units?.get(pActorId);
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            if (IsNobleEvidence(actor, row))
+                AddOrMergeNobleAncestor(pActorId, pDistance, actor, row, pResult);
+
+            foreach (long parent in GetTraceParentIds(pActorId))
+                CollectNobleAncestor(parent, pDistance + 1, pResult, pPath);
+
+            pPath.Remove(pActorId);
+        }
+
+        private static void AddOrMergeNobleAncestor(long pActorId, int pDistance, Actor pActor,
+            ActorArchiveTableItem pRow, Dictionary<long, NobleAncestorContribution> pResult)
+        {
+            float percent = AncestryDisplayRules.PercentForAncestorDistance(pDistance);
+            if (pResult.TryGetValue(pActorId, out NobleAncestorContribution existing))
+            {
+                existing.percent += percent;
+                if (pDistance < existing.distance) existing.distance = pDistance;
+                UpdateNobleAncestorText(existing);
+                return;
+            }
+
+            string socialColor;
+            string clan = LiveString(pActor, LineageKeys.CLAN_NAME, pRow?.clan_name);
+            string family = LiveString(pActor, LineageKeys.FAMILY_NAME, pRow?.family_name);
+            var item = new NobleAncestorContribution
+            {
+                actor_id = pActorId,
+                actor_name = NameOf(pActor, pRow, pActorId),
+                clan_name = string.IsNullOrEmpty(clan) ? family : clan,
+                family_name = family,
+                city_name = ResolveCityName(pActor, pRow),
+                social_title = ResolveAncestorSocialTitle(pActorId, pActor, pRow, out socialColor),
+                social_title_color = socialColor,
+                kingdom_color = ResolveKingdomColor(pActor, pRow),
+                distance = pDistance,
+                percent = percent
+            };
+            UpdateNobleAncestorText(item);
+            pResult[pActorId] = item;
+        }
+
+        private static void UpdateNobleAncestorText(NobleAncestorContribution pItem)
+        {
+            if (pItem == null) return;
+            pItem.label = AncestryDisplayRules.FormatNobleAncestorLabel(
+                pItem.city_name,
+                pItem.clan_name,
+                pItem.actor_name,
+                pItem.social_title,
+                pItem.percent);
+            pItem.tooltip =
+                "\u7956\u5148: " + pItem.actor_name + " #" + pItem.actor_id +
+                "\n\u6c0f\u65cf: " + AncestryDisplayRules.FormatLineageLabel(pItem.city_name, pItem.clan_name) +
+                "\n\u4ee3\u8ddd: +" + pItem.distance +
+                "\n\u4f30\u7b97\u5360\u6bd4: " + pItem.percent.ToString("0.0") + "%" +
+                (string.IsNullOrEmpty(pItem.social_title) ? "" : "\n\u8eab\u4efd: " + pItem.social_title);
+        }
+
+        private static string ResolveCityName(Actor pActor, ActorArchiveTableItem pRow)
+        {
+            string liveCity = pActor?.city?.data?.name ?? "";
+            if (!string.IsNullOrEmpty(liveCity)) return liveCity;
+
+            if (pActor?.data != null && pActor.data.cityID >= 0)
+            {
+                string city = World.world?.cities?.get(pActor.data.cityID)?.data?.name ?? "";
+                if (!string.IsNullOrEmpty(city)) return city;
+            }
+
+            return pRow?.city_name ?? "";
+        }
+
+        private static string ResolveKingdomColor(Actor pActor, ActorArchiveTableItem pRow)
+        {
+            string liveColor = pActor?.kingdom?.getColor()?.color_text ?? "";
+            return string.IsNullOrEmpty(liveColor) ? pRow?.kingdom_color ?? "" : liveColor;
+        }
+
+        private static string ResolveAncestorSocialTitle(long pActorId, Actor pActor, ActorArchiveTableItem pRow,
+            out string pColor)
+        {
+            pColor = ResolveKingdomColor(pActor, pRow);
+
+            if (TryGetPosthumousTitle(pActorId, out string posthumous, out string posthumousColor))
+            {
+                if (!string.IsNullOrEmpty(posthumousColor)) pColor = posthumousColor;
+                return posthumous;
+            }
+
+            if (pActor?.data != null)
+            {
+                try
+                {
+                    if (pActor.isKing())
+                    {
+                        string kingdomName = pActor.kingdom?.name ?? pRow?.kingdom_name ?? "";
+                        string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pActor.kingdom));
+                        return string.IsNullOrEmpty(kingdomName) ? "\u541b\u4e3b" : kingdomName + titleChar;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    if (GeneralService.IsFiefHolder(pActor))
+                    {
+                        City fief = FiefService.GetFiefCity(pActor);
+                        string cityName = fief?.data?.name ?? pActor.city?.data?.name ?? pRow?.city_name ?? "";
+                        return string.IsNullOrEmpty(cityName) ? "\u5c01\u5730\u5927\u5c06" : cityName + " \u5c01\u5730\u5927\u5c06";
+                    }
+
+                    if (GeneralService.IsGeneral(pActor)) return "\u5927\u5c06";
+                }
+                catch { }
+
+                try
+                {
+                    if (pActor.isCityLeader())
+                    {
+                        string cityName = pActor.city?.data?.name ?? pRow?.city_name ?? "";
+                        return string.IsNullOrEmpty(cityName) ? "\u592a\u5b88" : cityName + " \u592a\u5b88";
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+                    if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    {
+                        string kingdomName = pActor.kingdom?.name ?? pRow?.kingdom_name ?? "";
+                        return string.IsNullOrEmpty(kingdomName) ? "\u7ee7\u627f\u4eba" : kingdomName + " \u7ee7\u627f\u4eba";
+                    }
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrEmpty(pRow?.social_title))
+            {
+                if (!string.IsNullOrEmpty(pRow.social_title_color)) pColor = pRow.social_title_color;
+                return pRow.social_title;
+            }
+
+            return "";
+        }
+
+        private static bool TryGetPosthumousTitle(long pActorId, out string pTitle, out string pColor)
+        {
+            pTitle = "";
+            pColor = "";
+            var db = DB;
+            if (db == null || pActorId < 0) return false;
+
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(FULL_TITLE, ''), IFNULL(FULL_TITLE_COLOR, '') " +
+                    $"FROM {PosthumousTitleTableItem.GetTableName()} " +
+                    $"WHERE ACTOR_ID=@id AND IFNULL(FULL_TITLE, '')<>'' " +
+                    $"ORDER BY DECIDED_TIME DESC, RECORD_ID DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (r.Read())
+                {
+                    pTitle = SafeStr(r, 0);
+                    pColor = SafeStr(r, 1);
+                    return !string.IsNullOrEmpty(pTitle);
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(POSTHUMOUS_TITLE, ''), IFNULL(POSTHUMOUS_COLOR, '') " +
+                    $"FROM {KingdomReignTableItem.GetTableName()} " +
+                    $"WHERE KING_ACTOR_ID=@id AND IFNULL(POSTHUMOUS_TITLE, '')<>'' " +
+                    $"ORDER BY END_TIME DESC, START_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@id", pActorId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return false;
+                pTitle = SafeStr(r, 0);
+                pColor = SafeStr(r, 1);
+                return !string.IsNullOrEmpty(pTitle);
+            }
+            catch { return false; }
+        }
+
         private static bool IsNobleEvidence(Actor pActor, ActorArchiveTableItem pRow)
         {
             if (pActor?.data != null)
@@ -461,6 +677,11 @@ namespace AncientWarfare3.core.lineage
             }
 
             return pFallback;
+        }
+
+        private static string SafeStr(SQLiteDataReader pReader, int pOrdinal)
+        {
+            return pReader.IsDBNull(pOrdinal) ? "" : pReader.GetString(pOrdinal);
         }
     }
 }

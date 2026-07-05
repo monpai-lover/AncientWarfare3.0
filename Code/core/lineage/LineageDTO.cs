@@ -113,6 +113,9 @@ namespace AncientWarfare3.core.lineage
         public int direct_vassals;
         public int total_vassals;
         public string relation_subject_name = "";
+        public long context_kingdom_id = -1;
+        public bool can_absorb_by_context;
+        public string absorb_reason = "";
     }
 
     /// <summary>
@@ -251,6 +254,22 @@ namespace AncientWarfare3.core.lineage
         public string reason = "";
     }
 
+    internal sealed class NobleAncestorContribution
+    {
+        public long actor_id = -1;
+        public string actor_name = "";
+        public string clan_name = "";
+        public string family_name = "";
+        public string city_name = "";
+        public string social_title = "";
+        public string social_title_color = "";
+        public string kingdom_color = "";
+        public int distance = 99;
+        public float percent;
+        public string label = "";
+        public string tooltip = "";
+    }
+
     internal sealed class AncestryMarker
     {
         public bool known;
@@ -275,6 +294,7 @@ namespace AncientWarfare3.core.lineage
         public NobleBloodEvidence noble_blood = new NobleBloodEvidence();
         public List<AncestryContribution> contributions = new List<AncestryContribution>();
         public List<AncestryContribution> genetic_contributions = new List<AncestryContribution>();
+        public List<NobleAncestorContribution> noble_ancestors = new List<NobleAncestorContribution>();
     }
 
     internal sealed class MandateHistoryEvent

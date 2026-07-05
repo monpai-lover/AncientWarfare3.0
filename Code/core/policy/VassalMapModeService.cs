@@ -8,29 +8,11 @@ namespace AncientWarfare3.core.policy
     {
         public const string POWER_ID = "aw_vassal_mapmode";
 
-        [System.ThreadStatic] private static int _zoneColorOverrideDepth;
         [System.ThreadStatic] private static Dictionary<long, IMetaObject> _zoneRootCache;
 
         public static bool IsActive()
         {
-            return IsOptionActive() || IsSelectedPower();
-        }
-
-        private static bool IsOptionActive()
-        {
-            try { return PlayerConfig.optionBoolEnabled(POWER_ID); }
-            catch { return false; }
-        }
-
-        private static bool IsSelectedPower()
-        {
-            try { return World.world != null && World.world.isSelectedPower(POWER_ID); }
-            catch { return false; }
-        }
-
-        public static ColorAsset GetColor(Kingdom pKingdom, ColorAsset pFallback)
-        {
-            return VassalService.GetMapColor(pKingdom, pFallback);
+            return AWMapModeCoordinator.IsActive(POWER_ID);
         }
 
         public static IMetaObject GetRootMetaForZone(TileZone pZone)
@@ -48,22 +30,6 @@ namespace AncientWarfare3.core.policy
             return result;
         }
 
-        public static void BeginZoneColorOverride()
-        {
-            if (!IsActive()) return;
-            _zoneColorOverrideDepth++;
-        }
-
-        public static void EndZoneColorOverride()
-        {
-            if (_zoneColorOverrideDepth > 0) _zoneColorOverrideDepth--;
-        }
-
-        public static bool ShouldOverrideKingdomZoneColor(Kingdom pKingdom)
-        {
-            return _zoneColorOverrideDepth > 0 && IsActive() && pKingdom?.data != null && pKingdom.isCiv();
-        }
-
         public static string BuildTooltip(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return "";
@@ -77,22 +43,9 @@ namespace AncientWarfare3.core.policy
             try
             {
                 _zoneRootCache?.Clear();
-                HideLegacyLayer();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
-        }
-
-        public static void HideLegacyLayer()
-        {
-            if (World.world == null) return;
-            VassalMapLayer layer = World.world.GetComponentInChildren<VassalMapLayer>();
-            layer?.HideImmediate();
-        }
-
-        public static void EnsureLayer()
-        {
-            HideLegacyLayer();
         }
 
         public static void DirtyMapIfActive()

@@ -35,6 +35,7 @@ namespace AncientWarfare3.patch
 
             if (__instance.isKing() && __instance.kingdom != null)
             {
+                HeirService.PrepareSuccessionBeforeKingDeath(__instance.kingdom, __instance);
                 DyingKingActorId = __instance.data.id;
                 ChronicleEvents.OnKingDied(__instance.kingdom, __instance);
             }

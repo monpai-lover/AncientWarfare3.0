@@ -50,10 +50,53 @@ namespace AncientWarfare3.core.lineage
             catch { }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
             if (HasValidCasusBelli(pAttacker, pDefender, type)) return true;
 
             pReason = "missing_cb";
             return false;
+        }
+
+        public static bool CanQueueWarDecision(Kingdom pAttacker, Kingdom pDefender, string pWarType,
+            bool pNoCb, out string pReason)
+        {
+            string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!CanQueueWarPair(pAttacker, pDefender, type, out pReason)) return false;
+
+            if (pNoCb)
+            {
+                if (CanForceNoCb(pAttacker)) return true;
+                pReason = "cannot_force_no_cb";
+                return false;
+            }
+            if (HasValidCasusBelli(pAttacker, pDefender, type)) return true;
+            pReason = "missing_cb";
+            return false;
+        }
+
+        public static bool CanQueueWarPair(Kingdom pAttacker, Kingdom pDefender, string pWarType,
+            out string pReason)
+        {
+            pReason = "";
+            if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) || pAttacker == pDefender)
+            {
+                pReason = "invalid";
+                return false;
+            }
+
+            string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
+            try
+            {
+                if (World.world?.wars?.getWar(pAttacker, pDefender, pOnlyMain: false) != null)
+                {
+                    pReason = "already_at_war";
+                    return false;
+                }
+            }
+            catch { }
+
+            return true;
         }
 
         public static bool TryStartWar(Kingdom pAttacker, Kingdom pDefender, string pWarType,
@@ -80,6 +123,8 @@ namespace AncientWarfare3.core.lineage
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender)) return false;
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             if (HasActiveClaim(pAttacker.id, pDefender.id, type)) return true;
+            if (type == WAR_NORMAL && WarTerritoryService.HasClaimLikeCasusBelli(pAttacker, pDefender))
+                return true;
             return HasIntrinsicCasusBelli(pAttacker, pDefender, type);
         }
 
@@ -106,7 +151,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("TARGET_KINGDOM_ID", pTarget.id),
                     ColumnVal.Create("TARGET_KINGDOM_NAME", pTarget.name ?? ""),
                     ColumnVal.Create("TARGET_KINGDOM_COLOR", HistoryColors.FromKingdom(pTarget)),
-                    ColumnVal.Create("TARGET_CITY_ID", pTargetCity?.id ?? -1L),
+                    ColumnVal.Create("TARGET_CITY_ID", pTargetCity?.data?.id ?? -1L),
                     ColumnVal.Create("TARGET_CITY_NAME", pTargetCity?.data?.name ?? ""),
                     ColumnVal.Create("CLAIM_TYPE", pClaimType ?? ""),
                     ColumnVal.Create("WAR_TYPE", pWarType ?? WAR_NORMAL),
@@ -119,8 +164,9 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CREATED_BY_NAME", king?.getName() ?? ""));
 
                 HistoryWriter.RecordKingdom(pSource, "war_claim_created",
-                    HistoryText.Kingdom(pSource) + " 对 " + HistoryText.Kingdom(pTarget) +
-                    " 取得宣战理由：" + HistoryText.PlainText(ReasonLabel(pReasonKey, pWarType)),
+                    HistoryText.Kingdom(pSource) + " \u5bf9" + HistoryText.Kingdom(pTarget) +
+                    " \u53d6\u5f97\u5ba3\u6218\u7406\u7531\uff1a" +
+                    HistoryText.PlainText(ReasonLabel(pReasonKey, pWarType)),
                     HistoryTarget.Kingdom(pTarget));
                 return claimId;
             }
@@ -166,6 +212,7 @@ namespace AncientWarfare3.core.lineage
             WarTypeAsset asset = AssetManager.war_types_library.get(type);
             if (asset == null) return null;
 
+            if (!pSystemWar && !CanPassVassalWarRules(pAttacker, pDefender, type, out _)) return null;
             if (!pSystemWar && !pNoCb && !HasValidCasusBelli(pAttacker, pDefender, type)) return null;
             if (pNoCb && !CanForceNoCb(pAttacker)) return null;
 
@@ -192,12 +239,27 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static bool CanPassVassalWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
+            out string pReason)
+        {
+            Kingdom attackerSuzerain = VassalService.GetSuzerain(pAttacker);
+            Kingdom defenderSuzerain = VassalService.GetSuzerain(pDefender);
+            bool attackerIsVassal = attackerSuzerain?.data != null && !attackerSuzerain.isRekt();
+            bool defenderIsSuzerain = attackerSuzerain != null && attackerSuzerain == pDefender;
+            bool sameSuzerain = attackerSuzerain != null && defenderSuzerain != null &&
+                                attackerSuzerain == defenderSuzerain;
+            return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal, defenderIsSuzerain,
+                sameSuzerain, pWarType, out pReason);
+        }
+
         private static bool HasIntrinsicCasusBelli(Kingdom pAttacker, Kingdom pDefender, string pWarType)
         {
             switch (pWarType)
             {
                 case "independence_war":
                     return VassalService.GetSuzerain(pAttacker) == pDefender;
+                case "reclaim":
+                    return WarTerritoryService.FindBestCoreTargetCityForDecision(pAttacker, pDefender)?.data != null;
                 case "vassal_war":
                     return CanForceVassal(pAttacker, pDefender);
                 case MandateService.WAR_TIANMING:
@@ -212,7 +274,7 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static bool CanForceVassal(Kingdom pAttacker, Kingdom pDefender)
+        public static bool CanForceVassal(Kingdom pAttacker, Kingdom pDefender)
         {
             if (!VassalService.CanSetVassal(pDefender, pAttacker)) return false;
             if (VassalService.IsVassalKingdom(pAttacker)) return false;
@@ -266,7 +328,7 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
-        private static bool CanForceNoCb(Kingdom pAttacker)
+        public static bool CanForceNoCb(Kingdom pAttacker)
         {
             if (pAttacker?.data == null) return false;
             int year = Date.getCurrentYear();
@@ -286,35 +348,49 @@ namespace AncientWarfare3.core.lineage
             pAttacker.data.set("aw_war_legitimacy_penalty", Mathf.Clamp(penalty + 15, 0, 100));
 
             HistoryWriter.RecordKingdom(pAttacker, "no_cb_war",
-                HistoryText.Kingdom(pAttacker) + " 无故兴兵，攻伐 " + HistoryText.Kingdom(pDefender),
+                HistoryText.Kingdom(pAttacker) + " \u65e0\u6545\u5174\u5175\uff0c\u653b\u4f10" +
+                HistoryText.Kingdom(pDefender),
                 HistoryTarget.Kingdom(pDefender));
         }
 
         private static void RecordWarDecision(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             string pReasonKey, bool pNoCb, bool pSystemWar)
         {
-            string reason = pNoCb ? "无宣称" : ReasonLabel(pReasonKey, pWarType);
+            string reason = pNoCb ? "\u65e0\u7406\u7531\u5ba3\u6218" : ReasonLabel(pReasonKey, pWarType);
             string eventType = pSystemWar ? "system_war_start" : "war_decision_start";
             HistoryWriter.RecordKingdom(pAttacker, eventType,
-                HistoryText.Kingdom(pAttacker) + " 以 " + HistoryText.PlainText(reason) +
-                " 对 " + HistoryText.Kingdom(pDefender) + " 开战",
+                HistoryText.Kingdom(pAttacker) + " \u4ee5" + HistoryText.PlainText(reason) +
+                " \u5bf9" + HistoryText.Kingdom(pDefender) + " \u5f00\u6218",
                 HistoryTarget.Kingdom(pDefender));
         }
 
         private static string ReasonLabel(string pReasonKey, string pWarType)
         {
-            if (!string.IsNullOrEmpty(pReasonKey)) return pReasonKey;
+            switch (pReasonKey)
+            {
+                case "fabricate_core": return "\u5236\u9020\u6838\u5fc3";
+                case "core_reclaim": return "\u6536\u590d\u6838\u5fc3";
+                case "weak_claim": return "\u5f31\u5ba3\u79f0";
+                case "weak_claim_decision": return "\u5236\u9020\u5f31\u5ba3\u79f0";
+                case "strong_claim": return "\u5f3a\u5ba3\u79f0";
+                case "strong_claim_decision": return "\u5236\u9020\u5f3a\u5ba3\u79f0";
+                case "claim_war": return "\u6309\u5ba3\u79f0\u5ba3\u6218";
+                case "force_vassal": return "\u5f3a\u5236\u81e3\u670d";
+                case "restoration": return "\u590d\u56fd";
+                case "no_cb": return "\u65e0\u7406\u7531\u5ba3\u6218";
+            }
+
             switch (pWarType)
             {
-                case "vassal_war": return "强制臣服";
-                case "independence_war": return "脱离宗主";
-                case "reclaim": return "收复旧土";
-                case WAR_RESTORATION: return "复国";
-                case MandateService.WAR_TIANMING: return "讨伐失德天命";
-                case MandateService.WAR_TIANMING_REBEL: return "义军讨天命";
-                case GeneralRebellionService.WAR_GENERAL_REBELLION: return "大将叛乱";
-                case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return "封地独立";
-                default: return "宣战理由";
+                case "vassal_war": return "\u5f3a\u5236\u81e3\u670d";
+                case "independence_war": return "\u8131\u79bb\u5b97\u4e3b";
+                case "reclaim": return "\u6536\u590d\u65e7\u571f";
+                case WAR_RESTORATION: return "\u590d\u56fd";
+                case MandateService.WAR_TIANMING: return "\u8ba8\u4f10\u5931\u5fb7\u5929\u547d";
+                case MandateService.WAR_TIANMING_REBEL: return "\u4e49\u519b\u8ba8\u5929\u547d";
+                case GeneralRebellionService.WAR_GENERAL_REBELLION: return "\u5927\u5c06\u53db\u4e71";
+                case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return "\u5c01\u5730\u72ec\u7acb";
+                default: return string.IsNullOrEmpty(pReasonKey) ? "\u5ba3\u6218\u7406\u7531" : pReasonKey;
             }
         }
 

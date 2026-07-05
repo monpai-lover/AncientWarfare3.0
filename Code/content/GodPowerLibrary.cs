@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
@@ -18,6 +19,9 @@ namespace AncientWarfare3.content
             RegisterWarMapModes();
             RegisterVassalMapMode();
             RegisterMandateMapModes();
+            LinkMapModeAssets();
+            AWMapModeMetaLibrary.Init();
+            RegisterMapModeNameplates();
             RegisterVassalPowers();
         }
 
@@ -39,9 +43,12 @@ namespace AncientWarfare3.content
 
         private static void RegisterTechMapMode()
         {
-            if (AssetManager.powers.get(TechMapModeService.POWER_ID) != null)
+            RegisterMapModeOption(TechMapModeService.POWER_ID, AWMapModeNameplateRules.GetTechZoneOptionLocaleIds());
+            DisableLegacyDevelopmentMapMode();
+            GodPower existing = AssetManager.powers.get(TechMapModeService.POWER_ID);
+            if (existing != null)
             {
-                TechMapModeService.EnsureLayer();
+                ConfigureMapModePower(existing, TechMapModeService.POWER_ID, TechMapModeService.DirtyMap);
                 return;
             }
 
@@ -51,21 +58,24 @@ namespace AncientWarfare3.content
                 name = TechMapModeService.POWER_ID,
                 path_icon = "ui/icons/iconKnowledge",
                 map_modes_switch = true,
-                toggle_name = TechMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
+                multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(
+                    AWMapModeNameplateRules.GetTechZoneOptionLocaleIds().Length),
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(TechMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = _ => TechMapModeService.DirtyMap()
+                toggle_action = BuildMapModeToggleAction(TechMapModeService.DirtyMap)
             });
-            TechMapModeService.EnsureLayer();
         }
 
         private static void RegisterVassalMapMode()
         {
-            if (AssetManager.powers.get(VassalMapModeService.POWER_ID) != null)
+            RegisterMapModeOption(VassalMapModeService.POWER_ID);
+            GodPower existing = AssetManager.powers.get(VassalMapModeService.POWER_ID);
+            if (existing != null)
             {
-                VassalMapModeService.EnsureLayer();
+                ConfigureMapModePower(existing, VassalMapModeService.POWER_ID, VassalMapModeService.DirtyMap);
                 return;
             }
 
@@ -75,27 +85,31 @@ namespace AncientWarfare3.content
                 name = VassalMapModeService.POWER_ID,
                 path_icon = "ui/wars/war_vassal",
                 map_modes_switch = true,
-                toggle_name = VassalMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
+                multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(
+                    AWMapModeNameplateRules.GetDefaultZoneOptionLocaleIds().Length),
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(VassalMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = _ => VassalMapModeService.DirtyMap()
+                toggle_action = BuildMapModeToggleAction(VassalMapModeService.DirtyMap)
             });
-            VassalMapModeService.EnsureLayer();
         }
 
         private static void RegisterWarMapModes()
         {
             RegisterCoreMapMode();
-            RegisterClaimMapMode();
+            DisableLegacyClaimMapMode();
         }
 
         private static void RegisterCoreMapMode()
         {
-            if (AssetManager.powers.get(WarCoreMapModeService.POWER_ID) != null)
+            RegisterMapModeOption(WarCoreMapModeService.POWER_ID, AWMapModeNameplateRules.GetWarZoneOptionLocaleIds());
+            GodPower existing = AssetManager.powers.get(WarCoreMapModeService.POWER_ID);
+            if (existing != null)
             {
-                WarCoreMapModeService.EnsureLayer();
+                ConfigureMapModePower(existing, WarCoreMapModeService.POWER_ID, WarCoreMapModeService.DirtyMap);
+                existing.click_special_action = new PowerActionWithID(CoreMapClick);
                 return;
             }
 
@@ -105,38 +119,31 @@ namespace AncientWarfare3.content
                 name = WarCoreMapModeService.POWER_ID,
                 path_icon = "ui/icons/iconMap",
                 map_modes_switch = true,
-                toggle_name = WarCoreMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
+                multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(
+                    AWMapModeNameplateRules.GetWarZoneOptionLocaleIds().Length),
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(WarCoreMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = _ => WarCoreMapModeService.DirtyMap()
+                toggle_action = BuildMapModeToggleAction(WarCoreMapModeService.DirtyMap),
+                click_special_action = new PowerActionWithID(CoreMapClick)
             });
-            WarCoreMapModeService.EnsureLayer();
         }
 
-        private static void RegisterClaimMapMode()
+        private static void DisableLegacyClaimMapMode()
         {
-            if (AssetManager.powers.get(WarClaimMapModeService.POWER_ID) != null)
-            {
-                WarClaimMapModeService.EnsureLayer();
-                return;
-            }
+            string optionId = AWMapModeMetaRules.ResolveOptionId(WarClaimMapModeService.POWER_ID);
+            if (PlayerConfig.dict.TryGetValue(optionId, out var data))
+                data.boolVal = false;
+        }
 
-            AssetManager.powers.add(new GodPower
-            {
-                id = WarClaimMapModeService.POWER_ID,
-                name = WarClaimMapModeService.POWER_ID,
-                path_icon = "ui/wars/war_reclaim",
-                map_modes_switch = true,
-                toggle_name = WarClaimMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
-                unselect_when_window = true,
-                ignore_cursor_icon = true,
-                allow_unit_selection = true,
-                toggle_action = _ => WarClaimMapModeService.DirtyMap()
-            });
-            WarClaimMapModeService.EnsureLayer();
+        private static bool CoreMapClick(WorldTile pTile, string pPowerID)
+        {
+            Kingdom clicked = GetTileKingdom(pTile);
+            if (clicked?.data == null) return false;
+            WarCoreMapModeService.SetFocus(clicked);
+            return true;
         }
 
         private static void RegisterMandateMapModes()
@@ -147,9 +154,12 @@ namespace AncientWarfare3.content
 
         private static void RegisterMandateDynastyMapMode()
         {
-            if (AssetManager.powers.get(MandateDynastyMapModeService.POWER_ID) != null)
+            RegisterMapModeOption(MandateDynastyMapModeService.POWER_ID);
+            GodPower existing = AssetManager.powers.get(MandateDynastyMapModeService.POWER_ID);
+            if (existing != null)
             {
-                MandateDynastyMapModeService.EnsureLayer();
+                ConfigureMapModePower(existing, MandateDynastyMapModeService.POWER_ID,
+                    MandateDynastyMapModeService.DirtyMap);
                 return;
             }
 
@@ -159,21 +169,25 @@ namespace AncientWarfare3.content
                 name = MandateDynastyMapModeService.POWER_ID,
                 path_icon = "ui/Icons/traits/iconTianming",
                 map_modes_switch = true,
-                toggle_name = MandateDynastyMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
+                multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(
+                    AWMapModeNameplateRules.GetDefaultZoneOptionLocaleIds().Length),
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(MandateDynastyMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = _ => MandateDynastyMapModeService.DirtyMap()
+                toggle_action = BuildMapModeToggleAction(MandateDynastyMapModeService.DirtyMap)
             });
-            MandateDynastyMapModeService.EnsureLayer();
         }
 
         private static void RegisterMandateCoreMapMode()
         {
-            if (AssetManager.powers.get(MandateCoreMapModeService.POWER_ID) != null)
+            RegisterMapModeOption(MandateCoreMapModeService.POWER_ID);
+            GodPower existing = AssetManager.powers.get(MandateCoreMapModeService.POWER_ID);
+            if (existing != null)
             {
-                MandateCoreMapModeService.EnsureLayer();
+                ConfigureMapModePower(existing, MandateCoreMapModeService.POWER_ID,
+                    MandateCoreMapModeService.DirtyMap);
                 return;
             }
 
@@ -183,14 +197,119 @@ namespace AncientWarfare3.content
                 name = MandateCoreMapModeService.POWER_ID,
                 path_icon = "ui/icons/iconMap",
                 map_modes_switch = true,
-                toggle_name = MandateCoreMapModeService.POWER_ID,
-                force_map_mode = MetaType.Kingdom,
+                multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(
+                    AWMapModeNameplateRules.GetDefaultZoneOptionLocaleIds().Length),
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(MandateCoreMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = _ => MandateCoreMapModeService.DirtyMap()
+                toggle_action = BuildMapModeToggleAction(MandateCoreMapModeService.DirtyMap)
             });
-            MandateCoreMapModeService.EnsureLayer();
+        }
+
+        private static void RegisterMapModeOption(string pPowerId)
+        {
+            RegisterMapModeOption(pPowerId, AWMapModeNameplateRules.GetDefaultZoneOptionLocaleIds());
+        }
+
+        private static void RegisterMapModeOption(string pPowerId, string[] pLocaleOptionIds)
+        {
+            string optionId = AWMapModeMetaRules.ResolveOptionId(pPowerId);
+            string[] localeOptionIds = pLocaleOptionIds == null || pLocaleOptionIds.Length == 0
+                ? AWMapModeNameplateRules.GetDefaultZoneOptionLocaleIds()
+                : pLocaleOptionIds;
+            OptionAsset option = AssetManager.options_library.get(optionId);
+            if (option == null)
+            {
+                option = AssetManager.options_library.add(new OptionAsset
+                {
+                    id = optionId,
+                    default_bool = false,
+                    default_int = 0,
+                    max_value = localeOptionIds.Length - 1,
+                    multi_toggle = localeOptionIds.Length > 1,
+                    type = OptionType.Bool,
+                    locale_options_ids = localeOptionIds
+                });
+            }
+            else
+            {
+                option.default_int = 0;
+                option.max_value = localeOptionIds.Length - 1;
+                option.multi_toggle = localeOptionIds.Length > 1;
+                option.locale_options_ids = localeOptionIds;
+            }
+
+            if (!PlayerConfig.dict.ContainsKey(optionId))
+                PlayerConfig.instance.data.add(new PlayerOptionData(optionId)
+                {
+                    boolVal = false,
+                    intVal = option.default_int
+                });
+            else if (PlayerConfig.dict.TryGetValue(optionId, out var data))
+            {
+                if (data.intVal < 0 || data.intVal > option.max_value)
+                    data.intVal = option.default_int;
+            }
+
+            if (PlayerConfig.dict.TryGetValue(pPowerId, out var legacy) &&
+                PlayerConfig.dict.TryGetValue(optionId, out var current))
+            {
+                if (legacy.boolVal) current.boolVal = true;
+                legacy.boolVal = false;
+            }
+
+            LinkMapModeAssets();
+        }
+
+        private static void DisableLegacyDevelopmentMapMode()
+        {
+            string optionId = AWMapModeMetaRules.ResolveOptionId(DevelopmentMapModeService.POWER_ID);
+            if (PlayerConfig.dict.TryGetValue(optionId, out var data))
+                data.boolVal = false;
+        }
+
+        private static void RegisterMapModeNameplates()
+        {
+            var library = AssetManager.nameplates_library;
+            if (library == null) return;
+            NameplateAsset kingdomPlate = library.get("plate_kingdom");
+            if (kingdomPlate == null) return;
+
+            foreach (MetaType metaType in AWMapModeNameplateRules.GetRequiredNameplateMetaTypes())
+                library.map_modes_nameplates[metaType] = kingdomPlate;
+        }
+
+        private static void ConfigureMapModePower(GodPower pPower, string pPowerId, Action pDirtyAction)
+        {
+            if (pPower == null) return;
+            pPower.map_modes_switch = true;
+            pPower.toggle_name = AWMapModeMetaRules.ResolveOptionId(pPowerId);
+            pPower.force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower();
+            int optionCount = (pPower.option_asset?.max_value ?? 0) + 1;
+            pPower.multi_toggle = AWMapModePowerRules.ShouldUseGodPowerMultiToggle(optionCount);
+            pPower.unselect_when_window = true;
+            pPower.ignore_cursor_icon = true;
+            pPower.allow_unit_selection = true;
+            pPower.toggle_action = BuildMapModeToggleAction(pDirtyAction);
+        }
+
+        private static PowerToggleAction BuildMapModeToggleAction(Action pDirtyAction)
+        {
+            return (PowerToggleAction)Delegate.Combine(
+                new PowerToggleAction(AssetManager.powers.toggleOptionZone),
+                new PowerToggleAction(_ =>
+                {
+                    try { pDirtyAction?.Invoke(); }
+                    catch { }
+                }));
+        }
+
+        private static void LinkMapModeAssets()
+        {
+            try { AssetManager.powers.linkAssets(); } catch { }
+            try { AssetManager.options_library.linkAssets(); } catch { }
         }
 
         private static void RegisterVassalPowers()

@@ -22,11 +22,13 @@ namespace AncientWarfare3.patch
             SlaveService.CheckCitySlaveLabor(pCity);
             SlaveService.AssignSlaveCatchers(pCity);
             RoyalGuardService.EnsureKingdomGuard(pCity?.kingdom);
+            FiefMilitaryService.EnsureFiefCommand(pCity);
             if (pCity != null && pCity.hasArmy())
             {
                 RoyalGuardService.StripGuardsFromNormalArmy(pCity.getArmy());
                 SlaveService.EnsureNonSlaveCaptain(pCity.getArmy());
                 SlaveService.RenameArmyIfSlaveArmy(pCity.getArmy());
+                FiefMilitaryService.RefreshArmyName(pCity.getArmy());
             }
         }
 

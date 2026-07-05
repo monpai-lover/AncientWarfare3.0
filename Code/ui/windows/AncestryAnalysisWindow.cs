@@ -56,6 +56,9 @@ namespace AncientWarfare3.ui.windows
             AddLine(AW_L10n.Text("aw_ancestry_unknown", "\u672A\u77E5\u7956\u6E90") + ": " +
                     report.unknown_percent.ToString("0.0") + "%");
 
+            AddHeader(AW_L10n.Text("aw_ancestry_noble_ancestor_section", "\u53EF\u8FFD\u6EAF\u8D35\u65CF\u7956\u5148"));
+            AddNobleAncestorRows(report.noble_ancestors);
+
             AddHeader(AW_L10n.Text("aw_ancestry_genetic_section", "\u9057\u4F20\u4E9A\u79CD\u7956\u6E90"));
             AddLine(AW_L10n.Text("aw_ancestry_autosomal", "\u5E38\u67D3\u8272\u4F53\u7956\u6E90") + ": " +
                     report.autosomal_summary);
@@ -66,7 +69,27 @@ namespace AncientWarfare3.ui.windows
             AddContributionRows(report.genetic_contributions);
 
             AddHeader(AW_L10n.Text("aw_ancestry_social_section", "\u793E\u4F1A\u8C31\u7CFB\u7956\u6E90"));
-            AddContributionRows(report.contributions);
+            if (AncestryDisplayRules.ShouldUseNobleAncestorRowsForSocialSection(report.noble_ancestors.Count))
+                AddNobleAncestorRows(report.noble_ancestors);
+            else
+                AddContributionRows(report.contributions);
+        }
+
+        private void AddNobleAncestorRows(System.Collections.Generic.List<NobleAncestorContribution> pRows)
+        {
+            if (pRows == null || pRows.Count == 0)
+            {
+                AddLine(AW_L10n.Text("aw_ancestry_no_noble_ancestors", "\u6682\u65E0\u53EF\u8FFD\u6EAF\u8D35\u65CF\u7956\u5148"),
+                    pDim: true);
+                return;
+            }
+
+            foreach (NobleAncestorContribution c in pRows)
+            {
+                AddLine(c.label,
+                    pTipTitle: string.IsNullOrEmpty(c.actor_name) ? c.label : c.actor_name,
+                    pTipDesc: c.tooltip);
+            }
         }
 
         private void AddContributionRows(System.Collections.Generic.List<AncestryContribution> pRows)

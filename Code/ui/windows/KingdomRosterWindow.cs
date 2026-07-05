@@ -19,6 +19,18 @@ namespace AncientWarfare3.ui.windows
                 () => { if (Instance != null) Instance.Refresh(); });
         }
 
+        public static void ResetWorldCache(bool pRefreshIfCurrent)
+        {
+            if (Instance == null) return;
+            Instance.ClearList();
+            if (WorldSwitchCacheRules.ShouldRefreshContextFreeWindow(
+                    ScrollWindow.isCurrentWindow(AW_LineageWindowIds.KINGDOM_ROSTER)) &&
+                pRefreshIfCurrent)
+            {
+                Instance.Refresh();
+            }
+        }
+
         protected override void Init()
         {
             // 使用原版列表窗尺寸。

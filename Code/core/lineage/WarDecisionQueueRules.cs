@@ -1,0 +1,55 @@
+namespace AncientWarfare3.core.lineage
+{
+    public static class WarDecisionQueueRules
+    {
+        public static bool CanQueueGoal(string pGoalType,
+            bool pBasicAllowed,
+            bool pHasNormalCb,
+            bool pCanForceNoCb,
+            bool pHasCoreTarget,
+            bool pHasClaimTarget,
+            bool pCanForceVassal,
+            bool pIsIndependenceTarget,
+            bool pHasRestorationTarget,
+            out string pReason)
+        {
+            if (!pBasicAllowed)
+            {
+                pReason = "basic_blocked";
+                return false;
+            }
+
+            switch (pGoalType ?? "")
+            {
+                case "take_core_city":
+                    return Check(pHasCoreTarget, "missing_core_target", out pReason);
+                case "press_claim_city":
+                    return Check(pHasClaimTarget, "missing_claim_target", out pReason);
+                case "force_vassal":
+                    return Check(pCanForceVassal, "cannot_force_vassal", out pReason);
+                case "independence":
+                    return Check(pIsIndependenceTarget, "not_suzerain", out pReason);
+                case "restore_kingdom":
+                    return Check(pHasRestorationTarget, "missing_restoration_target", out pReason);
+                case "no_cb":
+                case "no_cb_punitive":
+                    return Check(pCanForceNoCb, "cannot_force_no_cb", out pReason);
+                default:
+                    pReason = "unknown_goal";
+                    return false;
+            }
+        }
+
+        private static bool Check(bool pAllowed, string pBlockedReason, out string pReason)
+        {
+            if (pAllowed)
+            {
+                pReason = "";
+                return true;
+            }
+
+            pReason = pBlockedReason;
+            return false;
+        }
+    }
+}

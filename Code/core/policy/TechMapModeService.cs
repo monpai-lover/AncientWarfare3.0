@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using AncientWarfare3.ui;
-using HarmonyLib;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -8,67 +7,44 @@ namespace AncientWarfare3.core.policy
     internal static class TechMapModeService
     {
         public const string POWER_ID = "aw_tech_level_mapmode";
-        private static ColorAsset[] _colors;
-        private static TechMapLayer _layer;
-        private static readonly Dictionary<long, ColorAsset> _kingdomColorCache = new Dictionary<long, ColorAsset>();
-        [System.ThreadStatic] private static int _zoneColorOverrideDepth;
+        private static readonly Dictionary<long, string> _cityColorKeyCache = new Dictionary<long, string>();
+        private static readonly Dictionary<string, ColorAsset> _colorAssetCache = new Dictionary<string, ColorAsset>();
 
         public static bool IsActive()
         {
-            return IsOptionActive() || IsSelectedPower();
+            return AWMapModeCoordinator.IsActive(POWER_ID);
         }
 
-        private static bool IsOptionActive()
+        public static TechMapModeLayer GetSelectedLayer()
         {
-            try
-            {
-                return PlayerConfig.optionBoolEnabled(POWER_ID);
-            }
-            catch
-            {
-                return false;
-            }
+            int option = 0;
+            try { option = AWMapModeMetaLibrary.TechAsset?.getZoneOptionState() ?? 0; }
+            catch { option = 0; }
+            return TechMapModeOptionRules.ResolveLayer(option);
         }
 
-        private static bool IsSelectedPower()
+        public static bool IsDevelopmentLayerSelected()
         {
-            try
-            {
-                return World.world != null && World.world.isSelectedPower(POWER_ID);
-            }
-            catch
-            {
-                return false;
-            }
+            return GetSelectedLayer() == TechMapModeLayer.Development;
         }
 
-        public static ColorAsset GetColor(Kingdom pKingdom, ColorAsset pFallback)
+        public static string GetCityColorKey(City pCity)
         {
-            if (pKingdom?.data == null || !KingdomPolicyService.CanUsePolicySystem(pKingdom)) return pFallback;
-            if (_kingdomColorCache.TryGetValue(pKingdom.id, out ColorAsset cached)) return cached ?? pFallback;
-            EnsureColors();
-            TechLevelReport report = KingdomPolicyService.GetTechLevelReport(pKingdom);
-            int index = Mathf.Clamp(report.level - 1, 0, _colors.Length - 1);
-            ColorAsset result = _colors[index] ?? pFallback;
-            _kingdomColorCache[pKingdom.id] = result;
-            return result;
+            if (pCity?.data == null) return "tech_0";
+            if (_cityColorKeyCache.TryGetValue(pCity.id, out string cached)) return cached;
+            string key = CityTechService.GetCityMapColorKey(pCity);
+            _cityColorKeyCache[pCity.id] = key;
+            return key;
         }
 
-        public static void BeginZoneColorOverride()
+        public static ColorAsset GetColorAssetForKey(string pKey)
         {
-            if (!IsActive()) return;
-            _zoneColorOverrideDepth++;
-        }
-
-        public static void EndZoneColorOverride()
-        {
-            if (_zoneColorOverrideDepth > 0) _zoneColorOverrideDepth--;
-        }
-
-        public static bool ShouldOverrideKingdomZoneColor(Kingdom pKingdom)
-        {
-            return _zoneColorOverrideDepth > 0 && IsActive() && pKingdom?.data != null &&
-                   KingdomPolicyService.CanUsePolicySystem(pKingdom);
+            string key = string.IsNullOrEmpty(pKey) ? "tech_0" : pKey;
+            if (_colorAssetCache.TryGetValue(key, out ColorAsset cached)) return cached;
+            ColorAsset color = ColorAsset.tryMakeNewColorAsset(CityTechMapRules.HexForColorKey(key));
+            color?.initColor();
+            _colorAssetCache[key] = color;
+            return color;
         }
 
         public static string BuildTooltip(Kingdom pKingdom)
@@ -91,30 +67,13 @@ namespace AncientWarfare3.core.policy
         {
             try
             {
-                EnsureLayer();
-                _kingdomColorCache.Clear();
-                _layer?.MarkDirty();
+                _cityColorKeyCache.Clear();
+                DevelopmentMapModeService.ClearCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch
             {
             }
-        }
-
-        public static void EnsureLayer()
-        {
-            if (World.world == null) return;
-            _layer = World.world.GetComponentInChildren<TechMapLayer>();
-            if (_layer == null)
-            {
-                var obj = new GameObject("[layer]AW3 Tech Map", typeof(SpriteRenderer), typeof(TechMapLayer));
-                obj.transform.SetParent(World.world.transform, false);
-                _layer = obj.GetComponent<TechMapLayer>();
-                _layer.create();
-            }
-
-            RegisterLayer(_layer);
-            _layer?.HideImmediate();
         }
 
         public static void DirtyMapIfActive()
@@ -123,32 +82,5 @@ namespace AncientWarfare3.core.policy
             DirtyMap();
         }
 
-        private static void EnsureColors()
-        {
-            if (_colors != null) return;
-            _colors = new[]
-            {
-                ColorAsset.tryMakeNewColorAsset("#B33A2E"),
-                ColorAsset.tryMakeNewColorAsset("#C96B2C"),
-                ColorAsset.tryMakeNewColorAsset("#C9A42C"),
-                ColorAsset.tryMakeNewColorAsset("#74A84A"),
-                ColorAsset.tryMakeNewColorAsset("#2F9B57")
-            };
-            for (int i = 0; i < _colors.Length; i++)
-                _colors[i]?.initColor();
-        }
-
-        private static void RegisterLayer(MapLayer pLayer)
-        {
-            if (pLayer == null || World.world == null) return;
-            try
-            {
-                var list = AccessTools.Field(typeof(MapBox), "_map_layers")?.GetValue(World.world) as List<MapLayer>;
-                if (list != null && !list.Contains(pLayer)) list.Add(pLayer);
-            }
-            catch
-            {
-            }
-        }
     }
 }

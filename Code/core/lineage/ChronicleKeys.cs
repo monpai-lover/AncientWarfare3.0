@@ -41,6 +41,7 @@ namespace AncientWarfare3.core.lineage
         public const string FIEF_GRANTED = "fief_granted";
         public const string GENERAL_RISK = "general_risk";
         public const string GENERAL_REBELLION = "general_rebellion";
+        public const string COLLATERAL_RESTORE = "person_collateral_restore";
     }
 
     internal static class KingdomEvent
@@ -82,6 +83,7 @@ namespace AncientWarfare3.core.lineage
         public const string FIEF_GRANTED = "fief_granted";
         public const string GENERAL_RISK = "general_risk";
         public const string GENERAL_REBELLION = "general_rebellion";
+        public const string COLLATERAL_RESTORE = "succession_collateral_restore";
     }
 
     internal static class CityEvent

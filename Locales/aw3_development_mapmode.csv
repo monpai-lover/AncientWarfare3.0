@@ -1,0 +1,11 @@
+key,cz,en,ch
+aw_development_mapmode,发展度地图,Development Map,發展度地圖
+aw_development_mapmode Description,按城市实际发展度从红到绿显示,Show cities from red to green by real development,按城市實際發展度從紅到綠顯示
+aw_development_mapmode_description,按城市实际发展度从红到绿显示,Show cities from red to green by real development,按城市實際發展度從紅到綠顯示
+aw_development_mapmode_tooltip,发展度地图,Development Map,發展度地圖
+aw_development_mapmode_city_score,城市发展度,City Development,城市發展度
+aw_development_mapmode_kingdom_average,王国平均发展度,Kingdom Average,王國平均發展度
+aw_tech_mapmode_option_tech,城市科技,City Technology,城市科技
+aw_tech_mapmode_option_development,发展度,Development,發展度
+aw_war_mapmode_option_core,核心,Core,核心
+aw_war_mapmode_option_claim,宣称,Claim,宣稱

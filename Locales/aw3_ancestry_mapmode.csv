@@ -1,13 +1,17 @@
 key,cz,en,ch
 aw_tech_level_mapmode,科技地图,Technology Map,科技地圖
-aw_tech_level_mapmode Description,按国家科技等级从红到绿显示,Show kingdoms from red to green by technology level,按國家科技等級從紅到綠顯示
-aw_tech_level_mapmode_description,按国家科技等级从红到绿显示,Show kingdoms from red to green by technology level,按國家科技等級從紅到綠顯示
+aw_tech_level_mapmode Description,按城市实际掌握科技和传播进度从红到绿显示,Show cities from red to green by adopted technology and spread progress,按城市實際掌握科技和傳播進度從紅到綠顯示
+aw_tech_level_mapmode_description,按城市实际掌握科技和传播进度从红到绿显示,Show cities from red to green by adopted technology and spread progress,按城市實際掌握科技和傳播進度從紅到綠顯示
 aw_tech_mapmode_tooltip,科技地图,Technology Map,科技地圖
 aw_tech_mapmode_level,科技等级,Tech Level,科技等級
 aw_tech_mapmode_completed,已完成科技,Completed Techs,已完成科技
 aw_tech_mapmode_current,当前研发,Current Research,當前研發
 aw_tech_mapmode_points,科技点,Tech Points,科技點
 aw_tech_mapmode_idle,无当前科技,No current tech,無當前科技
+aw_tech_mapmode_city,城市科技,City Technology,城市科技
+aw_tech_mapmode_development,发展度,Development,發展度
+aw_tech_mapmode_spreading,传播中,Spreading,傳播中
+aw_tech_mapmode_neighbor_ideas,邻国思潮,Neighbor Ideas,鄰國思潮
 aw_vassal_mapmode,附庸地图,Vassal Map,附庸地圖
 aw_vassal_mapmode Description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
 aw_vassal_mapmode_description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
@@ -41,4 +45,6 @@ aw_ancestry_autosomal,常染色体祖源,Autosomal Ancestry,常染色體祖源
 aw_ancestry_paternal_marker,父系标记,Paternal Marker,父系標記
 aw_ancestry_maternal_marker,母系标记,Maternal Marker,母系標記
 aw_ancestry_marker_unknown,未知,Unknown,未知
+aw_ancestry_noble_ancestor_section,可追溯贵族祖先,Traceable Noble Ancestors,可追溯貴族祖先
+aw_ancestry_no_noble_ancestors,暂无可追溯贵族祖先,No traceable noble ancestors,暫無可追溯貴族祖先
 aw_ancestry_no_traceable,暂无可追溯祖源,No traceable ancestry,暫無可追溯祖源

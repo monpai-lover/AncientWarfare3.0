@@ -629,6 +629,90 @@ namespace AncientWarfare3.content.policies
                 Repeatable = true,
                 Column = 5,
                 Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_fabricate_core",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_fabricate_core",
+                DescKey = "aw_decision_fabricate_core_desc",
+                FallbackName = "\u5236\u9020\u6838\u5fc3",
+                FallbackDesc = "\u5728\u672c\u56fd\u63a7\u5236\u7684\u975e\u6838\u5fc3\u57ce\u5e02\u5236\u9020\u6838\u5fc3\u3002",
+                IconPath = "ui/icons/iconMap",
+                Cost = 80f,
+                Repeatable = true,
+                Column = 6,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_fabricate_weak_claim",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_fabricate_weak_claim",
+                DescKey = "aw_decision_fabricate_weak_claim_desc",
+                FallbackName = "\u5236\u9020\u5f31\u5ba3\u79f0",
+                FallbackDesc = "\u5728\u63a5\u58e4\u7684\u4ed6\u56fd\u57ce\u5e02\u5236\u9020\u8f83\u5feb\u4f46\u4f1a\u8fc7\u671f\u7684\u5f31\u5ba3\u79f0\u3002",
+                IconPath = "ui/wars/war_reclaim",
+                Cost = 65f,
+                Repeatable = true,
+                Column = 7,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_fabricate_strong_claim",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_fabricate_strong_claim",
+                DescKey = "aw_decision_fabricate_strong_claim_desc",
+                FallbackName = "\u5236\u9020\u5f3a\u5ba3\u79f0",
+                FallbackDesc = "\u5728\u63a5\u58e4\u7684\u4ed6\u56fd\u57ce\u5e02\u5236\u9020\u8f83\u7a33\u56fa\u7684\u5f3a\u5ba3\u79f0\u3002",
+                IconPath = "ui/wars/war_reclaim",
+                Cost = 110f,
+                Repeatable = true,
+                Column = 8,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_seek_suzerain",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_seek_suzerain",
+                DescKey = "aw_decision_seek_suzerain_desc",
+                FallbackName = "\u8bf7\u6c42\u81e3\u5c5e",
+                FallbackDesc = "\u5c0f\u56fd\u5728\u5a01\u80c1\u4e0b\u4e3b\u52a8\u5411\u5f3a\u56fd\u81e3\u5c5e\u3002",
+                IconPath = "ui/wars/war_vassal",
+                Cost = 35f,
+                Repeatable = true,
+                Column = 9,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_absorb_vassal",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_absorb_vassal",
+                DescKey = "aw_decision_absorb_vassal_desc",
+                FallbackName = "\u541E\u5E76\u9644\u5EB8",
+                FallbackDesc = "\u5C06\u4E00\u4E2A\u76F4\u5C5E\u9644\u5EB8\u5E76\u5165\u672C\u56FD\uFF0C\u9644\u5EB8\u4E0D\u80FD\u6B63\u5728\u4EA4\u6218\u3002",
+                IconPath = "ui/wars/war_vassal",
+                Cost = 120f,
+                Repeatable = true,
+                Column = 10,
+                Row = 0
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_decision_declare_war",
+                Kind = PolicyNodeKind.Decision,
+                NameKey = "aw_decision_declare_war",
+                DescKey = "aw_decision_declare_war_desc",
+                FallbackName = "\u5174\u5e08\u5ba3\u6218",
+                FallbackDesc = "\u6309\u5df2\u9009\u5b9a\u7684\u5ba3\u6218\u7406\u7531\u548c\u6218\u4e89\u76ee\u6807\u53d1\u52a8\u6218\u4e89\u3002",
+                IconPath = "ui/wars/war_reclaim",
+                Cost = 45f,
+                Repeatable = true,
+                Column = 11,
+                Row = 0
             }
         };
 

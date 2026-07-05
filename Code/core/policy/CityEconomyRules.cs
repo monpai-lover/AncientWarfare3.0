@@ -1,3 +1,4 @@
+using AncientWarfare3.core.lineage;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -35,11 +36,26 @@ namespace AncientWarfare3.core.policy
 
     public static class CityEconomyRules
     {
+        public static string RoleNameKey(CityEconomyRole pRole)
+        {
+            switch (pRole)
+            {
+                case CityEconomyRole.CapitalAdmin: return "aw_city_economy_role_capital_admin";
+                case CityEconomyRole.AgrarianGranary: return "aw_city_economy_role_agrarian_granary";
+                case CityEconomyRole.MarketTrade: return "aw_city_economy_role_market_trade";
+                case CityEconomyRole.FrontierMilitary: return "aw_city_economy_role_frontier_military";
+                case CityEconomyRole.WorkshopCraft: return "aw_city_economy_role_workshop_craft";
+                case CityEconomyRole.OccupiedUnrest: return "aw_city_economy_role_occupied_unrest";
+                default: return "";
+            }
+        }
+
         public static CityEconomyRole SelectRole(bool isCapital, int population, int marketBuildings,
             int farmBuildings, int militaryBuildings, int workshopBuildings, int adoptedTechCount,
-            int totalTechCount, bool isBorder, bool occupiedUnrest)
+            int totalTechCount, bool isBorder, bool occupiedUnrest, bool activeFief = false)
         {
             if (occupiedUnrest) return CityEconomyRole.OccupiedUnrest;
+            if (activeFief) return CityEconomyRole.FrontierMilitary;
             if (isCapital) return CityEconomyRole.CapitalAdmin;
             if (isBorder && militaryBuildings >= 1) return CityEconomyRole.FrontierMilitary;
             if (marketBuildings >= farmBuildings && marketBuildings >= workshopBuildings && marketBuildings >= 2)
@@ -50,7 +66,8 @@ namespace AncientWarfare3.core.policy
         }
 
         public static CityEconomyContribution CalculateContribution(CityEconomyRole role, int population,
-            int adoptedTechCount, int totalTechCount, float distanceFromCapital, int slavePopulation, bool nonCore)
+            int adoptedTechCount, int totalTechCount, float distanceFromCapital, int slavePopulation,
+            bool nonCore, bool activeFief = false)
         {
             float pop = Mathf.Max(0, population);
             float techFactor = totalTechCount <= 0 ? 0f : Mathf.Clamp01((float)adoptedTechCount / totalTechCount);
@@ -97,6 +114,13 @@ namespace AncientWarfare3.core.policy
                     food *= 0.75f;
                     unrest += 18f;
                     break;
+            }
+
+            if (activeFief)
+            {
+                manpower *= FiefMilitaryRules.ActiveFiefManpowerMultiplier;
+                tax *= FiefMilitaryRules.ActiveFiefTaxMultiplier;
+                unrest += FiefMilitaryRules.ActiveFiefUnrestBonus;
             }
 
             tax *= 1f + slaveFactor * 0.12f;

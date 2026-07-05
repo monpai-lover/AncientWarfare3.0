@@ -3,48 +3,69 @@ using HarmonyLib;
 
 namespace AncientWarfare3.patch
 {
-    /// <summary>
-    ///     继承人接管 + 新王换年号。
-    ///
-    ///     1. Prefix SuccessionTool.getKingFromRoyalClan(Kingdom, Actor) —— 原版从王族选王前,
-    ///        若我们已指定继承人(aw_heir_id 有效),直接返回继承人接管继位(return false 完全接管);
-    ///        否则放行原版(return true),由原版/getKingFromLeaders 兜底。
-    ///        这是少数"Prefix return false 完全接管"场景(Cultiway 哲学允许)。
-    ///
-    ///     2. Postfix Kingdom.setKing —— 新王上任后:清旧继承人、重选继承人、换年号。
-    ///
-    ///     不依赖 AW_Kingdom 子类(新版不可行),全用 kingdom.data + HeirService/YearNameService。
-    /// </summary>
     [HarmonyPatch]
     public static class AW_HeirPatch
     {
+        public struct KingBranchContext
+        {
+            public Actor PreviousKing;
+            public bool  WasRegisteredHeir;
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuccessionTool), nameof(SuccessionTool.getKingFromRoyalClan))]
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!LineageService.IsXiaKingdom(pKingdom)) return true;
-            var heir = HeirService.GetHeir(pKingdom);
-            if (heir == null) return true; // 无继承人,放行原版选王
+            __result = HeirService.GetHeir(pKingdom);
+            return false;
+        }
 
-            __result = heir;
-            return false; // 有继承人,接管:直接让继承人继位
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuccessionTool), nameof(SuccessionTool.getKingFromLeaders))]
+        public static bool GetKingFromLeaders_Prefix(Kingdom pKingdom, ref Actor __result)
+        {
+            if (!LineageService.IsXiaKingdom(pKingdom)) return true;
+            Actor heir = HeirService.GetHeir(pKingdom);
+            __result = HeirRecallRules.ShouldPreferRegisteredHeirBeforeLeaderFallback(heir != null)
+                ? heir
+                : HeirService.GetLeaderSuccessionCandidate(pKingdom);
+            if (heir == null) HeirService.MarkLeaderFallbackSuccession(pKingdom, __result);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
+        public static void SetKing_CaptureBranchContext_Prefix(Kingdom __instance, Actor pActor, bool pFromLoad,
+            out KingBranchContext __state)
+        {
+            __state = default;
+            if (pFromLoad || __instance?.data == null || pActor?.data == null) return;
+            __state.PreviousKing = __instance.king;
+            HeirService.RememberPreSuccessionKing(__instance, __state.PreviousKing);
+
+            __instance.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            pActor.data.get(LineageKeys.IS_HEIR, out bool heirFlag, false);
+            __state.WasRegisteredHeir = heirFlag || heirId == pActor.data.id;
         }
 
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Low)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
-        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad, KingBranchContext __state)
         {
             if (pFromLoad) return;
             if (__instance?.data == null) return;
             if (!LineageService.IsXiaKingdom(__instance)) return;
 
-            // 新王即位:先称王分封(建新国/夺别国→开新氏支,可能改氏名)→ 再清/重选继承人 → 换年号(可能用氏名)。
             Actor king = pActor ?? __instance.king;
+            if (pActor != null && __instance.king != pActor) return;
             if (king != null)
             {
-                LineageService.OnKingFoundBranch(__instance, king);
+                LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing, __state.WasRegisteredHeir);
+                HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
             }
+
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             YearNameService.OnNewKing(__instance);

@@ -3,10 +3,22 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.policy
 {
+    internal sealed class CityEconomySnapshot
+    {
+        public bool has_record;
+        public float policy_points;
+        public float tech_points;
+        public float tax_value;
+        public float manpower;
+        public float food_stability;
+        public float unrest_risk;
+    }
+
     internal static class CityEconomyService
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
@@ -25,6 +37,7 @@ namespace AncientWarfare3.core.policy
 
             foreach (City city in pKingdom.getCities())
                 UpdateCity(pKingdom, city, year);
+            DevelopmentMapModeService.DirtyMapIfActive();
         }
 
         public static float GetPolicyContribution(Kingdom pKingdom)
@@ -37,26 +50,53 @@ namespace AncientWarfare3.core.policy
             return SumContribution(pKingdom, "TECH_POINTS");
         }
 
+        public static CityEconomySnapshot GetSnapshot(City pCity)
+        {
+            var snapshot = new CityEconomySnapshot();
+            if (pCity?.data == null || !Ready) return snapshot;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT POLICY_POINTS,TECH_POINTS,TAX_VALUE,MANPOWER,FOOD_STABILITY,UNREST_RISK " +
+                                  "FROM " + CityEconomyStateTableItem.GetTableName() + " WHERE CITY_ID=@city LIMIT 1";
+                cmd.Parameters.AddWithValue("@city", pCity.id);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!reader.Read()) return snapshot;
+                snapshot.has_record = true;
+                snapshot.policy_points = ReadFloat(reader, 0);
+                snapshot.tech_points = ReadFloat(reader, 1);
+                snapshot.tax_value = ReadFloat(reader, 2);
+                snapshot.manpower = ReadFloat(reader, 3);
+                snapshot.food_stability = ReadFloat(reader, 4);
+                snapshot.unrest_risk = ReadFloat(reader, 5);
+            }
+            catch
+            {
+            }
+            return snapshot;
+        }
+
         private static void UpdateCity(Kingdom pKingdom, City pCity, int pYear)
         {
             if (pCity?.data == null || pCity.isRekt()) return;
-            CityEconomyRole role = SelectRole(pKingdom, pCity);
-            CityTechReport tech = CityTechService.GetCityReport(pCity);
+            bool activeFief = FiefService.IsActiveFief(pCity);
+            CityTechReport tech = CityTechService.GetCityReport(pCity, pIncludeNeighborBonus: false);
+            CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief, tech);
             int population = SafePopulation(pCity);
             bool nonCore = IsNonCore(pKingdom, pCity);
             CityEconomyContribution contribution = CityEconomyRules.CalculateContribution(role, population,
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
-                CountSlavePopulation(pCity), nonCore);
+                CountSlavePopulation(pCity), nonCore, activeFief);
             Upsert(pKingdom, pCity, role, contribution, pYear);
         }
 
-        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity)
+        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief, CityTechReport pTech)
         {
-            CityTechReport tech = CityTechService.GetCityReport(pCity);
             return CityEconomyRules.SelectRole(pKingdom.capital == pCity, SafePopulation(pCity),
                 CountBuildings(pCity, "market"), CountBuildings(pCity, "farm"),
                 CountBuildings(pCity, "barracks"), CountBuildings(pCity, "workshop"),
-                tech.adopted_count, tech.total_count, IsBorderCity(pKingdom, pCity), IsOccupiedUnrest(pKingdom, pCity));
+                pTech.adopted_count, pTech.total_count, IsBorderCity(pKingdom, pCity),
+                IsOccupiedUnrest(pKingdom, pCity), pActiveFief);
         }
 
         private static void Upsert(Kingdom pKingdom, City pCity, CityEconomyRole pRole,
@@ -147,6 +187,11 @@ namespace AncientWarfare3.core.policy
             }
         }
 
+        private static float ReadFloat(SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? 0f : Convert.ToSingle(pReader.GetValue(pIndex));
+        }
+
         private static void RecordEconomyMilestone(Kingdom pKingdom, City pCity, string pPreviousRole,
             string pRole, CityEconomyContribution pContribution, bool pExisted)
         {
@@ -155,16 +200,27 @@ namespace AncientWarfare3.core.policy
             bool majorTax = pContribution.TaxValue >= 25f;
             if (pExisted && !roleChanged && !majorTax) return;
 
+            string roleName = LocalizedRoleName(pRole);
             HistoryText text = HistoryText.City(pCity, pKingdom) +
-                               HistoryText.PlainText(" \u57ce\u5e02\u7ecf\u6d4e\u5b9a\u578b\u4e3a " + pRole +
+                               HistoryText.PlainText(" \u57ce\u5e02\u7ecf\u6d4e\u5b9a\u578b\u4e3a " + roleName +
                                                      "\uff0c\u7a0e\u6536 " + Math.Round(pContribution.TaxValue, 1));
             HistoryWriter.RecordCity(pCity, pKingdom, "city_economy_role", text, HistoryTarget.City(pCity));
 
             if (!pExisted || roleChanged)
                 HistoryWriter.RecordKingdom(pKingdom, "city_economy_role",
                     HistoryText.Kingdom(pKingdom) + HistoryText.PlainText(" \u8c03\u6574\u57ce\u5e02\u7ecf\u6d4e\uff1a") +
-                    HistoryText.City(pCity, pKingdom) + HistoryText.PlainText(" -> " + pRole),
+                    HistoryText.City(pCity, pKingdom) + HistoryText.PlainText(" -> " + roleName),
                     HistoryTarget.City(pCity));
+        }
+
+        public static string LocalizedRoleName(string pRole)
+        {
+            if (Enum.TryParse(pRole, out CityEconomyRole role))
+            {
+                string key = CityEconomyRules.RoleNameKey(role);
+                return AW_L10n.Text(key, pRole);
+            }
+            return pRole ?? "";
         }
 
         private static int SafePopulation(City pCity)

@@ -5,6 +5,7 @@ using System.Linq;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -51,6 +52,7 @@ namespace AncientWarfare3.core.policy
                 HistoryText.City(capital, pKingdom) + " \u9996\u5148\u91C7\u7EB3\u79D1\u6280 " +
                 HistoryText.PlainText(pTech.FallbackName));
             TechMapModeService.DirtyMapIfActive();
+            DevelopmentMapModeService.DirtyMapIfActive();
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -98,7 +100,7 @@ namespace AncientWarfare3.core.policy
                    (best.sourceKingdom?.name ?? "") + " " + (best.sourceCity?.data?.name ?? "");
         }
 
-        public static CityTechReport GetCityReport(City pCity)
+        public static CityTechReport GetCityReport(City pCity, bool pIncludeNeighborBonus = true)
         {
             var report = new CityTechReport();
             report.total_count = KingdomPolicyDefs.Techs.Count();
@@ -137,7 +139,9 @@ namespace AncientWarfare3.core.policy
             }
             catch { }
 
-            report.neighbor_bonus = GetNeighborTechResearchBonus(pCity.kingdom, KingdomPolicyService.GetCurrent(pCity.kingdom, PolicyNodeKind.Tech));
+            string currentTech = KingdomPolicyService.GetCurrent(pCity.kingdom, PolicyNodeKind.Tech);
+            if (CityTechReportRules.ShouldLoadNeighborBonus(pIncludeNeighborBonus, currentTech))
+                report.neighbor_bonus = GetNeighborTechResearchBonus(pCity.kingdom, currentTech);
             return report;
         }
 
@@ -146,32 +150,54 @@ namespace AncientWarfare3.core.policy
             if (pCity?.data == null || pCity.kingdom?.data == null) return new Color32(0, 0, 0, 0);
             if (!KingdomPolicyService.CanUsePolicySystem(pCity.kingdom)) return new Color32(0, 0, 0, 0);
 
-            CityTechReport report = GetCityReport(pCity);
-            float max = Mathf.Max(1f, report.total_count);
-            float score = Mathf.Clamp01(report.adoption_score / max);
-            Color32 color;
-            if (score < 0.05f) color = new Color32(179, 58, 46, 215);
-            else if (score < 0.22f) color = new Color32(201, 107, 44, 215);
-            else if (score < 0.45f) color = new Color32(201, 164, 44, 215);
-            else if (score < 0.70f) color = new Color32(116, 168, 74, 215);
-            else color = new Color32(47, 155, 87, 215);
-            return color;
+            return HexToColor32(GetCityMapHex(pCity), 215);
+        }
+
+        public static string GetCityMapColorKey(City pCity)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null) return "tech_0";
+            if (!KingdomPolicyService.CanUsePolicySystem(pCity.kingdom)) return "tech_0";
+            CityTechReport report = GetCityReport(pCity, pIncludeNeighborBonus: false);
+            float score = CityTechMapRules.CalculateDevelopmentScore(report.adoption_score, report.total_count);
+            return CityTechMapRules.ColorKeyForScore(score);
+        }
+
+        public static string GetCityMapHex(City pCity)
+        {
+            return CityTechMapRules.HexForColorKey(GetCityMapColorKey(pCity));
         }
 
         public static string BuildCityTooltip(City pCity)
         {
             if (pCity?.data == null) return "";
             CityTechReport report = GetCityReport(pCity);
-            string text = "\u57CE\u5E02\u79D1\u6280: " + report.adopted_count + "/" + report.total_count;
+            int development = Mathf.RoundToInt(
+                CityTechMapRules.CalculateDevelopmentScore(report.adoption_score, report.total_count) * 100f);
+            string text = AW_L10n.Text("aw_tech_mapmode_city", "\u57CE\u5E02\u79D1\u6280") + ": " +
+                          report.adopted_count + "/" + report.total_count +
+                          "\n" + AW_L10n.Text("aw_tech_mapmode_development", "\u53D1\u5C55\u5EA6") + ": " +
+                          development + "%";
             if (!string.IsNullOrEmpty(report.spreading_tech))
             {
                 KingdomPolicyDef def = KingdomPolicyDefs.Get(report.spreading_tech);
-                text += "\n\u4F20\u64AD\u4E2D: " + (def?.FallbackName ?? report.spreading_tech) +
+                text += "\n" + AW_L10n.Text("aw_tech_mapmode_spreading", "\u4F20\u64AD\u4E2D") + ": " +
+                        (def?.FallbackName ?? report.spreading_tech) +
                         " " + Mathf.RoundToInt(report.spreading_progress * 100f) + "%";
             }
             if (report.neighbor_bonus > 1.001f)
-                text += "\n\u90BB\u56FD\u601D\u6F6E: +" + Mathf.RoundToInt((report.neighbor_bonus - 1f) * 100f) + "%";
+                text += "\n" + AW_L10n.Text("aw_tech_mapmode_neighbor_ideas", "\u90BB\u56FD\u601D\u6F6E") +
+                        ": +" + Mathf.RoundToInt((report.neighbor_bonus - 1f) * 100f) + "%";
             return text;
+        }
+
+        private static Color32 HexToColor32(string pHex, byte pAlpha)
+        {
+            if (!ColorUtility.TryParseHtmlString(pHex, out Color color))
+                color = new Color(0.47f, 0.47f, 0.47f, 1f);
+            return new Color32((byte)Mathf.RoundToInt(color.r * 255f),
+                (byte)Mathf.RoundToInt(color.g * 255f),
+                (byte)Mathf.RoundToInt(color.b * 255f),
+                pAlpha);
         }
 
         public static void OnCityChangedKingdom(City pCity, Kingdom pKingdom)
@@ -187,6 +213,35 @@ namespace AncientWarfare3.core.policy
                     ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
             }
             catch { }
+        }
+
+        public static void OnCityFounded(City pCity)
+        {
+            Kingdom kingdom = pCity?.kingdom;
+            if (pCity?.data == null || kingdom?.data == null || !Ready) return;
+            SyncCompletedTechsToCity(pCity, kingdom, "new_city");
+        }
+
+        private static void SyncCompletedTechsToCity(City pCity, Kingdom pKingdom, string pSourceType)
+        {
+            if (pCity?.data == null || pKingdom?.data == null || !Ready) return;
+            string[] missing = CityTechSyncRules.SelectMissingCompletedTechIds(
+                CompletedTechIds(pKingdom),
+                techId => IsAdopted(pCity, techId));
+            if (missing.Length == 0) return;
+
+            bool changed = false;
+            for (int i = 0; i < missing.Length; i++)
+            {
+                string techId = missing[i];
+                if (string.IsNullOrEmpty(techId)) continue;
+                changed |= UpsertProgress(pCity, techId, ADOPTED, 0, pSourceType ?? "sync",
+                    pKingdom.capital ?? pCity, pKingdom, true);
+            }
+
+            if (!changed) return;
+            TechMapModeService.DirtyMapIfActive();
+            DevelopmentMapModeService.DirtyMapIfActive();
         }
 
         public static void AdjustInheritedSnapshotFromCities(Kingdom pNewKingdom, KingdomPolicySnapshot pSnapshot)
@@ -281,6 +336,7 @@ namespace AncientWarfare3.core.policy
                     HistoryText.City(city, pKingdom) + " \u91C7\u7EB3\u79D1\u6280 " +
                     HistoryText.PlainText(pTech.FallbackName));
                 TechMapModeService.DirtyMapIfActive();
+                DevelopmentMapModeService.DirtyMapIfActive();
             }
         }
 

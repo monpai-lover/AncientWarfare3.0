@@ -45,7 +45,8 @@ namespace AncientWarfare3.core.lineage
             if (suzerain == null) return false;
             if (!Chance(0.45f)) return false;
 
-            return VassalService.SetVassal(pKingdom, suzerain, "active_vassal");
+            return string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)) &&
+                   KingdomPolicyService.StartDecisionWithTarget(pKingdom, "aw_decision_seek_suzerain", suzerain);
         }
 
         private static bool TryVassalWar(Kingdom pKingdom)
@@ -76,7 +77,8 @@ namespace AncientWarfare3.core.lineage
                 float vassalPower = Math.Max(1f, VassalService.GetPowerScore(vassal, pIncludeVassals: true));
                 if (lordPower < vassalPower * 1.55f) continue;
 
-                return VassalService.TryAbsorbVassal(pKingdom, vassal, "absorb_vassal");
+                return string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)) &&
+                       KingdomPolicyService.StartDecisionWithTarget(pKingdom, "aw_decision_absorb_vassal", vassal);
             }
 
             return false;
@@ -182,8 +184,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (pAttacker?.data == null || pDefender?.data == null) return false;
             if (pAttacker == pDefender || pAttacker.hasEnemies() || pDefender.hasEnemies()) return false;
+            if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pAttacker, PolicyNodeKind.Decision)))
+                return false;
 
-            try { return WarDecisionService.TryStartWar(pAttacker, pDefender, pWarType, pWarType); }
+            try
+            {
+                string goal = pWarType == "independence_war"
+                    ? WarTerritoryService.GOAL_INDEPENDENCE
+                    : WarTerritoryService.GOAL_FORCE_VASSAL;
+                string label = pWarType == "independence_war" ? "\u8131\u79bb\u5b97\u4e3b" : "\u5f3a\u5236\u81e3\u670d";
+                return KingdomPolicyService.StartWarDecision(pAttacker, pDefender, goal, null, pWarType, pWarType, label);
+            }
             catch { return false; }
         }
 

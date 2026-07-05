@@ -37,6 +37,46 @@ namespace AncientWarfare3.core.lineage
         }
 
         // 建国
+        internal static void OnCollateralRestoration(Kingdom pKingdom, Actor pPreviousKing, Actor pNewKing,
+            ShiBranchInfo pRestoredBranch)
+        {
+            if (pKingdom?.data == null || pNewKing?.data == null) return;
+
+            string label = BuildRestoredShiLabel(pRestoredBranch);
+            string color = pRestoredBranch?.origin_kingdom_color;
+            if (string.IsNullOrEmpty(color)) color = HistoryColors.FromKingdom(pKingdom);
+
+            HistoryText text = HistoryText.Actor(pNewKing) +
+                               HistoryText.PlainText("\u7531\u65c1\u7cfb\u5165\u7ee7\uff0c\u6062\u590d") +
+                               HistoryText.Colored(label, color) +
+                               HistoryText.PlainText("\u5b97\u7edf");
+            if (pPreviousKing?.data != null)
+                text += HistoryText.PlainText("\uff08\u524d\u541b ") + HistoryText.Actor(pPreviousKing) +
+                        HistoryText.PlainText("\uff09");
+
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COLLATERAL_RESTORE, text,
+                HistoryTarget.Actor(pNewKing));
+            HistoryWriter.RecordPerson(pNewKing.data.id, pKingdom, pNewKing.getName(),
+                PersonEvent.COLLATERAL_RESTORE, text, ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+
+            pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long periodId, -1L);
+            if (periodId >= 0)
+            {
+                pKingdom.data.get(LineageKeys.MANDATE_VALUE, out int mandateValue, 0);
+                MandateService.RecordMandateEvent("succession_collateral_restore", pKingdom, pNewKing,
+                    pNewKing.city, 0, mandateValue, text.Plain);
+            }
+        }
+
+        private static string BuildRestoredShiLabel(ShiBranchInfo pBranch)
+        {
+            if (pBranch == null) return "\u65e7\u6c0f";
+            string city = pBranch.origin_city_name ?? "";
+            string clan = pBranch.clan_name ?? "";
+            if (string.IsNullOrEmpty(clan)) clan = "\u65e7";
+            return city + clan + "\u6c0f";
+        }
+
         public static void OnKingdomFounded(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
@@ -101,6 +141,7 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordCity(pCity, kingdom, CityEvent.CITY_FOUND,
                 HistoryText.City(pCity, kingdom, cityName) + " 作为" + kingdomPart + "城市建立");
             KingdomArchiveWriter.Upsert(kingdom);
+            WarTerritoryService.EnsureCore(kingdom, pCity, "founded", "自建城市");
         }
 
         // 城市易主:仅当"旧国非空 且 旧国 != 新国"(真易主),且非读档回填。
@@ -166,7 +207,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnWarStart(Kingdom pSelf, Kingdom pOpponent, string pOpponentName, string pWarType)
         {
             if (pSelf?.data == null) return;
-            string label = string.IsNullOrEmpty(pWarType) ? "" : "(" + pWarType + ")";
+            string label = string.IsNullOrEmpty(pWarType) ? "" : "（" + WarDisplayLabelRules.Label(pWarType) + "）";
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_START,
                 HistoryText.PlainText("与 ") + HistoryText.Kingdom(pOpponent, pOpponentName) + " 爆发战争" + label);
         }

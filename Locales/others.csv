@@ -5,6 +5,8 @@ aw_history_role_at_event,当时身份:,Role then:,當時身份：
 aw_age_suffix,岁, years old,歲
 aw_role_king,君主,Ruler,君主
 aw_role_city_leader,城主,City leader,城主
+aw_role_fief_holder,封地大将,Fief general,封地大將
+aw_role_general,大将,General,大將
 aw_role_clan_chief,氏族家主,Clan chief,氏族家主
 aw_role_royal_guard_captain,禁卫军统领,Royal guard captain,禁衛軍統領
 aw_role_royal_guard,禁卫军,Royal guard,禁衛軍
@@ -185,3 +187,5 @@ aw_relation_older_brother,兄,Older Brother,兄
 aw_relation_younger_brother,弟,Younger Brother,弟
 aw_relation_older_sister,姐,Older Sister,姐
 aw_relation_younger_sister,妹,Younger Sister,妹
+succession_collateral_restore,恢复宗统,Collateral restoration,恢復宗統
+person_collateral_restore,恢复宗统,Collateral restoration,恢復宗統

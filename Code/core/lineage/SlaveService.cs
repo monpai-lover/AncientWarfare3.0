@@ -23,6 +23,9 @@ namespace AncientWarfare3.core.lineage
         private const int MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 5;
         private const int SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 8;
         private const int MERIT_FOR_FREEDOM = 8;
+        private const int CITY_RETIREMENT_CHECK_INTERVAL = 20;
+        private const int CITY_SLAVE_LABOR_CHECK_INTERVAL = 30;
+        private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
         private static readonly System.Random Rng = new System.Random();
         private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =
             new Dictionary<long, List<PendingSlaveCaptureSummary>>();
@@ -82,8 +85,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || !IsSlaveryEnabled(pKingdom)) return;
             foreach (City city in pKingdom.getCities())
             {
-                AssignSlaveCatchers(city);
-                CheckCitySlaveLabor(city);
+                AssignSlaveCatchers(city, pForce: true);
+                CheckCitySlaveLabor(city, pForce: true);
                 if (city != null && city.hasArmy())
                 {
                     EnsureNonSlaveCaptain(city.getArmy());
@@ -132,7 +135,7 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        public static void AssignSlaveCatchers(City pCity)
+        public static void AssignSlaveCatchers(City pCity, bool pForce = false)
         {
             if (pCity?.data == null) return;
             Kingdom kingdom = pCity.kingdom;
@@ -141,6 +144,8 @@ namespace AncientWarfare3.core.lineage
             if (SlaveryContent.SlaveCatcherJob == null) return;
             if (pCity.getUnitsTotal() < 15) return;
             if (pCity.jobs.countCurrentJobs(SlaveryContent.SlaveCatcherJob) > 0) return;
+            if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_CATCHER_LAST_CHECK,
+                    CITY_SLAVE_CATCHER_CHECK_INTERVAL)) return;
             if (!HasCaptureTargetForCity(pCity)) return;
 
             pCity.jobs.addToJob(SlaveryContent.SlaveCatcherJob, 1);
@@ -308,9 +313,9 @@ namespace AncientWarfare3.core.lineage
         public static bool RetireIfNeeded(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            if (!IsSupportedSlaveryActor(pActor)) return false;
-            if (pActor.isRekt() || !pActor.isWarrior()) return false;
-            if (IsRetiredSoldier(pActor)) return false;
+            if (!SoldierRetirementRules.CanConsiderForRetirement(IsSupportedSlaveryActor(pActor),
+                    pActor.isRekt(), pActor.isWarrior(), IsRetiredSoldier(pActor),
+                    GeneralService.IsGeneral(pActor), GeneralService.IsFiefHolder(pActor))) return false;
 
             float lifespan = pActor.stats["lifespan"];
             if (lifespan <= 0f) return false;
@@ -357,6 +362,8 @@ namespace AncientWarfare3.core.lineage
         public static void CheckCityRetirements(City pCity)
         {
             if (pCity?.data == null) return;
+            if (!ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_RETIREMENT_LAST_CHECK,
+                    CITY_RETIREMENT_CHECK_INTERVAL)) return;
             foreach (Actor unit in new List<Actor>(pCity.getUnits()))
                 RetireIfNeeded(unit);
         }
@@ -392,6 +399,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             MarkSoldierServiceStarted(pActor);
+            ApplyFiefSoldierTraining(pCity, pActor);
 
             if (!IsSlave(pActor)) return;
             if (!IsSlaveryEnabled(pActor.kingdom ?? pCity?.kingdom))
@@ -405,6 +413,16 @@ namespace AncientWarfare3.core.lineage
             UpsertSlaveState(pActor, pActive: true, pCity ?? pActor.city, pActor.kingdom ?? pCity?.kingdom);
             RecordSlaveArmyFormation(pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
             ChronicleEvents.OnSlaveEnlisted(pActor, pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
+        }
+
+        private static void ApplyFiefSoldierTraining(City pCity, Actor pActor)
+        {
+            if (pActor?.data == null || pCity?.data == null) return;
+            if (!FiefMilitaryRules.ShouldApplyFiefSoldierTrait(FiefService.IsActiveFief(pCity),
+                    pActor.isWarrior(), pActor.hasTrait(LineageKeys.TRAIT_FIEF_SOLDIER),
+                    IsSlave(pActor), RoyalGuardService.IsRoyalGuard(pActor))) return;
+
+            pActor.addTrait(LineageKeys.TRAIT_FIEF_SOLDIER);
         }
 
         public static void TryPromoteSlaveByMerit(Actor pKiller, Actor pDead)
@@ -491,17 +509,19 @@ namespace AncientWarfare3.core.lineage
             });
         }
 
-        public static void CheckCitySlaveLabor(City pCity)
+        public static void CheckCitySlaveLabor(City pCity, bool pForce = false)
         {
             if (pCity?.data == null) return;
             Kingdom kingdom = pCity.kingdom;
             if (kingdom?.data == null) return;
 
-            int slaveCount = CountSlaves(pCity);
-            if (slaveCount <= 0) return;
-
             pCity.data.get(LineageKeys.SLAVE_LABOR_RECORDED, out long recordedKingdomId, -1L);
             if (recordedKingdomId == kingdom.id) return;
+            if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_LABOR_LAST_CHECK,
+                    CITY_SLAVE_LABOR_CHECK_INTERVAL)) return;
+
+            int slaveCount = CountSlaves(pCity);
+            if (slaveCount <= 0) return;
             pCity.data.set(LineageKeys.SLAVE_LABOR_RECORDED, kingdom.id);
 
             ChronicleEvents.OnSlaveLaborStarted(kingdom, pCity, slaveCount);
@@ -542,6 +562,7 @@ namespace AncientWarfare3.core.lineage
         public static void RenameArmyIfSlaveArmy(Army pArmy)
         {
             if (pArmy == null) return;
+            if (!SlaveArmyMaintenanceRules.ShouldRefreshKingdomArmyNames(IsSlaveArmy(pArmy))) return;
             RefreshArmyNames(pArmy.getKingdom());
         }
 
@@ -603,6 +624,16 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        private static bool ShouldRunCityMaintenance(City pCity, string pKey, int pInterval)
+        {
+            if (pCity?.data == null) return false;
+            int now = (int)LineageService.CurTime();
+            pCity.data.get(pKey, out int lastRun, -1);
+            if (!CityMaintenanceThrottleRules.ShouldRun(now, lastRun, pInterval)) return false;
+            pCity.data.set(pKey, now);
+            return true;
+        }
+
         private static bool CanCaptureTarget(Actor pCatcher, Actor pTarget)
         {
             if (!CanBeSlaveCatcher(pCatcher)) return false;
@@ -648,7 +679,7 @@ namespace AncientWarfare3.core.lineage
             return pActor.isKing() || pActor.isCityLeader();
         }
 
-        private static bool IsSlaveArmy(Army pArmy)
+        public static bool IsSlaveArmy(Army pArmy)
         {
             if (pArmy == null) return false;
 

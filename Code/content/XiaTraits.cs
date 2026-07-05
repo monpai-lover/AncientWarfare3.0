@@ -56,6 +56,11 @@ namespace AncientWarfare3.content
             jinwei.base_stats["speed"] = 1f;
             jinwei.base_stats["knockback"] = -0.1f;
 
+            var fiefSoldier = NewTrait("aw_fief_soldier", "ui/Icons/traits/iconjinwei", XiaTraitGroups.AW2);
+            fiefSoldier.base_stats["health"] = 3f;
+            fiefSoldier.base_stats["damage"] = 1f;
+            fiefSoldier.base_stats["warfare"] = 1f;
+
             // rebel 反抗者:血+2、外交+35、政务+35、战争+4、同特质聚集。special_effect=义军抱团(批F)
             var rebel = NewTrait("rebel", "ui/Icons/traits/iconrebel", XiaTraitGroups.AW2);
             rebel.same_trait_mod = 20;

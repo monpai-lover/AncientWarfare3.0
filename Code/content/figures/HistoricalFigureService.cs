@@ -253,7 +253,7 @@ namespace AncientWarfare3.content.figures
 
         /// <summary>
         ///     历史人物成为某国国王(夺取/继承/创建都算)时,把预留国名(周/秦/…)写到那个国,
-        ///     并记录到历史系统(FigureState.kingdom_id/name + RecordKingdomRename 钩子)。
+        ///     并记录 FigureState.kingdom_id/name。
         ///     由 AW_FigurePatch 钩 Kingdom.setKing 调用。
         /// </summary>
         public static void OnFigureKingBecame(Kingdom pKingdom, Actor pKing)
@@ -275,12 +275,12 @@ namespace AncientWarfare3.content.figures
         }
 
         /// <summary>
-        ///     王国改名历史记录钩子(留接口)——日后天命国/编年史系统接入时在此落历史事件。
-        ///     当前仅 log;不阻断改名。
+        ///     历史人物改国名不再单独写一条专门历史记录。
+        ///     建国、统治期和王朝记录仍由通用历史系统处理。
         /// </summary>
         private static void RecordKingdomRename(Kingdom pKingdom, string pOldName, string pNewName, Actor pKing)
         {
-            // TODO(天命国/编年史系统):把"<pKing> 受天命,改 <pOldName> 为 <pNewName>"写入历史。
+            // Intentionally no-op per current design.
         }
 
         // ───────────────────────── 死亡:解锁下一个 ─────────────────────────

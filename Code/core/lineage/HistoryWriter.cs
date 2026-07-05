@@ -44,12 +44,6 @@ namespace AncientWarfare3.core.lineage
         public bool IsValid => !string.IsNullOrEmpty(type) && id >= 0;
     }
 
-    /// <summary>
-    ///     编年史统一写入:拼「通用年 + 国家年号」前缀快照,分配自增 event_id,写对应表。
-    ///     年份前缀格式:有年号时 "{年号}({通用年}年{月}月{日}日)",无年号时 "{通用年}年{月}月{日}日"。
-    ///     前缀写入当时快照 → 日后改年号不影响旧事件显示。
-    ///     DB 不可用(OperatingDB==null)则静默跳过 + LogWarning,不崩。
-    /// </summary>
     public static class HistoryWriter
     {
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
@@ -64,7 +58,6 @@ namespace AncientWarfare3.core.lineage
             RecordPerson(pActorId, pContextKingdom, pSubjectName, pEventType, pContent, "");
         }
 
-        /// <summary>带分类(category)的人物事件写入。分类供 UI 筛选(life/honor/clan/war/bond)。</summary>
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
             string pSubjectName, string pEventType, string pContent, string pCategory)
         {
@@ -72,7 +65,6 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.PlainText(pContent), pCategory);
         }
 
-        /// <summary>带分类(category)的人物事件写入。分类供 UI 筛选(life/honor/clan/war/bond)。</summary>
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
             string pSubjectName, string pEventType, HistoryText pContent, string pCategory)
         {
@@ -129,9 +121,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return "";
             try { if (pActor.isKing()) return "king"; } catch { }
-            try { if (pActor.isCityLeader()) return "city_leader"; } catch { }
-            try { if (pActor.clan != null && pActor.clan.getChief() == pActor) return "clan_chief"; } catch { }
-
             try
             {
                 pActor.data.get(LineageKeys.ROYAL_GUARD_CAPTAIN, out bool captain, false);
@@ -147,6 +136,9 @@ namespace AncientWarfare3.core.lineage
                 if (GeneralService.IsGeneral(pActor)) return "general";
             }
             catch { }
+
+            try { if (pActor.isCityLeader()) return "city_leader"; } catch { }
+            try { if (pActor.clan != null && pActor.clan.getChief() == pActor) return "clan_chief"; } catch { }
 
             try
             {
@@ -167,18 +159,18 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pRole)
             {
-                case "king": return "君主";
-                case "city_leader": return "城主";
-                case "clan_chief": return "氏族家主";
-                case "royal_guard_captain": return "禁卫军统领";
-                case "royal_guard": return "禁卫军";
-                case "fief_holder": return "封地大将";
-                case "general": return "大将";
-                case "slave": return "奴隶";
-                case "warrior": return "士兵";
-                case "noble": return "贵族";
-                case "common_lineage": return "有氏平民";
-                case "common": return "平民";
+                case "king": return "\u541b\u4e3b";
+                case "city_leader": return "\u57ce\u4e3b";
+                case "clan_chief": return "\u6c0f\u65cf\u5bb6\u4e3b";
+                case "royal_guard_captain": return "\u7981\u536b\u519b\u7edf\u9886";
+                case "royal_guard": return "\u7981\u536b\u519b";
+                case "fief_holder": return "\u5c01\u5730\u5927\u5c06";
+                case "general": return "\u5927\u5c06";
+                case "slave": return "\u5974\u96b6";
+                case "warrior": return "\u58eb\u5175";
+                case "noble": return "\u8d35\u65cf";
+                case "common_lineage": return "\u6709\u6c0f\u5e73\u6c11";
+                case "common": return "\u5e73\u6c11";
                 default: return "";
             }
         }
@@ -211,10 +203,10 @@ namespace AncientWarfare3.core.lineage
             RecordCity(pCity, pContextKingdom, pEventType, pContent, HistoryTarget.City(pCity));
         }
 
-        public static void RecordCity(City pCity, Kingdom pContextKingdom, string pEventType, HistoryText pContent, HistoryTarget pTarget)
+        public static void RecordCity(City pCity, Kingdom pContextKingdom, string pEventType, HistoryText pContent,
+            HistoryTarget pTarget)
         {
-            if (pCity == null || pCity.data == null) return;
-            // 额外写 KINGDOM_NAME 快照(该事件时城市所属国名),供城市史"归属期"分段切段用。
+            if (pCity?.data == null) return;
             string kingdomName = pContextKingdom?.data != null ? pContextKingdom.name : "";
             Insert(CityHistoryTableItem.GetTableName(), pContextKingdom, pEventType, pContent, pCity.data.name,
                 pTarget.IsValid ? pTarget : HistoryTarget.City(pCity),
@@ -242,7 +234,7 @@ namespace AncientWarfare3.core.lineage
         internal static string FormatDate(double pTime)
         {
             int[] raw = Date.getRawDate(pTime); // [day, month, year]
-            return raw[2] + "年" + raw[1] + "月" + raw[0] + "日";
+            return ChronicleFormatRules.FormatDateParts(raw[2], raw[1], raw[0]);
         }
 
         internal static string NormalizeYearPrefix(string pYearPrefixSnapshot, double pTime)
@@ -252,7 +244,7 @@ namespace AncientWarfare3.core.lineage
             if (pYearPrefixSnapshot.Contains("(")) return pYearPrefixSnapshot;
 
             string trimmed = pYearPrefixSnapshot.Trim();
-            string yearOnly = Date.getYear(pTime) + "年";
+            string yearOnly = Date.getYear(pTime) + "\u5e74";
             if (trimmed == yearOnly) return date;
 
             int space = trimmed.LastIndexOf(' ');
@@ -264,14 +256,14 @@ namespace AncientWarfare3.core.lineage
             return trimmed + "(" + date + ")";
         }
 
-        // 公共写入:取时间、拼前缀、分配 event_id、Insert(关联列 + 表专属额外列由调用方传 pExtraCols)。
         private static void Insert(string pTable, Kingdom pContextKingdom,
-            string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget, params ColumnVal[] pExtraCols)
+            string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget,
+            params ColumnVal[] pExtraCols)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null)
             {
-                ModClass.LogWarning("HistoryWriter: DB 不可用,事件未记录(" + pTable + "/" + pEventType + ")");
+                ModClass.LogWarning("HistoryWriter: DB unavailable; event skipped (" + pTable + "/" + pEventType + ")");
                 return;
             }
 
@@ -307,11 +299,10 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
-                ModClass.LogWarning("HistoryWriter.Insert 失败(" + pTable + "):" + e.Message);
+                ModClass.LogWarning("HistoryWriter.Insert failed (" + pTable + "): " + e.Message);
             }
         }
 
-        // 自增 event_id:取表内 MAX(EVENT_ID)+1。空表返回 1。原生 SQLiteCommand(同 FigureStateStore.Load 模式)。
         private static long NextEventId(SQLiteConnection pDb, string pTable)
         {
             try
@@ -324,9 +315,10 @@ namespace AncientWarfare3.core.lineage
             }
             catch
             {
-                return 1; // 表尚未建立/异常 → 从 1 起(极早期不会走到写入)
+                return 1;
             }
         }
+
         private static HistoryTarget ResolveTarget(HistoryTarget pExplicit, HistoryText pContent)
         {
             if (!string.IsNullOrEmpty(pContent.TargetType) && pContent.TargetId >= 0)

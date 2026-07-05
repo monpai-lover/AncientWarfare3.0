@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -81,6 +82,7 @@ namespace AncientWarfare3.core.lineage
                 if (IsDuplicateDeathEntry(entry, seenDeathEvents)) continue;
                 result.Add(entry);
             }
+            NormalizeLegacyCityEconomyRoles(result);
             return result;
         }
 
@@ -210,6 +212,7 @@ namespace AncientWarfare3.core.lineage
                 });
             }
             ClearNonXiaEventYearPrefixes(result);
+            NormalizeLegacyCityEconomyRoles(result);
             return result;
         }
 
@@ -780,7 +783,38 @@ namespace AncientWarfare3.core.lineage
                 });
             }
             SortHistoryEntries(result);
+            NormalizeLegacyCityEconomyRoles(result);
             return result;
+        }
+
+        private static void NormalizeLegacyCityEconomyRoles(List<HistoryEntry> pEntries)
+        {
+            if (pEntries == null || pEntries.Count == 0) return;
+            foreach (HistoryEntry entry in pEntries)
+            {
+                if (entry == null || entry.event_type != "city_economy_role") continue;
+                entry.content = NormalizeLegacyCityEconomyRoleText(entry.content);
+                entry.content_rich = NormalizeLegacyCityEconomyRoleText(entry.content_rich);
+            }
+        }
+
+        private static string NormalizeLegacyCityEconomyRoleText(string pText)
+        {
+            if (string.IsNullOrEmpty(pText)) return pText ?? "";
+            string text = pText;
+            text = text.Replace(CityEconomyRole.CapitalAdmin.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.CapitalAdmin.ToString()));
+            text = text.Replace(CityEconomyRole.AgrarianGranary.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.AgrarianGranary.ToString()));
+            text = text.Replace(CityEconomyRole.MarketTrade.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.MarketTrade.ToString()));
+            text = text.Replace(CityEconomyRole.FrontierMilitary.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.FrontierMilitary.ToString()));
+            text = text.Replace(CityEconomyRole.WorkshopCraft.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.WorkshopCraft.ToString()));
+            text = text.Replace(CityEconomyRole.OccupiedUnrest.ToString(),
+                CityEconomyService.LocalizedRoleName(CityEconomyRole.OccupiedUnrest.ToString()));
+            return text;
         }
 
         private static void SortHistoryEntries(List<HistoryEntry> pEntries)

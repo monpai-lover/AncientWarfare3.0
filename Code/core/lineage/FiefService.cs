@@ -59,6 +59,7 @@ namespace AncientWarfare3.core.lineage
 
                 pGeneral.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, pCity.id);
                 UpdateGeneralFief(pGeneral, pCity, now);
+                FiefMilitaryService.EnsureFiefCommand(pCity, pGeneral);
                 RecordFiefGranted(pKingdom, pGeneral, pCity);
                 return true;
             }
@@ -157,6 +158,33 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
+        public static void RevokeActorFief(Actor pActor, string pReason)
+        {
+            if (pActor?.data == null) return;
+            City city = GetFiefCity(pActor);
+            if (city?.data != null)
+            {
+                RevokeFief(city, pReason);
+                return;
+            }
+
+            pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+            if (!Ready) return;
+            try
+            {
+                DB.UpdateValue(FiefGrantTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("GENERAL_ACTOR_ID", pActor.data.id),
+                        SimpleColumnConstraint.CreateEq("REVOKED", 0)
+                    },
+                    ColumnVal.Create("END_TIME", LineageService.CurTime()),
+                    ColumnVal.Create("REVOKED", 1),
+                    ColumnVal.Create("REVOKE_REASON", pReason ?? ""));
+            }
+            catch { }
+        }
+
         private static City PickBestCity(Kingdom pKingdom, Actor pGeneral)
         {
             City best = null;
@@ -180,6 +208,8 @@ namespace AncientWarfare3.core.lineage
             if (IsActiveFief(pCity)) return false;
             if (HeirService.IsCurrentHeir(pKingdom, pCity.leader)) return false;
             if (pGeneral.kingdom != pKingdom) return false;
+            if (!FiefGrantRules.CanGrantToGeneral(GeneralService.IsGeneral(pGeneral), GeneralService.GetMerit(pGeneral)))
+                return false;
             return true;
         }
 

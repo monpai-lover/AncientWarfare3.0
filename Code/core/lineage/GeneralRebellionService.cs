@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomRiskCheck(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral()) return;
+            int crisis = CalculateKingdomCrisis(pKingdom);
             foreach (Actor general in GeneralService.GetActiveGenerals(pKingdom))
             {
                 if (general?.data == null) continue;
@@ -24,7 +25,16 @@ namespace AncientWarfare3.core.lineage
                 GeneralService.UpdateTroopPower(general, power);
                 int risk = CalculateRisk(general, pKingdom, power);
                 if (risk >= 65) RecordHighRisk(general, pKingdom, risk);
-                if (risk >= REBELLION_RISK_THRESHOLD) TryRebel(general, pKingdom, risk);
+                if (risk >= REBELLION_RISK_THRESHOLD || (risk + crisis) / 2 >= 70)
+                {
+                    GeneralRebellionBranch branch = GeneralRebellionRules.SelectBranch(crisis, risk,
+                        FiefService.GetFiefCityId(general) >= 0,
+                        IsNearCapital(general, pKingdom),
+                        IsBorderFief(general, pKingdom),
+                        FindStrongNeighbor(general, pKingdom)?.data != null,
+                        RoyalClaimService.HasHostedClaim(pKingdom));
+                    if (branch != GeneralRebellionBranch.None) TryRebel(general, pKingdom, risk, branch);
+                }
             }
         }
 
@@ -67,6 +77,28 @@ namespace AncientWarfare3.core.lineage
             return Mathf.Clamp(risk, 0, 120);
         }
 
+        private static int CalculateKingdomCrisis(Kingdom pKingdom)
+        {
+            Actor king = pKingdom?.king;
+            int weakKingScore = 20;
+            bool childOrOldRuler = false;
+            if (king?.data != null)
+            {
+                int age = SafeAge(king);
+                childOrOldRuler = !king.isAdult() || age >= 75;
+                weakKingScore = Mathf.Clamp(55 - Mathf.RoundToInt(
+                    (SafeStat(king, "diplomacy") + SafeStat(king, "stewardship") + SafeStat(king, "warfare")) * 0.08f),
+                    0, 55);
+            }
+
+            bool successionUnstable = HeirService.GetHeir(pKingdom)?.data == null;
+            bool recentWarDefeat = false;
+            bool capitalThreatened = IsAtWar(pKingdom);
+            return GeneralRebellionRules.CalculateKingdomCrisis(weakKingScore, childOrOldRuler,
+                successionUnstable, recentWarDefeat, capitalThreatened, CountOwnedNonCoreCities(pKingdom),
+                CountDisloyalVassals(pKingdom), MandateValueFor(pKingdom), RoyalGuardExists(pKingdom));
+        }
+
         private static void RecordHighRisk(Actor pGeneral, Kingdom pKingdom, int pRisk)
         {
             int year = Date.getCurrentYear();
@@ -92,14 +124,22 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pGeneral));
         }
 
-        private static bool TryRebel(Actor pGeneral, Kingdom pOldKingdom, int pRisk)
+        private static bool TryRebel(Actor pGeneral, Kingdom pOldKingdom, int pRisk, GeneralRebellionBranch pBranch)
         {
             if (pGeneral?.data == null || pOldKingdom?.data == null) return false;
             if (IsAtWar(pOldKingdom)) return false;
             pGeneral.data.get("aw_general_rebelled_once", out bool rebelledOnce, false);
             if (rebelledOnce) return false;
 
-            bool hadFief = FiefService.GetFiefCityId(pGeneral) >= 0;
+            if (pBranch == GeneralRebellionBranch.PalaceCoup)
+                return TryPalaceCoup(pGeneral, pOldKingdom, pRisk);
+            if (pBranch == GeneralRebellionBranch.DefectToNeighbor)
+                return TryDefectToNeighbor(pGeneral, pOldKingdom, pRisk);
+            if (pBranch == GeneralRebellionBranch.SupportRestoration && TrySupportRestoration(pGeneral, pOldKingdom, pRisk))
+                return true;
+
+            bool hadFief = pBranch == GeneralRebellionBranch.FiefIndependence ||
+                           FiefService.GetFiefCityId(pGeneral) >= 0;
             City baseCity = FiefService.GetFiefCity(pGeneral);
             if (baseCity == null && pGeneral.isCityLeader()) baseCity = pGeneral.city;
             if (baseCity?.data == null || baseCity.kingdom != pOldKingdom || baseCity == pOldKingdom.capital) return false;
@@ -123,6 +163,74 @@ namespace AncientWarfare3.core.lineage
             StartRebellionWar(pOldKingdom, rebel, hadFief ? WAR_FIEF_INDEPENDENCE : WAR_GENERAL_REBELLION);
             RecordRebellion(pGeneral, pOldKingdom, rebel, baseCity, pRisk);
             return true;
+        }
+
+        private static bool TryPalaceCoup(Actor pGeneral, Kingdom pKingdom, int pRisk)
+        {
+            bool success = pRisk >= 100 || CalculateKingdomCrisis(pKingdom) >= 75 || !RoyalGuardExists(pKingdom);
+            pGeneral.data.set("aw_general_rebelled_once", true);
+            GeneralService.MarkRebelled(pGeneral);
+
+            if (success)
+            {
+                try { pKingdom.setKing(pGeneral); }
+                catch (Exception e)
+                {
+                    ModClass.LogWarning("General palace coup setKing failed: " + e.Message);
+                    return false;
+                }
+            }
+
+            RecordPalaceCoup(pGeneral, pKingdom, pRisk, success);
+            return success;
+        }
+
+        private static bool TryDefectToNeighbor(Actor pGeneral, Kingdom pOldKingdom, int pRisk)
+        {
+            City baseCity = FiefService.GetFiefCity(pGeneral);
+            if (baseCity == null && pGeneral.isCityLeader()) baseCity = pGeneral.city;
+            if (baseCity?.data == null || baseCity.kingdom != pOldKingdom || baseCity == pOldKingdom.capital) return false;
+            Kingdom neighbor = FindStrongNeighbor(pGeneral, pOldKingdom);
+            if (neighbor?.data == null) return false;
+
+            try
+            {
+                pGeneral.data.set("aw_general_rebelled_once", true);
+                GeneralService.MarkRebelled(pGeneral);
+                FiefService.RevokeFief(baseCity, "general_defection");
+                baseCity.joinAnotherKingdom(neighbor);
+                pGeneral.joinCity(baseCity);
+                baseCity.setLeader(pGeneral, pNew: true);
+                WarDecisionService.TryStartSystemWar(neighbor, pOldKingdom, WAR_GENERAL_REBELLION, "general_defection");
+                RecordDefection(pGeneral, pOldKingdom, neighbor, baseCity, pRisk);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("General defection failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private static bool TrySupportRestoration(Actor pGeneral, Kingdom pKingdom, int pRisk)
+        {
+            if (!RoyalClaimService.HasHostedClaim(pKingdom)) return false;
+            foreach (WarTerritoryService.TargetReport report in WarTerritoryService.BuildTargetReports(pKingdom))
+            {
+                if (report?.target?.data == null || !report.can_restore) continue;
+                WarTerritoryService.WarTargetOption option =
+                    WarTerritoryService.FindBestTargetOption(pKingdom, report.target, WarTerritoryService.GOAL_RESTORE_KINGDOM);
+                if (option == null) continue;
+                Actor claimant = FindActor(option.claimant_actor_id);
+                if (!WarTerritoryService.TryDeclareRestorationWar(pKingdom, report.target, option.target_city,
+                        option.restoration_claim_id, claimant)) continue;
+
+                pGeneral.data.set("aw_general_rebelled_once", true);
+                GeneralService.MarkRebelled(pGeneral);
+                RecordRestorationSupport(pGeneral, pKingdom, report.target, option.target_city, claimant, pRisk);
+                return true;
+            }
+            return false;
         }
 
         private static void StartRebellionWar(Kingdom pOldKingdom, Kingdom pRebel, string pWarType)
@@ -156,6 +264,44 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordCity(pBaseCity, pRebel, CityEvent.GENERAL_REBELLION,
                 HistoryText.City(pBaseCity, pRebel) + " \u6210\u4E3A" + HistoryText.Actor(pGeneral) + " \u53DB\u519B\u6839\u636E\u5730",
                 HistoryTarget.Actor(pGeneral));
+        }
+
+        private static void RecordPalaceCoup(Actor pGeneral, Kingdom pKingdom, int pRisk, bool pSuccess)
+        {
+            string eventKey = pSuccess ? "general_palace_coup_success" : "general_palace_coup_failed";
+            HistoryText text = HistoryText.Actor(pGeneral) +
+                               HistoryText.PlainText(pSuccess ? " 发动逼宫并夺取王位" : " 发动逼宫失败") +
+                               HistoryText.PlainText("，风险 ") + HistoryText.PlainText(pRisk.ToString());
+            HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(), eventKey,
+                text, ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordKingdom(pKingdom, eventKey, text, HistoryTarget.Actor(pGeneral));
+        }
+
+        private static void RecordDefection(Actor pGeneral, Kingdom pOldKingdom, Kingdom pNewKingdom, City pCity, int pRisk)
+        {
+            HistoryText text = HistoryText.Actor(pGeneral) + " 以" + HistoryText.City(pCity, pNewKingdom) +
+                               " 投附" + HistoryText.Kingdom(pNewKingdom) +
+                               "，拥兵风险 " + HistoryText.PlainText(pRisk.ToString());
+            HistoryWriter.RecordPerson(pGeneral.data.id, pNewKingdom, pGeneral.getName(), "general_defection",
+                text, ChronicleCategory.WAR, HistoryTarget.Kingdom(pNewKingdom));
+            HistoryWriter.RecordKingdom(pOldKingdom, "general_defection_lost", text, HistoryTarget.City(pCity));
+            HistoryWriter.RecordKingdom(pNewKingdom, "general_defection_gain", text, HistoryTarget.City(pCity));
+            HistoryWriter.RecordCity(pCity, pNewKingdom, "general_defection",
+                HistoryText.City(pCity, pNewKingdom) + " 随" + HistoryText.Actor(pGeneral) +
+                " 改投" + HistoryText.Kingdom(pNewKingdom), HistoryTarget.Actor(pGeneral));
+        }
+
+        private static void RecordRestorationSupport(Actor pGeneral, Kingdom pKingdom, Kingdom pTarget,
+            City pCity, Actor pClaimant, int pRisk)
+        {
+            HistoryText text = HistoryText.Actor(pGeneral) + " 主张奉" +
+                               HistoryText.Actor(pClaimant, pClaimant?.getName() ?? "") +
+                               " 复国，向" + HistoryText.Kingdom(pTarget) +
+                               " 宣战，风险 " + HistoryText.PlainText(pRisk.ToString());
+            HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(), "general_support_restoration",
+                text, ChronicleCategory.WAR, pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pTarget));
+            HistoryWriter.RecordKingdom(pKingdom, "general_support_restoration",
+                text, pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pTarget));
         }
 
         private static bool IsAtWar(Kingdom pKingdom)
@@ -195,6 +341,81 @@ namespace AncientWarfare3.core.lineage
             foreach (Actor unit in pKingdom.getUnits())
                 if (RoyalGuardService.IsRoyalGuard(unit)) return true;
             return false;
+        }
+
+        private static int CountOwnedNonCoreCities(Kingdom pKingdom)
+        {
+            int count = 0;
+            foreach (City city in pKingdom.getCities())
+            {
+                try
+                {
+                    if (WarTerritoryService.GetCoreStatus(pKingdom, city).status == "owned_non_core") count++;
+                }
+                catch { }
+            }
+            return count;
+        }
+
+        private static int CountDisloyalVassals(Kingdom pKingdom)
+        {
+            float own = Mathf.Max(1f, VassalService.GetPowerScore(pKingdom, pIncludeVassals: false));
+            int count = 0;
+            foreach (Kingdom vassal in VassalService.GetVassals(pKingdom))
+            {
+                if (vassal?.data == null || vassal.isRekt()) continue;
+                if (VassalService.GetPowerScore(vassal, pIncludeVassals: true) >= own * 0.55f) count++;
+            }
+            return count;
+        }
+
+        private static int MandateValueFor(Kingdom pKingdom)
+        {
+            try
+            {
+                Kingdom mandate = MandateService.GetCurrentMandateKingdom();
+                return mandate?.data != null && mandate.id == pKingdom.id ? MandateService.ReadReport().mandate_value : 80;
+            }
+            catch { return 80; }
+        }
+
+        private static bool IsNearCapital(Actor pGeneral, Kingdom pKingdom)
+        {
+            City city = FiefService.GetFiefCity(pGeneral) ?? pGeneral?.city;
+            return city?.data != null && pKingdom?.capital?.data != null && city == pKingdom.capital;
+        }
+
+        private static bool IsBorderFief(Actor pGeneral, Kingdom pKingdom)
+        {
+            City city = FiefService.GetFiefCity(pGeneral);
+            return city?.data != null && pKingdom?.capital?.data != null &&
+                   city != pKingdom.capital && pKingdom.countCities() > 1;
+        }
+
+        private static Kingdom FindStrongNeighbor(Actor pGeneral, Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || World.world?.kingdoms == null) return null;
+            float own = Mathf.Max(1f, VassalService.GetPowerScore(pKingdom, pIncludeVassals: true));
+            Kingdom best = null;
+            float bestScore = own * 1.15f;
+            Kingdom ownRoot = VassalService.GetRootSuzerain(pKingdom);
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom == pKingdom || kingdom.isRekt() || kingdom.isNeutral() || !kingdom.isCiv()) continue;
+                if (VassalService.GetRootSuzerain(kingdom) == ownRoot) continue;
+                float score = VassalService.GetPowerScore(kingdom, pIncludeVassals: true);
+                if (score <= bestScore) continue;
+                best = kingdom;
+                bestScore = score;
+            }
+            return best;
+        }
+
+        private static Actor FindActor(long pId)
+        {
+            if (pId < 0 || World.world?.units == null) return null;
+            try { return World.world.units.get(pId); }
+            catch { return null; }
         }
 
         private static bool SameParentLine(Actor pA, Actor pB)

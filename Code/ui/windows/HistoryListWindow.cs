@@ -68,6 +68,19 @@ namespace AncientWarfare3.ui.windows
             OpenInternal();
         }
 
+        public static void ResetWorldCache()
+        {
+            if (WorldSwitchCacheRules.ShouldClearContextBoundWindow(_contextId)) _contextId = -1;
+            _personFilter = "";
+            if (Instance == null) return;
+            Instance._expandedDynasties.Clear();
+            Instance._expandedReigns.Clear();
+            Instance._seeded = false;
+            Instance._dynasties = null;
+            Instance._reigns = null;
+            Instance.ClearList();
+        }
+
         private static void OpenInternal()
         {
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.HISTORY);
@@ -389,7 +402,7 @@ namespace AncientWarfare3.ui.windows
             string content = !string.IsNullOrEmpty(pEntry.content_rich)
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
-            return year + content;
+            return year + WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
         }
 
         private static HistoryRow BuildEventRow(HistoryEntry pEntry, bool pDim)
@@ -416,12 +429,16 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildEventTooltip(HistoryEntry pEntry)
         {
-            string type = string.IsNullOrEmpty(pEntry.event_type) ? "" : AW_L10n.Text("aw_history_type", "\u7C7B\u578B\uFF1A") + pEntry.event_type + "\n";
+            string type = string.IsNullOrEmpty(pEntry.event_type)
+                ? ""
+                : AW_L10n.Text("aw_history_type", "\u7C7B\u578B\uFF1A") +
+                  WarDisplayLabelRules.EventLabel(pEntry.event_type) + "\n";
             string time = AW_L10n.Text("aw_history_time", "\u65F6\u95F4\uFF1A") + HistoryWriter.NormalizeYearPrefix(pEntry.year_prefix, pEntry.world_time) + "\n";
             string snapshot = _source == Source.Person ? BuildPersonSnapshotTooltip(pEntry) : "";
             string content = !string.IsNullOrEmpty(pEntry.content_rich)
                 ? pEntry.content_rich
                 : HistoryColors.EscapeRich(pEntry.content);
+            content = WarDisplayLabelRules.NormalizeEmbeddedKeys(content);
             if (pEntry.event_type == KingdomEvent.POSTHUMOUS && pEntry.target_type == "actor" && pEntry.target_id >= 0)
             {
                 string extra = PosthumousTitleService.BuildTooltip(pEntry.target_id);
@@ -457,6 +474,8 @@ namespace AncientWarfare3.ui.windows
                 case "clan_chief": return AW_L10n.Text("aw_role_clan_chief", "\u6C0F\u65CF\u5BB6\u4E3B");
                 case "royal_guard_captain": return AW_L10n.Text("aw_role_royal_guard_captain", "\u7981\u536B\u519B\u7EDF\u9886");
                 case "royal_guard": return AW_L10n.Text("aw_role_royal_guard", "\u7981\u536B\u519B");
+                case "fief_holder": return AW_L10n.Text("aw_role_fief_holder", "\u5C01\u5730\u5927\u5C06");
+                case "general": return AW_L10n.Text("aw_role_general", "\u5927\u5C06");
                 case "slave": return AW_L10n.Text("aw_role_slave", "\u5974\u96B6");
                 case "warrior": return AW_L10n.Text("aw_role_warrior", "\u58EB\u5175");
                 case "noble": return AW_L10n.Text("aw_role_noble", "\u8D35\u65CF");

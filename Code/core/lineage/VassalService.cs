@@ -101,6 +101,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             AddVassalRows(pContext, result, 1, new HashSet<long> { pContext.id });
+            AttachContextActions(pContext, result);
             return result;
         }
 
@@ -210,12 +211,43 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        public static bool CanAbsorbVassalByDecision(Kingdom pSuzerain, Kingdom pVassal, out string pReason)
+        {
+            bool suzerainValid = pSuzerain?.data != null &&
+                                  !pSuzerain.isRekt() &&
+                                  pSuzerain.isCiv();
+            bool directVassal = pVassal?.data != null &&
+                                !pVassal.isRekt() &&
+                                pVassal.isCiv() &&
+                                pVassal != pSuzerain &&
+                                GetSuzerainId(pVassal) == pSuzerain?.id;
+            bool suzerainAtWar = HasActiveWars(pSuzerain);
+            bool vassalAtWar = HasActiveWars(pVassal);
+            return VassalAnnexDecisionRules.CanStart(suzerainValid, directVassal,
+                suzerainAtWar, vassalAtWar, out pReason);
+        }
+
+        public static Kingdom FindBestAbsorbVassalTarget(Kingdom pSuzerain)
+        {
+            if (pSuzerain?.data == null || pSuzerain.isRekt()) return null;
+            foreach (Kingdom vassal in GetVassals(pSuzerain)
+                         .OrderBy(v => GetPowerScore(v, pIncludeVassals: true))
+                         .ThenBy(v => v.name))
+            {
+                if (CanAbsorbVassalByDecision(pSuzerain, vassal, out _))
+                    return vassal;
+            }
+
+            return null;
+        }
+
         public static bool CanSetVassal(Kingdom pVassal, Kingdom pSuzerain)
         {
             if (pVassal?.data == null || pSuzerain?.data == null) return false;
             if (pVassal == pSuzerain) return false;
             if (pVassal.isRekt() || pSuzerain.isRekt()) return false;
             if (!pVassal.isCiv() || !pSuzerain.isCiv()) return false;
+            if (KingdomTitleService.GetTitle(pSuzerain) <= KingdomTitleService.GetTitle(pVassal)) return false;
 
             Kingdom root = GetRootSuzerain(pSuzerain);
             if (root == pVassal) return false;
@@ -357,7 +389,7 @@ namespace AncientWarfare3.core.lineage
 
             if (type == "independence_war" && pWinner == WarWinner.Attackers)
             {
-                EndVassal(attacker, "independence_war");
+                EndIndependenceWar(attacker, defender);
                 return;
             }
 
@@ -416,6 +448,25 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("VassalService.OnKingdomDestroyed: " + e.Message);
             }
+        }
+
+        public static void ResolveIndependenceWarWon(Kingdom pRebel, Kingdom pOldSuzerain)
+        {
+            EndIndependenceWar(pRebel, pOldSuzerain);
+        }
+
+        private static void EndIndependenceWar(Kingdom pRebel, Kingdom pOldSuzerain)
+        {
+            if (pRebel?.data == null) return;
+            Kingdom upper = GetSuzerain(pOldSuzerain);
+            if (upper?.data != null && !upper.isRekt() && CanSetVassal(pRebel, upper))
+            {
+                EndVassal(pRebel, "independence_war_transfer");
+                SetVassal(pRebel, upper, "independence_war_transfer");
+                return;
+            }
+
+            EndVassal(pRebel, "independence_war");
         }
 
         public static int GetYearsSinceRelationStarted(Kingdom pVassal)
@@ -521,6 +572,19 @@ namespace AncientWarfare3.core.lineage
                 pRows.Add(BuildRelationRow(child, role, pDepth, isContext: false,
                     isChain: false, relationSubject: child));
                 AddVassalRows(child, pRows, pDepth + 1, pVisited);
+            }
+        }
+
+        private static void AttachContextActions(Kingdom pContext, List<VassalRelationInfo> pRows)
+        {
+            if (pContext?.data == null || pRows == null) return;
+            foreach (VassalRelationInfo row in pRows)
+            {
+                if (row == null) continue;
+                row.context_kingdom_id = pContext.id;
+                Kingdom target = FindKingdom(row.kingdom_id);
+                row.can_absorb_by_context = CanAbsorbVassalByDecision(pContext, target, out string reason);
+                row.absorb_reason = reason ?? "";
             }
         }
 
@@ -674,6 +738,19 @@ namespace AncientWarfare3.core.lineage
             }
 
             return false;
+        }
+
+        private static bool HasActiveWars(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            try
+            {
+                foreach (War war in pKingdom.getWars())
+                    if (war?.data != null && !war.hasEnded()) return true;
+            }
+            catch { }
+            try { return pKingdom.hasEnemies(); }
+            catch { return false; }
         }
 
         private static void LeaveWarPeacefully(War pWar, Kingdom pKingdom)

@@ -1,5 +1,7 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
+using AncientWarfare3.ui.windows;
 using NeoModLoader.api;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,14 +15,19 @@ namespace AncientWarfare3.ui.items
         private Image _flagBg;
         private Image _flagIcon;
         private Text _label;
+        private GameObject _absorbObj;
+        private TipButton _absorbTip;
         private LayoutElement _layout;
         private TipButton _tip;
         private long _kingdomId = -1;
+        private long _contextKingdomId = -1;
 
         public override void Setup(VassalRelationInfo pObject)
         {
             EnsureUi();
+            ApplyLiveKingdomVisuals(pObject);
             _kingdomId = pObject.kingdom_id;
+            _contextKingdomId = pObject.context_kingdom_id;
             KingdomFlagBuilder.Build(pObject.banner_id, pObject.banner_icon_id, pObject.banner_background_id,
                 pObject.color_text, pObject.color_id, _flagBg, _flagIcon);
 
@@ -32,6 +39,7 @@ namespace AncientWarfare3.ui.items
             if (pObject.is_context) AW_UIStyle.ApplyPanel(bg, 0.95f);
             else AW_UIStyle.ApplyListRow(bg, pObject.is_chain_row ? 0.88f : 0.82f);
             SetTip(pObject);
+            SetupAbsorbButton(pObject);
         }
 
         private void EnsureUi()
@@ -81,7 +89,7 @@ namespace AncientWarfare3.ui.items
             trect.anchorMin = Vector2.zero;
             trect.anchorMax = Vector2.one;
             trect.offsetMin = new Vector2(34, 0);
-            trect.offsetMax = new Vector2(-5, 0);
+            trect.offsetMax = new Vector2(-44, 0);
             _label = textObj.GetComponent<Text>();
             _label.font = LocalizedTextManager.current_font;
             _label.fontSize = 10;
@@ -90,6 +98,46 @@ namespace AncientWarfare3.ui.items
             _label.horizontalOverflow = HorizontalWrapMode.Wrap;
             _label.verticalOverflow = VerticalWrapMode.Overflow;
             _label.raycastTarget = false;
+
+            _absorbObj = new GameObject("AbsorbButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(TipButton));
+            _absorbObj.transform.SetParent(transform, false);
+            var arect = _absorbObj.GetComponent<RectTransform>();
+            arect.anchorMin = new Vector2(1f, 0.5f);
+            arect.anchorMax = new Vector2(1f, 0.5f);
+            arect.pivot = new Vector2(1f, 0.5f);
+            arect.sizeDelta = new Vector2(36, 22);
+            arect.anchoredPosition = new Vector2(-5, 0);
+            AW_UIStyle.ApplyButton(_absorbObj.GetComponent<Image>(), 0.95f);
+            _absorbObj.GetComponent<Button>().onClick.AddListener(OnClickAbsorbTarget);
+            _absorbTip = _absorbObj.GetComponent<TipButton>();
+
+            var absorbTextObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            absorbTextObj.transform.SetParent(_absorbObj.transform, false);
+            var absorbTextRect = absorbTextObj.GetComponent<RectTransform>();
+            absorbTextRect.anchorMin = Vector2.zero;
+            absorbTextRect.anchorMax = Vector2.one;
+            absorbTextRect.offsetMin = Vector2.zero;
+            absorbTextRect.offsetMax = Vector2.zero;
+            var absorbText = absorbTextObj.GetComponent<Text>();
+            absorbText.font = LocalizedTextManager.current_font;
+            absorbText.fontSize = 8;
+            absorbText.alignment = TextAnchor.MiddleCenter;
+            absorbText.color = Color.white;
+            absorbText.raycastTarget = false;
+            absorbText.text = AW_L10n.Text("aw_vassal_absorb_action", "\u76EE\u6807");
+        }
+
+        private static void ApplyLiveKingdomVisuals(VassalRelationInfo pObject)
+        {
+            Kingdom live = FindKingdom(pObject.kingdom_id);
+            if (live?.data == null || live.isRekt()) return;
+            pObject.kingdom_name = live.name ?? pObject.kingdom_name;
+            pObject.color_text = HistoryColors.FromKingdom(live);
+            pObject.color_id = live.data.color_id;
+            pObject.banner_icon_id = live.data.banner_icon_id;
+            pObject.banner_background_id = live.data.banner_background_id;
+            try { pObject.banner_id = live.getActorAsset()?.banner_id ?? pObject.banner_id; }
+            catch { }
         }
 
         private static string BuildText(VassalRelationInfo pObject)
@@ -120,6 +168,27 @@ namespace AncientWarfare3.ui.items
             _tip.hoverAction = () =>
                 Tooltip.show(gameObject, AW_RawTooltip.TYPE,
                     new TooltipData { tip_name = title, tip_description = desc });
+        }
+
+        private void SetupAbsorbButton(VassalRelationInfo pObject)
+        {
+            if (_absorbObj == null) return;
+            bool visible = pObject.can_absorb_by_context && pObject.context_kingdom_id >= 0;
+            _absorbObj.SetActive(visible);
+            if (!visible || _absorbTip == null) return;
+
+            _absorbTip.enabled = true;
+            _absorbTip.type = AW_RawTooltip.TYPE;
+            string target = Fallback(pObject.kingdom_name);
+            _absorbTip.hoverAction = () =>
+                Tooltip.show(_absorbObj, AW_RawTooltip.TYPE,
+                    new TooltipData
+                    {
+                        tip_name = AW_L10n.Text("aw_vassal_absorb_action", "\u76EE\u6807"),
+                        tip_description = AW_L10n.Text("aw_vassal_absorb_action_desc",
+                            "\u9009\u62E9\u4E3A\u541E\u5E76\u9644\u5EB8\u51B3\u7B56\u76EE\u6807\uFF0C\u5B9E\u9645\u541E\u5E76\u5728\u56FD\u5BB6\u51B3\u7B56\u5B8C\u6210\u65F6\u6267\u884C") +
+                                          "\n" + DecisionTargetTextRules.TargetLine(target)
+                    });
         }
 
         private static string BuildTip(VassalRelationInfo pObject)
@@ -158,6 +227,31 @@ namespace AncientWarfare3.ui.items
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
             if (kingdom != null && !kingdom.isRekt())
                 MetaType.Kingdom.getAsset().selectAndInspect(kingdom);
+        }
+
+        private void OnClickAbsorbTarget()
+        {
+            Kingdom context = FindKingdom(_contextKingdomId);
+            Kingdom target = FindKingdom(_kingdomId);
+            if (context == null || target == null) return;
+            if (KingdomPolicyService.StartDecisionWithTarget(context, "aw_decision_absorb_vassal", target))
+                VassalRelationWindow.Open(context.id);
+        }
+
+        private static Kingdom FindKingdom(long pId)
+        {
+            if (pId < 0 || World.world?.kingdoms == null) return null;
+            try
+            {
+                Kingdom direct = World.world.kingdoms.get(pId);
+                if (direct?.data != null && !direct.isRekt()) return direct;
+            }
+            catch { }
+
+            foreach (Kingdom kingdom in World.world.kingdoms)
+                if (kingdom?.data != null && !kingdom.isRekt() && kingdom.id == pId)
+                    return kingdom;
+            return null;
         }
 
         private static string FormatDate(double pTime)

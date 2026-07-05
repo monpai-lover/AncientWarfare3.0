@@ -1,0 +1,39 @@
+﻿key,cz,en,ch
+aw_decision_fabricate_core,制造核心,Fabricate Core,製造核心
+aw_decision_fabricate_core_desc,在本国控制的非核心城市制造核心,Fabricate a core in a controlled non core city,在本國控制的非核心城市製造核心
+aw_decision_fabricate_weak_claim,制造弱宣称,Fabricate Weak Claim,製造弱宣稱
+aw_decision_fabricate_weak_claim_desc,在接壤的他国城市制造较快但会过期的弱宣称,Fabricate a faster expiring weak claim on a bordering foreign city,在接壤的他國城市製造較快但會過期的弱宣稱
+aw_decision_fabricate_strong_claim,制造强宣称,Fabricate Strong Claim,製造強宣稱
+aw_decision_fabricate_strong_claim_desc,在接壤的他国城市制造更稳定的强宣称,Fabricate a stronger claim on a bordering foreign city,在接壤的他國城市製造更穩定的強宣稱
+aw_decision_seek_suzerain,请求臣属,Seek Suzerain,請求臣屬
+aw_decision_seek_suzerain_desc,小国在威胁下主动向强国臣属,Submit voluntarily to a stronger kingdom under threat,小國在威脅下主動向強國臣屬
+aw_war_own_non_core,本国非核心,Own Non Core,本國非核心
+aw_loyalty_non_core_territory,非核心领土,Non core territory,非核心領土
+aw_war_targets,战争目标,War Targets,戰爭目標
+aw_war_targets Title,战争目标,War Targets,戰爭目標
+aw_war_targets_title,战争目标,War Targets,戰爭目標
+aw_war_targets_desc,宣战理由与战争目标,Casus belli and war goals,宣戰理由與戰爭目標
+aw_war_no_targets,当前没有可用目标,No available targets,目前沒有可用目標
+aw_war_fabricate_core,制造核心,Fabricate Core,製造核心
+aw_war_fabricate_core_desc,在本国控制的非核心城市制造核心,Fabricate a core in a controlled non core city,在本國控制的非核心城市製造核心
+aw_war_fabricate_weak_claim,制造弱宣称,Fabricate Weak Claim,製造弱宣稱
+aw_war_fabricate_strong_claim,制造强宣称,Fabricate Strong Claim,製造強宣稱
+aw_war_reclaim,收复核心,Reclaim Core,收復核心
+aw_war_reclaim_desc,收复该国占据的核心城市,Reclaim a core city held by the target,收復該國占據的核心城市
+aw_war_press_claim,按宣称宣战,Press Claim,按宣稱宣戰
+aw_war_press_claim_desc,按强弱宣称发动战争,Start a war using a strong or weak claim,按強弱宣稱發動戰爭
+aw_war_force_vassal,强制臣服,Force Vassalage,強制臣服
+aw_war_force_vassal_desc,迫使目标成为附庸,Force the target to become a vassal,迫使目標成為附庸
+aw_war_independence,独立战争,Independence War,獨立戰爭
+aw_war_independence_desc,对当前宗主发动独立战争,Start an independence war against the suzerain,對當前宗主發動獨立戰爭
+aw_war_restoration,复国战争,Restoration War,復國戰爭
+aw_war_restoration_desc,以亡国王室血统发起复国战争,Restore a fallen realm by royal bloodline,以亡國王室血統發起復國戰爭
+aw_war_no_cb,强宣,No CB War,強宣
+aw_war_no_cb_desc,无理由宣战,War without a valid casus belli,無理由宣戰
+aw_war_no_cb_cooldown,强宣冷却至,No CB cooldown until,強宣冷卻至
+aw_war_no_cb_penalty,消耗政治点数并增加合法性外交和叛乱风险惩罚,Costs political points and adds legitimacy diplomacy and rebellion penalties,消耗政治點數並增加合法性外交和叛亂風險懲罰
+aw_war_target_action_project,筹备,Prepare,籌備
+aw_war_target_action_war,宣战,Declare,宣戰
+aw_war_target_city,目标城市：,Target city:,目標城市：
+aw_war_target_selected_kingdom,目标国：,Target realm:,目標國：
+aw_war_target_selected_city,选中城市：,Selected city:,選中城市：

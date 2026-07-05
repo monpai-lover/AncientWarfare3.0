@@ -1,6 +1,8 @@
 using System.Reflection;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace AncientWarfare3.core.policy
 {
@@ -10,14 +12,31 @@ namespace AncientWarfare3.core.policy
         private const string IconRebel = "ui/Icons/traits/iconrebel";
         private const string IconPseudo = "ui/wars/Mandate_of_Heaven";
 
-        private static readonly MethodInfo ShowSpecialMethod =
-            AccessTools.Method(typeof(NameplateText), "showSpecial");
+        private static readonly FieldInfo SpecialIconField =
+            AccessTools.Field(typeof(NameplateText), "_icon_special");
+
+        private static readonly FieldInfo ShowSpecialIconField =
+            AccessTools.Field(typeof(NameplateText), "_show_icon_special");
 
         public static void ApplyNameplate(NameplateText pNameplate, Kingdom pKingdom)
         {
             string icon = GetMarkerIcon(pKingdom);
-            if (string.IsNullOrEmpty(icon) || ShowSpecialMethod == null || pNameplate == null) return;
-            try { ShowSpecialMethod.Invoke(pNameplate, new object[] { icon }); }
+            if (string.IsNullOrEmpty(icon) || pNameplate == null) return;
+            ReplaceSpecialIcon(pNameplate, icon);
+        }
+
+        private static void ReplaceSpecialIcon(NameplateText pNameplate, string pIconPath)
+        {
+            if (SpecialIconField == null || ShowSpecialIconField == null) return;
+            try
+            {
+                Image icon = SpecialIconField.GetValue(pNameplate) as Image;
+                if (!MandateMapMarkerRules.ShouldUseSpecialIcon(pIconPath, icon != null)) return;
+                Sprite sprite = SpriteTextureLoader.getSprite(pIconPath);
+                if (sprite == null) return;
+                ShowSpecialIconField.SetValue(pNameplate, true);
+                icon.sprite = sprite;
+            }
             catch { }
         }
 

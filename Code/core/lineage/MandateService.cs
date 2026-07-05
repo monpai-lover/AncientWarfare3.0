@@ -58,6 +58,11 @@ namespace AncientWarfare3.core.lineage
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
+        public static bool IsMandateKingdom(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null && GetCurrentMandateKingdom()?.id == pKingdom.id;
+        }
+
         public static Kingdom GetCurrentMandateKingdom()
         {
             MandateReport report = ReadReport();
@@ -148,6 +153,7 @@ namespace AncientWarfare3.core.lineage
             long periodId = TableIdAllocator.Next(DB, MandatePeriodTableItem.GetTableName(), "PERIOD_ID");
             double now = LineageService.CurTime();
             Actor king = pKingdom.king;
+            HeirService.EnsureLegitimateLine(pKingdom, king);
             string dynastyName = MakeDynastyName(pKingdom);
 
             DB.Insert(MandatePeriodTableItem.GetTableName(),
@@ -226,17 +232,17 @@ namespace AncientWarfare3.core.lineage
             bool historicalFigure = IsHistoricalFigureKing(pKingdom);
             KingdomTitle title = KingdomTitleService.GetTitle(pKingdom);
             int cityCount = CountCities(pKingdom);
-            bool tooSmall = historicalFigure
-                ? cityCount < 4
-                : title < KingdomTitle.King && cityCount < 4;
-            if (tooSmall)
+            if (!MandateDeclarationRules.HasEnoughRealmToDeclare(cityCount, (int)title,
+                    historicalFigure, 4, (int)KingdomTitle.King))
             {
                 pReason = "too_small";
                 return false;
             }
 
             MandateReport last = ReadReport();
-            if (!last.active && last.core_count > 0 && GetCoreControlRatio(pKingdom, last.period_id) < RESTORE_CORE_THRESHOLD)
+            if (MandateDeclarationRules.NeedsLegalCoreControl(last.core_count, last.active) &&
+                !MandateDeclarationRules.HasEnoughLegalCoreControl(
+                    GetCoreControlRatio(pKingdom, last.period_id), RESTORE_CORE_THRESHOLD))
             {
                 pReason = "core_control";
                 return false;
@@ -279,7 +285,8 @@ namespace AncientWarfare3.core.lineage
                     pReason = "already_exists";
                     return false;
                 }
-                if (GetCoreControlRatioFor(pKingdom) < RESTORE_CORE_THRESHOLD)
+                if (!MandateDeclarationRules.HasEnoughLegalCoreControl(
+                        GetCoreControlRatioFor(pKingdom), RESTORE_CORE_THRESHOLD))
                 {
                     pReason = "core_control";
                     return false;
@@ -317,6 +324,33 @@ namespace AncientWarfare3.core.lineage
             return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
         }
 
+        public static bool ShouldBlockPeacefulFellApart(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || !IsMandateKingdom(pKingdom)) return false;
+            MandateReport report = ReadReport();
+            bool hasCandidate = HeirService.HasSuccessionCandidate(pKingdom);
+            return MandateSuccessionRules.ShouldBlockPeacefulFellApart(
+                pIsActiveMandate: report.active && report.kingdom_id == pKingdom.id,
+                pMandateValue: report.mandate_value,
+                pCrisisLevel: report.crisis_level,
+                pHasSuccessionCandidate: hasCandidate);
+        }
+
+        public static void OnPeacefulFellApartBlocked(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || !IsMandateKingdom(pKingdom)) return;
+            int year = Date.getCurrentYear();
+            pKingdom.data.get(LineageKeys.MANDATE_SUCCESSION_CRISIS_YEAR, out int lastYear, int.MinValue);
+            if (!MandateSuccessionRules.ShouldRecordSuccessionCrisis(lastYear, year)) return;
+
+            pKingdom.data.set(LineageKeys.MANDATE_SUCCESSION_CRISIS_YEAR, year);
+            ChangeMandate(pKingdom, -4, "mandate_succession_crisis",
+                (pKingdom.name ?? "") + " \u56FD\u672C\u4E0D\u7A33\uFF0C\u8BF8\u57CE\u4E00\u5EA6\u6709\u79BB\u5FC3");
+            HistoryWriter.RecordKingdom(pKingdom, "mandate_succession_crisis",
+                HistoryText.Kingdom(pKingdom) + " \u56FD\u672C\u4E0D\u7A33\uFF0C\u5929\u547D\u56E0\u7EE7\u627F\u5371\u673A\u53D7\u635F",
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
         public static long GetCurrentPeriodId()
         {
             return ReadReport().period_id;
@@ -327,6 +361,41 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return false;
             ReadReport();
             return _coreCityIds.Contains(pCity.id);
+        }
+
+        public static void OnKingdomCoreCreated(Kingdom pKingdom, City pCity, string pSourceType)
+        {
+            if (!Ready || pKingdom?.data == null || pCity?.data == null) return;
+            MandateReport report = ReadReport();
+            bool isActiveMandateKingdom = report.active && report.kingdom_id == pKingdom.id && report.period_id >= 0;
+            bool alreadyLegal = _coreCityIds.Contains(pCity.id);
+            if (!MandateCoreMapRules.ShouldAddNewKingdomCoreToMandateLegalCore(isActiveMandateKingdom, alreadyLegal))
+                return;
+
+            long coreId = TableIdAllocator.Next(DB, MandateCoreCityTableItem.GetTableName(), "CORE_ID");
+            try
+            {
+                DB.Insert(MandateCoreCityTableItem.GetTableName(),
+                    ColumnVal.Create("CORE_ID", coreId),
+                    ColumnVal.Create("PERIOD_ID", report.period_id),
+                    ColumnVal.Create("CITY_ID", pCity.id),
+                    ColumnVal.Create("CITY_NAME", pCity.data.name ?? ""),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_ID", pKingdom.id),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_NAME", pKingdom.name ?? ""),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_COLOR", HistoryColors.FromKingdom(pKingdom)),
+                    ColumnVal.Create("CORE_TYPE", string.IsNullOrEmpty(pSourceType) ? "expanded" : pSourceType),
+                    ColumnVal.Create("ADDED_TIME", LineageService.CurTime()),
+                    ColumnVal.Create("ACTIVE", 1));
+
+                _coreCityIds.Add(pCity.id);
+                UpdateOriginalCoreCount(report.period_id);
+                RecordEvent("mandate_core_added", pKingdom, pKingdom.king, pCity, 0, report.mandate_value,
+                    (pCity.data.name ?? "") + " 纳入天命法理核心");
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Mandate legal core sync failed: " + e.Message);
+            }
         }
 
         public static float GetCoreControlRatioFor(Kingdom pKingdom)
@@ -462,6 +531,37 @@ namespace AncientWarfare3.core.lineage
             }
 
             return CoreLostColor();
+        }
+
+        public static ColorAsset GetCoreMapColor(City pCity, ColorAsset pFallback)
+        {
+            string status = GetCoreMapStatus(pCity);
+            switch (status)
+            {
+                case "controlled": return CoreControlledColor();
+                case "vassal": return CoreVassalColor();
+                case "lost":
+                case "orphan":
+                    return CoreLostColor();
+                default:
+                    return pFallback;
+            }
+        }
+
+        public static string GetCoreMapStatus(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return "none";
+            MandateReport report = ReadReport();
+            if (report.period_id < 0 || _coreCityIds.Count == 0) return "none";
+
+            Kingdom mandate = GetCurrentMandateKingdom();
+            Kingdom owner = pCity.kingdom;
+            return MandateCoreMapRules.SelectCoreStatus(
+                _coreCityIds.Contains(pCity.id),
+                mandate?.data != null,
+                owner?.data != null,
+                owner?.data != null && mandate?.data != null && owner == mandate,
+                owner?.data != null && mandate?.data != null && VassalService.GetRootSuzerain(owner) == mandate);
         }
 
         public static Color32 GetDynastyTileColor(City pCity)
@@ -656,6 +756,7 @@ namespace AncientWarfare3.core.lineage
             else if (pReport.core_control < 0.5f) delta -= 4;
             if (pReport.vassal_loyalty >= 0.7f) delta += 1;
             else if (pReport.vassal_loyalty < 0.35f) delta -= 2;
+            delta += HeirService.GetMandateChildScarcityPenalty(pKingdom);
 
             Actor king = pKingdom.king;
             if (king?.data != null)
@@ -687,13 +788,18 @@ namespace AncientWarfare3.core.lineage
             return Mathf.Clamp(Mathf.RoundToInt(score), 0, 100);
         }
 
-        private static void ChangeMandate(Kingdom pKingdom, int pDelta, string pEventType)
+        private static void ChangeMandate(Kingdom pKingdom, int pDelta, string pEventType, string pContent = null)
         {
             MandateReport r = ReadReport();
             if (!r.active || pKingdom?.data == null || pKingdom.id != r.kingdom_id) return;
             int next = Mathf.Clamp(r.mandate_value + pDelta, MIN_VALUE, MAX_VALUE);
             UpdateState(pKingdom, r.period_id, next, r.imperial_authority, r.dynasty_prestige, r.core_control,
                 r.vassal_loyalty, CrisisLevel(next), Date.getCurrentYear());
+            if (!string.IsNullOrEmpty(pContent))
+            {
+                RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next, pContent);
+                return;
+            }
             RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next,
                 pKingdom.name + " 天命变化 " + Signed(pDelta) + "，当前 " + next);
         }

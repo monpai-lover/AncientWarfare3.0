@@ -71,6 +71,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
+            if (MandateService.IsMandateKingdom(pKingdom))
+                MandateRulerTitleService.OnMandateReignEnded(pKingdom, pKing, pReign, pEndReason);
 
             HistoryText posthumousText = BuildTitleEventText(pKing, pEndReason, fullTitle, titleColor, eval.Reason);
             /*

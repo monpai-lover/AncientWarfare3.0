@@ -59,17 +59,24 @@ aw_locate_clan_tree,定位氏族大树,Locate Clan Tree,定位氏族大樹
 aw_locate_clan_tree_desc,在氏族大树中定位该人物并只展开相关祖先链,Locate this person in the clan tree and expand only the ancestor path,在氏族大樹中定位該人物並只展開相關祖先鏈
 aw_tree_locate_target,目标,Target,目標
 aw_war_targets,战争目标,War Targets,戰爭目標
+aw_war_targets Title,战争目标,War Targets,戰爭目標
 aw_war_targets_title,战争目标,War Targets,戰爭目標
 aw_war_targets_desc,宣战理由与战争目的,Casus Belli and War Goals,宣戰理由與戰爭目的
 aw_view_war_targets,查看宣战理由战争目的和制造核心宣称,View casus belli war goals and core claim fabrication,查看宣戰理由戰爭目的和製造核心宣稱
 aw_war_no_targets,当前没有可用目标,No available targets,目前沒有可用目標
 aw_war_fabricate_core,制造核心,Fabricate Core,製造核心
+aw_war_fabricate_core_desc,在本国控制的非核心城市制造核心,Fabricate a core in a controlled non-core city,在本國控制的非核心城市製造核心
 aw_war_fabricate_weak_claim,制造弱宣称,Fabricate Weak Claim,製造弱宣稱
 aw_war_fabricate_strong_claim,制造强宣称,Fabricate Strong Claim,製造強宣稱
+aw_war_fabricate_strong_claim_desc,在接壤的他国城市制造更稳定的强宣称,Fabricate a stronger claim on a bordering foreign city,在接壤的他國城市製造更穩定的強宣稱
 aw_war_reclaim_core,收复核心,Reclaim Core,收復核心
 aw_war_press_claim,按宣称宣战,Press Claim,按宣稱宣戰
 aw_war_force_vassal,附庸战争,Vassal War,附庸戰爭
+aw_war_independence,独立战争,Independence War,獨立戰爭
+aw_war_restore_kingdom,复国战争,Restoration War,復國戰爭
 aw_war_no_cb,强宣,No-CB War,強宣
+aw_decision_declare_war,兴师宣战,Declare War,興師宣戰
+aw_decision_declare_war_desc,按已选定的宣战理由和战争目标发动战争,Start a war using the selected casus belli and war goal,按已選定的宣戰理由和戰爭目標發動戰爭
 aw_tech_writing,文字记事,Writing Records,文字記事
 aw_tech_writing_desc,建立稳定的政府记录并解锁更复杂的国策,Create stable records and unlock more complex policies,建立穩定的政府記錄並解鎖更複雜的國策
 aw_tech_pottery_casting,陶范铸造,Clay Mold Casting,陶範鑄造
@@ -122,3 +129,21 @@ aw_policy_early_law,律令雏形,Early Law Code,律令雛形
 aw_policy_early_law_desc,把征发赋税身份和刑罚写入固定条例为废奴做准备,Write levies taxes status and penalties into fixed rules,把徵發賦稅身份和刑罰寫入固定條例為廢奴做準備
 aw_policy_abolish_slavery,废奴制,Abolish Slavery,廢奴制
 aw_policy_abolish_slavery_desc,关闭国家奴隶制开关并停止新的奴隶制扩张,Disable slavery policy and stop further slave expansion,關閉國家奴隸制開關並停止新的奴隸制擴張
+aw_city_economy_role_capital_admin,都城政务,Capital Administration,都城政务
+aw_city_economy_role_agrarian_granary,农桑粮仓,Agrarian Granary,农桑粮仓
+aw_city_economy_role_market_trade,市集商贸,Market Trade,市集商贸
+aw_city_economy_role_frontier_military,边地军镇,Frontier Military,边地军镇
+aw_city_economy_role_workshop_craft,工坊手工业,Workshop Craft,工坊手工业
+aw_city_economy_role_occupied_unrest,占领动荡,Occupied Unrest,占领动荡
+aw_war_target_detail_title,战争目标,War Target,战争目标
+aw_war_target_claimant,复国宣称人,Restoration Claimant,复国宣称人
+aw_peace_term_transfer_city,割让目标城市,Transfer Target City,割让目标城市
+aw_peace_term_force_vassal,强制臣服,Force Vassalage,强制臣服
+aw_peace_term_release_vassal,承认独立,Release Vassal,承认独立
+aw_peace_term_restore_kingdom,复立旧国,Restore Kingdom,复立旧国
+aw_general_rebellion_palace_coup,逼宫夺位,Palace Coup,逼宫夺位
+aw_general_rebellion_fief_independence,封地独立,Fief Independence,封地独立
+aw_general_rebellion_defect_neighbor,投附强邻,Defect to Neighbor,投附强邻
+aw_general_rebellion_support_restoration,拥立复国,Support Restoration,拥立复国
+aw_mandate_temple_title,天命庙号,Mandate Temple Name,天命庙号
+aw_mandate_double_posthumous,天命双字谥号,Mandate Double Posthumous Title,天命双字谥号

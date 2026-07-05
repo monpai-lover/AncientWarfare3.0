@@ -439,7 +439,7 @@ namespace AncientWarfare3.ui.windows
                 if (_policyStateText != null)
                 {
                     _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
-                    _policyStateText.color = pKingdom.getColor().getColorText();
+                    _policyStateText.color = DirectKingdomTextColor(pKingdom);
                 }
                 if (_policyExecText != null)
                 {
@@ -473,7 +473,7 @@ namespace AncientWarfare3.ui.windows
             if (_policyStateText != null)
             {
                 _policyStateText.text = AW_L10n.Text("aw_policy_state_short", "\u653F");
-                _policyStateText.color = pKingdom.getColor().getColorText();
+                _policyStateText.color = DirectKingdomTextColor(pKingdom);
             }
 
             string current = BuildCurrentPolicyText(pKingdom);
@@ -505,7 +505,7 @@ namespace AncientWarfare3.ui.windows
             if (_vassalStatusText != null)
             {
                 _vassalStatusText.text = VassalService.GetStatusShort(pKingdom);
-                _vassalStatusText.color = pKingdom.getColor().getColorText();
+                _vassalStatusText.color = DirectKingdomTextColor(pKingdom);
             }
             SetPolicyTip(_vassalStatusTip, AW_L10n.Text("aw_vassal_relations", "\u9644\u5EB8\u5173\u7CFB"),
                 VassalService.GetStatusTooltip(pKingdom));
@@ -527,9 +527,12 @@ namespace AncientWarfare3.ui.windows
         private static string BuildCurrentDecisionText(Kingdom pKingdom)
         {
             KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
-            return decision == null
-                ? AW_L10n.Text("aw_policy_no_current_decision", "\u5F53\u524D\u6CA1\u6709\u51B3\u7B56")
-                : AW_L10n.Text(decision.NameKey, decision.FallbackName);
+            if (decision == null)
+                return AW_L10n.Text("aw_policy_no_current_decision", "\u5F53\u524D\u6CA1\u6709\u51B3\u7B56");
+
+            string name = AW_L10n.Text(decision.NameKey, decision.FallbackName);
+            string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
+            return string.IsNullOrEmpty(target) ? name : name + "\n" + target;
         }
 
         private void RefreshPolicyButtonIcons(Kingdom pKingdom)
@@ -620,7 +623,7 @@ namespace AncientWarfare3.ui.windows
                 {
                     if (yearBox != null) yearBox.gameObject.SetActive(true);
                     _yearText.text = yearName;
-                    _yearText.color = kingdom.getColor().getColorText();
+                    _yearText.color = DirectKingdomTextColor(kingdom);
                 }
             }
 
@@ -650,6 +653,13 @@ namespace AncientWarfare3.ui.windows
                 Transform heirLabel = _heirCol.transform.Find("Label");
                 if (heirLabel != null) heirLabel.gameObject.SetActive(hasHeir);
             }
+        }
+
+        private static Color DirectKingdomTextColor(Kingdom pKingdom)
+        {
+            ColorAsset color = KingdomFlagBuilder.ResolveColor(HistoryColors.FromKingdom(pKingdom),
+                pKingdom?.data?.color_id ?? -1);
+            return color != null ? color.getColorText() : Color.white;
         }
     }
 }
