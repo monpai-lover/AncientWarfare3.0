@@ -67,7 +67,8 @@ namespace AncientWarfare3.core.lineage
             if (!pForce)
             {
                 pKingdom.data.get(LineageKeys.ROYAL_GUARD_LAST_CHECK, out int lastCheck, -1);
-                if (lastCheck >= 0 && now - lastCheck < CHECK_INTERVAL) return;
+                if (!RoyalGuardMaintenanceRules.ShouldRunScheduledCheck(now, lastCheck, CHECK_INTERVAL, pKingdom.id))
+                    return;
             }
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_LAST_CHECK, now);
 
@@ -75,6 +76,19 @@ namespace AncientWarfare3.core.lineage
             if (king?.data == null || king.isRekt())
             {
                 DismissKingdomGuards(pKingdom, "no_king");
+                return;
+            }
+
+            bool kingIsXia = LineageService.IsXia(king);
+            if (!kingIsXia)
+            {
+                if (RoyalGuardMaintenanceRules.ShouldDismissNonXiaKingdom(
+                        pKingIsXia: false,
+                        pHasGuardStateHint: HasKingdomGuardStateHint(pKingdom)))
+                {
+                    DismissKingdomGuards(pKingdom, "non_xia_king");
+                    ClearKingdomGuardStateHints(pKingdom);
+                }
                 return;
             }
 
@@ -332,16 +346,20 @@ namespace AncientWarfare3.core.lineage
         private static bool IsGuardCandidate(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
-            if (pActor.kingdom != pKingdom) return false;
-            if (!LineageService.IsXia(pActor)) return false;
-            if (pActor.asset.is_boat) return false;
-            if (pActor.isRekt() || !pActor.isAdult()) return false;
-            if (pActor.isKing() || pActor.isCityLeader()) return false;
-            if (SlaveService.IsSlave(pActor) || SlaveService.IsRetiredSoldier(pActor)) return false;
-            if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
-            if (pActor.hasTrait("madness")) return false;
-            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
-            return true;
+            return RoyalGuardSelectionRules.IsEligibleCore(
+                isXia: LineageService.IsXia(pActor),
+                sameKingdom: pActor.kingdom == pKingdom,
+                isMale: pActor.isSexMale(),
+                isBoat: pActor.asset.is_boat,
+                isRekt: pActor.isRekt(),
+                isAdult: pActor.isAdult(),
+                isKing: pActor.isKing(),
+                isCityLeader: pActor.isCityLeader(),
+                isSlave: SlaveService.IsSlave(pActor),
+                isRetiredSoldier: SlaveService.IsRetiredSoldier(pActor),
+                isCurrentHeir: HeirService.IsCurrentHeir(pKingdom, pActor),
+                hasMadness: pActor.hasTrait("madness"),
+                isHistoricalFigure: pActor.hasTrait("figure") || pActor.hasTrait("first"));
         }
 
         private static void FillNobleQuota(Kingdom pKingdom, List<Actor> pActive,
@@ -452,6 +470,21 @@ namespace AncientWarfare3.core.lineage
                 if (IsRoyalGuard(unit))
                     DismissGuard(unit, pReason);
             }
+        }
+
+        private static bool HasKingdomGuardStateHint(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_RECORDED, out bool recorded, false);
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ARMY_ID, out long armyId, -1L);
+            return recorded || armyId >= 0;
+        }
+
+        private static void ClearKingdomGuardStateHints(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_RECORDED, false);
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, -1L);
         }
 
         private static void DismissGuard(Actor pActor, string pReason, bool pRecord, bool pKeepTrait)

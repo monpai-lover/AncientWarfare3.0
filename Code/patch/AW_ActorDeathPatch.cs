@@ -39,6 +39,10 @@ namespace AncientWarfare3.patch
                 DyingKingActorId = __instance.data.id;
                 ChronicleEvents.OnKingDied(__instance.kingdom, __instance);
             }
+            else
+            {
+                PosthumousTitleService.OnFormerRulerDied(__instance);
+            }
 
             __instance.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
             if (lid >= 0)

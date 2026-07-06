@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.lineage
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
             if (lastKingId == pNewKing.data.id) return;
+            RecordPreviousKingLostThrone(pKingdom, lastKingId, pNewKing.data.id);
             pKingdom.data.set(LineageKeys.CHRONICLE_LAST_KING_ID, pNewKing.data.id);
 
             string kingName = pNewKing.getName();
@@ -34,6 +35,19 @@ namespace AncientWarfare3.core.lineage
             ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
             DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
             ReignRecordWriter.OpenReign(pKingdom, pNewKing);
+        }
+
+        private static void RecordPreviousKingLostThrone(Kingdom pKingdom, long pPreviousKingId, long pNewKingId)
+        {
+            Actor previous = pPreviousKingId < 0 ? null : World.world?.units?.get(pPreviousKingId);
+            bool alive = previous?.data != null && !previous.isRekt() && previous.isAlive();
+            if (!FormerRulerRecordRules.ShouldRecordLostThrone(pPreviousKingId, pNewKingId, alive)) return;
+
+            string name = previous.getName();
+            HistoryText text = HistoryText.Actor(previous, name) + HistoryText.PlainText(" \u5931\u4F4D");
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE, text, HistoryTarget.Actor(previous));
+            HistoryWriter.RecordPerson(previous.data.id, pKingdom, name,
+                PersonEvent.ABDICATE, text, ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
         }
 
         // 建国

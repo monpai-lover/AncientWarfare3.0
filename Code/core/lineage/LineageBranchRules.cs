@@ -15,6 +15,14 @@ namespace AncientWarfare3.core.lineage
             return parent1Id == kingId || parent2Id == kingId;
         }
 
+        public static bool ShouldApplyCollateralRestoration(string successionMode, bool wasHeir,
+            bool isCurrentHeir, bool isDirectSuccessionFromPreviousKing)
+        {
+            if (successionMode != "collateral_restore") return false;
+            if (wasHeir || isCurrentHeir || isDirectSuccessionFromPreviousKing) return false;
+            return true;
+        }
+
         public static bool ShouldFoundKingBranch(
             bool validKingdom,
             bool isXiaKing,

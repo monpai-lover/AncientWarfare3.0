@@ -115,6 +115,18 @@ namespace AncientWarfare3.core.lineage
             return GetLeaderSuccessionCandidate(pKingdom) != null;
         }
 
+        public static void RefreshForNewRoyalChild(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null || !pBaby.isSexMale()) return;
+            Actor father = FindFather(pParent1, pParent2);
+            if (father?.data == null) return;
+            Kingdom kingdom = father.kingdom;
+            bool fatherIsCurrentKing = kingdom?.king == father || father.isKing();
+            if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(pBaby.isSexMale(), fatherIsCurrentKing))
+                return;
+            RefreshHeir(kingdom);
+        }
+
         public static int GetMandateChildScarcityPenalty(Kingdom pKingdom)
         {
             Actor king = pKingdom?.king;
@@ -334,7 +346,20 @@ namespace AncientWarfare3.core.lineage
             long royalClanId = pKingdom.data.royal_clan_id;
             if (royalClanId < 0) return null;
             var clan = World.world.clans.get(royalClanId);
-            return clan == null ? null : PickClosest(new List<Actor>(clan.units), pKing, pPreferMale: false);
+            if (clan == null) return null;
+
+            var candidates = new List<Actor>();
+            foreach (Actor member in clan.units)
+            {
+                if (!HeirCandidateRules.IsFallbackEligibleCore(
+                        isSuitable: IsSuitableHeir(member, pKing),
+                        sameKingdom: member?.kingdom == pKingdom,
+                        hasLineage: HasLineage(member),
+                        hasShi: HasShi(member)))
+                    continue;
+                candidates.Add(member);
+            }
+            return PickClosest(candidates, pKing, pPreferMale: false);
         }
 
         private static Actor FindCollateralRestorationHeir(Kingdom pKingdom, Actor pKing)
@@ -522,6 +547,13 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
+        private static Actor FindFather(Actor pParent1, Actor pParent2)
+        {
+            if (pParent1?.data != null && pParent1.isSexMale()) return pParent1;
+            if (pParent2?.data != null && pParent2.isSexMale()) return pParent2;
+            return null;
+        }
+
         private static bool IsDirectChildOf(Actor pActor, Actor pParent)
         {
             if (pActor?.data == null || pParent?.data == null) return false;
@@ -611,6 +643,20 @@ namespace AncientWarfare3.core.lineage
             if (!pActor.isAdult()) return false;
             if (pActor.hasTrait("madness")) return false;
             return true;
+        }
+
+        private static bool HasLineage(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1L);
+            return lineage >= 0;
+        }
+
+        private static bool HasShi(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.SHI_ID, out long shi, -1L);
+            return shi >= 0;
         }
 
         private static bool IsSuitableRegisteredHeir(Actor pActor, Actor pKing)

@@ -6,7 +6,6 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_BirthLimitPatch
     {
-        private const int KING_CHILD_CAP = 8;
         private const int LEADER_CHILD_CAP = 6;
         private const int NOBLE_CHILD_CAP = 4;
 
@@ -44,7 +43,7 @@ namespace AncientWarfare3.patch
         {
             if (pActor?.data == null) return -1;
             if (!LineageService.IsXia(pActor)) return -1;
-            if (pActor.isKing()) return KING_CHILD_CAP;
+            if (pActor.isKing()) return RoyalSuccessionBirthRules.KingChildCap(HasLivingDirectSon(pActor));
             if (pActor.isCityLeader()) return LEADER_CHILD_CAP;
 
             pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
@@ -52,6 +51,18 @@ namespace AncientWarfare3.patch
 
             pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
             return status == LineageStatus.NOBLE ? NOBLE_CHILD_CAP : -1;
+        }
+
+        private static bool HasLivingDirectSon(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            foreach (Actor child in pActor.getChildren(false))
+            {
+                if (child?.data == null || child.isRekt()) continue;
+                if (child.isSexMale()) return true;
+            }
+
+            return false;
         }
     }
 }

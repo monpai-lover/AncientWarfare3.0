@@ -197,8 +197,12 @@ namespace AncientWarfare3.core.policy
         {
             if (pCity?.data == null || pKingdom?.data == null) return;
             bool roleChanged = pExisted && !string.Equals(pPreviousRole, pRole, StringComparison.Ordinal);
-            bool majorTax = pContribution.TaxValue >= 25f;
-            if (pExisted && !roleChanged && !majorTax) return;
+            int year = Date.getCurrentYear();
+            pCity.data.get(LineageKeys.CITY_ECONOMY_MAJOR_TAX_YEAR, out int lastMajorTaxYear, -99999);
+            if (!CityEconomyMilestoneRules.ShouldRecord(pExisted, roleChanged, pContribution.TaxValue,
+                    year, lastMajorTaxYear)) return;
+            if (pContribution.TaxValue >= CityEconomyMilestoneRules.MajorTaxThreshold)
+                pCity.data.set(LineageKeys.CITY_ECONOMY_MAJOR_TAX_YEAR, year);
 
             string roleName = LocalizedRoleName(pRole);
             HistoryText text = HistoryText.City(pCity, pKingdom) +
@@ -255,8 +259,7 @@ namespace AncientWarfare3.core.policy
         {
             try
             {
-                WarTerritoryService.TerritoryStatus status = WarTerritoryService.GetCoreStatus(pKingdom, pCity);
-                return status.status == "owned_non_core";
+                return WarTerritoryService.IsOwnedNonCore(pKingdom, pCity);
             }
             catch
             {

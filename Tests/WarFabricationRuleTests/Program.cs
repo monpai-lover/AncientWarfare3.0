@@ -275,6 +275,7 @@ namespace WarFabricationRuleTests
             ExpectRestorationSettlementRules();
             ExpectSlaveArmyNameRefreshRule();
             ExpectCityMaintenanceThrottleRules();
+            ExpectRoyalGuardMaintenanceRules();
             ExpectNonCoreLoyaltyRules();
             ExpectWarTerritoryCacheRules();
             ExpectFamilyTreePortraitFrameRules();
@@ -282,12 +283,24 @@ namespace WarFabricationRuleTests
             ExpectMandateSuccessionRules();
             ExpectHeirRecallRules();
             ExpectLineageBranchRules();
+            ExpectRoyalGuardSelectionRules();
+            ExpectXiaAuthorityGenderRules();
+            ExpectHeirCandidateRules();
+            ExpectRoyalSuccessionBirthRules();
+            ExpectFormerRulerPosthumousRules();
+            ExpectFormerRulerRecordRules();
+            ExpectSetKingPostfixRules();
+            ExpectCityEconomyMilestoneRules();
             ExpectAncestryDisplayRules();
             ExpectMandateMapMarkerRules();
             ExpectLineageArchiveIndexRules();
             ExpectMapModeMetaCacheRules();
+            ExpectMapModeDirtyThrottleRules();
             ExpectKingdomYearSchedulerRules();
+            ExpectFiefCacheRules();
             ExpectXiaNameRepairRules();
+            ExpectCityTechChronicleRules();
+            ExpectCityMaintenanceBenchmarkRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
             return 0;
@@ -1132,6 +1145,27 @@ namespace WarFabricationRuleTests
                     alreadyFoundedForKingdom: false))
                 throw new Exception("Collateral restoration must not create a new shi branch.");
 
+            if (LineageBranchRules.ShouldApplyCollateralRestoration(
+                    successionMode: "collateral_restore",
+                    wasHeir: true,
+                    isCurrentHeir: false,
+                    isDirectSuccessionFromPreviousKing: false))
+                throw new Exception("Registered heirs must not be reinterpreted as collateral restoration.");
+
+            if (LineageBranchRules.ShouldApplyCollateralRestoration(
+                    successionMode: "collateral_restore",
+                    wasHeir: false,
+                    isCurrentHeir: false,
+                    isDirectSuccessionFromPreviousKing: true))
+                throw new Exception("Direct sons must not be reinterpreted as collateral restoration.");
+
+            if (!LineageBranchRules.ShouldApplyCollateralRestoration(
+                    successionMode: "collateral_restore",
+                    wasHeir: false,
+                    isCurrentHeir: false,
+                    isDirectSuccessionFromPreviousKing: false))
+                throw new Exception("True collateral restoration should still be allowed.");
+
             if (!LineageBranchRules.ShouldFoundKingBranch(
                     validKingdom: true,
                     isXiaKing: true,
@@ -1149,6 +1183,167 @@ namespace WarFabricationRuleTests
                     originKingdomId: 10,
                     alreadyFoundedForKingdom: false))
                 throw new Exception("A non-heir noble king founding a separate kingdom may create a new shi branch.");
+        }
+
+        private static void ExpectRoyalGuardSelectionRules()
+        {
+            if (!RoyalGuardSelectionRules.IsEligibleCore(
+                    isXia: true,
+                    sameKingdom: true,
+                    isMale: true,
+                    isBoat: false,
+                    isRekt: false,
+                    isAdult: true,
+                    isKing: false,
+                    isCityLeader: false,
+                    isSlave: false,
+                    isRetiredSoldier: false,
+                    isCurrentHeir: false,
+                    hasMadness: false,
+                    isHistoricalFigure: false))
+                throw new Exception("Adult male Xia soldiers should remain eligible for royal guard selection.");
+
+            if (!RoyalGuardSelectionRules.IsEligibleCore(
+                    isXia: true,
+                    sameKingdom: true,
+                    isMale: false,
+                    isBoat: false,
+                    isRekt: false,
+                    isAdult: true,
+                    isKing: false,
+                    isCityLeader: false,
+                    isSlave: false,
+                    isRetiredSoldier: false,
+                    isCurrentHeir: false,
+                    hasMadness: false,
+                    isHistoricalFigure: false))
+                throw new Exception("Female actors should be eligible for royal guard service when other guard rules pass.");
+        }
+
+        private static void ExpectXiaAuthorityGenderRules()
+        {
+            if (!XiaAuthorityGenderRules.ShouldAllowSetLeader(
+                    pIsXiaActor: true,
+                    pIsMale: true,
+                    pIsNewAppointment: true))
+                throw new Exception("Male Xia actors should be allowed to become city leaders.");
+            if (XiaAuthorityGenderRules.ShouldAllowSetLeader(
+                    pIsXiaActor: true,
+                    pIsMale: false,
+                    pIsNewAppointment: true))
+                throw new Exception("Female Xia actors must not become city leaders.");
+            if (XiaAuthorityGenderRules.ShouldAllowSetLeader(
+                    pIsXiaActor: true,
+                    pIsMale: false,
+                    pIsNewAppointment: false))
+                throw new Exception("Loaded or restored female Xia leaders should be rejected and replaced.");
+            if (!XiaAuthorityGenderRules.ShouldAllowSetLeader(
+                    pIsXiaActor: false,
+                    pIsMale: false,
+                    pIsNewAppointment: true))
+                throw new Exception("Non-Xia leader rules should be left to the base game.");
+
+            if (!XiaAuthorityGenderRules.ShouldAllowSetKing(
+                    pFromLoad: false,
+                    pCandidateIsMale: true,
+                    pCandidateIsXia: true,
+                    pKingdomIsXia: true))
+                throw new Exception("Male Xia actors should be allowed to become king.");
+            if (XiaAuthorityGenderRules.ShouldAllowSetKing(
+                    pFromLoad: false,
+                    pCandidateIsMale: false,
+                    pCandidateIsXia: true,
+                    pKingdomIsXia: true))
+                throw new Exception("Female Xia actors must not become king.");
+            if (XiaAuthorityGenderRules.ShouldAllowSetKing(
+                    pFromLoad: true,
+                    pCandidateIsMale: false,
+                    pCandidateIsXia: true,
+                    pKingdomIsXia: true))
+                throw new Exception("Loaded female Xia kings should be rejected so succession can recover.");
+            if (!XiaAuthorityGenderRules.ShouldAllowSetKing(
+                    pFromLoad: false,
+                    pCandidateIsMale: false,
+                    pCandidateIsXia: false,
+                    pKingdomIsXia: false))
+                throw new Exception("Non-Xia king rules should be left to the base game.");
+        }
+
+        private static void ExpectHeirCandidateRules()
+        {
+            if (!HeirCandidateRules.IsFallbackEligibleCore(
+                    isSuitable: true,
+                    sameKingdom: true,
+                    hasLineage: true,
+                    hasShi: true))
+                throw new Exception("Fallback heirs with complete AW3 lineage should be eligible.");
+
+            if (HeirCandidateRules.IsFallbackEligibleCore(
+                    isSuitable: true,
+                    sameKingdom: true,
+                    hasLineage: false,
+                    hasShi: false))
+                throw new Exception("Vanilla royal clan commoners without AW3 lineage must not become fallback heirs.");
+        }
+
+        private static void ExpectRoyalSuccessionBirthRules()
+        {
+            if (!RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(
+                    childIsMale: true,
+                    fatherIsCurrentKing: true))
+                throw new Exception("A new direct royal son should refresh the registered heir.");
+            if (RoyalSuccessionBirthRules.ShouldRefreshHeirForNewChild(
+                    childIsMale: false,
+                    fatherIsCurrentKing: true))
+                throw new Exception("A daughter should not refresh male-only succession.");
+            if (RoyalSuccessionBirthRules.KingChildCap(hasLivingDirectSon: false) <=
+                RoyalSuccessionBirthRules.KingChildCap(hasLivingDirectSon: true))
+                throw new Exception("Kings without a living direct son should get a wider child cap.");
+        }
+
+        private static void ExpectFormerRulerPosthumousRules()
+        {
+            if (!FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    isCurrentKing: false,
+                    hasUntitledClosedReign: true))
+                throw new Exception("Former rulers with an untitled closed reign should receive posthumous review on death.");
+            if (FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    isCurrentKing: true,
+                    hasUntitledClosedReign: true))
+                throw new Exception("Current kings are already handled by the direct king death path.");
+            if (FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    isCurrentKing: false,
+                    hasUntitledClosedReign: false))
+                throw new Exception("Common dead actors without a ruler reign must not receive posthumous review.");
+        }
+
+        private static void ExpectFormerRulerRecordRules()
+        {
+            if (!FormerRulerRecordRules.ShouldRecordLostThrone(
+                    previousKingId: 10,
+                    newKingId: 20,
+                    previousAlive: true))
+                throw new Exception("Living previous rulers should get a lost-throne record when replaced.");
+            if (FormerRulerRecordRules.ShouldRecordLostThrone(
+                    previousKingId: 20,
+                    newKingId: 20,
+                    previousAlive: true))
+                throw new Exception("Same king must not get a lost-throne record.");
+            if (FormerRulerRecordRules.ShouldRecordLostThrone(
+                    previousKingId: 10,
+                    newKingId: 20,
+                    previousAlive: false))
+                throw new Exception("Dead previous rulers are handled by death/posthumous records.");
+        }
+
+        private static void ExpectSetKingPostfixRules()
+        {
+            if (!SetKingPostfixRules.ShouldRun(pFromLoad: false, pActorIsActualKing: true))
+                throw new Exception("Successful runtime setKing should run AW3 postfix side effects.");
+            if (SetKingPostfixRules.ShouldRun(pFromLoad: true, pActorIsActualKing: true))
+                throw new Exception("Load-time setKing must not run runtime side effects.");
+            if (SetKingPostfixRules.ShouldRun(pFromLoad: false, pActorIsActualKing: false))
+                throw new Exception("Skipped or rejected setKing calls must not run AW3 postfix side effects.");
         }
 
         private static void ExpectWorldSwitchCacheRules()
@@ -1293,6 +1488,49 @@ namespace WarFabricationRuleTests
                 throw new Exception("Invalid modulo should fall back to running instead of disabling maintenance.");
         }
 
+        private static void ExpectMapModeDirtyThrottleRules()
+        {
+            if (!MapModeDirtyThrottleRules.ShouldDirty(pActive: true, pNow: 10.0, pLastDirty: -1.0, pMinInterval: 0.25))
+                throw new Exception("Active map modes must dirty on the first invalidation.");
+            if (MapModeDirtyThrottleRules.ShouldDirty(pActive: true, pNow: 10.1, pLastDirty: 10.0, pMinInterval: 0.25))
+                throw new Exception("Map modes should coalesce repeated invalidations in the same short time slice.");
+            if (!MapModeDirtyThrottleRules.ShouldDirty(pActive: true, pNow: 10.3, pLastDirty: 10.0, pMinInterval: 0.25))
+                throw new Exception("Map modes should allow a later invalidation after the throttle interval.");
+            if (MapModeDirtyThrottleRules.ShouldDirty(pActive: false, pNow: 10.3, pLastDirty: 10.0, pMinInterval: 0.25))
+                throw new Exception("Inactive map modes must not dirty the zone calculator.");
+        }
+
+        private static void ExpectFiefCacheRules()
+        {
+            if (!FiefCacheRules.IsUnknown(FiefCacheRules.UnknownGeneralId))
+                throw new Exception("Fief cache must distinguish unknown state from no active fief.");
+            if (!FiefCacheRules.HasActiveFief(42))
+                throw new Exception("Positive cached general id should mean the city has an active fief.");
+            if (FiefCacheRules.HasActiveFief(FiefCacheRules.NoActiveFiefGeneralId))
+                throw new Exception("No-active-fief marker should not be treated as an active fief.");
+            if (FiefCacheRules.HasActiveFief(FiefCacheRules.UnknownGeneralId))
+                throw new Exception("Unknown fief cache state must not be treated as active without a DB lookup.");
+        }
+
+        private static void ExpectCityEconomyMilestoneRules()
+        {
+            if (!CityEconomyMilestoneRules.ShouldRecord(pExisted: false, pRoleChanged: false,
+                    pTaxValue: 2f, pCurrentYear: 100, pLastMajorTaxYear: -99999))
+                throw new Exception("New city economy records should write an initial milestone.");
+            if (!CityEconomyMilestoneRules.ShouldRecord(pExisted: true, pRoleChanged: true,
+                    pTaxValue: 2f, pCurrentYear: 100, pLastMajorTaxYear: 99))
+                throw new Exception("City economy role changes should be recorded.");
+            if (CityEconomyMilestoneRules.ShouldRecord(pExisted: true, pRoleChanged: false,
+                    pTaxValue: 30f, pCurrentYear: 100, pLastMajorTaxYear: 95))
+                throw new Exception("Major tax milestones should not be recorded every year.");
+            if (!CityEconomyMilestoneRules.ShouldRecord(pExisted: true, pRoleChanged: false,
+                    pTaxValue: 30f, pCurrentYear: 120, pLastMajorTaxYear: 95))
+                throw new Exception("Major tax milestones should be recorded again after the cooldown.");
+            if (CityEconomyMilestoneRules.ShouldRecord(pExisted: true, pRoleChanged: false,
+                    pTaxValue: 12f, pCurrentYear: 120, pLastMajorTaxYear: -99999))
+                throw new Exception("Unchanged ordinary economy records should stay quiet.");
+        }
+
         private static void ExpectXiaNameRepairRules()
         {
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName("NAME"))
@@ -1311,6 +1549,39 @@ namespace WarFabricationRuleTests
                 throw new Exception("Placeholder Xia religion names must be repaired.");
             if (XiaNameRepairRules.IsInvalidXiaReligionName("\u793E\u7A37\u793C"))
                 throw new Exception("A valid Xia religion name must not be repaired.");
+        }
+
+        private static void ExpectCityTechChronicleRules()
+        {
+            if (!CityTechChronicleRules.ShouldRecordNationalCompletionInKingdomHistory())
+                throw new Exception("National tech completion must remain visible in kingdom history.");
+            if (CityTechChronicleRules.ShouldRecordCityAdoptionInKingdomHistory())
+                throw new Exception("City tech adoption/transmission must be kept in city chronicles only.");
+        }
+
+        private static void ExpectCityMaintenanceBenchmarkRules()
+        {
+            string[] ids = CityMaintenanceBenchmarkRules.EntryIds;
+            if (ids.Length < 7)
+                throw new Exception("City maintenance benchmark needs enough component entries.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_retirements"))
+                throw new Exception("City retirement benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_slave_labor"))
+                throw new Exception("City slave labor benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard"))
+                throw new Exception("Royal guard benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_fief_command"))
+                throw new Exception("Fief command benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_army_cleanup"))
+                throw new Exception("City army cleanup benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_food"))
+                throw new Exception("Vanilla city food benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_status"))
+                throw new Exception("Vanilla city status benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_citizens"))
+                throw new Exception("Vanilla city citizens benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_capture"))
+                throw new Exception("Vanilla city capture benchmark entry is missing.");
         }
 
         private static void ExpectHistoryContentNormalization(string pRaw, string pExpected)
@@ -1348,6 +1619,61 @@ namespace WarFabricationRuleTests
                 throw new Exception("Expected city maintenance to run at interval boundary.");
             if (!CityMaintenanceThrottleRules.ShouldRun(pNow: 90, pLastRun: 100, pInterval: 15))
                 throw new Exception("Expected city maintenance to run when time moves backward.");
+        }
+
+        private static void ExpectRoyalGuardMaintenanceRules()
+        {
+            if (!RoyalGuardMaintenanceRules.ShouldCheckFromCity(
+                    pHasCity: true,
+                    pHasKingdom: true,
+                    pHasCapital: true,
+                    pIsCapital: true))
+                throw new Exception("Royal guard kingdom maintenance should run from the capital city.");
+            if (RoyalGuardMaintenanceRules.ShouldCheckFromCity(
+                    pHasCity: true,
+                    pHasKingdom: true,
+                    pHasCapital: true,
+                    pIsCapital: false))
+                throw new Exception("Non-capital cities must not trigger kingdom-wide royal guard scans.");
+            if (!RoyalGuardMaintenanceRules.ShouldCheckFromCity(
+                    pHasCity: true,
+                    pHasKingdom: true,
+                    pHasCapital: false,
+                    pIsCapital: false))
+                throw new Exception("A kingdom without a known capital should keep a fallback guard check.");
+
+            if (RoyalGuardMaintenanceRules.ShouldRunScheduledCheck(
+                    pNow: 100,
+                    pLastCheck: -1,
+                    pInterval: 20,
+                    pKingdomId: 3))
+                throw new Exception("First royal guard maintenance should wait for its kingdom id slot.");
+            if (!RoyalGuardMaintenanceRules.ShouldRunScheduledCheck(
+                    pNow: 103,
+                    pLastCheck: -1,
+                    pInterval: 20,
+                    pKingdomId: 3))
+                throw new Exception("First royal guard maintenance should run on its staggered kingdom id slot.");
+            if (RoyalGuardMaintenanceRules.ShouldRunScheduledCheck(
+                    pNow: 119,
+                    pLastCheck: 103,
+                    pInterval: 20,
+                    pKingdomId: 3))
+                throw new Exception("Royal guard maintenance should not run before the interval even on nearby years.");
+            if (!RoyalGuardMaintenanceRules.ShouldRunScheduledCheck(
+                    pNow: 123,
+                    pLastCheck: 103,
+                    pInterval: 20,
+                    pKingdomId: 3))
+                throw new Exception("Royal guard maintenance should run again on the next kingdom id slot.");
+            if (!RoyalGuardMaintenanceRules.ShouldDismissNonXiaKingdom(
+                    pKingIsXia: false,
+                    pHasGuardStateHint: true))
+                throw new Exception("A non-Xia kingdom with guard state should dismiss stale royal guards.");
+            if (RoyalGuardMaintenanceRules.ShouldDismissNonXiaKingdom(
+                    pKingIsXia: false,
+                    pHasGuardStateHint: false))
+                throw new Exception("Ordinary non-Xia kingdoms with no guard state should skip royal guard scans.");
         }
 
         private static void ExpectNonCoreLoyaltyRules()

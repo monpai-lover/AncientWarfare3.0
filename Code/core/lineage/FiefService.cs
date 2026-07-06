@@ -58,6 +58,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("REVOKE_REASON", ""));
 
                 pGeneral.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, pCity.id);
+                CacheActiveFief(pCity, pGeneral);
                 UpdateGeneralFief(pGeneral, pCity, now);
                 FiefMilitaryService.EnsureFiefCommand(pCity, pGeneral);
                 RecordFiefGranted(pKingdom, pGeneral, pCity);
@@ -73,6 +74,9 @@ namespace AncientWarfare3.core.lineage
         public static FiefInfo GetActiveFief(City pCity)
         {
             if (!Ready || pCity?.data == null) return null;
+            if (TryReadCachedFief(pCity, out FiefInfo cached))
+                return cached;
+
             try
             {
                 using var cmd = new SQLiteCommand(DB);
@@ -81,14 +85,21 @@ namespace AncientWarfare3.core.lineage
                                   " WHERE CITY_ID=@c AND REVOKED=0 AND END_TIME<0 ORDER BY GRANT_ID DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@c", pCity.id);
                 using SQLiteDataReader reader = cmd.ExecuteReader();
-                if (!reader.Read()) return null;
-                return new FiefInfo
+                if (!reader.Read())
+                {
+                    CacheNoActiveFief(pCity);
+                    return null;
+                }
+
+                var info = new FiefInfo
                 {
                     city_id = ToLong(reader, 0),
                     city_name = ToString(reader, 1),
                     general_actor_id = ToLong(reader, 2),
                     general_name = ToString(reader, 3)
                 };
+                CacheFiefInfo(pCity, info);
+                return info;
             }
             catch { return null; }
         }
@@ -154,6 +165,7 @@ namespace AncientWarfare3.core.lineage
                 Actor general = FindActor(info.general_actor_id);
                 if (general?.data != null)
                     general.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+                CacheNoActiveFief(pCity);
             }
             catch { }
         }
@@ -183,6 +195,53 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("REVOKE_REASON", pReason ?? ""));
             }
             catch { }
+        }
+
+        private static bool TryReadCachedFief(City pCity, out FiefInfo pInfo)
+        {
+            pInfo = null;
+            if (pCity?.data == null) return false;
+
+            pCity.data.get(LineageKeys.CITY_FIEF_GENERAL_ID, out long cachedGeneralId,
+                FiefCacheRules.UnknownGeneralId);
+            if (FiefCacheRules.IsUnknown(cachedGeneralId)) return false;
+            if (!FiefCacheRules.HasActiveFief(cachedGeneralId)) return true;
+
+            pCity.data.get(LineageKeys.CITY_FIEF_GENERAL_NAME, out string generalName, "");
+            pInfo = new FiefInfo
+            {
+                city_id = pCity.id,
+                city_name = pCity.data.name ?? "",
+                general_actor_id = cachedGeneralId,
+                general_name = generalName ?? ""
+            };
+            return true;
+        }
+
+        private static void CacheActiveFief(City pCity, Actor pGeneral)
+        {
+            if (pCity?.data == null || pGeneral?.data == null) return;
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_ID, pGeneral.data.id);
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_NAME, pGeneral.getName() ?? "");
+        }
+
+        private static void CacheFiefInfo(City pCity, FiefInfo pInfo)
+        {
+            if (pCity?.data == null || pInfo == null) return;
+            if (!FiefCacheRules.HasActiveFief(pInfo.general_actor_id))
+            {
+                CacheNoActiveFief(pCity);
+                return;
+            }
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_ID, pInfo.general_actor_id);
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_NAME, pInfo.general_name ?? "");
+        }
+
+        private static void CacheNoActiveFief(City pCity)
+        {
+            if (pCity?.data == null) return;
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_ID, FiefCacheRules.NoActiveFiefGeneralId);
+            pCity.data.set(LineageKeys.CITY_FIEF_GENERAL_NAME, "");
         }
 
         private static City PickBestCity(Kingdom pKingdom, Actor pGeneral)

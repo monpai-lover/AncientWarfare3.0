@@ -8,10 +8,12 @@ namespace AncientWarfare3.core.policy
     internal static class DevelopmentMapModeService
     {
         public const string POWER_ID = "aw_development_mapmode";
+        private const double DIRTY_MIN_INTERVAL = 0.25;
 
         private static readonly Dictionary<long, float> CityScoreCache = new Dictionary<long, float>();
         private static readonly Dictionary<long, float> KingdomAverageCache = new Dictionary<long, float>();
         private static readonly Dictionary<string, ColorAsset> ColorAssetCache = new Dictionary<string, ColorAsset>();
+        private static double _lastDirtyTime = -1.0;
 
         public static bool IsActive()
         {
@@ -122,7 +124,10 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMapIfActive()
         {
-            if (IsActive()) DirtyMap();
+            double now = LineageService.CurTime();
+            if (!MapModeDirtyThrottleRules.ShouldDirty(IsActive(), now, _lastDirtyTime, DIRTY_MIN_INTERVAL)) return;
+            _lastDirtyTime = now;
+            DirtyMap();
         }
 
         private static float CalculateEconomyScore(City pCity, CityEconomySnapshot pEconomy)
@@ -145,7 +150,7 @@ namespace AncientWarfare3.core.policy
             if (kingdom?.data == null || pCity?.data == null) return false;
             try
             {
-                return WarTerritoryService.GetCoreStatus(kingdom, pCity).status == "owned_non_core";
+                return WarTerritoryService.IsOwnedNonCore(kingdom, pCity);
             }
             catch
             {

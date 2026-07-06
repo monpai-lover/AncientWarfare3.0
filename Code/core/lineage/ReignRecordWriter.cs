@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.lineage
             public int WarLosses;
             public int LostCapital;
             public string DeathCause;
+            public string EndReason;
             public double StartTime;
             public double EndTime;
             public int ReignIndex;
@@ -228,6 +229,46 @@ namespace AncientWarfare3.core.lineage
             catch { return ReignInfo.Empty; }
         }
 
+        public static ReignInfo ReadLatestUntitledClosedReignForActor(long pActorId)
+        {
+            if (!Ready || pActorId < 0) return ReignInfo.Empty;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME, " +
+                    $"START_ARMY_COUNT, IS_FOUNDER, REIGN_INDEX, END_TIME, IFNULL(END_REASON, ''), " +
+                    $"END_POPULATION, END_CITY_COUNT, END_ARMY_COUNT, WAR_WINS, WAR_LOSSES, LOST_CAPITAL, IFNULL(DEATH_CAUSE, '') " +
+                    $"FROM {TABLE} WHERE KING_ACTOR_ID=@aid AND END_TIME>=0 " +
+                    $"AND IFNULL(POSTHUMOUS_TITLE, '')='' ORDER BY END_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@aid", pActorId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return ReignInfo.Empty;
+                return new ReignInfo
+                {
+                    ReignId = r.GetInt64(0),
+                    KingdomId = r.GetInt64(1),
+                    KingActorId = r.GetInt64(2),
+                    StartPopulation = (int)r.GetInt64(3),
+                    StartCityCount = (int)r.GetInt64(4),
+                    StartTime = r.GetDouble(5),
+                    StartArmyCount = SafeInt64(r, 6),
+                    IsFounder = SafeInt64(r, 7),
+                    ReignIndex = SafeInt64(r, 8),
+                    EndTime = SafeDouble(r, 9),
+                    EndReason = SafeString(r, 10),
+                    EndPopulation = SafeInt64(r, 11),
+                    EndCityCount = SafeInt64(r, 12),
+                    EndArmyCount = SafeInt64(r, 13),
+                    WarWins = SafeInt64(r, 14),
+                    WarLosses = SafeInt64(r, 15),
+                    LostCapital = SafeInt64(r, 16),
+                    DeathCause = SafeString(r, 17)
+                };
+            }
+            catch { return ReignInfo.Empty; }
+        }
+
         // ── 内部辅助 ──
 
         public static long FindOpenReignId(long pKingdomId)
@@ -318,6 +359,12 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pReader.IsDBNull(pIndex) ? -1.0 : Convert.ToDouble(pReader.GetValue(pIndex)); }
             catch { return -1.0; }
+        }
+
+        private static string SafeString(SQLiteDataReader pReader, int pIndex)
+        {
+            try { return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? ""; }
+            catch { return ""; }
         }
     }
 }

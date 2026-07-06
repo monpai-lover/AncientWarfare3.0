@@ -20,13 +20,16 @@ namespace AncientWarfare3.patch
         public static bool SetLeader_HeirGuard_Prefix(City __instance, Actor pActor, bool pNew, out bool __state)
         {
             __state = false;
-            if (!pNew) return true;
             if (pActor == null || !LineageService.IsXia(pActor)) return true;
-            if (!pActor.isSexMale())
+            if (!XiaAuthorityGenderRules.ShouldAllowSetLeader(
+                    pIsXiaActor: true,
+                    pIsMale: pActor.isSexMale(),
+                    pIsNewAppointment: pNew))
             {
                 __state = true;
                 return false;
             }
+            if (!pNew) return true;
 
             Kingdom kingdom = __instance?.kingdom ?? pActor.kingdom;
             if (!HeirService.IsCurrentHeir(kingdom, pActor)) return true;
@@ -50,7 +53,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
-            if (pFromLoad) return;
+            if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
             if (pActor == null || !LineageService.IsXia(pActor)) return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
         }
@@ -59,10 +62,12 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static bool SetKing_MaleOnly_Prefix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
-            if (pFromLoad) return true;
-            if (pActor == null || pActor.isSexMale()) return true;
-            if (!LineageService.IsXiaKingdom(__instance) && !LineageService.IsXia(pActor)) return true;
-            return false;
+            if (pActor == null) return true;
+            return XiaAuthorityGenderRules.ShouldAllowSetKing(
+                pFromLoad,
+                pCandidateIsMale: pActor.isSexMale(),
+                pCandidateIsXia: LineageService.IsXia(pActor),
+                pKingdomIsXia: LineageService.IsXiaKingdom(__instance));
         }
     }
 }

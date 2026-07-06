@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using ai.behaviours;
 
@@ -23,11 +24,31 @@ namespace AncientWarfare3.patch
         {
             if (!ShouldRunAwCityArmyMaintenance(pCity)) return;
 
+            Bench.bench(CityMaintenanceBenchmarkRules.Total, CityMaintenanceBenchmarkRules.Group);
+            Bench.bench(CityMaintenanceBenchmarkRules.Retirements, CityMaintenanceBenchmarkRules.Group);
             SlaveService.CheckCityRetirements(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.Retirements, CityMaintenanceBenchmarkRules.Group);
+
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
             SlaveService.CheckCitySlaveLabor(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
+
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
             SlaveService.AssignSlaveCatchers(pCity);
-            RoyalGuardService.EnsureKingdomGuard(pCity?.kingdom);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
+
+            if (ShouldRunRoyalGuardMaintenance(pCity))
+            {
+                Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuard, CityMaintenanceBenchmarkRules.Group);
+                RoyalGuardService.EnsureKingdomGuard(pCity?.kingdom);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuard, CityMaintenanceBenchmarkRules.Group);
+            }
+
+            Bench.bench(CityMaintenanceBenchmarkRules.FiefCommand, CityMaintenanceBenchmarkRules.Group);
             FiefMilitaryService.EnsureFiefCommand(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.FiefCommand, CityMaintenanceBenchmarkRules.Group);
+
+            Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanup, CityMaintenanceBenchmarkRules.Group);
             if (pCity != null && pCity.hasArmy())
             {
                 RoyalGuardService.StripGuardsFromNormalArmy(pCity.getArmy());
@@ -35,6 +56,8 @@ namespace AncientWarfare3.patch
                 SlaveService.RenameArmyIfSlaveArmy(pCity.getArmy());
                 FiefMilitaryService.RefreshArmyName(pCity.getArmy());
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanup, CityMaintenanceBenchmarkRules.Group);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.Total, CityMaintenanceBenchmarkRules.Group);
         }
 
         private static bool ShouldRunAwCityArmyMaintenance(City pCity)
@@ -48,6 +71,16 @@ namespace AncientWarfare3.patch
             if (!CityMaintenanceThrottleRules.ShouldRun(now, lastRun, CITY_ARMY_MAINTENANCE_INTERVAL)) return false;
             pCity.data.set(CITY_ARMY_MAINTENANCE_LAST_CHECK, now);
             return true;
+        }
+
+        private static bool ShouldRunRoyalGuardMaintenance(City pCity)
+        {
+            Kingdom kingdom = pCity?.kingdom;
+            return RoyalGuardMaintenanceRules.ShouldCheckFromCity(
+                pHasCity: pCity?.data != null,
+                pHasKingdom: kingdom?.data != null,
+                pHasCapital: kingdom?.capital?.data != null,
+                pIsCapital: kingdom?.capital == pCity);
         }
 
         [HarmonyPostfix]

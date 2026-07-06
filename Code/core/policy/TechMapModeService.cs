@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
 using UnityEngine;
 
@@ -7,8 +8,10 @@ namespace AncientWarfare3.core.policy
     internal static class TechMapModeService
     {
         public const string POWER_ID = "aw_tech_level_mapmode";
+        private const double DIRTY_MIN_INTERVAL = 0.25;
         private static readonly Dictionary<long, string> _cityColorKeyCache = new Dictionary<long, string>();
         private static readonly Dictionary<string, ColorAsset> _colorAssetCache = new Dictionary<string, ColorAsset>();
+        private static double _lastDirtyTime = -1.0;
 
         public static bool IsActive()
         {
@@ -84,7 +87,9 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMapIfActive()
         {
-            if (!IsActive()) return;
+            double now = LineageService.CurTime();
+            if (!MapModeDirtyThrottleRules.ShouldDirty(IsActive(), now, _lastDirtyTime, DIRTY_MIN_INTERVAL)) return;
+            _lastDirtyTime = now;
             DirtyMap();
         }
 

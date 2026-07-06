@@ -101,6 +101,7 @@ namespace AncientWarfare3.core.lineage
             RecordFamilyEdges(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
             ArchiveActor(pBaby, pAlive: true);
+            HeirService.RefreshForNewRoyalChild(pBaby, pParent1, pParent2);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);
@@ -592,7 +593,11 @@ namespace AncientWarfare3.core.lineage
             pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             pKing.data.get(LineageKeys.SHI_ID, out long curShiId, -1);
             pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE, out string successionMode, SuccessionMode.NONE);
-            if (successionMode == SuccessionMode.COLLATERAL_RESTORE)
+            if (LineageBranchRules.ShouldApplyCollateralRestoration(
+                    successionMode,
+                    registeredHeir,
+                    currentHeir,
+                    directSuccession))
             {
                 ApplyCollateralRestoration(pKingdom, pKing, pPreviousKing);
                 return;

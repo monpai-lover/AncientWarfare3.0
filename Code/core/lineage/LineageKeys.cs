@@ -47,6 +47,7 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_SUCCESSION_CRISIS_YEAR = "aw_mandate_succession_crisis_year";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
+        public const string CITY_ECONOMY_MAJOR_TAX_YEAR = "aw_city_economy_major_tax_year";
         public const string FOREIGN_OCCUPATION_LAST_YEAR = "aw_foreign_occupation_last_year";
         public const string FOREIGN_OCCUPATION_ID = "aw_foreign_occupation_id";
         public const string CITY_ORIGINAL_KINGDOM_ID = "aw_city_original_kingdom_id";
@@ -131,6 +132,8 @@ namespace AncientWarfare3.core.lineage
         public const string GENERAL_ACTIVE = "aw_general_active";
         public const string GENERAL_MERIT = "aw_general_merit";
         public const string GENERAL_FIEF_CITY_ID = "aw_general_fief_city_id";
+        public const string CITY_FIEF_GENERAL_ID = "aw_city_fief_general_id";
+        public const string CITY_FIEF_GENERAL_NAME = "aw_city_fief_general_name";
         public const string GENERAL_RISK_RECORDED_YEAR = "aw_general_risk_recorded_year";
 
         public const int NOBLE_DECAY_DISTANCE = 3;

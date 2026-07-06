@@ -127,4 +127,20 @@ namespace AncientWarfare3.core.policy
             return new CityEconomyContribution(policy, tech, tax, manpower, food, Mathf.Clamp(unrest, 0f, 100f));
         }
     }
+
+    public static class CityEconomyMilestoneRules
+    {
+        public const float MajorTaxThreshold = 25f;
+        public const int MajorTaxCooldownYears = 20;
+
+        public static bool ShouldRecord(bool pExisted, bool pRoleChanged, float pTaxValue,
+            int pCurrentYear, int pLastMajorTaxYear)
+        {
+            if (!pExisted) return true;
+            if (pRoleChanged) return true;
+            if (pTaxValue < MajorTaxThreshold) return false;
+            if (pLastMajorTaxYear <= -9999) return true;
+            return pCurrentYear - pLastMajorTaxYear >= MajorTaxCooldownYears;
+        }
+    }
 }

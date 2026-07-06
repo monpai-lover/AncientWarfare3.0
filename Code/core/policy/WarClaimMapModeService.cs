@@ -6,9 +6,11 @@ namespace AncientWarfare3.core.policy
     internal static class WarClaimMapModeService
     {
         public const string POWER_ID = "aw_claim_mapmode";
+        private const double DIRTY_MIN_INTERVAL = 0.25;
 
         private static long _focusedKingdomId = -1;
         private static readonly Dictionary<string, string> _statusCache = new Dictionary<string, string>();
+        private static double _lastDirtyTime = -1.0;
 
         public static bool IsActive()
         {
@@ -81,7 +83,10 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMapIfActive()
         {
-            if (IsActive()) DirtyMap();
+            double now = LineageService.CurTime();
+            if (!MapModeDirtyThrottleRules.ShouldDirty(IsActive(), now, _lastDirtyTime, DIRTY_MIN_INTERVAL)) return;
+            _lastDirtyTime = now;
+            DirtyMap();
         }
 
     }

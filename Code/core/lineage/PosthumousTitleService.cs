@@ -91,6 +91,20 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pKing));
         }
 
+        public static void OnFormerRulerDied(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            ReignRecordWriter.ReignInfo reign =
+                ReignRecordWriter.ReadLatestUntitledClosedReignForActor(pActor.data.id);
+            if (!FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(pActor.isKing(), reign.IsValid))
+                return;
+
+            Kingdom kingdom = World.world?.kingdoms?.get(reign.KingdomId);
+            if (kingdom?.data == null) return;
+            string reason = string.IsNullOrEmpty(reign.EndReason) ? "replaced" : reign.EndReason;
+            OnReignEnded(kingdom, pActor, reason, reign);
+        }
+
         private static HistoryText BuildTitleEventText(Actor pKing, string pEndReason, string pFullTitle,
             string pTitleColor, string pReason)
         {

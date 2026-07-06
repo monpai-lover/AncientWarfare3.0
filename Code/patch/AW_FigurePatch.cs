@@ -1,4 +1,5 @@
 using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
 using HarmonyLib;
 using UnityEngine;
 
@@ -27,7 +28,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
-            if (pFromLoad) return;
+            if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
             if (__instance == null || pActor == null) return;
             HistoricalFigureService.OnFigureKingBecame(__instance, pActor);
         }

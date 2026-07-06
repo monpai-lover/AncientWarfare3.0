@@ -43,11 +43,12 @@ namespace AncientWarfare3.core.policy
             bool changed = UpsertProgress(capital, pTech.Id, ADOPTED, 0, "capital", capital, pKingdom, true);
             if (!changed) return;
 
-            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.CITY_TECH_ADOPTED,
-                HistoryText.Kingdom(pKingdom) + " \u5B8C\u6210\u79D1\u6280 " +
-                HistoryText.PlainText(pTech.FallbackName) + "\uFF0C\u5148\u884C\u4F20\u5165" +
-                HistoryText.City(capital, pKingdom),
-                HistoryTarget.City(capital));
+            if (CityTechChronicleRules.ShouldRecordCityAdoptionInKingdomHistory())
+                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.CITY_TECH_ADOPTED,
+                    HistoryText.Kingdom(pKingdom) + " \u5B8C\u6210\u79D1\u6280 " +
+                    HistoryText.PlainText(pTech.FallbackName) + "\uFF0C\u5148\u884C\u4F20\u5165" +
+                    HistoryText.City(capital, pKingdom),
+                    HistoryTarget.City(capital));
             HistoryWriter.RecordCity(capital, pKingdom, CityEvent.TECH_ADOPTED,
                 HistoryText.City(capital, pKingdom) + " \u9996\u5148\u91C7\u7EB3\u79D1\u6280 " +
                 HistoryText.PlainText(pTech.FallbackName));

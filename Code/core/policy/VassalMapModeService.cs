@@ -7,8 +7,10 @@ namespace AncientWarfare3.core.policy
     internal static class VassalMapModeService
     {
         public const string POWER_ID = "aw_vassal_mapmode";
+        private const double DIRTY_MIN_INTERVAL = 0.25;
 
         [System.ThreadStatic] private static Dictionary<long, IMetaObject> _zoneRootCache;
+        private static double _lastDirtyTime = -1.0;
 
         public static bool IsActive()
         {
@@ -51,7 +53,9 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMapIfActive()
         {
-            if (!IsActive()) return;
+            double now = LineageService.CurTime();
+            if (!MapModeDirtyThrottleRules.ShouldDirty(IsActive(), now, _lastDirtyTime, DIRTY_MIN_INTERVAL)) return;
+            _lastDirtyTime = now;
             DirtyMap();
         }
 
