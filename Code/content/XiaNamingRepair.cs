@@ -17,9 +17,23 @@ namespace AncientWarfare3.content
             "诸夏", "华夏", "中原", "河洛", "九州", "礼乐", "青铜", "文化", "雅风", "礼制"
         };
 
+        private static readonly string[] ReligionMarkers =
+        {
+            "社稷", "宗庙", "礼乐", "华夏", "诸夏", "天命", "王畿", "河洛", "九州", "先王",
+            "祖祀", "祀典", "王礼"
+        };
+
         internal static int EnsureWorldNames()
         {
             int changed = 0;
+
+            if (World.world?.kingdoms != null)
+            {
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                {
+                    if (TryRenameKingdom(kingdom, null, pForce: false)) changed++;
+                }
+            }
 
             if (World.world?.cultures != null)
             {
@@ -45,7 +59,39 @@ namespace AncientWarfare3.content
                 }
             }
 
+            if (World.world?.religions != null)
+            {
+                foreach (Religion religion in World.world.religions)
+                {
+                    if (TryRenameReligion(religion, null, pForce: false)) changed++;
+                }
+            }
+
             return changed;
+        }
+
+        internal static bool TryRenameKingdom(Kingdom pKingdom, Actor pActor, bool pForce)
+        {
+            if (!IsXiaKingdom(pKingdom, pActor)) return false;
+            if (!pForce && !XiaNameRepairRules.IsInvalidGeneratedMetaName(pKingdom?.data?.name)) return false;
+
+            string name = GenerateKingdomName(pKingdom);
+            if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
+
+            pKingdom.setName(name, pTrack: false);
+            return true;
+        }
+
+        internal static bool TryRenameReligion(Religion pReligion, Actor pActor, bool pForce)
+        {
+            if (!IsXiaReligion(pReligion, pActor)) return false;
+            if (!pForce && IsXiaReligionName(pReligion?.data?.name)) return false;
+
+            string name = GenerateReligionName(pReligion);
+            if (XiaNameRepairRules.IsInvalidXiaReligionName(name)) return false;
+
+            pReligion.setName(name, pTrack: false);
+            return true;
         }
 
         internal static bool TryRenameLanguage(Language pLanguage, Actor pActor, bool pForce)
@@ -54,7 +100,7 @@ namespace AncientWarfare3.content
             if (!pForce && IsXiaLanguageName(pLanguage?.data?.name)) return false;
 
             string name = GenerateLanguageName(pLanguage);
-            if (string.IsNullOrEmpty(name)) return false;
+            if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
 
             pLanguage.setName(name, pTrack: false);
             return true;
@@ -66,7 +112,7 @@ namespace AncientWarfare3.content
             if (!pForce && IsXiaSubspeciesName(pSubspecies?.data?.name)) return false;
 
             string name = GenerateSubspeciesName(pSubspecies);
-            if (string.IsNullOrEmpty(name)) return false;
+            if (XiaNameRepairRules.IsInvalidXiaSubspeciesName(name)) return false;
 
             pSubspecies.setName(name, pTrack: false);
             return true;
@@ -80,10 +126,23 @@ namespace AncientWarfare3.content
             if (!pForce && string.IsNullOrEmpty(originName) && IsXiaCultureName(pCulture?.data?.name)) return false;
 
             string name = GenerateCultureName(pCulture);
-            if (string.IsNullOrEmpty(name)) return false;
+            if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
 
             pCulture.setName(name, pTrack: false);
             return true;
+        }
+
+        private static bool IsXiaKingdom(Kingdom pKingdom, Actor pActor)
+        {
+            if (pActor?.asset?.id == XiaRace.ID) return true;
+            return pKingdom?.data?.original_actor_asset == XiaRace.ID ||
+                   pKingdom?.getActorAsset()?.id == XiaRace.ID;
+        }
+
+        private static bool IsXiaReligion(Religion pReligion, Actor pActor)
+        {
+            if (pActor?.asset?.id == XiaRace.ID) return true;
+            return pReligion?.data?.creator_species_id == XiaRace.ID;
         }
 
         private static bool IsXiaLanguage(Language pLanguage, Actor pActor)
@@ -117,6 +176,18 @@ namespace AncientWarfare3.content
             return false;
         }
 
+        private static bool IsXiaReligionName(string pName)
+        {
+            if (XiaNameRepairRules.IsInvalidXiaReligionName(pName)) return false;
+
+            foreach (string marker in ReligionMarkers)
+            {
+                if (pName.IndexOf(marker, StringComparison.Ordinal) >= 0) return true;
+            }
+
+            return false;
+        }
+
         private static bool IsXiaSubspeciesName(string pName)
         {
             if (string.IsNullOrEmpty(pName)) return false;
@@ -140,22 +211,52 @@ namespace AncientWarfare3.content
 
         private static bool IsInvalidGeneratedName(string pName)
         {
-            if (string.IsNullOrWhiteSpace(pName)) return true;
-            string trimmed = pName.Trim();
-            return trimmed == "NO_NAME" ||
-                   trimmed.StartsWith("NO_NAME ", StringComparison.Ordinal) ||
-                   trimmed.StartsWith("NO_NAME[", StringComparison.Ordinal) ||
-                   trimmed.StartsWith("NO_NAME [", StringComparison.Ordinal);
+            return XiaNameRepairRules.IsInvalidGeneratedMetaName(pName);
+        }
+
+        private static string GenerateKingdomName(Kingdom pKingdom)
+        {
+            string name = GenerateChineseName(XiaNameSets.KingdomGenerator, p =>
+            {
+                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.KingdomGenerator);
+                ParameterGetters.GetKingdomParameterGetter(generator.parameter_getter)(pKingdom, p);
+            });
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
+
+            name = GenerateVanillaName(XiaNameSets.KingdomGenerator, pKingdom?.getID() ?? 0L);
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
+
+            return GenerateLocalKingdomName(pKingdom);
         }
 
         private static string GenerateLanguageName(Language pLanguage)
         {
-            return GenerateChineseName(XiaNameSets.LanguageGenerator, p =>
-                   {
-                       var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.LanguageGenerator);
-                       ParameterGetters.GetLanguageParameterGetter(generator.parameter_getter)(pLanguage, p);
-                   })
-                   ?? GenerateVanillaName(XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L);
+            string name = GenerateChineseName(XiaNameSets.LanguageGenerator, p =>
+            {
+                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.LanguageGenerator);
+                ParameterGetters.GetLanguageParameterGetter(generator.parameter_getter)(pLanguage, p);
+            });
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
+
+            name = GenerateVanillaName(XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L);
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
+
+            return "夏语";
+        }
+
+        private static string GenerateReligionName(Religion pReligion)
+        {
+            string name = GenerateChineseName(XiaNameSets.ReligionGenerator, p =>
+            {
+                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.ReligionGenerator);
+                ParameterGetters.GetReligionParameterGetter(generator.parameter_getter)(pReligion, p);
+            });
+            if (!XiaNameRepairRules.IsInvalidXiaReligionName(name)) return name;
+
+            name = GenerateVanillaName(XiaNameSets.ReligionGenerator, pReligion?.getID() ?? 0L);
+            if (!XiaNameRepairRules.IsInvalidXiaReligionName(name)) return name;
+
+            return GenerateLocalReligionName(pReligion);
         }
 
         private static string GenerateCultureName(Culture pCulture)
@@ -222,14 +323,39 @@ namespace AncientWarfare3.content
 
         private static bool IsUsefulSubspeciesName(string pName)
         {
-            return !string.IsNullOrEmpty(pName) && !IsBareXiaSubspeciesName(pName);
+            return !XiaNameRepairRules.IsInvalidXiaSubspeciesName(pName);
         }
 
         private static bool IsBareXiaSubspeciesName(string pName)
         {
             if (string.IsNullOrEmpty(pName)) return true;
-            string trimmed = pName.Trim();
-            return trimmed == "夏" || trimmed == "夏人" || trimmed == "夏人人" || trimmed.EndsWith("人人");
+            return XiaNameRepairRules.IsInvalidXiaSubspeciesName(pName);
+        }
+
+        private static string GenerateLocalKingdomName(Kingdom pKingdom)
+        {
+            string[] fixedNames =
+            {
+                "夏", "商", "周", "秦", "汉", "魏", "晋", "楚", "齐", "鲁", "燕", "赵",
+                "宋", "郑", "卫", "陈", "蔡", "吴", "越", "唐", "虞"
+            };
+
+            long id = pKingdom?.getID() ?? DateTime.UtcNow.Ticks;
+            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
+            return fixedNames[random.Next(fixedNames.Length)];
+        }
+
+        private static string GenerateLocalReligionName(Religion pReligion)
+        {
+            string[] fixedNames =
+            {
+                "社稷礼", "宗庙礼", "礼乐祖祀", "华夏大礼", "诸夏礼",
+                "天命礼", "王畿祖祀", "河洛礼", "先王祀典", "九州王礼"
+            };
+
+            long id = pReligion?.getID() ?? DateTime.UtcNow.Ticks;
+            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
+            return fixedNames[random.Next(fixedNames.Length)];
         }
 
         private static string GenerateLocalSubspeciesName(Subspecies pSubspecies)

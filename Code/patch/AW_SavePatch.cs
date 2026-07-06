@@ -1,4 +1,5 @@
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.content;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
@@ -57,6 +58,7 @@ namespace AncientWarfare3.patch
 
         private static void ResetHistoryWindowsAfterArchiveSwitch()
         {
+            try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
         }

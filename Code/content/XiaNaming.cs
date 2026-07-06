@@ -33,7 +33,7 @@ namespace AncientWarfare3.content
             // (直接清 dict/list,不走 add),这样 AW3 注册时 dict 无同名 → 不再打警告。AW3 模板与 ChineseName
             // 不同(用中文城名上/下、中文国名前缀),是有意覆盖,故必须用 AW3 版本而非复用。
             RemoveExistingGenerators("Xia_city", "Xia_clan", "Xia_culture", "Xia_kingdom", "Xia_name",
-                "Xia_language", "Xia_subspecies");
+                "Xia_language", "Xia_religion", "Xia_subspecies");
 
             CN_NameGeneratorLibrary.SubmitDirectoryToLoad(modPath + "/name_generators/Xia");
             WordLibraryManager.SubmitDirectoryToLoad(modPath + "/name_generators/lib");

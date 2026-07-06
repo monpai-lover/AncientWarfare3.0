@@ -1,4 +1,6 @@
 using System;
+using AncientWarfare3.core.db;
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
@@ -282,6 +284,10 @@ namespace WarFabricationRuleTests
             ExpectLineageBranchRules();
             ExpectAncestryDisplayRules();
             ExpectMandateMapMarkerRules();
+            ExpectLineageArchiveIndexRules();
+            ExpectMapModeMetaCacheRules();
+            ExpectKingdomYearSchedulerRules();
+            ExpectXiaNameRepairRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
             return 0;
@@ -1244,6 +1250,67 @@ namespace WarFabricationRuleTests
                 throw new Exception("Empty mandate marker paths must leave the original nameplate icon untouched.");
             if (MandateMapMarkerRules.ShouldUseSpecialIcon("moh_nameplate", pHasSpecialImage: false))
                 throw new Exception("Mandate marker replacement needs an existing special image target.");
+        }
+
+        private static void ExpectLineageArchiveIndexRules()
+        {
+            var specs = LineageArchiveIndexRules.GetRequiredIndexes();
+            if (!LineageArchiveIndexRules.ContainsIndex(specs, "idx_FamilyEdge_child_slot"))
+                throw new Exception("Family tree parent lookups need an index on FamilyEdge(CHILD_ID, PARENT_SLOT).");
+            if (!LineageArchiveIndexRules.ContainsIndex(specs, "idx_FamilyEdge_parent_time"))
+                throw new Exception("Family tree child lookups need an index on FamilyEdge(PARENT_ID, CREATED_TIME, CHILD_ID).");
+            if (!LineageArchiveIndexRules.ContainsIndex(specs, "idx_ActorArchive_shi_alive_birth"))
+                throw new Exception("Shi tree reads need an index on ActorArchive(SHI_ID, IS_ALIVE, BIRTH_TIME).");
+            if (!LineageArchiveIndexRules.ContainsIndex(specs, "idx_WarClaim_source_target_active"))
+                throw new Exception("War claim map/AI reads need an index on active source-target claims.");
+            if (!LineageArchiveIndexRules.ContainsIndex(specs, "idx_MandateCoreCity_kingdom_city_active"))
+                throw new Exception("Mandate legal core map reads need an index on active kingdom-city cores.");
+        }
+
+        private static void ExpectMapModeMetaCacheRules()
+        {
+            if (!MapModeMetaCacheRules.IsDynamicMetaKey("Tech:city:10:tech_2"))
+                throw new Exception("City-colored tech meta keys must be treated as dynamic cache entries.");
+            if (!MapModeMetaCacheRules.IsDynamicMetaKey("aw3_tech_map:city:10:tech_2"))
+                throw new Exception("Runtime AW3 tech meta ids must be treated as dynamic cache entries.");
+            if (!MapModeMetaCacheRules.IsDynamicMetaKey("212:owned_non_core"))
+                throw new Exception("Numeric custom MetaType keys must be treated as dynamic cache entries.");
+            if (!MapModeMetaCacheRules.IsDynamicMetaKey("WarCore:owned_non_core"))
+                throw new Exception("Runtime war core meta keys must be treated as dynamic cache entries.");
+            if (MapModeMetaCacheRules.IsDynamicMetaKey("Kingdom:42"))
+                throw new Exception("Vanilla kingdom meta keys must not be cleared by AW3 dynamic cache pruning.");
+            if (!MapModeMetaCacheRules.ShouldClearForWorldSwitch(pHadAnyDynamicMeta: true))
+                throw new Exception("World switches must clear AW3 dynamic map meta cache.");
+        }
+
+        private static void ExpectKingdomYearSchedulerRules()
+        {
+            if (!KingdomYearSchedulerRules.ShouldRunHeavySystem(pYear: 120, pKingdomId: 6, pModulo: 4, pSlot: 2))
+                throw new Exception("Staggered yearly scheduler should run when kingdom/year slot matches.");
+            if (KingdomYearSchedulerRules.ShouldRunHeavySystem(pYear: 120, pKingdomId: 7, pModulo: 4, pSlot: 2))
+                throw new Exception("Staggered yearly scheduler should skip non-matching kingdoms.");
+            if (!KingdomYearSchedulerRules.ShouldRunHeavySystem(pYear: 120, pKingdomId: 7, pModulo: 0, pSlot: 2))
+                throw new Exception("Invalid modulo should fall back to running instead of disabling maintenance.");
+        }
+
+        private static void ExpectXiaNameRepairRules()
+        {
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName("NAME"))
+                throw new Exception("NAME placeholder must be repaired before it reaches vanilla meta windows.");
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName("No_Name [Xia]"))
+                throw new Exception("NO_NAME placeholders must be repaired.");
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(""))
+                throw new Exception("Empty generated names must be repaired.");
+            if (XiaNameRepairRules.IsInvalidGeneratedMetaName("\u5468"))
+                throw new Exception("A real single-character kingdom name must not be treated as invalid.");
+            if (!XiaNameRepairRules.IsInvalidXiaSubspeciesName("\u590F\u4EBA\u4EBA"))
+                throw new Exception("Duplicated Xia subspecies names must be repaired.");
+            if (XiaNameRepairRules.IsInvalidXiaSubspeciesName("\u534E\u590F\u4EBA"))
+                throw new Exception("A valid Xia subspecies name must not be repaired.");
+            if (!XiaNameRepairRules.IsInvalidXiaReligionName("NO\u2014\u2014Name\u4FE1\u4EF0"))
+                throw new Exception("Placeholder Xia religion names must be repaired.");
+            if (XiaNameRepairRules.IsInvalidXiaReligionName("\u793E\u7A37\u793C"))
+                throw new Exception("A valid Xia religion name must not be repaired.");
         }
 
         private static void ExpectHistoryContentNormalization(string pRaw, string pExpected)

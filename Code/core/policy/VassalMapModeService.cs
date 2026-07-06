@@ -43,6 +43,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 _zoneRootCache?.Clear();
+                AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }

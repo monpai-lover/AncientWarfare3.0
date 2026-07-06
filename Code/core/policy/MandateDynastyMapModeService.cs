@@ -22,6 +22,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 AWMapModeMetaLibrary.ClearMandateDynastyStatusCache();
+                AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }

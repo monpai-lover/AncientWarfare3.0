@@ -7,7 +7,8 @@ namespace AncientWarfare3.content
     ///
     ///     新版 WorldBox(0.51.0+)中"文明种族"由 <see cref="ActorAsset"/> 承载
     ///     (旧版 Race 类已删除),经 <c>AssetManager.actor_library.clone(新id, 模板id)</c> 注册。
-    ///     模板 <c>$civ_advanced_unit$</c> 即 human/elf/orc/dwarf 共用的高等文明单位模板。
+    ///     Xia 直接 clone human,再覆盖自己的贴图、建筑和命名。这样继承原版 human 的完整文明/繁殖/窗口字段,
+    ///     避免从通用模板手动补字段时漏出 NAME 或无小孩出生之类的问题。
     ///
     ///     参数取自 AW2 旧 Xia(蓝图 1.1):军事起步弱(army_multiplier 0.5)、基础城市 1、
     ///     产出 bread/pie/tea、地图色 #33724D、贴图复用 actors/races/Xia/。
@@ -38,7 +39,7 @@ namespace AncientWarfare3.content
 
         public static void Init()
         {
-            ActorAsset Xia = AssetManager.actor_library.clone(ID, "$civ_advanced_unit$");
+            ActorAsset Xia = AssetManager.actor_library.clone(ID, "human");
             asset = Xia;
 
             // —— 命名 / 本地化 ——
@@ -85,32 +86,26 @@ namespace AncientWarfare3.content
             Xia.name_taxonomic_genus = "homo";
             Xia.name_taxonomic_species = "sapiens";
 
-            // —— 基因(genome):夏人战斗/文明属性的真正来源 ——
-            // 根因(H18 属性弱):原版种族的 health/damage/speed/warfare 等都来自 addGenome(基因),
-            //   而非 base_stats。human 段显式 addGenome(health100/damage15/speed15/warfare3...);
-            //   夏人 clone 自 $civ_advanced_unit$ 模板(非 clone human),模板本身没 addGenome →
-            //   genome 近乎空 → 夏人战斗属性走最低默认,显著弱于 human。这里给夏人一套略强于 human
-            //   的基因(华夏先进文明:体质/军略/治理/智力全面高一档),addGenome 对已存在 part 是累加。
+            // —— 基因(genome):继承 human 后只追加相对 human 的差额 ——
+            // addGenome 对同名基因是累加,所以这里不能再写一整套最终值。
+            // 目标最终值大致为:health130/stamina120/lifespan90/damage20/speed16/offspring6,
+            // 外加 Xia 明确的 birth_rate=4 和治理/军略/智力 +2。
             Xia.addGenome(
-                ("health", 130f),       // human 100
-                ("stamina", 120f),      // human 100
-                ("mutation", 1f),
-                ("lifespan", 90f),      // human 70(与下方 base_stats lifespan 对齐)
-                ("damage", 20f),        // human 15
-                ("speed", 16f),         // human 15(略快)
-                ("offspring", 6f),      // human 5
+                ("health", 30f),        // human 100 -> Xia 130
+                ("stamina", 20f),       // human 100 -> Xia 120
+                ("lifespan", 20f),      // human 70 -> Xia 90
+                ("damage", 5f),         // human 15 -> Xia 20
+                ("speed", 1f),          // human 15 -> Xia 16
+                ("offspring", 1f),      // human 5 -> Xia 6
                 // ⚠ birth_rate 必须显式给(每帧繁殖 BabyMaker.cs:123 用 (int)stats["birth_rate"] 决定额外子女数)。
-                //   原版各文明种族 genome 都显式设(human/orc=3~5);夏人 clone 模板未继承 → 漏设则基础≈0,
-                //   叠加贵族 guizu 的小数后 (int) 取整成 0 → **贵族/平民几乎不生育**(用户实测生育数=0 的真凶之一)。
-                ("birth_rate", 4f),     // human 3,夏人略高(多子)
-                ("diplomacy", 5f),      // human 3
-                ("warfare", 5f),        // human 3(军略更强)
-                ("stewardship", 5f),    // human 3
-                ("intelligence", 5f));  // human 3
+                //   human 基线没有稳定显式值;Xia 仍单独给 4,避免贵族/平民生育被取整成 0。
+                ("birth_rate", 4f),     // Xia 明确生育率
+                ("diplomacy", 2f),      // human 3 -> Xia 5
+                ("warfare", 2f),        // human 3 -> Xia 5
+                ("stewardship", 2f),    // human 3 -> Xia 5
+                ("intelligence", 2f));  // human 3 -> Xia 5
 
-            // Clone from $civ_advanced_unit$ does not include human's species traits.
-            // Without reproduction_sexual/viviparity, Xia units can join cities,
-            // raising population, while the normal child-birth path never runs.
+            // human clone 已有这些繁殖/生理 trait;这里保留缺失兜底,防止未来模板改动。
             foreach (string traitId in HumanLikeSubspeciesTraits)
             {
                 Xia.addSubspeciesTrait(traitId);

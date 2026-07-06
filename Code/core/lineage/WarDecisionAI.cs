@@ -17,7 +17,6 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
-            WarTerritoryService.OnKingdomYear(pKingdom);
             if (!CanRunFor(pKingdom)) return;
 
             int year = Date.getCurrentYear();

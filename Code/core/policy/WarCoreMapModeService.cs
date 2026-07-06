@@ -83,6 +83,7 @@ namespace AncientWarfare3.core.policy
             {
                 _statusCache.Clear();
                 WarClaimMapModeService.ClearCache();
+                AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }

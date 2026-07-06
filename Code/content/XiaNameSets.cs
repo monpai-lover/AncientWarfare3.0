@@ -12,6 +12,7 @@ namespace AncientWarfare3.content
         internal const string CultureGenerator = "Xia_culture";
         internal const string KingdomGenerator = "Xia_kingdom";
         internal const string LanguageGenerator = "Xia_language";
+        internal const string ReligionGenerator = "Xia_religion";
         internal const string SubspeciesGenerator = "Xia_subspecies";
         internal const string UnitGenerator = "Xia_name";
 
@@ -34,7 +35,7 @@ namespace AncientWarfare3.content
             set.kingdom = KingdomGenerator;
             set.language = LanguageGenerator;
             set.unit = UnitGenerator;
-            set.religion = "human_religion";
+            set.religion = ReligionGenerator;
         }
 
         private static void RegisterVanillaFallbackGenerators()
@@ -98,6 +99,17 @@ namespace AncientWarfare3.content
                 "root,ending",
                 "root,classic_ending",
                 "fixed_language");
+
+            RegisterDictionaryGenerator(
+                ReligionGenerator,
+                new[]
+                {
+                    "root", "\u793E\u7A37,\u5B97\u5E99,\u793C\u4E50,\u534E\u590F,\u8BF8\u590F,\u5929\u547D,\u738B\u757F,\u6CB3\u6D1B,\u4E5D\u5DDE",
+                    "ending", "\u793C,\u796D,\u7956\u7940,\u5927\u793C,\u4FE1\u4EF0",
+                    "fixed_religion", "\u793E\u7A37\u793C,\u5B97\u5E99\u793C,\u793C\u4E50\u7956\u7940,\u534E\u590F\u5927\u793C,\u8BF8\u590F\u793C,\u5929\u547D\u793C,\u738B\u757F\u7956\u7940,\u6CB3\u6D1B\u793C"
+                },
+                "root,ending",
+                "fixed_religion");
 
             RegisterDictionaryGenerator(
                 SubspeciesGenerator,

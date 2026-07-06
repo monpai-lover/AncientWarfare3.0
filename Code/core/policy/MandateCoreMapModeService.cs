@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 _statusCache.Clear();
+                AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }

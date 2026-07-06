@@ -146,6 +146,7 @@ namespace AncientWarfare3.core.db
         {
             foreach (var (tableName, cols) in EnumerateTableSchemas())
                 if (cols.Count > 0) _db.CreateTable(tableName, cols);
+            LineageArchiveIndexManager.EnsureIndexes(_db);
         }
 
         /// <summary>
@@ -166,6 +167,7 @@ namespace AncientWarfare3.core.db
                 SQLiteHelper.RegisterTable(tableName, cols);
                 _db.AddMissingColumns(tableName, cols);
             }
+            LineageArchiveIndexManager.EnsureIndexes(_db);
         }
 
         /// <summary>反射出每个 [TableDef] 类对应的 (表名, 列定义)。建表 / 补列共用。</summary>

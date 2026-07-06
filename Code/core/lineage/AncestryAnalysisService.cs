@@ -9,14 +9,21 @@ namespace AncientWarfare3.core.lineage
     internal static class AncestryAnalysisService
     {
         private const int MAX_DEPTH = 8;
+        [ThreadStatic] private static ReportCache _activeReportCache;
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
+
+        private sealed class ReportCache
+        {
+            public readonly Dictionary<long, ActorArchiveTableItem> rows = new Dictionary<long, ActorArchiveTableItem>();
+            public readonly Dictionary<long, List<long>> parents = new Dictionary<long, List<long>>();
+        }
 
         public static bool HasAnalyzableAncestry(Actor pActor)
         {
             if (pActor?.data == null) return false;
             if (HasLiveAncestryData(pActor)) return true;
 
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActor.data.id);
+            ActorArchiveTableItem row = ReadRowCached(pActor.data.id);
             if (row == null) return false;
             return row.lineage_id >= 0 || row.shi_id >= 0 || row.ever_noble_blood != 0 ||
                    row.parent_id_1 >= 0 || row.parent_id_2 >= 0 || row.original_clan_id >= 0 ||
@@ -29,7 +36,7 @@ namespace AncientWarfare3.core.lineage
 
             if (pActor.clan?.data != null || pActor.subspecies != null) return true;
             if (pActor.data.parent_id_1 >= 0 || pActor.data.parent_id_2 >= 0) return true;
-            if (LineageQuery.GetParentIds(pActor.data.id).Count > 0) return true;
+            if (GetLineageParentIdsCached(pActor.data.id).Count > 0) return true;
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
@@ -41,32 +48,63 @@ namespace AncientWarfare3.core.lineage
             return !string.IsNullOrEmpty(family) || !string.IsNullOrEmpty(clan);
         }
 
+        private static ActorArchiveTableItem ReadRowCached(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            ReportCache cache = _activeReportCache;
+            if (cache == null) return LineageArchiveReader.ReadRow(pActorId);
+            if (cache.rows.TryGetValue(pActorId, out ActorArchiveTableItem row)) return row;
+            row = LineageArchiveReader.ReadRow(pActorId);
+            cache.rows[pActorId] = row;
+            return row;
+        }
+
+        private static List<long> GetLineageParentIdsCached(long pActorId)
+        {
+            if (pActorId < 0) return new List<long>();
+            ReportCache cache = _activeReportCache;
+            if (cache == null) return LineageQuery.GetParentIds(pActorId);
+            if (cache.parents.TryGetValue(pActorId, out List<long> ids)) return ids;
+            ids = LineageQuery.GetParentIds(pActorId);
+            cache.parents[pActorId] = ids;
+            return ids;
+        }
+
         public static AncestryReport BuildReport(long pActorId)
         {
-            var report = new AncestryReport { actor_id = pActorId, max_depth = MAX_DEPTH };
-            Actor actor = World.world?.units?.get(pActorId);
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ReportCache previous = _activeReportCache;
+            _activeReportCache = new ReportCache();
+            try
+            {
+                var report = new AncestryReport { actor_id = pActorId, max_depth = MAX_DEPTH };
+                Actor actor = World.world?.units?.get(pActorId);
+                ActorArchiveTableItem row = ReadRowCached(pActorId);
 
-            report.actor_name = NameOf(actor, row, pActorId);
-            report.identity = ResolveIdentity(actor, row);
-            report.noble_blood = ResolveNobleBlood(pActorId, actor, row);
-            report.noble_ancestors = CollectNobleAncestors(pActorId);
+                report.actor_name = NameOf(actor, row, pActorId);
+                report.identity = ResolveIdentity(actor, row);
+                report.noble_blood = ResolveNobleBlood(pActorId, actor, row);
+                report.noble_ancestors = CollectNobleAncestors(pActorId);
 
-            var social = new Dictionary<string, AncestryContribution>();
-            AccumulateSocial(pActorId, 100f, 0, social, new HashSet<long>(), report);
-            report.contributions = SortContributions(social);
-            report.unknown_percent = CalculateUnknownPercent(report.contributions);
+                var social = new Dictionary<string, AncestryContribution>();
+                AccumulateSocial(pActorId, 100f, 0, social, new HashSet<long>(), report);
+                report.contributions = SortContributions(social);
+                report.unknown_percent = CalculateUnknownPercent(report.contributions);
 
-            var genetic = new Dictionary<string, AncestryContribution>();
-            _ = AccumulateGenetic(pActorId, 100f, 0, genetic, new HashSet<long>());
-            report.genetic_contributions = SortContributions(genetic);
-            report.genetic_unknown_percent = CalculateUnknownPercent(report.genetic_contributions);
-            report.autosomal_summary = BuildAutosomalSummary(report.genetic_contributions,
-                report.genetic_unknown_percent);
-            report.paternal_marker = ResolveDirectMarker(pActorId, pWantMale: true);
-            report.maternal_marker = ResolveDirectMarker(pActorId, pWantMale: false);
+                var genetic = new Dictionary<string, AncestryContribution>();
+                _ = AccumulateGenetic(pActorId, 100f, 0, genetic, new HashSet<long>());
+                report.genetic_contributions = SortContributions(genetic);
+                report.genetic_unknown_percent = CalculateUnknownPercent(report.genetic_contributions);
+                report.autosomal_summary = BuildAutosomalSummary(report.genetic_contributions,
+                    report.genetic_unknown_percent);
+                report.paternal_marker = ResolveDirectMarker(pActorId, pWantMale: true);
+                report.maternal_marker = ResolveDirectMarker(pActorId, pWantMale: false);
 
-            return report;
+                return report;
+            }
+            finally
+            {
+                _activeReportCache = previous;
+            }
         }
 
         private static void AccumulateSocial(long pActorId, float pPercent, int pDepth,
@@ -132,7 +170,7 @@ namespace AncientWarfare3.core.lineage
             Dictionary<string, AncestryContribution> pAcc)
         {
             Actor actor = World.world?.units?.get(pActorId);
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             AncestryContribution c = BuildSocialContribution(actor, row, pActorId);
             AddContribution(pAcc, c, pPercent);
         }
@@ -141,7 +179,7 @@ namespace AncientWarfare3.core.lineage
             Dictionary<string, AncestryContribution> pAcc)
         {
             Actor actor = World.world?.units?.get(pActorId);
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             AncestryContribution c = BuildGeneticContribution(actor, row, pActorId);
             AddContribution(pAcc, c, pPercent);
             return c.kind != "unknown";
@@ -236,7 +274,7 @@ namespace AncientWarfare3.core.lineage
                 if (!MatchesSex(parentId, pWantMale)) continue;
 
                 Actor parent = World.world?.units?.get(parentId);
-                ActorArchiveTableItem parentRow = LineageArchiveReader.ReadRow(parentId);
+                ActorArchiveTableItem parentRow = ReadRowCached(parentId);
                 var subspecies = ResolveSubspecies(parent, parentRow);
                 if (subspecies.id >= 0 || !string.IsNullOrEmpty(subspecies.name))
                 {
@@ -264,7 +302,7 @@ namespace AncientWarfare3.core.lineage
             Actor actor = World.world?.units?.get(pActorId);
             if (actor?.data != null) return actor.isSexMale() == pWantMale;
 
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             if (row == null) return false;
             return pWantMale ? row.sex == 0 : row.sex == 1;
         }
@@ -279,7 +317,7 @@ namespace AncientWarfare3.core.lineage
                 if (id >= 0 && seen.Add(id)) result.Add(id);
             }
 
-            foreach (long id in LineageQuery.GetParentIds(pActorId))
+            foreach (long id in GetLineageParentIdsCached(pActorId))
                 Add(id);
 
             if (result.Count > 0) return result;
@@ -291,7 +329,7 @@ namespace AncientWarfare3.core.lineage
                 Add(live.data.parent_id_2);
             }
 
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             if (row != null)
             {
                 Add(row.parent_id_1);
@@ -380,7 +418,7 @@ namespace AncientWarfare3.core.lineage
                 return new NobleBloodEvidence();
 
             Actor actor = World.world?.units?.get(pActorId);
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             if (IsNobleEvidence(actor, row))
                 return new NobleBloodEvidence
                 {
@@ -422,7 +460,7 @@ namespace AncientWarfare3.core.lineage
             if (pDistance > MAX_DEPTH || pActorId < 0 || !pPath.Add(pActorId)) return;
 
             Actor actor = World.world?.units?.get(pActorId);
-            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            ActorArchiveTableItem row = ReadRowCached(pActorId);
             if (IsNobleEvidence(actor, row))
                 AddOrMergeNobleAncestor(pActorId, pDistance, actor, row, pResult);
 

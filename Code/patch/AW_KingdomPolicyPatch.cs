@@ -11,19 +11,31 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.updateAge))]
         public static void UpdateAge_Postfix(Kingdom __instance)
         {
+            if (__instance?.data == null || __instance.isRekt() || __instance.isNeutral()) return;
+
             XiaizationService.OnKingdomYear(__instance);
             KingdomPolicyService.OnKingdomYear(__instance);
             CityTechService.OnKingdomYear(__instance);
             CityEconomyService.OnKingdomYear(__instance);
-            WarPlotRedirectService.OnKingdomYear(__instance);
-            WarDecisionAI.OnKingdomYear(__instance);
-            VassalAIService.OnKingdomYear(__instance);
+            WarTerritoryService.OnKingdomYear(__instance);
             MandateService.OnKingdomYear(__instance);
             MandateDecisionService.OnKingdomYear(__instance);
             MandateRebelService.OnKingdomYear(__instance);
-            MandateBorderDefenseService.OnKingdomYear(__instance);
             ForeignOccupationService.OnKingdomYear(__instance);
-            GeneralService.OnKingdomYear(__instance);
+
+            int year = Date.getCurrentYear();
+            long id = __instance.id;
+            if (KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 2, pSlot: 0))
+            {
+                WarPlotRedirectService.OnKingdomYear(__instance);
+                WarDecisionAI.OnKingdomYear(__instance);
+                VassalAIService.OnKingdomYear(__instance);
+            }
+
+            if (KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 4, pSlot: 2))
+            {
+                GeneralService.OnKingdomYear(__instance);
+            }
         }
 
         [HarmonyPrefix]

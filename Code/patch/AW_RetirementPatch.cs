@@ -7,6 +7,9 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_RetirementPatch
     {
+        private const string CITY_ARMY_MAINTENANCE_LAST_CHECK = "aw_city_army_maintenance_last_check";
+        private const int CITY_ARMY_MAINTENANCE_INTERVAL = 5;
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), "updateAge")]
         public static void UpdateAge_Postfix(Actor __instance)
@@ -18,6 +21,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(CityBehCheckArmy), nameof(CityBehCheckArmy.execute))]
         public static void CityBehCheckArmy_Postfix(City pCity)
         {
+            if (!ShouldRunAwCityArmyMaintenance(pCity)) return;
+
             SlaveService.CheckCityRetirements(pCity);
             SlaveService.CheckCitySlaveLabor(pCity);
             SlaveService.AssignSlaveCatchers(pCity);
@@ -30,6 +35,19 @@ namespace AncientWarfare3.patch
                 SlaveService.RenameArmyIfSlaveArmy(pCity.getArmy());
                 FiefMilitaryService.RefreshArmyName(pCity.getArmy());
             }
+        }
+
+        private static bool ShouldRunAwCityArmyMaintenance(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            Kingdom kingdom = pCity.kingdom;
+            if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) return false;
+
+            int now = (int)LineageService.CurTime();
+            pCity.data.get(CITY_ARMY_MAINTENANCE_LAST_CHECK, out int lastRun, -1);
+            if (!CityMaintenanceThrottleRules.ShouldRun(now, lastRun, CITY_ARMY_MAINTENANCE_INTERVAL)) return false;
+            pCity.data.set(CITY_ARMY_MAINTENANCE_LAST_CHECK, now);
+            return true;
         }
 
         [HarmonyPostfix]

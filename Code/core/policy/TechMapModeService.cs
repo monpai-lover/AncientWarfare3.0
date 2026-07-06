@@ -67,13 +67,19 @@ namespace AncientWarfare3.core.policy
         {
             try
             {
-                _cityColorKeyCache.Clear();
+                ClearCache();
                 DevelopmentMapModeService.ClearCache();
+                AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch
             {
             }
+        }
+
+        public static void ClearCache()
+        {
+            _cityColorKeyCache.Clear();
         }
 
         public static void DirtyMapIfActive()

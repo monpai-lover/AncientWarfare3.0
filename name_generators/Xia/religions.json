@@ -1,0 +1,19 @@
+[
+    {
+        "id": "Xia_religion",
+        "templates": [
+            {
+                "format": "{Xia宗教雅称}",
+                "weight": 4
+            },
+            {
+                "format": "{Xia宗教前缀}{Xia宗教后缀}",
+                "weight": 4
+            },
+            {
+                "format": "{Xia宗教地望}{Xia宗教后缀}",
+                "weight": 2
+            }
+        ]
+    }
+]

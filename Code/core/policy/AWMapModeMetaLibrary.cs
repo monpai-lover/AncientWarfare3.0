@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.policy
     {
         private static readonly Dictionary<string, AWMapModeMetaObject> Metas = new Dictionary<string, AWMapModeMetaObject>();
         private static readonly Dictionary<string, ColorAsset> ColorCache = new Dictionary<string, ColorAsset>();
+        private static bool _hadAnyDynamicMeta;
 
         [System.ThreadStatic] private static Dictionary<string, string> _mandateDynastyStatusCache;
         [System.ThreadStatic] private static bool _mandateDynastyMandateResolved;
@@ -284,10 +285,13 @@ namespace AncientWarfare3.core.policy
 
         private static AWMapModeMetaObject GetMeta(MetaType pType, string pKey, string pName, ColorAsset pColor)
         {
-            string fullKey = pType + ":" + pKey;
+            string typeKey = AWMapModeMetaTypes.TryAsString(pType, out string id) ? id : pType.ToString();
+            string fullKey = typeKey + ":" + pKey;
             if (Metas.TryGetValue(fullKey, out AWMapModeMetaObject meta)) return meta;
             var obj = new AWMapModeMetaObject(StableId(pType, pKey), pName, pType, pColor);
             Metas[fullKey] = obj;
+            if (MapModeMetaCacheRules.IsDynamicMetaKey(fullKey))
+                _hadAnyDynamicMeta = true;
             return obj;
         }
 
@@ -368,6 +372,27 @@ namespace AncientWarfare3.core.policy
             _mandateDynastyStatusCache?.Clear();
             _mandateDynastyMandateResolved = false;
             _mandateDynastyMandate = null;
+        }
+
+        internal static void ClearDynamicMetaCache()
+        {
+            if (!MapModeMetaCacheRules.ShouldClearForWorldSwitch(_hadAnyDynamicMeta)) return;
+
+            var keys = new List<string>();
+            foreach (string key in Metas.Keys)
+                if (MapModeMetaCacheRules.IsDynamicMetaKey(key))
+                    keys.Add(key);
+
+            for (int i = 0; i < keys.Count; i++)
+                Metas.Remove(keys[i]);
+
+            _hadAnyDynamicMeta = false;
+        }
+
+        internal static void ClearRuntimeCaches()
+        {
+            ClearDynamicMetaCache();
+            ClearMandateDynastyStatusCache();
         }
 
         private static ColorAsset MandateDynastyColor(string pStatus)
