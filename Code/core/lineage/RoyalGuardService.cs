@@ -22,6 +22,7 @@ namespace AncientWarfare3.core.lineage
         private const double THREAT_SEARCH_MISS_COOLDOWN = 2.0;
         private static readonly MethodInfo NewArmyObjectMethod = ResolveNewArmyObjectMethod();
         private static readonly Dictionary<long, double> ThreatSearchNextAllowed = new Dictionary<long, double>();
+        private static readonly System.Random Rng = new System.Random();
         private static bool _creatingGuardArmy;
 
         private sealed class GuardCandidate
@@ -241,6 +242,9 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pGuard.kingdom;
             Actor king = kingdom?.king;
             if (king?.current_tile == null || king.isRekt()) return null;
+            Actor directThreat = GetDirectAttackThreat(pGuard, kingdom, king);
+            if (!ShouldSearchThreatsNow(pGuard, kingdom, king, directThreat != null)) return null;
+            if (directThreat != null) return directThreat;
             if (!ShouldRunThreatSearch(pGuard)) return null;
 
             Actor best = null;
@@ -262,6 +266,20 @@ namespace AncientWarfare3.core.lineage
             }
             MarkThreatSearchResult(pGuard, best);
             return best;
+        }
+
+        public static void WaitAfterGuardFollowIdle(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(RoyalGuardActionRules.FollowIdleWaitMin,
+                RoyalGuardActionRules.FollowIdleWaitMax));
+        }
+
+        public static void WaitAfterGuardNoThreat(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(RoyalGuardActionRules.NoThreatWaitMin,
+                RoyalGuardActionRules.NoThreatWaitMax));
         }
 
         public static bool IsValidThreatForGuard(Actor pGuard, Actor pTarget)
@@ -301,6 +319,37 @@ namespace AncientWarfare3.core.lineage
             double now = LineageService.CurTime();
             ThreatSearchNextAllowed.TryGetValue(pGuard.data.id, out double nextAllowed);
             return ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed);
+        }
+
+        private static bool ShouldSearchThreatsNow(Actor pGuard, Kingdom pKingdom, Actor pKing, bool pDirectAttack)
+        {
+            bool hasEnemyWar = false;
+            try { hasEnemyWar = pKingdom?.data != null && pKingdom.hasEnemies(); }
+            catch { hasEnemyWar = false; }
+
+            return RoyalGuardActionRules.ShouldSearchThreats(hasEnemyWar, pDirectAttack);
+        }
+
+        private static Actor GetDirectAttackThreat(Actor pGuard, Kingdom pKingdom, Actor pKing)
+        {
+            Actor threat = GetDirectAttackThreatFromVictim(pKingdom, pKing);
+            if (IsValidThreatForGuardCore(pGuard, pKingdom, pKing, threat)) return threat;
+
+            threat = GetDirectAttackThreatFromVictim(pKingdom, pGuard);
+            return IsValidThreatForGuardCore(pGuard, pKingdom, pKing, threat) ? threat : null;
+        }
+
+        private static Actor GetDirectAttackThreatFromVictim(Kingdom pKingdom, Actor pVictim)
+        {
+            try
+            {
+                BaseSimObject source = pVictim?.attackedBy;
+                if (source == null || !source.isActor()) return null;
+                Actor attacker = source.a;
+                if (attacker?.kingdom == null || pKingdom == null) return null;
+                return pKingdom.isEnemy(attacker.kingdom) ? attacker : null;
+            }
+            catch { return null; }
         }
 
         private static void MarkThreatSearchResult(Actor pGuard, Actor pTarget)
@@ -880,6 +929,12 @@ namespace AncientWarfare3.core.lineage
             {
                 return false;
             }
+        }
+
+        private static float RandomWait(float pMin, float pMax)
+        {
+            if (pMax < pMin) return pMax;
+            return (float)(pMin + Rng.NextDouble() * (pMax - pMin));
         }
 
         private static void UpsertGuardState(Actor pActor, bool pActive, bool pCaptain,

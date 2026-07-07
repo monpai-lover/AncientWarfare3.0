@@ -11,6 +11,7 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (target == null)
             {
                 pActor.beh_actor_target = null;
+                RoyalGuardService.WaitAfterGuardNoThreat(pActor);
                 return BehResult.Stop;
             }
 
