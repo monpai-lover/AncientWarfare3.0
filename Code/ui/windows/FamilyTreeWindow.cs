@@ -24,8 +24,11 @@ namespace AncientWarfare3.ui.windows
         private const int PAD = 12;
         private const float WINDOW_W = 480f;
         private const float WINDOW_H = 310f;
-        private const float VIEWPORT_W = 430f; // 加宽后的滚动视口宽(用于居中)
+        private const float VIEWPORT_W = 360f; // 右侧留出侧边工具栏,树画布不被按钮/输入框覆盖
         private const float VIEWPORT_H = 230f;
+        private const float VIEWPORT_X = -48f;
+        private const float SIDE_RIGHT = -12f;
+        private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
 
         private enum Mode { Family, BigTree }
         private static Mode _mode;
@@ -160,10 +163,10 @@ namespace AncientWarfare3.ui.windows
             var sw = GetComponent<ScrollWindow>();
             if (sw != null) _titleText = sw.titleText;
 
-            _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(-104, -28), ExpandAllLiveBranches);
-            _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(-52, -28), CollapseAllBranches);
-            _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(-156, -28), ToggleHalfSiblingRelations);
-            _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(-208, -28), ToggleRenameClanPanel);
+            _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(SIDE_RIGHT, -104), ExpandAllLiveBranches, SIDE_BUTTON_SIZE);
+            _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(SIDE_RIGHT, -128), CollapseAllBranches, SIDE_BUTTON_SIZE);
+            _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(SIDE_RIGHT, -54), ToggleHalfSiblingRelations, SIDE_BUTTON_SIZE);
+            _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, -54), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
             _halfSiblingText = _halfSiblingButton != null ? _halfSiblingButton.GetComponentInChildren<Text>() : null;
             UpdateHalfSiblingButtonText();
             BuildRenameClanPanel();
@@ -172,11 +175,11 @@ namespace AncientWarfare3.ui.windows
             var btnObj = new GameObject("BackToBigTree", typeof(RectTransform), typeof(Image), typeof(Button));
             btnObj.transform.SetParent(BackgroundTransform, false);
             var brect = btnObj.GetComponent<RectTransform>();
-            brect.anchorMin = new Vector2(0.5f, 0f);
-            brect.anchorMax = new Vector2(0.5f, 0f);
-            brect.pivot = new Vector2(0.5f, 0f);
-            brect.sizeDelta = new Vector2(120, 18);
-            brect.anchoredPosition = new Vector2(0, 12);
+            brect.anchorMin = new Vector2(1f, 1f);
+            brect.anchorMax = new Vector2(1f, 1f);
+            brect.pivot = new Vector2(1f, 1f);
+            brect.sizeDelta = SIDE_BUTTON_SIZE;
+            brect.anchoredPosition = new Vector2(SIDE_RIGHT, -80);
             var bg = btnObj.GetComponent<Image>();
             AW_UIStyle.ApplyButton(bg, 0.95f);
             _backButton = btnObj.GetComponent<Button>();
@@ -187,8 +190,9 @@ namespace AncientWarfare3.ui.windows
             trect.anchorMin = Vector2.zero; trect.anchorMax = Vector2.one; trect.sizeDelta = Vector2.zero;
             _backText = txtObj.GetComponent<Text>();
             _backText.font = LocalizedTextManager.current_font;
-            _backText.fontSize = 10;
+            _backText.fontSize = 9;
             _backText.alignment = TextAnchor.MiddleCenter;
+            _backText.horizontalOverflow = HorizontalWrapMode.Overflow;
             _backText.color = Color.white;
             _backText.text = AW_L10n.Text("aw_back_big_tree", "← 回氏族大树");
         }
@@ -222,7 +226,7 @@ namespace AncientWarfare3.ui.windows
             if (scrollRect != null)
             {
                 scrollRect.sizeDelta = new Vector2(VIEWPORT_W, VIEWPORT_H);
-                scroll.localPosition = new Vector3(0, -18f, 0);
+                scroll.localPosition = new Vector3(VIEWPORT_X, -18f, 0);
             }
 
             Transform viewport = BackgroundTransform.Find("Scroll View/Viewport");
@@ -230,7 +234,8 @@ namespace AncientWarfare3.ui.windows
             if (viewRect != null) viewRect.sizeDelta = new Vector2(VIEWPORT_W, VIEWPORT_H);
         }
 
-        private Button MakeToolbarButton(string pName, string pText, Vector2 pTopRightOffset, System.Action pAction)
+        private Button MakeToolbarButton(string pName, string pText, Vector2 pTopRightOffset,
+            System.Action pAction, Vector2? pSize = null)
         {
             var obj = new GameObject(pName, typeof(RectTransform), typeof(Image), typeof(Button));
             obj.transform.SetParent(BackgroundTransform, false);
@@ -238,7 +243,7 @@ namespace AncientWarfare3.ui.windows
             rect.anchorMin = new Vector2(1f, 1f);
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(1f, 1f);
-            rect.sizeDelta = new Vector2(46, 18);
+            rect.sizeDelta = pSize ?? new Vector2(46, 18);
             rect.anchoredPosition = pTopRightOffset;
             AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
 
@@ -269,8 +274,8 @@ namespace AncientWarfare3.ui.windows
             rect.anchorMin = new Vector2(1f, 1f);
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(1f, 1f);
-            rect.sizeDelta = new Vector2(184, 48);
-            rect.anchoredPosition = new Vector2(-10, -50);
+            rect.sizeDelta = new Vector2(86, 76);
+            rect.anchoredPosition = new Vector2(SIDE_RIGHT, -78);
             AW_UIStyle.ApplyPanel(obj.GetComponent<Image>(), 0.96f);
             _renameClanPanel = obj;
 
@@ -280,7 +285,7 @@ namespace AncientWarfare3.ui.windows
             inputRect.anchorMin = new Vector2(0f, 1f);
             inputRect.anchorMax = new Vector2(0f, 1f);
             inputRect.pivot = new Vector2(0f, 1f);
-            inputRect.sizeDelta = new Vector2(92, 18);
+            inputRect.sizeDelta = new Vector2(70, 18);
             inputRect.anchoredPosition = new Vector2(8, -8);
             AW_UIStyle.ApplyButton(inputObj.GetComponent<Image>(), 0.82f);
 
@@ -317,9 +322,9 @@ namespace AncientWarfare3.ui.windows
             _renameClanInput.placeholder = placeholder;
 
             MakeRenamePanelButton(obj.transform, "Ok", AW_L10n.Text("aw_confirm", "\u786E\u5B9A"),
-                new Vector2(106, -8), new Vector2(38, 18), ConfirmRenameVisibleClan);
+                new Vector2(8, -31), new Vector2(34, 17), ConfirmRenameVisibleClan);
             MakeRenamePanelButton(obj.transform, "Cancel", "X",
-                new Vector2(150, -8), new Vector2(24, 18), () => _renameClanPanel.SetActive(false));
+                new Vector2(48, -31), new Vector2(30, 17), () => _renameClanPanel.SetActive(false));
 
             var hintObj = new GameObject("Hint", typeof(RectTransform), typeof(Text));
             hintObj.transform.SetParent(obj.transform, false);
@@ -327,8 +332,8 @@ namespace AncientWarfare3.ui.windows
             hintRect.anchorMin = new Vector2(0f, 1f);
             hintRect.anchorMax = new Vector2(0f, 1f);
             hintRect.pivot = new Vector2(0f, 1f);
-            hintRect.sizeDelta = new Vector2(168, 16);
-            hintRect.anchoredPosition = new Vector2(8, -29);
+            hintRect.sizeDelta = new Vector2(70, 28);
+            hintRect.anchoredPosition = new Vector2(8, -52);
             _renameClanHintText = hintObj.GetComponent<Text>();
             _renameClanHintText.font = LocalizedTextManager.current_font;
             _renameClanHintText.fontSize = 9;
