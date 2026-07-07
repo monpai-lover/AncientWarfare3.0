@@ -29,7 +29,9 @@ namespace AncientWarfare3.patch
             Actor heir = HeirService.GetHeir(pKingdom);
             __result = HeirRecallRules.ShouldPreferRegisteredHeirBeforeLeaderFallback(heir != null)
                 ? heir
-                : HeirService.GetLeaderSuccessionCandidate(pKingdom);
+                : (HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom)
+                    ? HeirService.GetLeaderSuccessionCandidate(pKingdom)
+                    : null);
             if (heir == null) HeirService.MarkLeaderFallbackSuccession(pKingdom, __result);
             return false;
         }

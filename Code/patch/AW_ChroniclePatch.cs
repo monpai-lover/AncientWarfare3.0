@@ -61,6 +61,7 @@ namespace AncientWarfare3.patch
             CityTechService.OnCityChangedKingdom(__instance, __instance?.kingdom ?? pKingdom);
             ForeignOccupationService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             GeneralService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
+            WarTerritoryService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
         }
 
         [HarmonyPostfix]

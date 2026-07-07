@@ -109,10 +109,10 @@ namespace AncientWarfare3.core.lineage
             if (curId >= 0)
             {
                 Actor current = World.world.units.get(curId);
-                if (IsSuitableRegisteredHeir(current, pKingdom.king)) return true;
+                if (IsSuitableRegisteredHeir(current, pKingdom, pKingdom.king)) return true;
             }
             if (FindHeir(pKingdom, pKingdom.king, pIncludeRegisteredHeir: true).Actor != null) return true;
-            return GetLeaderSuccessionCandidate(pKingdom) != null;
+            return ShouldUseOrdinaryFallbackSuccession(pKingdom) && GetLeaderSuccessionCandidate(pKingdom) != null;
         }
 
         public static void RefreshForNewRoyalChild(Actor pBaby, Actor pParent1, Actor pParent2)
@@ -212,6 +212,19 @@ namespace AncientWarfare3.core.lineage
             return best;
         }
 
+        public static bool ShouldUseOrdinaryFallbackSuccession(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID, out long lineage, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID, out long shi, -1L);
+            bool hasLegitimateDynasty = lineage >= 0 || shi >= 0;
+            return MandateSuccessionRules.ShouldUseOrdinaryClanFallbackAfterCollateralSearch(
+                hasDirectSon: false,
+                hasRegisteredHeir: false,
+                hasCollateralRestorationCandidate: false,
+                isMandateOrLegitimateDynasty: hasLegitimateDynasty);
+        }
+
         public static void MarkLeaderFallbackSuccession(Kingdom pKingdom, Actor pLeader)
         {
             if (pKingdom?.data == null) return;
@@ -302,6 +315,9 @@ namespace AncientWarfare3.core.lineage
             Actor collateral = FindCollateralRestorationHeir(pKingdom, king);
             if (collateral != null) return new HeirSelection(collateral, SuccessionMode.COLLATERAL_RESTORE);
 
+            if (!ShouldUseOrdinaryFallbackSuccession(pKingdom))
+                return new HeirSelection(null, SuccessionMode.NONE);
+
             Actor clanFallback = FindRoyalClanFallbackHeir(pKingdom, king);
             return new HeirSelection(clanFallback,
                 clanFallback == null ? SuccessionMode.NONE : SuccessionMode.CLAN_FALLBACK);
@@ -337,7 +353,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long curId, -1L);
             if (curId < 0) return null;
             Actor current = World.world.units.get(curId);
-            return IsSuitableRegisteredHeir(current, pKing) ? current : null;
+            return IsSuitableRegisteredHeir(current, pKingdom, pKing) ? current : null;
         }
 
         private static Actor FindRoyalClanFallbackHeir(Kingdom pKingdom, Actor pKing)
@@ -374,9 +390,9 @@ namespace AncientWarfare3.core.lineage
                 pRequireLegitimateShi: true, pRequireAdult: true);
             if (exactAdult != null) return exactAdult;
 
-            Actor sameLineAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+            Actor traceableBranchAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: false, pRequireAdult: true);
-            if (sameLineAdult != null) return sameLineAdult;
+            if (traceableBranchAdult != null) return traceableBranchAdult;
 
             Actor exactUnderage = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
                 pRequireLegitimateShi: true, pRequireAdult: false);
@@ -460,6 +476,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long shi, -1L);
             if (lineage != pLegitimateLineage) return false;
+            bool canRestore = CollateralRestorationTraceService.CanRestoreToLegitimateShi(
+                pActor, pLegitimateLineage, pLegitimateShi);
             if (pRequireLegitimateShi)
             {
                 if (shi != pLegitimateShi) return false;
@@ -474,7 +492,16 @@ namespace AncientWarfare3.core.lineage
                     sameLineage: true,
                     belongsToLegitimateShi: true);
             }
-            return true;
+            return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
+                isXia: true,
+                isMale: true,
+                isAlive: true,
+                isAdult: pActor.isAdult(),
+                isKing: false,
+                hasMadness: false,
+                sameLineage: true,
+                belongsToLegitimateShi: false,
+                canTraceToLegitimateBranch: canRestore);
         }
 
         private static int CollateralCandidateScore(Actor pActor, Actor pKing, long pLegitimateShi)
@@ -659,14 +686,22 @@ namespace AncientWarfare3.core.lineage
             return shi >= 0;
         }
 
-        private static bool IsSuitableRegisteredHeir(Actor pActor, Actor pKing)
+        private static bool IsSuitableRegisteredHeir(Actor pActor, Kingdom pKingdom, Actor pKing)
         {
-            if (IsSuitableHeir(pActor, pKing)) return true;
             if (pActor == null || pActor.isRekt()) return false;
-            if (pActor.isAdult()) return false;
+            if (pKingdom?.data == null || pActor.kingdom != pKingdom) return false;
+            if (!pActor.isSexMale()) return false;
+            if (pActor.isKing() || pActor == pKing) return false;
             if (pActor.hasTrait("madness")) return false;
 
-            bool direct = pKing == null || IsDirectChildOf(pActor, pKing);
+            bool direct = pKing != null && IsDirectChildOf(pActor, pKing);
+            if (pActor.isAdult())
+            {
+                if (direct) return true;
+                pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID, out long legitimateShi, -1L);
+                return CollateralRestorationTraceService.BelongsToLegitimateShi(pActor, legitimateShi);
+            }
+
             bool hasAdultDirectSon = pKing != null &&
                 PickEldestStable(pKing.getChildren(false), pKing, pMaleOnly: true) != null;
             return MandateSuccessionRules.CanUseUnderageDirectSonFallback(

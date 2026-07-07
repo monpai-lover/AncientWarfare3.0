@@ -195,3 +195,6 @@ aw_rename_visible_clan_hint,改当前氏支树全部成员,Whole branch tree,Who
 aw_rename_visible_clan_invalid,请输入有效氏名,Enter a valid clan name,Enter a valid clan name
 aw_rename_visible_clan_none,没有可更新节点,No visible nodes updated,No visible nodes updated
 aw_confirm,确定,OK,OK
+aw_war_goal_take_mandate,夺取天命,Seize Mandate,奪取天命
+aw_war_take_mandate,夺取天命,Seize Mandate,奪取天命
+aw_war_take_mandate_desc,对当前天命国发动天命战争，胜利后转移天命,Start a Mandate war against the current Mandate realm and transfer the Mandate on victory,對當前天命國發動天命戰爭，勝利後轉移天命

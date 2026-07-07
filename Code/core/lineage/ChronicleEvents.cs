@@ -1,3 +1,5 @@
+using AncientWarfare3.core.policy;
+
 namespace AncientWarfare3.core.lineage
 {
     /// <summary>
@@ -617,6 +619,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnBondDeath(Actor pDead)
         {
             if (pDead?.data == null) return;
+            if (!DeathBondRules.ShouldRecordBondDeathForParentsAndLover(pDeadIsTraceable: true)) return;
             string deadName = pDead.getName();
 
             // 配偶
@@ -654,13 +657,48 @@ namespace AncientWarfare3.core.lineage
         {
             var result = new System.Collections.Generic.List<Actor>();
             if (pParent?.data == null) return result;
+
+            bool actorChildrenAvailable = TryCollectActorChildren(pParent, result);
+            if (!DeathBondRules.ShouldUseWorldScanForChildren(
+                    pCanUseActorChildrenList: actorChildrenAvailable,
+                    pDeadIsImportant: IsImportantForBondDeathChildFallback(pParent)))
+                return result;
+
+            Bench.bench(CityMaintenanceBenchmarkRules.DeathBondChildScan, CityMaintenanceBenchmarkRules.Group);
             long pid = pParent.data.id;
             foreach (Actor a in World.world.units)
             {
                 if (a?.data == null || a == pParent) continue;
                 if (a.data.parent_id_1 == pid || a.data.parent_id_2 == pid) result.Add(a);
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.DeathBondChildScan, CityMaintenanceBenchmarkRules.Group);
             return result;
+        }
+
+        private static bool TryCollectActorChildren(Actor pParent, System.Collections.Generic.List<Actor> pResult)
+        {
+            if (pParent?.data == null || pResult == null) return false;
+            try
+            {
+                foreach (Actor child in pParent.getChildren(pOnlyCurrentFamily: false))
+                {
+                    if (child?.data == null || child == pParent) continue;
+                    pResult.Add(child);
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsImportantForBondDeathChildFallback(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (ChronicleGate.IsImportant(pActor) || ChronicleGate.IsNobleActor(pActor)) return true;
+            try { return pActor.isArmyGroupLeader(); }
+            catch { return false; }
         }
     }
 }

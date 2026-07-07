@@ -663,6 +663,11 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID, out long legitimateLineage, -1L);
             pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID, out long legitimateShi, -1L);
             if (legitimateLineage < 0 || legitimateShi < 0) return;
+            if (!CollateralRestorationTraceService.CanRestoreToLegitimateShi(pKing, legitimateLineage, legitimateShi))
+            {
+                pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
+                return;
+            }
 
             ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(legitimateShi);
             string clanName = branch?.clan_name ?? "";

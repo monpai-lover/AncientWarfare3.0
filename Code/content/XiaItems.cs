@@ -12,7 +12,7 @@ namespace AncientWarfare3.content
     ///     - equipment_type(EquipmentType)、quality(Rarity,旧 ItemQuality)
     ///     - base_stats["key"]=val 索引器;knockback_reduction→knockback
     ///     - path_slash_animation="qing":挥击时播放青色斩击特效动画(复用 effects/qing 贴图)
-    ///     - 命中施加 qing 状态:action_attack_target += qingAttack,addStatusEffect 有 string 重载
+    ///     - qing 只保留 path_slash_animation 斩击动画,不再在命中时加 status
     /// </summary>
     public static class XiaItems
     {
@@ -51,8 +51,6 @@ namespace AncientWarfare3.content
             ji.base_stats["knockback"] = 0.1f;   // 旧 knockback_reduction +0.1
             ji.base_stats["targets"] = 1f;
             ji.path_slash_animation = "qing";     // 青色斩击特效动画
-            ji.action_attack_target =
-                (AttackAction)Delegate.Combine(ji.action_attack_target, new AttackAction(QingAttack));
 
             // ===== 戈 ge(clone 剑基础模板,暴击翻倍)=====
             ItemAsset ge = AssetManager.items.clone("ge", "$sword");
@@ -69,8 +67,6 @@ namespace AncientWarfare3.content
             ge.base_stats["knockback"] = 0.1f;
             ge.base_stats["targets"] = 1f;
             ge.path_slash_animation = "qing";
-            ge.action_attack_target =
-                (AttackAction)Delegate.Combine(ge.action_attack_target, new AttackAction(QingAttack));
             EnsureGameplaySprites(ji);
             EnsureGameplaySprites(ge);
 
@@ -120,10 +116,11 @@ namespace AncientWarfare3.content
             pItem.gameplay_sprites = sprites ?? Array.Empty<Sprite>();
         }
 
-        /// <summary>命中目标时施加 qing 状态(青色清扫特效 0.5s)。</summary>
+        /// <summary>兼容旧委托入口;默认不再施加 qing status,只用武器 slash 动画。</summary>
         public static bool QingAttack(BaseSimObject pSelf, BaseSimObject pTarget, WorldTile pTile = null)
         {
-            if (pTarget is Actor a && a.isAlive())
+            if (XiaItemEffectRules.ShouldApplyQingStatusEffect() &&
+                pTarget is Actor a && a.isAlive())
             {
                 a.addStatusEffect("qing", 0.5f);
             }

@@ -24,10 +24,11 @@ namespace AncientWarfare3.ui.windows
         private const int PAD = 12;
         private const float WINDOW_W = 480f;
         private const float WINDOW_H = 310f;
-        private const float VIEWPORT_W = 430f; // 树画布保持完整宽度,工具入口放到窗口外右侧
+        private const float VIEWPORT_W = 430f; // 树画布保持完整宽度,工具入口在窗口右侧内缩
         private const float VIEWPORT_H = 230f;
         private const float VIEWPORT_X = 0f;
-        private const float SIDE_RIGHT = 128f;
+        private const float SIDE_RIGHT_INSET = 12f;
+        private static readonly float SIDE_RIGHT = FamilyTreeToolbarLayoutRules.RightAlignedX(SIDE_RIGHT_INSET);
         private const float RENAME_TOP = -164f;
         private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
 
@@ -193,7 +194,7 @@ namespace AncientWarfare3.ui.windows
             _backText.font = LocalizedTextManager.current_font;
             _backText.fontSize = 9;
             _backText.alignment = TextAnchor.MiddleCenter;
-            _backText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _backText.horizontalOverflow = HorizontalWrapMode.Wrap;
             _backText.color = Color.white;
             _backText.text = AW_L10n.Text("aw_back_big_tree", "← 回氏族大树");
         }
