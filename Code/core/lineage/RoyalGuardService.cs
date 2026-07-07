@@ -12,6 +12,8 @@ namespace AncientWarfare3.core.lineage
     {
         private const int MAX_GUARDS_PER_KINGDOM = 20;
         private const int REFILL_SEARCH_THRESHOLD = 16;
+        private const int RECRUITMENT_BATCH_LIMIT = 4;
+        private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
         private const float MIN_NOBLE_RATIO = 0.2f;
         private const int CHECK_INTERVAL = 20;
         private const int PROTECT_RADIUS = 10;
@@ -127,6 +129,8 @@ namespace AncientWarfare3.core.lineage
                 int desired = Math.Min(MAX_GUARDS_PER_KINGDOM, active.Count + candidates.Count);
                 desired = Math.Min(desired, availableNobles * 5);
                 desired = Math.Max(1, desired);
+                desired = RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
+                    active.Count, desired, RECRUITMENT_BATCH_LIMIT);
                 TrimExcessGuards(active, desired);
 
                 targetNobles = Math.Max(1, (int)Math.Ceiling(desired * MIN_NOBLE_RATIO));
@@ -148,8 +152,15 @@ namespace AncientWarfare3.core.lineage
             Army guardArmy = EnsureGuardArmy(pKingdom, captain, guardName);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardArmy, CityMaintenanceBenchmarkRules.Group);
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardRefresh, CityMaintenanceBenchmarkRules.Group);
+            int runtimeRefreshesApplied = 0;
+            RefreshGuardIdentity(captain, pKingdom, guardName, pCaptain: true, guardArmy,
+                ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
             foreach (Actor guard in new List<Actor>(active))
-                RefreshGuardIdentity(guard, pKingdom, guardName, guard == captain, guardArmy);
+            {
+                if (guard == captain) continue;
+                RefreshGuardIdentity(guard, pKingdom, guardName, pCaptain: false, guardArmy,
+                    ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
+            }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefresh, CityMaintenanceBenchmarkRules.Group);
         }
 
@@ -538,10 +549,13 @@ namespace AncientWarfare3.core.lineage
         private static void AppointGuard(Actor pActor, Kingdom pKingdom, string pGuardName, bool pCaptain)
         {
             if (!RoyalGuardMaintenanceRules.ShouldPersistNewGuardDuringFill(pFinalRefreshWillRun: true)) return;
-            RefreshGuardIdentity(pActor, pKingdom, pGuardName, pCaptain, null);
+            int runtimeRefreshesApplied = 0;
+            RefreshGuardIdentity(pActor, pKingdom, pGuardName, pCaptain, null,
+                ref runtimeRefreshesApplied, RUNTIME_REFRESH_BATCH_LIMIT);
         }
 
-        private static void RefreshGuardIdentity(Actor pActor, Kingdom pKingdom, string pGuardName, bool pCaptain, Army pGuardArmy)
+        private static void RefreshGuardIdentity(Actor pActor, Kingdom pKingdom, string pGuardName, bool pCaptain,
+            Army pGuardArmy, ref int pRuntimeRefreshesApplied, int pRuntimeRefreshLimit)
         {
             if (pActor?.data == null || pKingdom?.data == null) return;
 
@@ -571,6 +585,9 @@ namespace AncientWarfare3.core.lineage
                 pProfessionChanged: professionChanged,
                 pJobChanged: jobChanged);
             if (!persistRefresh && !runtimeRefresh) return;
+            if (!RoyalGuardMaintenanceRules.ShouldApplyRuntimeRefreshNow(
+                    persistRefresh, runtimeRefresh, pRuntimeRefreshesApplied, pRuntimeRefreshLimit))
+                return;
 
             if (persistRefresh)
             {
@@ -583,13 +600,16 @@ namespace AncientWarfare3.core.lineage
                     pActor.addTrait(LineageKeys.TRAIT_GUARD);
             }
 
-            AssignToGuardArmy(pActor, pGuardArmy);
-            if (!pActor.isWarrior())
+            if (armyChanged)
+                AssignToGuardArmy(pActor, pGuardArmy);
+            if (professionChanged && !pActor.isWarrior())
             {
                 try { pActor.setProfession(UnitProfession.Warrior); } catch { }
             }
-            if (GuardContent.KingGuardJob != null)
+            if (jobChanged && GuardContent.KingGuardJob != null)
                 pActor.setCitizenJob(GuardContent.KingGuardJob);
+            if (runtimeRefresh)
+                pRuntimeRefreshesApplied++;
 
             if (!persistRefresh) return;
 

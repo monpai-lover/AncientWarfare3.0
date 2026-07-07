@@ -1,3 +1,5 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
     public static class RoyalGuardMaintenanceRules
@@ -59,6 +61,30 @@ namespace AncientWarfare3.core.lineage
             bool pJobChanged)
         {
             return pArmyChanged || pProfessionChanged || pJobChanged;
+        }
+
+        public static bool ShouldApplyRuntimeRefreshNow(
+            bool pPersistRefresh,
+            bool pRuntimeRefresh,
+            int pRuntimeRefreshesApplied,
+            int pRuntimeRefreshLimit)
+        {
+            if (pPersistRefresh) return true;
+            if (!pRuntimeRefresh) return false;
+
+            int limit = pRuntimeRefreshLimit <= 0 ? 1 : pRuntimeRefreshLimit;
+            return pRuntimeRefreshesApplied < limit;
+        }
+
+        public static int ClampDesiredGuardCountForBatch(
+            int pCurrentActiveCount,
+            int pDesiredCount,
+            int pRecruitmentLimit)
+        {
+            if (pDesiredCount <= pCurrentActiveCount) return pDesiredCount;
+
+            int limit = pRecruitmentLimit <= 0 ? 1 : pRecruitmentLimit;
+            return Math.Min(pDesiredCount, pCurrentActiveCount + limit);
         }
 
         public static bool ShouldPersistNewGuardDuringFill(bool pFinalRefreshWillRun)

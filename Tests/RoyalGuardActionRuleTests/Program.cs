@@ -15,6 +15,9 @@ namespace RoyalGuardActionRuleTests
             ExpectThreatSearch("wartime", pHasEnemyWar: true, pKingOrGuardUnderAttack: false);
             ExpectThreatSearch("direct_attack", pHasEnemyWar: false, pKingOrGuardUnderAttack: true);
 
+            ExpectRecruitmentBatching();
+            ExpectRuntimeRefreshBatching();
+
             if (RoyalGuardActionRules.WaitAfterNoThreat(2f, 5f) != 2f)
                 throw new Exception("Expected royal guard no-threat wait low bound.");
             if (RoyalGuardActionRules.WaitAfterFollowIdle(3f, 6f) != 3f)
@@ -46,6 +49,64 @@ namespace RoyalGuardActionRuleTests
         {
             if (!RoyalGuardActionRules.ShouldSearchThreats(pHasEnemyWar, pKingOrGuardUnderAttack))
                 throw new Exception($"Expected threat search '{pLabel}' to be allowed.");
+        }
+
+        private static void ExpectRuntimeRefreshBatching()
+        {
+            if (!RoyalGuardMaintenanceRules.ShouldApplyRuntimeRefreshNow(
+                    pPersistRefresh: false,
+                    pRuntimeRefresh: true,
+                    pRuntimeRefreshesApplied: 2,
+                    pRuntimeRefreshLimit: 4))
+                throw new Exception("Expected royal guard runtime refresh below the batch limit.");
+
+            if (RoyalGuardMaintenanceRules.ShouldApplyRuntimeRefreshNow(
+                    pPersistRefresh: false,
+                    pRuntimeRefresh: true,
+                    pRuntimeRefreshesApplied: 4,
+                    pRuntimeRefreshLimit: 4))
+                throw new Exception("Expected royal guard runtime refresh to be deferred at the batch limit.");
+
+            if (!RoyalGuardMaintenanceRules.ShouldApplyRuntimeRefreshNow(
+                    pPersistRefresh: true,
+                    pRuntimeRefresh: true,
+                    pRuntimeRefreshesApplied: 4,
+                    pRuntimeRefreshLimit: 4))
+                throw new Exception("Expected royal guard identity persistence to bypass runtime batching.");
+
+            if (RoyalGuardMaintenanceRules.ShouldApplyRuntimeRefreshNow(
+                    pPersistRefresh: false,
+                    pRuntimeRefresh: false,
+                    pRuntimeRefreshesApplied: 0,
+                    pRuntimeRefreshLimit: 4))
+                throw new Exception("Expected stable guards to skip runtime refresh.");
+        }
+
+        private static void ExpectRecruitmentBatching()
+        {
+            if (RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
+                    pCurrentActiveCount: 0,
+                    pDesiredCount: 20,
+                    pRecruitmentLimit: 4) != 4)
+                throw new Exception("Expected first royal guard formation to recruit only one batch.");
+
+            if (RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
+                    pCurrentActiveCount: 15,
+                    pDesiredCount: 20,
+                    pRecruitmentLimit: 4) != 19)
+                throw new Exception("Expected royal guard refill to add at most one batch.");
+
+            if (RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
+                    pCurrentActiveCount: 20,
+                    pDesiredCount: 20,
+                    pRecruitmentLimit: 4) != 20)
+                throw new Exception("Expected full royal guard to keep its desired count.");
+
+            if (RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
+                    pCurrentActiveCount: 2,
+                    pDesiredCount: 1,
+                    pRecruitmentLimit: 4) != 1)
+                throw new Exception("Expected trimming decisions to bypass recruitment batching.");
         }
     }
 }
