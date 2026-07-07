@@ -24,10 +24,11 @@ namespace AncientWarfare3.ui.windows
         private const int PAD = 12;
         private const float WINDOW_W = 480f;
         private const float WINDOW_H = 310f;
-        private const float VIEWPORT_W = 360f; // 右侧留出侧边工具栏,树画布不被按钮/输入框覆盖
+        private const float VIEWPORT_W = 430f; // 树画布保持完整宽度,工具入口放到窗口外右侧
         private const float VIEWPORT_H = 230f;
-        private const float VIEWPORT_X = -48f;
-        private const float SIDE_RIGHT = -12f;
+        private const float VIEWPORT_X = 0f;
+        private const float SIDE_RIGHT = 128f;
+        private const float RENAME_TOP = -164f;
         private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
 
         private enum Mode { Family, BigTree }
@@ -166,7 +167,7 @@ namespace AncientWarfare3.ui.windows
             _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(SIDE_RIGHT, -104), ExpandAllLiveBranches, SIDE_BUTTON_SIZE);
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(SIDE_RIGHT, -128), CollapseAllBranches, SIDE_BUTTON_SIZE);
             _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(SIDE_RIGHT, -54), ToggleHalfSiblingRelations, SIDE_BUTTON_SIZE);
-            _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, -54), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
+            _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(SIDE_RIGHT, RENAME_TOP), ToggleRenameClanPanel, SIDE_BUTTON_SIZE);
             _halfSiblingText = _halfSiblingButton != null ? _halfSiblingButton.GetComponentInChildren<Text>() : null;
             UpdateHalfSiblingButtonText();
             BuildRenameClanPanel();
@@ -275,7 +276,7 @@ namespace AncientWarfare3.ui.windows
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(1f, 1f);
             rect.sizeDelta = new Vector2(86, 76);
-            rect.anchoredPosition = new Vector2(SIDE_RIGHT, -78);
+            rect.anchoredPosition = new Vector2(SIDE_RIGHT, RENAME_TOP - 24f);
             AW_UIStyle.ApplyPanel(obj.GetComponent<Image>(), 0.96f);
             _renameClanPanel = obj;
 
