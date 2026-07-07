@@ -174,6 +174,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!CanBeSlaveCatcher(pCatcher)) return null;
             if (pCatcher.current_tile == null || pCatcher.kingdom == null) return null;
+            if (!ShouldScanCaptureTargetsFromCurrentPosition(pCatcher)) return null;
             if (!ShouldRunCaptureSearch(pCatcher)) return null;
 
             Actor best = null;
@@ -754,6 +755,29 @@ namespace AncientWarfare3.core.lineage
             double now = LineageService.CurTime();
             CaptureSearchNextAllowed.TryGetValue(pCatcher.data.id, out double nextAllowed);
             return ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed);
+        }
+
+        private static bool ShouldScanCaptureTargetsFromCurrentPosition(Actor pCatcher)
+        {
+            Kingdom kingdom = pCatcher?.kingdom;
+            bool hasEnemyWar = false;
+            try { hasEnemyWar = kingdom?.data != null && kingdom.hasEnemies(); }
+            catch { hasEnemyWar = false; }
+
+            bool inEnemyTerritory = IsInEnemyTerritory(pCatcher?.current_tile, kingdom);
+            return SlaveCaptureCommandRules.ShouldScanForCaptureTargets(hasEnemyWar, inEnemyTerritory);
+        }
+
+        private static bool IsInEnemyTerritory(WorldTile pTile, Kingdom pKingdom)
+        {
+            if (pTile == null || pKingdom?.data == null) return false;
+            try
+            {
+                if (!pTile.hasCity()) return false;
+                Kingdom owner = pTile.zone_city?.kingdom;
+                return owner?.data != null && owner != pKingdom && pKingdom.isEnemy(owner);
+            }
+            catch { return false; }
         }
 
         private static void MarkCaptureSearchResult(Actor pCatcher, Actor pTarget)

@@ -7,6 +7,11 @@ namespace AncientWarfare3.core.lineage
             return pSlaveryEnabled && pIsSlaveArmyCaptain && !pIsSlave;
         }
 
+        public static bool ShouldScanForCaptureTargets(bool pHasEnemyWar, bool pInEnemyTerritory)
+        {
+            return pHasEnemyWar && pInEnemyTerritory;
+        }
+
         public static float WaitAfterNoTarget(float pMin, float pMax)
         {
             return ClampMin(pMin, pMax);
