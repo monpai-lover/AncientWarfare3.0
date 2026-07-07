@@ -143,7 +143,7 @@ namespace AncientWarfare3.core.lineage
         public static bool TryDeclareMandate(Kingdom pKingdom, string pReason = "decision",
             string pOriginType = "native", string pClaimantKind = "orthodox", Kingdom pRebelOrigin = null)
         {
-            if (!CanDeclareMandateForOrigin(pKingdom, pOriginType, pClaimantKind, out _)) return false;
+            if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
             if (!Ready) return false;
 
             Kingdom old = GetCurrentMandateKingdom();
@@ -191,13 +191,14 @@ namespace AncientWarfare3.core.lineage
             CreateLegalCores(pKingdom, periodId);
             UpdateOriginalCoreCount(periodId);
 
-            RecordEvent("mandate_start", pKingdom, king, null, 0, START_VALUE,
+            string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
+            RecordEvent(startEventType, pKingdom, king, null, 0, START_VALUE,
                 pKingdom.name + " 受命称帝，建立" + dynastyName);
-            HistoryWriter.RecordKingdom(pKingdom, "mandate_start",
+            HistoryWriter.RecordKingdom(pKingdom, startEventType,
                 HistoryText.Kingdom(pKingdom) + " 受命称帝，建立" + HistoryText.PlainText(dynastyName),
                 HistoryTarget.Kingdom(pKingdom));
             if (king?.data != null)
-                HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), "mandate_start",
+                HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), startEventType,
                     HistoryText.Actor(king) + " 受天命为帝", ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
 
@@ -263,11 +264,12 @@ namespace AncientWarfare3.core.lineage
             return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
         }
 
-        private static bool CanDeclareMandateForOrigin(Kingdom pKingdom, string pOriginType, string pClaimantKind,
-            out string pReason)
+        private static bool CanDeclareMandateForOrigin(Kingdom pKingdom, string pDeclarationReason,
+            string pOriginType, string pClaimantKind, out string pReason)
         {
-            if (pOriginType == "rebel" || pClaimantKind == "rebel" ||
-                pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
+            bool rebelOrigin = pOriginType == "rebel" || pClaimantKind == "rebel";
+            bool foreignPseudo = pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo";
+            if (rebelOrigin || foreignPseudo)
             {
                 pReason = "";
                 if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
@@ -280,13 +282,26 @@ namespace AncientWarfare3.core.lineage
                     pReason = "no_king";
                     return false;
                 }
-                if (Exists)
+                bool mandateExists = Exists;
+                bool hasEnoughCore = MandateDeclarationRules.HasEnoughLegalCoreControl(
+                    GetCoreControlRatioFor(pKingdom), RESTORE_CORE_THRESHOLD);
+
+                if (foreignPseudo)
+                {
+                    return MandateDeclarationRules.CanDeclareForeignPseudo(
+                        LineageService.IsXiaKingdom(pKingdom),
+                        IsMandateWarDeclarationReason(pDeclarationReason),
+                        hasEnoughCore,
+                        mandateExists,
+                        out pReason);
+                }
+
+                if (mandateExists)
                 {
                     pReason = "already_exists";
                     return false;
                 }
-                if (!MandateDeclarationRules.HasEnoughLegalCoreControl(
-                        GetCoreControlRatioFor(pKingdom), RESTORE_CORE_THRESHOLD))
+                if (!hasEnoughCore)
                 {
                     pReason = "core_control";
                     return false;
@@ -295,6 +310,13 @@ namespace AncientWarfare3.core.lineage
             }
 
             return CanDeclareMandate(pKingdom, out pReason);
+        }
+
+        private static bool IsMandateWarDeclarationReason(string pReason)
+        {
+            return pReason == "pseudo_foreign_war" ||
+                   pReason == "tianming_war" ||
+                   pReason == "tianmingrebel_war";
         }
 
         public static bool CanStabilizeMandate(Kingdom pKingdom)
@@ -540,9 +562,8 @@ namespace AncientWarfare3.core.lineage
             {
                 case "controlled": return CoreControlledColor();
                 case "vassal": return CoreVassalColor();
-                case "lost":
-                case "orphan":
-                    return CoreLostColor();
+                case "lost": return CoreLostColor();
+                case "orphan": return CoreOrphanColor();
                 default:
                     return pFallback;
             }
@@ -584,9 +605,9 @@ namespace AncientWarfare3.core.lineage
             Kingdom mandate = GetCurrentMandateKingdom();
             Kingdom owner = pCity.kingdom;
             if (owner?.data == null || mandate?.data == null) return new Color32(140, 140, 140, 120);
-            if (owner == mandate) return new Color32(68, 180, 84, 220);
-            if (VassalService.GetRootSuzerain(owner) == mandate) return new Color32(70, 150, 210, 190);
-            return new Color32(190, 60, 50, 210);
+            if (owner == mandate) return new Color32(34, 107, 58, 220);
+            if (VassalService.GetRootSuzerain(owner) == mandate) return new Color32(79, 143, 69, 190);
+            return new Color32(179, 18, 75, 210);
         }
 
         private static bool ControlsAnyCurrentCore(Kingdom pKingdom)
@@ -616,17 +637,22 @@ namespace AncientWarfare3.core.lineage
 
         private static ColorAsset CoreControlledColor()
         {
-            return _coreControlledColor ??= MakeMapColor("#44B454");
+            return _coreControlledColor ??= MakeMapColor(MandateCoreMapRules.HexForStatus("controlled"));
         }
 
         private static ColorAsset CoreVassalColor()
         {
-            return _coreVassalColor ??= MakeMapColor("#4696D2");
+            return _coreVassalColor ??= MakeMapColor(MandateCoreMapRules.HexForStatus("vassal"));
         }
 
         private static ColorAsset CoreLostColor()
         {
-            return _coreLostColor ??= MakeMapColor("#BE3C32");
+            return _coreLostColor ??= MakeMapColor(MandateCoreMapRules.HexForStatus("lost"));
+        }
+
+        private static ColorAsset CoreOrphanColor()
+        {
+            return MakeMapColor(MandateCoreMapRules.HexForStatus("orphan"));
         }
 
         private static ColorAsset MakeMapColor(string pHex)
@@ -751,7 +777,7 @@ namespace AncientWarfare3.core.lineage
         {
             int delta = 0;
             try { delta += pKingdom.hasEnemies() ? -2 : 1; } catch { delta += 1; }
-            if (!IsMostPowerfulIndependent(pKingdom)) delta -= 2;
+            delta += CalculateStrongestPowerPenalty(pKingdom);
             if (pReport.core_control >= 0.85f) delta += 2;
             else if (pReport.core_control < 0.5f) delta -= 4;
             if (pReport.vassal_loyalty >= 0.7f) delta += 1;
@@ -1114,6 +1140,23 @@ namespace AncientWarfare3.core.lineage
                 if (otherPower > strongestOther) strongestOther = otherPower;
             }
             return MandatePowerRules.HasRequiredLeadForMandate(own, strongestOther);
+        }
+
+        private static int CalculateStrongestPowerPenalty(Kingdom pMandate)
+        {
+            if (pMandate?.data == null || World.world?.kingdoms == null) return 0;
+            float mandatePower = CalculateMandateCompetitionPower(pMandate);
+            float strongest = mandatePower;
+            foreach (Kingdom other in World.world.kingdoms)
+            {
+                if (other == pMandate) continue;
+                if (!MandatePowerRules.IsEligibleCompetitor(IsValidMandatePowerKingdom(other),
+                        VassalService.IsVassalKingdom(other), IsSupportedKingdom(other)))
+                    continue;
+                float power = CalculateMandateCompetitionPower(other);
+                if (power > strongest) strongest = power;
+            }
+            return MandatePowerRules.CalculateStrongestPowerPenalty(mandatePower, strongest);
         }
 
         private static float CalculateMandateCompetitionPower(Kingdom pKingdom)

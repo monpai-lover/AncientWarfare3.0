@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pKind ?? "")
             {
+                case "take_mandate": return "ui/Icons/traits/iconTianming";
                 case "take_core_city": return "ui/plots/plot_reclaim";
                 case "press_claim_city": return "ui/plots/plot_reclaim";
                 case "restore_kingdom": return "ui/plots/plot_usurpation";

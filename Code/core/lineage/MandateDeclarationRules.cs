@@ -18,5 +18,33 @@ namespace AncientWarfare3.core.lineage
         {
             return pControlRatio + 0.0001f >= pThreshold;
         }
+
+        public static bool CanDeclareForeignPseudo(bool pIsXiaKingdom, bool pWonMandateWar,
+            bool pHasEnoughLegalCoreControl, bool pMandateAlreadyExists, out string pReason)
+        {
+            if (pIsXiaKingdom)
+            {
+                pReason = "xia_not_foreign";
+                return false;
+            }
+            if (pMandateAlreadyExists)
+            {
+                pReason = "already_exists";
+                return false;
+            }
+            if (!pWonMandateWar)
+            {
+                pReason = "requires_mandate_war";
+                return false;
+            }
+            if (!pHasEnoughLegalCoreControl)
+            {
+                pReason = "core_control";
+                return false;
+            }
+
+            pReason = "";
+            return true;
+        }
     }
 }

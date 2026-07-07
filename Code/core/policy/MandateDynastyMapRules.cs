@@ -22,6 +22,11 @@ namespace AncientWarfare3.core.policy
             return pStatus == StatusMandate || pStatus == StatusVassal;
         }
 
+        public static bool ShouldUseKingdomColor(string pStatus)
+        {
+            return ShouldDrawStatus(pStatus);
+        }
+
         public static string HexForStatus(string pStatus)
         {
             switch (pStatus ?? "")

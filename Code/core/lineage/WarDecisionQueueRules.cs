@@ -21,6 +21,8 @@ namespace AncientWarfare3.core.lineage
 
             switch (pGoalType ?? "")
             {
+                case "take_mandate":
+                    return Check(pHasNormalCb, "missing_mandate_cb", out pReason);
                 case "take_core_city":
                     return Check(pHasCoreTarget, "missing_core_target", out pReason);
                 case "press_claim_city":

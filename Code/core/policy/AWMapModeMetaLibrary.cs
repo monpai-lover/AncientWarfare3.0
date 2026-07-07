@@ -234,6 +234,9 @@ namespace AncientWarfare3.core.policy
             Kingdom kingdom = pZone?.city?.kingdom;
             string status = GetMandateDynastyStatusForKingdom(kingdom);
             if (!MandateDynastyMapRules.ShouldDrawStatus(status)) return null;
+            if (MandateDynastyMapRules.ShouldUseKingdomColor(status))
+                return GetMeta(AWMapModeMetaTypes.MandateDynasty, status + ":" + (kingdom?.id ?? -1),
+                    status, DirectKingdomColor(kingdom, MandateDynastyColor(status)));
             return GetMeta(AWMapModeMetaTypes.MandateDynasty, status, status, MandateDynastyColor(status));
         }
 
@@ -323,48 +326,37 @@ namespace AncientWarfare3.core.policy
 
         private static ColorAsset TechColor(string pKey)
         {
-            switch (pKey)
-            {
-                case "tech_1": return MakeColor("#B33A2E");
-                case "tech_2": return MakeColor("#C96B2C");
-                case "tech_3": return MakeColor("#C9A42C");
-                case "tech_4": return MakeColor("#74A84A");
-                default: return MakeColor("#2F9B57");
-            }
+            return MakeColor(CityTechMapRules.HexForColorKey(pKey));
         }
 
         private static ColorAsset CoreColor(string pKey)
         {
-            switch (pKey)
-            {
-                case "core": return MakeColor("#2EAD4A");
-                case "pending_core": return MakeColor("#30B8AD");
-                case "owned_non_core": return MakeColor("#B33A2E");
-                default: return MakeColor("#242424");
-            }
+            return MakeColor(WarMapModeColorRules.CoreHexForStatus(pKey));
         }
 
         private static ColorAsset ClaimColor(string pKey)
         {
-            switch (pKey)
-            {
-                case "strong_claim": return MakeColor("#31AC52");
-                case "weak_claim": return MakeColor("#D6B42D");
-                case "pending_claim": return MakeColor("#E07A26");
-                default: return MakeColor("#242424");
-            }
+            return MakeColor(WarMapModeColorRules.ClaimHexForStatus(pKey));
         }
 
         private static ColorAsset MandateCoreColor(string pKey)
         {
-            switch (pKey)
+            return MakeColor(MandateCoreMapRules.HexForStatus(pKey));
+        }
+
+        private static ColorAsset DirectKingdomColor(Kingdom pKingdom, ColorAsset pFallback)
+        {
+            if (pKingdom?.data == null) return pFallback;
+            try
             {
-                case "controlled": return MakeColor("#44B454");
-                case "vassal": return MakeColor("#4696D2");
-                case "lost": return MakeColor("#BE3C32");
-                case "orphan": return MakeColor("#8A8A8A");
-                default: return MakeColor("#242424");
+                int colorId = pKingdom.data.color_id;
+                if (colorId >= 0)
+                    return AssetManager.kingdom_colors_library.getColorByIndex(colorId) ?? pFallback;
             }
+            catch
+            {
+            }
+            return pFallback;
         }
 
         internal static void ClearMandateDynastyStatusCache()

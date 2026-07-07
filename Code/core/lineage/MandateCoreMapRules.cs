@@ -17,5 +17,17 @@ namespace AncientWarfare3.core.lineage
         {
             return pIsActiveMandateKingdom && !pCoreAlreadyLegal;
         }
+
+        public static string HexForStatus(string pStatus)
+        {
+            switch (pStatus ?? "")
+            {
+                case "controlled": return "#226B3A";
+                case "vassal": return "#4F8F45";
+                case "lost": return "#B3124B";
+                case "orphan": return "#8A8A8A";
+                default: return "#242424";
+            }
+        }
     }
 }

@@ -8,6 +8,8 @@ namespace AncientWarfare3.core.lineage
             {
                 case "fabricate_core":
                     return 0;
+                case "take_mandate":
+                    return 5;
                 case "take_core_city":
                     return 10;
                 case "press_claim_city":

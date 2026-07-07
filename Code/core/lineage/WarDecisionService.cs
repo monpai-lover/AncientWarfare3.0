@@ -405,6 +405,7 @@ namespace AncientWarfare3.core.lineage
                 case "claim_war": return "\u6309\u5ba3\u79f0\u5ba3\u6218";
                 case "force_vassal": return "\u5f3a\u5236\u81e3\u670d";
                 case "restoration": return "\u590d\u56fd";
+                case "tianming": return "\u593a\u53d6\u5929\u547d";
                 case "no_cb": return "\u65e0\u7406\u7531\u5ba3\u6218";
             }
 
@@ -414,7 +415,7 @@ namespace AncientWarfare3.core.lineage
                 case "independence_war": return "\u8131\u79bb\u5b97\u4e3b";
                 case "reclaim": return "\u6536\u590d\u65e7\u571f";
                 case WAR_RESTORATION: return "\u590d\u56fd";
-                case MandateService.WAR_TIANMING: return "\u8ba8\u4f10\u5931\u5fb7\u5929\u547d";
+                case MandateService.WAR_TIANMING: return "\u593a\u53d6\u5929\u547d";
                 case MandateService.WAR_TIANMING_REBEL: return "\u4e49\u519b\u8ba8\u5929\u547d";
                 case GeneralRebellionService.WAR_GENERAL_REBELLION: return "\u5927\u5c06\u53db\u4e71";
                 case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return "\u5c01\u5730\u72ec\u7acb";

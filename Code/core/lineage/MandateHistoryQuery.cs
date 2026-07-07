@@ -209,13 +209,7 @@ namespace AncientWarfare3.core.lineage
             if (pPeriod == null || pEvents == null) return;
             foreach (MandateHistoryEvent e in pEvents)
             {
-                MandateReignView target = null;
-                foreach (MandateReignView reign in pPeriod.reigns)
-                {
-                    if (!Contains(reign.start_time, reign.end_time, e.world_time)) continue;
-                    target = reign;
-                    break;
-                }
+                MandateReignView target = FindActorTargetReign(pPeriod, e) ?? FindTimeTargetReign(pPeriod, e);
                 if (target == null)
                 {
                     target = pPeriod.reigns.Count > 0 ? pPeriod.reigns[0] : BuildFallbackReign(pPeriod);
@@ -223,6 +217,31 @@ namespace AncientWarfare3.core.lineage
                 }
                 target.events.Add(e);
             }
+        }
+
+        private static MandateReignView FindActorTargetReign(MandatePeriodView pPeriod, MandateHistoryEvent pEvent)
+        {
+            if (pPeriod == null || pEvent == null) return null;
+            if (!MandateHistoryEventAssignmentRules.ShouldPreferActorReign(pEvent.event_type, pEvent.actor_id))
+                return null;
+
+            foreach (MandateReignView reign in pPeriod.reigns)
+            {
+                if (reign == null || !reign.has_king) continue;
+                if (reign.king_actor_id == pEvent.actor_id) return reign;
+            }
+            return null;
+        }
+
+        private static MandateReignView FindTimeTargetReign(MandatePeriodView pPeriod, MandateHistoryEvent pEvent)
+        {
+            if (pPeriod == null || pEvent == null) return null;
+            foreach (MandateReignView reign in pPeriod.reigns)
+            {
+                if (!Contains(reign.start_time, reign.end_time, pEvent.world_time)) continue;
+                return reign;
+            }
+            return null;
         }
 
         private static void RemoveEmptyFallbackReigns(MandatePeriodView pPeriod)

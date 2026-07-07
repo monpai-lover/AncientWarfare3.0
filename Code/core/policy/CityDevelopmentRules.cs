@@ -25,22 +25,30 @@ namespace AncientWarfare3.core.policy
         public static string ColorKeyForScore(float pScore)
         {
             float score = Mathf.Clamp01(pScore);
-            if (score < 0.20f) return "development_0";
-            if (score < 0.40f) return "development_1";
-            if (score < 0.60f) return "development_2";
-            if (score < 0.80f) return "development_3";
-            return "development_4";
+            if (score < 0.10f) return "development_0";
+            if (score < 0.22f) return "development_1";
+            if (score < 0.34f) return "development_2";
+            if (score < 0.45f) return "development_3";
+            if (score < 0.57f) return "development_4";
+            if (score < 0.69f) return "development_5";
+            if (score < 0.81f) return "development_6";
+            if (score < 0.92f) return "development_7";
+            return "development_8";
         }
 
         public static string HexForColorKey(string pKey)
         {
             switch (pKey ?? "")
             {
-                case "development_0": return "#B33A2E";
-                case "development_1": return "#C96B2C";
-                case "development_2": return "#C9A42C";
-                case "development_3": return "#74A84A";
-                case "development_4": return "#2F9B57";
+                case "development_0": return "#B3124B";
+                case "development_1": return "#C7343A";
+                case "development_2": return "#D85B2A";
+                case "development_3": return "#E08226";
+                case "development_4": return "#D7A928";
+                case "development_5": return "#B6B23A";
+                case "development_6": return "#7EA648";
+                case "development_7": return "#4F8F45";
+                case "development_8": return "#226B3A";
                 default: return "#242424";
             }
         }

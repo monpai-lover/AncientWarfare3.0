@@ -104,6 +104,18 @@ namespace AncientWarfare3.ui.windows
             string targetNameRich = RichKingdomName(target);
 
             AddProjectRows(pRows, pSource, pReport, target, targetName, targetNameRich);
+            if (pReport.can_take_mandate)
+                AddWarRow(pRows, pSource, target, pReport,
+                    WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_MANDATE),
+                    AW_L10n.Text("aw_war_take_mandate", "\u593A\u53D6\u5929\u547D"),
+                    WarTerritoryService.GOAL_TAKE_MANDATE,
+                    AW_L10n.Text("aw_war_take_mandate_desc", "\u5BF9\u5F53\u524D\u5929\u547D\u56FD\u53D1\u52A8\u5929\u547D\u6218\u4E89\uFF0C\u80DC\u5229\u540E\u8F6C\u79FB\u5929\u547D\u3002"),
+                    AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"),
+                    () => KingdomPolicyService.StartWarDecision(pSource, target,
+                        WarTerritoryService.GOAL_TAKE_MANDATE,
+                        target.capital,
+                        MandateService.WAR_TIANMING, "tianming", "\u593A\u53D6\u5929\u547D"));
+
             if (pReport.can_reclaim)
                 AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_CORE_CITY),

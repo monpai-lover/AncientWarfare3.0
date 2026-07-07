@@ -53,6 +53,9 @@ namespace AncientWarfare3.core.lineage
                 case "war_start": return "\u6218\u4e89\u7206\u53d1";
                 case "war_end": return "\u6218\u4e89\u7ed3\u675f";
                 case "mandate_start": return "\u53d7\u547d\u79f0\u5e1d";
+                case "mandate_declared_orthodox": return "\u6b63\u7edf\u53d7\u547d";
+                case "mandate_declared_rebel": return "\u4e49\u519b\u53d7\u547d";
+                case "mandate_declared_foreign_pseudo": return "\u5916\u65cf\u4f2a\u671d";
                 case "mandate_end": return "\u5931\u53bb\u5929\u547d";
                 case "mandate_yearly": return "\u5929\u547d\u5e74\u5ea6\u53d8\u5316";
                 case "mandate_war_start": return "\u5929\u547d\u6218\u4e89\u5f00\u59cb";
@@ -118,7 +121,7 @@ namespace AncientWarfare3.core.lineage
                     pLabel = "\u65e0\u7406\u7531\u5ba3\u6218";
                     return true;
                 case "tianming":
-                    pLabel = "\u5929\u547d\u6218\u4e89";
+                    pLabel = "\u593a\u53d6\u5929\u547d";
                     return true;
                 case "tianmingrebel":
                     pLabel = "\u4e49\u519b\u5929\u547d\u6218\u4e89";

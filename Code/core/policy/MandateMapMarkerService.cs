@@ -12,6 +12,12 @@ namespace AncientWarfare3.core.policy
         private const string IconRebel = "ui/Icons/traits/iconrebel";
         private const string IconPseudo = "ui/wars/Mandate_of_Heaven";
 
+        private static readonly FieldInfo SpeciesIconField =
+            AccessTools.Field(typeof(NameplateText), "_icon_species");
+
+        private static readonly FieldInfo ShowSpeciesIconField =
+            AccessTools.Field(typeof(NameplateText), "_show_icon_species");
+
         private static readonly FieldInfo SpecialIconField =
             AccessTools.Field(typeof(NameplateText), "_icon_special");
 
@@ -20,22 +26,43 @@ namespace AncientWarfare3.core.policy
 
         public static void ApplyNameplate(NameplateText pNameplate, Kingdom pKingdom)
         {
+            if (pNameplate == null) return;
             string icon = GetMarkerIcon(pKingdom);
-            if (string.IsNullOrEmpty(icon) || pNameplate == null) return;
-            ReplaceSpecialIcon(pNameplate, icon);
+            if (string.IsNullOrEmpty(icon))
+            {
+                ClearSpecialIcon(pNameplate, icon);
+                return;
+            }
+            ReplaceSpeciesIcon(pNameplate, icon);
+            ClearSpecialIcon(pNameplate, icon);
         }
 
-        private static void ReplaceSpecialIcon(NameplateText pNameplate, string pIconPath)
+        private static void ReplaceSpeciesIcon(NameplateText pNameplate, string pIconPath)
         {
-            if (SpecialIconField == null || ShowSpecialIconField == null) return;
+            if (SpeciesIconField == null || ShowSpeciesIconField == null) return;
             try
             {
-                Image icon = SpecialIconField.GetValue(pNameplate) as Image;
-                if (!MandateMapMarkerRules.ShouldUseSpecialIcon(pIconPath, icon != null)) return;
+                if (pNameplate.is_mini) return;
+                Image icon = SpeciesIconField.GetValue(pNameplate) as Image;
+                if (!MandateMapMarkerRules.ShouldReplaceSpeciesIcon(pIconPath, icon != null)) return;
                 Sprite sprite = SpriteTextureLoader.getSprite(pIconPath);
                 if (sprite == null) return;
-                ShowSpecialIconField.SetValue(pNameplate, true);
+                ShowSpeciesIconField.SetValue(pNameplate, true);
                 icon.sprite = sprite;
+            }
+            catch { }
+        }
+
+        private static void ClearSpecialIcon(NameplateText pNameplate, string pIconPath)
+        {
+            if (SpecialIconField == null && ShowSpecialIconField == null) return;
+            try
+            {
+                Image icon = SpecialIconField?.GetValue(pNameplate) as Image;
+                bool hasSpecialTarget = icon != null || ShowSpecialIconField != null;
+                if (!MandateMapMarkerRules.ShouldClearSpecialIcon(pIconPath, hasSpecialTarget)) return;
+                ShowSpecialIconField?.SetValue(pNameplate, false);
+                if (icon != null) icon.sprite = null;
             }
             catch { }
         }

@@ -42,6 +42,7 @@ namespace AncientWarfare3.core.lineage
                     return PeaceSettlementAction.ReleaseVassal;
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:
                     return PeaceSettlementAction.RestoreKingdom;
+                case WarTerritoryService.GOAL_TAKE_MANDATE:
                 case WarTerritoryService.GOAL_NO_CB:
                     return PeaceSettlementAction.ApplyNoCbOutcome;
                 default:

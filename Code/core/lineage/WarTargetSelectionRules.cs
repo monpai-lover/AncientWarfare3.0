@@ -23,6 +23,9 @@ namespace AncientWarfare3.core.lineage
             int score = pPopulation / 2;
             switch (pGoalType)
             {
+                case WarTerritoryService.GOAL_TAKE_MANDATE:
+                    score += 180;
+                    break;
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                     if (pHasCore) score += 120;
                     break;

@@ -40,10 +40,18 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool IsValidCollateralRestorationCandidate(bool isXia, bool isMale, bool isAlive,
-            bool isAdult, bool isKing, bool hasMadness, bool sameLineage, bool belongsToLegitimateShi)
+            bool isAdult, bool isKing, bool hasMadness, bool sameLineage, bool belongsToLegitimateShi,
+            bool canTraceToLegitimateBranch = false)
         {
             return isXia && isMale && isAlive && isAdult && !isKing && !hasMadness &&
-                   sameLineage && belongsToLegitimateShi;
+                   sameLineage && (belongsToLegitimateShi || canTraceToLegitimateBranch);
+        }
+
+        public static bool ShouldUseOrdinaryClanFallbackAfterCollateralSearch(bool hasDirectSon,
+            bool hasRegisteredHeir, bool hasCollateralRestorationCandidate, bool isMandateOrLegitimateDynasty)
+        {
+            if (hasDirectSon || hasRegisteredHeir || hasCollateralRestorationCandidate) return false;
+            return !isMandateOrLegitimateDynasty;
         }
 
         public static bool ShouldRecordSuccessionCrisis(int pLastRecordedYear, int pCurrentYear)

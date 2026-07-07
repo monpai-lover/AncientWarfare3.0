@@ -122,20 +122,41 @@ namespace AncientWarfare3.core.lineage
 
             foreach (Kingdom other in CandidateKingdoms(pKingdom))
             {
-                if (other == pKingdom || other.hasEnemies()) continue;
+                if (other == pKingdom) continue;
+                bool isMandateTarget = MandateService.GetCurrentMandateKingdom() == other;
+                if (!isMandateTarget && other.hasEnemies()) continue;
                 if (VassalService.GetRootSuzerain(other) == VassalService.GetRootSuzerain(pKingdom)) continue;
                 if (WarTerritoryService.IsVassalDecisionOnlyTarget(pKingdom, other)) continue;
-                if (WarTerritoryService.FindFirstFabricationTargetCity(pKingdom, other)?.data == null) continue;
-                if (!AreNeighbors(pKingdom, other) && Opinion(pKingdom, other) > -65) continue;
 
                 float target = Math.Max(1f, VassalService.GetPowerScore(other, pIncludeVassals: true));
+                if (isMandateTarget)
+                {
+                    MandateReport report = MandateService.ReadReport();
+                    if (!MandateWarAiRules.ShouldConsiderTakeMandate(
+                            pTargetIsCurrentMandate: true,
+                            pVassalBlocked: false,
+                            pAttackerPower: own,
+                            pDefenderPower: target,
+                            pMandateValue: report.mandate_value))
+                        continue;
+
+                    float mandateScore = MandateWarAiRules.ScoreTakeMandate(own, target, report.mandate_value);
+                    if (other.hasEnemies()) mandateScore += 80f;
+                    if (report.core_control < 0.5f) mandateScore += 70f;
+                    if (mandateScore <= bestScore) continue;
+                    bestScore = mandateScore;
+                    best = other;
+                    continue;
+                }
+
+                if (WarTerritoryService.FindFirstFabricationTargetCity(pKingdom, other)?.data == null) continue;
+                if (!AreNeighbors(pKingdom, other) && Opinion(pKingdom, other) > -65) continue;
                 if (own < target * 1.35f) continue;
 
                 float score = 120f;
                 if (AreNeighbors(pKingdom, other)) score += 90f;
                 score += Math.Max(0, -Opinion(pKingdom, other));
                 score += Math.Min(160f, target);
-                if (MandateService.GetCurrentMandateKingdom() == other) score -= 140f;
                 if (score <= bestScore) continue;
                 bestScore = score;
                 best = other;

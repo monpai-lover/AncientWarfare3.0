@@ -53,6 +53,11 @@ aw_mandate_no_emperor_period,无明确天子时期,No clear emperor period,无�
 aw_view_emperor_biography,查看天子传记,View Emperor Biography,查看天子传记
 aw_view_emperor_biography_desc,打开该天命君主的人物传记,Open this Mandate ruler biography,打开该天命君主的人物传记
 aw_mandate_decision_slot,天朝决议,Mandate Decision,天朝决议
+aw_mandate_decisions_title,天朝决议,Mandate Decisions,天朝决议
+aw_mandate_decisions Title,天朝决议,Mandate Decisions,天朝决议
+aw_mandate_decisions_title Title,天朝决议,Mandate Decisions,天朝决议
+aw_mandate_decisions_desc,选择天命王朝独立推进的决议,Choose a Mandate dynasty decision to advance,选择天命王朝独立推进的决议
+aw_mandate_decision_select,选择,Select,选择
 aw_mandate_decision_idle,无当前决议,No current decision,无当前决议
 aw_mandate_decision_idle_desc,点击切换为可执行的天朝决议,Click to switch to an available Mandate decision,点击切换为可执行的天朝决议
 aw_mandate_decision_click_cycle,点击切换天朝决议,Click to cycle Mandate decision,点击切换天朝决议

@@ -56,11 +56,61 @@ namespace AncientWarfare3.core.lineage
             return MandateRulerTitleDefs.PositivePairs[PositiveIndex(score, MandateRulerTitleDefs.PositivePairs.Length)];
         }
 
+        public static string EnsureUniqueDoublePosthumousTitle(string pCandidate,
+            IEnumerable<string> pUsed, bool pNegative, int pReignIndex)
+        {
+            if (string.IsNullOrEmpty(pCandidate)) return "";
+            string[] pool = pNegative
+                ? MandateRulerTitleDefs.NegativePairs
+                : MandateRulerTitleDefs.PositivePairs;
+            if (pool.Length == 0) return pCandidate;
+
+            var used = new HashSet<string>();
+            string previous = "";
+            if (pUsed != null)
+            {
+                foreach (string title in pUsed)
+                {
+                    if (string.IsNullOrEmpty(title)) continue;
+                    used.Add(title);
+                    previous = title;
+                }
+            }
+
+            if (!used.Contains(pCandidate)) return pCandidate;
+
+            int candidateIndex = IndexOf(pool, pCandidate);
+            int start = candidateIndex >= 0
+                ? PositiveIndex(candidateIndex + 1, pool.Length)
+                : PositiveIndex(pReignIndex, pool.Length);
+            for (int i = 0; i < pool.Length; i++)
+            {
+                string next = pool[(start + i) % pool.Length];
+                if (!used.Contains(next)) return next;
+            }
+
+            for (int i = 0; i < pool.Length; i++)
+            {
+                string next = pool[(start + i) % pool.Length];
+                if (next != previous) return next;
+            }
+
+            return pCandidate;
+        }
+
         private static int PositiveIndex(int pValue, int pLength)
         {
             if (pLength <= 0) return 0;
             int idx = pValue % pLength;
             return idx < 0 ? idx + pLength : idx;
+        }
+
+        private static int IndexOf(string[] pPool, string pValue)
+        {
+            for (int i = 0; i < pPool.Length; i++)
+                if (pPool[i] == pValue)
+                    return i;
+            return -1;
         }
     }
 }

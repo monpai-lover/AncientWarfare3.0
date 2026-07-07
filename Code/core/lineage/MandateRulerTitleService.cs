@@ -40,6 +40,8 @@ namespace AncientWarfare3.core.lineage
                 war: wins * 20 - losses * 12,
                 order: report.mandate_value,
                 disaster: pEndReason == "kingdom_fell" ? 90 : 0);
+            pair = MandateRulerTitleRules.EnsureUniqueDoublePosthumousTitle(pair,
+                GetUsedDoublePosthumousTitles(periodId), pEndReason == "kingdom_fell", reignIndex);
             InsertTitle(pKingdom, pKing, pReign, periodId, temple, pair, pEndReason,
                 "wins=" + wins + ";losses=" + losses + ";conquest=" + conquestScore + ";reform=" + reformScore);
         }
@@ -92,6 +94,27 @@ namespace AncientWarfare3.core.lineage
                 {
                     string name = reader["TEMPLE_NAME"]?.ToString() ?? "";
                     if (!string.IsNullOrEmpty(name)) result.Add(name);
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static List<string> GetUsedDoublePosthumousTitles(long pPeriodId)
+        {
+            var result = new List<string>();
+            if (!Ready || pPeriodId < 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT DOUBLE_POSTHUMOUS FROM " + MandateRulerTitleTableItem.GetTableName() +
+                                  " WHERE PERIOD_ID=@p AND DOUBLE_POSTHUMOUS<>'' ORDER BY DECIDED_TIME, RECORD_ID";
+                cmd.Parameters.AddWithValue("@p", pPeriodId);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string title = reader["DOUBLE_POSTHUMOUS"]?.ToString() ?? "";
+                    if (!string.IsNullOrEmpty(title)) result.Add(title);
                 }
             }
             catch { }

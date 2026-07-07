@@ -51,8 +51,7 @@ namespace AncientWarfare3.ui.windows
             {
                 Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
                 if (kingdom?.data == null) return;
-                MandateDecisionService.CycleCurrent(kingdom);
-                Instance?.Refresh();
+                MandateDecisionWindow.Open(kingdom.id);
             };
             HistoryListItem.OnActorBiography = actorId =>
             {

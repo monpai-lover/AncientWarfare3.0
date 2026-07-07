@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.lineage
         public const string PROJECT_WEAK_CLAIM = "fabricate_weak_claim";
         public const string PROJECT_STRONG_CLAIM = "fabricate_strong_claim";
 
+        public const string GOAL_TAKE_MANDATE = "take_mandate";
         public const string GOAL_TAKE_CORE_CITY = "take_core_city";
         public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
         public const string GOAL_FORCE_VASSAL = "force_vassal";
@@ -66,6 +67,7 @@ namespace AncientWarfare3.core.lineage
             public bool can_force_vassal;
             public bool can_independence;
             public bool can_restore;
+            public bool can_take_mandate;
             public bool can_no_cb;
             public bool can_fabricate;
             public bool vassal_blocked;
@@ -93,6 +95,34 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsCivil(pKingdom) || !Ready) return;
             AdvanceProjects(pKingdom);
+        }
+
+        public static void OnCityTransferred(City pCity, Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (pCity?.data == null || pNewKingdom?.data == null || !Ready) return;
+            try
+            {
+                foreach (War war in pNewKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    foreach (GoalRow goal in ReadOpenGoals(war.data.id))
+                    {
+                        if (goal.target_city_id != pCity.data.id && goal.target_city_id != pCity.id) continue;
+                        Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ?? war.getMainAttacker();
+                        bool controlledByAttackerSystem = IsControlledByAttackerSystem(pNewKingdom, attacker);
+                        if (!WarGoalControlRules.ShouldResolveControlledCityGoal(goal.goal_type,
+                                controlledByAttackerSystem))
+                            continue;
+
+                        World.world?.wars?.endWar(war, WarWinner.Attackers);
+                        return;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("WarTerritoryService.OnCityTransferred failed: " + e.Message);
+            }
         }
 
         public static long EnsureCore(Kingdom pKingdom, City pCity, string pSourceType, string pSourceLabel)
@@ -330,6 +360,23 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool TryDeclareMandateWar(Kingdom pAttacker, Kingdom pDefender)
+        {
+            if (IsVassalDecisionOnlyTarget(pAttacker, pDefender)) return false;
+            if (MandateService.GetCurrentMandateKingdom() != pDefender) return false;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_TAKE_MANDATE,
+                target_kingdom = pDefender,
+                target_city = pDefender?.capital ?? FindFirstTargetCity(pDefender)
+            };
+            War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
+                MandateService.WAR_TIANMING, "tianming");
+            if (war?.data == null) return false;
+            CreateGoalForWar(war, goal);
+            return true;
+        }
+
         public static void CreateGoalForWar(War pWar, WarGoalRequest pGoal)
         {
             if (pWar?.data == null || pGoal == null || !Ready) return;
@@ -528,6 +575,9 @@ namespace AncientWarfare3.core.lineage
                 report.can_reclaim = !vassalBlocked && report.core_count > 0;
                 report.can_press_claim = !vassalBlocked && WarTargetSelectionRules.HasClaimLikeCasusBelli(
                     weakClaims, explicitStrongClaims, coreTargets);
+                report.can_take_mandate = !vassalBlocked &&
+                    MandateService.GetCurrentMandateKingdom() == target &&
+                    WarDecisionService.HasValidCasusBelli(pSource, target, MandateService.WAR_TIANMING);
                 report.can_force_vassal = !vassalBlocked &&
                     WarDecisionService.HasValidCasusBelli(pSource, target, "vassal_war");
                 report.can_independence = VassalService.GetSuzerain(pSource) == target &&
@@ -542,9 +592,9 @@ namespace AncientWarfare3.core.lineage
             }
             result.Sort((a, b) =>
             {
-                int scoreA = a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
+                int scoreA = (a.can_take_mandate ? 500 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
                              a.weak_claim_count * 20 + a.pending_count;
-                int scoreB = b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
+                int scoreB = (b.can_take_mandate ? 500 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
                              b.weak_claim_count * 20 + b.pending_count;
                 int cmp = scoreB.CompareTo(scoreA);
                 return cmp != 0 ? cmp : string.Compare(a.target?.name, b.target?.name, StringComparison.Ordinal);
@@ -558,6 +608,13 @@ namespace AncientWarfare3.core.lineage
             if (!IsCivil(pSource) || pTarget?.data == null) return result;
 
             bool vassalBlocked = IsVassalDecisionOnlyTarget(pSource, pTarget);
+            if (!vassalBlocked && MandateService.GetCurrentMandateKingdom() == pTarget &&
+                WarDecisionService.HasValidCasusBelli(pSource, pTarget, MandateService.WAR_TIANMING))
+                result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
+                    GOAL_TAKE_MANDATE, "\u593A\u53D6\u5929\u547D",
+                    -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
+                    restorationStrength: 0));
+
             City city = FindBestCoreTargetCity(pSource, pTarget, out long coreId);
             if (!vassalBlocked && city?.data != null)
                 result.Add(MakeOption(pTarget, city, GOAL_TAKE_CORE_CITY, "\u6536\u590d\u6838\u5fc3",
@@ -744,7 +801,8 @@ namespace AncientWarfare3.core.lineage
             bool alreadyCore = ownCity && FindCoreId(pSource.id, pTargetCity.data.id) >= 0;
             bool existing = pCheckExistingProject && ownCity &&
                             (FindPendingProject(pSource.id, pTargetCity.data.id, PROJECT_CORE).project_id >= 0 ||
-                             HasCurrentDecisionProjectForCity(pSource, pTargetCity.data.id, PROJECT_CORE));
+                             HasCurrentDecisionProjectForCity(pSource, pTargetCity.data.id, PROJECT_CORE) ||
+                             KingdomPolicyService.HasCoreFabricationProjectForCity(pSource, pTargetCity.data.id));
             return WarFabricationRules.CanFabricateCore(sourceValid, ownCity, alreadyCore, existing, out pReason);
         }
 
@@ -1031,6 +1089,13 @@ namespace AncientWarfare3.core.lineage
 
         private static bool UsePeaceSettlementResolver() => true;
 
+        private static bool IsControlledByAttackerSystem(Kingdom pOwner, Kingdom pAttacker)
+        {
+            if (pOwner?.data == null || pAttacker?.data == null) return false;
+            if (pOwner == pAttacker) return true;
+            return VassalService.GetRootSuzerain(pOwner) == pAttacker;
+        }
+
         private static void TryTransferTargetCity(Kingdom pAttacker, City pTargetCity)
         {
             if (pAttacker?.data == null || pTargetCity?.data == null || pTargetCity.kingdom == pAttacker) return;
@@ -1159,6 +1224,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case GOAL_TAKE_CORE_CITY: return "收复核心城市";
                 case GOAL_PRESS_CLAIM_CITY: return "夺取宣称城市";
+                case GOAL_TAKE_MANDATE: return "夺取天命";
                 case GOAL_FORCE_VASSAL: return "强制臣服";
                 case GOAL_INDEPENDENCE: return "脱离宗主";
                 case GOAL_RESTORE_KINGDOM: return "复国";
@@ -1402,12 +1468,17 @@ namespace AncientWarfare3.core.lineage
         {
             if (pTypes == null || pTypes.Length == 0)
                 return CountSql(WarProjectTableItem.GetTableName(),
-                    "SOURCE_KINGDOM_ID=@k AND ACTIVE=1 AND COMPLETED=0", ("@k", pKingdomId));
+                    "SOURCE_KINGDOM_ID=@k AND ACTIVE=1 AND COMPLETED=0", ("@k", pKingdomId)) +
+                       KingdomPolicyService.CountCoreFabricationProjects(FindKingdom(pKingdomId));
             int total = 0;
             foreach (string type in pTypes)
+            {
                 total += CountSql(WarProjectTableItem.GetTableName(),
                     "SOURCE_KINGDOM_ID=@k AND PROJECT_TYPE=@p AND ACTIVE=1 AND COMPLETED=0",
                     ("@k", pKingdomId), ("@p", type));
+                if (type == PROJECT_CORE)
+                    total += KingdomPolicyService.CountCoreFabricationProjects(FindKingdom(pKingdomId));
+            }
             return total;
         }
 
@@ -1538,6 +1609,17 @@ namespace AncientWarfare3.core.lineage
         {
             var result = new ProjectRow { project_id = -1 };
             if (pKingdom?.data == null || pCityId < 0 || pTypes == null || pTypes.Length == 0) return result;
+
+            if (Array.IndexOf(pTypes, PROJECT_CORE) >= 0 &&
+                KingdomPolicyService.TryGetCoreFabricationProject(pKingdom, pCityId, out float coreProgress,
+                    out float coreCost))
+            {
+                result.project_id = -3L;
+                result.project_type = PROJECT_CORE;
+                result.progress = coreProgress;
+                result.cost = coreCost;
+                return result;
+            }
 
             if (!CurrentDecisionProjectMatches(pKingdom, pTypes)) return result;
             pKingdom.data.get(LineageKeys.DECISION_PROJECT_TYPE, out string projectType, "");
