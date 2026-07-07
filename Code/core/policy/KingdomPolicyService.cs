@@ -31,6 +31,11 @@ namespace AncientWarfare3.core.policy
         public float tech_progress;
         public string current_decision = "";
         public float decision_progress;
+        public string decision_queue = "";
+        public long core_fab_current_city_id = -1L;
+        public string core_fab_current_city_name = "";
+        public float core_fab_progress;
+        public string core_fab_queue = "";
         public string completed_policies = "";
         public string completed_techs = "";
         public string completed_decisions = "";
@@ -65,10 +70,15 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, currentYear);
 
             AddYearlyPoints(pKingdom);
+            TryStartCoreFabrication(pKingdom);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
             KingdomPolicyAI.TryFillEmptySlots(pKingdom);
             AdvanceCurrent(pKingdom, PolicyNodeKind.Tech);
+            AdvanceCoreFabrication(pKingdom);
             AdvanceCurrent(pKingdom, PolicyNodeKind.Social);
             AdvanceCurrent(pKingdom, PolicyNodeKind.Decision);
+            TryStartCoreFabrication(pKingdom);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
             KingdomPolicyAI.TryFillEmptySlots(pKingdom);
             UpsertSnapshot(pKingdom);
             TechMapModeService.DirtyMapIfActive();
@@ -132,9 +142,18 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.get(LineageKeys.POLICY_CURRENT, out string currentPolicy, "");
             pKingdom.data.get(LineageKeys.TECH_CURRENT, out string currentTech, "");
             pKingdom.data.get(LineageKeys.DECISION_CURRENT, out string currentDecision, "");
+            pKingdom.data.get(LineageKeys.DECISION_QUEUE, out string decisionQueue, "");
+            pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_ID, out long currentCoreCityId, -1L);
+            pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, out string currentCoreCityName, "");
+            pKingdom.data.get(LineageKeys.CORE_FAB_QUEUE, out string coreQueue, "");
             if (currentPolicy == null) pKingdom.data.set(LineageKeys.POLICY_CURRENT, "");
             if (currentTech == null) pKingdom.data.set(LineageKeys.TECH_CURRENT, "");
             if (currentDecision == null) pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
+            if (decisionQueue == null) pKingdom.data.set(LineageKeys.DECISION_QUEUE, "");
+            if (currentCoreCityId < -1L) pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, -1L);
+            if (currentCoreCityName == null) pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, "");
+            if (coreQueue == null) pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, "");
+            MigrateCurrentCoreDecisionToDedicatedSlot(pKingdom);
         }
 
         public static bool StartResearch(Kingdom pKingdom, string pNodeId)
@@ -153,6 +172,14 @@ namespace AncientWarfare3.core.policy
                 return false;
             EnsureInitialized(pKingdom);
             if (GetStatus(pKingdom, def) != PolicyNodeStatus.Available) return false;
+
+            if (def.Kind == PolicyNodeKind.Decision &&
+                DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
+            {
+                EnqueueDecisionBack(pKingdom, CreateSimpleDecisionItem(def.Id, 0f));
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
 
             string currentKey = CurrentKey(def.Kind);
             string progressKey = ProgressKey(def.Kind);
@@ -180,6 +207,14 @@ namespace AncientWarfare3.core.policy
             EnsureInitialized(pKingdom);
             if (GetCurrent(pKingdom, def.Kind) == def.Id) return false;
 
+            if (def.Kind == PolicyNodeKind.Decision &&
+                DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
+            {
+                EnqueueDecisionBack(pKingdom, CreateSimpleDecisionItem(def.Id, 0f));
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
+
             pKingdom.data.set(CurrentKey(def.Kind), def.Id);
             pKingdom.data.set(ProgressKey(def.Kind), 0f);
             if (def.Kind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
@@ -194,7 +229,6 @@ namespace AncientWarfare3.core.policy
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
             EnsureInitialized(pKingdom);
-            if (!string.IsNullOrEmpty(GetCurrent(pKingdom, PolicyNodeKind.Decision))) return false;
 
             if (def.Id == "aw_decision_absorb_vassal" &&
                 !VassalService.CanAbsorbVassalByDecision(pKingdom, pTarget, out _))
@@ -203,6 +237,15 @@ namespace AncientWarfare3.core.policy
                 !VassalService.CanSetVassal(pKingdom, pTarget))
                 return false;
             if (GetStatus(pKingdom, def) == PolicyNodeStatus.Locked) return false;
+
+            var item = CreateSimpleDecisionItem(def.Id, 0f);
+            FillDecisionTarget(item, pTarget);
+            if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
+            {
+                EnqueueDecisionBack(pKingdom, item);
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
 
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, def.Id);
             pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
@@ -220,7 +263,6 @@ namespace AncientWarfare3.core.policy
             KingdomPolicyDef def = KingdomPolicyDefs.Get(defId);
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
             EnsureInitialized(pKingdom);
-            if (!string.IsNullOrEmpty(GetCurrent(pKingdom, PolicyNodeKind.Decision))) return false;
 
             City city = pTargetCity;
             Kingdom target = pTarget;
@@ -229,12 +271,27 @@ namespace AncientWarfare3.core.policy
                 if (city?.data == null) city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
                 target = pKingdom;
                 if (!WarTerritoryService.CanFabricateCoreProject(pKingdom, city, out _)) return false;
+                return StartCoreFabrication(pKingdom, city);
             }
             else
             {
                 if (target?.data == null) return false;
                 if (city?.data == null) city = WarTerritoryService.FindFirstFabricationTargetCity(pKingdom, target);
                 if (!WarTerritoryService.CanFabricateAgainst(pKingdom, target, city, out _)) return false;
+            }
+
+            var item = CreateFabricationDecisionItem(def.Id, target, city, pProjectType, def.FallbackName ?? "", 0f);
+            string current = GetCurrent(pKingdom, PolicyNodeKind.Decision);
+            if (pProjectType == WarTerritoryService.PROJECT_CORE &&
+                DecisionQueueRules.ShouldPreemptCurrentDecisionForCore(current, coreDecisionAvailable: true))
+            {
+                EnqueueCurrentDecisionFront(pKingdom);
+            }
+            else if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(current, def.Id))
+            {
+                EnqueueDecisionBack(pKingdom, item);
+                UpsertSnapshot(pKingdom);
+                return true;
             }
 
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, def.Id);
@@ -249,7 +306,8 @@ namespace AncientWarfare3.core.policy
         }
 
         public static bool StartWarDecision(Kingdom pKingdom, Kingdom pTarget, string pGoalType, City pTargetCity,
-            string pWarType, string pReasonKey, string pReasonLabel, Actor pClaimant = null)
+            string pWarType, string pReasonKey, string pReasonLabel, Actor pClaimant = null,
+            long pSourceClaimId = -1L, long pSourceCoreId = -1L, long pRestorationClaimId = -1L)
         {
             if (pKingdom?.data == null || pTarget?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
@@ -273,7 +331,17 @@ namespace AncientWarfare3.core.policy
 
             City displayTargetCity = pTargetCity ?? FindWarDecisionDisplayCity(pKingdom, pTarget, goalType);
             EnsureInitialized(pKingdom);
-            if (!string.IsNullOrEmpty(GetCurrent(pKingdom, PolicyNodeKind.Decision))) return false;
+            var item = CreateWarDecisionItem(pTarget, goalType, displayTargetCity, warType, pReasonKey,
+                pReasonLabel, pClaimant, 0f);
+            item.war_source_claim_id = pSourceClaimId;
+            item.war_source_core_id = pSourceCoreId;
+            item.war_restoration_claim_id = pRestorationClaimId;
+            if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
+            {
+                EnqueueDecisionBack(pKingdom, item);
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, def.Id);
             pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
             SetDecisionTarget(pKingdom, pTarget);
@@ -283,9 +351,9 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_WAR_REASON_LABEL, pReasonLabel ?? "");
             pKingdom.data.set(LineageKeys.DECISION_WAR_TARGET_CITY_ID, displayTargetCity?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.DECISION_WAR_TARGET_CITY_NAME, displayTargetCity?.data?.name ?? "");
-            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CLAIM_ID, -1L);
-            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, -1L);
-            pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, -1L);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CLAIM_ID, pSourceClaimId);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, pSourceCoreId);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, pRestorationClaimId);
             pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, pClaimant?.data?.id ?? -1L);
             UpsertSnapshot(pKingdom);
             return true;
@@ -297,11 +365,9 @@ namespace AncientWarfare3.core.policy
             Actor claimant = FindActor(pOption.claimant_actor_id);
             bool queued = StartWarDecision(pKingdom, pOption.target_kingdom, pOption.goal_type,
                 pOption.target_city, WarTypeForGoal(pOption.goal_type), ReasonKeyForGoal(pOption.goal_type),
-                pOption.label, claimant);
+                pOption.label, claimant, pOption.source_claim_id, pOption.source_core_id,
+                pOption.restoration_claim_id);
             if (!queued) return false;
-            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CLAIM_ID, pOption.source_claim_id);
-            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, pOption.source_core_id);
-            pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, pOption.restoration_claim_id);
             UpsertSnapshot(pKingdom);
             return true;
         }
@@ -310,6 +376,7 @@ namespace AncientWarfare3.core.policy
         {
             switch (pGoalType ?? "")
             {
+                case WarTerritoryService.GOAL_TAKE_MANDATE: return MandateService.WAR_TIANMING;
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY: return "reclaim";
                 case WarTerritoryService.GOAL_FORCE_VASSAL: return "vassal_war";
                 case WarTerritoryService.GOAL_INDEPENDENCE: return "independence_war";
@@ -322,6 +389,7 @@ namespace AncientWarfare3.core.policy
         {
             switch (pGoalType ?? "")
             {
+                case WarTerritoryService.GOAL_TAKE_MANDATE: return "tianming";
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY: return "core_reclaim";
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY: return "claim_war";
                 case WarTerritoryService.GOAL_FORCE_VASSAL: return "force_vassal";
@@ -474,6 +542,30 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, -1L);
         }
 
+        private static void MigrateCurrentCoreDecisionToDedicatedSlot(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.DECISION_CURRENT, out string current, "");
+            if (current != DecisionQueueRules.FabricateCoreDecisionId) return;
+            pKingdom.data.get(LineageKeys.DECISION_PROJECT_TYPE, out string projectType, "");
+            if (!string.IsNullOrEmpty(projectType) && projectType != WarTerritoryService.PROJECT_CORE) return;
+
+            pKingdom.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID, out long cityId, -1L);
+            City city = FindCity(cityId) ?? WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+            float progress = GetProgress(pKingdom, PolicyNodeKind.Decision);
+            if (city?.data != null)
+            {
+                if (GetCoreFabricationCityId(pKingdom) < 0)
+                    SetCoreFabricationCurrent(pKingdom, city, progress);
+                else if (!HasCoreFabricationProjectForCity(pKingdom, city.data.id))
+                    EnqueueCoreFabrication(pKingdom, city);
+            }
+
+            pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
+            pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
+            ClearDecisionTarget(pKingdom);
+        }
+
         public static bool ForceSetClassState(Kingdom pKingdom, string pClassId)
         {
             if (pKingdom?.data == null || !KingdomPolicyDefs.ClassStates.Contains(pClassId)) return false;
@@ -606,6 +698,11 @@ namespace AncientWarfare3.core.policy
             snapshot.tech_progress = GetProgress(pKingdom, PolicyNodeKind.Tech);
             snapshot.current_decision = GetCurrent(pKingdom, PolicyNodeKind.Decision);
             snapshot.decision_progress = GetProgress(pKingdom, PolicyNodeKind.Decision);
+            snapshot.decision_queue = GetDecisionQueueRaw(pKingdom);
+            snapshot.core_fab_current_city_id = GetCoreFabricationCityId(pKingdom);
+            snapshot.core_fab_current_city_name = GetCoreFabricationCityName(pKingdom);
+            snapshot.core_fab_progress = GetCoreFabricationProgress(pKingdom);
+            snapshot.core_fab_queue = GetCoreFabricationQueueRaw(pKingdom);
             snapshot.completed_policies = GetCompletedRaw(pKingdom, PolicyNodeKind.Social);
             snapshot.completed_techs = GetCompletedRaw(pKingdom, PolicyNodeKind.Tech);
             snapshot.completed_decisions = GetCompletedRaw(pKingdom, PolicyNodeKind.Decision);
@@ -639,6 +736,11 @@ namespace AncientWarfare3.core.policy
             {
                 pKingdom.data.set(LineageKeys.DECISION_CURRENT, pSnapshot.current_decision ?? "");
                 pKingdom.data.set(LineageKeys.DECISION_PROGRESS, Mathf.Max(0f, pSnapshot.decision_progress));
+                pKingdom.data.set(LineageKeys.DECISION_QUEUE, pSnapshot.decision_queue ?? "");
+                pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, pSnapshot.core_fab_current_city_id);
+                pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, pSnapshot.core_fab_current_city_name ?? "");
+                pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, Mathf.Max(0f, pSnapshot.core_fab_progress));
+                pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, pSnapshot.core_fab_queue ?? "");
                 pKingdom.data.set(LineageKeys.DECISION_COMPLETED, pSnapshot.completed_decisions ?? "");
             }
 
@@ -820,7 +922,10 @@ namespace AncientWarfare3.core.policy
             if (effectApplied && ShouldRecordGenericCompletion(pDef))
                 RecordCompletion(pKingdom, pDef);
             if (pDef.Kind == PolicyNodeKind.Decision)
+            {
                 ClearDecisionTarget(pKingdom);
+                StartNextQueuedDecisionIfEmpty(pKingdom);
+            }
             UpsertSnapshot(pKingdom);
         }
 
@@ -1037,6 +1142,404 @@ namespace AncientWarfare3.core.policy
             return raw ?? "";
         }
 
+        private static string GetDecisionQueueRaw(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.DECISION_QUEUE, out string raw, "");
+            return raw ?? "";
+        }
+
+        public static long GetCoreFabricationCityId(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_ID, out long value, -1L);
+            return value;
+        }
+
+        public static string GetCoreFabricationCityName(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, out string value, "");
+            return value ?? "";
+        }
+
+        public static float GetCoreFabricationProgress(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0f;
+            pKingdom.data.get(LineageKeys.CORE_FAB_PROGRESS, out float value, 0f);
+            return Mathf.Max(0f, value);
+        }
+
+        public static float GetCoreFabricationCost()
+        {
+            KingdomPolicyDef def = KingdomPolicyDefs.Get(DecisionQueueRules.FabricateCoreDecisionId);
+            return Mathf.Max(1f, def?.Cost ?? 80f);
+        }
+
+        public static float GetCoreFabricationProgressFraction(Kingdom pKingdom)
+        {
+            return Mathf.Clamp01(GetCoreFabricationProgress(pKingdom) / GetCoreFabricationCost());
+        }
+
+        public static bool TryGetCoreFabricationProject(Kingdom pKingdom, long pCityId,
+            out float pProgress, out float pCost)
+        {
+            pProgress = 0f;
+            pCost = GetCoreFabricationCost();
+            if (pKingdom?.data == null || pCityId < 0) return false;
+            if (GetCoreFabricationCityId(pKingdom) != pCityId) return false;
+            pProgress = GetCoreFabricationProgress(pKingdom);
+            return true;
+        }
+
+        public static bool HasCoreFabricationProjectForCity(Kingdom pKingdom, long pCityId)
+        {
+            if (pKingdom?.data == null || pCityId < 0) return false;
+            if (GetCoreFabricationCityId(pKingdom) == pCityId) return true;
+            foreach (KingdomDecisionQueueItem item in ReadCoreFabricationQueue(pKingdom))
+                if (item.war_target_city_id == pCityId) return true;
+            return false;
+        }
+
+        public static int CountCoreFabricationProjects(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0;
+            int count = GetCoreFabricationCityId(pKingdom) >= 0 ? 1 : 0;
+            count += ReadCoreFabricationQueue(pKingdom).Count;
+            return count;
+        }
+
+        private static string GetCoreFabricationQueueRaw(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.CORE_FAB_QUEUE, out string raw, "");
+            return raw ?? "";
+        }
+
+        private static List<KingdomDecisionQueueItem> ReadCoreFabricationQueue(Kingdom pKingdom)
+        {
+            return KingdomDecisionQueueCodec.Decode(GetCoreFabricationQueueRaw(pKingdom));
+        }
+
+        private static void WriteCoreFabricationQueue(Kingdom pKingdom, List<KingdomDecisionQueueItem> pItems)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, KingdomDecisionQueueCodec.Encode(pItems));
+        }
+
+        private static bool StartCoreFabrication(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null) return false;
+            City city = pCity ?? WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+            if (city?.data == null) return false;
+
+            long currentCityId = GetCoreFabricationCityId(pKingdom);
+            if (currentCityId == city.data.id) return true;
+            if (IsCoreFabricationQueued(pKingdom, city.data.id)) return true;
+            if (!WarTerritoryService.CanFabricateCoreProject(pKingdom, city, out _)) return false;
+
+            if (CoreFabricationSlotRules.ShouldStartWhenEmpty(currentCityId, hasAvailableCoreTarget: true))
+            {
+                SetCoreFabricationCurrent(pKingdom, city, 0f);
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
+
+            if (CoreFabricationSlotRules.ShouldQueueWhenBusy(currentCityId, hasAvailableCoreTarget: true))
+            {
+                EnqueueCoreFabrication(pKingdom, city);
+                UpsertSnapshot(pKingdom);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsCoreFabricationQueued(Kingdom pKingdom, long pCityId)
+        {
+            foreach (KingdomDecisionQueueItem item in ReadCoreFabricationQueue(pKingdom))
+                if (item.war_target_city_id == pCityId) return true;
+            return false;
+        }
+
+        private static void EnqueueCoreFabrication(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null) return;
+            List<KingdomDecisionQueueItem> queue = ReadCoreFabricationQueue(pKingdom);
+            if (queue.Count >= KingdomDecisionQueueCodec.MaxQueueSize) return;
+            queue.Add(CreateFabricationDecisionItem(DecisionQueueRules.FabricateCoreDecisionId, pKingdom, pCity,
+                WarTerritoryService.PROJECT_CORE, "\u5236\u9020\u6838\u5FC3", 0f));
+            WriteCoreFabricationQueue(pKingdom, queue);
+        }
+
+        private static void SetCoreFabricationCurrent(Kingdom pKingdom, City pCity, float pProgress)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, pCity?.data?.id ?? -1L);
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, pCity?.data?.name ?? "");
+            pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, Mathf.Max(0f, pProgress));
+        }
+
+        private static void ClearCoreFabricationCurrent(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, -1L);
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, "");
+            pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, 0f);
+        }
+
+        private static void TryStartCoreFabrication(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            if (GetCoreFabricationCityId(pKingdom) < 0 && StartNextQueuedCoreFabrication(pKingdom))
+                return;
+            City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+            if (city?.data == null) return;
+            StartCoreFabrication(pKingdom, city);
+        }
+
+        private static void AdvanceCoreFabrication(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            long cityId = GetCoreFabricationCityId(pKingdom);
+            if (cityId < 0) return;
+
+            City city = FindCity(cityId);
+            if (city?.data == null || city.kingdom != pKingdom || !WarTerritoryService.IsOwnedNonCore(pKingdom, city))
+            {
+                ClearCoreFabricationCurrent(pKingdom);
+                StartNextQueuedCoreFabrication(pKingdom);
+                UpsertSnapshot(pKingdom);
+                return;
+            }
+
+            pKingdom.data.get(LineageKeys.POLICY_POINTS, out float points, 0f);
+            if (points <= 0f) return;
+
+            float progress = GetCoreFabricationProgress(pKingdom);
+            float cost = GetCoreFabricationCost();
+            float remaining = cost - progress;
+            float spend = Mathf.Min(points, MAX_YEARLY_SPEND, remaining);
+            if (spend <= 0f) return;
+
+            points -= spend;
+            progress += spend;
+            pKingdom.data.set(LineageKeys.POLICY_POINTS, points);
+            pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, progress);
+
+            if (progress + 0.001f < cost) return;
+            if (WarTerritoryService.EnsureCore(pKingdom, city, "fabricated", "\u5236\u9020\u6838\u5FC3") < 0)
+                return;
+
+            ClearCoreFabricationCurrent(pKingdom);
+            StartNextQueuedCoreFabrication(pKingdom);
+            UpsertSnapshot(pKingdom);
+        }
+
+        private static bool StartNextQueuedCoreFabrication(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || GetCoreFabricationCityId(pKingdom) >= 0) return false;
+            List<KingdomDecisionQueueItem> queue = ReadCoreFabricationQueue(pKingdom);
+            while (queue.Count > 0)
+            {
+                KingdomDecisionQueueItem item = queue[0];
+                queue.RemoveAt(0);
+                WriteCoreFabricationQueue(pKingdom, queue);
+                City city = FindCity(item.war_target_city_id);
+                if (city?.data == null || !WarTerritoryService.CanFabricateCoreProject(pKingdom, city, out _))
+                    continue;
+                SetCoreFabricationCurrent(pKingdom, city, Mathf.Max(0f, item.progress));
+                return true;
+            }
+
+            WriteCoreFabricationQueue(pKingdom, queue);
+            return false;
+        }
+
+        private static List<KingdomDecisionQueueItem> ReadDecisionQueue(Kingdom pKingdom)
+        {
+            return KingdomDecisionQueueCodec.Decode(GetDecisionQueueRaw(pKingdom));
+        }
+
+        private static void WriteDecisionQueue(Kingdom pKingdom, List<KingdomDecisionQueueItem> pItems)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.DECISION_QUEUE, KingdomDecisionQueueCodec.Encode(pItems));
+        }
+
+        private static void EnqueueDecisionBack(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
+        {
+            if (pKingdom?.data == null || pItem == null || string.IsNullOrEmpty(pItem.decision_id)) return;
+            List<KingdomDecisionQueueItem> queue = ReadDecisionQueue(pKingdom);
+            if (queue.Count >= KingdomDecisionQueueCodec.MaxQueueSize) return;
+            queue.Add(pItem);
+            WriteDecisionQueue(pKingdom, queue);
+        }
+
+        private static void EnqueueDecisionFront(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
+        {
+            if (pKingdom?.data == null || pItem == null || string.IsNullOrEmpty(pItem.decision_id)) return;
+            List<KingdomDecisionQueueItem> queue = ReadDecisionQueue(pKingdom);
+            queue.Insert(0, pItem);
+            if (queue.Count > KingdomDecisionQueueCodec.MaxQueueSize)
+                queue.RemoveAt(queue.Count - 1);
+            WriteDecisionQueue(pKingdom, queue);
+        }
+
+        private static void EnqueueCurrentDecisionFront(Kingdom pKingdom)
+        {
+            KingdomDecisionQueueItem current = CaptureCurrentDecision(pKingdom);
+            if (current == null) return;
+            EnqueueDecisionFront(pKingdom, current);
+        }
+
+        private static KingdomDecisionQueueItem CaptureCurrentDecision(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return null;
+            string current = GetCurrent(pKingdom, PolicyNodeKind.Decision);
+            if (string.IsNullOrEmpty(current)) return null;
+
+            var item = CreateSimpleDecisionItem(current, GetProgress(pKingdom, PolicyNodeKind.Decision));
+            pKingdom.data.get(LineageKeys.DECISION_TARGET_KINGDOM_ID, out item.target_kingdom_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_TARGET_KINGDOM_NAME, out item.target_kingdom_name, "");
+            pKingdom.data.get(LineageKeys.DECISION_PROJECT_TYPE, out item.project_type, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_TYPE, out item.war_type, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_GOAL_TYPE, out item.war_goal_type, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_REASON_KEY, out item.war_reason_key, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_REASON_LABEL, out item.war_reason_label, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID, out item.war_target_city_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_NAME, out item.war_target_city_name, "");
+            pKingdom.data.get(LineageKeys.DECISION_WAR_SOURCE_CLAIM_ID, out item.war_source_claim_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, out item.war_source_core_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, out item.war_restoration_claim_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, out item.war_claimant_actor_id, -1L);
+            return item;
+        }
+
+        private static KingdomDecisionQueueItem CreateSimpleDecisionItem(string pDecisionId, float pProgress)
+        {
+            return new KingdomDecisionQueueItem
+            {
+                decision_id = pDecisionId ?? "",
+                progress = Mathf.Max(0f, pProgress)
+            };
+        }
+
+        private static KingdomDecisionQueueItem CreateFabricationDecisionItem(string pDecisionId, Kingdom pTarget,
+            City pCity, string pProjectType, string pReasonLabel, float pProgress)
+        {
+            var item = CreateSimpleDecisionItem(pDecisionId, pProgress);
+            FillDecisionTarget(item, pTarget);
+            item.project_type = pProjectType ?? "";
+            item.war_target_city_id = pCity?.data?.id ?? -1L;
+            item.war_target_city_name = pCity?.data?.name ?? "";
+            item.war_reason_label = pReasonLabel ?? "";
+            return item;
+        }
+
+        private static KingdomDecisionQueueItem CreateWarDecisionItem(Kingdom pTarget, string pGoalType, City pCity,
+            string pWarType, string pReasonKey, string pReasonLabel, Actor pClaimant, float pProgress)
+        {
+            var item = CreateSimpleDecisionItem("aw_decision_declare_war", pProgress);
+            FillDecisionTarget(item, pTarget);
+            item.war_goal_type = pGoalType ?? "";
+            item.war_type = pWarType ?? "";
+            item.war_reason_key = pReasonKey ?? "";
+            item.war_reason_label = pReasonLabel ?? "";
+            item.war_target_city_id = pCity?.data?.id ?? -1L;
+            item.war_target_city_name = pCity?.data?.name ?? "";
+            item.war_claimant_actor_id = pClaimant?.data?.id ?? -1L;
+            return item;
+        }
+
+        private static void FillDecisionTarget(KingdomDecisionQueueItem pItem, Kingdom pTarget)
+        {
+            if (pItem == null) return;
+            pItem.target_kingdom_id = pTarget?.id ?? -1L;
+            pItem.target_kingdom_name = pTarget?.name ?? "";
+        }
+
+        private static void TryPromoteCoreDecision(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            if (GetCurrent(pKingdom, PolicyNodeKind.Decision) == DecisionQueueRules.FabricateCoreDecisionId) return;
+            City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+            if (city?.data == null) return;
+            StartFabricationDecision(pKingdom, pKingdom, city, WarTerritoryService.PROJECT_CORE);
+        }
+
+        private static bool StartNextQueuedDecisionIfEmpty(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            if (!string.IsNullOrEmpty(GetCurrent(pKingdom, PolicyNodeKind.Decision))) return false;
+
+            List<KingdomDecisionQueueItem> queue = ReadDecisionQueue(pKingdom);
+            while (queue.Count > 0)
+            {
+                KingdomDecisionQueueItem item = queue[0];
+                queue.RemoveAt(0);
+                WriteDecisionQueue(pKingdom, queue);
+                if (item.decision_id == DecisionQueueRules.FabricateCoreDecisionId)
+                {
+                    StartCoreFabrication(pKingdom, FindCity(item.war_target_city_id));
+                    continue;
+                }
+                if (!CanStartQueuedDecision(pKingdom, item)) continue;
+                ApplyQueuedDecision(pKingdom, item);
+                return true;
+            }
+
+            WriteDecisionQueue(pKingdom, queue);
+            return false;
+        }
+
+        private static bool CanStartQueuedDecision(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
+        {
+            if (pKingdom?.data == null || pItem == null || string.IsNullOrEmpty(pItem.decision_id)) return false;
+            KingdomPolicyDef def = KingdomPolicyDefs.Get(pItem.decision_id);
+            if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
+
+            switch (pItem.decision_id)
+            {
+                case "aw_decision_absorb_vassal":
+                    return VassalService.CanAbsorbVassalByDecision(pKingdom, FindKingdom(pItem.target_kingdom_id), out _);
+                case "aw_decision_seek_suzerain":
+                    return VassalService.CanSetVassal(pKingdom, FindKingdom(pItem.target_kingdom_id));
+                case "aw_decision_fabricate_core":
+                    return false;
+                case "aw_decision_fabricate_weak_claim":
+                case "aw_decision_fabricate_strong_claim":
+                    return WarTerritoryService.CanFabricateAgainst(pKingdom, FindKingdom(pItem.target_kingdom_id),
+                        FindCity(pItem.war_target_city_id), out _);
+                case "aw_decision_declare_war":
+                    return FindKingdom(pItem.target_kingdom_id)?.data != null &&
+                           !string.IsNullOrEmpty(pItem.war_goal_type);
+                default:
+                    return GetStatus(pKingdom, def) == PolicyNodeStatus.Available;
+            }
+        }
+
+        private static void ApplyQueuedDecision(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
+        {
+            ClearDecisionTarget(pKingdom);
+            pKingdom.data.set(LineageKeys.DECISION_CURRENT, pItem.decision_id ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_PROGRESS, Mathf.Max(0f, pItem.progress));
+            pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_ID, pItem.target_kingdom_id);
+            pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_NAME, pItem.target_kingdom_name ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_PROJECT_TYPE, pItem.project_type ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_TYPE, pItem.war_type ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_GOAL_TYPE, pItem.war_goal_type ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_REASON_KEY, pItem.war_reason_key ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_REASON_LABEL, pItem.war_reason_label ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_TARGET_CITY_ID, pItem.war_target_city_id);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_TARGET_CITY_NAME, pItem.war_target_city_name ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CLAIM_ID, pItem.war_source_claim_id);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, pItem.war_source_core_id);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, pItem.war_restoration_claim_id);
+            pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, pItem.war_claimant_actor_id);
+            UpsertSnapshot(pKingdom);
+        }
+
         private static IEnumerable<string> Split(string pRaw)
         {
             if (string.IsNullOrEmpty(pRaw)) return Array.Empty<string>();
@@ -1210,6 +1713,8 @@ namespace AncientWarfare3.core.policy
             Actor claimant = FindActor(claimantId);
             switch (goalType ?? "")
             {
+                case WarTerritoryService.GOAL_TAKE_MANDATE:
+                    return WarTerritoryService.TryDeclareMandateWar(pKingdom, target);
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                     return WarTerritoryService.TryDeclareReclaimWar(pKingdom, target, targetCity, sourceCoreId);
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
@@ -1340,6 +1845,11 @@ namespace AncientWarfare3.core.policy
                 ColumnVal.Create("TECH_PROGRESS", (double)GetProgress(pKingdom, PolicyNodeKind.Tech)),
                 ColumnVal.Create("CURRENT_DECISION", GetCurrent(pKingdom, PolicyNodeKind.Decision)),
                 ColumnVal.Create("DECISION_PROGRESS", (double)GetProgress(pKingdom, PolicyNodeKind.Decision)),
+                ColumnVal.Create("DECISION_QUEUE", GetDecisionQueueRaw(pKingdom)),
+                ColumnVal.Create("CORE_FAB_CURRENT_CITY_ID", GetCoreFabricationCityId(pKingdom)),
+                ColumnVal.Create("CORE_FAB_CURRENT_CITY_NAME", GetCoreFabricationCityName(pKingdom)),
+                ColumnVal.Create("CORE_FAB_PROGRESS", (double)GetCoreFabricationProgress(pKingdom)),
+                ColumnVal.Create("CORE_FAB_QUEUE", GetCoreFabricationQueueRaw(pKingdom)),
                 ColumnVal.Create("COMPLETED_POLICIES", GetCompletedRaw(pKingdom, PolicyNodeKind.Social)),
                 ColumnVal.Create("COMPLETED_TECHS", GetCompletedRaw(pKingdom, PolicyNodeKind.Tech)),
                 ColumnVal.Create("COMPLETED_DECISIONS", GetCompletedRaw(pKingdom, PolicyNodeKind.Decision)),

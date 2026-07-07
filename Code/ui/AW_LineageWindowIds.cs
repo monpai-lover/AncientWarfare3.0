@@ -10,6 +10,7 @@ namespace AncientWarfare3.ui
         public const string POLICY_TREE = "aw_policy_tree";
         public const string ANCESTRY = "aw_ancestry_analysis";
         public const string MANDATE_DYNASTY = "aw_mandate_dynasty";
+        public const string MANDATE_DECISIONS = "aw_mandate_decisions";
         public const string VASSAL_RELATIONS = "aw_vassal_relations";
         public const string WAR_TARGETS = "aw_war_targets";
 

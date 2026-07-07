@@ -20,6 +20,11 @@ namespace AncientWarfare3.core.db
         public double tech_progress;
         public string current_decision;
         public double decision_progress;
+        public string decision_queue;
+        public long core_fab_current_city_id;
+        public string core_fab_current_city_name;
+        public double core_fab_progress;
+        public string core_fab_queue;
         public string completed_policies;
         public string completed_techs;
         public string completed_decisions;

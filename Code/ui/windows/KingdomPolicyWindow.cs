@@ -36,6 +36,8 @@ namespace AncientWarfare3.ui.windows
         private const float SUMMARY_H = 34f;
         private const float SECTION_TITLE_H = 18f;
         private const float PROGRESS_H = 30f;
+        private const float DECISION_SIDEBAR_W = 74f;
+        private const float DECISION_SIDEBAR_GAP = 6f;
         private const float SCROLL_MARGIN_X = 42f;
         private const float SCROLL_MARGIN_Y = 58f;
         private const float CANVAS_TOP_GAP = 10f;
@@ -623,6 +625,42 @@ namespace AncientWarfare3.ui.windows
             return string.Join("\n", lines.ToArray());
         }
 
+        private static string BuildCoreFabricationSidebarTooltip(Kingdom pKingdom)
+        {
+            var lines = new List<string>
+            {
+                AW_L10n.Text("aw_core_fabrication_queue_desc",
+                    "\u5236\u9020\u6838\u5FC3\u4F7F\u7528\u72EC\u7ACB\u961F\u5217\uFF0C\u4E0D\u5360\u7528\u5E38\u6001\u51B3\u7B56\u69FD\u3002")
+            };
+
+            long currentCityId = KingdomPolicyService.GetCoreFabricationCityId(pKingdom);
+            if (currentCityId >= 0)
+            {
+                string cityName = KingdomPolicyService.GetCoreFabricationCityName(pKingdom);
+                lines.Add(AW_L10n.Text("aw_core_fabrication_current", "\u5F53\u524D") + ": " +
+                          (string.IsNullOrEmpty(cityName) ? "?" : cityName) + " " +
+                          Mathf.FloorToInt(KingdomPolicyService.GetCoreFabricationProgress(pKingdom)) + "/" +
+                          Mathf.CeilToInt(KingdomPolicyService.GetCoreFabricationCost()));
+            }
+            else
+            {
+                lines.Add(AW_L10n.Text("aw_core_fabrication_current", "\u5F53\u524D") + ": " +
+                          AW_L10n.Text("aw_policy_idle", "\u5F85\u5B9A"));
+            }
+
+            lines.Add(AW_L10n.Text("aw_core_fabrication_project_count", "\u961F\u5217\u9879\u76EE") + ": " +
+                      KingdomPolicyService.CountCoreFabricationProjects(pKingdom));
+
+            City next = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+            if (next?.data != null)
+                lines.Add(AW_L10n.Text("aw_core_fabrication_click_next", "\u70B9\u51FB\u52A0\u5165") + ": " +
+                          next.data.name);
+            else
+                lines.Add(AW_L10n.Text("aw_core_fabrication_no_target", "\u6CA1\u6709\u53EF\u5236\u9020\u6838\u5FC3\u7684\u57CE\u5E02"));
+
+            return string.Join("\n", lines.ToArray());
+        }
+
         private static string BuildAllProgressTooltip(Kingdom pKingdom, KingdomPolicyDef pDef, PolicyNodeKind pKind)
         {
             var lines = new List<string>();
@@ -713,18 +751,45 @@ namespace AncientWarfare3.ui.windows
 
             KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
             float barX = CONTENT_PAD_X;
-            float barW = Mathf.Max(260f, _contentWidth - CONTENT_PAD_X * 2f);
+            float fullW = Mathf.Max(260f, _contentWidth - CONTENT_PAD_X * 2f);
+            bool showCoreSidebar = CoreFabricationSlotRules.ShouldShowDecisionSidebarButton(
+                pIsDecisionPanel: _mode == PolicyPanelMode.Decision,
+                pPolicyEnabled: KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom));
+            float barW = showCoreSidebar
+                ? Mathf.Max(180f, fullW - DECISION_SIDEBAR_W - DECISION_SIDEBAR_GAP)
+                : fullW;
             CreateProgressSlot("DecisionResearchProgress", pKingdom, decision, PolicyNodeKind.Decision,
                 TopLeft(barX, pY + 20f), new Vector2(barW, PROGRESS_H));
-
-            var warButton = CreateButtonBox("WarTargets", AW_L10n.Text("aw_war_targets", "\u6218\u4E89\u76EE\u6807"),
-                TopLeft(CONTENT_PAD_X, pY + 58f), new Vector2(132f, SUMMARY_H), Color.white,
-                () => WarDecisionTargetWindow.Open(pKingdom.id));
-            SetTip(warButton, AW_L10n.Text("aw_war_targets", "\u6218\u4E89\u76EE\u6807"),
-                AW_L10n.Text("aw_war_targets_desc", "\u67E5\u770B\u6838\u5FC3\u3001\u5BA3\u79F0\u3001\u5BA3\u6218\u7406\u7531\u548C\u6218\u4E89\u76EE\u7684\u3002"));
+            if (showCoreSidebar)
+                BuildCoreFabricationSidebarButton(pKingdom,
+                    TopLeft(barX + barW + DECISION_SIDEBAR_GAP, pY + 20f),
+                    new Vector2(DECISION_SIDEBAR_W, PROGRESS_H));
 
             return BuildSection(pKingdom, AW_L10n.Text("aw_policy_decision_section", "\u53EF\u6267\u884C\u51B3\u7B56"),
-                KingdomPolicyDefs.Decisions, pY + 96f);
+                KingdomPolicyDefs.Decisions, pY + 58f);
+        }
+
+        private void BuildCoreFabricationSidebarButton(Kingdom pKingdom, Vector2 pPos, Vector2 pSize)
+        {
+            int count = KingdomPolicyService.CountCoreFabricationProjects(pKingdom);
+            int progress = Mathf.FloorToInt(KingdomPolicyService.GetCoreFabricationProgressFraction(pKingdom) * 100f);
+            string label = CoreFabricationSlotRules.BuildSidebarLabel(
+                KingdomPolicyService.GetCoreFabricationCityName(pKingdom), count, progress,
+                AW_L10n.Text("aw_core_fabrication_queue", "\u6838\u5FC3\u961F\u5217"),
+                AW_L10n.Text("aw_war_cb_core", "\u6838\u5FC3"));
+            var box = CreateButtonBox("CoreFabricationQueue", label, pPos, pSize,
+                new Color(1f, 0.93f, 0.68f, 1f), () =>
+                {
+                    City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
+                    if (city?.data != null)
+                        KingdomPolicyService.StartFabricationDecision(pKingdom, pKingdom, city,
+                            WarTerritoryService.PROJECT_CORE);
+                    Refresh();
+                });
+            Image img = box.GetComponent<Image>();
+            if (img != null && count > 0) img.color = new Color(0.58f, 0.47f, 0.22f, 0.96f);
+            SetTip(box, AW_L10n.Text("aw_core_fabrication_queue", "\u6838\u5FC3\u961F\u5217"),
+                BuildCoreFabricationSidebarTooltip(pKingdom));
         }
 
         private float BuildSection(Kingdom pKingdom, string pTitle, IEnumerable<KingdomPolicyDef> pDefs, float pY)

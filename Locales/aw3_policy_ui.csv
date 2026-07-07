@@ -147,3 +147,9 @@ aw_general_rebellion_defect_neighbor,投附强邻,Defect to Neighbor,投附强�
 aw_general_rebellion_support_restoration,拥立复国,Support Restoration,拥立复国
 aw_mandate_temple_title,天命庙号,Mandate Temple Name,天命庙号
 aw_mandate_double_posthumous,天命双字谥号,Mandate Double Posthumous Title,天命双字谥号
+aw_core_fabrication_queue,核心队列,Core Queue,核心隊列
+aw_core_fabrication_queue_desc,制造核心使用独立队列不占用常态决策槽,Core fabrication uses a dedicated queue and does not occupy the normal decision slot,製造核心使用獨立隊列不占用常態決策槽
+aw_core_fabrication_current,当前,Current,目前
+aw_core_fabrication_project_count,队列项目,Queue Items,隊列項目
+aw_core_fabrication_click_next,点击加入,Click to Add,點擊加入
+aw_core_fabrication_no_target,没有可制造核心的城市,No city available for core fabrication,沒有可製造核心的城市

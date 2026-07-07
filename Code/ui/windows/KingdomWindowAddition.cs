@@ -82,7 +82,7 @@ namespace AncientWarfare3.ui.windows
                        ?? content.gameObject.AddComponent<AutoVertLayoutGroup>();
 
             // 中段横排 200×36(照 AW2 custom_part)。
-            var custom = root.BeginHoriGroup(new Vector2(222, 36), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
+            var custom = root.BeginHoriGroup(new Vector2(206, 36), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
             custom.name = MIDDLE_OBJ;
             _middle = custom.gameObject;
             // 插到 content_motto 兄弟位之后(新版 motto 在 content_motto 容器,非 AW2 的直接 MottoName)。
@@ -94,19 +94,19 @@ namespace AncientWarfare3.ui.windows
             custom.AddChild(_kingCol);
 
             // 中:竖排(年号框 + 一排两个国策占位框)。
-            var middleBar = custom.BeginVertGroup(new Vector2(130, 36), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
+            var middleBar = custom.BeginVertGroup(new Vector2(114, 36), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
 
-            GameObject yearBox = BuildBox("Year", new Vector2(130, 16), out _yearText);
+            GameObject yearBox = BuildBox("Year", new Vector2(114, 16), out _yearText);
             middleBar.AddChild(yearBox);
 
-            var policyRow = middleBar.BeginHoriGroup(new Vector2(130, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(32, 16),
+            var policyRow = middleBar.BeginHoriGroup(new Vector2(114, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
+            policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(28, 16),
                 "ui/icons/iconDiplomacy", out _policyStateText, out _policyStateIcon, out _policyStateTip, OpenClassStateWindow));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(32, 16),
+            policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(28, 16),
                 "ui/icons/iconKnowledge", out _policyExecText, out _policyExecIcon, out _policyExecTip, OpenResearchWindow));
-            policyRow.AddChild(BuildPolicyIconButton("PolicyDecision", new Vector2(32, 16),
+            policyRow.AddChild(BuildPolicyIconButton("PolicyDecision", new Vector2(28, 16),
                 "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow));
-            policyRow.AddChild(BuildTextButton("VassalStatus", new Vector2(24, 16),
+            policyRow.AddChild(BuildTextButton("VassalStatus", new Vector2(22, 16),
                 out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
@@ -161,7 +161,7 @@ namespace AncientWarfare3.ui.windows
                 Transform row = middle.transform.FindRecursive("PolicyExec")?.parent;
                 if (row != null)
                 {
-                    GameObject obj = BuildPolicyIconButton("PolicyDecision", new Vector2(34, 16),
+                    GameObject obj = BuildPolicyIconButton("PolicyDecision", new Vector2(28, 16),
                         "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow);
                     obj.transform.SetParent(row, false);
                 }
@@ -176,7 +176,7 @@ namespace AncientWarfare3.ui.windows
                 Transform row = middle.transform.FindRecursive("PolicyDecision")?.parent;
                 if (row != null)
                 {
-                    GameObject obj = BuildTextButton("VassalStatus", new Vector2(24, 16),
+                    GameObject obj = BuildTextButton("VassalStatus", new Vector2(22, 16),
                         out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow);
                     obj.transform.SetParent(row, false);
                 }
