@@ -29,6 +29,15 @@ namespace AncientWarfare3.core.lineage
             return pHasGuardStateHint;
         }
 
+        public static bool ShouldScanKingdomForDismiss(
+            bool pHasCollectedActiveList,
+            int pActiveGuardCount,
+            bool pHasGuardStateHint)
+        {
+            if (pHasCollectedActiveList) return false;
+            return pHasGuardStateHint;
+        }
+
         public static bool ShouldSearchCandidates(int pActiveCount, int pActiveNobleCount,
             int pTargetNobleCount, bool pHasCaptain, int pRefillThreshold)
         {

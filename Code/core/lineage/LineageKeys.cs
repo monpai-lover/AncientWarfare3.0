@@ -84,6 +84,7 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_RETIREMENT_LAST_CHECK = "aw_slave_retirement_last_check";
         public const string SLAVE_LABOR_LAST_CHECK = "aw_slave_labor_last_check";
         public const string SLAVE_CATCHER_LAST_CHECK = "aw_slave_catcher_last_check";
+        public const string SLAVE_ARMY_LAST_CHECK = "aw_slave_army_last_check";
 
         public const string ROYAL_GUARD = "aw_royal_guard";
         public const string ROYAL_GUARD_CAPTAIN = "aw_royal_guard_captain";

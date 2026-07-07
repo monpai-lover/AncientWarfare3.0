@@ -10,6 +10,7 @@ namespace CityMaintenanceRuleTests
             ExpectStaggeredCityMaintenance();
             ExpectRetirementCheapGate();
             ExpectOldHeadRefreshGate();
+            ExpectSlaveArmyMaintenanceGate();
 
             Console.WriteLine("City maintenance rule tests passed.");
             return 0;
@@ -94,6 +95,33 @@ namespace CityMaintenanceRuleTests
 
             if (XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead: true, shouldUseOldHead: true))
                 throw new Exception("Stable old-head Xia actors should skip graphics refresh.");
+        }
+
+        private static void ExpectSlaveArmyMaintenanceGate()
+        {
+            if (SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    pSlaveryEnabled: false,
+                    pSlaveArmyEnabled: true,
+                    pOnSchedule: true))
+                throw new Exception("Disabled slavery should skip slave army maintenance.");
+
+            if (SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    pSlaveryEnabled: true,
+                    pSlaveArmyEnabled: false,
+                    pOnSchedule: true))
+                throw new Exception("Disabled slave army policy should skip slave army maintenance.");
+
+            if (SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    pSlaveryEnabled: true,
+                    pSlaveArmyEnabled: true,
+                    pOnSchedule: false))
+                throw new Exception("Slave army maintenance should wait for its staggered schedule.");
+
+            if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    pSlaveryEnabled: true,
+                    pSlaveArmyEnabled: true,
+                    pOnSchedule: true))
+                throw new Exception("Enabled slave army maintenance should run on its staggered schedule.");
         }
     }
 }

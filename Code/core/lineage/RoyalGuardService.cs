@@ -83,6 +83,7 @@ namespace AncientWarfare3.core.lineage
             if (king?.data == null || king.isRekt())
             {
                 DismissKingdomGuards(pKingdom, "no_king");
+                ClearKingdomGuardStateHints(pKingdom);
                 return;
             }
 
@@ -122,7 +123,8 @@ namespace AncientWarfare3.core.lineage
                 int availableNobles = activeNobles + CountNobleCandidates(candidates);
                 if (availableNobles <= 0)
                 {
-                    DismissKingdomGuards(pKingdom, "no_noble_captain");
+                    DismissCollectedGuards(active, "no_noble_captain");
+                    ClearKingdomGuardStateHints(pKingdom);
                     return;
                 }
 
@@ -143,7 +145,8 @@ namespace AncientWarfare3.core.lineage
 
             if (captain == null)
             {
-                DismissKingdomGuards(pKingdom, "no_noble_captain");
+                DismissCollectedGuards(active, "no_noble_captain");
+                ClearKingdomGuardStateHints(pKingdom);
                 return;
             }
 
@@ -624,12 +627,29 @@ namespace AncientWarfare3.core.lineage
         private static void DismissKingdomGuards(Kingdom pKingdom, string pReason)
         {
             if (pKingdom?.data == null) return;
+            if (!RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
+                    pHasCollectedActiveList: false,
+                    pActiveGuardCount: 0,
+                    pHasGuardStateHint: HasKingdomGuardStateHint(pKingdom)))
+                return;
+
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
             foreach (Actor unit in new List<Actor>(pKingdom.getUnits()))
             {
                 if (IsRoyalGuard(unit))
                     DismissGuard(unit, pReason);
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
+            ClearKingdomGuardStateHints(pKingdom);
+        }
+
+        private static void DismissCollectedGuards(List<Actor> pActive, string pReason)
+        {
+            if (pActive == null) return;
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
+            foreach (Actor guard in new List<Actor>(pActive))
+                if (IsRoyalGuard(guard))
+                    DismissGuard(guard, pReason);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
         }
 

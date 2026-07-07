@@ -17,6 +17,7 @@ namespace RoyalGuardActionRuleTests
 
             ExpectRecruitmentBatching();
             ExpectRuntimeRefreshBatching();
+            ExpectDismissScanGate();
 
             if (RoyalGuardActionRules.WaitAfterNoThreat(2f, 5f) != 2f)
                 throw new Exception("Expected royal guard no-threat wait low bound.");
@@ -107,6 +108,33 @@ namespace RoyalGuardActionRuleTests
                     pDesiredCount: 1,
                     pRecruitmentLimit: 4) != 1)
                 throw new Exception("Expected trimming decisions to bypass recruitment batching.");
+        }
+
+        private static void ExpectDismissScanGate()
+        {
+            if (RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
+                    pHasCollectedActiveList: true,
+                    pActiveGuardCount: 0,
+                    pHasGuardStateHint: false))
+                throw new Exception("Collected empty guard lists should not trigger kingdom-wide dismiss scans.");
+
+            if (RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
+                    pHasCollectedActiveList: true,
+                    pActiveGuardCount: 3,
+                    pHasGuardStateHint: true))
+                throw new Exception("Collected guard lists should dismiss the collected actors directly.");
+
+            if (RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
+                    pHasCollectedActiveList: false,
+                    pActiveGuardCount: 0,
+                    pHasGuardStateHint: false))
+                throw new Exception("Kingdoms with no guard state hint should skip full dismiss scans.");
+
+            if (!RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
+                    pHasCollectedActiveList: false,
+                    pActiveGuardCount: 0,
+                    pHasGuardStateHint: true))
+                throw new Exception("Kingdoms with stale guard state hints may need one full dismiss scan.");
         }
     }
 }

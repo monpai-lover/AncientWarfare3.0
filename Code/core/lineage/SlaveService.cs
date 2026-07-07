@@ -28,6 +28,7 @@ namespace AncientWarfare3.core.lineage
         private const int CITY_RETIREMENT_CHECK_INTERVAL = 20;
         private const int CITY_SLAVE_LABOR_CHECK_INTERVAL = 30;
         private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
+        private const int CITY_SLAVE_ARMY_CHECK_INTERVAL = 20;
         private const double SLAVE_CAPTURE_SEARCH_MISS_COOLDOWN = 2.0;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MIN = 3f;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MAX = 8f;
@@ -624,7 +625,12 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return;
             Kingdom kingdom = pCity.kingdom;
             if (kingdom?.data == null) return;
-            if (!IsSlaveryEnabled(kingdom) || !IsSlaveArmyEnabled(kingdom)) return;
+            bool slaveryEnabled = IsSlaveryEnabled(kingdom);
+            bool slaveArmyEnabled = IsSlaveArmyEnabled(kingdom);
+            if (!slaveryEnabled || !slaveArmyEnabled) return;
+            bool onSchedule = ShouldRunCityMaintenanceStaggered(pCity, LineageKeys.SLAVE_ARMY_LAST_CHECK,
+                CITY_SLAVE_ARMY_CHECK_INTERVAL);
+            if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(slaveryEnabled, slaveArmyEnabled, onSchedule)) return;
             if (CountSlaves(pCity) < MIN_SLAVES_FOR_SLAVE_ARMY) return;
 
             Actor captain = PickSlaveArmyCaptain(pCity);

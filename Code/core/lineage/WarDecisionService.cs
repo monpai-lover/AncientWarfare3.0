@@ -50,6 +50,7 @@ namespace AncientWarfare3.core.lineage
             catch { }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar: false, out pReason)) return false;
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
             if (HasValidCasusBelli(pAttacker, pDefender, type)) return true;
 
@@ -85,6 +86,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar: false, out pReason)) return false;
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
             try
             {
@@ -213,6 +215,7 @@ namespace AncientWarfare3.core.lineage
             if (asset == null) return null;
 
             if (!pSystemWar && !CanPassVassalWarRules(pAttacker, pDefender, type, out _)) return null;
+            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar, out _)) return null;
             if (!pSystemWar && !pNoCb && !HasValidCasusBelli(pAttacker, pDefender, type)) return null;
             if (pNoCb && !CanForceNoCb(pAttacker)) return null;
 
@@ -250,6 +253,31 @@ namespace AncientWarfare3.core.lineage
                                 attackerSuzerain == defenderSuzerain;
             return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal, defenderIsSuzerain,
                 sameSuzerain, pWarType, out pReason);
+        }
+
+        private static bool CanPassAllianceWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
+            bool pSystemWar, out string pReason)
+        {
+            return WarAllianceRules.CanStartWar(
+                pSameAlliance: IsSameAlliance(pAttacker, pDefender),
+                pSystemWar: pSystemWar,
+                pIndependenceWar: pWarType == "independence_war",
+                out pReason);
+        }
+
+        private static bool IsSameAlliance(Kingdom pAttacker, Kingdom pDefender)
+        {
+            try
+            {
+                Alliance attackerAlliance = pAttacker?.getAlliance();
+                Alliance defenderAlliance = pDefender?.getAlliance();
+                if (attackerAlliance == null || defenderAlliance == null) return false;
+                return Alliance.isSame(attackerAlliance, defenderAlliance);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool HasIntrinsicCasusBelli(Kingdom pAttacker, Kingdom pDefender, string pWarType)
