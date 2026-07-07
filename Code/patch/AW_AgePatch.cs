@@ -9,7 +9,6 @@ namespace AncientWarfare3.patch
     {
         internal const float XIA_OLD_HEAD_AGE = 75f;
         private const string XIA_OLD_HEAD_ACTIVE = "aw_xia_old_head_active";
-        private const string XIA_OLD_HEAD_SEEN = "aw_xia_old_head_seen";
         private const float XIA_AGE_PRESSURE_START_RATIO = 1.25f;
         private const float XIA_AGE_HIGH_PRESSURE_RATIO = 1.65f;
 
@@ -23,10 +22,8 @@ namespace AncientWarfare3.patch
 
             bool shouldUseOldHead = ShouldUseXiaOldHead(__instance);
             __instance.data.get(XIA_OLD_HEAD_ACTIVE, out bool wasOldHead, false);
-            __instance.data.get(XIA_OLD_HEAD_SEEN, out bool seen, false);
-            if (seen && wasOldHead == shouldUseOldHead) return;
+            if (!XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead, shouldUseOldHead)) return;
 
-            __instance.data.set(XIA_OLD_HEAD_SEEN, true);
             __instance.data.set(XIA_OLD_HEAD_ACTIVE, shouldUseOldHead);
             __instance.clearGraphicsFully();
         }

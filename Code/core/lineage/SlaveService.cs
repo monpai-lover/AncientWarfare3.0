@@ -357,6 +357,10 @@ namespace AncientWarfare3.core.lineage
             bool rekt = pActor.isRekt();
             bool warrior = pActor.isWarrior();
             bool alreadyRetired = IsRetiredSoldier(pActor);
+            float lifespan = pActor.stats["lifespan"];
+            if (!SoldierRetirementRules.ShouldRunExpensiveRetirementChecks(supportedActor, rekt, warrior,
+                    alreadyRetired, pActor.getAge(), lifespan, RETIREMENT_AGE_RATIO)) return false;
+
             bool general = GeneralService.IsGeneral(pActor);
             bool fiefHolder = GeneralService.IsFiefHolder(pActor);
             bool royalGuard = supportedActor && !rekt && warrior && !alreadyRetired && !general && !fiefHolder &&
@@ -365,9 +369,6 @@ namespace AncientWarfare3.core.lineage
             if (!SoldierRetirementRules.CanConsiderForRetirement(supportedActor, rekt, warrior, alreadyRetired,
                     general, fiefHolder, royalGuard)) return false;
 
-            float lifespan = pActor.stats["lifespan"];
-            if (lifespan <= 0f) return false;
-            if (pActor.getAge() < lifespan * RETIREMENT_AGE_RATIO) return false;
             if (!HasServedEnoughForRetirement(pActor)) return false;
 
             pActor.stopBeingWarrior();
@@ -410,11 +411,14 @@ namespace AncientWarfare3.core.lineage
         public static void CheckCityRetirements(City pCity)
         {
             if (pCity?.data == null) return;
-            if (!ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_RETIREMENT_LAST_CHECK,
+            if (!ShouldRunCityMaintenanceStaggered(pCity, LineageKeys.SLAVE_RETIREMENT_LAST_CHECK,
                     CITY_RETIREMENT_CHECK_INTERVAL)) return;
             Bench.bench(CityMaintenanceBenchmarkRules.RetirementsScan, CityMaintenanceBenchmarkRules.Group);
-            foreach (Actor unit in new List<Actor>(pCity.getUnits()))
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || !unit.isWarrior()) continue;
                 RetireIfNeeded(unit);
+            }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RetirementsScan, CityMaintenanceBenchmarkRules.Group);
         }
 
@@ -725,6 +729,16 @@ namespace AncientWarfare3.core.lineage
             int now = (int)LineageService.CurTime();
             pCity.data.get(pKey, out int lastRun, -1);
             if (!CityMaintenanceThrottleRules.ShouldRun(now, lastRun, pInterval)) return false;
+            pCity.data.set(pKey, now);
+            return true;
+        }
+
+        private static bool ShouldRunCityMaintenanceStaggered(City pCity, string pKey, int pInterval)
+        {
+            if (pCity?.data == null) return false;
+            int now = (int)LineageService.CurTime();
+            pCity.data.get(pKey, out int lastRun, -1);
+            if (!CityMaintenanceThrottleRules.ShouldRunStaggered(now, lastRun, pInterval, pCity.id)) return false;
             pCity.data.set(pKey, now);
             return true;
         }
