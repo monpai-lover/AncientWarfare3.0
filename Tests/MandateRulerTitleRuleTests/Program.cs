@@ -23,6 +23,10 @@ namespace MandateRulerTitleRuleTests
                 refounder: false, conquestScore: 35, reformScore: 95, reignIndex: 5);
             ExpectUniqueTemple("\u4e16\u5b97", "\u4e16\u5b97", Array.Empty<string>(), 5);
             ExpectUniqueTemple("\u7a46\u5b97", "\u4e16\u5b97", new[] { "\u4e16\u5b97" }, 5);
+            ExpectUniqueDoublePosthumous("\u7aef\u9756", "\u61ff\u70c8", new[] { "\u61ff\u70c8" },
+                pNegative: false, pReignIndex: 4);
+            ExpectUniqueDoublePosthumous("\u8c2c\u60d1", "\u623e\u8650", new[] { "\u623e\u8650" },
+                pNegative: true, pReignIndex: 4);
             ExpectFullTitle("\u9ad8\u7956 \u6587\u6b66\u7687\u5e1d", "\u9ad8\u7956", "\u6587\u6b66");
             ExpectFullTitle("\u6587\u6b66\u7687\u5e1d", "", "\u6587\u6b66");
 
@@ -53,6 +57,7 @@ namespace MandateRulerTitleRuleTests
             ExpectNameplateSuffix("normal_emperor", "\u5e1d\u56fd", title: 4, isMandate: false);
             ExpectNameplateSuffix("normal_king", "\u738b\u56fd", title: 3, isMandate: true);
 
+            ExpectMandateHistoryAssignmentRules();
             ExpectMandateDeclarationRules();
 
             Console.WriteLine("Mandate ruler title rule tests passed.");
@@ -88,6 +93,15 @@ namespace MandateRulerTitleRuleTests
                 throw new Exception($"Expected full title {expected}, got {actual}.");
         }
 
+        private static void ExpectUniqueDoublePosthumous(string expected, string candidate, string[] used,
+            bool pNegative, int pReignIndex)
+        {
+            string actual = MandateRulerTitleRules.EnsureUniqueDoublePosthumousTitle(candidate, used,
+                pNegative, pReignIndex);
+            if (actual != expected)
+                throw new Exception($"Expected unique double posthumous {expected}, got {actual}.");
+        }
+
         private static void ExpectCoreStatus(string label, string expected, bool isLegalCore, bool hasMandate,
             bool hasOwner, bool ownerIsMandate, bool ownerRootSuzerainIsMandate)
         {
@@ -110,6 +124,18 @@ namespace MandateRulerTitleRuleTests
             string actual = KingdomTitleDisplayRules.GetNameplateTitleSuffix(title, isMandate);
             if (actual != expected)
                 throw new Exception($"Expected {label} nameplate suffix {expected}, got {actual}.");
+        }
+
+        private static void ExpectMandateHistoryAssignmentRules()
+        {
+            if (!MandateHistoryEventAssignmentRules.ShouldPreferActorReign("mandate_ruler_title", 12))
+                throw new Exception("Mandate ruler title events should be assigned by target actor first.");
+
+            if (MandateHistoryEventAssignmentRules.ShouldPreferActorReign("mandate_year_name", 12))
+                throw new Exception("General mandate events should still be assigned by event time.");
+
+            if (MandateHistoryEventAssignmentRules.ShouldPreferActorReign("mandate_ruler_title", -1))
+                throw new Exception("Actor assignment should require a valid actor id.");
         }
 
         private static void ExpectMandateDeclarationRules()

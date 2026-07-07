@@ -11,6 +11,8 @@ namespace CityMaintenanceRuleTests
             ExpectRetirementCheapGate();
             ExpectOldHeadRefreshGate();
             ExpectSlaveArmyMaintenanceGate();
+            ExpectArmyAiSafetyGate();
+            ExpectArmySaveSafetyGate();
 
             Console.WriteLine("City maintenance rule tests passed.");
             return 0;
@@ -122,6 +124,46 @@ namespace CityMaintenanceRuleTests
                     pSlaveArmyEnabled: true,
                     pOnSchedule: true))
                 throw new Exception("Enabled slave army maintenance should run on its staggered schedule.");
+        }
+
+        private static void ExpectArmyAiSafetyGate()
+        {
+            if (!ArmyAiSafetyRules.ShouldSkipCityAttackAction(
+                    pHasActor: true,
+                    pHasCity: true,
+                    pHasAttackZone: true,
+                    pHasArmy: false,
+                    pHasCurrentTile: true,
+                    pHasCurrentZone: true))
+                throw new Exception("Warriors without an army must skip the original city attack action.");
+
+            if (ArmyAiSafetyRules.ShouldSkipCityAttackAction(
+                    pHasActor: true,
+                    pHasCity: true,
+                    pHasAttackZone: true,
+                    pHasArmy: true,
+                    pHasCurrentTile: true,
+                    pHasCurrentZone: true))
+                throw new Exception("Complete city attack context should use the original action.");
+        }
+
+        private static void ExpectArmySaveSafetyGate()
+        {
+            if (!ArmySaveSafetyRules.ShouldRemoveInvalidSpecialArmy(
+                    pIsSpecialArmy: true,
+                    pHasKingdom: false,
+                    pHasCity: false,
+                    pHasCaptain: false,
+                    pUnitCount: 0))
+                throw new Exception("Empty special armies with no kingdom anchor should be removed before saving.");
+
+            if (ArmySaveSafetyRules.ShouldRemoveInvalidSpecialArmy(
+                    pIsSpecialArmy: true,
+                    pHasKingdom: true,
+                    pHasCity: false,
+                    pHasCaptain: true,
+                    pUnitCount: 3))
+                throw new Exception("Valid detached special armies should be kept.");
         }
     }
 }

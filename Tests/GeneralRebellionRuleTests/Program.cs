@@ -59,6 +59,10 @@ namespace GeneralRebellionRuleTests
                     isRekt: false, isWarrior: true, alreadyRetired: false, isGeneral: false,
                     isFiefHolder: false))
                 throw new Exception("Expected ordinary warrior to remain eligible for retirement checks.");
+            if (SoldierRetirementRules.CanConsiderForRetirement(isSupportedActor: true,
+                    isRekt: false, isWarrior: true, alreadyRetired: false, isGeneral: false,
+                    isFiefHolder: false, isRoyalGuard: true))
+                throw new Exception("Expected royal guards to be excluded from ordinary retirement checks.");
 
             if (!FiefMilitaryRules.ShouldApplyFiefSoldierTrait(activeFief: true, isWarrior: true,
                     alreadyHasTrait: false, isSlave: false, isRoyalGuard: false))

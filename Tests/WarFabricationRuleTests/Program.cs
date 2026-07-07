@@ -117,11 +117,17 @@ namespace WarFabricationRuleTests
             ExpectCoreMapColor("pending_core", "pending_core");
             ExpectCoreMapColor("owned_non_core", "owned_non_core");
             ExpectCoreMapColor("", "");
+            ExpectWarMapHex("core", "#226B3A", WarMapModeColorRules.CoreHexForStatus("core"));
+            ExpectWarMapHex("pending_core", "#D7A928", WarMapModeColorRules.CoreHexForStatus("pending_core"));
+            ExpectWarMapHex("owned_non_core", "#B3124B", WarMapModeColorRules.CoreHexForStatus("owned_non_core"));
 
             ExpectClaimMapColor("strong_claim", "strong_claim");
             ExpectClaimMapColor("weak_claim", "weak_claim");
             ExpectClaimMapColor("pending_claim", "pending_claim");
             ExpectClaimMapColor("", "");
+            ExpectWarMapHex("strong_claim", "#226B3A", WarMapModeColorRules.ClaimHexForStatus("strong_claim"));
+            ExpectWarMapHex("weak_claim", "#D7A928", WarMapModeColorRules.ClaimHexForStatus("weak_claim"));
+            ExpectWarMapHex("pending_claim", "#E08226", WarMapModeColorRules.ClaimHexForStatus("pending_claim"));
 
             ExpectIconPath("aw_normal_war", "ui/wars/war_conquest", "wars/war_conquest");
             ExpectIconPath("general_rebellion_war", "ui/wars/war_rebellion", "wars/war_rebellion");
@@ -273,14 +279,27 @@ namespace WarFabricationRuleTests
             ExpectWarTypeAssetRules();
             ExpectMetaWindowSafetyRules();
             ExpectRestorationSettlementRules();
+            ExpectWarGoalControlRules();
             ExpectSlaveArmyNameRefreshRule();
             ExpectCityMaintenanceThrottleRules();
             ExpectRoyalGuardMaintenanceRules();
+            ExpectAwArmyRoleRules();
+            ExpectSlaveArmyFormationRules();
+            ExpectSlaveCaptureCommandRules();
             ExpectNonCoreLoyaltyRules();
             ExpectWarTerritoryCacheRules();
             ExpectFamilyTreePortraitFrameRules();
+            ExpectFamilyTreeToolbarLayoutRules();
             ExpectFabricateCoreDecisionPriority();
+            ExpectCoreFabricationSlotRules();
+            ExpectDecisionQueueRules();
+            ExpectForeignOccupationDetectionRules();
             ExpectMandateSuccessionRules();
+            ExpectMandateDeclarationOriginRules();
+            ExpectMandatePowerRules();
+            ExpectMandateStartRecordRules();
+            ExpectMandateWarAiRules();
+            ExpectCollateralSuccessionFallbackRules();
             ExpectHeirRecallRules();
             ExpectLineageBranchRules();
             ExpectRoyalGuardSelectionRules();
@@ -293,15 +312,17 @@ namespace WarFabricationRuleTests
             ExpectCityEconomyMilestoneRules();
             ExpectAncestryDisplayRules();
             ExpectMandateMapMarkerRules();
-            ExpectMandatePowerRules();
             ExpectLineageArchiveIndexRules();
             ExpectMapModeMetaCacheRules();
             ExpectMapModeDirtyThrottleRules();
+            ExpectActorAiSearchThrottleRules();
             ExpectKingdomYearSchedulerRules();
             ExpectFiefCacheRules();
             ExpectXiaNameRepairRules();
             ExpectCityTechChronicleRules();
             ExpectCityMaintenanceBenchmarkRules();
+            ExpectDeathBondRules();
+            ExpectXiaItemEffectRules();
             ExpectVisibleClanRenameRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
@@ -490,6 +511,12 @@ namespace WarFabricationRuleTests
             string actual = WarMapModeColorRules.ClaimColorKey(pStatus);
             if (actual != pExpectedKey)
                 throw new Exception($"Expected claim map color '{pExpectedKey}', got '{actual}'.");
+        }
+
+        private static void ExpectWarMapHex(string pLabel, string pExpectedHex, string pActualHex)
+        {
+            if (pActualHex != pExpectedHex)
+                throw new Exception($"Expected {pLabel} map hex '{pExpectedHex}', got '{pActualHex}'.");
         }
 
         private static void ExpectIconPath(string pWarType, string pInput, string pExpected)
@@ -834,9 +861,15 @@ namespace WarFabricationRuleTests
                 MandateDynastyMapRules.BuildStatusCacheKey(9, -1) != "")
                 throw new Exception("Mandate dynasty status cache key must be empty for invalid ids.");
 
-            if (MandateDynastyMapRules.HexForStatus("mandate") == "#44B454" ||
-                MandateDynastyMapRules.HexForStatus("vassal") == "#4696D2")
-                throw new Exception("Mandate dynasty colors must not reuse low-contrast mandate core colors.");
+            if (!MandateDynastyMapRules.ShouldUseKingdomColor("mandate") ||
+                !MandateDynastyMapRules.ShouldUseKingdomColor("vassal") ||
+                MandateDynastyMapRules.ShouldUseKingdomColor(""))
+                throw new Exception("Mandate dynasty map should draw mandate-order kingdoms using their own kingdom colors.");
+
+            if (MandateCoreMapRules.HexForStatus("controlled") != "#226B3A" ||
+                MandateCoreMapRules.HexForStatus("vassal") != "#4F8F45" ||
+                MandateCoreMapRules.HexForStatus("lost") != "#B3124B")
+                throw new Exception("Mandate core map controlled/vassal/lost colors should use the green-to-red semantic palette.");
 
             if (AWMapModeMetaRules.NormalizeMapColorHex("  #d72f8a ") != "#D72F8A")
                 throw new Exception("Map color hex cache keys must be normalized.");
@@ -988,8 +1021,45 @@ namespace WarFabricationRuleTests
                     isKing: false,
                     hasMadness: false,
                     sameLineage: true,
-                    belongsToLegitimateShi: false))
-                throw new Exception("Collateral restoration must prefer the legitimate old shi line.");
+                    belongsToLegitimateShi: false,
+                    canTraceToLegitimateBranch: false))
+                throw new Exception("Collateral restoration must not accept same-surname or same-lineage candidates without a genealogy trace.");
+
+            if (!MandateSuccessionRules.IsValidCollateralRestorationCandidate(
+                    isXia: true,
+                    isMale: true,
+                    isAlive: true,
+                    isAdult: true,
+                    isKing: false,
+                    hasMadness: false,
+                    sameLineage: true,
+                    belongsToLegitimateShi: false,
+                    canTraceToLegitimateBranch: true))
+                throw new Exception("Collateral restoration should accept a branch founder or descendant that traces back to the legitimate line.");
+        }
+
+        private static void ExpectCollateralSuccessionFallbackRules()
+        {
+            if (MandateSuccessionRules.ShouldUseOrdinaryClanFallbackAfterCollateralSearch(
+                    hasDirectSon: false,
+                    hasRegisteredHeir: false,
+                    hasCollateralRestorationCandidate: false,
+                    isMandateOrLegitimateDynasty: true))
+                throw new Exception("A legitimate dynasty must not pick an ordinary royal-clan fallback when no traceable collateral heir exists.");
+
+            if (!MandateSuccessionRules.ShouldUseOrdinaryClanFallbackAfterCollateralSearch(
+                    hasDirectSon: false,
+                    hasRegisteredHeir: false,
+                    hasCollateralRestorationCandidate: false,
+                    isMandateOrLegitimateDynasty: false))
+                throw new Exception("Non-legitimate fallback rules may still use ordinary royal-clan fallback.");
+
+            if (MandateSuccessionRules.ShouldUseOrdinaryClanFallbackAfterCollateralSearch(
+                    hasDirectSon: true,
+                    hasRegisteredHeir: false,
+                    hasCollateralRestorationCandidate: false,
+                    isMandateOrLegitimateDynasty: false))
+                throw new Exception("Ordinary clan fallback should not run when a direct son already exists.");
         }
 
         private static void ExpectHeirRecallRules()
@@ -1439,14 +1509,47 @@ namespace WarFabricationRuleTests
 
         private static void ExpectMandateMapMarkerRules()
         {
-            if (!MandateMapMarkerRules.ShouldUseSpecialIcon("moh_nameplate", pHasSpecialImage: true))
-                throw new Exception("Mandate markers must use the stable special-icon slot.");
-            if (MandateMapMarkerRules.ShouldReplaceSpeciesIcon("moh_nameplate", pHasSpeciesImage: true))
-                throw new Exception("Mandate markers must not replace the kingdom species icon.");
+            if (!MandateMapMarkerRules.ShouldReplaceSpeciesIcon("moh_nameplate", pHasSpeciesImage: true))
+                throw new Exception("Mandate markers must replace the stable primary kingdom nameplate icon.");
+            if (MandateMapMarkerRules.ShouldUseSpecialIcon("moh_nameplate", pHasSpecialImage: true))
+                throw new Exception("Mandate markers must not use the drifting special-icon slot.");
             if (MandateMapMarkerRules.ShouldUseSpecialIcon("", pHasSpecialImage: true))
                 throw new Exception("Empty mandate marker paths must leave the original nameplate icon untouched.");
-            if (MandateMapMarkerRules.ShouldUseSpecialIcon("moh_nameplate", pHasSpecialImage: false))
-                throw new Exception("Mandate marker replacement needs an existing special image target.");
+            if (MandateMapMarkerRules.ShouldReplaceSpeciesIcon("moh_nameplate", pHasSpeciesImage: false))
+                throw new Exception("Mandate marker replacement needs an existing primary image target.");
+            if (MandateMapMarkerRules.ShouldReplaceSpeciesIcon("", pHasSpeciesImage: true))
+                throw new Exception("Empty mandate marker paths must not replace the primary icon.");
+            if (!MandateMapMarkerRules.ShouldClearSpecialIcon("", pHasSpecialImage: true))
+                throw new Exception("Pooled kingdom nameplates must clear stale special markers when this kingdom has no marker.");
+            if (!MandateMapMarkerRules.ShouldClearSpecialIcon("moh_nameplate", pHasSpecialImage: true))
+                throw new Exception("Active mandate markers must also clear stale special icon state from older builds.");
+        }
+
+        private static void ExpectMandateDeclarationOriginRules()
+        {
+            if (MandateDeclarationRules.CanDeclareForeignPseudo(
+                    pIsXiaKingdom: false,
+                    pWonMandateWar: false,
+                    pHasEnoughLegalCoreControl: true,
+                    pMandateAlreadyExists: false,
+                    out string reason) || reason != "requires_mandate_war")
+                throw new Exception("Foreign pseudo-dynasties must not claim Mandate through a normal decision.");
+
+            if (!MandateDeclarationRules.CanDeclareForeignPseudo(
+                    pIsXiaKingdom: false,
+                    pWonMandateWar: true,
+                    pHasEnoughLegalCoreControl: true,
+                    pMandateAlreadyExists: false,
+                    out reason) || reason != "")
+                throw new Exception("Foreign pseudo-dynasties should claim Mandate after winning a Mandate war.");
+
+            if (MandateDeclarationRules.CanDeclareForeignPseudo(
+                    pIsXiaKingdom: false,
+                    pWonMandateWar: true,
+                    pHasEnoughLegalCoreControl: false,
+                    pMandateAlreadyExists: false,
+                    out reason) || reason != "core_control")
+                throw new Exception("Foreign pseudo-dynasties still need enough legal-core control after winning.");
         }
 
         private static void ExpectMandatePowerRules()
@@ -1477,6 +1580,90 @@ namespace WarFabricationRuleTests
                     pCandidatePower: 90f,
                     pStrongestOtherPower: 100f))
                 throw new Exception("Mandate claimant must be blocked when it is not the strongest realm.");
+
+            if (MandatePowerRules.IsEligibleCompetitor(
+                    pIsValidCivilKingdom: true,
+                    pIsVassal: true,
+                    pSupportsMandateSystem: true))
+                throw new Exception("Vassal kingdoms must be excluded from strongest-Mandate competition.");
+
+            if (!MandatePowerRules.IsEligibleCompetitor(
+                    pIsValidCivilKingdom: true,
+                    pIsVassal: false,
+                    pSupportsMandateSystem: true))
+                throw new Exception("Independent supported kingdoms should compete for strongest-Mandate status.");
+
+            if (MandatePowerRules.CalculateStrongestPowerPenalty(
+                    pMandatePower: 100f,
+                    pStrongestPower: 100f) != 0)
+                throw new Exception("Equal power should not penalize Mandate.");
+
+            if (MandatePowerRules.CalculateStrongestPowerPenalty(
+                    pMandatePower: 100f,
+                    pStrongestPower: 130f) != -4)
+                throw new Exception("A 1.25x stronger rival should apply the AW2-style stronger-state penalty.");
+
+            if (MandatePowerRules.CalculateStrongestPowerPenalty(
+                    pMandatePower: 100f,
+                    pStrongestPower: 180f) != -6)
+                throw new Exception("A 1.75x stronger rival should apply the severe stronger-state penalty.");
+        }
+
+        private static void ExpectMandateStartRecordRules()
+        {
+            if (MandateStartRecordRules.EventType("native", "orthodox") != "mandate_declared_orthodox")
+                throw new Exception("Native orthodox mandate starts need a distinct history event type.");
+            if (MandateStartRecordRules.EventType("rebel", "rebel") != "mandate_declared_rebel")
+                throw new Exception("Rebel mandate starts need a distinct history event type.");
+            if (MandateStartRecordRules.EventType("pseudo_foreign", "foreign_pseudo") !=
+                "mandate_declared_foreign_pseudo")
+                throw new Exception("Foreign pseudo mandate starts need a distinct history event type.");
+
+            if (!MandateStartRecordRules.IsForeignPseudo("pseudo_foreign", "orthodox") ||
+                !MandateStartRecordRules.IsForeignPseudo("native", "foreign_pseudo"))
+                throw new Exception("Foreign pseudo origin and claimant markers should both be recognized.");
+        }
+
+        private static void ExpectMandateWarAiRules()
+        {
+            if (MandateWarAiRules.ShouldConsiderTakeMandate(
+                    pTargetIsCurrentMandate: false,
+                    pVassalBlocked: false,
+                    pAttackerPower: 200f,
+                    pDefenderPower: 100f,
+                    pMandateValue: 20))
+                throw new Exception("AI should only consider take-Mandate against the current Mandate realm.");
+
+            if (MandateWarAiRules.ShouldConsiderTakeMandate(
+                    pTargetIsCurrentMandate: true,
+                    pVassalBlocked: true,
+                    pAttackerPower: 200f,
+                    pDefenderPower: 100f,
+                    pMandateValue: 20))
+                throw new Exception("Vassal-blocked targets should not be considered for take-Mandate.");
+
+            if (MandateWarAiRules.ShouldConsiderTakeMandate(
+                    pTargetIsCurrentMandate: true,
+                    pVassalBlocked: false,
+                    pAttackerPower: 90f,
+                    pDefenderPower: 100f,
+                    pMandateValue: 20))
+                throw new Exception("AI should not challenge Mandate while clearly weaker.");
+
+            if (!MandateWarAiRules.ShouldConsiderTakeMandate(
+                    pTargetIsCurrentMandate: true,
+                    pVassalBlocked: false,
+                    pAttackerPower: 130f,
+                    pDefenderPower: 100f,
+                    pMandateValue: 25))
+                throw new Exception("AI should consider take-Mandate when stronger and Mandate is weak.");
+
+            int weakScore = MandateWarAiRules.ScoreTakeMandate(pAttackerPower: 130f, pDefenderPower: 100f,
+                pMandateValue: 20);
+            int stableScore = MandateWarAiRules.ScoreTakeMandate(pAttackerPower: 130f, pDefenderPower: 100f,
+                pMandateValue: 80);
+            if (weakScore <= stableScore)
+                throw new Exception("AI take-Mandate score should rise when the Mandate value is weak.");
         }
 
         private static void ExpectLineageArchiveIndexRules()
@@ -1530,6 +1717,20 @@ namespace WarFabricationRuleTests
                 throw new Exception("Map modes should allow a later invalidation after the throttle interval.");
             if (MapModeDirtyThrottleRules.ShouldDirty(pActive: false, pNow: 10.3, pLastDirty: 10.0, pMinInterval: 0.25))
                 throw new Exception("Inactive map modes must not dirty the zone calculator.");
+        }
+
+        private static void ExpectActorAiSearchThrottleRules()
+        {
+            if (!ActorAiSearchThrottleRules.ShouldSearch(pNow: 10.0, pNextAllowed: -1.0))
+                throw new Exception("Actor AI target search should run when it has no cooldown.");
+            if (ActorAiSearchThrottleRules.ShouldSearch(pNow: 10.0, pNextAllowed: 12.0))
+                throw new Exception("Actor AI target search should skip while a miss cooldown is active.");
+            if (!ActorAiSearchThrottleRules.ShouldSearch(pNow: 12.0, pNextAllowed: 12.0))
+                throw new Exception("Actor AI target search should resume at the cooldown boundary.");
+            if (ActorAiSearchThrottleRules.NextAllowedAfterMiss(pNow: 10.0, pCooldown: 2.0) != 12.0)
+                throw new Exception("Actor AI target search miss cooldown should be based on current world time.");
+            if (ActorAiSearchThrottleRules.NextAllowedAfterMiss(pNow: 10.0, pCooldown: -1.0) != 10.0)
+                throw new Exception("Invalid actor AI target search cooldown should not push searches into the future.");
         }
 
         private static void ExpectFiefCacheRules()
@@ -1614,6 +1815,54 @@ namespace WarFabricationRuleTests
                 throw new Exception("Vanilla city citizens benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_capture"))
                 throw new Exception("Vanilla city capture benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_candidates"))
+                throw new Exception("Royal guard candidate scan benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh"))
+                throw new Exception("Royal guard identity refresh benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_slave_catchers_target_scan"))
+                throw new Exception("Slave catcher target scan benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_slave_army_name_scan"))
+                throw new Exception("Slave army name scan benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_army_cleanup_guard_strip"))
+                throw new Exception("Army cleanup guard strip benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_fief_command_captain"))
+                throw new Exception("Fief command captain benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_active_army_fast_path"))
+                throw new Exception("Royal guard active army fast-path benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_active_fallback_scan"))
+                throw new Exception("Royal guard active fallback scan benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_candidate_scan"))
+                throw new Exception("Royal guard candidate scan detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_candidate_score"))
+                throw new Exception("Royal guard candidate score detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_candidate_sort"))
+                throw new Exception("Royal guard candidate sort detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_death_bond_child_scan"))
+                throw new Exception("Death bond child scan benchmark entry is missing.");
+        }
+
+        private static void ExpectDeathBondRules()
+        {
+            if (!DeathBondRules.ShouldRecordBondDeathForParentsAndLover(pDeadIsTraceable: true))
+                throw new Exception("Traceable deaths should still notify parents and lovers.");
+            if (DeathBondRules.ShouldUseWorldScanForChildren(
+                    pCanUseActorChildrenList: true,
+                    pDeadIsImportant: true))
+                throw new Exception("Death bond should prefer Actor.getChildren over world scans.");
+            if (DeathBondRules.ShouldUseWorldScanForChildren(
+                    pCanUseActorChildrenList: false,
+                    pDeadIsImportant: false))
+                throw new Exception("Common deaths must not scan all world units for children.");
+            if (!DeathBondRules.ShouldUseWorldScanForChildren(
+                    pCanUseActorChildrenList: false,
+                    pDeadIsImportant: true))
+                throw new Exception("Only important deaths may use the expensive child-scan fallback.");
+        }
+
+        private static void ExpectXiaItemEffectRules()
+        {
+            if (XiaItemEffectRules.ShouldApplyQingStatusEffect())
+                throw new Exception("Qing hit effect should not use status effects; slash animation is enough.");
         }
 
         private static void ExpectVisibleClanRenameRules()
@@ -1659,6 +1908,29 @@ namespace WarFabricationRuleTests
             if (RestorationSettlementRules.ShouldMoveClaimantToTargetCityBeforeKingdomCreation(
                     pClaimantInTargetCity: true))
                 throw new Exception("Restoration should not move a claimant who is already in the target city.");
+        }
+
+        private static void ExpectWarGoalControlRules()
+        {
+            if (!WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "take_core_city",
+                    pTargetCityControlledByAttackerSystem: true))
+                throw new Exception("Controlled core targets should allow immediate war-goal settlement.");
+
+            if (!WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "press_claim_city",
+                    pTargetCityControlledByAttackerSystem: true))
+                throw new Exception("Controlled claim targets should allow immediate war-goal settlement.");
+
+            if (WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "force_vassal",
+                    pTargetCityControlledByAttackerSystem: true))
+                throw new Exception("Non-city-control goals must not settle from a captured target city.");
+
+            if (WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "take_core_city",
+                    pTargetCityControlledByAttackerSystem: false))
+                throw new Exception("Uncontrolled city goals must not settle.");
         }
 
         private static void ExpectSlaveArmyNameRefreshRule()
@@ -1734,6 +2006,212 @@ namespace WarFabricationRuleTests
                     pKingIsXia: false,
                     pHasGuardStateHint: false))
                 throw new Exception("Ordinary non-Xia kingdoms with no guard state should skip royal guard scans.");
+
+            if (RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 20,
+                    pActiveNobleCount: 4,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: true,
+                    pRefillThreshold: 16))
+                throw new Exception("A full valid royal guard should not scan the whole kingdom for candidates.");
+            if (RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 18,
+                    pActiveNobleCount: 4,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: true,
+                    pRefillThreshold: 16))
+                throw new Exception("A healthy royal guard above the refill threshold should skip candidate scans.");
+            if (RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 12,
+                    pActiveNobleCount: 4,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: true,
+                    pRefillThreshold: 12))
+                throw new Exception("Royal guard maintenance should not refill at the low-water mark.");
+            if (!RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 11,
+                    pActiveNobleCount: 4,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: true,
+                    pRefillThreshold: 12))
+                throw new Exception("Royal guard maintenance should refill only after dropping below the lower low-water mark.");
+            if (!RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 20,
+                    pActiveNobleCount: 3,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: true,
+                    pRefillThreshold: 16))
+                throw new Exception("Royal guard maintenance should scan when the noble quota is not satisfied.");
+            if (!RoyalGuardMaintenanceRules.ShouldSearchCandidates(
+                    pActiveCount: 20,
+                    pActiveNobleCount: 4,
+                    pTargetNobleCount: 4,
+                    pHasCaptain: false,
+                    pRefillThreshold: 16))
+                throw new Exception("Royal guard maintenance should scan when no noble captain is available.");
+
+            if (RoyalGuardMaintenanceRules.ShouldPersistGuardIdentityRefresh(
+                    pWasGuard: true,
+                    pWasCaptain: true,
+                    pCaptain: true,
+                    pKingdomChanged: false,
+                    pNameChanged: false,
+                    pMissingTrait: false,
+                    pArmyChanged: false,
+                    pProfessionChanged: false,
+                    pJobChanged: false))
+                throw new Exception("Stable guard identity should skip DB/archive/graphics refresh.");
+            if (RoyalGuardMaintenanceRules.ShouldPersistGuardIdentityRefresh(
+                    pWasGuard: true,
+                    pWasCaptain: true,
+                    pCaptain: true,
+                    pKingdomChanged: false,
+                    pNameChanged: false,
+                    pMissingTrait: false,
+                    pArmyChanged: true,
+                    pProfessionChanged: true,
+                    pJobChanged: true))
+                throw new Exception("Runtime guard drift should be corrected without DB/archive/graphics refresh.");
+            if (!RoyalGuardMaintenanceRules.ShouldApplyGuardRuntimeRefresh(
+                    pArmyChanged: true,
+                    pProfessionChanged: false,
+                    pJobChanged: false))
+                throw new Exception("Army drift must still be corrected with a lightweight runtime refresh.");
+            if (RoyalGuardMaintenanceRules.ShouldPersistNewGuardDuringFill(pFinalRefreshWillRun: true))
+                throw new Exception("New guard candidates should be persisted once in the final refresh, not during fill.");
+            if (!RoyalGuardMaintenanceRules.ShouldPersistGuardIdentityRefresh(
+                    pWasGuard: true,
+                    pWasCaptain: false,
+                    pCaptain: true,
+                    pKingdomChanged: false,
+                    pNameChanged: false,
+                    pMissingTrait: false,
+                    pArmyChanged: false,
+                    pProfessionChanged: false,
+                    pJobChanged: false))
+                throw new Exception("Captain changes must persist guard identity.");
+            if (!RoyalGuardMaintenanceRules.ShouldUseArmyFastPathForActiveGuards(
+                    pGuardArmyFound: true,
+                    pGuardArmyUnitCount: 1))
+                throw new Exception("Royal guard active list should prefer the dedicated guard army.");
+            if (RoyalGuardMaintenanceRules.ShouldFallbackToKingdomScanForActiveGuards(
+                    pGuardArmyFound: true,
+                    pHasGuardStateHint: true))
+                throw new Exception("Royal guard active scan should not fall back when a guard army exists.");
+            if (!RoyalGuardMaintenanceRules.ShouldFallbackToKingdomScanForActiveGuards(
+                    pGuardArmyFound: false,
+                    pHasGuardStateHint: true))
+                throw new Exception("Royal guard active scan should fall back only for dirty/missing guard-army state.");
+            if (!RoyalGuardMaintenanceRules.ShouldKeepBoundedCandidate(
+                    pCurrentCount: 31,
+                    pLimit: 32,
+                    pLowestScore: 10f,
+                    pCandidateScore: 5f))
+                throw new Exception("Bounded candidate pool should keep candidates until it reaches the limit.");
+            if (!RoyalGuardMaintenanceRules.ShouldKeepBoundedCandidate(
+                    pCurrentCount: 32,
+                    pLimit: 32,
+                    pLowestScore: 10f,
+                    pCandidateScore: 11f))
+                throw new Exception("Bounded candidate pool should replace the current weakest candidate.");
+            if (RoyalGuardMaintenanceRules.ShouldKeepBoundedCandidate(
+                    pCurrentCount: 32,
+                    pLimit: 32,
+                    pLowestScore: 10f,
+                    pCandidateScore: 9f))
+                throw new Exception("Bounded candidate pool should reject weak candidates after the limit.");
+        }
+
+        private static void ExpectAwArmyRoleRules()
+        {
+            if (!AWArmyRoleRules.IsSpecialRole(AWArmyRole.RoyalGuard) ||
+                !AWArmyRoleRules.IsSpecialRole(AWArmyRole.SlaveArmy) ||
+                !AWArmyRoleRules.IsSpecialRole(AWArmyRole.BorderArmy))
+                throw new Exception("AW3 army layer must recognize royal guard, slave army, and border army roles.");
+
+            if (AWArmyRoleRules.IsSpecialRole("") || AWArmyRoleRules.IsSpecialRole("normal"))
+                throw new Exception("Ordinary armies must not be treated as AW3 special armies.");
+
+            if (!AWArmyRoleRules.ShouldUseDetachedArmy(AWArmyRole.RoyalGuard))
+                throw new Exception("Royal guards should use a detached army.");
+            if (AWArmyRoleRules.ShouldUseDetachedArmy(AWArmyRole.SlaveArmy))
+                throw new Exception("Slave armies should keep the original city binding for UI and city caps.");
+            if (AWArmyRoleRules.ShouldUseDetachedArmy(AWArmyRole.BorderArmy))
+                throw new Exception("Border armies should keep the original city binding for garrison behavior.");
+            if (AWArmyRoleRules.MaxArmiesPerCity(AWArmyRole.SlaveArmy) != 1)
+                throw new Exception("Each city may have at most one slave army.");
+            if (AWArmyRoleRules.MaxArmiesPerKingdom(AWArmyRole.BorderArmy) != 3)
+                throw new Exception("Each kingdom may have at most three border armies.");
+            if (!AWArmyRoleRules.ShouldSetCaptain(pCurrentCaptainId: 10, pNewCaptainId: 11))
+                throw new Exception("Special armies should set a new captain when the actor changes.");
+            if (AWArmyRoleRules.ShouldSetCaptain(pCurrentCaptainId: 10, pNewCaptainId: 10))
+                throw new Exception("Special armies must not append duplicate past captains for the same actor.");
+
+            if (AWArmyRoleRules.DisplayName(AWArmyRole.BorderArmy, "周", 2) != "周 边军 2")
+                throw new Exception("Border army names should include kingdom name, role label, and index.");
+        }
+
+        private static void ExpectSlaveArmyFormationRules()
+        {
+            if (!SlaveArmyFormationRules.IsSlaveArmyComposition(
+                    totalWarriors: 20,
+                    slaveWarriors: 15,
+                    nonSlaveWarriors: 5,
+                    captainNonSlave: true))
+                throw new Exception("A slave army may include at most five non-slave cadres including captain.");
+
+            if (SlaveArmyFormationRules.IsSlaveArmyComposition(
+                    totalWarriors: 20,
+                    slaveWarriors: 14,
+                    nonSlaveWarriors: 6,
+                    captainNonSlave: true))
+                throw new Exception("A slave army must reject more than five non-slave cadres.");
+
+            if (SlaveArmyFormationRules.IsSlaveArmyComposition(
+                    totalWarriors: 20,
+                    slaveWarriors: 16,
+                    nonSlaveWarriors: 4,
+                    captainNonSlave: false))
+                throw new Exception("A slave army captain must be non-slave.");
+
+            if (!SlaveArmyFormationRules.CanAddSlaveToArmy(
+                    totalWarriors: 10,
+                    slaveWarriors: 7,
+                    nonSlaveWarriors: 3))
+                throw new Exception("Slave armies should prefer adding slaves while under the 80 percent target.");
+
+            if (SlaveArmyFormationRules.CanAddNonSlaveCadre(
+                    nonSlaveWarriors: 5,
+                    hasNonSlaveCaptain: true))
+                throw new Exception("Slave armies must cap non-slave cadres at five including captain.");
+        }
+
+        private static void ExpectSlaveCaptureCommandRules()
+        {
+            if (!SlaveCaptureCommandRules.CanCommandSlaveCapture(
+                    pIsSlaveArmyCaptain: true,
+                    pIsSlave: false,
+                    pSlaveryEnabled: true))
+                throw new Exception("Slave army non-slave captains should command slave capture.");
+
+            if (SlaveCaptureCommandRules.CanCommandSlaveCapture(
+                    pIsSlaveArmyCaptain: false,
+                    pIsSlave: false,
+                    pSlaveryEnabled: true))
+                throw new Exception("Ordinary non-slave civilians must not be slave catchers.");
+
+            if (SlaveCaptureCommandRules.CanCommandSlaveCapture(
+                    pIsSlaveArmyCaptain: true,
+                    pIsSlave: true,
+                    pSlaveryEnabled: true))
+                throw new Exception("Slave army captains must be non-slaves.");
+
+            if (SlaveCaptureCommandRules.WaitAfterNoTarget(3f, 8f) != 3f)
+                throw new Exception("No-target slave capture wait should use the low end for deterministic tests.");
+            if (SlaveCaptureCommandRules.WaitAfterFailure(2f, 5f) != 2f)
+                throw new Exception("Failed slave capture wait should use the low end for deterministic tests.");
+            if (SlaveCaptureCommandRules.WaitAfterSuccess(5f, 10f) != 5f)
+                throw new Exception("Successful slave capture wait should use the low end for deterministic tests.");
         }
 
         private static void ExpectNonCoreLoyaltyRules()
@@ -1769,6 +2247,19 @@ namespace WarFabricationRuleTests
                 throw new Exception("Army captain family tree nodes must show a role frame.");
         }
 
+        private static void ExpectFamilyTreeToolbarLayoutRules()
+        {
+            const float windowWidth = 480f;
+            const float buttonWidth = 78f;
+            const float inset = 12f;
+            float x = FamilyTreeToolbarLayoutRules.RightAlignedX(inset);
+
+            if (x >= 0)
+                throw new Exception("Right anchored family tree toolbar buttons must use a negative x inset.");
+            if (!FamilyTreeToolbarLayoutRules.StaysInsideRightEdge(windowWidth, buttonWidth, x))
+                throw new Exception("Family tree toolbar buttons must stay inside the window right edge.");
+        }
+
         private static void ExpectFabricateCoreDecisionPriority()
         {
             int fabricateCore = KingdomDecisionPriorityRules.ScoreDecision("aw_decision_fabricate_core",
@@ -1797,6 +2288,92 @@ namespace WarFabricationRuleTests
                 throw new Exception("Fabricating cores must be the highest priority auto decision.");
         }
 
+        private static void ExpectCoreFabricationSlotRules()
+        {
+            if (!CoreFabricationSlotRules.ShouldUseDedicatedSlot("fabricate_core"))
+                throw new Exception("Core fabrication must use its dedicated slot.");
+            if (CoreFabricationSlotRules.ShouldUseDedicatedSlot("fabricate_strong_claim"))
+                throw new Exception("Claim fabrication must stay in the normal decision slot.");
+            if (!CoreFabricationSlotRules.ShouldStartWhenEmpty(currentCoreCityId: -1, hasAvailableCoreTarget: true))
+                throw new Exception("An empty core fabrication slot should immediately start an available core target.");
+            if (!CoreFabricationSlotRules.ShouldQueueWhenBusy(currentCoreCityId: 12, hasAvailableCoreTarget: true))
+                throw new Exception("A busy core fabrication slot should queue additional core targets.");
+            if (CoreFabricationSlotRules.ShouldQueueWhenBusy(currentCoreCityId: -1, hasAvailableCoreTarget: true))
+                throw new Exception("An empty core fabrication slot should start immediately instead of queueing.");
+            if (!CoreFabricationSlotRules.ShouldShowDecisionSidebarButton(pIsDecisionPanel: true, pPolicyEnabled: true))
+                throw new Exception("Core fabrication queue entry belongs in the enabled decision panel sidebar.");
+            if (CoreFabricationSlotRules.ShouldShowDecisionSidebarButton(pIsDecisionPanel: false, pPolicyEnabled: true))
+                throw new Exception("Core fabrication queue entry must not show outside the decision panel.");
+            if (CoreFabricationSlotRules.ShouldShowDecisionSidebarButton(pIsDecisionPanel: true, pPolicyEnabled: false))
+                throw new Exception("Core fabrication queue entry must not show for kingdoms without policy enabled.");
+            if (CoreFabricationSlotRules.BuildSidebarLabel("", 0, 0) != "核心队列")
+                throw new Exception("Empty core fabrication queue should show a stable queue entry label.");
+            if (CoreFabricationSlotRules.BuildSidebarLabel("洛阳", 2, 45) != "核心\n45%/2")
+                throw new Exception("Busy core fabrication queue should show progress and total project count.");
+        }
+
+        private static void ExpectDecisionQueueRules()
+        {
+            if (DecisionQueueRules.ShouldPreemptCurrentDecisionForCore(
+                    currentDecisionId: "aw_decision_title_upgrade",
+                    coreDecisionAvailable: true))
+                throw new Exception("Core fabrication must not preempt the normal decision slot after it has a dedicated slot.");
+
+            if (DecisionQueueRules.ShouldPreemptCurrentDecisionForCore(
+                    currentDecisionId: "aw_decision_fabricate_core",
+                    coreDecisionAvailable: true))
+                throw new Exception("Current core fabrication must not preempt itself.");
+
+            if (DecisionQueueRules.ShouldPreemptCurrentDecisionForCore(
+                    currentDecisionId: "aw_decision_title_upgrade",
+                    coreDecisionAvailable: false))
+                throw new Exception("Core fabrication must not preempt when no core target is available.");
+
+            if (!DecisionQueueRules.ShouldQueueDecisionWhenBusy(
+                    currentDecisionId: "aw_decision_title_upgrade",
+                    nextDecisionId: "aw_decision_royal_expansion"))
+                throw new Exception("A new decision should enter the queue when another decision is active.");
+
+            if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(
+                    currentDecisionId: "",
+                    nextDecisionId: "aw_decision_royal_expansion"))
+                throw new Exception("An empty decision slot should start the decision immediately, not queue it.");
+        }
+
+        private static void ExpectForeignOccupationDetectionRules()
+        {
+            string type;
+            if (ForeignOccupationDetectionRules.TryDetectOccupation(
+                    ownerIsXia: false,
+                    legalCore: true,
+                    mandateCoreControlRatio: 0.8f,
+                    cityHasXiaIdentity: false,
+                    differentCultureOrLanguage: false,
+                    sameOwnerOriginCity: true,
+                    out type))
+                throw new Exception("A foreign Mandate realm's own native city must not be recorded as foreign occupation.");
+
+            if (!ForeignOccupationDetectionRules.TryDetectOccupation(
+                    ownerIsXia: false,
+                    legalCore: true,
+                    mandateCoreControlRatio: 0.8f,
+                    cityHasXiaIdentity: true,
+                    differentCultureOrLanguage: true,
+                    sameOwnerOriginCity: false,
+                    out type) || type != "pseudo_dynasty")
+                throw new Exception("A foreign realm controlling Xia legal-core cities should still be pseudo-dynasty occupation.");
+
+            if (!ForeignOccupationDetectionRules.TryDetectOccupation(
+                    ownerIsXia: false,
+                    legalCore: false,
+                    mandateCoreControlRatio: 0f,
+                    cityHasXiaIdentity: false,
+                    differentCultureOrLanguage: true,
+                    sameOwnerOriginCity: false,
+                    out type) || type != "normal_conquest")
+                throw new Exception("Different-culture foreign conquest should still be recorded as occupation.");
+        }
+
         private static void ExpectWarLabel(string pKey, string pExpected)
         {
             string actual = WarDisplayLabelRules.Label(pKey);
@@ -1808,6 +2385,9 @@ namespace WarFabricationRuleTests
         {
             if (WarDecisionTargetOrderRules.SortOrder("fabricate_core") != 0)
                 throw new Exception("Core fabrication should appear before war target rows.");
+            if (WarDecisionTargetOrderRules.SortOrder("take_mandate") >=
+                WarDecisionTargetOrderRules.SortOrder("take_core_city"))
+                throw new Exception("Mandate seizure should be the first war reason against the current Mandate kingdom.");
             if (WarDecisionTargetOrderRules.SortOrder("take_core_city") >=
                 WarDecisionTargetOrderRules.SortOrder("press_claim_city"))
                 throw new Exception("Core-reclaim wars must sort before claim wars.");

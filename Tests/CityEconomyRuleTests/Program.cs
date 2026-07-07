@@ -7,6 +7,8 @@ namespace CityEconomyRuleTests
     {
         private static int Main()
         {
+            try
+            {
             ExpectRole("capital", CityEconomyRole.CapitalAdmin,
                 isCapital: true, population: 80, marketBuildings: 0, farmBuildings: 0,
                 militaryBuildings: 0, workshopBuildings: 0, adoptedTechCount: 2,
@@ -65,20 +67,29 @@ namespace CityEconomyRuleTests
 
             ExpectTechMap("none", "tech_0", adoptedScore: 0f, totalTechCount: 8);
             ExpectTechMap("low", "tech_1", adoptedScore: 1f, totalTechCount: 8);
-            ExpectTechMap("middle", "tech_3", adoptedScore: 4f, totalTechCount: 8);
-            ExpectTechMap("high", "tech_4", adoptedScore: 6f, totalTechCount: 8);
-            ExpectTechMap("max", "tech_5", adoptedScore: 8f, totalTechCount: 8);
+            ExpectTechMap("middle", "tech_4", adoptedScore: 4f, totalTechCount: 8);
+            ExpectTechMap("high", "tech_6", adoptedScore: 6f, totalTechCount: 8);
+            ExpectTechMap("max", "tech_8", adoptedScore: 8f, totalTechCount: 8);
+            ExpectHeatHex("tech max green", "#226B3A", CityTechMapRules.HexForColorKey("tech_8"));
+            ExpectHeatHex("tech old cyan removed", "#4F8F45", CityTechMapRules.HexForColorKey("tech_7"));
             ExpectDevelopmentScoreOrder();
             ExpectDevelopmentPenalty();
             ExpectDevelopmentColor("low", "development_0", 0.05f);
-            ExpectDevelopmentColor("middle", "development_2", 0.45f);
-            ExpectDevelopmentColor("high", "development_4", 0.85f);
+            ExpectDevelopmentColor("middle", "development_4", 0.45f);
+            ExpectDevelopmentColor("high", "development_7", 0.85f);
+            ExpectHeatHex("development max green", "#226B3A", CityDevelopmentRules.HexForColorKey("development_8"));
             ExpectDevelopmentAverage();
             ExpectNewCityTechSyncRules();
             ExpectNeighborBonusRule();
 
             Console.WriteLine("City economy rule tests passed.");
             return 0;
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e.GetType().FullName + ": " + e.Message);
+                return 1;
+            }
         }
 
         private static void ExpectRole(string label, CityEconomyRole expected,
@@ -133,6 +144,12 @@ namespace CityEconomyRuleTests
             string actual = CityDevelopmentRules.ColorKeyForScore(score);
             if (actual != expected)
                 throw new Exception($"Expected {label} development color {expected}, got {actual}.");
+        }
+
+        private static void ExpectHeatHex(string label, string expected, string actual)
+        {
+            if (actual != expected)
+                throw new Exception($"Expected {label} hex {expected}, got {actual}.");
         }
 
         private static void ExpectDevelopmentAverage()
