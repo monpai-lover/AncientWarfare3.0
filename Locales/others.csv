@@ -189,3 +189,9 @@ aw_relation_older_sister,姐,Older Sister,姐
 aw_relation_younger_sister,妹,Younger Sister,妹
 succession_collateral_restore,恢复宗统,Collateral restoration,恢復宗統
 person_collateral_restore,恢复宗统,Collateral restoration,恢復宗統
+aw_rename_visible_clan,改氏,Rename,Rename
+aw_rename_visible_clan_placeholder,新氏,New clan,New clan
+aw_rename_visible_clan_hint,改当前氏支树全部成员,Whole branch tree,Whole branch tree
+aw_rename_visible_clan_invalid,请输入有效氏名,Enter a valid clan name,Enter a valid clan name
+aw_rename_visible_clan_none,没有可更新节点,No visible nodes updated,No visible nodes updated
+aw_confirm,确定,OK,OK

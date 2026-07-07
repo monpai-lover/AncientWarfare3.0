@@ -49,6 +49,10 @@ namespace AncientWarfare3.ui.windows
         private Button _collapseButton;
         private Button _halfSiblingButton;
         private Text _halfSiblingText;
+        private Button _renameClanButton;
+        private GameObject _renameClanPanel;
+        private InputField _renameClanInput;
+        private Text _renameClanHintText;
         private Text _titleText;
         private float _maxDepthY;
         private long _lastTreeRootId = -1;
@@ -159,8 +163,10 @@ namespace AncientWarfare3.ui.windows
             _expandButton = MakeToolbarButton("ExpandLiveBranches", AW_L10n.Text("aw_tree_expand", "展开"), new Vector2(-104, -28), ExpandAllLiveBranches);
             _collapseButton = MakeToolbarButton("CollapseBranches", AW_L10n.Text("aw_tree_collapse", "收缩"), new Vector2(-52, -28), CollapseAllBranches);
             _halfSiblingButton = MakeToolbarButton("HalfSiblingRelations", "", new Vector2(-156, -28), ToggleHalfSiblingRelations);
+            _renameClanButton = MakeToolbarButton("RenameVisibleClan", AW_L10n.Text("aw_rename_visible_clan", "\u6539\u6C0F"), new Vector2(-208, -28), ToggleRenameClanPanel);
             _halfSiblingText = _halfSiblingButton != null ? _halfSiblingButton.GetComponentInChildren<Text>() : null;
             UpdateHalfSiblingButtonText();
+            BuildRenameClanPanel();
 
             // "回氏族大树"按钮(窗口底部居中,小树模式可见)
             var btnObj = new GameObject("BackToBigTree", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -255,6 +261,116 @@ namespace AncientWarfare3.ui.windows
             return btn;
         }
 
+        private void BuildRenameClanPanel()
+        {
+            var obj = new GameObject("RenameVisibleClanPanel", typeof(RectTransform), typeof(Image));
+            obj.transform.SetParent(BackgroundTransform, false);
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(184, 48);
+            rect.anchoredPosition = new Vector2(-10, -50);
+            AW_UIStyle.ApplyPanel(obj.GetComponent<Image>(), 0.96f);
+            _renameClanPanel = obj;
+
+            var inputObj = new GameObject("ClanInput", typeof(RectTransform), typeof(Image), typeof(InputField));
+            inputObj.transform.SetParent(obj.transform, false);
+            var inputRect = inputObj.GetComponent<RectTransform>();
+            inputRect.anchorMin = new Vector2(0f, 1f);
+            inputRect.anchorMax = new Vector2(0f, 1f);
+            inputRect.pivot = new Vector2(0f, 1f);
+            inputRect.sizeDelta = new Vector2(92, 18);
+            inputRect.anchoredPosition = new Vector2(8, -8);
+            AW_UIStyle.ApplyButton(inputObj.GetComponent<Image>(), 0.82f);
+
+            var textObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            textObj.transform.SetParent(inputObj.transform, false);
+            var textRect = textObj.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(4, 1);
+            textRect.offsetMax = new Vector2(-4, -1);
+            var text = textObj.GetComponent<Text>();
+            text.font = LocalizedTextManager.current_font;
+            text.fontSize = 10;
+            text.alignment = TextAnchor.MiddleLeft;
+            text.color = Color.white;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            var placeholderObj = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+            placeholderObj.transform.SetParent(inputObj.transform, false);
+            var placeholderRect = placeholderObj.GetComponent<RectTransform>();
+            placeholderRect.anchorMin = Vector2.zero;
+            placeholderRect.anchorMax = Vector2.one;
+            placeholderRect.offsetMin = new Vector2(4, 1);
+            placeholderRect.offsetMax = new Vector2(-4, -1);
+            var placeholder = placeholderObj.GetComponent<Text>();
+            placeholder.font = LocalizedTextManager.current_font;
+            placeholder.fontSize = 10;
+            placeholder.alignment = TextAnchor.MiddleLeft;
+            placeholder.color = new Color(1f, 1f, 1f, 0.45f);
+            placeholder.text = AW_L10n.Text("aw_rename_visible_clan_placeholder", "\u65B0\u6C0F");
+
+            _renameClanInput = inputObj.GetComponent<InputField>();
+            _renameClanInput.textComponent = text;
+            _renameClanInput.placeholder = placeholder;
+
+            MakeRenamePanelButton(obj.transform, "Ok", AW_L10n.Text("aw_confirm", "\u786E\u5B9A"),
+                new Vector2(106, -8), new Vector2(38, 18), ConfirmRenameVisibleClan);
+            MakeRenamePanelButton(obj.transform, "Cancel", "X",
+                new Vector2(150, -8), new Vector2(24, 18), () => _renameClanPanel.SetActive(false));
+
+            var hintObj = new GameObject("Hint", typeof(RectTransform), typeof(Text));
+            hintObj.transform.SetParent(obj.transform, false);
+            var hintRect = hintObj.GetComponent<RectTransform>();
+            hintRect.anchorMin = new Vector2(0f, 1f);
+            hintRect.anchorMax = new Vector2(0f, 1f);
+            hintRect.pivot = new Vector2(0f, 1f);
+            hintRect.sizeDelta = new Vector2(168, 16);
+            hintRect.anchoredPosition = new Vector2(8, -29);
+            _renameClanHintText = hintObj.GetComponent<Text>();
+            _renameClanHintText.font = LocalizedTextManager.current_font;
+            _renameClanHintText.fontSize = 9;
+            _renameClanHintText.alignment = TextAnchor.MiddleLeft;
+            _renameClanHintText.color = new Color(0.95f, 0.86f, 0.55f, 1f);
+            _renameClanHintText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_hint", "\u6539\u5F53\u524D\u6C0F\u652F\u6811\u5168\u90E8\u6210\u5458");
+            _renameClanPanel.SetActive(false);
+        }
+
+        private Button MakeRenamePanelButton(Transform pParent, string pName, string pText,
+            Vector2 pPosition, Vector2 pSize, System.Action pAction)
+        {
+            var obj = new GameObject(pName, typeof(RectTransform), typeof(Image), typeof(Button));
+            obj.transform.SetParent(pParent, false);
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.sizeDelta = pSize;
+            rect.anchoredPosition = pPosition;
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
+
+            var btn = obj.GetComponent<Button>();
+            btn.onClick.AddListener(() => pAction?.Invoke());
+
+            var txtObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            txtObj.transform.SetParent(obj.transform, false);
+            var trect = txtObj.GetComponent<RectTransform>();
+            trect.anchorMin = Vector2.zero;
+            trect.anchorMax = Vector2.one;
+            trect.offsetMin = Vector2.zero;
+            trect.offsetMax = Vector2.zero;
+            var txt = txtObj.GetComponent<Text>();
+            txt.font = LocalizedTextManager.current_font;
+            txt.fontSize = 10;
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.color = Color.white;
+            txt.text = pText;
+            return btn;
+        }
+
         public override void OnNormalEnable()
         {
             Rebuild();
@@ -268,6 +384,46 @@ namespace AncientWarfare3.ui.windows
             long currentShi = LineageQuery.GetActorShiId(_centerActorId);
             if (currentShi < 0) currentShi = _backShiId;
             if (currentShi >= 0) OpenBigTreeLocate(_centerActorId, currentShi);
+        }
+
+        private void ToggleRenameClanPanel()
+        {
+            if (_renameClanPanel == null || _mode != Mode.BigTree) return;
+            bool show = !_renameClanPanel.activeSelf;
+            _renameClanPanel.SetActive(show);
+            if (!show) return;
+
+            var branch = LineageQuery.GetShiBranchInfo(_backShiId);
+            if (_renameClanInput != null)
+                _renameClanInput.text = branch != null && !string.IsNullOrEmpty(branch.clan_name) ? branch.clan_name : "";
+            if (_renameClanHintText != null)
+                _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_hint", "\u6539\u5F53\u524D\u6C0F\u652F\u6811\u5168\u90E8\u6210\u5458");
+            try { _renameClanInput?.ActivateInputField(); } catch { }
+        }
+
+        private void ConfirmRenameVisibleClan()
+        {
+            if (_mode != Mode.BigTree) return;
+            string raw = _renameClanInput != null ? _renameClanInput.text : "";
+            if (!VisibleClanRenameRules.TryNormalizeClanName(raw, out _))
+            {
+                if (_renameClanHintText != null)
+                    _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_invalid", "\u8BF7\u8F93\u5165\u6709\u6548\u6C0F\u540D");
+                return;
+            }
+
+            int changed = VisibleClanRenameService.RenameWholeShiTree(_backShiId, raw);
+            if (changed <= 0)
+            {
+                if (_renameClanHintText != null)
+                    _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_none", "\u6CA1\u6709\u53EF\u66F4\u65B0\u8282\u70B9");
+                return;
+            }
+
+            if (_renameClanPanel != null) _renameClanPanel.SetActive(false);
+            ResetQueryCache();
+            PreservePanForNextRebuild();
+            Rebuild();
         }
 
         private void ToggleHalfSiblingRelations()
@@ -340,6 +496,8 @@ namespace AncientWarfare3.ui.windows
             if (_expandButton != null) _expandButton.gameObject.SetActive(showTreeTools);
             if (_collapseButton != null) _collapseButton.gameObject.SetActive(showTreeTools);
             if (_halfSiblingButton != null) _halfSiblingButton.gameObject.SetActive(_mode == Mode.Family);
+            if (_renameClanButton != null) _renameClanButton.gameObject.SetActive(_mode == Mode.BigTree);
+            if (_renameClanPanel != null && _mode != Mode.BigTree) _renameClanPanel.SetActive(false);
             UpdateHalfSiblingButtonText();
             _titleText.text = _mode == Mode.BigTree
                 ? AW_L10n.Text("aw_clan_big_tree", "氏族大树")

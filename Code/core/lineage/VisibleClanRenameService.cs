@@ -1,0 +1,139 @@
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.db;
+using AncientWarfare3.utils;
+
+namespace AncientWarfare3.core.lineage
+{
+    internal static class VisibleClanRenameService
+    {
+        private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
+        private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+
+        public static int RenameVisibleMembers(IEnumerable<long> pVisibleActorIds, long pShiId,
+            bool pModeIsBigTree, string pRawClanName)
+        {
+            if (!Ready) return 0;
+            if (!VisibleClanRenameRules.TryNormalizeClanName(pRawClanName, out string clanName)) return 0;
+
+            List<long> ids = VisibleClanRenameRules.ShouldUseWholeShiTreeScope(pModeIsBigTree, pShiId)
+                ? CollectShiTreeActorIds(pShiId)
+                : VisibleClanRenameRules.CollectValidVisibleActorIds(pVisibleActorIds);
+            if (ids.Count == 0) return 0;
+
+            if (VisibleClanRenameRules.ShouldUpdateBranchName(pModeIsBigTree, pShiId, ids.Count))
+                UpdateBranchName(pShiId, clanName);
+
+            int changed = 0;
+            foreach (long id in ids)
+            {
+                if (RenameActor(id, clanName))
+                    changed++;
+            }
+            return changed;
+        }
+
+        public static int RenameWholeShiTree(long pShiId, string pRawClanName)
+        {
+            return RenameVisibleMembers(null, pShiId, pModeIsBigTree: true, pRawClanName);
+        }
+
+        private static List<long> CollectShiTreeActorIds(long pShiId)
+        {
+            var result = new List<long>();
+            var seen = new HashSet<long>();
+            if (pShiId < 0) return result;
+
+            using (var cmd = new SQLiteCommand(DB))
+            {
+                cmd.CommandText =
+                    $"SELECT ID FROM {ActorArchiveTableItem.GetTableName()} " +
+                    $"WHERE SHI_ID=@sid ORDER BY BIRTH_TIME ASC, ID ASC";
+                cmd.Parameters.AddWithValue("@sid", pShiId);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                    AddUnique(result, seen, reader.GetInt64(0));
+            }
+
+            var units = World.world?.units;
+            if (units != null)
+            {
+                foreach (Actor unit in units)
+                {
+                    if (unit?.data == null || unit.isRekt()) continue;
+                    unit.data.get(LineageKeys.SHI_ID, out long unitShiId, -1L);
+                    if (unitShiId == pShiId)
+                        AddUnique(result, seen, unit.data.id);
+                }
+            }
+
+            return result;
+        }
+
+        private static void AddUnique(List<long> pResult, HashSet<long> pSeen, long pActorId)
+        {
+            if (pActorId < 0 || !pSeen.Add(pActorId)) return;
+            pResult.Add(pActorId);
+        }
+
+        private static bool RenameActor(long pActorId, string pClanName)
+        {
+            bool changed = false;
+            Actor live = World.world?.units?.get(pActorId);
+            if (live?.data != null && !live.isRekt())
+            {
+                live.data.set(LineageKeys.CLAN_NAME, pClanName);
+                LineageService.ApplyDisplayName(live);
+                LineageService.ArchiveActor(live, pAlive: live.isAlive());
+                try { live.clearGraphicsFully(); } catch { }
+                changed = true;
+            }
+
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActorId);
+            if (row != null)
+            {
+                UpdateArchivedActor(row, pClanName);
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private static void UpdateBranchName(long pShiId, string pClanName)
+        {
+            DB.UpdateValue(ShiBranchTableItem.GetTableName(),
+                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("SHI_ID", pShiId) },
+                ColumnVal.Create("CLAN_NAME", pClanName));
+        }
+
+        private static void UpdateArchivedActor(ActorArchiveTableItem pRow, string pClanName)
+        {
+            DB.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pRow.id) },
+                ColumnVal.Create("CLAN_NAME", pClanName),
+                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pRow, pClanName)));
+        }
+
+        private static string BuildArchivedDisplayName(ActorArchiveTableItem pRow, string pClanName)
+        {
+            string given = pRow.given_name ?? "";
+            if (string.IsNullOrEmpty(given)) given = pRow.display_name ?? "";
+            if (string.IsNullOrEmpty(given)) return "";
+
+            string family = pRow.family_name ?? "";
+            string status = pRow.status ?? LineageStatus.NONE;
+            if (status == LineageStatus.NOBLE)
+            {
+                if (pRow.sex == 0)
+                {
+                    string prefix = !string.IsNullOrEmpty(pClanName) ? pClanName : family;
+                    return !string.IsNullOrEmpty(prefix) ? prefix + given : given;
+                }
+
+                return !string.IsNullOrEmpty(family) ? given + family : given;
+            }
+
+            return !string.IsNullOrEmpty(pClanName) ? pClanName + given : given;
+        }
+    }
+}

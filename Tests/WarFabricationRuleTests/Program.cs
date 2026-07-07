@@ -301,6 +301,7 @@ namespace WarFabricationRuleTests
             ExpectXiaNameRepairRules();
             ExpectCityTechChronicleRules();
             ExpectCityMaintenanceBenchmarkRules();
+            ExpectVisibleClanRenameRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
             return 0;
@@ -1582,6 +1583,34 @@ namespace WarFabricationRuleTests
                 throw new Exception("Vanilla city citizens benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_capture"))
                 throw new Exception("Vanilla city capture benchmark entry is missing.");
+        }
+
+        private static void ExpectVisibleClanRenameRules()
+        {
+            if (!VisibleClanRenameRules.TryNormalizeClanName(" 新氏 ", out string normalized) || normalized != "新")
+                throw new Exception("Visible clan rename should trim whitespace and remove the shi suffix.");
+            if (!VisibleClanRenameRules.TryNormalizeClanName("王", out normalized) || normalized != "王")
+                throw new Exception("Visible clan rename should keep a single-character clan name.");
+            if (VisibleClanRenameRules.TryNormalizeClanName("   氏  ", out _))
+                throw new Exception("Visible clan rename should reject an empty clan name after suffix removal.");
+
+            var ids = VisibleClanRenameRules.CollectValidVisibleActorIds(new long[] { 3, -1, 3, 8, 0, 8 });
+            if (ids.Count != 3 || ids[0] != 3 || ids[1] != 8 || ids[2] != 0)
+                throw new Exception("Visible clan rename should keep visible actor ids in first-seen order and remove duplicates.");
+
+            if (!VisibleClanRenameRules.ShouldUpdateBranchName(pModeIsBigTree: true, pShiId: 7, pVisibleActorCount: 2))
+                throw new Exception("Visible clan rename should update the current shi branch when renaming visible big-tree members.");
+            if (VisibleClanRenameRules.ShouldUpdateBranchName(pModeIsBigTree: false, pShiId: 7, pVisibleActorCount: 2))
+                throw new Exception("Family-tree visible rename should not update a whole shi branch name.");
+            if (VisibleClanRenameRules.ShouldUpdateBranchName(pModeIsBigTree: true, pShiId: -1, pVisibleActorCount: 2))
+                throw new Exception("Invalid shi id should not update a branch name.");
+
+            if (!VisibleClanRenameRules.ShouldUseWholeShiTreeScope(pModeIsBigTree: true, pShiId: 7))
+                throw new Exception("Big-tree clan rename should use the whole displayable shi tree scope.");
+            if (VisibleClanRenameRules.ShouldUseWholeShiTreeScope(pModeIsBigTree: false, pShiId: 7))
+                throw new Exception("Family-tree rename must not use whole shi tree scope.");
+            if (VisibleClanRenameRules.ShouldUseWholeShiTreeScope(pModeIsBigTree: true, pShiId: -1))
+                throw new Exception("Invalid shi id must not use whole shi tree scope.");
         }
 
         private static void ExpectHistoryContentNormalization(string pRaw, string pExpected)
