@@ -617,7 +617,7 @@ namespace AncientWarfare3.core.lineage
             if (replacement == null)
                 replacement = PickBestSlaveArmyCadre(FindArmyAnchorCity(pArmy) ?? pArmy.getCity(), pRequireWarrior: true);
             if (replacement != null)
-                pArmy.setCaptain(replacement);
+                AWArmyService.SetCaptainIfChanged(pArmy, replacement);
         }
 
         public static void EnsureSlaveArmy(City pCity)
@@ -637,7 +637,7 @@ namespace AncientWarfare3.core.lineage
             if (captain == null) return;
 
             Army army = AWArmyService.EnsureArmy(kingdom, pCity, captain, AWArmyRole.SlaveArmy,
-                BuildSlaveArmyName(kingdom, pCity, 1), pDetached: true);
+                BuildSlaveArmyName(kingdom, pCity, 1), pDetached: false);
             if (army == null) return;
 
             _formingSlaveArmy = true;
@@ -651,6 +651,7 @@ namespace AncientWarfare3.core.lineage
             }
             EnsureNonSlaveCaptain(army);
             AssignSlaveCatcherJobToCaptain(army.getCaptain());
+            DriveSlaveArmyFrontline(army, pCity);
             RenameArmyIfSlaveArmy(army);
             RecordSlaveArmyFormation(kingdom, pCity);
         }
@@ -986,6 +987,61 @@ namespace AncientWarfare3.core.lineage
             if (pCaptain.citizen_job == SlaveryContent.SlaveCatcherJob) return;
             try { pCaptain.setCitizenJob(SlaveryContent.SlaveCatcherJob); }
             catch { }
+        }
+
+        private static void DriveSlaveArmyFrontline(Army pArmy, City pCity)
+        {
+            if (pArmy?.data == null || pCity?.data == null || pCity.kingdom?.data == null) return;
+            try
+            {
+                if (!pCity.kingdom.hasEnemies()) return;
+            }
+            catch { return; }
+
+            Actor target = FindNearestEnemyForSlaveArmy(pArmy, pCity);
+            if (target?.current_tile == null) return;
+
+            int issued = 0;
+            foreach (Actor unit in pArmy.getUnits())
+            {
+                if (issued >= MAX_SLAVE_ARMY_SIZE) break;
+                if (unit?.data == null || unit.isRekt() || unit.current_tile == null) continue;
+                if (unit.army != pArmy || !unit.isWarrior()) continue;
+                if (!unit.current_tile.isSameIsland(target.current_tile)) continue;
+                try
+                {
+                    unit.beh_actor_target = target;
+                    unit.goTo(target.current_tile);
+                    issued++;
+                }
+                catch { }
+            }
+        }
+
+        private static Actor FindNearestEnemyForSlaveArmy(Army pArmy, City pCity)
+        {
+            WorldTile origin = null;
+            try { origin = pArmy.getCaptain()?.current_tile; } catch { }
+            if (origin == null) origin = pCity.getTile();
+            if (origin == null) return null;
+
+            Actor best = null;
+            int bestDist = int.MaxValue;
+            using ListPool<Kingdom> enemies = pCity.kingdom.getEnemiesKingdoms();
+            foreach (Kingdom enemy in enemies)
+            {
+                if (enemy?.data == null) continue;
+                foreach (Actor target in enemy.getUnits())
+                {
+                    if (target?.data == null || target.isRekt() || target.current_tile == null) continue;
+                    if (!origin.isSameIsland(target.current_tile)) continue;
+                    int dist = Toolbox.SquaredDistTile(origin, target.current_tile);
+                    if (dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = target;
+                }
+            }
+            return best;
         }
 
         private static string BuildSlaveArmyName(Kingdom pKingdom, City pCity, int pIndex)

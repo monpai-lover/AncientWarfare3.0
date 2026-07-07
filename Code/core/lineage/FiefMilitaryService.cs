@@ -1,3 +1,5 @@
+using AncientWarfare3.core.policy;
+
 namespace AncientWarfare3.core.lineage
 {
     internal static class FiefMilitaryService
@@ -6,6 +8,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCity?.data == null) return;
 
+            Bench.bench(CityMaintenanceBenchmarkRules.FiefCommandResolve, CityMaintenanceBenchmarkRules.Group);
             FiefInfo info = FiefService.GetActiveFief(pCity);
             Actor general = pGeneral ?? FindActor(info?.general_actor_id ?? -1L);
             Kingdom kingdom = pCity.kingdom;
@@ -14,16 +17,21 @@ namespace AncientWarfare3.core.lineage
             bool sameKingdom = generalAlive && kingdom?.data != null && general.kingdom == kingdom;
             bool slave = generalAlive && SlaveService.IsSlave(general);
             bool king = generalAlive && general.isKing();
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.FiefCommandResolve, CityMaintenanceBenchmarkRules.Group);
             if (!FiefMilitaryRules.ShouldEnforceFiefCommand(activeFief, generalAlive, sameKingdom, slave, king))
                 return;
 
+            Bench.bench(CityMaintenanceBenchmarkRules.FiefCommandApply, CityMaintenanceBenchmarkRules.Group);
             if (general.city != pCity)
                 general.joinCity(pCity);
 
             if (pCity.leader != general)
                 pCity.setLeader(general, pNew: true);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.FiefCommandApply, CityMaintenanceBenchmarkRules.Group);
 
+            Bench.bench(CityMaintenanceBenchmarkRules.FiefCommandCaptain, CityMaintenanceBenchmarkRules.Group);
             EnsureArmyCaptain(pCity, general);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.FiefCommandCaptain, CityMaintenanceBenchmarkRules.Group);
         }
 
         public static void RefreshArmyName(Army pArmy)

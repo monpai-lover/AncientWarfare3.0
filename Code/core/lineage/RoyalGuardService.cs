@@ -11,9 +11,11 @@ namespace AncientWarfare3.core.lineage
     internal static class RoyalGuardService
     {
         private const int MAX_GUARDS_PER_KINGDOM = 20;
-        private const int REFILL_SEARCH_THRESHOLD = 16;
+        private const int REFILL_SEARCH_THRESHOLD = 12;
         private const int RECRUITMENT_BATCH_LIMIT = 4;
         private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
+        private const int CANDIDATE_POOL_LIMIT = 32;
+        private const int NOBLE_CANDIDATE_POOL_LIMIT = 16;
         private const float MIN_NOBLE_RATIO = 0.2f;
         private const int CHECK_INTERVAL = 20;
         private const int PROTECT_RADIUS = 10;
@@ -204,7 +206,7 @@ namespace AncientWarfare3.core.lineage
             if (IsRoyalGuard(captain))
             {
                 Actor replacement = PickArmyCaptainReplacement(pArmy);
-                if (replacement != null) pArmy.setCaptain(replacement);
+                if (replacement != null) AWArmyService.SetCaptainIfChanged(pArmy, replacement);
             }
         }
 
@@ -383,6 +385,27 @@ namespace AncientWarfare3.core.lineage
         private static List<Actor> CollectActiveGuards(Kingdom pKingdom)
         {
             var active = new List<Actor>();
+            bool hasHint = HasKingdomGuardStateHint(pKingdom);
+            Army guardArmy = hasHint ? FindGuardArmy(pKingdom) : null;
+            if (RoyalGuardMaintenanceRules.ShouldUseArmyFastPathForActiveGuards(
+                    pGuardArmyFound: guardArmy != null,
+                    pGuardArmyUnitCount: guardArmy?.countUnits() ?? 0))
+            {
+                Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardActiveArmyFastPath,
+                    CityMaintenanceBenchmarkRules.Group);
+                CollectActiveGuardsFromArmy(guardArmy, pKingdom, active);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardActiveArmyFastPath,
+                    CityMaintenanceBenchmarkRules.Group);
+                return active;
+            }
+
+            if (!RoyalGuardMaintenanceRules.ShouldFallbackToKingdomScanForActiveGuards(
+                    pGuardArmyFound: guardArmy != null,
+                    pHasGuardStateHint: hasHint))
+                return active;
+
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
+                CityMaintenanceBenchmarkRules.Group);
             foreach (Actor unit in pKingdom.getUnits())
             {
                 if (!IsRoyalGuard(unit)) continue;
@@ -394,7 +417,33 @@ namespace AncientWarfare3.core.lineage
                 active.Add(unit);
                 RemoveFromNormalArmy(unit);
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
+                CityMaintenanceBenchmarkRules.Group);
             return active;
+        }
+
+        private static void CollectActiveGuardsFromArmy(Army pGuardArmy, Kingdom pKingdom, List<Actor> pActive)
+        {
+            if (pGuardArmy == null || pActive == null) return;
+            var seen = new HashSet<long>();
+            foreach (Actor unit in pGuardArmy.getUnits())
+                AddActiveGuardFromArmy(unit, pKingdom, pActive, seen);
+
+            AddActiveGuardFromArmy(pGuardArmy.getCaptain(), pKingdom, pActive, seen);
+        }
+
+        private static void AddActiveGuardFromArmy(Actor pActor, Kingdom pKingdom,
+            List<Actor> pActive, HashSet<long> pSeen)
+        {
+            if (pActor?.data == null || pSeen == null) return;
+            if (!pSeen.Add(pActor.data.id)) return;
+            if (!IsRoyalGuard(pActor)) return;
+            if (!IsStillValidGuard(pActor, pKingdom))
+            {
+                DismissGuard(pActor, "invalid");
+                return;
+            }
+            pActive.Add(pActor);
         }
 
         private static bool IsStillValidGuard(Actor pActor, Kingdom pKingdom)
@@ -448,22 +497,81 @@ namespace AncientWarfare3.core.lineage
 
         private static List<GuardCandidate> CollectCandidates(Kingdom pKingdom, List<Actor> pActive, float pAverageWarriorScore)
         {
-            var result = new List<GuardCandidate>();
+            var nobles = new List<GuardCandidate>(NOBLE_CANDIDATE_POOL_LIMIT);
+            var common = new List<GuardCandidate>(CANDIDATE_POOL_LIMIT);
+            HashSet<long> activeIds = BuildActiveIdSet(pActive);
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScan, CityMaintenanceBenchmarkRules.Group);
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScore, CityMaintenanceBenchmarkRules.Group);
             foreach (Actor unit in pKingdom.getUnits())
             {
-                if (pActive.Contains(unit)) continue;
+                if (unit?.data == null || activeIds.Contains(unit.data.id)) continue;
                 if (!IsGuardCandidate(unit, pKingdom)) continue;
                 float score = CombatScore(unit);
                 if (pAverageWarriorScore > 0f && score <= pAverageWarriorScore) continue;
-                result.Add(new GuardCandidate
+                var candidate = new GuardCandidate
                 {
                     actor = unit,
                     score = score,
                     noble = ChronicleGate.IsNobleActor(unit)
-                });
+                };
+                AddBoundedCandidate(candidate.noble ? nobles : common, candidate,
+                    candidate.noble ? NOBLE_CANDIDATE_POOL_LIMIT : CANDIDATE_POOL_LIMIT);
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScore, CityMaintenanceBenchmarkRules.Group);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScan, CityMaintenanceBenchmarkRules.Group);
+
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardCandidateSort, CityMaintenanceBenchmarkRules.Group);
+            var result = new List<GuardCandidate>(nobles.Count + common.Count);
+            result.AddRange(nobles);
+            result.AddRange(common);
             result.Sort((a, b) => b.score.CompareTo(a.score));
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardCandidateSort, CityMaintenanceBenchmarkRules.Group);
             return result;
+        }
+
+        private static HashSet<long> BuildActiveIdSet(List<Actor> pActive)
+        {
+            var result = new HashSet<long>();
+            if (pActive == null) return result;
+            foreach (Actor actor in pActive)
+            {
+                if (actor?.data == null) continue;
+                result.Add(actor.data.id);
+            }
+            return result;
+        }
+
+        private static void AddBoundedCandidate(List<GuardCandidate> pPool, GuardCandidate pCandidate, int pLimit)
+        {
+            if (pPool == null || pCandidate?.actor == null) return;
+            int limit = pLimit <= 0 ? 1 : pLimit;
+            if (pPool.Count < limit)
+            {
+                pPool.Add(pCandidate);
+                return;
+            }
+
+            int weakestIndex = FindWeakestCandidateIndex(pPool);
+            if (weakestIndex < 0) return;
+            float weakestScore = pPool[weakestIndex].score;
+            if (!RoyalGuardMaintenanceRules.ShouldKeepBoundedCandidate(
+                    pPool.Count, limit, weakestScore, pCandidate.score))
+                return;
+            pPool[weakestIndex] = pCandidate;
+        }
+
+        private static int FindWeakestCandidateIndex(List<GuardCandidate> pPool)
+        {
+            if (pPool == null || pPool.Count == 0) return -1;
+            int weakestIndex = 0;
+            float weakestScore = pPool[0].score;
+            for (int i = 1; i < pPool.Count; i++)
+            {
+                if (pPool[i].score >= weakestScore) continue;
+                weakestScore = pPool[i].score;
+                weakestIndex = i;
+            }
+            return weakestIndex;
         }
 
         private static bool IsGuardCandidate(Actor pActor, Kingdom pKingdom)
@@ -778,7 +886,7 @@ namespace AncientWarfare3.core.lineage
                     army.setName(pGuardName);
             }
             if (!pCaptain.isRekt())
-                army.setCaptain(pCaptain);
+                AWArmyService.SetCaptainIfChanged(army, pCaptain);
 
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, army.id);
             return army;

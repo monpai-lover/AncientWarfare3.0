@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.content;
 using AncientWarfare3.utils;
+using ai.behaviours;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
@@ -11,12 +13,22 @@ namespace AncientWarfare3.core.lineage
         private const int WAR_GUARD_CAP = 20;
         private const int YEARLY_WALL_CAP = 8;
         private const int WAR_WALL_CAP = 12;
+        private const int YEARLY_TOWER_CAP = 1;
+        private const int WAR_TOWER_CAP = 2;
+        private const int MAX_BORDER_ARMIES = 3;
         private const int MAX_BORDER_GUARDS_PER_CITY = 10;
+        private const int BORDER_THREAT_RADIUS = 55;
+        private const float BORDER_NO_THREAT_WAIT_MIN = 4f;
+        private const float BORDER_NO_THREAT_WAIT_MAX = 8f;
+        private const float BORDER_PATROL_WAIT_MIN = 5f;
+        private const float BORDER_PATROL_WAIT_MAX = 10f;
+        private static readonly System.Random Rng = new System.Random();
 
         private sealed class BorderResult
         {
             public int guards;
             public int walls;
+            public int towers;
             public City main_city;
         }
 
@@ -27,7 +39,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ExecuteDecision(Kingdom pMandate)
         {
-            return ReinforceBorder(pMandate, YEARLY_GUARD_CAP, YEARLY_WALL_CAP, "decision");
+            return ReinforceBorder(pMandate, YEARLY_GUARD_CAP, YEARLY_WALL_CAP, YEARLY_TOWER_CAP, "decision");
         }
 
         public static void OnMandateWarStarted(War pWar)
@@ -41,32 +53,37 @@ namespace AncientWarfare3.core.lineage
             if (attacker?.data == null || defender?.data == null) return;
             if (defender != mandate && attacker != mandate) return;
 
-            ReinforceBorder(mandate, WAR_GUARD_CAP, WAR_WALL_CAP, "war");
+            ReinforceBorder(mandate, WAR_GUARD_CAP, WAR_WALL_CAP, WAR_TOWER_CAP, "war");
         }
 
-        private static bool ReinforceBorder(Kingdom pMandate, int pGuardCap, int pWallCap, string pReason)
+        private static bool ReinforceBorder(Kingdom pMandate, int pGuardCap, int pWallCap, int pTowerCap, string pReason)
         {
             if (pMandate?.data == null) return false;
             pGuardCap = LimitedGuardCap(pMandate, pGuardCap);
             List<City> cities = CollectBorderCities(pMandate);
             if (cities.Count == 0) return false;
+            cities = SelectBorderArmyCities(cities);
+            ReanchorBorderArmies(pMandate, cities);
 
             var result = new BorderResult();
             foreach (City city in cities)
             {
                 if (result.guards < pGuardCap)
                     result.guards += AppointBorderGuards(city, pMandate, pGuardCap - result.guards);
+                if (result.towers < pTowerCap)
+                    result.towers += BuildBorderTowers(city, pMandate, pTowerCap - result.towers);
                 if (result.walls < pWallCap)
                     result.walls += BuildBorderWalls(city, pMandate, pWallCap - result.walls);
-                if (result.main_city == null && (result.guards > 0 || result.walls > 0))
+                if (result.main_city == null && (result.guards > 0 || result.walls > 0 || result.towers > 0))
                     result.main_city = city;
-                if (result.guards >= pGuardCap && result.walls >= pWallCap) break;
+                if (result.guards >= pGuardCap && result.walls >= pWallCap && result.towers >= pTowerCap) break;
             }
 
-            if (result.guards <= 0 && result.walls <= 0) return false;
+            if (result.guards <= 0 && result.walls <= 0 && result.towers <= 0) return false;
 
             string text = " \u6574\u5907\u8FB9\u9632";
             if (result.guards > 0) text += "\uFF0C\u62BD\u8C03\u8FB9\u519B " + result.guards + " \u540D";
+            if (result.towers > 0) text += "\uFF0C\u4FEE\u7B51\u7BAD\u5854 " + result.towers + " \u5EA7";
             if (result.walls > 0) text += "\uFF0C\u4FEE\u7B51\u8FB9\u5899 " + result.walls + " \u6BB5";
             if (pReason == "war") text += "\uFF0C\u6218\u65F6\u52A8\u5458";
 
@@ -127,6 +144,96 @@ namespace AncientWarfare3.core.lineage
 
             result.Sort((a, b) => BorderScore(b, pMandate).CompareTo(BorderScore(a, pMandate)));
             return result;
+        }
+
+        private static List<City> SelectBorderArmyCities(List<City> pCities)
+        {
+            if (pCities.Count <= MAX_BORDER_ARMIES) return pCities;
+            return pCities.GetRange(0, MAX_BORDER_ARMIES);
+        }
+
+        private static void ReanchorBorderArmies(Kingdom pMandate, List<City> pBorderCities)
+        {
+            if (pMandate?.data == null || pBorderCities == null) return;
+            List<Army> armies = GetMandateBorderArmies(pMandate);
+            var used = new HashSet<long>();
+
+            foreach (City city in pBorderCities)
+            {
+                if (city?.data == null || city.kingdom?.data == null) continue;
+                Army existing = AWArmyService.FindArmy(city.kingdom, city, AWArmyRole.BorderArmy);
+                if (existing != null)
+                {
+                    used.Add(existing.id);
+                    continue;
+                }
+
+                Army candidate = PickReusableBorderArmy(armies, used, city.kingdom);
+                if (candidate == null) continue;
+                AWArmyService.ReanchorArmy(candidate, city.kingdom, city, AWArmyRole.BorderArmy,
+                    BuildBorderArmyName(city.kingdom, city));
+                MoveBorderArmyToPatrol(candidate, city, pMandate);
+                used.Add(candidate.id);
+            }
+
+            foreach (Army army in armies)
+            {
+                if (army?.data == null || used.Contains(army.id)) continue;
+                City anchor = AWArmyService.FindAnchorCity(army);
+                if (anchor?.data != null && pBorderCities.Contains(anchor)) continue;
+                ReleaseBorderArmy(army);
+            }
+        }
+
+        private static List<Army> GetMandateBorderArmies(Kingdom pMandate)
+        {
+            var result = new List<Army>();
+            if (World.world?.armies == null || pMandate?.data == null) return result;
+
+            foreach (Army army in World.world.armies)
+            {
+                if (army?.data == null || !army.isAlive()) continue;
+                if (!AWArmyService.IsRoleArmy(army, AWArmyRole.BorderArmy)) continue;
+                Kingdom owner = SafeArmyKingdom(army);
+                if (owner?.data == null) continue;
+                if (owner == pMandate || VassalService.GetRootSuzerain(owner) == pMandate)
+                    result.Add(army);
+            }
+            return result;
+        }
+
+        private static Army PickReusableBorderArmy(List<Army> pArmies, HashSet<long> pUsed, Kingdom pOwner)
+        {
+            foreach (Army army in pArmies)
+            {
+                if (army?.data == null || pUsed.Contains(army.id)) continue;
+                if (SafeArmyKingdom(army) != pOwner) continue;
+                return army;
+            }
+            return null;
+        }
+
+        private static void ReleaseBorderArmy(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            var units = new List<Actor>();
+            try
+            {
+                foreach (Actor unit in pArmy.getUnits())
+                    if (unit?.data != null && !unit.isRekt())
+                        units.Add(unit);
+            }
+            catch { }
+
+            foreach (Actor unit in units)
+            {
+                unit.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
+                try { unit.removeFromArmy(); }
+                catch { unit.setArmy(null); }
+            }
+
+            try { pArmy.setCaptain(null); } catch { }
+            try { World.world?.armies?.removeObject(pArmy); } catch { }
         }
 
         private static bool HasOutsideNeighbour(City pCity, Kingdom pMandate)
@@ -193,7 +300,7 @@ namespace AncientWarfare3.core.lineage
 
             Actor captain = candidates[0];
             Army borderArmy = AWArmyService.EnsureArmy(owner, pCity, captain, AWArmyRole.BorderArmy,
-                BuildBorderArmyName(owner, pCity), pDetached: true);
+                BuildBorderArmyName(owner, pCity), pDetached: false);
             WorldTile patrol = PickBorderTile(pCity, pMandate);
             int changed = 0;
             foreach (Actor actor in candidates)
@@ -206,6 +313,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 if (borderArmy != null)
                     AWArmyService.AddToArmy(actor, borderArmy);
+                AssignBorderGuardJob(actor);
                 if (patrol != null && actor.current_tile != null && actor.current_tile.isSameIsland(patrol))
                 {
                     try { actor.goTo(patrol); } catch { }
@@ -213,6 +321,32 @@ namespace AncientWarfare3.core.lineage
                 changed++;
             }
             return changed;
+        }
+
+        private static void MoveBorderArmyToPatrol(Army pArmy, City pCity, Kingdom pMandate)
+        {
+            if (pArmy?.data == null || pCity?.data == null) return;
+            WorldTile patrol = PickBorderTile(pCity, pMandate);
+            if (patrol == null) return;
+            try
+            {
+                foreach (Actor actor in pArmy.getUnits())
+                {
+                    if (actor?.data == null || actor.isRekt()) continue;
+                    actor.data.set(LineageKeys.MANDATE_BORDER_GUARD, true);
+                    AssignBorderGuardJob(actor);
+                    if (actor.current_tile != null && actor.current_tile.isSameIsland(patrol))
+                        actor.goTo(patrol);
+                }
+            }
+            catch { }
+        }
+
+        private static void AssignBorderGuardJob(Actor pActor)
+        {
+            if (pActor?.data == null || BorderGuardContent.ACTOR_JOB_BORDER_GUARD == null) return;
+            try { pActor.ai.setJob(BorderGuardContent.ACTOR_JOB_BORDER_GUARD); }
+            catch { }
         }
 
         private static string BuildBorderArmyName(Kingdom pKingdom, City pCity)
@@ -235,7 +369,7 @@ namespace AncientWarfare3.core.lineage
                     if (zone?.tiles == null) continue;
                     foreach (WorldTile tile in zone.tiles)
                     {
-                        if (!IsWallCandidate(tile, pMandate)) continue;
+                        if (!IsWallCandidate(tile, pCity, pMandate)) continue;
                         candidates.Add(tile);
                     }
                 }
@@ -259,13 +393,94 @@ namespace AncientWarfare3.core.lineage
             return built;
         }
 
-        private static bool IsWallCandidate(WorldTile pTile, Kingdom pMandate)
+        private static int BuildBorderTowers(City pCity, Kingdom pMandate, int pCap)
+        {
+            if (pCity?.data == null || pCap <= 0) return 0;
+            if (pCity.countBuildingsType("type_watch_tower", pCountOnlyFinished: false) >= 3) return 0;
+
+            BuildingAsset tower = GetWatchTowerAsset(pCity);
+            if (tower == null) return 0;
+
+            int built = 0;
+            try
+            {
+                Building building = CityBehBuild.tryToBuild(pCity, tower);
+                if (building != null) built++;
+            }
+            catch { }
+            if (built >= pCap) return built;
+
+            foreach (WorldTile tile in GetBorderBuildCandidates(pCity, pMandate))
+            {
+                if (built >= pCap) break;
+                try
+                {
+                    if (!World.world.buildings.canBuildFrom(tile, tower, pCity)) continue;
+                    Building building = World.world.buildings.addBuilding(tower, tile, pCheckForBuild: false);
+                    if (building == null) continue;
+                    building.setKingdom(pCity.kingdom);
+                    built++;
+                }
+                catch (Exception e)
+                {
+                    ModClass.LogWarning("Mandate border tower failed: " + e.Message);
+                }
+            }
+            return built;
+        }
+
+        private static BuildingAsset GetWatchTowerAsset(City pCity)
+        {
+            try
+            {
+                BuildingAsset tower = pCity.getActorAsset()?.architecture_asset?.getBuilding("order_watch_tower");
+                if (tower != null) return tower;
+            }
+            catch { }
+
+            return AssetManager.buildings.get("watch_tower_Xia") ??
+                   AssetManager.buildings.get("watch_tower_human");
+        }
+
+        private static List<WorldTile> GetBorderBuildCandidates(City pCity, Kingdom pMandate)
+        {
+            var candidates = new List<WorldTile>();
+            try
+            {
+                pCity.recalculateNeighbourZones();
+                foreach (TileZone zone in pCity.border_zones)
+                {
+                    if (zone?.tiles == null) continue;
+                    foreach (WorldTile tile in zone.tiles)
+                    {
+                        if (tile == null || !IsInsideCity(tile, pCity)) continue;
+                        if (!TouchesOutsideCity(tile, pMandate) && !TouchesOutsideCityBorder(tile, pCity)) continue;
+                        candidates.Add(tile);
+                    }
+                }
+            }
+            catch { }
+            return candidates;
+        }
+
+        private static bool IsWallCandidate(WorldTile pTile, City pCity, Kingdom pMandate)
         {
             if (pTile == null || pTile.zone == null || pTile.Type == null) return false;
+            if (!IsInsideCity(pTile, pCity)) return false;
             if (!pTile.Type.ground || pTile.Type.liquid || pTile.Type.lava || pTile.Type.block) return false;
             if (pTile.Type.wall || pTile.Type.road || pTile.top_type != null) return false;
             if (pTile.hasBuilding()) return false;
-            return TouchesOutsideCity(pTile, pMandate);
+            return TouchesOutsideCity(pTile, pMandate) || TouchesOutsideCityBorder(pTile, pCity);
+        }
+
+        private static bool IsInsideCity(WorldTile pTile, City pCity)
+        {
+            try
+            {
+                if (pTile?.zone_city == pCity) return true;
+                return pTile?.zone?.city == pCity;
+            }
+            catch { return false; }
         }
 
         private static bool TouchesOutsideCity(WorldTile pTile, Kingdom pMandate)
@@ -284,6 +499,20 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        private static bool TouchesOutsideCityBorder(WorldTile pTile, City pCity)
+        {
+            try
+            {
+                foreach (WorldTile n in pTile.neighboursAll)
+                {
+                    if (n == null) continue;
+                    if (n.zone_city != pCity) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         private static WorldTile PickBorderTile(City pCity, Kingdom pMandate)
         {
             try
@@ -291,11 +520,88 @@ namespace AncientWarfare3.core.lineage
                 pCity.recalculateNeighbourZones();
                 foreach (TileZone zone in pCity.border_zones)
                 foreach (WorldTile tile in zone.tiles)
-                    if (tile != null && tile.Type != null && tile.Type.ground && TouchesOutsideCity(tile, pMandate))
+                    if (tile != null && tile.Type != null && tile.Type.ground &&
+                        (TouchesOutsideCity(tile, pMandate) || TouchesOutsideCityBorder(tile, pCity)))
                         return tile;
             }
             catch { }
             return pCity.getTile();
+        }
+
+        public static bool IsBorderGuard(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+            pActor.data.get(LineageKeys.MANDATE_BORDER_GUARD, out bool flag, false);
+            if (flag) return true;
+            return AWArmyService.IsRoleArmy(pActor.army, AWArmyRole.BorderArmy);
+        }
+
+        public static Actor FindThreatNearBorderGuard(Actor pActor)
+        {
+            if (!IsBorderGuard(pActor)) return null;
+            Kingdom kingdom = pActor.kingdom;
+            if (kingdom?.data == null) return null;
+            try
+            {
+                if (!kingdom.hasEnemies()) return null;
+            }
+            catch { return null; }
+
+            WorldTile origin = pActor.current_tile ?? GetBorderGuardPatrolTile(pActor);
+            if (origin == null) return null;
+
+            Actor best = null;
+            int bestDist = int.MaxValue;
+            int maxDist = BORDER_THREAT_RADIUS * BORDER_THREAT_RADIUS;
+            using ListPool<Kingdom> enemies = kingdom.getEnemiesKingdoms();
+            foreach (Kingdom enemy in enemies)
+            {
+                if (enemy?.data == null) continue;
+                foreach (Actor target in enemy.getUnits())
+                {
+                    if (!IsValidThreatForBorderGuard(pActor, target)) continue;
+                    int dist = Toolbox.SquaredDistTile(origin, target.current_tile);
+                    if (dist > maxDist || dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = target;
+                }
+            }
+            return best;
+        }
+
+        public static bool IsValidThreatForBorderGuard(Actor pGuard, Actor pTarget)
+        {
+            if (!IsBorderGuard(pGuard)) return false;
+            if (pTarget?.data == null || pTarget.isRekt() || !pTarget.isAlive()) return false;
+            if (pGuard.kingdom?.data == null || pTarget.kingdom?.data == null) return false;
+            if (pGuard.kingdom == pTarget.kingdom || !pGuard.kingdom.isEnemy(pTarget.kingdom)) return false;
+            if (pGuard.current_tile == null || pTarget.current_tile == null) return false;
+            return pGuard.current_tile.isSameIsland(pTarget.current_tile);
+        }
+
+        public static WorldTile GetBorderGuardPatrolTile(Actor pActor)
+        {
+            if (!IsBorderGuard(pActor)) return null;
+            City city = AWArmyService.FindAnchorCity(pActor.army) ?? pActor.city;
+            if (city?.data == null) return pActor.city?.getTile();
+            Kingdom mandate = VassalService.GetRootSuzerain(city.kingdom) ?? city.kingdom;
+            WorldTile tile = PickBorderTile(city, mandate);
+            if (tile == null) return city.getTile();
+            if (pActor.current_tile != null && !pActor.current_tile.isSameIsland(tile))
+                return city.getTile();
+            return tile;
+        }
+
+        public static void WaitAfterBorderGuardNoThreat(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(BORDER_NO_THREAT_WAIT_MIN, BORDER_NO_THREAT_WAIT_MAX));
+        }
+
+        public static void WaitAfterBorderGuardPatrol(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(BORDER_PATROL_WAIT_MIN, BORDER_PATROL_WAIT_MAX));
         }
 
         private static bool CanBeBorderGuard(Actor pActor, Kingdom pKingdom)
@@ -349,6 +655,24 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pActor.stats[pKey]; }
             catch { return 0f; }
+        }
+
+        private static Kingdom SafeArmyKingdom(Army pArmy)
+        {
+            try
+            {
+                Kingdom kingdom = pArmy?.getKingdom();
+                if (kingdom?.data != null) return kingdom;
+            }
+            catch { }
+            City anchor = AWArmyService.FindAnchorCity(pArmy);
+            return anchor?.kingdom;
+        }
+
+        private static float RandomWait(float pMin, float pMax)
+        {
+            if (pMax < pMin) return pMax;
+            return (float)(pMin + Rng.NextDouble() * (pMax - pMin));
         }
 
         private static City FindCity(long pId)

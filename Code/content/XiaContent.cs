@@ -29,6 +29,7 @@ namespace AncientWarfare3.content
             XiaRace.Init();
             SlaveryContent.Init();
             GuardContent.Init();
+            BorderGuardContent.Init();
             core.lineage.WarPlotRedirectService.Init();
 
             // 历史人物降临(姬发/嬴政/刘邦/曹丕/司马炎):注册开关 toggle + 世界日志资产。

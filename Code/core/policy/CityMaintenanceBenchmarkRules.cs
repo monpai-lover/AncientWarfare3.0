@@ -20,6 +20,11 @@ namespace AncientWarfare3.core.policy
         public const string RoyalGuardValidate = "aw3_city_royal_guard_validate";
         public const string RoyalGuardAverage = "aw3_city_royal_guard_average";
         public const string RoyalGuardCandidates = "aw3_city_royal_guard_candidates";
+        public const string RoyalGuardActiveArmyFastPath = "aw3_city_royal_guard_active_army_fast_path";
+        public const string RoyalGuardActiveFallbackScan = "aw3_city_royal_guard_active_fallback_scan";
+        public const string RoyalGuardCandidateScan = "aw3_city_royal_guard_candidate_scan";
+        public const string RoyalGuardCandidateScore = "aw3_city_royal_guard_candidate_score";
+        public const string RoyalGuardCandidateSort = "aw3_city_royal_guard_candidate_sort";
         public const string RoyalGuardFill = "aw3_city_royal_guard_fill";
         public const string RoyalGuardArmy = "aw3_city_royal_guard_army";
         public const string RoyalGuardRefresh = "aw3_city_royal_guard_refresh";
@@ -31,6 +36,7 @@ namespace AncientWarfare3.core.policy
         public const string FiefCommandResolve = "aw3_city_fief_command_resolve";
         public const string FiefCommandApply = "aw3_city_fief_command_apply";
         public const string FiefCommandCaptain = "aw3_city_fief_command_captain";
+        public const string DeathBondChildScan = "aw3_death_bond_child_scan";
         public const string Food = "aw3_city_food";
         public const string Status = "aw3_city_status";
         public const string Citizens = "aw3_city_citizens";
@@ -53,6 +59,11 @@ namespace AncientWarfare3.core.policy
             RoyalGuardValidate,
             RoyalGuardAverage,
             RoyalGuardCandidates,
+            RoyalGuardActiveArmyFastPath,
+            RoyalGuardActiveFallbackScan,
+            RoyalGuardCandidateScan,
+            RoyalGuardCandidateScore,
+            RoyalGuardCandidateSort,
             RoyalGuardFill,
             RoyalGuardArmy,
             RoyalGuardRefresh,
@@ -64,6 +75,7 @@ namespace AncientWarfare3.core.policy
             FiefCommandResolve,
             FiefCommandApply,
             FiefCommandCaptain,
+            DeathBondChildScan,
             Food,
             Status,
             Citizens,

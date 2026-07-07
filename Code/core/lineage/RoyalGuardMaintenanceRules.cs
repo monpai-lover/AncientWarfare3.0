@@ -48,6 +48,24 @@ namespace AncientWarfare3.core.lineage
             return pActiveCount < threshold;
         }
 
+        public static bool ShouldUseArmyFastPathForActiveGuards(bool pGuardArmyFound, int pGuardArmyUnitCount)
+        {
+            return pGuardArmyFound && pGuardArmyUnitCount >= 0;
+        }
+
+        public static bool ShouldFallbackToKingdomScanForActiveGuards(bool pGuardArmyFound, bool pHasGuardStateHint)
+        {
+            return !pGuardArmyFound && pHasGuardStateHint;
+        }
+
+        public static bool ShouldKeepBoundedCandidate(int pCurrentCount, int pLimit,
+            float pLowestScore, float pCandidateScore)
+        {
+            int limit = pLimit <= 0 ? 1 : pLimit;
+            if (pCurrentCount < limit) return true;
+            return pCandidateScore > pLowestScore;
+        }
+
         public static bool ShouldPersistGuardIdentityRefresh(
             bool pWasGuard,
             bool pWasCaptain,

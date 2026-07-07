@@ -11,7 +11,22 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldUseDetachedArmy(string pRole)
         {
-            return IsSpecialRole(pRole);
+            return pRole == AWArmyRole.RoyalGuard;
+        }
+
+        public static int MaxArmiesPerCity(string pRole)
+        {
+            return pRole == AWArmyRole.SlaveArmy ? 1 : int.MaxValue;
+        }
+
+        public static int MaxArmiesPerKingdom(string pRole)
+        {
+            return pRole == AWArmyRole.BorderArmy ? 3 : int.MaxValue;
+        }
+
+        public static bool ShouldSetCaptain(long pCurrentCaptainId, long pNewCaptainId)
+        {
+            return pNewCaptainId >= 0 && pCurrentCaptainId != pNewCaptainId;
         }
 
         public static string DisplayName(string pRole, string pKingdomName, int pIndex)

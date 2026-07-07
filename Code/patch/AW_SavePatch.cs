@@ -38,6 +38,7 @@ namespace AncientWarfare3.patch
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
             ResetHistoryWindowsAfterArchiveSwitch();
+            core.lineage.AWArmyService.RepairSpecialArmiesAfterLoad();
             core.lineage.WarPlotRedirectService.SweepExistingPlots();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
         }
