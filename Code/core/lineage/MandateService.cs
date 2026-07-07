@@ -1102,16 +1102,61 @@ namespace AncientWarfare3.core.lineage
         private static bool IsMostPowerfulIndependent(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || World.world?.kingdoms == null) return false;
-            float own = VassalService.GetPowerScore(pKingdom, true);
+            float own = CalculateMandateCompetitionPower(pKingdom);
+            float strongestOther = 0f;
             foreach (Kingdom other in World.world.kingdoms)
             {
-                if (other?.data == null || other == pKingdom || other.isRekt() || !other.isCiv() || other.isNeutral())
+                if (other == pKingdom) continue;
+                if (!MandatePowerRules.IsEligibleCompetitor(IsValidMandatePowerKingdom(other),
+                        VassalService.IsVassalKingdom(other), IsSupportedKingdom(other)))
                     continue;
-                if (VassalService.IsVassalKingdom(other)) continue;
-                if (!IsSupportedKingdom(other)) continue;
-                if (VassalService.GetPowerScore(other, true) > own * 1.08f) return false;
+                float otherPower = CalculateMandateCompetitionPower(other);
+                if (otherPower > strongestOther) strongestOther = otherPower;
             }
-            return true;
+            return MandatePowerRules.HasRequiredLeadForMandate(own, strongestOther);
+        }
+
+        private static float CalculateMandateCompetitionPower(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0f;
+            float own = CalculateMandateRealmPower(pKingdom);
+            float vassalPower = 0f;
+            foreach (Kingdom vassal in VassalService.GetVassals(pKingdom, pRecursive: true))
+                vassalPower += CalculateMandateRealmPower(vassal);
+            return MandatePowerRules.CalculateCompetitionPower(own, vassalPower);
+        }
+
+        private static float CalculateMandateRealmPower(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return 0f;
+            return MandatePowerRules.CalculateRealmPower(
+                pPopulation: CountPopulation(pKingdom),
+                pCityCount: CountCities(pKingdom),
+                pArmyPower: CountWarriors(pKingdom),
+                pKingStewardship: GetKingStewardship(pKingdom));
+        }
+
+        private static int CountPopulation(Kingdom pKingdom)
+        {
+            try { return pKingdom?.getPopulationPeople() ?? 0; }
+            catch { return 0; }
+        }
+
+        private static int CountWarriors(Kingdom pKingdom)
+        {
+            try { return pKingdom?.countTotalWarriors() ?? 0; }
+            catch { return 0; }
+        }
+
+        private static float GetKingStewardship(Kingdom pKingdom)
+        {
+            try { return pKingdom?.king?.stats?["stewardship"] ?? 0f; }
+            catch { return 0f; }
+        }
+
+        private static bool IsValidMandatePowerKingdom(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null && !pKingdom.isRekt() && pKingdom.isCiv() && !pKingdom.isNeutral();
         }
 
         private static bool IsSupportedKingdom(Kingdom pKingdom)

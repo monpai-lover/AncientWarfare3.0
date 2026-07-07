@@ -293,6 +293,7 @@ namespace WarFabricationRuleTests
             ExpectCityEconomyMilestoneRules();
             ExpectAncestryDisplayRules();
             ExpectMandateMapMarkerRules();
+            ExpectMandatePowerRules();
             ExpectLineageArchiveIndexRules();
             ExpectMapModeMetaCacheRules();
             ExpectMapModeDirtyThrottleRules();
@@ -1446,6 +1447,36 @@ namespace WarFabricationRuleTests
                 throw new Exception("Empty mandate marker paths must leave the original nameplate icon untouched.");
             if (MandateMapMarkerRules.ShouldUseSpecialIcon("moh_nameplate", pHasSpecialImage: false))
                 throw new Exception("Mandate marker replacement needs an existing special image target.");
+        }
+
+        private static void ExpectMandatePowerRules()
+        {
+            float realmPower = MandatePowerRules.CalculateRealmPower(
+                pPopulation: 250,
+                pCityCount: 3,
+                pArmyPower: 40f,
+                pKingStewardship: 7f);
+            if (Math.Abs(realmPower - 660f) > 0.001f)
+                throw new Exception($"Mandate realm power must use population + cities*100 + army + stewardship*10, got {realmPower}.");
+
+            float power = MandatePowerRules.CalculateCompetitionPower(pOwnPower: 100f, pVassalPower: 50f);
+            if (Math.Abs(power - 130f) > 0.001f)
+                throw new Exception($"Mandate competition power must use own + vassals*0.6, got {power}.");
+
+            if (!MandatePowerRules.HasRequiredLeadForMandate(
+                    pCandidatePower: 115f,
+                    pStrongestOtherPower: 100f))
+                throw new Exception("Mandate claimant should pass with a 15 percent lead over the second strongest realm.");
+
+            if (MandatePowerRules.HasRequiredLeadForMandate(
+                    pCandidatePower: 114.99f,
+                    pStrongestOtherPower: 100f))
+                throw new Exception("Mandate claimant must be blocked when the lead is below 15 percent.");
+
+            if (MandatePowerRules.HasRequiredLeadForMandate(
+                    pCandidatePower: 90f,
+                    pStrongestOtherPower: 100f))
+                throw new Exception("Mandate claimant must be blocked when it is not the strongest realm.");
         }
 
         private static void ExpectLineageArchiveIndexRules()
