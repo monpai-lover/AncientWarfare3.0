@@ -189,6 +189,11 @@ namespace AncientWarfare3.core.lineage
             }
 
             candidates.Sort((a, b) => CombatScore(b).CompareTo(CombatScore(a)));
+            if (candidates.Count == 0) return 0;
+
+            Actor captain = candidates[0];
+            Army borderArmy = AWArmyService.EnsureArmy(owner, pCity, captain, AWArmyRole.BorderArmy,
+                BuildBorderArmyName(owner, pCity), pDetached: true);
             WorldTile patrol = PickBorderTile(pCity, pMandate);
             int changed = 0;
             foreach (Actor actor in candidates)
@@ -199,6 +204,8 @@ namespace AncientWarfare3.core.lineage
                 {
                     try { actor.setProfession(UnitProfession.Warrior); } catch { }
                 }
+                if (borderArmy != null)
+                    AWArmyService.AddToArmy(actor, borderArmy);
                 if (patrol != null && actor.current_tile != null && actor.current_tile.isSameIsland(patrol))
                 {
                     try { actor.goTo(patrol); } catch { }
@@ -206,6 +213,13 @@ namespace AncientWarfare3.core.lineage
                 changed++;
             }
             return changed;
+        }
+
+        private static string BuildBorderArmyName(Kingdom pKingdom, City pCity)
+        {
+            string name = AWArmyRoleRules.DisplayName(AWArmyRole.BorderArmy, pKingdom?.name ?? "", 1);
+            string cityName = pCity?.data?.name;
+            return string.IsNullOrEmpty(cityName) ? name : cityName + " " + name;
         }
 
         private static int BuildBorderWalls(City pCity, Kingdom pMandate, int pCap)
@@ -299,10 +313,25 @@ namespace AncientWarfare3.core.lineage
 
         private static int CountBorderGuards(City pCity)
         {
+            var seen = new HashSet<long>();
             int count = 0;
+            Army borderArmy = AWArmyService.FindArmy(pCity?.kingdom, pCity, AWArmyRole.BorderArmy);
+            if (borderArmy != null)
+            {
+                foreach (Actor unit in borderArmy.getUnits())
+                {
+                    if (unit?.data == null || unit.isRekt()) continue;
+                    unit.data.get(LineageKeys.MANDATE_BORDER_GUARD, out bool flag, false);
+                    if (!flag) continue;
+                    seen.Add(unit.data.id);
+                    count++;
+                }
+            }
+
             foreach (Actor unit in pCity.getUnits())
             {
                 if (unit?.data == null || unit.isRekt()) continue;
+                if (seen.Contains(unit.data.id)) continue;
                 unit.data.get(LineageKeys.MANDATE_BORDER_GUARD, out bool flag, false);
                 if (flag) count++;
             }

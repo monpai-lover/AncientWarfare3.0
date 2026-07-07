@@ -34,7 +34,7 @@ namespace AncientWarfare3.patch
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
-            SlaveService.AssignSlaveCatchers(pCity);
+            SlaveService.EnsureSlaveArmy(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
 
             if (ShouldRunRoyalGuardMaintenance(pCity))
@@ -51,10 +51,21 @@ namespace AncientWarfare3.patch
             Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanup, CityMaintenanceBenchmarkRules.Group);
             if (pCity != null && pCity.hasArmy())
             {
+                Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupGuardStrip, CityMaintenanceBenchmarkRules.Group);
                 RoyalGuardService.StripGuardsFromNormalArmy(pCity.getArmy());
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupGuardStrip, CityMaintenanceBenchmarkRules.Group);
+
+                Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveCaptain, CityMaintenanceBenchmarkRules.Group);
                 SlaveService.EnsureNonSlaveCaptain(pCity.getArmy());
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveCaptain, CityMaintenanceBenchmarkRules.Group);
+
+                Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveName, CityMaintenanceBenchmarkRules.Group);
                 SlaveService.RenameArmyIfSlaveArmy(pCity.getArmy());
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveName, CityMaintenanceBenchmarkRules.Group);
+
+                Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupFiefName, CityMaintenanceBenchmarkRules.Group);
                 FiefMilitaryService.RefreshArmyName(pCity.getArmy());
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupFiefName, CityMaintenanceBenchmarkRules.Group);
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanup, CityMaintenanceBenchmarkRules.Group);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.Total, CityMaintenanceBenchmarkRules.Group);

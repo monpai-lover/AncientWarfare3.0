@@ -41,6 +41,10 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
         public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
         public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
+        public const string AW_ARMY_ROLE = "aw_army_role";
+        public const string AW_ARMY_CITY_ID = "aw_army_city_id";
+        public const string AW_ARMY_ANCHOR_X = "aw_army_anchor_x";
+        public const string AW_ARMY_ANCHOR_Y = "aw_army_anchor_y";
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";
@@ -104,6 +108,7 @@ namespace AncientWarfare3.core.lineage
         public const string DECISION_CURRENT = "aw_decision_current";
         public const string DECISION_PROGRESS = "aw_decision_progress";
         public const string DECISION_COMPLETED = "aw_decision_completed";
+        public const string DECISION_QUEUE = "aw_decision_queue";
         public const string DECISION_TARGET_KINGDOM_ID = "aw_decision_target_kingdom_id";
         public const string DECISION_TARGET_KINGDOM_NAME = "aw_decision_target_kingdom_name";
         public const string DECISION_PROJECT_TYPE = "aw_decision_project_type";
@@ -117,6 +122,10 @@ namespace AncientWarfare3.core.lineage
         public const string DECISION_WAR_SOURCE_CORE_ID = "aw_decision_war_source_core_id";
         public const string DECISION_WAR_RESTORATION_CLAIM_ID = "aw_decision_war_restoration_claim_id";
         public const string DECISION_WAR_CLAIMANT_ACTOR_ID = "aw_decision_war_claimant_actor_id";
+        public const string CORE_FAB_CURRENT_CITY_ID = "aw_core_fab_current_city_id";
+        public const string CORE_FAB_CURRENT_CITY_NAME = "aw_core_fab_current_city_name";
+        public const string CORE_FAB_PROGRESS = "aw_core_fab_progress";
+        public const string CORE_FAB_QUEUE = "aw_core_fab_queue";
         public const string POLICY_LAST_YEAR = "aw_policy_last_year";
         public const string POLICY_ENABLED = "aw_policy_enabled";
         public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";

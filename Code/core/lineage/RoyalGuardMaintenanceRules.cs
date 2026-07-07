@@ -27,6 +27,45 @@ namespace AncientWarfare3.core.lineage
             return pHasGuardStateHint;
         }
 
+        public static bool ShouldSearchCandidates(int pActiveCount, int pActiveNobleCount,
+            int pTargetNobleCount, bool pHasCaptain, int pRefillThreshold)
+        {
+            if (!pHasCaptain) return true;
+            if (pActiveNobleCount < pTargetNobleCount) return true;
+
+            int threshold = pRefillThreshold <= 0 ? 1 : pRefillThreshold;
+            return pActiveCount < threshold;
+        }
+
+        public static bool ShouldPersistGuardIdentityRefresh(
+            bool pWasGuard,
+            bool pWasCaptain,
+            bool pCaptain,
+            bool pKingdomChanged,
+            bool pNameChanged,
+            bool pMissingTrait,
+            bool pArmyChanged,
+            bool pProfessionChanged,
+            bool pJobChanged)
+        {
+            if (!pWasGuard) return true;
+            if (pWasCaptain != pCaptain) return true;
+            return pKingdomChanged || pNameChanged || pMissingTrait;
+        }
+
+        public static bool ShouldApplyGuardRuntimeRefresh(
+            bool pArmyChanged,
+            bool pProfessionChanged,
+            bool pJobChanged)
+        {
+            return pArmyChanged || pProfessionChanged || pJobChanged;
+        }
+
+        public static bool ShouldPersistNewGuardDuringFill(bool pFinalRefreshWillRun)
+        {
+            return !pFinalRefreshWillRun;
+        }
+
         private static int PositiveModulo(long pValue, int pModulo)
         {
             long result = pValue % pModulo;

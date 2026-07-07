@@ -13,6 +13,7 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (target == null)
             {
                 pActor.beh_actor_target = null;
+                SlaveService.WaitAfterSlaveCaptureNoTarget(pActor);
                 return BehResult.Stop;
             }
 

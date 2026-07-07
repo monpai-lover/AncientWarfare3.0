@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -19,6 +20,7 @@ namespace AncientWarfare3.core.lineage
         private const float COMBAT_CAPTURE_CATCHER_BONUS = 0.25f;
         private const int SLAVE_CATCHER_SEARCH_RADIUS = 80;
         private const int MIN_SLAVES_FOR_SLAVE_ARMY = 3;
+        private const int MAX_SLAVE_ARMY_SIZE = 25;
         private const int MAX_CITY_FALL_SLAVES = 8;
         private const int MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 5;
         private const int SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 8;
@@ -26,9 +28,18 @@ namespace AncientWarfare3.core.lineage
         private const int CITY_RETIREMENT_CHECK_INTERVAL = 20;
         private const int CITY_SLAVE_LABOR_CHECK_INTERVAL = 30;
         private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
+        private const double SLAVE_CAPTURE_SEARCH_MISS_COOLDOWN = 2.0;
+        private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MIN = 3f;
+        private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MAX = 8f;
+        private const float SLAVE_CAPTURE_FAILURE_WAIT_MIN = 2f;
+        private const float SLAVE_CAPTURE_FAILURE_WAIT_MAX = 5f;
+        private const float SLAVE_CAPTURE_SUCCESS_WAIT_MIN = 5f;
+        private const float SLAVE_CAPTURE_SUCCESS_WAIT_MAX = 10f;
         private static readonly System.Random Rng = new System.Random();
+        private static readonly Dictionary<long, double> CaptureSearchNextAllowed = new Dictionary<long, double>();
         private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =
             new Dictionary<long, List<PendingSlaveCaptureSummary>>();
+        private static bool _formingSlaveArmy;
 
         private sealed class PendingSlaveCaptureSummary
         {
@@ -85,7 +96,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || !IsSlaveryEnabled(pKingdom)) return;
             foreach (City city in pKingdom.getCities())
             {
-                AssignSlaveCatchers(city, pForce: true);
+                EnsureSlaveArmy(city);
                 CheckCitySlaveLabor(city, pForce: true);
                 if (city != null && city.hasArmy())
                 {
@@ -127,12 +138,14 @@ namespace AncientWarfare3.core.lineage
             if (!IsSupportedSlaveryActor(pActor)) return false;
             if (pActor.isRekt() || !pActor.isAdult()) return false;
             if (pActor.isKing() || pActor.isCityLeader()) return false;
-            if (!IsSlaveryEnabled(pActor.kingdom)) return false;
-            if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
+            if (IsRetiredSoldier(pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
             if (HeirService.IsCurrentHeir(pActor.kingdom, pActor)) return false;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
-            return true;
+            return SlaveCaptureCommandRules.CanCommandSlaveCapture(
+                pIsSlaveArmyCaptain: IsSlaveArmyCaptain(pActor),
+                pIsSlave: IsSlave(pActor),
+                pSlaveryEnabled: IsSlaveryEnabled(pActor.kingdom));
         }
 
         public static void AssignSlaveCatchers(City pCity, bool pForce = false)
@@ -143,10 +156,16 @@ namespace AncientWarfare3.core.lineage
             if (!IsSlaveryEnabled(kingdom)) return;
             if (SlaveryContent.SlaveCatcherJob == null) return;
             if (pCity.getUnitsTotal() < 15) return;
-            if (pCity.jobs.countCurrentJobs(SlaveryContent.SlaveCatcherJob) > 0) return;
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchersJobGate, CityMaintenanceBenchmarkRules.Group);
+            bool alreadyHasCatcher = pCity.jobs.countCurrentJobs(SlaveryContent.SlaveCatcherJob) > 0;
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchersJobGate, CityMaintenanceBenchmarkRules.Group);
+            if (alreadyHasCatcher) return;
             if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_CATCHER_LAST_CHECK,
                     CITY_SLAVE_CATCHER_CHECK_INTERVAL)) return;
-            if (!HasCaptureTargetForCity(pCity)) return;
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchersTargetScan, CityMaintenanceBenchmarkRules.Group);
+            bool hasTarget = HasCaptureTargetForCity(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchersTargetScan, CityMaintenanceBenchmarkRules.Group);
+            if (!hasTarget) return;
 
             pCity.jobs.addToJob(SlaveryContent.SlaveCatcherJob, 1);
         }
@@ -155,6 +174,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!CanBeSlaveCatcher(pCatcher)) return null;
             if (pCatcher.current_tile == null || pCatcher.kingdom == null) return null;
+            if (!ShouldRunCaptureSearch(pCatcher)) return null;
 
             Actor best = null;
             int bestDist = int.MaxValue;
@@ -166,14 +186,33 @@ namespace AncientWarfare3.core.lineage
                 if (enemy?.data == null) continue;
                 foreach (Actor target in enemy.getUnits())
                 {
-                    if (!CanCaptureTarget(pCatcher, target)) continue;
+                    if (!CanCaptureTargetForKnownCatcher(pCatcher, target)) continue;
                     int dist = Toolbox.SquaredDistTile(pCatcher.current_tile, target.current_tile);
                     if (dist > maxDist || dist >= bestDist) continue;
                     bestDist = dist;
                     best = target;
                 }
             }
+            MarkCaptureSearchResult(pCatcher, best);
             return best;
+        }
+
+        public static void WaitAfterSlaveCaptureNoTarget(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(SLAVE_CAPTURE_NO_TARGET_WAIT_MIN, SLAVE_CAPTURE_NO_TARGET_WAIT_MAX));
+        }
+
+        public static void WaitAfterSlaveCaptureFailure(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(SLAVE_CAPTURE_FAILURE_WAIT_MIN, SLAVE_CAPTURE_FAILURE_WAIT_MAX));
+        }
+
+        public static void WaitAfterSlaveCaptureSuccess(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(SLAVE_CAPTURE_SUCCESS_WAIT_MIN, SLAVE_CAPTURE_SUCCESS_WAIT_MAX));
         }
 
         public static bool TryCaptureCombatTarget(Actor pTarget, BaseSimObject pAttacker, AttackType pAttackType)
@@ -313,9 +352,17 @@ namespace AncientWarfare3.core.lineage
         public static bool RetireIfNeeded(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            if (!SoldierRetirementRules.CanConsiderForRetirement(IsSupportedSlaveryActor(pActor),
-                    pActor.isRekt(), pActor.isWarrior(), IsRetiredSoldier(pActor),
-                    GeneralService.IsGeneral(pActor), GeneralService.IsFiefHolder(pActor))) return false;
+            bool supportedActor = IsSupportedSlaveryActor(pActor);
+            bool rekt = pActor.isRekt();
+            bool warrior = pActor.isWarrior();
+            bool alreadyRetired = IsRetiredSoldier(pActor);
+            bool general = GeneralService.IsGeneral(pActor);
+            bool fiefHolder = GeneralService.IsFiefHolder(pActor);
+            bool royalGuard = supportedActor && !rekt && warrior && !alreadyRetired && !general && !fiefHolder &&
+                              RoyalGuardService.IsRoyalGuard(pActor);
+
+            if (!SoldierRetirementRules.CanConsiderForRetirement(supportedActor, rekt, warrior, alreadyRetired,
+                    general, fiefHolder, royalGuard)) return false;
 
             float lifespan = pActor.stats["lifespan"];
             if (lifespan <= 0f) return false;
@@ -364,8 +411,10 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return;
             if (!ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_RETIREMENT_LAST_CHECK,
                     CITY_RETIREMENT_CHECK_INTERVAL)) return;
+            Bench.bench(CityMaintenanceBenchmarkRules.RetirementsScan, CityMaintenanceBenchmarkRules.Group);
             foreach (Actor unit in new List<Actor>(pCity.getUnits()))
                 RetireIfNeeded(unit);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RetirementsScan, CityMaintenanceBenchmarkRules.Group);
         }
 
         public static bool ShouldBlockConscription(City pCity, Actor pActor)
@@ -412,6 +461,8 @@ namespace AncientWarfare3.core.lineage
             EnableSlaveArmy(pActor.kingdom ?? pCity?.kingdom);
             UpsertSlaveState(pActor, pActive: true, pCity ?? pActor.city, pActor.kingdom ?? pCity?.kingdom);
             RecordSlaveArmyFormation(pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
+            if (!_formingSlaveArmy)
+                EnsureSlaveArmy(pCity ?? pActor.city);
             ChronicleEvents.OnSlaveEnlisted(pActor, pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
         }
 
@@ -520,7 +571,9 @@ namespace AncientWarfare3.core.lineage
             if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_LABOR_LAST_CHECK,
                     CITY_SLAVE_LABOR_CHECK_INTERVAL)) return;
 
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveLaborCount, CityMaintenanceBenchmarkRules.Group);
             int slaveCount = CountSlaves(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLaborCount, CityMaintenanceBenchmarkRules.Group);
             if (slaveCount <= 0) return;
             pCity.data.set(LineageKeys.SLAVE_LABOR_RECORDED, kingdom.id);
 
@@ -530,7 +583,7 @@ namespace AncientWarfare3.core.lineage
         public static void PrepareArmyCaptain(ref Actor pActor, City pCity)
         {
             if (!IsSlave(pActor)) return;
-            Actor replacement = PickNonSlaveWarrior(pCity);
+            Actor replacement = PickBestSlaveArmyCadre(pCity, pRequireWarrior: true);
             if (replacement == null)
                 replacement = TryRaiseNonSlaveCaptain(pCity);
             if (replacement != null) pActor = replacement;
@@ -541,7 +594,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsSlave(pActor)) return true;
 
             Actor replacement = PickNonSlaveWarrior(pArmy);
-            if (replacement == null) replacement = PickNonSlaveWarrior(pArmy?.getCity());
+            if (replacement == null) replacement = PickNonSlaveWarrior(FindArmyAnchorCity(pArmy) ?? pArmy?.getCity());
             if (replacement == null) return false;
 
             pActor = replacement;
@@ -555,8 +608,40 @@ namespace AncientWarfare3.core.lineage
             if (!IsSlave(captain)) return;
 
             Actor replacement = PickNonSlaveWarrior(pArmy);
+            if (replacement == null)
+                replacement = PickBestSlaveArmyCadre(FindArmyAnchorCity(pArmy) ?? pArmy.getCity(), pRequireWarrior: true);
             if (replacement != null)
                 pArmy.setCaptain(replacement);
+        }
+
+        public static void EnsureSlaveArmy(City pCity)
+        {
+            if (pCity?.data == null) return;
+            Kingdom kingdom = pCity.kingdom;
+            if (kingdom?.data == null) return;
+            if (!IsSlaveryEnabled(kingdom) || !IsSlaveArmyEnabled(kingdom)) return;
+            if (CountSlaves(pCity) < MIN_SLAVES_FOR_SLAVE_ARMY) return;
+
+            Actor captain = PickSlaveArmyCaptain(pCity);
+            if (captain == null) return;
+
+            Army army = AWArmyService.EnsureArmy(kingdom, pCity, captain, AWArmyRole.SlaveArmy,
+                BuildSlaveArmyName(kingdom, pCity, 1), pDetached: true);
+            if (army == null) return;
+
+            _formingSlaveArmy = true;
+            try
+            {
+                FillSlaveArmy(army, pCity);
+            }
+            finally
+            {
+                _formingSlaveArmy = false;
+            }
+            EnsureNonSlaveCaptain(army);
+            AssignSlaveCatcherJobToCaptain(army.getCaptain());
+            RenameArmyIfSlaveArmy(army);
+            RecordSlaveArmyFormation(kingdom, pCity);
         }
 
         public static void RenameArmyIfSlaveArmy(Army pArmy)
@@ -570,20 +655,29 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
 
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyNameScan, CityMaintenanceBenchmarkRules.Group);
             var slaveArmies = new List<Army>();
-            foreach (City city in pKingdom.getCities())
+            if (World.world?.armies != null)
             {
-                if (city?.data == null || !city.hasArmy()) continue;
-                Army army = city.getArmy();
-                if (IsSlaveArmy(army))
-                    slaveArmies.Add(army);
+                foreach (Army army in World.world.armies)
+                {
+                    if (army?.data == null || !army.isAlive()) continue;
+                    try
+                    {
+                        if (army.getKingdom() != pKingdom) continue;
+                    }
+                    catch { continue; }
+                    if (IsSlaveArmy(army))
+                        slaveArmies.Add(army);
+                }
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyNameScan, CityMaintenanceBenchmarkRules.Group);
 
             for (int i = 0; i < slaveArmies.Count; i++)
             {
                 Army army = slaveArmies[i];
-                string suffix = slaveArmies.Count == 1 ? "" : " " + (i + 1).ToString();
-                string name = (pKingdom.name ?? "") + " " + "\u5974\u96B6\u519B" + suffix;
+                City anchor = FindArmyAnchorCity(army);
+                string name = BuildSlaveArmyName(pKingdom, anchor, slaveArmies.Count == 1 ? 1 : i + 1);
                 if (army.data.name == name && army.data.custom_name) continue;
                 army.data.custom_name = true;
                 army.setName(name);
@@ -637,6 +731,11 @@ namespace AncientWarfare3.core.lineage
         private static bool CanCaptureTarget(Actor pCatcher, Actor pTarget)
         {
             if (!CanBeSlaveCatcher(pCatcher)) return false;
+            return CanCaptureTargetForKnownCatcher(pCatcher, pTarget);
+        }
+
+        private static bool CanCaptureTargetForKnownCatcher(Actor pCatcher, Actor pTarget)
+        {
             if (!CanBeCapturedAsTarget(pTarget, pAllowImportantCapture: true)) return false;
             if (pCatcher.kingdom == null || pTarget.kingdom == null) return false;
             if (pCatcher.kingdom == pTarget.kingdom) return false;
@@ -649,6 +748,28 @@ namespace AncientWarfare3.core.lineage
             return pTarget.getHealthRatio() <= threshold;
         }
 
+        private static bool ShouldRunCaptureSearch(Actor pCatcher)
+        {
+            if (pCatcher?.data == null) return false;
+            double now = LineageService.CurTime();
+            CaptureSearchNextAllowed.TryGetValue(pCatcher.data.id, out double nextAllowed);
+            return ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed);
+        }
+
+        private static void MarkCaptureSearchResult(Actor pCatcher, Actor pTarget)
+        {
+            if (pCatcher?.data == null) return;
+            long id = pCatcher.data.id;
+            if (pTarget?.data != null)
+            {
+                CaptureSearchNextAllowed.Remove(id);
+                return;
+            }
+
+            CaptureSearchNextAllowed[id] = ActorAiSearchThrottleRules.NextAllowedAfterMiss(
+                LineageService.CurTime(), SLAVE_CAPTURE_SEARCH_MISS_COOLDOWN);
+        }
+
         private static bool RollCombatCapture(Actor pCaptor, Actor pTarget)
         {
             float chance = IsImportantCaptureTarget(pTarget)
@@ -657,7 +778,7 @@ namespace AncientWarfare3.core.lineage
                     ? COMBAT_CAPTURE_WARRIOR_CHANCE
                     : COMBAT_CAPTURE_CIVILIAN_CHANCE;
 
-            if (pCaptor != null && pCaptor.isCitizenJob(SlaveryContent.CITIZEN_JOB_SLAVE_CATCHER))
+            if (pCaptor != null && IsSlaveArmyCaptain(pCaptor))
                 chance += COMBAT_CAPTURE_CATCHER_BONUS;
 
             chance = Math.Max(0f, Math.Min(0.95f, chance));
@@ -682,19 +803,32 @@ namespace AncientWarfare3.core.lineage
         public static bool IsSlaveArmy(Army pArmy)
         {
             if (pArmy == null) return false;
+            if (AWArmyService.IsRoleArmy(pArmy, AWArmyRole.SlaveArmy)) return true;
 
             int total = 0;
             int slaves = 0;
+            int nonSlaves = 0;
             foreach (Actor unit in pArmy.getUnits())
             {
                 if (unit?.data == null || unit.isRekt()) continue;
                 if (!unit.isWarrior()) continue;
                 total++;
                 if (IsSlave(unit)) slaves++;
+                else nonSlaves++;
             }
 
             if (total < MIN_SLAVES_FOR_SLAVE_ARMY) return false;
-            return slaves >= Math.Ceiling(total * SLAVE_ARMY_TARGET_PERCENT);
+            Actor captain = pArmy.getCaptain();
+            return SlaveArmyFormationRules.IsSlaveArmyComposition(total, slaves, nonSlaves,
+                captain?.data != null && !IsSlave(captain));
+        }
+
+        public static bool IsSlaveArmyCaptain(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.hasArmy()) return false;
+            Army army = pActor.army;
+            if (!IsSlaveArmy(army)) return false;
+            return army.getCaptain() == pActor;
         }
 
         private static void ApplySlaveIdentity(Actor pActor, string pReason, Actor pCaptor)
@@ -740,6 +874,195 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pCity.kingdom;
             if (!IsSlaveryEnabled(kingdom)) return false;
             return IsSlaveArmyEnabled(kingdom) && CountSlaves(pCity) >= MIN_SLAVES_FOR_SLAVE_ARMY;
+        }
+
+        private static float RandomWait(float pMin, float pMax)
+        {
+            if (pMax < pMin) return pMax;
+            return (float)(pMin + Rng.NextDouble() * (pMax - pMin));
+        }
+
+        private static Actor PickSlaveArmyCaptain(City pCity)
+        {
+            if (pCity?.data == null) return null;
+            Kingdom kingdom = pCity.kingdom;
+            if (kingdom?.data == null) return null;
+
+            Army existing = AWArmyService.FindArmy(kingdom, pCity, AWArmyRole.SlaveArmy);
+            Actor currentCaptain = existing?.getCaptain();
+            if (CanBeSlaveArmyCaptainCandidate(currentCaptain, kingdom, pCity, pRequireWarrior: true))
+                return currentCaptain;
+
+            Actor warrior = PickBestSlaveArmyCadre(pCity, pRequireWarrior: true);
+            if (warrior != null) return warrior;
+
+            return TryRaiseNonSlaveCaptain(pCity);
+        }
+
+        private static void FillSlaveArmy(Army pArmy, City pCity)
+        {
+            if (pArmy?.data == null || pCity?.data == null) return;
+
+            Actor captain = pArmy.getCaptain();
+            if (CanBeSlaveArmyCaptainCandidate(captain, pCity.kingdom, pCity, pRequireWarrior: false) &&
+                EnsureWarriorForSlaveArmy(pCity, captain))
+            {
+                AWArmyService.AddToArmy(captain, pArmy);
+            }
+
+            CountArmyComposition(pArmy, out int total, out int slaves, out int nonSlaves);
+            foreach (Actor cadre in GetSlaveArmyCadreCandidates(pCity))
+            {
+                if (total >= MAX_SLAVE_ARMY_SIZE) break;
+                if (nonSlaves >= SlaveArmyFormationRules.MaxNonSlaveCadres) break;
+                if (cadre == captain || cadre.army == pArmy) continue;
+                if (!EnsureWarriorForSlaveArmy(pCity, cadre)) continue;
+                AWArmyService.AddToArmy(cadre, pArmy);
+                total++;
+                nonSlaves++;
+            }
+
+            foreach (Actor slave in GetSlaveArmySlaveCandidates(pCity))
+            {
+                if (total >= MAX_SLAVE_ARMY_SIZE) break;
+                if (slave.army == pArmy) continue;
+                if (!EnsureWarriorForSlaveArmy(pCity, slave)) continue;
+                if (!SlaveArmyFormationRules.CanAddSlaveToArmy(total, slaves, nonSlaves)) break;
+                AWArmyService.AddToArmy(slave, pArmy);
+                slave.data.set(LineageKeys.SLAVE_SOLDIER, true);
+                total++;
+                slaves++;
+            }
+        }
+
+        private static void AssignSlaveCatcherJobToCaptain(Actor pCaptain)
+        {
+            if (SlaveryContent.SlaveCatcherJob == null) return;
+            if (!CanBeSlaveCatcher(pCaptain)) return;
+            if (pCaptain.citizen_job == SlaveryContent.SlaveCatcherJob) return;
+            try { pCaptain.setCitizenJob(SlaveryContent.SlaveCatcherJob); }
+            catch { }
+        }
+
+        private static string BuildSlaveArmyName(Kingdom pKingdom, City pCity, int pIndex)
+        {
+            string name = AWArmyRoleRules.DisplayName(AWArmyRole.SlaveArmy, pKingdom?.name ?? "", pIndex);
+            string cityName = pCity?.data?.name;
+            return string.IsNullOrEmpty(cityName) ? name : cityName + " " + name;
+        }
+
+        private static City FindArmyAnchorCity(Army pArmy)
+        {
+            long cityId = AWArmyService.GetAnchorCityId(pArmy);
+            if (cityId >= 0 && World.world?.cities != null)
+            {
+                try
+                {
+                    City city = World.world.cities.get(cityId);
+                    if (city?.data != null) return city;
+                }
+                catch { }
+            }
+
+            try { return pArmy?.getCity(); }
+            catch { return null; }
+        }
+
+        private static Actor PickBestSlaveArmyCadre(City pCity, bool pRequireWarrior)
+        {
+            Actor best = null;
+            float bestScore = float.MinValue;
+            foreach (Actor unit in GetSlaveArmyCadreCandidates(pCity))
+            {
+                if (pRequireWarrior && !unit.isWarrior()) continue;
+                float score = SafeCombatScore(unit);
+                if (score <= bestScore) continue;
+                bestScore = score;
+                best = unit;
+            }
+            return best;
+        }
+
+        private static List<Actor> GetSlaveArmyCadreCandidates(City pCity)
+        {
+            var result = new List<Actor>();
+            if (pCity?.data == null) return result;
+            Kingdom kingdom = pCity.kingdom;
+            foreach (Actor unit in pCity.getUnits())
+                if (CanBeSlaveArmyCaptainCandidate(unit, kingdom, pCity, pRequireWarrior: false))
+                    result.Add(unit);
+            result.Sort((a, b) => SafeCombatScore(b).CompareTo(SafeCombatScore(a)));
+            return result;
+        }
+
+        private static List<Actor> GetSlaveArmySlaveCandidates(City pCity)
+        {
+            var result = new List<Actor>();
+            if (pCity?.data == null) return result;
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt() || !unit.isAdult()) continue;
+                if (!IsSlave(unit) || IsRetiredSoldier(unit)) continue;
+                if (RoyalGuardService.IsRoyalGuard(unit)) continue;
+                if (unit.asset?.is_boat == true) continue;
+                result.Add(unit);
+            }
+            result.Sort((a, b) => SafeCombatScore(b).CompareTo(SafeCombatScore(a)));
+            return result;
+        }
+
+        private static bool EnsureWarriorForSlaveArmy(City pCity, Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt()) return false;
+            if (pActor.isWarrior()) return true;
+            if (pCity?.data == null || pActor.city != pCity) return false;
+            if (!pCity.checkCanMakeWarrior(pActor)) return false;
+            pCity.makeWarrior(pActor);
+            return pActor.isWarrior();
+        }
+
+        private static bool CanBeSlaveArmyCaptainCandidate(Actor pActor, Kingdom pKingdom, City pCity,
+            bool pRequireWarrior)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAdult()) return false;
+            if (pActor.asset?.is_boat == true) return false;
+            if (pRequireWarrior && !pActor.isWarrior()) return false;
+            if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
+            if (pActor.isKing() || pActor.isCityLeader()) return false;
+            if (GeneralService.IsGeneral(pActor) || GeneralService.IsFiefHolder(pActor)) return false;
+            if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
+            if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
+            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
+            return pCity == null || pActor.city == pCity || pActor.isWarrior();
+        }
+
+        private static void CountArmyComposition(Army pArmy, out int pTotal, out int pSlaves, out int pNonSlaves)
+        {
+            pTotal = 0;
+            pSlaves = 0;
+            pNonSlaves = 0;
+            if (pArmy == null) return;
+            foreach (Actor unit in pArmy.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt() || unit.army != pArmy || !unit.isWarrior()) continue;
+                pTotal++;
+                if (IsSlave(unit)) pSlaves++;
+                else pNonSlaves++;
+            }
+        }
+
+        private static float SafeCombatScore(Actor pActor)
+        {
+            if (pActor?.stats == null) return 0f;
+            return SafeStat(pActor, "damage") + SafeStat(pActor, "warfare") * 2f +
+                   SafeStat(pActor, "health") * 0.08f + SafeStat(pActor, "armor") * 1.5f;
+        }
+
+        private static float SafeStat(Actor pActor, string pKey)
+        {
+            try { return pActor.stats[pKey]; }
+            catch { return 0f; }
         }
 
         private static bool IsSlaveArmyEnabled(Kingdom pKingdom)
@@ -800,7 +1123,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (unit?.data == null || unit.isRekt()) continue;
                 if (!unit.isWarrior()) continue;
-                if (IsSlave(unit)) continue;
+                if (!CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity, pRequireWarrior: true)) continue;
                 return unit;
             }
             return null;
@@ -812,11 +1135,9 @@ namespace AncientWarfare3.core.lineage
             foreach (Actor unit in pCity.getUnits())
             {
                 if (unit?.data == null || unit.isRekt()) continue;
-                if (unit.asset.is_boat || unit.isBaby()) continue;
+                if (unit.asset?.is_boat == true || unit.isBaby()) continue;
                 if (unit.isWarrior()) continue;
-                if (IsSlave(unit) || IsRetiredSoldier(unit)) continue;
-                if (RoyalGuardService.IsRoyalGuard(unit)) continue;
-                if (HeirService.IsCurrentHeir(unit.kingdom, unit)) continue;
+                if (!CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity, pRequireWarrior: false)) continue;
                 if (!pCity.checkCanMakeWarrior(unit)) continue;
 
                 pCity.makeWarrior(unit);
