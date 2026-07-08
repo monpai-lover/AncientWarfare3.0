@@ -11,7 +11,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.newCivKingdom))]
         private static void NewCivKingdom_Postfix(Kingdom __instance)
         {
-            MetaColorCacheService.RefreshKingdomAfterGeneratedColor(__instance);
+            KingdomVisualRandomizationService.RerollNewCivVisuals(__instance);
         }
     }
 }

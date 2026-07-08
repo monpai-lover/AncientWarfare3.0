@@ -333,6 +333,7 @@ namespace WarFabricationRuleTests
             ExpectMandateMapMarkerRules();
             ExpectLineageArchiveIndexRules();
             ExpectMetaColorCacheRules();
+            ExpectKingdomVisualRandomizationRules();
             ExpectMapModeMetaCacheRules();
             ExpectMapModeDirtyThrottleRules();
             ExpectActorAiSearchThrottleRules();
@@ -2200,6 +2201,60 @@ namespace WarFabricationRuleTests
                     pColorId: 32,
                     pColorCount: 32))
                 throw new Exception("Out-of-range color ids must not run color cache refresh.");
+        }
+
+        private static void ExpectKingdomVisualRandomizationRules()
+        {
+            if (!KingdomVisualRandomizationRules.ShouldRerollNewCivVisuals(
+                    pHasKingdom: true,
+                    pIsCivilized: true,
+                    pIsNeutral: false,
+                    pColorCount: 8,
+                    pBackgroundCount: 3,
+                    pIconCount: 4))
+                throw new Exception("New civilized kingdoms should reroll visuals with the AW3 private RNG.");
+
+            if (KingdomVisualRandomizationRules.ShouldRerollNewCivVisuals(
+                    pHasKingdom: true,
+                    pIsCivilized: false,
+                    pIsNeutral: false,
+                    pColorCount: 8,
+                    pBackgroundCount: 3,
+                    pIconCount: 4))
+                throw new Exception("Non-civilized kingdoms must not use civ visual rerolling.");
+
+            if (KingdomVisualRandomizationRules.ShouldRerollNewCivVisuals(
+                    pHasKingdom: true,
+                    pIsCivilized: true,
+                    pIsNeutral: false,
+                    pColorCount: 0,
+                    pBackgroundCount: 3,
+                    pIconCount: 4))
+                throw new Exception("Visual rerolling must require a valid color library.");
+
+            if (KingdomVisualRandomizationRules.NormalizeVisualIndex(
+                    pCandidateIndex: 2,
+                    pCurrentIndex: 2,
+                    pCount: 5) == 2)
+                throw new Exception("Visual rerolling should avoid keeping the original Randy-picked index when alternatives exist.");
+
+            if (KingdomVisualRandomizationRules.NormalizeVisualIndex(
+                    pCandidateIndex: 4,
+                    pCurrentIndex: 2,
+                    pCount: 5) != 4)
+                throw new Exception("Visual rerolling should keep a different valid candidate.");
+
+            if (KingdomVisualRandomizationRules.NormalizeVisualIndex(
+                    pCandidateIndex: 9,
+                    pCurrentIndex: 0,
+                    pCount: 5) != 4)
+                throw new Exception("Visual rerolling should normalize out-of-range candidates.");
+
+            if (KingdomVisualRandomizationRules.NormalizeVisualIndex(
+                    pCandidateIndex: 0,
+                    pCurrentIndex: 0,
+                    pCount: 1) != 0)
+                throw new Exception("Single-option banner pools must keep their only valid index.");
         }
 
         private static void ExpectKingdomYearSchedulerRules()
