@@ -599,6 +599,7 @@ namespace AncientWarfare3.core.policy
         public static string GetClassFallbackName(string pClassId)
         {
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
+            if (pClassId == KingdomPolicyDefs.ClassRepublic) return "\u5171\u548C\u653F\u4F53";
             return pClassId switch
             {
                 KingdomPolicyDefs.ClassSlaveOwner => "奴隶制",
@@ -1035,6 +1036,7 @@ namespace AncientWarfare3.core.policy
                 case KingdomPolicyDefs.ClassRebel:
                     break;
                 case KingdomPolicyDefs.ClassDefault:
+                case KingdomPolicyDefs.ClassRepublic:
                 case KingdomPolicyDefs.ClassReform:
                     SlaveService.SetSlaveryEnabled(pKingdom, false);
                     break;

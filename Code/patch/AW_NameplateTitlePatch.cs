@@ -14,12 +14,14 @@ namespace AncientWarfare3.patch
             if (pMetaObject?.data == null) return;
 
             bool isRebel = MandateRebelService.IsRebelKingdom(pMetaObject);
-            if (pMetaObject.data.original_actor_asset != LineageService.XIA_ASSET_ID && !isRebel) return;
+            bool isRepublic = RepublicGovernmentService.IsRepublic(pMetaObject);
+            if (pMetaObject.data.original_actor_asset != LineageService.XIA_ASSET_ID && !isRebel && !isRepublic) return;
             if (!__instance.is_full) return;
 
             var title = KingdomTitleService.GetTitle(pMetaObject);
             bool isMandate = MandateService.IsMandateKingdom(pMetaObject);
-            string titleSuffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix((int)title, isMandate, isRebel);
+            string titleSuffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix((int)title, isMandate, isRebel,
+                isRepublic);
             if (string.IsNullOrEmpty(titleSuffix)) return;
 
             int pop = pMetaObject.getPopulationPeople();

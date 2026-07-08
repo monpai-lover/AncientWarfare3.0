@@ -311,6 +311,7 @@ namespace WarFabricationRuleTests
             ExpectMandatePowerRules();
             ExpectMandateStartRecordRules();
             ExpectMandateRebelStateRules();
+            ExpectRepublicGovernmentRules();
             ExpectMandateWarAiRules();
             ExpectMandateConquestRules();
             ExpectMandateBorderWallRules();
@@ -1908,6 +1909,44 @@ namespace WarFabricationRuleTests
 
             if (MandateRebelStateRules.SettledClassAfterRebellion("peasant_rebel") != "default")
                 throw new Exception("A peasant rebel kingdom should return to ordinary political class after rebellion war settlement.");
+        }
+
+        private static void ExpectRepublicGovernmentRules()
+        {
+            if (!RepublicGovernmentRules.ShouldBecomeRepublic(
+                    pIsCiv: true,
+                    pIsRekt: false,
+                    pHasKing: false,
+                    pHasMonarchyCandidate: false,
+                    pIsRebelGovernment: false))
+                throw new Exception("A surviving civil kingdom with no king and no succession candidate should become a republic.");
+
+            if (RepublicGovernmentRules.ShouldBecomeRepublic(
+                    pIsCiv: true,
+                    pIsRekt: false,
+                    pHasKing: true,
+                    pHasMonarchyCandidate: false,
+                    pIsRebelGovernment: false))
+                throw new Exception("A kingdom that still has a king must not become a republic.");
+
+            if (RepublicGovernmentRules.ShouldBecomeRepublic(
+                    pIsCiv: true,
+                    pIsRekt: false,
+                    pHasKing: false,
+                    pHasMonarchyCandidate: true,
+                    pIsRebelGovernment: false))
+                throw new Exception("A kingdom with a valid monarchy candidate must not become a republic.");
+
+            if (RepublicGovernmentRules.ShouldBecomeRepublic(
+                    pIsCiv: true,
+                    pIsRekt: false,
+                    pHasKing: false,
+                    pHasMonarchyCandidate: false,
+                    pIsRebelGovernment: true))
+                throw new Exception("Peasant rebel governments must keep the rebel state instead of becoming republics.");
+
+            if (RepublicGovernmentRules.SuffixForNameplate(pIsRepublic: true) != "\u5171\u548c\u56fd")
+                throw new Exception("Republic kingdoms should use the republic nameplate suffix.");
         }
 
         private static void ExpectMandateWarAiRules()

@@ -45,12 +45,14 @@ aw_policy_class_slaveowner,奴隶制,Slavery,奴隸制
 aw_policy_class_halfaristocrat,半贵族制,Half Aristocracy,半貴族制
 aw_policy_class_aristocrat,封建贵族,Feudal Nobility,封建貴族
 aw_policy_class_reform,改革制,Reform,改革制
+aw_policy_class_republic,共和政体,Republic,共和政體
 aw_policy_class_peasant_rebel,农民义军,Peasant Rebel Army,農民義軍
 aw_policy_class_default_desc,以基础血缘和聚落秩序维持的早期国家,Early state maintained by kinship and settlements,以基礎血緣和聚落秩序維持的早期國家
 aw_policy_class_slaveowner_desc,国家承认奴隶劳役与奴隶军体系,The kingdom recognizes slave labor and slave armies,國家承認奴隸勞役與奴隸軍體系
 aw_policy_class_halfaristocrat_desc,奴隶制向贵族分层过渡,Transition from slavery toward layered nobility,奴隸制向貴族分層過渡
 aw_policy_class_aristocrat_desc,贵族和氏支成为地方秩序核心,Nobles and clan branches anchor local order,貴族和氏支成為地方秩序核心
 aw_policy_class_reform_desc,改革旧制推动废奴和更集中的国家秩序,Reform old institutions toward abolition and central order,改革舊制推動廢奴和更集中的國家秩序
+aw_policy_class_republic_desc,无可立之君时的共和政体，国家不再使用君主爵位后缀,Republican rule when no monarch can be selected; the realm no longer uses monarchic title suffixes,無可立之君時的共和政體，國家不再使用君主爵位後綴
 aw_policy_class_peasant_rebel_desc,义军军政府不设禁卫军并动员成年男性保卫起义,Rebel military government with no royal guard and mass mobilization,義軍軍政府不設禁衛軍並動員成年男性保衛起義
 aw_policy_class_manual_desc,手动切换属于上帝类操作，AI只会在完成对应科技和国策后自动改变政体,Manual switching is a god action and AI only changes government after completing policies,手動切換屬於上帝類操作，AI只會在完成對應科技和國策後自動改變政體
 aw_action_family_tree,定位族谱,Family Tree,定位族譜

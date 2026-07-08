@@ -567,6 +567,7 @@ namespace AncientWarfare3.ui.windows
             if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "ui/policy/start_halfaristocrat";
             if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "ui/policy/base_enfeoffment";
             if (pClassId == KingdomPolicyDefs.ClassReform) return "ui/icons/iconPeace";
+            if (pClassId == KingdomPolicyDefs.ClassRepublic) return "ui/icons/iconDiplomacy";
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "ui/Icons/traits/iconrebel";
             return "ui/icons/iconDiplomacy";
         }
@@ -589,6 +590,7 @@ namespace AncientWarfare3.ui.windows
             if (pClassId == KingdomPolicyDefs.ClassHalfAristocrat) return "\u534A\u8D35\u65CF\u5236";
             if (pClassId == KingdomPolicyDefs.ClassAristocrat) return "\u5C01\u5EFA\u8D35\u65CF";
             if (pClassId == KingdomPolicyDefs.ClassReform) return "\u6539\u9769\u5236";
+            if (pClassId == KingdomPolicyDefs.ClassRepublic) return "\u5171\u548C\u653F\u4F53";
             if (pClassId == KingdomPolicyDefs.ClassRebel) return "\u519C\u6C11\u4E49\u519B";
             return "\u90E8\u843D\u5236";
         }

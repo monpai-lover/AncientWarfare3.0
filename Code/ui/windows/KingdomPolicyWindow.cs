@@ -1368,6 +1368,7 @@ namespace AncientWarfare3.ui.windows
                     KingdomPolicyDefs.ClassHalfAristocrat => "\u534A\u8D35\u65CF\u5236",
                     KingdomPolicyDefs.ClassAristocrat => "\u5C01\u5EFA\u8D35\u65CF",
                     KingdomPolicyDefs.ClassReform => "\u6539\u9769\u5236",
+                    KingdomPolicyDefs.ClassRepublic => "\u5171\u548C\u653F\u4F53",
                     KingdomPolicyDefs.ClassRebel => "\u519C\u6C11\u4E49\u519B",
                     _ => "\u90E8\u843D\u5236"
                 });
@@ -1383,6 +1384,8 @@ namespace AncientWarfare3.ui.windows
                 return AW_L10n.Text("aw_policy_class_aristocrat_desc", "\u8D35\u65CF\u548C\u6C0F\u652F\u6210\u4E3A\u5730\u65B9\u79E9\u5E8F\u6838\u5FC3\u3002");
             if (pClassId == KingdomPolicyDefs.ClassReform)
                 return AW_L10n.Text("aw_policy_class_reform_desc", "\u6539\u9769\u65E7\u5236\uFF0C\u63A8\u52A8\u5E9F\u5974\u548C\u66F4\u96C6\u4E2D\u7684\u56FD\u5BB6\u79E9\u5E8F\u3002");
+            if (pClassId == KingdomPolicyDefs.ClassRepublic)
+                return AW_L10n.Text("aw_policy_class_republic_desc", "\u65E0\u53EF\u7ACB\u4E4B\u541B\u65F6\u7684\u5171\u548C\u653F\u4F53\uFF0C\u56FD\u5BB6\u4E0D\u518D\u4F7F\u7528\u541B\u4E3B\u7235\u4F4D\u540E\u7F00\u3002");
             if (pClassId == KingdomPolicyDefs.ClassRebel)
                 return AW_L10n.Text("aw_policy_class_peasant_rebel_desc", "\u4E49\u519B\u519B\u653F\u5E9C\u4E0D\u8BBE\u7981\u536B\u519B\uFF0C\u5E76\u52A8\u5458\u6210\u5E74\u7537\u6027\u4FDD\u536B\u8D77\u4E49\u3002");
             return AW_L10n.Text("aw_policy_class_default_desc", "\u4EE5\u57FA\u7840\u8840\u7F18\u548C\u805A\u843D\u79E9\u5E8F\u7EF4\u6301\u7684\u65E9\u671F\u56FD\u5BB6\u3002");

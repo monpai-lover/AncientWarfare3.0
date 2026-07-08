@@ -81,6 +81,10 @@ namespace MandateRulerTitleRuleTests
                 isRebel: true);
             ExpectNameplateSuffix("rebel_emperor", "\u4e49\u519b", title: 4, isMandate: true,
                 isRebel: true);
+            ExpectNameplateSuffix("republic_duke", "\u5171\u548c\u56fd", title: 2, isMandate: false,
+                isRepublic: true);
+            ExpectNameplateSuffix("republic_mandate_emperor", "\u5171\u548c\u56fd", title: 4, isMandate: true,
+                isRepublic: true);
 
             ExpectMandateHistoryAssignmentRules();
             ExpectMandateDeclarationRules();
@@ -168,9 +172,9 @@ namespace MandateRulerTitleRuleTests
         }
 
         private static void ExpectNameplateSuffix(string label, string expected, int title, bool isMandate,
-            bool isRebel = false)
+            bool isRebel = false, bool isRepublic = false)
         {
-            string actual = KingdomTitleDisplayRules.GetNameplateTitleSuffix(title, isMandate, isRebel);
+            string actual = KingdomTitleDisplayRules.GetNameplateTitleSuffix(title, isMandate, isRebel, isRepublic);
             if (actual != expected)
                 throw new Exception($"Expected {label} nameplate suffix {expected}, got {actual}.");
         }

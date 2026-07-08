@@ -39,6 +39,7 @@ namespace AncientWarfare3.content.policies
         public const string ClassHalfAristocrat = "halfaristocrat";
         public const string ClassAristocrat = "aristocrat";
         public const string ClassReform = "reform";
+        public const string ClassRepublic = "republic";
         public const string ClassRebel = "peasant_rebel";
         public const string ArmyDefault = "default";
         public const string ArmySlaveSoldier = "slave_soldier";
@@ -56,6 +57,7 @@ namespace AncientWarfare3.content.policies
             ClassHalfAristocrat,
             ClassAristocrat,
             ClassReform,
+            ClassRepublic,
             ClassRebel
         };
 
