@@ -36,6 +36,9 @@
 		<Reference Include="Assembly-CSharp">
 			<HintPath>$(NewModDir)\AssemblyPublicizer\publicized_assemblies\Assembly-CSharp_publicized.dll</HintPath>
 		</Reference>
+		<Reference Include="netstandard">
+			<HintPath>$(WorldBoxManaged)\netstandard.dll</HintPath>
+		</Reference>
 		<Reference Include="NeoModLoader">
 			<HintPath>$(NewModDir)\NeoModLoader.dll</HintPath>
 		</Reference>

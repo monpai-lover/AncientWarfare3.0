@@ -1647,11 +1647,11 @@ namespace WarFabricationRuleTests
                     pAw3AllowedWarStart: false))
                 throw new Exception("Active vanilla new_war plots must be intercepted before progress.");
 
-            if (WarPlotRedirectRules.ShouldInterceptActiveNewWarPlot("new_war",
+            if (!WarPlotRedirectRules.ShouldInterceptActiveNewWarPlot("new_war",
                     pCivilKingdom: true,
                     pCanUseAwDecision: true,
                     pAw3AllowedWarStart: true))
-                throw new Exception("AW3 scoped war starts must not intercept their own plot path.");
+                throw new Exception("Active vanilla new_war plots must be consumed even during AW3 war-start scope.");
 
             if (WarPlotRedirectRules.ShouldInterceptActiveNewWarPlot("alliance_create",
                     pCivilKingdom: true,

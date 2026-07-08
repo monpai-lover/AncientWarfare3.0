@@ -19,7 +19,7 @@ namespace AncientWarfare3.core.lineage
             bool pCanUseAwDecision,
             bool pAw3AllowedWarStart)
         {
-            return ShouldRedirectNewWarPlot(pPlotId, pCivilKingdom, pCanUseAwDecision, pAw3AllowedWarStart);
+            return (pPlotId ?? "") == NewWarPlotId;
         }
     }
 }
