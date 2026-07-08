@@ -310,6 +310,7 @@ namespace WarFabricationRuleTests
             ExpectForeignPseudoLineageRules();
             ExpectMandatePowerRules();
             ExpectMandateStartRecordRules();
+            ExpectMandateRebelStateRules();
             ExpectMandateWarAiRules();
             ExpectMandateConquestRules();
             ExpectMandateBorderWallRules();
@@ -1880,6 +1881,33 @@ namespace WarFabricationRuleTests
             if (!MandateStartRecordRules.IsForeignPseudo("pseudo_foreign", "orthodox") ||
                 !MandateStartRecordRules.IsForeignPseudo("native", "foreign_pseudo"))
                 throw new Exception("Foreign pseudo origin and claimant markers should both be recognized.");
+        }
+
+        private static void ExpectMandateRebelStateRules()
+        {
+            if (!MandateRebelStateRules.IsCurrentRebelGovernment(
+                    pRebelFlag: true,
+                    pClassState: "default",
+                    pOriginType: "",
+                    pClaimantKind: ""))
+                throw new Exception("A live rebel flag should mark the kingdom as a current peasant rebel government.");
+
+            if (!MandateRebelStateRules.IsCurrentRebelGovernment(
+                    pRebelFlag: false,
+                    pClassState: "peasant_rebel",
+                    pOriginType: "",
+                    pClaimantKind: ""))
+                throw new Exception("A live peasant rebel class state should mark the kingdom as a current peasant rebel government.");
+
+            if (MandateRebelStateRules.IsCurrentRebelGovernment(
+                    pRebelFlag: false,
+                    pClassState: "default",
+                    pOriginType: "rebel",
+                    pClaimantKind: "rebel"))
+                throw new Exception("Historical rebel origin must not keep a settled kingdom in peasant rebel government.");
+
+            if (MandateRebelStateRules.SettledClassAfterRebellion("peasant_rebel") != "default")
+                throw new Exception("A peasant rebel kingdom should return to ordinary political class after rebellion war settlement.");
         }
 
         private static void ExpectMandateWarAiRules()

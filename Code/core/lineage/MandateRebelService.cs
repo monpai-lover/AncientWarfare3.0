@@ -26,10 +26,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             pKingdom.data.get(LineageKeys.MANDATE_REBEL, out bool rebel, false);
-            if (rebel) return true;
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string classState, "");
             pKingdom.data.get(LineageKeys.MANDATE_ORIGIN_TYPE, out string origin, "");
             pKingdom.data.get(LineageKeys.MANDATE_CLAIMANT_KIND, out string claimant, "");
-            return origin == "rebel" || claimant == "rebel";
+            return MandateRebelStateRules.IsCurrentRebelGovernment(rebel, classState, origin, claimant);
         }
 
         public static bool IsRebelLeader(Actor pActor)
@@ -184,7 +184,6 @@ namespace AncientWarfare3.core.lineage
             Kingdom origin = FindKingdomFromRebelOrigin(pKingdom);
             if (!MandateService.TryDeclareMandate(pKingdom, "rebel_claim", "rebel", "rebel", origin)) return;
 
-            pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, Date.getCurrentYear() + REBEL_BUFF_YEARS);
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_CLAIMED,
                 HistoryText.Kingdom(pKingdom) + " \u4E49\u519B\u53D7\u547D\uFF0C\u5EFA\u7ACB\u5929\u671D",
                 HistoryTarget.Kingdom(pKingdom));
@@ -197,6 +196,50 @@ namespace AncientWarfare3.core.lineage
             MandateService.RecordMandateEvent("mandate_rebel_claimed", pKingdom, pKingdom.king, pKingdom.capital,
                 20, MandateService.ReadReport().mandate_value,
                 pKingdom.name + " \u4E49\u519B\u53D7\u547D\u5EFA\u7ACB\u5929\u671D");
+            SettleRebelGovernment(pKingdom, "mandate_claimed");
+        }
+
+        public static void OnWarEnded(War pWar, WarWinner pWinner)
+        {
+            if (pWar?.data == null) return;
+            string type = GetWarType(pWar);
+            bool rebelWar = type == MandateService.WAR_TIANMING_REBEL || pWar.getAsset()?.rebellion == true;
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender = pWar.getMainDefender();
+            if (!rebelWar && !IsRebelKingdom(attacker) && !IsRebelKingdom(defender)) return;
+
+            SettleRebelGovernment(attacker, "rebellion_war_end");
+            SettleRebelGovernment(defender, "rebellion_war_end");
+        }
+
+        public static void SettleRebelGovernment(Kingdom pKingdom, string pReason)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL, out bool rebel, false);
+            pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string classState, "");
+            pKingdom.data.get(LineageKeys.MANDATE_ORIGIN_TYPE, out string origin, "");
+            pKingdom.data.get(LineageKeys.MANDATE_CLAIMANT_KIND, out string claimant, "");
+            if (!MandateRebelStateRules.IsCurrentRebelGovernment(rebel, classState, origin, claimant)) return;
+
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL, false);
+            pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE,
+                MandateRebelStateRules.SettledClassAfterRebellion(classState));
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, 0);
+            pKingdom.data.get(LineageKeys.MANDATE_MAP_MARKER_KIND, out string marker, "");
+            if (marker == "rebel_claimant") pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "");
+            MandateService.NormalizeMapMarkerAfterRebelSettlement(pKingdom);
+
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (unit?.data == null) continue;
+                unit.data.set(LineageKeys.MANDATE_REBEL, false);
+                unit.data.set(LineageKeys.MANDATE_REBEL_LEADER, false);
+                if (unit.hasTrait("rebel")) unit.removeTrait("rebel");
+            }
+
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
+                HistoryText.Kingdom(pKingdom) + " \u4E49\u519B\u6218\u4E8B\u7ED3\u675F\uFF0C\u6062\u590D\u666E\u901A\u653F\u4F53",
+                HistoryTarget.Kingdom(pKingdom));
         }
 
         private static List<City> PickCollapseCities(Kingdom pMandateKingdom)
@@ -406,6 +449,12 @@ namespace AncientWarfare3.core.lineage
         {
             pKingdom.data.get(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, out int until, -1);
             return until >= Date.getCurrentYear();
+        }
+
+        private static string GetWarType(War pWar)
+        {
+            try { return pWar?.getAsset()?.id ?? ""; }
+            catch { return ""; }
         }
 
         private static Kingdom FindKingdomFromRebelOrigin(Kingdom pRebel)

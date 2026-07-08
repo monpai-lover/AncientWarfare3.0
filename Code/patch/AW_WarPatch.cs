@@ -59,6 +59,7 @@ namespace AncientWarfare3.patch
             WarTerritoryService.OnWarEnded(pWar, pWinner);
             ApplyDiplomacyWarResult(pWar, pWinner);
             MandateService.OnWarEnded(pWar, pWinner);
+            MandateRebelService.OnWarEnded(pWar, pWinner);
             GeneralService.OnWarEnded(pWar, pWinner);
 
             Kingdom atk = pWar.getMainAttacker();

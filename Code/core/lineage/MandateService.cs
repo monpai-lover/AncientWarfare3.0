@@ -540,6 +540,26 @@ namespace AncientWarfare3.core.lineage
                 ClearMandate("kingdom_fell");
         }
 
+        public static void NormalizeMapMarkerAfterRebelSettlement(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.MANDATE_MAP_MARKER_KIND, out string marker, "");
+            if (marker == "rebel_claimant") pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "moh");
+
+            MandateReport report = ReadReport();
+            if (!Ready || !report.active || report.kingdom_id != pKingdom.id || report.period_id < 0)
+            {
+                DirtyAllMaps();
+                return;
+            }
+            if (report.map_marker_kind != "rebel_claimant") return;
+
+            UpsertState(pKingdom, report.period_id, report.mandate_value, report.imperial_authority,
+                report.dynasty_prestige, report.core_control, report.vassal_loyalty, report.crisis_level,
+                Date.getCurrentYear(), ReadStartTime(), report.origin_type, report.claimant_kind, null, "moh");
+            DirtyAllMaps();
+        }
+
         public static ColorAsset GetDynastyMapColor(Kingdom pKingdom, ColorAsset pFallback)
         {
             Kingdom mandate = GetCurrentMandateKingdom();
