@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.lineage
         private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
         private const int DISMISS_SCAN_LIMIT = 64;
+        private const int ACTIVE_FALLBACK_SCAN_LIMIT = 64;
         private const int CANDIDATE_POOL_LIMIT = 16;
         private const int NOBLE_CANDIDATE_POOL_LIMIT = 8;
         private const int CANDIDATE_SCAN_LIMIT = 128;
@@ -107,8 +108,12 @@ namespace AncientWarfare3.core.lineage
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardValidate, CityMaintenanceBenchmarkRules.Group);
-            List<Actor> active = CollectActiveGuards(pKingdom);
+            List<Actor> active = CollectActiveGuards(pKingdom,
+                out bool activeFallbackUsed, out bool activeFallbackComplete);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardValidate, CityMaintenanceBenchmarkRules.Group);
+            if (activeFallbackUsed && !activeFallbackComplete)
+                return;
+
             string guardName = BuildGuardName(pKingdom);
             TrimExcessGuards(active, MAX_GUARDS_PER_KINGDOM);
             var newlyAppointed = new List<Actor>(RECRUITMENT_BATCH_LIMIT);
@@ -414,9 +419,12 @@ namespace AncientWarfare3.core.lineage
                 ActorAiSearchThrottleRules.NextAllowedAfterMiss(LineageService.CurTime(), THREAT_SEARCH_MISS_COOLDOWN);
         }
 
-        private static List<Actor> CollectActiveGuards(Kingdom pKingdom)
+        private static List<Actor> CollectActiveGuards(Kingdom pKingdom,
+            out bool pFallbackUsed, out bool pFallbackComplete)
         {
             var active = new List<Actor>();
+            pFallbackUsed = false;
+            pFallbackComplete = true;
             bool hasHint = HasKingdomGuardStateHint(pKingdom);
             Army guardArmy = hasHint ? FindGuardArmy(pKingdom) : null;
             if (RoyalGuardMaintenanceRules.ShouldUseArmyFastPathForActiveGuards(
@@ -438,20 +446,49 @@ namespace AncientWarfare3.core.lineage
 
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
                 CityMaintenanceBenchmarkRules.Group);
+            pFallbackUsed = true;
+            pFallbackComplete = CollectActiveGuardsFallbackBounded(pKingdom, active);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
+                CityMaintenanceBenchmarkRules.Group);
+            if (RoyalGuardMaintenanceRules.ShouldClearGuardHintAfterFallbackScan(
+                    pFallbackComplete, active.Count, pFoundGuardArmy: false))
+                ClearKingdomGuardStateHints(pKingdom);
+            return active;
+        }
+
+        private static bool CollectActiveGuardsFallbackBounded(Kingdom pKingdom, List<Actor> pActive)
+        {
+            if (pKingdom?.data == null || pActive == null) return true;
+
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, out int cursor, 0);
+            if (cursor < 0) cursor = 0;
+
+            int scanned = 0;
+            int processed = 0;
             foreach (Actor unit in pKingdom.getUnits())
             {
+                if (scanned++ < cursor) continue;
+                if (RoyalGuardMaintenanceRules.ShouldStopBoundedDismissScan(
+                        processed, ACTIVE_FALLBACK_SCAN_LIMIT))
+                {
+                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, scanned - 1);
+                    return false;
+                }
+
+                processed++;
                 if (!IsRoyalGuard(unit)) continue;
                 if (!IsStillValidGuard(unit, pKingdom))
                 {
                     DismissGuard(unit, "invalid");
                     continue;
                 }
-                active.Add(unit);
+                pActive.Add(unit);
                 RemoveFromNormalArmy(unit);
+                if (pActive.Count >= MAX_GUARDS_PER_KINGDOM) break;
             }
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
-                CityMaintenanceBenchmarkRules.Group);
-            return active;
+
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, 0);
+            return true;
         }
 
         private static void CollectActiveGuardsFromArmy(Army pGuardArmy, Kingdom pKingdom, List<Actor> pActive)
@@ -954,6 +991,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_RECORDED, false);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, -1L);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, 0);
         }
 
         private static void DismissGuard(Actor pActor, string pReason, bool pRecord, bool pKeepTrait)
@@ -1077,12 +1115,15 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || World.world?.armies == null) return null;
 
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_ARMY_ID, out long armyId, -1L);
-            Army stored = World.world.armies.get(armyId);
+            Army stored = GetArmyById(armyId);
             if (IsRoyalGuardArmyForKingdom(stored, pKingdom)) return stored;
 
-            foreach (Army army in World.world.armies)
-                if (IsRoyalGuardArmyForKingdom(army, pKingdom))
-                    return army;
+            Army army = AWArmyService.FindArmy(pKingdom, pKingdom.capital, AWArmyRole.RoyalGuard);
+            if (IsRoyalGuardArmyForKingdom(army, pKingdom))
+            {
+                pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, army.id);
+                return army;
+            }
 
             return null;
         }
@@ -1090,8 +1131,27 @@ namespace AncientWarfare3.core.lineage
         private static bool IsRoyalGuardArmyForKingdom(Army pArmy, Kingdom pKingdom)
         {
             if (!IsRoyalGuardArmy(pArmy)) return false;
-            try { return pArmy.getKingdom() == pKingdom; }
-            catch { return false; }
+            try
+            {
+                if (pArmy.getKingdom() == pKingdom) return true;
+            }
+            catch { }
+
+            try
+            {
+                if (pArmy.data?.id_kingdom == pKingdom?.id) return true;
+            }
+            catch { }
+
+            City anchor = AWArmyService.FindAnchorCity(pArmy);
+            return anchor?.kingdom == pKingdom;
+        }
+
+        private static Army GetArmyById(long pArmyId)
+        {
+            if (pArmyId < 0 || World.world?.armies == null) return null;
+            try { return World.world.armies.get(pArmyId); }
+            catch { return null; }
         }
 
         private static bool IsRoyalGuardArmy(Army pArmy)

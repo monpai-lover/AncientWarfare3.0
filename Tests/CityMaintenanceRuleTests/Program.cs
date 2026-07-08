@@ -161,6 +161,18 @@ namespace CityMaintenanceRuleTests
                     pCaptainValid: true,
                     pCitySlaveCount: 12))
                 throw new Exception("Underfilled slave armies should keep filling when local slave candidates remain.");
+
+            if (!SlaveArmyMaintenanceRules.ShouldSkipAfterFailedMaintenance(
+                    pNow: 120,
+                    pLastFailure: 112,
+                    pCooldownYears: 12))
+                throw new Exception("Slave army maintenance should skip repeated failed fills during cooldown.");
+
+            if (SlaveArmyMaintenanceRules.ShouldSkipAfterFailedMaintenance(
+                    pNow: 125,
+                    pLastFailure: 112,
+                    pCooldownYears: 12))
+                throw new Exception("Slave army maintenance should resume after the failed-fill cooldown.");
         }
 
         private static void ExpectArmyAiSafetyGate()

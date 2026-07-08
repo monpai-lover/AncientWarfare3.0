@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -11,6 +12,7 @@ namespace AncientWarfare3.core.lineage
             BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo ArmyKingdomField = typeof(Army).GetField("_kingdom",
             BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly Dictionary<string, long> RoleArmyCache = new Dictionary<string, long>();
         private static bool _creatingSpecialArmy;
 
         public static bool IsCreatingSpecialArmy => _creatingSpecialArmy;
@@ -84,15 +86,37 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || World.world?.armies == null) return null;
             long cityId = pAnchorCity?.id ?? -1L;
+            string cacheKey = SpecialArmyLookupCacheRules.BuildKey(pKingdom.id, pRole, cityId);
+            if (RoleArmyCache.TryGetValue(cacheKey, out long cachedArmyId))
+            {
+                Army cachedArmy = GetArmyById(cachedArmyId);
+                if (IsValidLookupResult(cachedArmy, pKingdom, cityId, pRole))
+                {
+                    Bench.bench(CityMaintenanceBenchmarkRules.SpecialArmyCacheHit,
+                        CityMaintenanceBenchmarkRules.Group);
+                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyCacheHit,
+                        CityMaintenanceBenchmarkRules.Group);
+                    return cachedArmy;
+                }
+                Bench.bench(CityMaintenanceBenchmarkRules.SpecialArmyCacheMiss,
+                    CityMaintenanceBenchmarkRules.Group);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyCacheMiss,
+                    CityMaintenanceBenchmarkRules.Group);
+                RoleArmyCache.Remove(cacheKey);
+            }
+
+            Bench.bench(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
+                CityMaintenanceBenchmarkRules.Group);
             foreach (Army army in World.world.armies)
             {
-                if (army?.data == null || !army.isAlive()) continue;
-                if (!IsRoleArmy(army, pRole)) continue;
-                Kingdom kingdom = SafeGetKingdom(army, FindAnchorCity(army));
-                if (kingdom != pKingdom) continue;
-                if (!AWArmyRoleRules.ShouldMatchArmyAnchor(pRole, cityId, GetAnchorCityId(army))) continue;
+                if (!IsValidLookupResult(army, pKingdom, cityId, pRole)) continue;
+                RoleArmyCache[cacheKey] = army.id;
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
+                    CityMaintenanceBenchmarkRules.Group);
                 return army;
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
+                CityMaintenanceBenchmarkRules.Group);
             return null;
         }
 
@@ -112,6 +136,7 @@ namespace AncientWarfare3.core.lineage
                 pArmy.clearCity();
             else if (!AWArmyRoleRules.ShouldUseDetachedArmy(pRole))
                 TrySetRuntimeCity(pArmy, pAnchorCity, pKingdom);
+            CacheArmy(pArmy, pKingdom, pRole);
             DedupePastCaptains(pArmy);
         }
 
@@ -149,6 +174,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsSpecialArmy(pArmy)) return;
             if (pArmy.countUnits() > 0 || pArmy.hasCaptain()) return;
+            RemoveArmyFromCache(pArmy);
             try { World.world?.armies?.removeObject(pArmy); }
             catch { }
         }
@@ -174,14 +200,16 @@ namespace AncientWarfare3.core.lineage
         public static void RepairSpecialArmiesAfterLoad()
         {
             if (World.world?.armies == null) return;
+            RoleArmyCache.Clear();
             foreach (Army army in World.world.armies)
             {
                 if (!IsSpecialArmy(army)) continue;
+                string role = GetRole(army);
                 City anchor = FindAnchorCity(army);
                 Kingdom kingdom = SafeGetKingdom(army, anchor);
-                if (anchor?.data != null && !AWArmyRoleRules.ShouldUseDetachedArmy(GetRole(army)))
+                if (anchor?.data != null && !AWArmyRoleRules.ShouldUseDetachedArmy(role))
                     TrySetRuntimeCity(army, anchor, kingdom);
-                else if (AWArmyRoleRules.ShouldUseDetachedArmy(GetRole(army)))
+                else if (AWArmyRoleRules.ShouldUseDetachedArmy(role))
                 {
                     try
                     {
@@ -189,6 +217,7 @@ namespace AncientWarfare3.core.lineage
                     }
                     catch { }
                 }
+                CacheArmy(army, kingdom, role);
                 DedupePastCaptains(army);
             }
         }
@@ -320,8 +349,51 @@ namespace AncientWarfare3.core.lineage
                 pDuplicate.data.set(LineageKeys.AW_ARMY_CITY_ID, -1L);
             }
 
+            RemoveArmyFromCache(pDuplicate);
             try { World.world?.armies?.removeObject(pDuplicate); }
             catch { }
+        }
+
+        private static Army GetArmyById(long pArmyId)
+        {
+            if (pArmyId < 0 || World.world?.armies == null) return null;
+            try { return World.world.armies.get(pArmyId); }
+            catch { return null; }
+        }
+
+        private static bool IsValidLookupResult(Army pArmy, Kingdom pKingdom, long pRequestedCityId, string pRole)
+        {
+            if (pArmy?.data == null || !pArmy.isAlive()) return false;
+            if (!IsRoleArmy(pArmy, pRole)) return false;
+            City anchor = FindAnchorCity(pArmy);
+            Kingdom kingdom = SafeGetKingdom(pArmy, anchor);
+            if (!SpecialArmyLookupCacheRules.ShouldUseCachedArmy(
+                    pCachedArmyId: pArmy.id,
+                    pCachedArmyAlive: true,
+                    pRoleMatches: true,
+                    pKingdomMatches: kingdom == pKingdom,
+                    pAnchorMatches: AWArmyRoleRules.ShouldMatchArmyAnchor(
+                        pRole, pRequestedCityId, GetAnchorCityId(pArmy))))
+                return false;
+            return true;
+        }
+
+        private static void CacheArmy(Army pArmy, Kingdom pKingdom, string pRole)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole)) return;
+            string key = SpecialArmyLookupCacheRules.BuildKey(pKingdom.id, pRole, GetAnchorCityId(pArmy));
+            RoleArmyCache[key] = pArmy.id;
+        }
+
+        private static void RemoveArmyFromCache(Army pArmy)
+        {
+            if (pArmy?.data == null || RoleArmyCache.Count == 0) return;
+            var staleKeys = new List<string>();
+            foreach (KeyValuePair<string, long> entry in RoleArmyCache)
+                if (entry.Value == pArmy.id)
+                    staleKeys.Add(entry.Key);
+            foreach (string key in staleKeys)
+                RoleArmyCache.Remove(key);
         }
 
         private static City SafeGetCity(Army pArmy)

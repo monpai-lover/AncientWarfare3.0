@@ -86,6 +86,7 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_LABOR_LAST_CHECK = "aw_slave_labor_last_check";
         public const string SLAVE_CATCHER_LAST_CHECK = "aw_slave_catcher_last_check";
         public const string SLAVE_ARMY_LAST_CHECK = "aw_slave_army_last_check";
+        public const string SLAVE_ARMY_FAILURE_YEAR = "aw_slave_army_failure_year";
 
         public const string ROYAL_GUARD = "aw_royal_guard";
         public const string ROYAL_GUARD_CAPTAIN = "aw_royal_guard_captain";
@@ -96,6 +97,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_LAST_CHECK = "aw_royal_guard_last_check";
         public const string ROYAL_GUARD_REFRESH_CURSOR = "aw_royal_guard_refresh_cursor";
         public const string ROYAL_GUARD_DISMISS_CURSOR = "aw_royal_guard_dismiss_cursor";
+        public const string ROYAL_GUARD_ACTIVE_SCAN_CURSOR = "aw_royal_guard_active_scan_cursor";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";

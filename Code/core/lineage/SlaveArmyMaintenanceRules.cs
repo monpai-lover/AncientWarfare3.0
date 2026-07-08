@@ -43,5 +43,13 @@ namespace AncientWarfare3.core.lineage
             int limit = pBatchLimit <= 0 ? 1 : pBatchLimit;
             return pAddedThisPass >= limit;
         }
+
+        public static bool ShouldSkipAfterFailedMaintenance(int pNow, int pLastFailure, int pCooldownYears)
+        {
+            if (pCooldownYears <= 0) return false;
+            if (pLastFailure < 0) return false;
+            if (pNow < pLastFailure) return false;
+            return pNow - pLastFailure < pCooldownYears;
+        }
     }
 }

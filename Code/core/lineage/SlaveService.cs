@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         private const int CITY_SLAVE_LABOR_CHECK_INTERVAL = 30;
         private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
         private const int CITY_SLAVE_ARMY_CHECK_INTERVAL = 20;
+        private const int SLAVE_ARMY_FAILED_MAINTENANCE_COOLDOWN = 60;
         private const double SLAVE_CAPTURE_SEARCH_MISS_COOLDOWN = 2.0;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MIN = 3f;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MAX = 8f;
@@ -640,6 +641,11 @@ namespace AncientWarfare3.core.lineage
             bool onSchedule = ShouldRunCityMaintenanceStaggered(pCity, LineageKeys.SLAVE_ARMY_LAST_CHECK,
                 CITY_SLAVE_ARMY_CHECK_INTERVAL);
             if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(slaveryEnabled, slaveArmyEnabled, onSchedule)) return;
+            int now = (int)LineageService.CurTime();
+            pCity.data.get(LineageKeys.SLAVE_ARMY_FAILURE_YEAR, out int lastFailure, -1);
+            if (SlaveArmyMaintenanceRules.ShouldSkipAfterFailedMaintenance(
+                    now, lastFailure, SLAVE_ARMY_FAILED_MAINTENANCE_COOLDOWN))
+                return;
 
             int slaveCount = -1;
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyExisting, CityMaintenanceBenchmarkRules.Group);
@@ -663,6 +669,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting,
                         CityMaintenanceBenchmarkRules.Group);
+                    ClearSlaveArmyMaintenanceFailure(pCity);
                     AssignSlaveCatcherJobToCaptain(existingCaptain);
                     if (SlaveArmyMaintenanceRules.ShouldDriveFrontline(
                             pHasArmy: true,
@@ -688,24 +695,37 @@ namespace AncientWarfare3.core.lineage
                 slaveCount = CountSlaves(pCity);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
             }
-            if (slaveCount < MIN_SLAVES_FOR_SLAVE_ARMY) return;
+            if (slaveCount < MIN_SLAVES_FOR_SLAVE_ARMY)
+            {
+                MarkSlaveArmyMaintenanceFailure(pCity, now);
+                return;
+            }
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyCaptain, CityMaintenanceBenchmarkRules.Group);
             Actor captain = PickSlaveArmyCaptain(pCity, army);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyCaptain, CityMaintenanceBenchmarkRules.Group);
-            if (captain == null) return;
+            if (captain == null)
+            {
+                MarkSlaveArmyMaintenanceFailure(pCity, now);
+                return;
+            }
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyEnsure, CityMaintenanceBenchmarkRules.Group);
             army = AWArmyService.EnsureArmy(kingdom, pCity, captain, AWArmyRole.SlaveArmy,
                 BuildSlaveArmyName(kingdom, pCity, 1), pDetached: false);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyEnsure, CityMaintenanceBenchmarkRules.Group);
-            if (army == null) return;
+            if (army == null)
+            {
+                MarkSlaveArmyMaintenanceFailure(pCity, now);
+                return;
+            }
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             _formingSlaveArmy = true;
+            int addedThisPass = 0;
             try
             {
-                FillSlaveArmy(army, pCity);
+                addedThisPass = FillSlaveArmy(army, pCity);
             }
             finally
             {
@@ -713,6 +733,20 @@ namespace AncientWarfare3.core.lineage
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             EnsureNonSlaveCaptain(army);
+            CountArmyComposition(army, out int finalTotal, out int finalSlaves, out int finalNonSlaves);
+            Actor finalCaptain = army.getCaptain();
+            bool finalCaptainValid = CanBeSlaveArmyCaptainCandidate(finalCaptain, kingdom, pCity,
+                pRequireWarrior: true);
+            if (addedThisPass > 0 || SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+                    pArmyExists: true,
+                    pTotalWarriors: finalTotal,
+                    pSlaveWarriors: finalSlaves,
+                    pNonSlaveWarriors: finalNonSlaves,
+                    pCaptainValid: finalCaptainValid,
+                    pCitySlaveCount: slaveCount))
+                ClearSlaveArmyMaintenanceFailure(pCity);
+            else
+                MarkSlaveArmyMaintenanceFailure(pCity, now);
             AssignSlaveCatcherJobToCaptain(army.getCaptain());
             if (SlaveArmyMaintenanceRules.ShouldDriveFrontline(
                     pHasArmy: true,
@@ -1040,9 +1074,9 @@ namespace AncientWarfare3.core.lineage
             return TryRaiseNonSlaveCaptain(pCity);
         }
 
-        private static void FillSlaveArmy(Army pArmy, City pCity)
+        private static int FillSlaveArmy(Army pArmy, City pCity)
         {
-            if (pArmy?.data == null || pCity?.data == null) return;
+            if (pArmy?.data == null || pCity?.data == null) return 0;
 
             int addedThisPass = 0;
             Actor captain = pArmy.getCaptain();
@@ -1084,6 +1118,20 @@ namespace AncientWarfare3.core.lineage
                 slaves++;
                 addedThisPass++;
             }
+
+            return addedThisPass;
+        }
+
+        private static void MarkSlaveArmyMaintenanceFailure(City pCity, int pNow)
+        {
+            if (pCity?.data == null) return;
+            pCity.data.set(LineageKeys.SLAVE_ARMY_FAILURE_YEAR, pNow);
+        }
+
+        private static void ClearSlaveArmyMaintenanceFailure(City pCity)
+        {
+            if (pCity?.data == null) return;
+            pCity.data.set(LineageKeys.SLAVE_ARMY_FAILURE_YEAR, -1);
         }
 
         private static void AssignSlaveCatcherJobToCaptain(Actor pCaptain)

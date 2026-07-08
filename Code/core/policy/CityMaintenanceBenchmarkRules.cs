@@ -47,6 +47,9 @@ namespace AncientWarfare3.core.policy
         public const string FiefCommandResolve = "aw3_city_fief_command_resolve";
         public const string FiefCommandApply = "aw3_city_fief_command_apply";
         public const string FiefCommandCaptain = "aw3_city_fief_command_captain";
+        public const string SpecialArmyCacheHit = "aw3_city_special_army_cache_hit";
+        public const string SpecialArmyCacheMiss = "aw3_city_special_army_cache_miss";
+        public const string SpecialArmyGlobalScan = "aw3_city_special_army_global_scan";
         public const string DeathBondChildScan = "aw3_death_bond_child_scan";
         public const string Food = "aw3_city_food";
         public const string Status = "aw3_city_status";
@@ -97,6 +100,9 @@ namespace AncientWarfare3.core.policy
             FiefCommandResolve,
             FiefCommandApply,
             FiefCommandCaptain,
+            SpecialArmyCacheHit,
+            SpecialArmyCacheMiss,
+            SpecialArmyGlobalScan,
             DeathBondChildScan,
             Food,
             Status,

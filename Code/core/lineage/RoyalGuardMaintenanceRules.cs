@@ -95,6 +95,14 @@ namespace AncientWarfare3.core.lineage
             return pProcessed >= limit;
         }
 
+        public static bool ShouldClearGuardHintAfterFallbackScan(
+            bool pScanComplete,
+            int pActiveGuardCount,
+            bool pFoundGuardArmy)
+        {
+            return pScanComplete && pActiveGuardCount <= 0 && !pFoundGuardArmy;
+        }
+
         public static bool ShouldKeepExistingCaptain(bool pExistingCaptainValid, bool pExistingCaptainNoble)
         {
             return pExistingCaptainValid && pExistingCaptainNoble;

@@ -293,6 +293,7 @@ namespace WarFabricationRuleTests
             ExpectCityMaintenanceThrottleRules();
             ExpectRoyalGuardMaintenanceRules();
             ExpectAwArmyRoleRules();
+            ExpectSpecialArmyLookupCacheRules();
             ExpectSlaveArmyFormationRules();
             ExpectSlaveCaptureCommandRules();
             ExpectNonCoreLoyaltyRules();
@@ -2732,6 +2733,21 @@ namespace WarFabricationRuleTests
                     pProcessed: 63,
                     pLimit: 64))
                 throw new Exception("Bounded dismiss scans should continue before the per-pass limit.");
+            if (!RoyalGuardMaintenanceRules.ShouldClearGuardHintAfterFallbackScan(
+                    pScanComplete: true,
+                    pActiveGuardCount: 0,
+                    pFoundGuardArmy: false))
+                throw new Exception("A completed fallback scan with no active guards should clear stale guard hints.");
+            if (RoyalGuardMaintenanceRules.ShouldClearGuardHintAfterFallbackScan(
+                    pScanComplete: false,
+                    pActiveGuardCount: 0,
+                    pFoundGuardArmy: false))
+                throw new Exception("Partial fallback scans must keep guard hints for the next bounded pass.");
+            if (RoyalGuardMaintenanceRules.ShouldClearGuardHintAfterFallbackScan(
+                    pScanComplete: true,
+                    pActiveGuardCount: 2,
+                    pFoundGuardArmy: false))
+                throw new Exception("Fallback scans that find active guards must keep guard hints.");
             if (!RoyalGuardMaintenanceRules.ShouldKeepExistingCaptain(
                     pExistingCaptainValid: true,
                     pExistingCaptainNoble: true))
@@ -2848,6 +2864,35 @@ namespace WarFabricationRuleTests
 
             if (AWArmyRoleRules.DisplayName(AWArmyRole.BorderArmy, "周", 2) != "周 边军 2")
                 throw new Exception("Border army names should include kingdom name, role label, and index.");
+        }
+
+        private static void ExpectSpecialArmyLookupCacheRules()
+        {
+            string royalKey = SpecialArmyLookupCacheRules.BuildKey(7, AWArmyRole.RoyalGuard, -1);
+            string royalKeyWithCity = SpecialArmyLookupCacheRules.BuildKey(7, AWArmyRole.RoyalGuard, 88);
+            if (royalKey != royalKeyWithCity)
+                throw new Exception("Kingdom-wide special armies must ignore city ids in cache keys.");
+
+            string slaveA = SpecialArmyLookupCacheRules.BuildKey(7, AWArmyRole.SlaveArmy, 88);
+            string slaveB = SpecialArmyLookupCacheRules.BuildKey(7, AWArmyRole.SlaveArmy, 89);
+            if (slaveA == slaveB)
+                throw new Exception("City-scoped slave army cache keys must include the anchor city.");
+
+            if (!SpecialArmyLookupCacheRules.ShouldUseCachedArmy(
+                    pCachedArmyId: 12,
+                    pCachedArmyAlive: true,
+                    pRoleMatches: true,
+                    pKingdomMatches: true,
+                    pAnchorMatches: true))
+                throw new Exception("Valid special army cache entries should be used before global scans.");
+
+            if (SpecialArmyLookupCacheRules.ShouldUseCachedArmy(
+                    pCachedArmyId: 12,
+                    pCachedArmyAlive: true,
+                    pRoleMatches: true,
+                    pKingdomMatches: true,
+                    pAnchorMatches: false))
+                throw new Exception("Special army cache entries with stale anchors must be invalidated.");
         }
 
         private static void ExpectSlaveArmyFormationRules()
