@@ -92,6 +92,10 @@ namespace WarFabricationRuleTests
             ExpectClaimLikeCasusBelli(false, weakClaims: 0, explicitStrongClaims: 0, coreTargets: 0);
 
             ExpectDateParts(6, 3, 21, "6\u5e743\u670821\u65e5");
+            ExpectHistoryPeriodRules();
+            ExpectKingdomRenameRules();
+            ExpectAncestryOriginRules();
+            ExpectSlaveKingAbdicationRules();
 
             ExpectRestorationBlocked("no_hosted_claim",
                 pHasHostedClaim: false,
@@ -278,6 +282,7 @@ namespace WarFabricationRuleTests
             ExpectWarPlotProgressRedirectRules();
             ExpectWarTypeAssetRules();
             ExpectMetaWindowSafetyRules();
+            ExpectPathfindingSafetyRules();
             ExpectRestorationSettlementRules();
             ExpectWarGoalControlRules();
             ExpectSlaveArmyNameRefreshRule();
@@ -296,9 +301,14 @@ namespace WarFabricationRuleTests
             ExpectForeignOccupationDetectionRules();
             ExpectMandateSuccessionRules();
             ExpectMandateDeclarationOriginRules();
+            ExpectXiaizationEligibilityRules();
+            ExpectForeignPseudoLineageRules();
             ExpectMandatePowerRules();
             ExpectMandateStartRecordRules();
             ExpectMandateWarAiRules();
+            ExpectMandateConquestRules();
+            ExpectMandateBorderWallRules();
+            ExpectCapitalMoveRules();
             ExpectCollateralSuccessionFallbackRules();
             ExpectHeirRecallRules();
             ExpectLineageBranchRules();
@@ -321,6 +331,7 @@ namespace WarFabricationRuleTests
             ExpectXiaNameRepairRules();
             ExpectCityTechChronicleRules();
             ExpectCityMaintenanceBenchmarkRules();
+            ExpectUpdateAgeBenchmarkRules();
             ExpectDeathBondRules();
             ExpectXiaItemEffectRules();
             ExpectVisibleClanRenameRules();
@@ -1507,6 +1518,25 @@ namespace WarFabricationRuleTests
                 throw new Exception("Meta windows without a name input must skip the vanilla name input flow.");
         }
 
+        private static void ExpectPathfindingSafetyRules()
+        {
+            if (!PathfindingSafetyRules.ShouldConvertGlobalPathExceptionToNotFound(
+                    new NullReferenceException(),
+                    pHasStartTile: true,
+                    pHasTargetTile: true))
+                throw new Exception("RegionPathFinder null refs from disconnected region paths should become NotFound.");
+            if (PathfindingSafetyRules.ShouldConvertGlobalPathExceptionToNotFound(
+                    new InvalidOperationException(),
+                    pHasStartTile: true,
+                    pHasTargetTile: true))
+                throw new Exception("Pathfinding safety must not swallow unrelated exceptions.");
+            if (PathfindingSafetyRules.ShouldConvertGlobalPathExceptionToNotFound(
+                    new NullReferenceException(),
+                    pHasStartTile: false,
+                    pHasTargetTile: true))
+                throw new Exception("Pathfinding safety should not hide null input bugs.");
+        }
+
         private static void ExpectMandateMapMarkerRules()
         {
             if (!MandateMapMarkerRules.ShouldReplaceSpeciesIcon("moh_nameplate", pHasSpeciesImage: true))
@@ -1552,6 +1582,51 @@ namespace WarFabricationRuleTests
                 throw new Exception("Foreign pseudo-dynasties still need enough legal-core control after winning.");
         }
 
+        private static void ExpectXiaizationEligibilityRules()
+        {
+            if (!XiaizationEligibilityRules.CanUseMandateSystem(pIsXiaKingdom: true, pXiaizationLevel: 0))
+                throw new Exception("Xia kingdoms must keep normal Mandate access.");
+            if (!XiaizationEligibilityRules.CanUsePolicySystem(pIsXiaKingdom: true, pXiaizationLevel: 0))
+                throw new Exception("Xia kingdoms must keep normal policy access.");
+            if (XiaizationEligibilityRules.CanUseMandateSystem(pIsXiaKingdom: false, pXiaizationLevel: 0))
+                throw new Exception("Foreign kingdoms must not claim Mandate through ordinary peaceful/decision paths.");
+            if (XiaizationEligibilityRules.CanUsePolicySystem(pIsXiaKingdom: false, pXiaizationLevel: 0))
+                throw new Exception("Foreign kingdoms must not use AW3 policy by default before pseudo-dynasty Xiaization.");
+            if (!XiaizationEligibilityRules.CanUseMandateSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel))
+                throw new Exception("Foreign pseudo-dynasties should use Mandate maintenance after seizing Mandate.");
+            if (!XiaizationEligibilityRules.CanUsePolicySystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel))
+                throw new Exception("Foreign pseudo-dynasties should use AW3 policy/decision systems after Xiaization.");
+        }
+
+        private static void ExpectForeignPseudoLineageRules()
+        {
+            if (ForeignPseudoLineageRules.ExtractClanName("所罗巴伯 蒲察", "蒲察") != "蒲察")
+                throw new Exception("Foreign pseudo lineage must use the text after the name delimiter as clan name.");
+            if (ForeignPseudoLineageRules.ExtractClanName("阿骨打·完颜", "") != "完颜")
+                throw new Exception("Middle-dot foreign names should use the right side as clan name.");
+            if (ForeignPseudoLineageRules.ExtractGivenName("所罗巴伯 蒲察") != "所罗巴伯")
+                throw new Exception("Foreign pseudo lineage should keep the left side as given name.");
+            if (!ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
+                    pIsXiaActor: false,
+                    pKingdomIsForeignPseudoDynasty: true,
+                    pHasLineage: true))
+                throw new Exception("Foreign pseudo-dynasty officials with lineage must pass AW3 chronicle gates.");
+            if (ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
+                    pIsXiaActor: false,
+                    pKingdomIsForeignPseudoDynasty: false,
+                    pHasLineage: true))
+                throw new Exception("Ordinary foreign nobles must not be treated as AW3 Xia lineage actors.");
+            if (!ForeignPseudoLineageRules.ShouldIntegrateOfficial(
+                    pIsKing: false,
+                    pIsCityLeader: true,
+                    pIsArmyLeader: false))
+                throw new Exception("Foreign pseudo-dynasty city leaders should be integrated into the AW3 lineage system.");
+        }
+
         private static void ExpectMandatePowerRules()
         {
             float realmPower = MandatePowerRules.CalculateRealmPower(
@@ -1567,18 +1642,27 @@ namespace WarFabricationRuleTests
                 throw new Exception($"Mandate competition power must use own + vassals*0.6, got {power}.");
 
             if (!MandatePowerRules.HasRequiredLeadForMandate(
-                    pCandidatePower: 115f,
-                    pStrongestOtherPower: 100f))
-                throw new Exception("Mandate claimant should pass with a 15 percent lead over the second strongest realm.");
+                    pCandidatePower: 138f,
+                    pStrongestOtherPower: 100f,
+                    pWeakestOtherPower: 20f))
+                throw new Exception("Mandate claimant should pass only when above second-plus-weakest power by 15 percent.");
 
             if (MandatePowerRules.HasRequiredLeadForMandate(
-                    pCandidatePower: 114.99f,
-                    pStrongestOtherPower: 100f))
-                throw new Exception("Mandate claimant must be blocked when the lead is below 15 percent.");
+                    pCandidatePower: 137.99f,
+                    pStrongestOtherPower: 100f,
+                    pWeakestOtherPower: 20f))
+                throw new Exception("Mandate claimant must be blocked below the second-plus-weakest 15 percent threshold.");
+
+            if (MandatePowerRules.HasRequiredLeadForMandate(
+                    pCandidatePower: 116f,
+                    pStrongestOtherPower: 100f,
+                    pWeakestOtherPower: 20f))
+                throw new Exception("Mandate claimant must not pass with only the old 15 percent lead over the second strongest realm.");
 
             if (MandatePowerRules.HasRequiredLeadForMandate(
                     pCandidatePower: 90f,
-                    pStrongestOtherPower: 100f))
+                    pStrongestOtherPower: 100f,
+                    pWeakestOtherPower: 20f))
                 throw new Exception("Mandate claimant must be blocked when it is not the strongest realm.");
 
             if (MandatePowerRules.IsEligibleCompetitor(
@@ -1664,6 +1748,157 @@ namespace WarFabricationRuleTests
                 pMandateValue: 80);
             if (weakScore <= stableScore)
                 throw new Exception("AI take-Mandate score should rise when the Mandate value is weak.");
+        }
+
+        private static void ExpectMandateConquestRules()
+        {
+            if (!MandateConquestRules.CanUseMandateConquest(
+                    pAttackerIsCurrentMandate: true,
+                    pVassalBlocked: false,
+                    pSameAlliance: false,
+                    pAttackerSystemPower: 180f,
+                    pDefenderAlliancePower: 120f))
+                throw new Exception("A stronger Mandate realm should be able to use a penalty-free conquest CB.");
+            if (MandateConquestRules.CanUseMandateConquest(
+                    pAttackerIsCurrentMandate: false,
+                    pVassalBlocked: false,
+                    pSameAlliance: false,
+                    pAttackerSystemPower: 300f,
+                    pDefenderAlliancePower: 100f))
+                throw new Exception("Non-Mandate realms must not receive the Mandate conquest CB.");
+            if (MandateConquestRules.CanUseMandateConquest(
+                    pAttackerIsCurrentMandate: true,
+                    pVassalBlocked: false,
+                    pSameAlliance: true,
+                    pAttackerSystemPower: 300f,
+                    pDefenderAlliancePower: 100f))
+                throw new Exception("Mandate conquest should still respect alliance blocks.");
+            if (MandateConquestRules.CanUseMandateConquest(
+                    pAttackerIsCurrentMandate: true,
+                    pVassalBlocked: false,
+                    pSameAlliance: false,
+                    pAttackerSystemPower: 120f,
+                    pDefenderAlliancePower: 110f))
+                throw new Exception("Mandate conquest should consider the defender's alliance power.");
+            if (MandateConquestRules.ScoreMandateConquest(220f, 100f, pNeighbor: true) <=
+                MandateConquestRules.ScoreMandateConquest(150f, 100f, pNeighbor: false))
+                throw new Exception("Mandate conquest AI should strongly prefer weaker neighboring targets.");
+        }
+
+        private static void ExpectMandateBorderWallRules()
+        {
+            if (MandateBorderWallRules.PreferredWallTopTileId != "wall_order")
+                throw new Exception("Mandate border walls should use the vanilla Stone Wall top tile, not iron wall.");
+            if (MandateBorderWallRules.ShouldBuildWallAtOrderedIndex(8))
+                throw new Exception("Border wall builder should leave periodic gaps in long wall lines.");
+            if (!MandateBorderWallRules.ShouldBuildWallAtOrderedIndex(7) ||
+                !MandateBorderWallRules.ShouldBuildWallAtOrderedIndex(9))
+                throw new Exception("Border wall gaps should be narrow, not break the entire border line.");
+            if (MandateBorderWallRules.CompareWallTileOrder(3, 4, 2, 5) >= 0)
+                throw new Exception("Border wall candidates should be sorted into a stable continuous line order.");
+            if (!MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                    pNeighborHasCity: true,
+                    pNeighborGround: true,
+                    pNeighborLiquid: false,
+                    pNeighborLava: false,
+                    pNeighborBlock: false,
+                    pNeighborNeutral: false,
+                    pSameMandateSystem: false))
+                throw new Exception("Border walls should accept land tiles belonging to an outside realm.");
+            if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                    pNeighborHasCity: false,
+                    pNeighborGround: true,
+                    pNeighborLiquid: false,
+                    pNeighborLava: false,
+                    pNeighborBlock: false,
+                    pNeighborNeutral: false,
+                    pSameMandateSystem: false))
+                throw new Exception("Border walls must not treat empty wilderness as a realm border.");
+            if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                    pNeighborHasCity: true,
+                    pNeighborGround: false,
+                    pNeighborLiquid: true,
+                    pNeighborLava: false,
+                    pNeighborBlock: false,
+                    pNeighborNeutral: false,
+                    pSameMandateSystem: false))
+                throw new Exception("Border walls must not be built along sea or river edges.");
+            if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                    pNeighborHasCity: true,
+                    pNeighborGround: true,
+                    pNeighborLiquid: false,
+                    pNeighborLava: false,
+                    pNeighborBlock: false,
+                    pNeighborNeutral: false,
+                    pSameMandateSystem: true))
+                throw new Exception("Mandate vassal and own land borders should not receive border walls.");
+            if (!MandateBorderWallRules.IsWallBuildTileTerrainValid(
+                    pInsideCity: true,
+                    pGround: true,
+                    pLiquid: false,
+                    pLava: false,
+                    pBlock: false,
+                    pWall: false,
+                    pRoad: false,
+                    pHasTopTile: false,
+                    pHasBuilding: false))
+                throw new Exception("Border wall build tile should accept empty city land.");
+            if (MandateBorderWallRules.IsWallBuildTileTerrainValid(
+                    pInsideCity: true,
+                    pGround: true,
+                    pLiquid: false,
+                    pLava: false,
+                    pBlock: false,
+                    pWall: false,
+                    pRoad: true,
+                    pHasTopTile: false,
+                    pHasBuilding: false))
+                throw new Exception("Border walls should not overwrite city roads.");
+        }
+
+        private static void ExpectCapitalMoveRules()
+        {
+            if (CapitalMoveRules.CanConsiderCandidate(
+                    pCandidateAlive: true,
+                    pIsCurrentCapital: false,
+                    pIsCoreCity: false,
+                    pHasOwnNeighbor: true))
+                throw new Exception("Capital moves must only target core cities.");
+            if (CapitalMoveRules.CanConsiderCandidate(
+                    pCandidateAlive: true,
+                    pIsCurrentCapital: false,
+                    pIsCoreCity: true,
+                    pHasOwnNeighbor: false))
+                throw new Exception("Capital moves should prefer connected cities like AW2.");
+            if (!CapitalMoveRules.CanConsiderCandidate(
+                    pCandidateAlive: true,
+                    pIsCurrentCapital: false,
+                    pIsCoreCity: true,
+                    pHasOwnNeighbor: true))
+                throw new Exception("Alive connected core cities should be valid capital candidates.");
+
+            float current = CapitalMoveRules.ScoreCity(
+                pCityAge: 100,
+                pCurrentCapitalAge: 100,
+                pPopulation: 80,
+                pCurrentPopulation: 80,
+                pZones: 50,
+                pCurrentZones: 50,
+                pOwnNeighborCount: 1,
+                pCentralityScore: 0f);
+            float better = CapitalMoveRules.ScoreCity(
+                pCityAge: 120,
+                pCurrentCapitalAge: 100,
+                pPopulation: 160,
+                pCurrentPopulation: 80,
+                pZones: 90,
+                pCurrentZones: 50,
+                pOwnNeighborCount: 3,
+                pCentralityScore: 20f);
+            if (!CapitalMoveRules.ShouldMoveCapital(current, better))
+                throw new Exception("A clearly better connected core city should pass the AW2-style capital move threshold.");
+            if (CapitalMoveRules.ShouldMoveCapital(current, current + 5f))
+                throw new Exception("Tiny improvements should not trigger capital movement.");
         }
 
         private static void ExpectLineageArchiveIndexRules()
@@ -1819,6 +2054,14 @@ namespace WarFabricationRuleTests
                 throw new Exception("Royal guard candidate scan benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh"))
                 throw new Exception("Royal guard identity refresh benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh_captain"))
+                throw new Exception("Royal guard captain refresh detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh_batch"))
+                throw new Exception("Royal guard batch refresh detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh_persist"))
+                throw new Exception("Royal guard persist refresh detail benchmark entry is missing.");
+            if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_royal_guard_refresh_runtime"))
+                throw new Exception("Royal guard runtime refresh detail benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_slave_catchers_target_scan"))
                 throw new Exception("Slave catcher target scan benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_city_slave_army_name_scan"))
@@ -1839,6 +2082,33 @@ namespace WarFabricationRuleTests
                 throw new Exception("Royal guard candidate sort detail benchmark entry is missing.");
             if (!CityMaintenanceBenchmarkRules.Contains("aw3_death_bond_child_scan"))
                 throw new Exception("Death bond child scan benchmark entry is missing.");
+        }
+
+        private static void ExpectUpdateAgeBenchmarkRules()
+        {
+            string[] ids = UpdateAgeBenchmarkRules.EntryIds;
+            if (ids.Length < 18)
+                throw new Exception("UpdateAge benchmark needs actor, city, and kingdom component entries.");
+            if (UpdateAgeBenchmarkRules.ParentGroup != "update_age")
+                throw new Exception("AW3 updateAge total benchmark should appear under vanilla update_age.");
+            if (UpdateAgeBenchmarkRules.Total != "aw3_update_age_total")
+                throw new Exception("UpdateAge details should use the AW3 update-age parent entry.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_actor_update_age_retirement"))
+                throw new Exception("Actor retirement updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_actor_update_age_old_head"))
+                throw new Exception("Actor old-head updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_update_age_slave_food"))
+                throw new Exception("City slave-food updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_policy"))
+                throw new Exception("Kingdom policy updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_mandate"))
+                throw new Exception("Kingdom mandate updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_war_ai"))
+                throw new Exception("Kingdom war AI updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_vassal_ai"))
+                throw new Exception("Kingdom vassal AI updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_general"))
+                throw new Exception("Kingdom general updateAge benchmark entry is missing.");
         }
 
         private static void ExpectDeathBondRules()
@@ -2120,6 +2390,125 @@ namespace WarFabricationRuleTests
                     pLowestScore: 10f,
                     pCandidateScore: 9f))
                 throw new Exception("Bounded candidate pool should reject weak candidates after the limit.");
+            if (!RoyalGuardMaintenanceRules.ShouldStopCandidateScan(
+                    pScannedCount: 256,
+                    pMaxScan: 256))
+                throw new Exception("Royal guard candidate scans must have a hard per-pass cap.");
+            if (RoyalGuardMaintenanceRules.ShouldStopCandidateScan(
+                    pScannedCount: 255,
+                    pMaxScan: 256))
+                throw new Exception("Royal guard candidate scans should not stop before the hard cap.");
+            if (RoyalGuardMaintenanceRules.MaxFastPathGuardArmyScan(20, 4) != 40)
+                throw new Exception("Royal guard fast path should cap oversized army scans to twice the guard limit.");
+            if (!RoyalGuardMaintenanceRules.ShouldStopFastPathGuardArmyScan(
+                    pScanned: 40,
+                    pActiveCount: 3,
+                    pMaxActiveGuards: 20,
+                    pMaxScan: 40))
+                throw new Exception("Royal guard fast path must stop after the bounded scan cap.");
+            if (!RoyalGuardMaintenanceRules.ShouldStopFastPathGuardArmyScan(
+                    pScanned: 8,
+                    pActiveCount: 20,
+                    pMaxActiveGuards: 20,
+                    pMaxScan: 40))
+                throw new Exception("Royal guard fast path must stop after collecting the active guard cap.");
+            if (!RoyalGuardMaintenanceRules.HasGuardDataForKingdom(
+                    pGuardFlag: true,
+                    pGuardKingdomId: -1,
+                    pActorKingdomId: 9,
+                    pTargetKingdomId: 9))
+                throw new Exception("Legacy guard data without a kingdom id should be accepted only in the current kingdom.");
+            if (RoyalGuardMaintenanceRules.HasGuardDataForKingdom(
+                    pGuardFlag: false,
+                    pGuardKingdomId: -1,
+                    pActorKingdomId: 9,
+                    pTargetKingdomId: 9))
+                throw new Exception("Trait-only guards should not be treated as active in the fast path.");
+            if (!RoyalGuardMaintenanceRules.ShouldRemoveStaleActorFromGuardArmy(
+                    pHasGuardDataForKingdom: false,
+                    pActorArmyIsGuardArmy: true,
+                    pRemovedCount: 3,
+                    pRemovalLimit: 4))
+                throw new Exception("Fast path should remove a bounded number of stale non-guard actors from guard armies.");
+            if (RoyalGuardMaintenanceRules.ShouldRemoveStaleActorFromGuardArmy(
+                    pHasGuardDataForKingdom: false,
+                    pActorArmyIsGuardArmy: true,
+                    pRemovedCount: 4,
+                    pRemovalLimit: 4))
+                throw new Exception("Fast path stale cleanup must be bounded per maintenance pass.");
+            if (!RoyalGuardMaintenanceRules.ShouldKeepExistingCaptain(
+                    pExistingCaptainValid: true,
+                    pExistingCaptainNoble: true))
+                throw new Exception("Royal guard should keep a valid noble captain instead of reselecting every pass.");
+            if (RoyalGuardMaintenanceRules.ShouldKeepExistingCaptain(
+                    pExistingCaptainValid: true,
+                    pExistingCaptainNoble: false))
+                throw new Exception("Royal guard captain cannot be kept if the noble requirement is no longer met.");
+            if (RoyalGuardMaintenanceRules.ShouldKeepExistingCaptain(
+                    pExistingCaptainValid: false,
+                    pExistingCaptainNoble: true))
+                throw new Exception("Invalid royal guard captain must be replaced.");
+            if (RoyalGuardMaintenanceRules.ShouldDismissActiveGuardsForCaptainShortage(
+                    pActiveGuardCount: 12,
+                    pAvailableNobleCount: 0))
+                throw new Exception("Temporary royal guard captain shortages must not bulk-dismiss existing guards.");
+            if (!RoyalGuardMaintenanceRules.ShouldDeferGuardMaintenanceForCaptainShortage(
+                    pActiveGuardCount: 12,
+                    pAvailableNobleCount: 0))
+                throw new Exception("Royal guard maintenance should defer when existing guards cannot satisfy noble captain rules.");
+            if (RoyalGuardMaintenanceRules.ShouldDeferGuardMaintenanceForCaptainShortage(
+                    pActiveGuardCount: 0,
+                    pAvailableNobleCount: 0))
+                throw new Exception("An empty royal guard should not enter a no-op defer loop.");
+            if (RoyalGuardMaintenanceRules.ShouldDeferGuardMaintenanceForCaptainShortage(
+                    pActiveGuardCount: 12,
+                    pAvailableNobleCount: 1))
+                throw new Exception("Royal guard maintenance should continue when a noble candidate exists.");
+            if (!RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                    pIsCaptain: true,
+                    pIsNewlyAppointed: false,
+                    pActorIndex: 19,
+                    pCursor: 3,
+                    pBatchLimit: 4,
+                    pActiveCount: 20))
+                throw new Exception("Royal guard captain must always be refreshed.");
+            if (!RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                    pIsCaptain: false,
+                    pIsNewlyAppointed: true,
+                    pActorIndex: 19,
+                    pCursor: 3,
+                    pBatchLimit: 4,
+                    pActiveCount: 20))
+                throw new Exception("Newly appointed guards must be refreshed immediately.");
+            if (!RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                    pIsCaptain: false,
+                    pIsNewlyAppointed: false,
+                    pActorIndex: 5,
+                    pCursor: 3,
+                    pBatchLimit: 4,
+                    pActiveCount: 20))
+                throw new Exception("Royal guard refresh should include actors inside the cursor batch.");
+            if (RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                    pIsCaptain: false,
+                    pIsNewlyAppointed: false,
+                    pActorIndex: 8,
+                    pCursor: 3,
+                    pBatchLimit: 4,
+                    pActiveCount: 20))
+                throw new Exception("Royal guard refresh should skip stable actors outside the cursor batch.");
+            if (!RoyalGuardMaintenanceRules.ShouldRefreshGuardInMaintenancePass(
+                    pIsCaptain: false,
+                    pIsNewlyAppointed: false,
+                    pActorIndex: 1,
+                    pCursor: 18,
+                    pBatchLimit: 4,
+                    pActiveCount: 20))
+                throw new Exception("Royal guard refresh cursor should wrap around the active list.");
+            if (RoyalGuardMaintenanceRules.NextRefreshCursor(
+                    pCursor: 18,
+                    pActiveCount: 20,
+                    pBatchLimit: 4) != 2)
+                throw new Exception("Royal guard refresh cursor should advance and wrap.");
         }
 
         private static void ExpectAwArmyRoleRules()
@@ -2184,6 +2573,31 @@ namespace WarFabricationRuleTests
                     nonSlaveWarriors: 5,
                     hasNonSlaveCaptain: true))
                 throw new Exception("Slave armies must cap non-slave cadres at five including captain.");
+
+            if (!SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+                    pArmyExists: true,
+                    pTotalWarriors: 25,
+                    pSlaveWarriors: 20,
+                    pNonSlaveWarriors: 5,
+                    pCaptainValid: true))
+                throw new Exception("A full valid slave army should skip expensive fill scans.");
+            if (SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+                    pArmyExists: true,
+                    pTotalWarriors: 10,
+                    pSlaveWarriors: 8,
+                    pNonSlaveWarriors: 2,
+                    pCaptainValid: true))
+                throw new Exception("An underfilled slave army must still scan for reinforcements.");
+            if (SlaveArmyMaintenanceRules.ShouldDriveFrontline(
+                    pHasArmy: true,
+                    pHasEnemies: false,
+                    pOnSchedule: true))
+                throw new Exception("Slave army frontline driving must be skipped outside wars.");
+            if (!SlaveArmyMaintenanceRules.ShouldDriveFrontline(
+                    pHasArmy: true,
+                    pHasEnemies: true,
+                    pOnSchedule: true))
+                throw new Exception("Slave armies should still drive toward the front during scheduled wartime maintenance.");
         }
 
         private static void ExpectSlaveCaptureCommandRules()
@@ -2251,11 +2665,15 @@ namespace WarFabricationRuleTests
         {
             const float windowWidth = 480f;
             const float buttonWidth = 78f;
-            const float inset = 12f;
+            const float inset = 80f;
             float x = FamilyTreeToolbarLayoutRules.RightAlignedX(inset);
 
-            if (x >= 0)
-                throw new Exception("Right anchored family tree toolbar buttons must use a negative x inset.");
+            if (Math.Abs(x - 80f) > 0.01f)
+                throw new Exception($"Family tree clan rename toolbar x should be 80, got {x}.");
+            if (Math.Abs(FamilyTreeToolbarLayoutRules.RightAlignedX(12f) - 12f) > 0.01f)
+                throw new Exception("Family tree toolbar x should use the provided positive offset.");
+            if (Math.Abs(FamilyTreeToolbarLayoutRules.RightAlignedX(-80f) - 80f) > 0.01f)
+                throw new Exception("Family tree toolbar x should normalize negative offsets to positive offsets.");
             if (!FamilyTreeToolbarLayoutRules.StaysInsideRightEdge(windowWidth, buttonWidth, x))
                 throw new Exception("Family tree toolbar buttons must stay inside the window right edge.");
         }
@@ -2403,13 +2821,66 @@ namespace WarFabricationRuleTests
         {
             string richTarget = "<color=#88ff88>\u8d8a</color>";
             string label = WarDecisionTargetTextRules.BuildRowLabel(richTarget, "\u6536\u590d\u6838\u5fc3");
-            if (label != "<color=#88ff88>\u8d8a</color> \u8def \u6536\u590d\u6838\u5fc3")
+            if (label != "<color=#88ff88>\u8d8a</color>\uff1a\u6536\u590d\u6838\u5fc3")
                 throw new Exception($"Unexpected war target row label: '{label}'.");
 
             string stats = WarDecisionTargetTextRules.BuildStatsLine(2, 3, 1, 4,
                 "<color=#ffaa00>\u4f1a\u7a3d</color>");
-            if (stats != "\u68382 \u5f3a3 \u5f311 \u90204 \u8def <color=#ffaa00>\u4f1a\u7a3d</color>")
+            if (stats != "\u68382 \u5f3a3 \u5f311 \u90204 \u76ee\u6807\uff1a<color=#ffaa00>\u4f1a\u7a3d</color>")
                 throw new Exception($"Unexpected war target stats line: '{stats}'.");
+        }
+
+        private static void ExpectHistoryPeriodRules()
+        {
+            if (HistoryPeriodRules.NormalizeEndTime(121.0, 2.0) != -1.0)
+                throw new Exception("City history periods must not end before they start.");
+            if (HistoryPeriodRules.NormalizeEndTime(121.0, -1.0) != -1.0)
+                throw new Exception("Open city history periods should stay open.");
+            if (Math.Abs(HistoryPeriodRules.NormalizeEndTime(121.0, 130.0) - 130.0) > 0.001)
+                throw new Exception("Valid city history end time should be preserved.");
+            if (!HistoryPeriodRules.ShouldKeepPeriod(121.0, 121.0, pEventCount: 1))
+                throw new Exception("A same-day city history period with events should be kept.");
+            if (HistoryPeriodRules.ShouldKeepPeriod(121.0, 2.0, pEventCount: 0))
+                throw new Exception("Empty inverted city history periods should be dropped.");
+        }
+
+        private static void ExpectKingdomRenameRules()
+        {
+            if (!KingdomRenameRules.ShouldRecordRename("Tang", "Zhou", pTrack: true,
+                    pArchivable: true, pSuppressed: false))
+                throw new Exception("Manual tracked kingdom rename should be recorded.");
+            if (KingdomRenameRules.ShouldRecordRename("Tang", "Tang", pTrack: true,
+                    pArchivable: true, pSuppressed: false))
+                throw new Exception("Unchanged kingdom names must not be recorded.");
+            if (KingdomRenameRules.ShouldRecordRename("Tang", "Zhou", pTrack: false,
+                    pArchivable: true, pSuppressed: false))
+                throw new Exception("Untracked/system kingdom rename must not be recorded.");
+            if (KingdomRenameRules.ShouldRecordRename("Tang", "Zhou", pTrack: true,
+                    pArchivable: true, pSuppressed: true))
+                throw new Exception("Suppressed kingdom rename must not be recorded.");
+        }
+
+        private static void ExpectAncestryOriginRules()
+        {
+            if (AncestryOriginRules.SelectLineageCity("Live", "Branch", "Root") != "Root")
+                throw new Exception("Noble ancestry should prefer root lineage origin city.");
+            if (AncestryOriginRules.SelectLineageCity("Live", "Branch", "") != "Branch")
+                throw new Exception("Noble ancestry should fall back to branch origin city.");
+            if (AncestryOriginRules.SelectLineageCity("Live", "", "") != "Live")
+                throw new Exception("Noble ancestry should fall back to live/archive city.");
+        }
+
+        private static void ExpectSlaveKingAbdicationRules()
+        {
+            if (!SlaveKingAbdicationRules.ShouldForceAbdicate(
+                    pIsKing: true, pWasSlave: false, pIsSlaveNow: true, pHasKingdom: true))
+                throw new Exception("A newly enslaved king must abdicate.");
+            if (SlaveKingAbdicationRules.ShouldForceAbdicate(
+                    pIsKing: false, pWasSlave: false, pIsSlaveNow: true, pHasKingdom: true))
+                throw new Exception("Only kings should use forced abdication.");
+            if (!SlaveKingAbdicationRules.ShouldForceAbdicate(
+                    pIsKing: true, pWasSlave: true, pIsSlaveNow: true, pHasKingdom: true))
+                throw new Exception("An existing slave king must still abdicate while he holds the throne.");
         }
     }
 }

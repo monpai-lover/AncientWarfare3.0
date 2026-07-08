@@ -9,6 +9,7 @@ namespace CityMaintenanceRuleTests
         {
             ExpectStaggeredCityMaintenance();
             ExpectRetirementCheapGate();
+            ExpectCityRetirementScanGate();
             ExpectOldHeadRefreshGate();
             ExpectSlaveArmyMaintenanceGate();
             ExpectArmyAiSafetyGate();
@@ -82,6 +83,24 @@ namespace CityMaintenanceRuleTests
                     lifespan: 0f,
                     retirementAgeRatio: 0.7f))
                 throw new Exception("Invalid lifespan should skip expensive retirement checks.");
+        }
+
+        private static void ExpectCityRetirementScanGate()
+        {
+            if (SoldierRetirementRules.ShouldRunCityRetirementScan(
+                    pActorUpdateAgeRetirementEnabled: true,
+                    pMaintenanceDue: true))
+                throw new Exception("City retirement scans should be disabled when actor updateAge retirement is active.");
+
+            if (SoldierRetirementRules.ShouldRunCityRetirementScan(
+                    pActorUpdateAgeRetirementEnabled: true,
+                    pMaintenanceDue: false))
+                throw new Exception("City retirement scans should not run before their maintenance gate.");
+
+            if (!SoldierRetirementRules.ShouldRunCityRetirementScan(
+                    pActorUpdateAgeRetirementEnabled: false,
+                    pMaintenanceDue: true))
+                throw new Exception("City retirement scan fallback should remain available if actor updateAge retirement is disabled.");
         }
 
         private static void ExpectOldHeadRefreshGate()
