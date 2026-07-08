@@ -72,6 +72,10 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_SINCE = "aw_slave_since";
         public const string SLAVE_REASON = "aw_slave_reason";
         public const string SLAVE_CAPTURED_BY = "aw_slave_captured_by";
+        public const string CAPTURED_RULER_KINGDOM_ID = "aw_captured_ruler_kingdom_id";
+        public const string CAPTURED_RULER_KINGDOM_NAME = "aw_captured_ruler_kingdom_name";
+        public const string CAPTURED_RULER_KINGDOM_COLOR = "aw_captured_ruler_kingdom_color";
+        public const string CAPTURED_RULER_TITLE = "aw_captured_ruler_title";
         public const string SLAVE_SOLDIER = "aw_slave_soldier";
         public const string SOLDIER_SERVICE_START_TIME = "aw_soldier_service_start_time";
         public const string SLAVE_MERIT = "aw_slave_merit";

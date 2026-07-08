@@ -4,6 +4,17 @@ namespace AncientWarfare3.core.lineage
 {
     public static class FamilyTreeRelationRules
     {
+        public static bool ShouldBuildLiveLineageNode(bool isAlive, bool isXia, bool usesAwLineageSystem)
+        {
+            return isAlive && (isXia || usesAwLineageSystem);
+        }
+
+        public static bool ShouldUseReverseLiveParentLookup(int currentParentCount, bool hasLiveChild,
+            bool requestedByUi)
+        {
+            return requestedByUi && hasLiveChild && currentParentCount < 2;
+        }
+
         public static List<long> MergeRelationIds(params IEnumerable<long>[] pSources)
         {
             var result = new List<long>();

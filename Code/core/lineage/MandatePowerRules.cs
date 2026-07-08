@@ -4,19 +4,22 @@ namespace AncientWarfare3.core.lineage
     {
         public const float VassalPowerWeight = 0.6f;
         public const float CityPower = 100f;
+        public const float TerritoryZonePower = 1.5f;
         public const float KingStewardshipPower = 10f;
         public const float RequiredMandateLeadRatio = 1.15f;
 
         public static float CalculateRealmPower(float pPopulation, int pCityCount, float pArmyPower,
-            float pKingStewardship)
+            float pKingStewardship, int pTerritoryZones = 0)
         {
             if (pPopulation < 0f) pPopulation = 0f;
             if (pCityCount < 0) pCityCount = 0;
             if (pArmyPower < 0f) pArmyPower = 0f;
             if (pKingStewardship < 0f) pKingStewardship = 0f;
+            if (pTerritoryZones < 0) pTerritoryZones = 0;
 
             return pPopulation +
                    pCityCount * CityPower +
+                   pTerritoryZones * TerritoryZonePower +
                    pArmyPower +
                    pKingStewardship * KingStewardshipPower;
         }

@@ -870,7 +870,7 @@ namespace AncientWarfare3.core.lineage
 
             // 父母:用 FamilyEdge 反查(child=center 的 parent),活人优先 actor,死人查档案。
             //   BuildNode 失败(父母非 Xia / 无档案)时补**占位节点**,保证上溯链不断(用户报"往上查不到父母")。
-            foreach (var pid in GetParentIds(pCenterActorId))
+            foreach (var pid in GetParentIds(pCenterActorId, pUseReverseLiveLookup: true))
             {
                 var pn = BuildNode(pid) ?? BuildPlaceholderNode(pid);
                 if (pn != null) center.parents.Add(pn);
@@ -886,7 +886,7 @@ namespace AncientWarfare3.core.lineage
             return center;
         }
 
-        public static List<long> GetParentIds(long pChildId)
+        public static List<long> GetParentIds(long pChildId, bool pUseReverseLiveLookup = false)
         {
             var edgeIds = new List<long>();
             var archiveIds = new List<long>();
@@ -926,7 +926,16 @@ namespace AncientWarfare3.core.lineage
                 liveIds.Add(live.data.parent_id_2);
             }
 
-            return FamilyTreeRelationRules.MergeRelationIds(edgeIds, archiveIds, liveIds);
+            var merged = FamilyTreeRelationRules.MergeRelationIds(edgeIds, archiveIds, liveIds);
+            if (!FamilyTreeRelationRules.ShouldUseReverseLiveParentLookup(
+                    merged.Count,
+                    live?.data != null && !live.isRekt(),
+                    pUseReverseLiveLookup))
+                return merged;
+
+            var reverseIds = new List<long>();
+            AddLiveParentsByChildList(pChildId, reverseIds, merged);
+            return FamilyTreeRelationRules.MergeRelationIds(merged, reverseIds);
         }
 
         public static List<long> GetChildIds(long pParentId)
@@ -989,6 +998,44 @@ namespace AncientWarfare3.core.lineage
                 if (unit?.data == null || unit.isRekt()) continue;
                 if (unit.data.parent_id_1 == pParentId || unit.data.parent_id_2 == pParentId)
                     pTarget.Add(unit.data.id);
+            }
+        }
+
+        private static void AddLiveParentsByChildList(long pChildId, List<long> pTarget,
+            IEnumerable<long> pKnownParents)
+        {
+            if (pChildId < 0 || pTarget == null) return;
+            var units = World.world?.units;
+            if (units == null) return;
+
+            var known = new HashSet<long>();
+            if (pKnownParents != null)
+            {
+                foreach (long id in pKnownParents)
+                    if (id >= 0) known.Add(id);
+            }
+
+            foreach (Actor possibleParent in units)
+            {
+                if (possibleParent?.data == null || possibleParent.isRekt()) continue;
+                long parentId = possibleParent.data.id;
+                if (parentId < 0 || parentId == pChildId || known.Contains(parentId)) continue;
+
+                bool matched = false;
+                try
+                {
+                    foreach (Actor child in possibleParent.getChildren(pOnlyCurrentFamily: false))
+                    {
+                        if (child?.data == null || child.data.id != pChildId) continue;
+                        matched = true;
+                        break;
+                    }
+                }
+                catch { }
+
+                if (!matched || !known.Add(parentId)) continue;
+                pTarget.Add(parentId);
+                if (known.Count >= 2) return;
             }
         }
 
@@ -1108,7 +1155,10 @@ namespace AncientWarfare3.core.lineage
             var live = World.world?.units?.get(pId);
             var row = LineageArchiveReader.ReadRow(pId);
             bool archiveDead = IsArchivedDead(row);
-            if (!archiveDead && IsAliveActor(live) && LineageService.IsXia(live))
+            if (!archiveDead && FamilyTreeRelationRules.ShouldBuildLiveLineageNode(
+                    IsAliveActor(live),
+                    LineageService.IsXia(live),
+                    LineageService.UsesAwLineageSystem(live)))
             {
                 live.data.get("display_name", out string disp, "");
                 live.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);

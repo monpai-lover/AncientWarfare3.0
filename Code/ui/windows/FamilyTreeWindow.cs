@@ -561,7 +561,7 @@ namespace AncientWarfare3.ui.windows
                 var view = AcquireNode();
                 long pid = pData.id;
                 // 父母节点:点击 → 以父母为中心重开小树(继续上溯);本身再带 ▲(若其还有父母)。
-                System.Action onUp = LineageQuery.GetParentIds(pid).Count > 0
+                System.Action onUp = LineageQuery.GetParentIds(pid, pUseReverseLiveLookup: true).Count > 0
                     ? (System.Action)(() => OpenFamilyTree(pid, _backShiId)) : null;
                 view.Bind(pData, (_) => OpenFamilyTree(pid, _backShiId),
                     null, false, false, onUp, null);
@@ -641,7 +641,7 @@ namespace AncientWarfare3.ui.windows
             var seen = new HashSet<long>();
             var centerFatherIds = CollectParentIdsBySex(pCenter, 0);
             var centerMotherIds = CollectParentIdsBySex(pCenter, 1);
-            foreach (long parentId in LineageQuery.GetParentIds(pCenter.id))
+            foreach (long parentId in LineageQuery.GetParentIds(pCenter.id, pUseReverseLiveLookup: true))
             {
                 foreach (long childId in GetChildIdsCached(parentId))
                 {

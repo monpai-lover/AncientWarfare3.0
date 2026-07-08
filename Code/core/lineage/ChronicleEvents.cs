@@ -380,6 +380,35 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pActor));
         }
 
+        public static void OnCapturedRulerEnslaved(Actor pActor, string pReason, Kingdom pFormerKingdom,
+            Kingdom pCaptorKingdom, City pCaptorCity, Actor pCaptor)
+        {
+            if (pActor?.data == null || pFormerKingdom?.data == null) return;
+            string name = pActor.getName();
+            string reason = SlaveService.ReasonLabel(pReason);
+            HistoryText captor = pCaptorKingdom?.data != null
+                ? HistoryText.Kingdom(pCaptorKingdom)
+                : HistoryText.PlainText("\u654c\u56fd");
+            HistoryText text = HistoryText.Actor(pActor, name) +
+                               HistoryText.PlainText("\u4ee5") +
+                               HistoryText.Kingdom(pFormerKingdom) +
+                               HistoryText.PlainText("\u541b\u4e3b\u4e4b\u8eab\u88ab") +
+                               captor +
+                               HistoryText.PlainText("\u4fd8\u83b7\uff0c\u6ca6\u4e3a\u5974\u96b6\uff08" +
+                                                     reason + "\uff09");
+            if (pCaptor?.data != null)
+                text += HistoryText.PlainText("\uff0c\u4fd8\u83b7\u8005 ") + HistoryText.Actor(pCaptor);
+            if (pCaptorCity?.data != null)
+                text += HistoryText.PlainText("\uff0c\u5b89\u7f6e\u4e8e") +
+                        HistoryText.City(pCaptorCity, pCaptorKingdom);
+
+            HistoryWriter.RecordKingdom(pFormerKingdom, KingdomEvent.ENSLAVED, text,
+                HistoryTarget.Actor(pActor));
+            HistoryWriter.RecordPerson(pActor.data.id, pFormerKingdom, name,
+                PersonEvent.ENSLAVED, text, ChronicleCategory.HONOR,
+                HistoryTarget.Kingdom(pFormerKingdom));
+        }
+
         public static void OnFreedSlave(Actor pActor, string pReason, Kingdom pKingdom, City pCity)
         {
             if (pActor?.data == null) return;

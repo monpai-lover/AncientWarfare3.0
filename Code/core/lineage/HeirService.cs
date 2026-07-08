@@ -487,6 +487,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor.isRekt() || !pActor.isAlive()) return false;
             if (pActor.isKing()) return false;
             if (pActor.hasTrait("madness")) return false;
+            if (SlaveService.IsSlave(pActor)) return false;
             if (pRequireAdult && !pActor.isAdult()) return false;
             if (!pRequireAdult && pActor.isAdult()) return false;
 
@@ -680,13 +681,14 @@ namespace AncientWarfare3.core.lineage
         /// <summary>缁ф壙浜鸿祫鏍?娲荤潃鈭ч潪鐜颁换鐜嬧埀鎴愬勾鈭ч潪鐤媯銆?/summary>
         private static bool IsSuitableHeir(Actor pActor, Actor pKing)
         {
-            if (pActor == null || pActor.isRekt()) return false;
-            if (pActor == pKing) return false;
-            if (!pActor.isSexMale()) return false;
-            if (pActor.isKing()) return false;
-            if (!pActor.isAdult()) return false;
-            if (pActor.hasTrait("madness")) return false;
-            return true;
+            return HeirCandidateRules.IsBasicMaleSuccessionEligible(
+                isAlive: pActor != null && !pActor.isRekt() && pActor.isAlive(),
+                sameAsCurrentKing: pActor == pKing,
+                isMale: pActor?.data != null && pActor.isSexMale(),
+                isCurrentKing: pActor?.data != null && pActor.isKing(),
+                isAdult: pActor?.data != null && pActor.isAdult(),
+                hasMadness: pActor?.data != null && pActor.hasTrait("madness"),
+                isSlave: pActor?.data != null && SlaveService.IsSlave(pActor));
         }
 
         private static bool HasLineage(Actor pActor)
@@ -710,6 +712,7 @@ namespace AncientWarfare3.core.lineage
             if (!pActor.isSexMale()) return false;
             if (pActor.isKing() || pActor == pKing) return false;
             if (pActor.hasTrait("madness")) return false;
+            if (SlaveService.IsSlave(pActor)) return false;
 
             bool direct = pKing != null && IsDirectChildOf(pActor, pKing);
             if (pActor.isAdult())
@@ -732,13 +735,14 @@ namespace AncientWarfare3.core.lineage
         private static bool IsUnderageDirectSonFallback(Actor pActor, Actor pKing, bool pHasAdultDirectSon)
         {
             if (pActor == null || pActor.isRekt() || pActor.isAdult()) return false;
-            if (pActor.hasTrait("madness")) return false;
-            return MandateSuccessionRules.CanUseUnderageDirectSonFallback(
-                IsDirectChildOf(pActor, pKing),
-                pActor.isSexMale(),
-                !pActor.isRekt(),
-                pActor.isKing() || pActor == pKing,
-                pHasAdultDirectSon);
+            return HeirCandidateRules.IsUnderageDirectSonEligible(
+                isDirectSon: IsDirectChildOf(pActor, pKing),
+                isMale: pActor.isSexMale(),
+                isAlive: pActor.isAlive(),
+                isCurrentKing: pActor.isKing() || pActor == pKing,
+                hasAdultDirectSon: pHasAdultDirectSon,
+                hasMadness: pActor.hasTrait("madness"),
+                isSlave: SlaveService.IsSlave(pActor));
         }
     }
 }

@@ -248,6 +248,10 @@ namespace AncientWarfare3.core.lineage
             City city = captor.city ?? captorKingdom.capital;
             if (city?.data == null) return false;
 
+            bool nationalRecord = IsImportantCaptureTarget(pTarget);
+            bool wasKingBeforeRelocation = SafeIsKing(pTarget);
+            Kingdom formerRulerKingdom = wasKingBeforeRelocation ? targetKingdom : null;
+
             pTarget.cancelAllBeh();
             pTarget.clearAttackTarget();
             pTarget.beh_actor_target = null;
@@ -258,9 +262,10 @@ namespace AncientWarfare3.core.lineage
             pTarget.joinCity(city);
             pTarget.setHealth(Math.Max(1, pTarget.getMaxHealthPercent(0.2f)));
 
-            bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool changed = Enslave(pTarget, "battlefield_capture", captor, city, captorKingdom,
-                pForceRecord: true, pForceNationalRecord: nationalRecord);
+                pForceRecord: true, pForceNationalRecord: nationalRecord,
+                pFormerRulerKingdom: formerRulerKingdom,
+                pWasKingBeforeRelocation: wasKingBeforeRelocation);
             if (!changed) return false;
 
             QueueWarSlaveCaptureSummary(captorKingdom, city, 1);
@@ -273,13 +278,17 @@ namespace AncientWarfare3.core.lineage
             if (!CanCaptureTarget(pCatcher, pTarget)) return false;
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
+            bool wasKingBeforeRelocation = SafeIsKing(pTarget);
+            Kingdom formerRulerKingdom = wasKingBeforeRelocation ? pTarget.kingdom : null;
             City city = pCatcher.city ?? pCatcher.kingdom?.capital;
             Kingdom kingdom = pCatcher.kingdom ?? city?.kingdom;
             if (city?.data == null || kingdom?.data == null) return false;
 
             pTarget.joinCity(city);
             bool changed = Enslave(pTarget, "captured", pCatcher, city, kingdom, pForceRecord: true,
-                pForceNationalRecord: nationalRecord);
+                pForceNationalRecord: nationalRecord,
+                pFormerRulerKingdom: formerRulerKingdom,
+                pWasKingBeforeRelocation: wasKingBeforeRelocation);
             if (changed)
                 QueueWarSlaveCaptureSummary(kingdom, city, 1);
             CheckCitySlaveLabor(city);
@@ -288,24 +297,40 @@ namespace AncientWarfare3.core.lineage
 
         public static bool Enslave(Actor pActor, string pReason, Actor pCaptor = null,
             City pContextCity = null, Kingdom pContextKingdom = null, bool pForceRecord = false,
-            bool pForceNationalRecord = false)
+            bool pForceNationalRecord = false, Kingdom pFormerRulerKingdom = null,
+            bool pWasKingBeforeRelocation = false)
         {
             Kingdom contextKingdom = pContextKingdom ?? pActor?.kingdom ?? pContextCity?.kingdom;
             if (!IsSlaveryEnabled(contextKingdom)) return false;
             if (!CanBeEnslaved(pActor, pForceNationalRecord)) return false;
 
             bool wasSlave = IsSlave(pActor);
-            bool wasKing = SafeIsKing(pActor);
-            Kingdom formerKingdom = wasKing ? pActor.kingdom : null;
+            bool liveWasKing = SafeIsKing(pActor);
+            bool wasKing = pWasKingBeforeRelocation || liveWasKing;
+            Kingdom formerKingdom = pFormerRulerKingdom ?? (liveWasKing ? pActor.kingdom : null);
+            bool preserveCapturedRuler = CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
+                wasKing,
+                formerKingdom?.id ?? -1L,
+                contextKingdom?.id ?? -1L);
+            if (!preserveCapturedRuler && !liveWasKing)
+                formerKingdom = null;
             ApplySlaveIdentity(pActor, pReason, pCaptor);
+            if (preserveCapturedRuler)
+                RememberCapturedRulerContext(pActor, formerKingdom);
             UpsertSlaveState(pActor, pActive: true, pContextCity, pContextKingdom);
 
             if (!wasSlave || pForceRecord)
                 ChronicleEvents.OnEnslaved(pActor, pReason, pContextKingdom ?? pActor.kingdom,
                     pContextCity ?? pActor.city, pForceNationalRecord);
 
-            SlaveKingAbdicationService.TryForceAbdicate(pActor, pReason, wasKing, wasSlave,
+            if (preserveCapturedRuler)
+                ChronicleEvents.OnCapturedRulerEnslaved(pActor, pReason, formerKingdom,
+                    contextKingdom ?? pActor.kingdom, pContextCity ?? pActor.city, pCaptor);
+
+            bool abdicated = SlaveKingAbdicationService.TryForceAbdicate(pActor, pReason, wasKing, wasSlave,
                 formerKingdom ?? contextKingdom);
+            if (!abdicated && preserveCapturedRuler)
+                CloseCapturedRulerOpenReign(pActor, formerKingdom);
 
             CheckCitySlaveLabor(pContextCity ?? pActor.city);
             return !wasSlave || pForceRecord;
@@ -1023,6 +1048,23 @@ namespace AncientWarfare3.core.lineage
             LineageService.ApplyDisplayName(pActor);
             LineageService.ArchiveActor(pActor, pAlive: true);
             pActor.clearGraphicsFully();
+        }
+
+        private static void RememberCapturedRulerContext(Actor pActor, Kingdom pFormerKingdom)
+        {
+            if (pActor?.data == null || pFormerKingdom?.data == null) return;
+            pActor.data.set(LineageKeys.CAPTURED_RULER_KINGDOM_ID, pFormerKingdom.id);
+            pActor.data.set(LineageKeys.CAPTURED_RULER_KINGDOM_NAME, pFormerKingdom.name ?? "");
+            pActor.data.set(LineageKeys.CAPTURED_RULER_KINGDOM_COLOR, HistoryColors.FromKingdom(pFormerKingdom));
+            pActor.data.set(LineageKeys.CAPTURED_RULER_TITLE, (int)KingdomTitleService.GetTitle(pFormerKingdom));
+        }
+
+        private static void CloseCapturedRulerOpenReign(Actor pActor, Kingdom pFormerKingdom)
+        {
+            if (pActor?.data == null || pFormerKingdom?.data == null) return;
+            ReignRecordWriter.ReignInfo open = ReignRecordWriter.ReadOpenReignInfo(pFormerKingdom.id);
+            if (!open.IsValid || open.KingActorId != pActor.data.id) return;
+            ReignRecordWriter.CloseOpenReign(pFormerKingdom, "captured_slave", pActor);
         }
 
         private static void BreakInvalidLover(Actor pActor)

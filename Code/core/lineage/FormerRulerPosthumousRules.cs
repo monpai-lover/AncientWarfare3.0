@@ -6,5 +6,11 @@ namespace AncientWarfare3.core.lineage
         {
             return !isCurrentKing && hasUntitledClosedReign;
         }
+
+        public static bool ShouldTryPosthumousOnDeath(bool isCurrentKing, bool hasUntitledClosedReign,
+            bool hasCapturedRulerSnapshot)
+        {
+            return !isCurrentKing && (hasUntitledClosedReign || hasCapturedRulerSnapshot);
+        }
     }
 }

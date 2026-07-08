@@ -104,27 +104,64 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null || pNewKingdom?.data == null || !Ready) return;
             try
             {
-                foreach (War war in pNewKingdom.getWars())
-                {
-                    if (war?.data == null || war.hasEnded()) continue;
-                    foreach (GoalRow goal in ReadOpenGoals(war.data.id))
-                    {
-                        if (goal.target_city_id != pCity.data.id && goal.target_city_id != pCity.id) continue;
-                        Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ?? war.getMainAttacker();
-                        bool controlledByAttackerSystem = IsControlledByAttackerSystem(pNewKingdom, attacker);
-                        if (!WarGoalControlRules.ShouldResolveControlledCityGoal(goal.goal_type,
-                                controlledByAttackerSystem))
-                            continue;
-
-                        World.world?.wars?.endWar(war, WarWinner.Attackers);
+                foreach (War war in GetCandidateWarsForTransferredCity(pCity, pNewKingdom))
+                    if (TryResolveTransferredCityGoal(pCity, pNewKingdom, war))
                         return;
-                    }
-                }
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("WarTerritoryService.OnCityTransferred failed: " + e.Message);
             }
+        }
+
+        private static List<War> GetCandidateWarsForTransferredCity(City pCity, Kingdom pNewKingdom)
+        {
+            var result = new List<War>();
+            var seen = new HashSet<long>();
+
+            try
+            {
+                foreach (War war in pNewKingdom.getWars())
+                    AddCandidateWar(result, seen, war);
+            }
+            catch { }
+
+            foreach (long warId in ReadOpenGoalWarIdsForCity(pCity?.data?.id ?? -1L, pCity?.id ?? -1L))
+            {
+                War war = null;
+                try { war = World.world?.wars?.get(warId); }
+                catch { }
+                AddCandidateWar(result, seen, war);
+            }
+
+            return result;
+        }
+
+        private static void AddCandidateWar(List<War> pResult, HashSet<long> pSeen, War pWar)
+        {
+            if (pWar?.data == null || pWar.hasEnded()) return;
+            if (!pSeen.Add(pWar.data.id)) return;
+            pResult.Add(pWar);
+        }
+
+        private static bool TryResolveTransferredCityGoal(City pCity, Kingdom pNewKingdom, War pWar)
+        {
+            if (pCity?.data == null || pNewKingdom?.data == null || pWar?.data == null || pWar.hasEnded()) return false;
+
+            foreach (GoalRow goal in ReadOpenGoals(pWar.data.id))
+            {
+                bool targetCityMatches = goal.target_city_id == pCity.data.id || goal.target_city_id == pCity.id;
+                Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ?? pWar.getMainAttacker();
+                bool newOwnerIsWarAttacker = IsOnAttackerSideOrSystem(pWar, pNewKingdom, attacker);
+                if (!WarGoalControlRules.ShouldResolveTransferredCityGoal(goal.goal_type, targetCityMatches,
+                        newOwnerIsWarAttacker))
+                    continue;
+
+                World.world?.wars?.endWar(pWar, WarWinner.Attackers);
+                return true;
+            }
+
+            return false;
         }
 
         public static long EnsureCore(Kingdom pKingdom, City pCity, string pSourceType, string pSourceLabel)
@@ -1167,6 +1204,17 @@ namespace AncientWarfare3.core.lineage
 
         private static bool UsePeaceSettlementResolver() => true;
 
+        private static bool IsOnAttackerSideOrSystem(War pWar, Kingdom pOwner, Kingdom pAttacker)
+        {
+            if (pOwner?.data == null) return false;
+            try
+            {
+                if (pWar != null && pWar.isAttacker(pOwner)) return true;
+            }
+            catch { }
+            return IsControlledByAttackerSystem(pOwner, pAttacker);
+        }
+
         private static bool IsControlledByAttackerSystem(Kingdom pOwner, Kingdom pAttacker)
         {
             if (pOwner?.data == null || pAttacker?.data == null) return false;
@@ -1808,6 +1856,31 @@ namespace AncientWarfare3.core.lineage
                         source_core_id = reader.GetInt64(9),
                         claimant_actor_id = reader.GetInt64(10)
                     });
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static List<long> ReadOpenGoalWarIdsForCity(long pCityDataId, long pCityObjectId)
+        {
+            var result = new List<long>();
+            if (!Ready || pCityDataId < 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = $"SELECT DISTINCT WAR_ID FROM {WarGoalTableItem.GetTableName()} " +
+                                  "WHERE RESOLVED=0 AND (TARGET_CITY_ID=@data_id OR TARGET_CITY_ID=@object_id) " +
+                                  "AND (GOAL_TYPE=@core_goal OR GOAL_TYPE=@claim_goal)";
+                cmd.Parameters.AddWithValue("@data_id", pCityDataId);
+                cmd.Parameters.AddWithValue("@object_id", pCityObjectId);
+                cmd.Parameters.AddWithValue("@core_goal", GOAL_TAKE_CORE_CITY);
+                cmd.Parameters.AddWithValue("@claim_goal", GOAL_PRESS_CLAIM_CITY);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long warId = reader.GetInt64(0);
+                    if (!result.Contains(warId)) result.Add(warId);
                 }
             }
             catch { }

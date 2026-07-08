@@ -1487,6 +1487,36 @@ namespace WarFabricationRuleTests
                     hasShi: true))
                 throw new Exception("Fallback heirs with complete AW3 lineage should be eligible.");
 
+            if (HeirCandidateRules.IsBasicMaleSuccessionEligible(
+                    isAlive: true,
+                    sameAsCurrentKing: false,
+                    isMale: true,
+                    isCurrentKing: false,
+                    isAdult: true,
+                    hasMadness: false,
+                    isSlave: true))
+                throw new Exception("Enslaved actors must not be selected as monarchy succession candidates while free candidates can exist.");
+
+            if (!HeirCandidateRules.IsBasicMaleSuccessionEligible(
+                    isAlive: true,
+                    sameAsCurrentKing: false,
+                    isMale: true,
+                    isCurrentKing: false,
+                    isAdult: true,
+                    hasMadness: false,
+                    isSlave: false))
+                throw new Exception("Free adult male actors should remain eligible for monarchy succession.");
+
+            if (HeirCandidateRules.IsUnderageDirectSonEligible(
+                    isDirectSon: true,
+                    isMale: true,
+                    isAlive: true,
+                    isCurrentKing: false,
+                    hasAdultDirectSon: false,
+                    hasMadness: false,
+                    isSlave: true))
+                throw new Exception("Enslaved underage direct sons must not be used as succession fallbacks.");
+
             if (HeirCandidateRules.IsFallbackEligibleCore(
                     isSuitable: true,
                     sameKingdom: true,
@@ -1524,6 +1554,31 @@ namespace WarFabricationRuleTests
                     isCurrentKing: false,
                     hasUntitledClosedReign: false))
                 throw new Exception("Common dead actors without a ruler reign must not receive posthumous review.");
+            if (!FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    isCurrentKing: false,
+                    hasUntitledClosedReign: false,
+                    hasCapturedRulerSnapshot: true))
+                throw new Exception("Captured former rulers should receive posthumous review from the captured ruler snapshot.");
+            if (FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    isCurrentKing: true,
+                    hasUntitledClosedReign: false,
+                    hasCapturedRulerSnapshot: true))
+                throw new Exception("Current kings are still handled by the direct king death path even with a captured snapshot.");
+            if (!CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
+                    wasKingBeforeRelocation: true,
+                    formerKingdomId: 10,
+                    captorKingdomId: 20))
+                throw new Exception("Capturing a king must preserve the kingdom he ruled before relocation.");
+            if (CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
+                    wasKingBeforeRelocation: true,
+                    formerKingdomId: 10,
+                    captorKingdomId: 10))
+                throw new Exception("Same-kingdom slavery must not create a captured ruler context.");
+            if (CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
+                    wasKingBeforeRelocation: false,
+                    formerKingdomId: 10,
+                    captorKingdomId: 20))
+                throw new Exception("Non-king captives must not be treated as captured rulers.");
         }
 
         private static void ExpectPosthumousTitleRules()
@@ -1815,6 +1870,15 @@ namespace WarFabricationRuleTests
                 pKingStewardship: 7f);
             if (Math.Abs(realmPower - 660f) > 0.001f)
                 throw new Exception($"Mandate realm power must use population + cities*100 + army + stewardship*10, got {realmPower}.");
+
+            float territorialRealmPower = MandatePowerRules.CalculateRealmPower(
+                pPopulation: 250,
+                pCityCount: 3,
+                pArmyPower: 40f,
+                pKingStewardship: 7f,
+                pTerritoryZones: 400);
+            if (Math.Abs(territorialRealmPower - 1260f) > 0.001f)
+                throw new Exception($"Mandate realm power must give stronger weight to territory size, got {territorialRealmPower}.");
 
             float power = MandatePowerRules.CalculateCompetitionPower(pOwnPower: 100f, pVassalPower: 50f);
             if (Math.Abs(power - 130f) > 0.001f)
@@ -2507,6 +2571,30 @@ namespace WarFabricationRuleTests
 
         private static void ExpectWarGoalControlRules()
         {
+            if (!WarGoalControlRules.ShouldResolveTransferredCityGoal(
+                    "take_core_city",
+                    pTargetCityMatchesGoal: true,
+                    pNewOwnerIsWarAttacker: true))
+                throw new Exception("Core target captured by any attacking-side kingdom should settle the war.");
+
+            if (!WarGoalControlRules.ShouldResolveTransferredCityGoal(
+                    "press_claim_city",
+                    pTargetCityMatchesGoal: true,
+                    pNewOwnerIsWarAttacker: true))
+                throw new Exception("Claim target captured by any attacking-side kingdom should settle the war.");
+
+            if (WarGoalControlRules.ShouldResolveTransferredCityGoal(
+                    "take_core_city",
+                    pTargetCityMatchesGoal: false,
+                    pNewOwnerIsWarAttacker: true))
+                throw new Exception("A captured non-target city must not settle a city war goal.");
+
+            if (WarGoalControlRules.ShouldResolveTransferredCityGoal(
+                    "take_core_city",
+                    pTargetCityMatchesGoal: true,
+                    pNewOwnerIsWarAttacker: false))
+                throw new Exception("A target city held outside the attacking side must not settle.");
+
             if (!WarGoalControlRules.ShouldResolveControlledCityGoal(
                     "take_core_city",
                     pTargetCityControlledByAttackerSystem: true))
@@ -3104,6 +3192,37 @@ namespace WarFabricationRuleTests
 
         private static void ExpectFamilyTreePortraitFrameRules()
         {
+            if (!FamilyTreeRelationRules.ShouldBuildLiveLineageNode(
+                    isAlive: true,
+                    isXia: false,
+                    usesAwLineageSystem: true))
+                throw new Exception("Family tree live nodes must use full lineage data for Xiaized non-Xia actors.");
+            if (!FamilyTreeRelationRules.ShouldBuildLiveLineageNode(
+                    isAlive: true,
+                    isXia: true,
+                    usesAwLineageSystem: false))
+                throw new Exception("Family tree live nodes must use full lineage data for native Xia actors.");
+            if (FamilyTreeRelationRules.ShouldBuildLiveLineageNode(
+                    isAlive: false,
+                    isXia: true,
+                    usesAwLineageSystem: true))
+                throw new Exception("Dead or rekt actors should use archived family tree snapshots.");
+            if (!FamilyTreeRelationRules.ShouldUseReverseLiveParentLookup(
+                    currentParentCount: 1,
+                    hasLiveChild: true,
+                    requestedByUi: true))
+                throw new Exception("Family tree UI should recover missing parents from live parent child lists.");
+            if (FamilyTreeRelationRules.ShouldUseReverseLiveParentLookup(
+                    currentParentCount: 2,
+                    hasLiveChild: true,
+                    requestedByUi: true))
+                throw new Exception("Family tree UI should not scan live parents when both parent slots are known.");
+            if (FamilyTreeRelationRules.ShouldUseReverseLiveParentLookup(
+                    currentParentCount: 0,
+                    hasLiveChild: true,
+                    requestedByUi: false))
+                throw new Exception("High-frequency lineage queries must not run reverse live parent lookup by default.");
+
             if (FamilyTreePortraitFrameRules.ShouldShowRoleFrame(false, false, false))
                 throw new Exception("Common family tree nodes must not show a leader/captain/king frame.");
             if (!FamilyTreePortraitFrameRules.ShouldShowRoleFrame(true, false, false))

@@ -1216,7 +1216,8 @@ namespace AncientWarfare3.core.lineage
                 pPopulation: CountPopulation(pKingdom),
                 pCityCount: CountCities(pKingdom),
                 pArmyPower: CountWarriors(pKingdom),
-                pKingStewardship: GetKingStewardship(pKingdom));
+                pKingStewardship: GetKingStewardship(pKingdom),
+                pTerritoryZones: CountZones(pKingdom));
         }
 
         private static int CountPopulation(Kingdom pKingdom)
@@ -1290,6 +1291,12 @@ namespace AncientWarfare3.core.lineage
         private static int CountCities(Kingdom pKingdom)
         {
             try { return pKingdom?.countCities() ?? 0; }
+            catch { return 0; }
+        }
+
+        private static int CountZones(Kingdom pKingdom)
+        {
+            try { return pKingdom?.countZones() ?? 0; }
             catch { return 0; }
         }
 

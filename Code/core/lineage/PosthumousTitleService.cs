@@ -14,32 +14,52 @@ namespace AncientWarfare3.core.lineage
     {
         private static readonly System.Random Rng = new System.Random();
 
+        private struct PosthumousKingdomContext
+        {
+            public Kingdom LiveKingdom;
+            public long KingdomId;
+            public string KingdomName;
+            public string KingdomColor;
+            public KingdomTitle Title;
+            public bool IsMandate;
+
+            public bool IsValid => LiveKingdom?.data != null ||
+                                   (KingdomId >= 0 && !string.IsNullOrEmpty(KingdomName));
+        }
+
         /// <summary>在位结束时评谥。由 ChronicleEvents 在 CloseOpenReign 之后调用。</summary>
         public static void OnReignEnded(Kingdom pKingdom, Actor pKing, string pEndReason,
             ReignRecordWriter.ReignInfo pReign)
         {
-            if (pKingdom?.data == null || pKing?.data == null) return;
+            if (pKingdom?.data == null) return;
+            OnReignEnded(BuildLiveContext(pKingdom), pKing, pEndReason, pReign);
+        }
+
+        private static void OnReignEnded(PosthumousKingdomContext pContext, Actor pKing, string pEndReason,
+            ReignRecordWriter.ReignInfo pReign)
+        {
+            if (!pContext.IsValid || pKing?.data == null) return;
             var manager = LineageArchiveManager.Instance;
             var db = manager?.OperatingDB;
             if (db == null || !manager.InitializeSuccessful) return;
-            if (!pReign.IsValid) return;
+            if (!pReign.IsValid && pReign.ReignId != -1) return;
             if (HasExistingTitle(pKing.data.id, pReign.ReignId)) return;
 
             double now = World.world.getCurWorldTime();
-            PosthumousEvaluation eval = Evaluate(pKingdom, pEndReason, pReign);
-            string titleChar = SelectTitleChar(eval, pEndReason, pKingdom.id);
-            KingdomTitle kingdomTitle = KingdomTitleService.GetTitle(pKingdom);
+            PosthumousEvaluation eval = Evaluate(pContext.LiveKingdom, pEndReason, pReign);
+            string titleChar = SelectTitleChar(eval, pEndReason, pContext.KingdomId);
+            KingdomTitle kingdomTitle = pContext.Title;
             string suffix = KingdomTitleService.GetTitleChar(kingdomTitle);
             if (string.IsNullOrEmpty(suffix)) suffix = "君";
 
-            bool mandateKingdom = MandateService.IsMandateKingdom(pKingdom);
+            bool mandateKingdom = pContext.IsMandate;
             bool useOrdinaryFirstEmperorTaizu = PosthumousTitleRules.ShouldUseTaizuForOrdinaryFirstEmperor(
                 mandateKingdom,
                 kingdomTitle == KingdomTitle.Emperor,
-                HasPriorEmperorTitle(pKingdom.id, pReign.ReignId, suffix));
+                HasPriorEmperorTitle(pContext.KingdomId, pReign.ReignId, suffix));
             string fullTitle = PosthumousTitleRules.BuildFullTitle(
-                FirstChar(pKingdom.name), titleChar, suffix, useOrdinaryFirstEmperorTaizu);
-            string titleColor = HistoryColors.FromKingdom(pKingdom);
+                FirstChar(pContext.KingdomName), titleChar, suffix, useOrdinaryFirstEmperorTaizu);
+            string titleColor = HistoryColors.Normalize(pContext.KingdomColor);
             string evalKey = EvalKey(eval.Grade);
             string titleKind = pEndReason == "abdicated" ? "abdication" : "posthumous";
 
@@ -49,7 +69,7 @@ namespace AncientWarfare3.core.lineage
                 db.Insert(PosthumousTitleTableItem.GetTableName(),
                     ColumnVal.Create("RECORD_ID", recordId),
                     ColumnVal.Create("ACTOR_ID", pKing.data.id),
-                    ColumnVal.Create("KINGDOM_ID", pKingdom.id),
+                    ColumnVal.Create("KINGDOM_ID", pContext.KingdomId),
                     ColumnVal.Create("REIGN_ID", pReign.ReignId),
                     ColumnVal.Create("KING_NAME", pKing.getName()),
                     ColumnVal.Create("KING_COLOR", HistoryColors.FromActor(pKing)),
@@ -77,9 +97,10 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
-            if (mandateKingdom)
-                MandateRulerTitleService.OnMandateReignEnded(pKingdom, pKing, pReign, pEndReason);
+            if (pReign.IsValid)
+                ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
+            if (mandateKingdom && pContext.LiveKingdom?.data != null)
+                MandateRulerTitleService.OnMandateReignEnded(pContext.LiveKingdom, pKing, pReign, pEndReason);
 
             HistoryText posthumousText = BuildTitleEventText(pKing, pEndReason, fullTitle, titleColor, eval.Reason);
             /*
@@ -87,11 +108,12 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.PlainText("（" + eval.Reason + "）");
 
             */
-            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.POSTHUMOUS, posthumousText,
-                HistoryTarget.Actor(pKing));
+            if (pContext.LiveKingdom?.data != null)
+                HistoryWriter.RecordKingdom(pContext.LiveKingdom, KingdomEvent.POSTHUMOUS, posthumousText,
+                    HistoryTarget.Actor(pKing));
 
             if (ChronicleGate.IsNobleActor(pKing))
-                HistoryWriter.RecordPerson(pKing.data.id, pKingdom, fullTitle,
+                HistoryWriter.RecordPerson(pKing.data.id, pContext.LiveKingdom, fullTitle,
                     PersonEvent.POSTHUMOUS,
                     posthumousText,
                     ChronicleCategory.HONOR,
@@ -103,13 +125,144 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return;
             ReignRecordWriter.ReignInfo reign =
                 ReignRecordWriter.ReadLatestUntitledClosedReignForActor(pActor.data.id);
-            if (!FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(pActor.isKing(), reign.IsValid))
+            bool hasCapturedSnapshot = TryReadCapturedRulerContext(pActor, -1L, out PosthumousKingdomContext capturedContext);
+            if (!FormerRulerPosthumousRules.ShouldTryPosthumousOnDeath(
+                    pActor.isKing(), reign.IsValid, hasCapturedSnapshot))
                 return;
 
-            Kingdom kingdom = World.world?.kingdoms?.get(reign.KingdomId);
-            if (kingdom?.data == null) return;
-            string reason = string.IsNullOrEmpty(reign.EndReason) ? "replaced" : reign.EndReason;
-            OnReignEnded(kingdom, pActor, reason, reign);
+            if (reign.IsValid)
+            {
+                PosthumousKingdomContext context = ResolveFormerRulerContext(pActor, reign);
+                if (!context.IsValid) return;
+                string reason = string.IsNullOrEmpty(reign.EndReason) ? "replaced" : reign.EndReason;
+                OnReignEnded(context, pActor, reason, reign);
+                return;
+            }
+
+            if (!capturedContext.IsValid) return;
+            OnReignEnded(capturedContext, pActor, "captured_slave",
+                BuildSyntheticCapturedRulerReign(pActor, capturedContext));
+        }
+
+        public static Kingdom ResolveCapturedRulerLiveKingdom(Actor pActor)
+        {
+            if (pActor?.data == null) return null;
+            pActor.data.get(LineageKeys.CAPTURED_RULER_KINGDOM_ID, out long kingdomId, -1L);
+            if (kingdomId < 0) return null;
+            Kingdom kingdom = World.world?.kingdoms?.get(kingdomId);
+            return kingdom?.data != null ? kingdom : null;
+        }
+
+        private static PosthumousKingdomContext BuildLiveContext(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return default;
+            return new PosthumousKingdomContext
+            {
+                LiveKingdom = pKingdom,
+                KingdomId = pKingdom.id,
+                KingdomName = pKingdom.name ?? "",
+                KingdomColor = HistoryColors.FromKingdom(pKingdom),
+                Title = KingdomTitleService.GetTitle(pKingdom),
+                IsMandate = MandateService.IsMandateKingdom(pKingdom)
+            };
+        }
+
+        private static PosthumousKingdomContext ResolveFormerRulerContext(Actor pActor,
+            ReignRecordWriter.ReignInfo pReign)
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(pReign.KingdomId);
+            if (kingdom?.data != null) return BuildLiveContext(kingdom);
+            if (TryReadCapturedRulerContext(pActor, pReign.KingdomId, out PosthumousKingdomContext captured))
+                return captured;
+            if (TryReadArchivedKingdomContext(pReign.KingdomId, out PosthumousKingdomContext archived))
+                return archived;
+            return default;
+        }
+
+        private static bool TryReadCapturedRulerContext(Actor pActor, long pExpectedKingdomId,
+            out PosthumousKingdomContext pContext)
+        {
+            pContext = default;
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.CAPTURED_RULER_KINGDOM_ID, out long kingdomId, -1L);
+            if (kingdomId < 0) return false;
+            if (pExpectedKingdomId >= 0 && kingdomId != pExpectedKingdomId) return false;
+
+            Kingdom live = World.world?.kingdoms?.get(kingdomId);
+            if (live?.data != null)
+            {
+                pContext = BuildLiveContext(live);
+                return true;
+            }
+
+            pActor.data.get(LineageKeys.CAPTURED_RULER_KINGDOM_NAME, out string name, "");
+            pActor.data.get(LineageKeys.CAPTURED_RULER_KINGDOM_COLOR, out string color, "");
+            pActor.data.get(LineageKeys.CAPTURED_RULER_TITLE, out int title, (int)KingdomTitle.King);
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(color))
+            {
+                if (TryReadArchivedKingdomContext(kingdomId, out PosthumousKingdomContext archived))
+                {
+                    if (string.IsNullOrEmpty(name)) name = archived.KingdomName;
+                    if (string.IsNullOrEmpty(color)) color = archived.KingdomColor;
+                }
+            }
+
+            pContext = new PosthumousKingdomContext
+            {
+                KingdomId = kingdomId,
+                KingdomName = name ?? "",
+                KingdomColor = HistoryColors.Normalize(color),
+                Title = (KingdomTitle)title,
+                IsMandate = false
+            };
+            return pContext.IsValid;
+        }
+
+        private static bool TryReadArchivedKingdomContext(long pKingdomId, out PosthumousKingdomContext pContext)
+        {
+            pContext = default;
+            var db = LineageArchiveManager.Instance?.OperatingDB;
+            if (db == null || pKingdomId < 0) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT IFNULL(KINGDOM_NAME, ''), IFNULL(COLOR_TEXT, '') " +
+                    $"FROM {KingdomArchiveTableItem.GetTableName()} WHERE KINGDOM_ID=@kid LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                using var r = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!r.Read()) return false;
+                pContext = new PosthumousKingdomContext
+                {
+                    KingdomId = pKingdomId,
+                    KingdomName = SafeString(r, 0),
+                    KingdomColor = HistoryColors.Normalize(SafeString(r, 1)),
+                    Title = KingdomTitle.King,
+                    IsMandate = false
+                };
+                return pContext.IsValid;
+            }
+            catch { return false; }
+        }
+
+        private static ReignRecordWriter.ReignInfo BuildSyntheticCapturedRulerReign(Actor pActor,
+            PosthumousKingdomContext pContext)
+        {
+            string deathCause = "";
+            try { pActor?.data?.get(LineageKeys.DEATH_CAUSE, out deathCause, ""); } catch { deathCause = ""; }
+            double start = 0;
+            try { start = pActor?.data?.created_time ?? 0; } catch { start = 0; }
+            return new ReignRecordWriter.ReignInfo
+            {
+                ReignId = -1,
+                KingdomId = pContext.KingdomId,
+                KingActorId = pActor?.data?.id ?? -1L,
+                StartTime = start,
+                EndTime = World.world?.getCurWorldTime() ?? start,
+                EndReason = "captured_slave",
+                DeathCause = deathCause ?? "",
+                ReignIndex = 0
+            };
         }
 
         private static HistoryText BuildTitleEventText(Actor pKing, string pEndReason, string pFullTitle,
@@ -296,6 +449,7 @@ namespace AncientWarfare3.core.lineage
         private static int ScoreEnding(string pEndReason, string pDeathCause)
         {
             if (pEndReason == "kingdom_fell") return -3;
+            if (pEndReason == "captured_slave") return -2;
             if (pEndReason == "abdicated") return 1;
             if (string.IsNullOrEmpty(pDeathCause)) return 0;
             if (pDeathCause.Contains("自然老死")) return 1;
@@ -332,6 +486,9 @@ namespace AncientWarfare3.core.lineage
                 return PickByPriority(pEval.Total <= -5
                     ? new[] { "厉", "幽", "荒", "废" }
                     : new[] { "哀", "闵", "悼" }, pKingdomId);
+
+            if (pEndReason == "captured_slave")
+                return PickByPriority(new[] { "\u54c0", "\u95f5", "\u6000", "\u610d" }, pKingdomId);
 
             if (pEval.Years < 3 && !pEval.Founder)
                 return PickByPriority(new[] { "殇", "悼", "怀", "少" }, pKingdomId);
@@ -423,9 +580,11 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText =
-                    $"SELECT 1 FROM {PosthumousTitleTableItem.GetTableName()} " +
-                    "WHERE ACTOR_ID=@actor OR REIGN_ID=@reign LIMIT 1";
+                cmd.CommandText = pReignId >= 0
+                    ? $"SELECT 1 FROM {PosthumousTitleTableItem.GetTableName()} " +
+                      "WHERE ACTOR_ID=@actor OR REIGN_ID=@reign LIMIT 1"
+                    : $"SELECT 1 FROM {PosthumousTitleTableItem.GetTableName()} " +
+                      "WHERE ACTOR_ID=@actor LIMIT 1";
                 cmd.Parameters.AddWithValue("@actor", pActorId);
                 cmd.Parameters.AddWithValue("@reign", pReignId);
                 return cmd.ExecuteScalar() != null;
@@ -476,6 +635,7 @@ namespace AncientWarfare3.core.lineage
 
         private static string EndVerb(string pEndReason)
         {
+            if (pEndReason == "captured_slave") return "\u88ab\u4fd8\u540e\u8eab\u6545";
             return pEndReason switch
             {
                 "abdicated" => "退位",

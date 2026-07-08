@@ -50,8 +50,10 @@ namespace AncientWarfare3.patch
                 string name = __instance.getName();
                 __instance.data.get(LineageKeys.DEATH_CAUSE, out string cause, "");
                 string causeText = string.IsNullOrEmpty(cause) ? "" : "\uFF08\u6B7B\u56E0\uFF1A" + cause + "\uFF09";
+                Kingdom deathContext = PosthumousTitleService.ResolveCapturedRulerLiveKingdom(__instance) ??
+                                       __instance.kingdom;
                 HistoryWriter.RecordPerson(
-                    __instance.data.id, __instance.kingdom, name,
+                    __instance.data.id, deathContext, name,
                     PersonEvent.DEATH,
                     HistoryText.Actor(__instance, name) + " \u901D\u4E16" + causeText,
                     ChronicleCategory.LIFE);
