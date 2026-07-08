@@ -4,10 +4,26 @@ namespace AncientWarfare3.core.policy
 {
     public static class CityTechMapRules
     {
+        private const float LATE_WORLD_RELATIVE_MIN = 0.55f;
+        private const float LATE_WORLD_RELATIVE_RANGE = 0.08f;
+
         public static float CalculateDevelopmentScore(float adoptedScore, int totalTechCount)
         {
             if (totalTechCount <= 0) return 0f;
             return Mathf.Clamp01(adoptedScore / totalTechCount);
+        }
+
+        public static float CalculateVisibleScore(float pRawScore, float pMinScore, float pMaxScore)
+        {
+            float raw = Mathf.Clamp01(pRawScore);
+            float min = Mathf.Clamp01(Mathf.Min(pMinScore, pMaxScore));
+            float max = Mathf.Clamp01(Mathf.Max(pMinScore, pMaxScore));
+            float range = max - min;
+
+            if (min >= LATE_WORLD_RELATIVE_MIN && range >= LATE_WORLD_RELATIVE_RANGE)
+                return Mathf.Clamp01((raw - min) / range);
+
+            return raw;
         }
 
         public static string ColorKeyForScore(float pScore)

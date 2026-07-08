@@ -70,6 +70,11 @@ namespace CityEconomyRuleTests
             ExpectTechMap("middle", "tech_4", adoptedScore: 4f, totalTechCount: 8);
             ExpectTechMap("high", "tech_6", adoptedScore: 6f, totalTechCount: 8);
             ExpectTechMap("max", "tech_8", adoptedScore: 8f, totalTechCount: 8);
+            ExpectTechDisplayRange("late-world low", "tech_0", rawScore: 0.75f, minScore: 0.75f, maxScore: 1f);
+            ExpectTechDisplayRange("late-world middle", "tech_4", rawScore: 0.875f, minScore: 0.75f, maxScore: 1f);
+            ExpectTechDisplayRange("late-world max", "tech_8", rawScore: 1f, minScore: 0.75f, maxScore: 1f);
+            ExpectTechDisplayRange("early-world keeps absolute", "tech_4", rawScore: 0.50f, minScore: 0.10f,
+                maxScore: 1f);
             ExpectHeatHex("tech max green", "#226B3A", CityTechMapRules.HexForColorKey("tech_8"));
             ExpectHeatHex("tech old cyan removed", "#4F8F45", CityTechMapRules.HexForColorKey("tech_7"));
             ExpectDevelopmentScoreOrder();
@@ -117,6 +122,15 @@ namespace CityEconomyRuleTests
             string actual = CityTechMapRules.ColorKeyForScore(score);
             if (actual != expected)
                 throw new Exception($"Expected {label} tech map color {expected}, got {actual}.");
+        }
+
+        private static void ExpectTechDisplayRange(string label, string expected, float rawScore, float minScore,
+            float maxScore)
+        {
+            float score = CityTechMapRules.CalculateVisibleScore(rawScore, minScore, maxScore);
+            string actual = CityTechMapRules.ColorKeyForScore(score);
+            if (actual != expected)
+                throw new Exception($"Expected {label} visible tech map color {expected}, got {actual}.");
         }
 
         private static void ExpectDevelopmentScoreOrder()

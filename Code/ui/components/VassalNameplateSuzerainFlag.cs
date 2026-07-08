@@ -8,8 +8,6 @@ namespace AncientWarfare3.ui.components
 {
     internal sealed class VassalNameplateSuzerainFlag : MonoBehaviour
     {
-        private const float FLAG_SIZE = 13f;
-
         private static readonly FieldInfo NameTextField =
             AccessTools.Field(typeof(NameplateText), "_text_name");
 
@@ -99,16 +97,17 @@ namespace AncientWarfare3.ui.components
             _root.SetActive(false);
 
             _rect = _root.GetComponent<RectTransform>();
-            _rect.sizeDelta = new Vector2(FLAG_SIZE, FLAG_SIZE);
+            float flagSize = VassalNameplateFlagLayoutRules.FlagSize;
+            _rect.sizeDelta = new Vector2(flagSize, flagSize);
             _rect.anchorMin = new Vector2(0.5f, 0.5f);
             _rect.anchorMax = new Vector2(0.5f, 0.5f);
             _rect.pivot = new Vector2(0.5f, 0.5f);
 
             _layout = _root.GetComponent<LayoutElement>();
-            _layout.minWidth = FLAG_SIZE;
-            _layout.minHeight = FLAG_SIZE;
-            _layout.preferredWidth = FLAG_SIZE;
-            _layout.preferredHeight = FLAG_SIZE;
+            _layout.minWidth = flagSize;
+            _layout.minHeight = flagSize;
+            _layout.preferredWidth = flagSize;
+            _layout.preferredHeight = flagSize;
             _layout.flexibleWidth = 0f;
             _layout.flexibleHeight = 0f;
 
@@ -120,8 +119,9 @@ namespace AncientWarfare3.ui.components
             var iconRect = iconObj.GetComponent<RectTransform>();
             iconRect.anchorMin = Vector2.zero;
             iconRect.anchorMax = Vector2.one;
-            iconRect.offsetMin = new Vector2(1f, 1f);
-            iconRect.offsetMax = new Vector2(-1f, -1f);
+            float iconInset = VassalNameplateFlagLayoutRules.IconInset;
+            iconRect.offsetMin = new Vector2(iconInset, iconInset);
+            iconRect.offsetMax = new Vector2(-iconInset, -iconInset);
 
             _icon = iconObj.GetComponent<Image>();
             _icon.raycastTarget = false;
