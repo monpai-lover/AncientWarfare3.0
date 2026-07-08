@@ -299,6 +299,7 @@ namespace WarFabricationRuleTests
             ExpectNonCoreLoyaltyRules();
             ExpectWarTerritoryCacheRules();
             ExpectFamilyTreePortraitFrameRules();
+            ExpectClanBannerFrameRules();
             ExpectFamilyTreeToolbarLayoutRules();
             ExpectVassalNameplateFlagLayoutRules();
             ExpectFabricateCoreDecisionPriority();
@@ -3032,6 +3033,41 @@ namespace WarFabricationRuleTests
                 throw new Exception("City leader family tree nodes must show a role frame.");
             if (!FamilyTreePortraitFrameRules.ShouldShowRoleFrame(false, false, true))
                 throw new Exception("Army captain family tree nodes must show a role frame.");
+        }
+
+        private static void ExpectClanBannerFrameRules()
+        {
+            if (!ClanBannerFrameRules.ShouldCacheDefaultFrame(
+                    pHasCurrentFrame: true,
+                    pCurrentIsXiaFrame: false,
+                    pDefaultKnown: false))
+                throw new Exception("A clan banner should cache its prefab frame before Xia replacement.");
+
+            if (ClanBannerFrameRules.ShouldCacheDefaultFrame(
+                    pHasCurrentFrame: true,
+                    pCurrentIsXiaFrame: true,
+                    pDefaultKnown: false))
+                throw new Exception("A Xia frame must not be cached as the default clan frame.");
+
+            if (!ClanBannerFrameRules.ShouldApplyXiaFrame(
+                    pIsXiaClan: true,
+                    pHasXiaFrame: true))
+                throw new Exception("Xia clans should use the Xia clan frame.");
+
+            if (ClanBannerFrameRules.ShouldApplyXiaFrame(
+                    pIsXiaClan: false,
+                    pHasXiaFrame: true))
+                throw new Exception("Human/non-Xia clans must not use the Xia clan frame.");
+
+            if (!ClanBannerFrameRules.ShouldRestoreDefaultFrame(
+                    pIsXiaClan: false,
+                    pDefaultKnown: true))
+                throw new Exception("Human/non-Xia clans should restore the cached default frame.");
+
+            if (ClanBannerFrameRules.ShouldRestoreDefaultFrame(
+                    pIsXiaClan: true,
+                    pDefaultKnown: true))
+                throw new Exception("Xia clans should keep the Xia frame instead of restoring default.");
         }
 
         private static void ExpectFamilyTreeToolbarLayoutRules()
