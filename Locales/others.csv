@@ -168,9 +168,9 @@ aw_birth_label,生:,Born:,生:
 aw_death_label,卒:,Died:,卒:
 aw_age_label,年龄:,Age:,年齡:
 aw_age_suffix,岁, years old,歲
-aw_generation_label,辈分:,Generation:,輩分:
-aw_generation_prefix,第,#,第
-aw_generation_suffix,代, ,代
+aw_generation_label,辈分:,Generation,輩分:
+aw_generation_prefix,第, #,第
+aw_generation_suffix,代,.,代
 aw_death_cause_label,死因:,Cause of death:,死因:
 aw_noble_branch_root,贵族本支,Noble root branch,貴族本支
 aw_noble_distance_prefix,距贵族 ,Noble distance: ,距貴族 
