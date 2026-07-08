@@ -21,7 +21,23 @@ namespace AncientWarfare3.core.lineage
 
         public static int MaxArmiesPerKingdom(string pRole)
         {
+            if (pRole == AWArmyRole.RoyalGuard) return 1;
             return pRole == AWArmyRole.BorderArmy ? 3 : int.MaxValue;
+        }
+
+        public static bool ShouldMatchArmyAnchor(string pRole, long pRequestedAnchorId, long pArmyAnchorId)
+        {
+            if (MaxArmiesPerKingdom(pRole) == 1) return true;
+            if (pRequestedAnchorId < 0) return true;
+            return pArmyAnchorId == pRequestedAnchorId;
+        }
+
+        public static bool ShouldCleanupDuplicateArmy(string pRole, long pRequestedAnchorId, long pArmyAnchorId)
+        {
+            if (MaxArmiesPerKingdom(pRole) == 1) return true;
+            return MaxArmiesPerCity(pRole) == 1 &&
+                   pRequestedAnchorId >= 0 &&
+                   pArmyAnchorId == pRequestedAnchorId;
         }
 
         public static bool ShouldSetCaptain(long pCurrentCaptainId, long pNewCaptainId)

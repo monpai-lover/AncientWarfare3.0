@@ -88,13 +88,9 @@ namespace AncientWarfare3.core.lineage
             {
                 if (army?.data == null || !army.isAlive()) continue;
                 if (!IsRoleArmy(army, pRole)) continue;
-                try
-                {
-                    if (army.getKingdom() != pKingdom) continue;
-                }
-                catch { continue; }
-
-                if (cityId >= 0 && GetAnchorCityId(army) != cityId) continue;
+                Kingdom kingdom = SafeGetKingdom(army, FindAnchorCity(army));
+                if (kingdom != pKingdom) continue;
+                if (!AWArmyRoleRules.ShouldMatchArmyAnchor(pRole, cityId, GetAnchorCityId(army))) continue;
                 return army;
             }
             return null;
@@ -111,6 +107,7 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.custom_name = true;
             if (!string.IsNullOrEmpty(pName) && pArmy.data.name != pName)
                 pArmy.setName(pName);
+            TrySetRuntimeKingdom(pArmy, pKingdom);
             if (AWArmyRoleRules.ShouldUseDetachedArmy(pRole) && pArmy.hasCity())
                 pArmy.clearCity();
             else if (!AWArmyRoleRules.ShouldUseDetachedArmy(pRole))
@@ -286,8 +283,7 @@ namespace AncientWarfare3.core.lineage
                 if (!IsRoleArmy(army, pRole)) continue;
                 Kingdom kingdom = SafeGetKingdom(army, FindAnchorCity(army));
                 if (kingdom != pKingdom) continue;
-                if (AWArmyRoleRules.MaxArmiesPerCity(pRole) == 1 && anchorId >= 0 &&
-                    GetAnchorCityId(army) == anchorId)
+                if (AWArmyRoleRules.ShouldCleanupDuplicateArmy(pRole, anchorId, GetAnchorCityId(army)))
                     duplicates.Add(army);
             }
 
@@ -354,11 +350,18 @@ namespace AncientWarfare3.core.lineage
             if (pArmy?.data == null || pCity?.data == null) return;
             try { ArmyCityField?.SetValue(pArmy, pCity); }
             catch { }
-            try { ArmyKingdomField?.SetValue(pArmy, pKingdom ?? pCity.kingdom); }
-            catch { }
+            TrySetRuntimeKingdom(pArmy, pKingdom ?? pCity.kingdom);
             pArmy.data.id_city = -1L;
             if ((pKingdom ?? pCity.kingdom)?.data != null)
                 pArmy.data.id_kingdom = (pKingdom ?? pCity.kingdom).id;
+        }
+
+        private static void TrySetRuntimeKingdom(Army pArmy, Kingdom pKingdom)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null) return;
+            try { ArmyKingdomField?.SetValue(pArmy, pKingdom); }
+            catch { }
+            pArmy.data.id_kingdom = pKingdom.id;
         }
     }
 }

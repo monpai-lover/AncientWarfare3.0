@@ -92,13 +92,12 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom.hasEnemies()) return false;
 
             int years = VassalService.GetYearsSinceRelationStarted(pKingdom);
-            if (years >= 0 && years < 18) return false;
-
             float own = VassalService.GetPowerScore(pKingdom, pIncludeVassals: true);
-            float lord = Math.Max(1f, VassalService.GetPowerScore(suzerain, pIncludeVassals: true));
+            float lord = Math.Max(1f, VassalService.GetPowerScore(suzerain, pIncludeVassals: false));
             int opinion = Opinion(pKingdom, suzerain);
-            bool wantsOut = own >= lord * 0.75f || opinion <= -80;
-            if (!wantsOut || !Chance(0.30f)) return false;
+            if (!VassalIndependenceRules.ShouldAttemptIndependence(own, lord, years, opinion,
+                    (float)Rng.NextDouble()))
+                return false;
 
             return StartWar(pKingdom, suzerain, "independence_war");
         }

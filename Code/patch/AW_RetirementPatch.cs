@@ -87,7 +87,8 @@ namespace AncientWarfare3.patch
 
             int now = (int)LineageService.CurTime();
             pCity.data.get(CITY_ARMY_MAINTENANCE_LAST_CHECK, out int lastRun, -1);
-            if (!CityMaintenanceThrottleRules.ShouldRun(now, lastRun, CITY_ARMY_MAINTENANCE_INTERVAL)) return false;
+            if (!CityMaintenanceThrottleRules.ShouldRunStaggered(
+                    now, lastRun, CITY_ARMY_MAINTENANCE_INTERVAL, pCity.id)) return false;
             pCity.data.set(CITY_ARMY_MAINTENANCE_LAST_CHECK, now);
             return true;
         }

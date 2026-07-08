@@ -84,6 +84,17 @@ namespace AncientWarfare3.core.lineage
             return pRemovedCount < limit;
         }
 
+        public static bool ShouldUseBoundedDismissScan(bool pGuardArmyFound, bool pHasGuardStateHint)
+        {
+            return !pGuardArmyFound && pHasGuardStateHint;
+        }
+
+        public static bool ShouldStopBoundedDismissScan(int pProcessed, int pLimit)
+        {
+            int limit = pLimit <= 0 ? 1 : pLimit;
+            return pProcessed >= limit;
+        }
+
         public static bool ShouldKeepExistingCaptain(bool pExistingCaptainValid, bool pExistingCaptainNoble)
         {
             return pExistingCaptainValid && pExistingCaptainNoble;

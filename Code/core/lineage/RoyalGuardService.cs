@@ -15,10 +15,11 @@ namespace AncientWarfare3.core.lineage
         private const int RECRUITMENT_BATCH_LIMIT = 4;
         private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
-        private const int CANDIDATE_POOL_LIMIT = 32;
-        private const int NOBLE_CANDIDATE_POOL_LIMIT = 16;
-        private const int CANDIDATE_SCAN_LIMIT = 256;
-        private const int AVERAGE_SCORE_SCAN_LIMIT = 160;
+        private const int DISMISS_SCAN_LIMIT = 64;
+        private const int CANDIDATE_POOL_LIMIT = 16;
+        private const int NOBLE_CANDIDATE_POOL_LIMIT = 8;
+        private const int CANDIDATE_SCAN_LIMIT = 128;
+        private const int AVERAGE_SCORE_SCAN_LIMIT = 96;
         private const float MIN_NOBLE_RATIO = 0.2f;
         private const int CHECK_INTERVAL = 60;
         private const int PROTECT_RADIUS = 10;
@@ -886,13 +887,47 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            foreach (Actor unit in new List<Actor>(pKingdom.getUnits()))
-            {
-                if (IsRoyalGuard(unit))
-                    DismissGuard(unit, pReason);
-            }
+            bool complete = DismissKingdomGuardsBounded(pKingdom, pReason);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
-            ClearKingdomGuardStateHints(pKingdom);
+            if (complete)
+                ClearKingdomGuardStateHints(pKingdom);
+        }
+
+        private static bool DismissKingdomGuardsBounded(Kingdom pKingdom, string pReason)
+        {
+            if (pKingdom?.data == null) return true;
+            if (!RoyalGuardMaintenanceRules.ShouldUseBoundedDismissScan(
+                    pGuardArmyFound: false,
+                    pHasGuardStateHint: HasKingdomGuardStateHint(pKingdom)))
+                return true;
+
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, out int cursor, 0);
+            if (cursor < 0) cursor = 0;
+
+            int scanned = 0;
+            int processed = 0;
+            var toDismiss = new List<Actor>(Math.Min(DISMISS_SCAN_LIMIT, MAX_GUARDS_PER_KINGDOM));
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (scanned++ < cursor) continue;
+                if (RoyalGuardMaintenanceRules.ShouldStopBoundedDismissScan(processed, DISMISS_SCAN_LIMIT))
+                {
+                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, scanned - 1);
+                    foreach (Actor guard in toDismiss)
+                        DismissGuard(guard, pReason);
+                    return false;
+                }
+
+                processed++;
+                if (IsRoyalGuard(unit))
+                    toDismiss.Add(unit);
+            }
+
+            foreach (Actor guard in toDismiss)
+                DismissGuard(guard, pReason);
+
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
+            return true;
         }
 
         private static void DismissCollectedGuards(List<Actor> pActive, string pReason)
@@ -918,6 +953,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_RECORDED, false);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, -1L);
+            pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
         }
 
         private static void DismissGuard(Actor pActor, string pReason, bool pRecord, bool pKeepTrait)

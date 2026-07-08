@@ -223,8 +223,14 @@ namespace AncientWarfare3.core.lineage
                                 GetSuzerainId(pVassal) == pSuzerain?.id;
             bool suzerainAtWar = HasActiveWars(pSuzerain);
             bool vassalAtWar = HasActiveWars(pVassal);
-            return VassalAnnexDecisionRules.CanStart(suzerainValid, directVassal,
+            bool baseAllowed = VassalAnnexDecisionRules.CanStart(suzerainValid, directVassal,
                 suzerainAtWar, vassalAtWar, out pReason);
+            if (!baseAllowed) return false;
+
+            return VassalRelationRules.CanAbsorbVassal(true,
+                MandateRebelService.IsRebelKingdom(pSuzerain),
+                MandateRebelService.IsRebelKingdom(pVassal),
+                out pReason);
         }
 
         public static Kingdom FindBestAbsorbVassalTarget(Kingdom pSuzerain)
@@ -243,24 +249,40 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanSetVassal(Kingdom pVassal, Kingdom pSuzerain)
         {
-            if (pVassal?.data == null || pSuzerain?.data == null) return false;
-            if (pVassal == pSuzerain) return false;
-            if (pVassal.isRekt() || pSuzerain.isRekt()) return false;
-            if (!pVassal.isCiv() || !pSuzerain.isCiv()) return false;
-            if (KingdomTitleService.GetTitle(pSuzerain) <= KingdomTitleService.GetTitle(pVassal)) return false;
+            bool basicValid = pVassal?.data != null &&
+                              pSuzerain?.data != null &&
+                              pVassal != pSuzerain &&
+                              !pVassal.isRekt() &&
+                              !pSuzerain.isRekt() &&
+                              pVassal.isCiv() &&
+                              pSuzerain.isCiv();
+            if (!basicValid) return false;
 
+            bool titleAbove = KingdomTitleService.GetTitle(pSuzerain) > KingdomTitleService.GetTitle(pVassal);
+            bool cycleDetected = WouldCreateCycle(pVassal, pSuzerain);
+            return VassalRelationRules.CanSetVassal(
+                basicValid,
+                MandateRebelService.IsRebelKingdom(pVassal),
+                MandateRebelService.IsRebelKingdom(pSuzerain),
+                titleAbove,
+                cycleDetected,
+                out _);
+        }
+
+        private static bool WouldCreateCycle(Kingdom pVassal, Kingdom pSuzerain)
+        {
+            if (pVassal?.data == null || pSuzerain?.data == null) return true;
             Kingdom root = GetRootSuzerain(pSuzerain);
-            if (root == pVassal) return false;
-
+            if (root == pVassal) return true;
             Kingdom current = pSuzerain;
             var visited = new HashSet<long>();
             while (current?.data != null && visited.Add(current.id))
             {
-                if (current == pVassal) return false;
+                if (current == pVassal) return true;
                 current = GetSuzerain(current);
             }
 
-            return true;
+            return false;
         }
 
         public static bool SetVassal(Kingdom pVassal, Kingdom pSuzerain, string pReason = "manual", long pWarId = -1)
@@ -325,6 +347,11 @@ namespace AncientWarfare3.core.lineage
         public static bool TryAbsorbVassal(Kingdom pSuzerain, Kingdom pVassal, string pReason = "absorbed")
         {
             if (pSuzerain?.data == null || pVassal?.data == null || !Ready) return false;
+            if (!VassalRelationRules.CanAbsorbVassal(true,
+                    MandateRebelService.IsRebelKingdom(pSuzerain),
+                    MandateRebelService.IsRebelKingdom(pVassal),
+                    out _))
+                return false;
             if (GetSuzerainId(pVassal) != pSuzerain.id) return false;
 
             long relationId = GetRelationId(pVassal);
@@ -350,6 +377,20 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pSuzerain));
             DirtyVassalMap();
             return true;
+        }
+
+        internal static void EnforceNoVassalRelationsForRebel(Kingdom pKingdom, string pReason = "rebel_government")
+        {
+            if (pKingdom?.data == null || !MandateRebelService.IsRebelKingdom(pKingdom)) return;
+
+            if (IsVassalKingdom(pKingdom))
+                EndVassal(pKingdom, "rebel_no_vassal");
+
+            foreach (Kingdom child in GetVassals(pKingdom).ToList())
+            {
+                if (child?.data == null || child.isRekt()) continue;
+                EndVassal(child, "rebel_no_suzerain");
+            }
         }
 
         public static void OnWarStarted(War pWar)

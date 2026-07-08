@@ -143,6 +143,24 @@ namespace CityMaintenanceRuleTests
                     pSlaveArmyEnabled: true,
                     pOnSchedule: true))
                 throw new Exception("Enabled slave army maintenance should run on its staggered schedule.");
+
+            if (!SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+                    pArmyExists: true,
+                    pTotalWarriors: 10,
+                    pSlaveWarriors: 8,
+                    pNonSlaveWarriors: 2,
+                    pCaptainValid: true,
+                    pCitySlaveCount: 8))
+                throw new Exception("Underfilled slave armies should skip fill scans when all local slaves are already enlisted.");
+
+            if (SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+                    pArmyExists: true,
+                    pTotalWarriors: 10,
+                    pSlaveWarriors: 8,
+                    pNonSlaveWarriors: 2,
+                    pCaptainValid: true,
+                    pCitySlaveCount: 12))
+                throw new Exception("Underfilled slave armies should keep filling when local slave candidates remain.");
         }
 
         private static void ExpectArmyAiSafetyGate()

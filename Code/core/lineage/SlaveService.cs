@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.lineage
         private const int SLAVE_CATCHER_SEARCH_RADIUS = 80;
         private const int MIN_SLAVES_FOR_SLAVE_ARMY = 3;
         private const int MAX_SLAVE_ARMY_SIZE = 25;
+        private const int SLAVE_ARMY_FILL_BATCH_LIMIT = 6;
         private const int MAX_CITY_FALL_SLAVES = 8;
         private const int MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 5;
         private const int SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 8;
@@ -640,6 +641,7 @@ namespace AncientWarfare3.core.lineage
                 CITY_SLAVE_ARMY_CHECK_INTERVAL);
             if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(slaveryEnabled, slaveArmyEnabled, onSchedule)) return;
 
+            int slaveCount = -1;
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyExisting, CityMaintenanceBenchmarkRules.Group);
             Army army = AWArmyService.FindArmy(kingdom, pCity, AWArmyRole.SlaveArmy);
             if (army != null)
@@ -648,12 +650,16 @@ namespace AncientWarfare3.core.lineage
                 Actor existingCaptain = army.getCaptain();
                 bool captainValid = CanBeSlaveArmyCaptainCandidate(existingCaptain, kingdom, pCity,
                     pRequireWarrior: true);
+                Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+                slaveCount = CountSlaves(pCity);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
                 if (SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
                         pArmyExists: true,
                         pTotalWarriors: total,
                         pSlaveWarriors: slaves,
                         pNonSlaveWarriors: nonSlaves,
-                        pCaptainValid: captainValid))
+                        pCaptainValid: captainValid,
+                        pCitySlaveCount: slaveCount))
                 {
                     Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting,
                         CityMaintenanceBenchmarkRules.Group);
@@ -676,9 +682,12 @@ namespace AncientWarfare3.core.lineage
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting, CityMaintenanceBenchmarkRules.Group);
 
-            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-            int slaveCount = CountSlaves(pCity);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+            if (slaveCount < 0)
+            {
+                Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+                slaveCount = CountSlaves(pCity);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+            }
             if (slaveCount < MIN_SLAVES_FOR_SLAVE_ARMY) return;
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyCaptain, CityMaintenanceBenchmarkRules.Group);
@@ -1035,6 +1044,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pArmy?.data == null || pCity?.data == null) return;
 
+            int addedThisPass = 0;
             Actor captain = pArmy.getCaptain();
             if (CanBeSlaveArmyCaptainCandidate(captain, pCity.kingdom, pCity, pRequireWarrior: false) &&
                 EnsureWarriorForSlaveArmy(pCity, captain))
@@ -1043,20 +1053,28 @@ namespace AncientWarfare3.core.lineage
             }
 
             CountArmyComposition(pArmy, out int total, out int slaves, out int nonSlaves);
-            foreach (Actor cadre in GetSlaveArmyCadreCandidates(pCity))
+            foreach (Actor cadre in pCity.getUnits())
             {
+                if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
                 if (total >= MAX_SLAVE_ARMY_SIZE) break;
                 if (nonSlaves >= SlaveArmyFormationRules.MaxNonSlaveCadres) break;
                 if (cadre == captain || cadre.army == pArmy) continue;
+                if (!CanBeSlaveArmyCaptainCandidate(cadre, pCity.kingdom, pCity, pRequireWarrior: false)) continue;
                 if (!EnsureWarriorForSlaveArmy(pCity, cadre)) continue;
                 AWArmyService.AddToArmy(cadre, pArmy);
                 total++;
                 nonSlaves++;
+                addedThisPass++;
             }
 
-            foreach (Actor slave in GetSlaveArmySlaveCandidates(pCity))
+            foreach (Actor slave in pCity.getUnits())
             {
+                if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
                 if (total >= MAX_SLAVE_ARMY_SIZE) break;
+                if (slave?.data == null || slave.isRekt() || !slave.isAdult()) continue;
+                if (!IsSlave(slave) || IsRetiredSoldier(slave)) continue;
+                if (RoyalGuardService.IsRoyalGuard(slave)) continue;
+                if (slave.asset?.is_boat == true) continue;
                 if (slave.army == pArmy) continue;
                 if (!EnsureWarriorForSlaveArmy(pCity, slave)) continue;
                 if (!SlaveArmyFormationRules.CanAddSlaveToArmy(total, slaves, nonSlaves)) break;
@@ -1064,6 +1082,7 @@ namespace AncientWarfare3.core.lineage
                 slave.data.set(LineageKeys.SLAVE_SOLDIER, true);
                 total++;
                 slaves++;
+                addedThisPass++;
             }
         }
 
@@ -1178,7 +1197,6 @@ namespace AncientWarfare3.core.lineage
             foreach (Actor unit in pCity.getUnits())
                 if (CanBeSlaveArmyCaptainCandidate(unit, kingdom, pCity, pRequireWarrior: false))
                     result.Add(unit);
-            result.Sort((a, b) => SafeCombatScore(b).CompareTo(SafeCombatScore(a)));
             return result;
         }
 
@@ -1194,7 +1212,6 @@ namespace AncientWarfare3.core.lineage
                 if (unit.asset?.is_boat == true) continue;
                 result.Add(unit);
             }
-            result.Sort((a, b) => SafeCombatScore(b).CompareTo(SafeCombatScore(a)));
             return result;
         }
 
@@ -1411,6 +1428,7 @@ namespace AncientWarfare3.core.lineage
                 "battlefield_capture" => "\u6218\u573A\u4FD8\u83B7",
                 "foreign_occupation" => "\u5916\u65CF\u5360\u9886",
                 "slave_king" => "\u56FD\u738B\u4E3A\u5974",
+                "slave_only_rebel" => "\u5974\u96B6\u56FD\u6539\u7F16\u4E3A\u4E49\u519B",
                 "born_slave" => "奴籍所生",
                 "military_merit" => "军功释奴",
                 "promoted" => "因受任官职释奴",

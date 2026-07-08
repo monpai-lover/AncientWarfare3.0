@@ -162,6 +162,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "rebel_claimant");
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRebel);
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, Date.getCurrentYear() + REBEL_BUFF_YEARS);
+            VassalService.EnforceNoVassalRelationsForRebel(pKingdom, "rebel_government");
 
             Actor king = pLeader?.data != null ? pLeader : pKingdom.king;
             if (king?.data != null)
@@ -349,6 +350,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, "rebel");
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "rebel_claimant");
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRebel);
+            VassalService.EnforceNoVassalRelationsForRebel(pKingdom, "rebel_government");
             if (pKingdom.king?.data != null)
             {
                 pKingdom.king.data.set(LineageKeys.MANDATE_REBEL_LEADER, true);

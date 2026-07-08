@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.lineage
                     pKingdom?.data != null))
                 return false;
             if (pKingdom.king != pActor) return false;
+            if (TryConvertSlaveOnlyKingdom(pKingdom, pActor, isSlaveNow)) return true;
 
             PendingReasons[pActor.data.id] = pReason ?? "";
             pKingdom.kingLeftEvent();
@@ -37,6 +38,80 @@ namespace AncientWarfare3.core.lineage
 
             pReason = "";
             return false;
+        }
+
+        private static bool TryConvertSlaveOnlyKingdom(Kingdom pKingdom, Actor pKing, bool pIsSlaveNow)
+        {
+            if (pKingdom?.data == null || pKing?.data == null) return false;
+
+            CountLivingCandidates(pKingdom, out int livingCandidates, out int freeCandidates);
+            if (!SlaveKingAbdicationRules.ShouldConvertSlaveOnlyKingdomToRebel(
+                    pIsKing: pKingdom.king == pKing,
+                    pIsSlaveNow: pIsSlaveNow,
+                    pHasKingdom: true,
+                    pLivingCandidates: livingCandidates,
+                    pFreeCandidates: freeCandidates))
+                return false;
+
+            pKingdom.data.get(LineageKeys.SLAVE_ONLY_REBEL_CONVERTED, out bool converted, false);
+            SlaveService.SetSlaveryEnabled(pKingdom, false);
+            FreeKingdomSlaves(pKingdom);
+            MandateRebelService.MarkRebelKingdom(pKingdom, pKing, pKingdom);
+            pKingdom.data.set(LineageKeys.SLAVE_ONLY_REBEL_CONVERTED, true);
+
+            if (!converted)
+            {
+                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
+                    HistoryText.Kingdom(pKingdom) +
+                    HistoryText.PlainText(" \u56E0\u56FD\u4E2D\u5DF2\u65E0\u81EA\u7531\u6C11\u53EF\u7ACB\uFF0C\u89E3\u5974\u7C4D\u5E76\u6539\u7F16\u4E3A\u4E49\u519B"),
+                    HistoryTarget.Actor(pKing));
+                HistoryWriter.RecordPerson(pKing.data.id, pKingdom, pKing.getName(),
+                    PersonEvent.MANDATE_REBEL_LEADER,
+                    HistoryText.Actor(pKing) +
+                    HistoryText.PlainText(" \u89E3\u5974\u7C4D\uFF0C\u88AB\u63A8\u4E3A\u4E49\u519B\u9886\u8896"),
+                    ChronicleCategory.HONOR,
+                    HistoryTarget.Kingdom(pKingdom));
+            }
+
+            return true;
+        }
+
+        private static void CountLivingCandidates(Kingdom pKingdom, out int pLivingCandidates, out int pFreeCandidates)
+        {
+            pLivingCandidates = 0;
+            pFreeCandidates = 0;
+            if (pKingdom?.data == null) return;
+
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (!CanConsiderLivingCandidate(unit, pKingdom)) continue;
+                pLivingCandidates++;
+                if (!SlaveService.IsSlave(unit)) pFreeCandidates++;
+            }
+        }
+
+        private static void FreeKingdomSlaves(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+
+            var slaves = new List<Actor>();
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (unit?.data == null || unit.kingdom != pKingdom) continue;
+                if (!SlaveService.IsSlave(unit)) continue;
+                slaves.Add(unit);
+            }
+
+            foreach (Actor slave in slaves)
+                SlaveService.FreeSlave(slave, "slave_only_rebel");
+        }
+
+        private static bool CanConsiderLivingCandidate(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pActor.kingdom != pKingdom) return false;
+            if (pActor.isRekt() || !pActor.isAlive()) return false;
+            if (pActor.asset?.is_boat == true) return false;
+            return true;
         }
     }
 }
