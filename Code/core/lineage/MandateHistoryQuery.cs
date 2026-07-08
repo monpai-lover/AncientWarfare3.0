@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.lineage
             var periods = ReadPeriods();
             if (periods.Count == 0) return periods;
 
+            MandateRulerTitleService.RepairMissingTempleTitles(periods);
             var eventsByPeriod = ReadEventsByPeriod();
             foreach (MandatePeriodView period in periods)
             {

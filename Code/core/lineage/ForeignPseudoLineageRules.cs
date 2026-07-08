@@ -27,9 +27,9 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldUseAwLineageSystem(bool pIsXiaActor, bool pKingdomIsForeignPseudoDynasty,
-            bool pHasLineage)
+            bool pKingdomIsXia, bool pHasLineage)
         {
-            return pHasLineage && (pIsXiaActor || pKingdomIsForeignPseudoDynasty);
+            return pHasLineage && (pIsXiaActor || pKingdomIsForeignPseudoDynasty || pKingdomIsXia);
         }
 
         public static bool ShouldIntegrateOfficial(bool pIsKing, bool pIsCityLeader, bool pIsArmyLeader)

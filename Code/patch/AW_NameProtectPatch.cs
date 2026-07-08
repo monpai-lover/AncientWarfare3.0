@@ -25,7 +25,7 @@ namespace AncientWarfare3.patch
         public static bool GenerateNewName_Prefix(Actor __instance)
         {
             if (__instance?.data == null) return true;
-            if (!LineageService.IsXia(__instance)) return true;
+            if (!LineageService.IsXia(__instance) && !LineageService.UsesAwLineageSystem(__instance)) return true;
 
             // 只保护"已有谱系单名"的夏人:GIVEN_NAME 非空才接管,否则放行原版随机(防递归)。
             __instance.data.get(LineageKeys.GIVEN_NAME, out string given, "");

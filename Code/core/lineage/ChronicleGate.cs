@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.lineage
             return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                 LineageService.IsXia(pActor),
                 XiaizationService.IsForeignPseudoDynasty(pActor.kingdom),
+                LineageService.IsXiaKingdom(pActor.kingdom),
                 lid >= 0);
         }
 

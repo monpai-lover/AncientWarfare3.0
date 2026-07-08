@@ -68,7 +68,15 @@ namespace AncientWarfare3.core.lineage
             return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                 IsXia(pActor),
                 XiaizationService.IsForeignPseudoDynasty(pActor.kingdom),
+                IsXiaKingdom(pActor.kingdom),
                 lineageId >= 0);
+        }
+
+        private static bool CanUseXiaizedLineageGovernment(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            return IsXia(pActor) || IsXiaKingdom(pActor.kingdom) ||
+                   XiaizationService.IsForeignPseudoDynasty(pActor.kingdom);
         }
 
         public static void EnsureOriginalClanArchived(Actor pActor, bool pRecordHistory = true)
@@ -102,7 +110,7 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnActorBornWithParents(Actor pBaby, Actor pParent1, Actor pParent2)
         {
-            if (!IsXia(pBaby)) return;
+            if (!ShouldUseLineageBirth(pBaby, pParent1, pParent2)) return;
 
             EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
@@ -146,10 +154,19 @@ namespace AncientWarfare3.core.lineage
             return hasXia && hasHuman;
         }
 
+        private static bool ShouldUseLineageBirth(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null) return false;
+            if (IsXia(pBaby)) return true;
+            if (!IsHuman(pBaby)) return false;
+            return HasLineageData(pParent1) || HasLineageData(pParent2) ||
+                   UsesAwLineageSystem(pParent1) || UsesAwLineageSystem(pParent2);
+        }
+
         /// <summary>入谱贵族出生 → PersonBiography 记一条 birth 事件(无谱系者不记)。</summary>
         private static void RecordBirthEvent(Actor pActor)
         {
-            if (pActor?.data == null || !IsXia(pActor)) return;
+            if (pActor?.data == null || !UsesAwLineageSystem(pActor)) return;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
             if (lid < 0) return; // 仅入谱贵族家系
 
@@ -478,9 +495,9 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnCityLeaderAppointed(Actor pActor)
         {
-            if (!IsXia(pActor))
+            if (!IsXia(pActor) && !UsesAwLineageSystem(pActor))
             {
-                if (XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom))
+                if (CanUseXiaizedLineageGovernment(pActor))
                     OnActorPromoted(pActor, NobleTrigger.CityLeader);
                 return;
             }
@@ -499,7 +516,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>成为国王/城主/成名者时赋予或刷新贵族身份。由晋升 Hook 调用。</summary>
         public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger)
         {
-            if (!IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
+            if (!CanUseXiaizedLineageGovernment(pActor)) return;
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
 
@@ -574,7 +591,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pActor.isRekt()) return;
             if (IsXia(pActor)) return;
-            if (!XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)) return;
+            if (!CanUseXiaizedLineageGovernment(pActor)) return;
             if (pSeen != null && !pSeen.Add(pActor.data.id)) return;
 
             string rawName = pActor.getName() ?? "";
@@ -587,20 +604,30 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
             if (existingLineageId < 0 || existingShiId < 0)
             {
-                long lineageId = LineageIdAllocator.NextLineageId();
-                long shiId = LineageIdAllocator.NextShiId();
-                if (lineageId < 0 || shiId < 0) return;
+                Actor father = FindFatherOfChild(pActor);
+                bool inherited = father?.data != null && TryInheritLineageFromSource(pActor, father, pRequireClan: true);
+                if (!inherited)
+                {
+                    long lineageId = LineageIdAllocator.NextLineageId();
+                    long shiId = LineageIdAllocator.NextShiId();
+                    if (lineageId < 0 || shiId < 0) return;
 
-                InsertLineageGroup(lineageId, clanName, pActor);
-                InsertShiBranch(shiId, lineageId, clanName, pActor, "pseudo_foreign");
-                pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
-                pActor.data.set(LineageKeys.SHI_ID, shiId);
+                    InsertLineageGroup(lineageId, clanName, pActor);
+                    InsertShiBranch(shiId, lineageId, clanName, pActor, "pseudo_foreign");
+                    pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
+                    pActor.data.set(LineageKeys.SHI_ID, shiId);
+                }
             }
 
             pActor.data.set(LineageKeys.GIVEN_NAME, givenName);
-            pActor.data.set(LineageKeys.FAMILY_NAME, clanName);
-            pActor.data.set(LineageKeys.CLAN_NAME, clanName);
-            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, clanName);
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string existingFamily, "");
+            pActor.data.get(LineageKeys.CLAN_NAME, out string existingClan, "");
+            if (string.IsNullOrEmpty(existingFamily))
+            {
+                pActor.data.set(LineageKeys.FAMILY_NAME, clanName);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, clanName);
+            }
+            if (string.IsNullOrEmpty(existingClan)) pActor.data.set(LineageKeys.CLAN_NAME, clanName);
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
@@ -619,7 +646,7 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnNobleChildFounding(Actor pChild)
         {
-            if (!IsXia(pChild)) return;
+            if (!IsXia(pChild) && !UsesAwLineageSystem(pChild)) return;
 
             pChild.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0) return;
@@ -663,7 +690,7 @@ namespace AncientWarfare3.core.lineage
             bool pWasRegisteredHeir)
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
-            if (!IsXia(pKing)) return;
+            if (!IsXia(pKing) && !UsesAwLineageSystem(pKing)) return;
             pKing.data.get(LineageKeys.IS_HEIR, out bool wasHeir, false);
             bool registeredHeir = wasHeir || pWasRegisteredHeir;
             bool currentHeir = HeirService.IsCurrentHeir(pKingdom, pKing);
@@ -693,7 +720,7 @@ namespace AncientWarfare3.core.lineage
             bool alreadyFoundedForKingdom = foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id;
             bool shouldFound = LineageBranchRules.ShouldFoundKingBranch(
                 validKingdom: pKingdom.data != null,
-                isXiaKing: IsXia(pKing),
+                isXiaKing: IsXia(pKing) || UsesAwLineageSystem(pKing),
                 wasHeir: registeredHeir,
                 isCurrentHeir: currentHeir,
                 isDirectSuccessionFromPreviousKing: directSuccession,
@@ -786,7 +813,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void SyncExistingChildrenAfterLineageChange(Actor pParent)
         {
-            if (pParent?.data == null || !IsXia(pParent)) return;
+            if (pParent?.data == null || (!IsXia(pParent) && !UsesAwLineageSystem(pParent))) return;
             if (!HasLineageData(pParent)) return;
 
             var childIds = new HashSet<long>(LineageQuery.GetChildIds(pParent.data.id));
@@ -813,7 +840,7 @@ namespace AncientWarfare3.core.lineage
             if (pSynced >= MAX_PROMOTION_DESCENDANT_SYNC) return;
 
             Actor child = World.world?.units?.get(pChildId);
-            if (child?.data != null && IsXia(child) && !child.isRekt())
+            if (child?.data != null && (IsXia(child) || IsHuman(child) || UsesAwLineageSystem(child)) && !child.isRekt())
             {
                 if (!ShouldChildFollowParentLine(child, pParent)) return;
 
@@ -980,7 +1007,7 @@ namespace AncientWarfare3.core.lineage
 
             int moved = 0;
             var live = World.world?.units?.get(pActorId);
-            if (live?.data != null && IsXia(live) && !live.isRekt())
+            if (live?.data != null && (IsXia(live) || IsHuman(live) || UsesAwLineageSystem(live)) && !live.isRekt())
             {
                 live.data.get(LineageKeys.LINEAGE_ID, out long liveLineageId, -1L);
                 live.data.get(LineageKeys.SHI_ID, out long liveShiId, -1L);
@@ -1067,7 +1094,7 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static bool IsEnfeoffmentCandidate(Actor pActor)
         {
-            if (!IsXia(pActor)) return false;
+            if (!IsXia(pActor) && !UsesAwLineageSystem(pActor)) return false;
             if (!pActor.isAdult() || !pActor.isSexMale()) return false;
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
@@ -1219,7 +1246,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>按 noble_distance 添加/移除 guizu。距离≥3 且本人非当前贵族 → 退回平民。</summary>
         public static void RefreshNobleStatus(Actor pActor)
         {
-            if (!IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
+            if (!CanUseXiaizedLineageGovernment(pActor) && !UsesAwLineageSystem(pActor)) return;
 
             pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int dist, 99);
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1);
@@ -1249,7 +1276,8 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void ApplyDisplayName(Actor pActor)
         {
-            if (!IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
+            if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&
+                !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
 
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
@@ -1347,7 +1375,9 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static bool CanFallInLoveByLineage(Actor pA, Actor pB)
         {
-            if (!IsXia(pA) || !IsXia(pB)) return true;
+            bool aUsesLineage = IsXia(pA) || UsesAwLineageSystem(pA);
+            bool bUsesLineage = IsXia(pB) || UsesAwLineageSystem(pB);
+            if (!aUsesLineage || !bUsesLineage) return true;
             if (!SlaveService.CanFallInLoveByStatus(pA, pB)) return false;
             if (SlaveService.AreBothSlaves(pA, pB)) return true;
 

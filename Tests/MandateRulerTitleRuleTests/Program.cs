@@ -13,16 +13,37 @@ namespace MandateRulerTitleRuleTests
                 conquestScore: 80, reformScore: 20, reignIndex: 1);
             ExpectTemple("low_origin", "\u9ad8\u7956", founder: true, lowOrigin: true, refounder: false,
                 conquestScore: 55, reformScore: 20, reignIndex: 1);
-            ExpectTemple("refounder", "\u4e16\u7956", founder: true, lowOrigin: false, refounder: true,
+            ExpectTemple("refounder", "\u9ad8\u7956", founder: true, lowOrigin: false, refounder: true,
                 conquestScore: 55, reformScore: 20, reignIndex: 1);
             ExpectTemple("second_reformer", "\u592a\u5b97", founder: false, lowOrigin: false, refounder: false,
                 conquestScore: 20, reformScore: 80, reignIndex: 2);
-            ExpectTemple("later_reformer_not_spammed_as_shizong", "", founder: false, lowOrigin: false,
+            ExpectTemple("later_reformer_not_spammed_as_shizong", "\u5ba3\u5b97", founder: false, lowOrigin: false,
                 refounder: false, conquestScore: 20, reformScore: 80, reignIndex: 4);
             ExpectTemple("later_great_reformer_can_be_shizong", "\u4e16\u5b97", founder: false, lowOrigin: false,
                 refounder: false, conquestScore: 35, reformScore: 95, reignIndex: 5);
+            ExpectTemple("later_conqueror_is_wuzong_not_liezu", "\u6b66\u5b97", founder: false,
+                lowOrigin: false, refounder: false, conquestScore: 85, reformScore: 20, reignIndex: 6);
+            ExpectMandateReignIndex(1, pKingdomReignIndex: 4, pPriorMandateTitles: 0);
+            ExpectMandateReignIndex(2, pKingdomReignIndex: 5, pPriorMandateTitles: 1);
+            ExpectMandateFounder(true, pKingActorId: 3376, pPeriodFounderActorId: 3376, pMandateReignIndex: 1);
+            ExpectMandateFounder(false, pKingActorId: 7536, pPeriodFounderActorId: 3376, pMandateReignIndex: 2);
+            ExpectTemple("mandate_founder_mid_kingdom_reign", "\u9ad8\u7956",
+                MandateRulerTitleRules.IsMandateFounderReign(3376, 3376,
+                    MandateRulerTitleRules.ResolveMandateReignIndex(4, 0)),
+                lowOrigin: false, refounder: false, conquestScore: 36, reformScore: 20, reignIndex: 1);
+            ExpectTemple("mandate_second_reign_uses_mandate_index", "\u592a\u5b97",
+                MandateRulerTitleRules.IsMandateFounderReign(7536, 3376,
+                    MandateRulerTitleRules.ResolveMandateReignIndex(5, 1)),
+                lowOrigin: false, refounder: false, conquestScore: 20, reformScore: 80, reignIndex: 2);
             ExpectUniqueTemple("\u4e16\u5b97", "\u4e16\u5b97", Array.Empty<string>(), 5);
             ExpectUniqueTemple("\u7a46\u5b97", "\u4e16\u5b97", new[] { "\u4e16\u5b97" }, 5);
+            ExpectTempleValidity("founder_taizu", true, "\u592a\u7956", true);
+            ExpectTempleValidity("founder_gaozu", true, "\u9ad8\u7956", true);
+            ExpectTempleValidity("founder_shizu_invalid", true, "\u4e16\u7956", false);
+            ExpectTempleValidity("later_shizong", false, "\u4e16\u5b97", true);
+            ExpectTempleValidity("later_taizong", false, "\u592a\u5b97", true);
+            ExpectTempleValidity("later_liezu_invalid", false, "\u70c8\u7956", false);
+            ExpectTempleValidity("later_empty_invalid", false, "", false);
             ExpectUniqueDoublePosthumous("\u7aef\u9756", "\u61ff\u70c8", new[] { "\u61ff\u70c8" },
                 pNegative: false, pReignIndex: 4);
             ExpectUniqueDoublePosthumous("\u8c2c\u60d1", "\u623e\u8650", new[] { "\u623e\u8650" },
@@ -84,6 +105,29 @@ namespace MandateRulerTitleRuleTests
             string actual = MandateRulerTitleRules.EnsureUniqueTempleName(candidate, used, reignIndex);
             if (actual != expected)
                 throw new Exception($"Expected unique temple {expected}, got {actual}.");
+        }
+
+        private static void ExpectTempleValidity(string label, bool founder, string temple, bool expected)
+        {
+            bool actual = MandateRulerTitleRules.IsTempleNameValidForMandatePosition(temple, founder);
+            if (actual != expected)
+                throw new Exception($"Expected temple validity {label} {expected}, got {actual}.");
+        }
+
+        private static void ExpectMandateReignIndex(int expected, int pKingdomReignIndex, int pPriorMandateTitles)
+        {
+            int actual = MandateRulerTitleRules.ResolveMandateReignIndex(pKingdomReignIndex, pPriorMandateTitles);
+            if (actual != expected)
+                throw new Exception($"Expected mandate reign index {expected}, got {actual}.");
+        }
+
+        private static void ExpectMandateFounder(bool expected, long pKingActorId, long pPeriodFounderActorId,
+            int pMandateReignIndex)
+        {
+            bool actual = MandateRulerTitleRules.IsMandateFounderReign(pKingActorId, pPeriodFounderActorId,
+                pMandateReignIndex);
+            if (actual != expected)
+                throw new Exception($"Expected mandate founder {expected}, got {actual}.");
         }
 
         private static void ExpectFullTitle(string expected, string temple, string pair)

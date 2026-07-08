@@ -13,5 +13,16 @@ namespace AncientWarfare3.core.lineage
         {
             return pHasRegisteredHeir;
         }
+
+        public static bool ShouldUseLeaderFallbackForXiaizedSuccession(bool pHasRegisteredHeir,
+            bool pHasLeaderCandidate)
+        {
+            return !pHasRegisteredHeir && pHasLeaderCandidate;
+        }
+
+        public static bool ShouldRecallForeignSelectedHeir(bool pHasHeir, bool pSameKingdom, bool pHasCapital)
+        {
+            return pHasHeir && !pSameKingdom && pHasCapital;
+        }
     }
 }

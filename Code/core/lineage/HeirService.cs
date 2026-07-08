@@ -45,7 +45,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             Actor king = pKing ?? pKingdom.king;
-            if (king?.data == null || !LineageService.IsXia(king)) return;
+            if (king?.data == null || (!LineageService.IsXia(king) && !LineageService.UsesAwLineageSystem(king)))
+                return;
 
             king.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             king.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
@@ -236,10 +237,26 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             Actor heir = pSelection.Actor;
+            RecallForeignSelectedHeir(pKingdom, heir);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);
             SetHeirFlag(heir, true);
+        }
+
+        private static void RecallForeignSelectedHeir(Kingdom pKingdom, Actor pHeir)
+        {
+            if (pKingdom?.data == null || pHeir?.data == null) return;
+            City capital = pKingdom.capital;
+            if (!HeirRecallRules.ShouldRecallForeignSelectedHeir(
+                    pHasHeir: true,
+                    pSameKingdom: pHeir.kingdom == pKingdom,
+                    pHasCapital: capital?.data != null))
+                return;
+
+            try { if (pHeir.hasArmy()) pHeir.removeFromArmy(); } catch { }
+            try { pHeir.joinCity(capital); } catch { }
+            try { pHeir.clearGraphicsFully(); } catch { }
         }
 
         private static bool IsCityLeaderOfAnyCity(Kingdom pKingdom, Actor pActor)
@@ -465,7 +482,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (pActor == pKing) return false;
             if (pActor.kingdom != pKingdom) return false;
-            if (!LineageService.IsXia(pActor)) return false;
+            if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
             if (!pActor.isSexMale()) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
             if (pActor.isKing()) return false;

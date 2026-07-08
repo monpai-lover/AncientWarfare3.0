@@ -22,7 +22,7 @@ namespace AncientWarfare3.patch
         public static void MakeBaby_Postfix(Actor __result)
         {
             if (__result?.data == null) return;
-            if (!LineageService.IsXia(__result)) return;
+            if (!LineageService.IsXia(__result) && !LineageService.UsesAwLineageSystem(__result)) return;
             LineageService.ApplyDisplayName(__result); // 性别已定 → 重算走正确性别分支
             LineageService.ArchiveActor(__result, pAlive: true);
         }

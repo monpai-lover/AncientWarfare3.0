@@ -13,16 +13,27 @@ namespace AncientWarfare3.core.lineage
         public static string SelectTempleName(bool founder, bool lowOrigin, bool refounder,
             int conquestScore, int reformScore, int reignIndex)
         {
-            if (founder && refounder) return "\u4e16\u7956";
             if (founder && lowOrigin) return "\u9ad8\u7956";
             if (founder && conquestScore >= 70) return "\u592a\u7956";
             if (founder) return "\u9ad8\u7956";
-            if (reignIndex == 2 && reformScore >= 60) return "\u592a\u5b97";
-            if (conquestScore >= 75) return "\u70c8\u7956";
+            if (reignIndex == 2) return "\u592a\u5b97";
 
-            // Shizong is reserved for rare restoration/reform rulers, not the default high-reform result.
             if (reignIndex >= 3 && reformScore >= 90 && conquestScore >= 30) return "\u4e16\u5b97";
-            return "";
+            if (conquestScore >= 75) return "\u6b66\u5b97";
+            return CommonTempleNames[PositiveIndex(reignIndex - 2, CommonTempleNames.Length)];
+        }
+
+        public static int ResolveMandateReignIndex(int pKingdomReignIndex, int pPriorMandateTitles)
+        {
+            if (pPriorMandateTitles >= 0) return pPriorMandateTitles + 1;
+            return pKingdomReignIndex <= 0 ? 1 : pKingdomReignIndex;
+        }
+
+        public static bool IsMandateFounderReign(long pKingActorId, long pPeriodFounderActorId,
+            int pMandateReignIndex)
+        {
+            if (pPeriodFounderActorId >= 0) return pKingActorId == pPeriodFounderActorId;
+            return pMandateReignIndex <= 1;
         }
 
         public static string EnsureUniqueTempleName(string pCandidate, IEnumerable<string> pUsed, int pReignIndex)
@@ -38,6 +49,13 @@ namespace AncientWarfare3.core.lineage
                 if (!used.Contains(next)) return next;
             }
             return "";
+        }
+
+        public static bool IsTempleNameValidForMandatePosition(string pTemple, bool pFounder)
+        {
+            if (string.IsNullOrEmpty(pTemple)) return false;
+            if (pFounder) return pTemple == "\u592a\u7956" || pTemple == "\u9ad8\u7956";
+            return pTemple.EndsWith("\u5b97");
         }
 
         public static string BuildFullTitle(string pTemple, string pDoublePosthumous)

@@ -730,7 +730,13 @@ namespace AncientWarfare3.core.lineage
         {
             MandateReport r = ReadReport();
             if (r.period_id < 0) return "\u5F53\u524D\u6CA1\u6709\u5929\u547D\u6CD5\u7406";
-            string owner = pKingdom?.data == null ? "" : "\n\u5F53\u524D\u56FD\u5BB6: " + pKingdom.name;
+            string owner = "";
+            if (pKingdom?.data != null)
+            {
+                owner = "\n\u5F53\u524D\u56FD\u5BB6: " + pKingdom.name;
+                owner += "\n" + MandateCoreTooltipRules.BuildPointedKingdomControlLine(
+                    pKingdom.name, GetCoreControlRatioFor(pKingdom));
+            }
             return "\u5929\u547D\u6CD5\u7406" +
                    "\n\u5929\u547D\u56FD: " + (string.IsNullOrEmpty(r.kingdom_name) ? "\u65E0" : r.kingdom_name) +
                    "\n\u6838\u5FC3\u57CE\u5E02: " + r.controlled_core_count + "/" + r.core_count +

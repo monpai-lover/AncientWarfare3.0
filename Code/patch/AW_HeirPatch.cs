@@ -27,10 +27,13 @@ namespace AncientWarfare3.patch
         {
             if (!LineageService.IsXiaKingdom(pKingdom)) return true;
             Actor heir = HeirService.GetHeir(pKingdom);
+            Actor leaderCandidate = heir == null ? HeirService.GetLeaderSuccessionCandidate(pKingdom) : null;
             __result = HeirRecallRules.ShouldPreferRegisteredHeirBeforeLeaderFallback(heir != null)
                 ? heir
-                : (HeirService.ShouldUseOrdinaryFallbackSuccession(pKingdom)
-                    ? HeirService.GetLeaderSuccessionCandidate(pKingdom)
+                : (HeirRecallRules.ShouldUseLeaderFallbackForXiaizedSuccession(
+                    pHasRegisteredHeir: false,
+                    pHasLeaderCandidate: leaderCandidate != null)
+                    ? leaderCandidate
                     : null);
             if (heir == null) HeirService.MarkLeaderFallbackSuccession(pKingdom, __result);
             return false;

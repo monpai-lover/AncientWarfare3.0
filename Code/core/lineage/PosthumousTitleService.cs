@@ -28,10 +28,17 @@ namespace AncientWarfare3.core.lineage
             double now = World.world.getCurWorldTime();
             PosthumousEvaluation eval = Evaluate(pKingdom, pEndReason, pReign);
             string titleChar = SelectTitleChar(eval, pEndReason, pKingdom.id);
-            string suffix = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pKingdom));
+            KingdomTitle kingdomTitle = KingdomTitleService.GetTitle(pKingdom);
+            string suffix = KingdomTitleService.GetTitleChar(kingdomTitle);
             if (string.IsNullOrEmpty(suffix)) suffix = "君";
 
-            string fullTitle = FirstChar(pKingdom.name) + titleChar + suffix;
+            bool mandateKingdom = MandateService.IsMandateKingdom(pKingdom);
+            bool useOrdinaryFirstEmperorTaizu = PosthumousTitleRules.ShouldUseTaizuForOrdinaryFirstEmperor(
+                mandateKingdom,
+                kingdomTitle == KingdomTitle.Emperor,
+                HasPriorEmperorTitle(pKingdom.id, pReign.ReignId, suffix));
+            string fullTitle = PosthumousTitleRules.BuildFullTitle(
+                FirstChar(pKingdom.name), titleChar, suffix, useOrdinaryFirstEmperorTaizu);
             string titleColor = HistoryColors.FromKingdom(pKingdom);
             string evalKey = EvalKey(eval.Grade);
             string titleKind = pEndReason == "abdicated" ? "abdication" : "posthumous";
@@ -71,7 +78,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
-            if (MandateService.IsMandateKingdom(pKingdom))
+            if (mandateKingdom)
                 MandateRulerTitleService.OnMandateReignEnded(pKingdom, pKing, pReign, pEndReason);
 
             HistoryText posthumousText = BuildTitleEventText(pKing, pEndReason, fullTitle, titleColor, eval.Reason);
@@ -421,6 +428,24 @@ namespace AncientWarfare3.core.lineage
                     "WHERE ACTOR_ID=@actor OR REIGN_ID=@reign LIMIT 1";
                 cmd.Parameters.AddWithValue("@actor", pActorId);
                 cmd.Parameters.AddWithValue("@reign", pReignId);
+                return cmd.ExecuteScalar() != null;
+            }
+            catch { return false; }
+        }
+
+        private static bool HasPriorEmperorTitle(long pKingdomId, long pReignId, string pEmperorSuffix)
+        {
+            var db = LineageArchiveManager.Instance?.OperatingDB;
+            if (db == null || pKingdomId < 0 || string.IsNullOrEmpty(pEmperorSuffix)) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT 1 FROM {PosthumousTitleTableItem.GetTableName()} " +
+                    "WHERE KINGDOM_ID=@kid AND REIGN_ID<>@reign AND TITLE_SUFFIX=@suffix LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                cmd.Parameters.AddWithValue("@reign", pReignId);
+                cmd.Parameters.AddWithValue("@suffix", pEmperorSuffix);
                 return cmd.ExecuteScalar() != null;
             }
             catch { return false; }

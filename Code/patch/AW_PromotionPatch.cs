@@ -20,7 +20,10 @@ namespace AncientWarfare3.patch
         public static bool SetLeader_HeirGuard_Prefix(City __instance, Actor pActor, bool pNew, out bool __state)
         {
             __state = false;
-            if (pActor == null || !LineageService.IsXia(pActor)) return true;
+            if (pActor == null ||
+                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance?.kingdom) &&
+                 !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
+                return true;
             if (!XiaAuthorityGenderRules.ShouldAllowSetLeader(
                     pIsXiaActor: true,
                     pIsMale: pActor.isSexMale(),
@@ -44,7 +47,8 @@ namespace AncientWarfare3.patch
         {
             if (__state) return;
             if (pActor == null ||
-                (!LineageService.IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
+                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(pActor.kingdom) &&
+                 !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
                 return;
             LineageService.OnCityLeaderAppointed(pActor);
             if (pNew) ChronicleEvents.OnBecomeLeader(pActor); // 编年史:仅新任命记(pNew=false 是读档/复位,不重复记)
@@ -57,7 +61,8 @@ namespace AncientWarfare3.patch
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
             if (pActor == null ||
-                (!LineageService.IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(__instance)))
+                (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance) &&
+                 !XiaizationService.IsForeignPseudoDynasty(__instance)))
                 return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
         }

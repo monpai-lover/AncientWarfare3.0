@@ -458,6 +458,9 @@ namespace AncientWarfare3.core.lineage
             {
                 ReignPeriod period = pPeriods[i];
                 if (period == null) continue;
+                if (i + 1 < pPeriods.Count && pPeriods[i + 1] != null)
+                    period.end_time = HistoryPeriodRules.CloseEndBeforeNextStart(
+                        period.start_time, period.end_time, pPeriods[i + 1].start_time);
                 period.end_time = HistoryPeriodRules.NormalizeEndTime(period.start_time, period.end_time);
                 period.events.Sort(CompareHistoryEntries);
             }
@@ -516,7 +519,47 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             catch { }
+            NormalizeSequentialPeriodEnds(result);
             return result;
+        }
+
+        private static void NormalizeSequentialPeriodEnds(List<ReignPeriod> pPeriods)
+        {
+            if (pPeriods == null || pPeriods.Count == 0) return;
+            pPeriods.Sort((a, b) =>
+            {
+                if (ReferenceEquals(a, b)) return 0;
+                if (a == null) return 1;
+                if (b == null) return -1;
+                return a.start_time.CompareTo(b.start_time);
+            });
+
+            for (int i = 0; i < pPeriods.Count; i++)
+            {
+                ReignPeriod period = pPeriods[i];
+                if (period == null) continue;
+                if (i + 1 < pPeriods.Count && pPeriods[i + 1] != null)
+                    period.end_time = HistoryPeriodRules.CloseEndBeforeNextStart(
+                        period.start_time, period.end_time, pPeriods[i + 1].start_time);
+                else
+                    period.end_time = HistoryPeriodRules.NormalizeEndTime(period.start_time, period.end_time);
+            }
+            RepairOrdinaryFirstEmperorDisplayTitles(pPeriods);
+        }
+
+        private static void RepairOrdinaryFirstEmperorDisplayTitles(List<ReignPeriod> pPeriods)
+        {
+            if (pPeriods == null || pPeriods.Count == 0) return;
+            bool hasPriorOrdinaryEmperorTitle = false;
+            foreach (ReignPeriod period in pPeriods)
+            {
+                if (period == null || string.IsNullOrEmpty(period.posthumous_title)) continue;
+                if (!PosthumousTitleRules.IsCompactOrdinaryEmperorTitle(period.posthumous_title)) continue;
+                period.posthumous_title = PosthumousTitleRules.RepairFirstOrdinaryEmperorDisplayTitle(
+                    period.posthumous_title,
+                    hasPriorOrdinaryEmperorTitle);
+                hasPriorOrdinaryEmperorTitle = true;
+            }
         }
 
         /// <summary>
@@ -773,6 +816,7 @@ namespace AncientWarfare3.core.lineage
                     if (!string.IsNullOrEmpty(best.title)) reign.posthumous_title = best.title;
                     if (!string.IsNullOrEmpty(best.titleColor)) reign.posthumous_color = best.titleColor;
                 }
+                RepairOrdinaryFirstEmperorDisplayTitles(pReigns);
             }
             catch { }
         }

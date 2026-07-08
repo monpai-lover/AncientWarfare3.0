@@ -34,12 +34,6 @@ namespace AncientWarfare3.patch
         public static void ApplyParentsMeta_Postfix(Actor pParent1, Actor pParent2, Actor pBaby)
         {
             if (pBaby?.data == null) return;
-            if (!LineageService.IsXia(pBaby))
-            {
-                LineageService.OnMixedAncestryBorn(pBaby, pParent1, pParent2);
-                return;
-            }
-
             LineageService.OnActorBornWithParents(pBaby, pParent1, pParent2);
 
             // 编年史:给贵族父/母各记一条"喜得子/女"(谱系继承已在上一步完成,名字已就绪)。

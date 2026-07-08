@@ -79,6 +79,7 @@ namespace AncientWarfare3.core.lineage
         public const string SLAVE_ARMY_ENABLED = "aw_slave_army_enabled";
         public const string SLAVE_ARMY_RECORDED = "aw_slave_army_recorded";
         public const string SLAVE_LABOR_RECORDED = "aw_slave_labor_recorded";
+        public const string SLAVE_ONLY_REBEL_CONVERTED = "aw_slave_only_rebel_converted";
         public const string SLAVE_FOOD_YEAR = "aw_slave_food_year";
         public const string SLAVE_FOOD_QUOTA = "aw_slave_food_quota";
         public const string SLAVE_RETIREMENT_LAST_CHECK = "aw_slave_retirement_last_check";
@@ -94,6 +95,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_RECORDED = "aw_royal_guard_recorded";
         public const string ROYAL_GUARD_LAST_CHECK = "aw_royal_guard_last_check";
         public const string ROYAL_GUARD_REFRESH_CURSOR = "aw_royal_guard_refresh_cursor";
+        public const string ROYAL_GUARD_DISMISS_CURSOR = "aw_royal_guard_dismiss_cursor";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";
