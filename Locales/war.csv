@@ -46,6 +46,8 @@ aw_war_independence,独立战争,Independence War,獨立戰爭
 aw_war_independence_desc,对当前宗主发动独立战争,Start an independence war against the suzerain,對當前宗主發動獨立戰爭
 aw_war_restoration,复国战争,Restoration War,復國戰爭
 aw_war_restoration_desc,以亡国王室血统发起复国战争,Restore a fallen realm by royal bloodline,以亡國王室血統發起復國戰爭
+aw_war_mandate_conquest,天命征服,Mandate Conquest,天命征服
+aw_war_mandate_conquest_desc,天命国对弱小外国发动征服战争，不需制造宣称且不受强宣惩罚,Mandate realms can conquer weaker foreign realms without fabricating claims or taking no-CB penalties,天命國對弱小外國發動征服戰爭，不需製造宣稱且不受強宣懲罰
 aw_war_no_cb,强宣,No CB War,強宣
 aw_war_no_cb_desc,无理由宣战,War without a valid casus belli,無理由宣戰
 aw_war_no_cb_cooldown,强宣冷却至,No-CB cooldown until,強宣冷卻至

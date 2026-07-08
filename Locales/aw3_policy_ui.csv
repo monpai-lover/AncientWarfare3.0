@@ -74,6 +74,8 @@ aw_war_press_claim,按宣称宣战,Press Claim,按宣稱宣戰
 aw_war_force_vassal,附庸战争,Vassal War,附庸戰爭
 aw_war_independence,独立战争,Independence War,獨立戰爭
 aw_war_restore_kingdom,复国战争,Restoration War,復國戰爭
+aw_war_mandate_conquest,天命征服,Mandate Conquest,天命征服
+aw_war_mandate_conquest_desc,天命国对弱小外国发动征服战争，不需制造宣称且不受强宣惩罚,Mandate realms can conquer weaker foreign realms without fabricating claims or taking no-CB penalties,天命國對弱小外國發動征服戰爭，不需製造宣稱且不受強宣懲罰
 aw_war_no_cb,强宣,No-CB War,強宣
 aw_decision_declare_war,兴师宣战,Declare War,興師宣戰
 aw_decision_declare_war_desc,按已选定的宣战理由和战争目标发动战争,Start a war using the selected casus belli and war goal,按已選定的宣戰理由和戰爭目標發動戰爭
