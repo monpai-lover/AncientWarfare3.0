@@ -17,7 +17,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (string.IsNullOrEmpty(pTargetKingdomRich)) return pLabel ?? "";
             if (string.IsNullOrEmpty(pLabel)) return pTargetKingdomRich;
-            return pTargetKingdomRich + " \u8def " + pLabel;
+            return pTargetKingdomRich + "\uff1a" + pLabel;
         }
 
         public static string BuildStatsLine(int pCoreCount, int pStrongClaimCount, int pWeakClaimCount,
@@ -25,7 +25,7 @@ namespace AncientWarfare3.core.lineage
         {
             string stats = "\u6838" + pCoreCount + " \u5f3a" + pStrongClaimCount +
                            " \u5f31" + pWeakClaimCount + " \u9020" + pPendingCount;
-            if (!string.IsNullOrEmpty(pTargetCityRich)) stats += " \u8def " + pTargetCityRich;
+            if (!string.IsNullOrEmpty(pTargetCityRich)) stats += " \u76ee\u6807\uff1a" + pTargetCityRich;
             return stats;
         }
     }

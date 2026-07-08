@@ -491,7 +491,7 @@ namespace AncientWarfare3.core.lineage
                 actor_name = NameOf(pActor, pRow, pActorId),
                 clan_name = string.IsNullOrEmpty(clan) ? family : clan,
                 family_name = family,
-                city_name = ResolveCityName(pActor, pRow),
+                city_name = ResolveAncestorLineageCity(pActor, pRow),
                 social_title = ResolveAncestorSocialTitle(pActorId, pActor, pRow, out socialColor),
                 social_title_color = socialColor,
                 kingdom_color = ResolveKingdomColor(pActor, pRow),
@@ -531,6 +531,29 @@ namespace AncientWarfare3.core.lineage
             }
 
             return pRow?.city_name ?? "";
+        }
+
+        private static string ResolveAncestorLineageCity(Actor pActor, ActorArchiveTableItem pRow)
+        {
+            string liveOrArchive = ResolveCityName(pActor, pRow);
+            long shiId = LiveLong(pActor, LineageKeys.SHI_ID, pRow?.shi_id ?? -1L);
+            if (shiId < 0) return liveOrArchive;
+
+            string branchCity = "";
+            string rootCity = "";
+            try
+            {
+                ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+                branchCity = branch?.origin_city_name ?? "";
+                if (branch != null)
+                {
+                    ShiBranchInfo root = LineageQuery.GetRootShiBranchInfo(branch.lineage_id);
+                    rootCity = root?.origin_city_name ?? "";
+                }
+            }
+            catch { }
+
+            return AncestryOriginRules.SelectLineageCity(liveOrArchive, branchCity, rootCity);
         }
 
         private static string ResolveKingdomColor(Actor pActor, ActorArchiveTableItem pRow)

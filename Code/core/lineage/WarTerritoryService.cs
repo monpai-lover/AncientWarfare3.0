@@ -20,6 +20,7 @@ namespace AncientWarfare3.core.lineage
         public const string PROJECT_STRONG_CLAIM = "fabricate_strong_claim";
 
         public const string GOAL_TAKE_MANDATE = "take_mandate";
+        public const string GOAL_MANDATE_CONQUEST = "mandate_conquest";
         public const string GOAL_TAKE_CORE_CITY = "take_core_city";
         public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
         public const string GOAL_FORCE_VASSAL = "force_vassal";
@@ -68,6 +69,7 @@ namespace AncientWarfare3.core.lineage
             public bool can_independence;
             public bool can_restore;
             public bool can_take_mandate;
+            public bool can_mandate_conquest;
             public bool can_no_cb;
             public bool can_fabricate;
             public bool vassal_blocked;
@@ -377,6 +379,23 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool TryDeclareMandateConquestWar(Kingdom pAttacker, Kingdom pDefender, City pSelectedCity)
+        {
+            if (!CanUseMandateConquest(pAttacker, pDefender)) return false;
+            City city = pSelectedCity?.data != null ? pSelectedCity : pDefender?.capital ?? FindFirstTargetCity(pDefender);
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_MANDATE_CONQUEST,
+                target_kingdom = pDefender,
+                target_city = city
+            };
+            War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
+                WarDecisionService.WAR_NORMAL, "mandate_conquest");
+            if (war?.data == null) return false;
+            CreateGoalForWar(war, goal);
+            return true;
+        }
+
         public static void CreateGoalForWar(War pWar, WarGoalRequest pGoal)
         {
             if (pWar?.data == null || pGoal == null || !Ready) return;
@@ -541,6 +560,41 @@ namespace AncientWarfare3.core.lineage
             return string.Join("\n", lines.ToArray());
         }
 
+        public static bool CanUseMandateConquest(Kingdom pSource, Kingdom pTarget)
+        {
+            if (!IsCivil(pSource) || !IsCivil(pTarget) || pSource == pTarget) return false;
+            return MandateConquestRules.CanUseMandateConquest(
+                pAttackerIsCurrentMandate: MandateService.GetCurrentMandateKingdom() == pSource,
+                pVassalBlocked: IsVassalDecisionOnlyTarget(pSource, pTarget),
+                pSameAlliance: IsSameAlliance(pSource, pTarget),
+                pAttackerSystemPower: GetAllianceSystemPower(pSource),
+                pDefenderAlliancePower: GetAllianceSystemPower(pTarget));
+        }
+
+        public static float GetAllianceSystemPower(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0f;
+            float power = 0f;
+            var seen = new HashSet<long>();
+            try
+            {
+                Alliance alliance = pKingdom.getAlliance();
+                if (alliance != null)
+                {
+                    foreach (Kingdom member in alliance.kingdoms_hashset)
+                    {
+                        if (member?.data == null || member.isRekt() || !seen.Add(member.id)) continue;
+                        power += VassalService.GetPowerScore(member, pIncludeVassals: true);
+                    }
+                }
+            }
+            catch { }
+
+            if (seen.Add(pKingdom.id))
+                power += VassalService.GetPowerScore(pKingdom, pIncludeVassals: true);
+            return power;
+        }
+
         public static List<TargetReport> BuildTargetReports(Kingdom pSource)
         {
             var result = new List<TargetReport>();
@@ -578,6 +632,7 @@ namespace AncientWarfare3.core.lineage
                 report.can_take_mandate = !vassalBlocked &&
                     MandateService.GetCurrentMandateKingdom() == target &&
                     WarDecisionService.HasValidCasusBelli(pSource, target, MandateService.WAR_TIANMING);
+                report.can_mandate_conquest = CanUseMandateConquest(pSource, target);
                 report.can_force_vassal = !vassalBlocked &&
                     WarDecisionService.HasValidCasusBelli(pSource, target, "vassal_war");
                 report.can_independence = VassalService.GetSuzerain(pSource) == target &&
@@ -592,9 +647,9 @@ namespace AncientWarfare3.core.lineage
             }
             result.Sort((a, b) =>
             {
-                int scoreA = (a.can_take_mandate ? 500 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
+                int scoreA = (a.can_take_mandate ? 500 : 0) + (a.can_mandate_conquest ? 260 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
                              a.weak_claim_count * 20 + a.pending_count;
-                int scoreB = (b.can_take_mandate ? 500 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
+                int scoreB = (b.can_take_mandate ? 500 : 0) + (b.can_mandate_conquest ? 260 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
                              b.weak_claim_count * 20 + b.pending_count;
                 int cmp = scoreB.CompareTo(scoreA);
                 return cmp != 0 ? cmp : string.Compare(a.target?.name, b.target?.name, StringComparison.Ordinal);
@@ -613,6 +668,12 @@ namespace AncientWarfare3.core.lineage
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
                     GOAL_TAKE_MANDATE, "\u593A\u53D6\u5929\u547D",
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
+                    restorationStrength: 0));
+
+            if (CanUseMandateConquest(pSource, pTarget))
+                result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
+                    GOAL_MANDATE_CONQUEST, "\u5929\u547D\u5F81\u670D",
+                    -1, -1, -1, null, hasCore: false, hasStrongClaim: true, hasWeakClaim: false,
                     restorationStrength: 0));
 
             City city = FindBestCoreTargetCity(pSource, pTarget, out long coreId);
@@ -793,6 +854,11 @@ namespace AncientWarfare3.core.lineage
             return CanFabricateCoreProject(pSource, pTargetCity, pCheckExistingProject: true, out pReason);
         }
 
+        public static bool HasCore(Kingdom pKingdom, City pCity)
+        {
+            return pKingdom?.data != null && pCity?.data != null && FindCoreId(pKingdom.id, pCity.data.id) >= 0;
+        }
+
         private static bool CanFabricateCoreProject(Kingdom pSource, City pTargetCity, bool pCheckExistingProject,
             out string pReason)
         {
@@ -868,6 +934,18 @@ namespace AncientWarfare3.core.lineage
             Kingdom sourceRoot = VassalService.GetRootSuzerain(pSource);
             Kingdom targetRoot = VassalService.GetRootSuzerain(pTarget);
             return sourceRoot?.data != null && targetRoot?.data != null && sourceRoot == targetRoot;
+        }
+
+        private static bool IsSameAlliance(Kingdom pSource, Kingdom pTarget)
+        {
+            try
+            {
+                Alliance sourceAlliance = pSource?.getAlliance();
+                Alliance targetAlliance = pTarget?.getAlliance();
+                if (sourceAlliance == null || targetAlliance == null) return false;
+                return Alliance.isSame(sourceAlliance, targetAlliance);
+            }
+            catch { return false; }
         }
 
         public static string FabricationReasonText(string pReason)

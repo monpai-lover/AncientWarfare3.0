@@ -21,5 +21,11 @@ namespace AncientWarfare3.core.lineage
             if (lifespan <= 0f) return false;
             return age >= lifespan * retirementAgeRatio;
         }
+
+        public static bool ShouldRunCityRetirementScan(bool pActorUpdateAgeRetirementEnabled, bool pMaintenanceDue)
+        {
+            if (!pMaintenanceDue) return false;
+            return !pActorUpdateAgeRetirementEnabled;
+        }
     }
 }

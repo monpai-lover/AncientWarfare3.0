@@ -21,12 +21,12 @@ namespace AncientWarfare3.patch
                 content.figures.HistoricalFigureService.OnFigureDied(__instance);
             }
 
-            bool isXia = LineageService.IsXia(__instance);
+            bool usesAwLineage = LineageService.UsesAwLineageSystem(__instance);
             bool hasTraceableArchive = LineageService.HasTraceableArchive(__instance);
-            if (!isXia && !hasTraceableArchive) return;
+            if (!usesAwLineage && !hasTraceableArchive) return;
 
             EnsureDeathCause(__instance, pType);
-            if (isXia) LineageService.ArchiveActor(__instance, pAlive: false);
+            if (usesAwLineage) LineageService.ArchiveActor(__instance, pAlive: false);
             else
             {
                 LineageService.ArchiveTraceableActor(__instance, pAlive: false);

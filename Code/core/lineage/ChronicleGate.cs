@@ -10,9 +10,11 @@ namespace AncientWarfare3.core.lineage
         public static bool IsNobleActor(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            if (!LineageService.IsXia(pActor)) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
-            return lid >= 0;
+            return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
+                LineageService.IsXia(pActor),
+                XiaizationService.IsForeignPseudoDynasty(pActor.kingdom),
+                lid >= 0);
         }
 
         /// <summary>是否"重要人物":国王 / 城主 / 历史人物。用于重要击杀等跨门槛判定。</summary>

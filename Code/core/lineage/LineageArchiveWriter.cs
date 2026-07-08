@@ -15,7 +15,7 @@ namespace AncientWarfare3.core.lineage
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
-            if (!LineageService.IsXia(pActor) && (!pTraceOnly || !LineageService.IsHuman(pActor))) return;
+            if (!LineageService.UsesAwLineageSystem(pActor) && (!pTraceOnly || !LineageService.IsHuman(pActor))) return;
 
             long id = pActor.data.id;
             string table = ActorArchiveTableItem.GetTableName();

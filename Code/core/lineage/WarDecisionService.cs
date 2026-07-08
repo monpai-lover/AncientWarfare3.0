@@ -290,6 +290,8 @@ namespace AncientWarfare3.core.lineage
                     return WarTerritoryService.FindBestCoreTargetCityForDecision(pAttacker, pDefender)?.data != null;
                 case "vassal_war":
                     return CanForceVassal(pAttacker, pDefender);
+                case WAR_NORMAL:
+                    return WarTerritoryService.CanUseMandateConquest(pAttacker, pDefender);
                 case MandateService.WAR_TIANMING:
                     return MandateService.GetCurrentMandateKingdom() == pDefender;
                 case MandateService.WAR_TIANMING_REBEL:
@@ -406,6 +408,7 @@ namespace AncientWarfare3.core.lineage
                 case "force_vassal": return "\u5f3a\u5236\u81e3\u670d";
                 case "restoration": return "\u590d\u56fd";
                 case "tianming": return "\u593a\u53d6\u5929\u547d";
+                case "mandate_conquest": return "\u5929\u547d\u5f81\u670d";
                 case "no_cb": return "\u65e0\u7406\u7531\u5ba3\u6218";
             }
 

@@ -13,28 +13,74 @@ namespace AncientWarfare3.patch
         {
             if (__instance?.data == null || __instance.isRekt() || __instance.isNeutral()) return;
 
-            XiaizationService.OnKingdomYear(__instance);
-            KingdomPolicyService.OnKingdomYear(__instance);
-            CityTechService.OnKingdomYear(__instance);
-            CityEconomyService.OnKingdomYear(__instance);
-            WarTerritoryService.OnKingdomYear(__instance);
-            MandateService.OnKingdomYear(__instance);
-            MandateDecisionService.OnKingdomYear(__instance);
-            MandateRebelService.OnKingdomYear(__instance);
-            ForeignOccupationService.OnKingdomYear(__instance);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try { XiaizationService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomXiaizationIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { KingdomPolicyService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { CityTechService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCityTechIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { CityEconomyService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCityEconomyIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { WarTerritoryService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarTerritoryIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { MandateService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomMandateIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { MandateDecisionService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomMandateDecisionIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { MandateRebelService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomMandateRebelIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { ForeignOccupationService.OnKingdomYear(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomForeignOccupationIndex, benchmark); }
 
             int year = Date.getCurrentYear();
             long id = __instance.id;
-            if (KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 2, pSlot: 0))
+            benchmark = UpdateAgeBenchmark.Begin();
+            bool runHeavy;
+            try { runHeavy = KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 2, pSlot: 0); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomHeavyScheduleIndex, benchmark); }
+
+            if (runHeavy)
             {
-                WarPlotRedirectService.OnKingdomYear(__instance);
-                WarDecisionAI.OnKingdomYear(__instance);
-                VassalAIService.OnKingdomYear(__instance);
+                benchmark = UpdateAgeBenchmark.Begin();
+                try { WarPlotRedirectService.OnKingdomYear(__instance); }
+                finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarPlotIndex, benchmark); }
+
+                benchmark = UpdateAgeBenchmark.Begin();
+                try { WarDecisionAI.OnKingdomYear(__instance); }
+                finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarAiIndex, benchmark); }
+
+                benchmark = UpdateAgeBenchmark.Begin();
+                try { VassalAIService.OnKingdomYear(__instance); }
+                finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomVassalAiIndex, benchmark); }
             }
 
-            if (KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 4, pSlot: 2))
+            benchmark = UpdateAgeBenchmark.Begin();
+            bool runGeneral;
+            try { runGeneral = KingdomYearSchedulerRules.ShouldRunHeavySystem(year, id, pModulo: 4, pSlot: 2); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomGeneralScheduleIndex, benchmark); }
+
+            if (runGeneral)
             {
-                GeneralService.OnKingdomYear(__instance);
+                benchmark = UpdateAgeBenchmark.Begin();
+                try { GeneralService.OnKingdomYear(__instance); }
+                finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomGeneralIndex, benchmark); }
             }
         }
 

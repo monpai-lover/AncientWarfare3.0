@@ -116,6 +116,18 @@ namespace AncientWarfare3.ui.windows
                         target.capital,
                         MandateService.WAR_TIANMING, "tianming", "\u593A\u53D6\u5929\u547D"));
 
+            if (pReport.can_mandate_conquest)
+                AddWarRow(pRows, pSource, target, pReport,
+                    WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_MANDATE_CONQUEST),
+                    AW_L10n.Text("aw_war_mandate_conquest", "\u5929\u547D\u5F81\u670D"),
+                    WarTerritoryService.GOAL_MANDATE_CONQUEST,
+                    AW_L10n.Text("aw_war_mandate_conquest_desc", "\u5929\u547D\u56FD\u5BF9\u5F31\u5C0F\u5916\u56FD\u53D1\u52A8\u5F81\u670D\u6218\u4E89\uFF0C\u4E0D\u9700\u5236\u9020\u5BA3\u79F0\u4E14\u4E0D\u53D7\u5F3A\u5BA3\u60E9\u7F5A\u3002"),
+                    AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"),
+                    () => KingdomPolicyService.StartWarDecision(pSource, target,
+                        WarTerritoryService.GOAL_MANDATE_CONQUEST,
+                        target.capital,
+                        WarDecisionService.WAR_NORMAL, "mandate_conquest", "\u5929\u547D\u5F81\u670D"));
+
             if (pReport.can_reclaim)
                 AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_TAKE_CORE_CITY),

@@ -93,6 +93,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_ARMY_ID = "aw_royal_guard_army_id";
         public const string ROYAL_GUARD_RECORDED = "aw_royal_guard_recorded";
         public const string ROYAL_GUARD_LAST_CHECK = "aw_royal_guard_last_check";
+        public const string ROYAL_GUARD_REFRESH_CURSOR = "aw_royal_guard_refresh_cursor";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";

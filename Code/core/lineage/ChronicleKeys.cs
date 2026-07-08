@@ -49,6 +49,7 @@ namespace AncientWarfare3.core.lineage
         public const string FOUND = "found";
         public const string RULE_CHANGE = "rule_change";
         public const string DESTROYED = "destroyed";
+        public const string RENAMED = "kingdom_renamed";
         public const string KING_DIED = "king_died";
         public const string ABDICATE = "abdicate";
         public const string CITY_GAINED = "city_gained";

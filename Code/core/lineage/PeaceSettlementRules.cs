@@ -35,6 +35,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY:
+                case WarTerritoryService.GOAL_MANDATE_CONQUEST:
                     return PeaceSettlementAction.TransferCity;
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                     return PeaceSettlementAction.ForceVassal;

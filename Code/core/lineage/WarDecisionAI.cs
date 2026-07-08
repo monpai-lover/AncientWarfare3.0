@@ -36,6 +36,14 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom target = PickNormalWarTarget(pKingdom);
             if (target?.data == null) return;
+            WarTerritoryService.WarTargetOption option = PickBestImmediateOption(pKingdom, target);
+            if (option != null && KingdomPolicyService.StartWarDecision(pKingdom, option))
+            {
+                pKingdom.data.set(CLAIM_TARGET_ID, target.id);
+                pKingdom.data.set(LAST_ACTION_YEAR, year);
+                return;
+            }
+
             City targetCity = WarTerritoryService.FindFirstFabricationTargetCity(pKingdom, target);
             if (!KingdomPolicyService.StartFabricationDecision(pKingdom, target, targetCity,
                     WarTerritoryService.PROJECT_WEAK_CLAIM))
@@ -129,6 +137,18 @@ namespace AncientWarfare3.core.lineage
                 if (WarTerritoryService.IsVassalDecisionOnlyTarget(pKingdom, other)) continue;
 
                 float target = Math.Max(1f, VassalService.GetPowerScore(other, pIncludeVassals: true));
+                if (WarTerritoryService.CanUseMandateConquest(pKingdom, other))
+                {
+                    float mandateConquestScore = MandateConquestRules.ScoreMandateConquest(
+                        WarTerritoryService.GetAllianceSystemPower(pKingdom),
+                        WarTerritoryService.GetAllianceSystemPower(other),
+                        AreNeighbors(pKingdom, other));
+                    if (mandateConquestScore <= bestScore) continue;
+                    bestScore = mandateConquestScore;
+                    best = other;
+                    continue;
+                }
+
                 if (isMandateTarget)
                 {
                     MandateReport report = MandateService.ReadReport();
@@ -192,6 +212,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pTarget?.data == null) return false;
             float own = VassalService.GetPowerScore(pKingdom, pIncludeVassals: true);
             float target = Math.Max(1f, VassalService.GetPowerScore(pTarget, pIncludeVassals: true));
+            if (WarTerritoryService.CanUseMandateConquest(pKingdom, pTarget)) return true;
             return own >= target * 1.15f && (AreNeighbors(pKingdom, pTarget) || Opinion(pKingdom, pTarget) <= -55);
         }
 

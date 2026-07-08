@@ -212,6 +212,7 @@ namespace AncientWarfare3.core.lineage
                 });
             }
             ClearNonXiaEventYearPrefixes(result);
+            SortHistoryEntries(result);
             NormalizeLegacyCityEconomyRoles(result);
             return result;
         }
@@ -405,7 +406,8 @@ namespace AncientWarfare3.core.lineage
                 {
                     double start = ownerStart;
                     if (reign != null && reign.start_time > start) start = reign.start_time;
-                    if (current != null) current.end_time = start;
+                    if (current != null)
+                        current.end_time = HistoryPeriodRules.NormalizeEndTime(current.start_time, start);
                     string periodPrefix = (reign != null && System.Math.Abs(start - reign.start_time) < 0.001)
                         ? reign.year_prefix_snapshot
                         : e.year_prefix;
@@ -420,7 +422,7 @@ namespace AncientWarfare3.core.lineage
                         posthumous_title = reign?.posthumous_title ?? "",
                         posthumous_color = reign?.posthumous_color ?? "",
                         start_time = start,
-                        end_time = reign?.end_time ?? -1,
+                        end_time = HistoryPeriodRules.NormalizeEndTime(start, reign?.end_time ?? -1),
                         year_prefix_snapshot = periodPrefix,
                         owner_name = eventOwnerName,
                         owner_color = eventOwnerColor,
@@ -431,7 +433,34 @@ namespace AncientWarfare3.core.lineage
                 }
                 current.events.Add(e);
             }
+            NormalizeCityPeriods(periods);
             return periods;
+        }
+
+        private static void NormalizeCityPeriods(List<ReignPeriod> pPeriods)
+        {
+            if (pPeriods == null || pPeriods.Count == 0) return;
+            pPeriods.Sort((a, b) =>
+            {
+                if (ReferenceEquals(a, b)) return 0;
+                if (a == null) return 1;
+                if (b == null) return -1;
+                int time = a.start_time.CompareTo(b.start_time);
+                if (time != 0) return time;
+                return a.events.Count == 0 && b.events.Count > 0 ? 1 :
+                    a.events.Count > 0 && b.events.Count == 0 ? -1 : 0;
+            });
+
+            pPeriods.RemoveAll(p =>
+                p == null || !HistoryPeriodRules.ShouldKeepPeriod(p.start_time, p.end_time, p.events.Count));
+
+            for (int i = 0; i < pPeriods.Count; i++)
+            {
+                ReignPeriod period = pPeriods[i];
+                if (period == null) continue;
+                period.end_time = HistoryPeriodRules.NormalizeEndTime(period.start_time, period.end_time);
+                period.events.Sort(CompareHistoryEntries);
+            }
         }
 
         private static ReignPeriod FindReignAt(long pKingdomId, double pTime,

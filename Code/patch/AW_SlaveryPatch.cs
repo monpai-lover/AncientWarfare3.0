@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -26,6 +27,14 @@ namespace AncientWarfare3.patch
             SlaveService.TryPromoteSlaveByMerit(__instance, pDeadUnit);
         }
 
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
+        {
+            SlaveKingAbdicationService.TryForceCurrentSlaveKing(__instance, pActor, "slave_king");
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "getHit")]
         public static bool GetHit_Prefix(Actor __instance, AttackType pAttackType, BaseSimObject pAttacker)
@@ -37,7 +46,15 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.updateAge))]
         public static void CityUpdateAge_Postfix(City __instance)
         {
-            SlaveService.ResetSlaveFoodQuota(__instance);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                SlaveService.ResetSlaveFoodQuota(__instance);
+            }
+            finally
+            {
+                UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CitySlaveFoodIndex, benchmark);
+            }
         }
 
         [HarmonyPrefix]

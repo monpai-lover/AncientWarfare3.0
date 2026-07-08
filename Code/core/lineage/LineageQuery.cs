@@ -577,6 +577,43 @@ namespace AncientWarfare3.core.lineage
             return info;
         }
 
+        public static ShiBranchInfo GetRootShiBranchInfo(long pLineageId)
+        {
+            var db = DB;
+            if (db == null || pLineageId < 0) return null;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"FROM {ShiBranchTableItem.GetTableName()} WHERE LINEAGE_ID=@l " +
+                $"ORDER BY CREATED_TIME ASC, SHI_ID ASC LIMIT 1";
+            cmd.Parameters.AddWithValue("@l", pLineageId);
+            ShiBranchInfo info = null;
+            using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    info = new ShiBranchInfo
+                    {
+                        shi_id = reader.GetInt64(0),
+                        lineage_id = reader.GetInt64(1),
+                        clan_name = SafeStr(reader, 2),
+                        source_type = SafeStr(reader, 3),
+                        created_time = reader.GetDouble(4),
+                        founder_actor_id = reader.GetInt64(5),
+                        origin_kingdom_id = ToLong(reader, 6, -1),
+                        origin_city_id = ToLong(reader, 7, -1)
+                    };
+                }
+            }
+            if (info != null)
+            {
+                FillShiCounts(info);
+                FillShiOrigin(info);
+            }
+            return info;
+        }
+
         /// <summary>
         ///     兜底读取某 actor 作为始祖开创的称王分支。
         ///     有些旧档/时序里 ActorArchive.founded_branch_shi_id 没写上,但 ShiBranch 已经有

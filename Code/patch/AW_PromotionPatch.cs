@@ -43,7 +43,9 @@ namespace AncientWarfare3.patch
         public static void SetLeader_Postfix(Actor pActor, bool pNew, bool __state)
         {
             if (__state) return;
-            if (pActor == null || !LineageService.IsXia(pActor)) return;
+            if (pActor == null ||
+                (!LineageService.IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
+                return;
             LineageService.OnCityLeaderAppointed(pActor);
             if (pNew) ChronicleEvents.OnBecomeLeader(pActor); // 编年史:仅新任命记(pNew=false 是读档/复位,不重复记)
         }
@@ -54,7 +56,9 @@ namespace AncientWarfare3.patch
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
-            if (pActor == null || !LineageService.IsXia(pActor)) return;
+            if (pActor == null ||
+                (!LineageService.IsXia(pActor) && !XiaizationService.IsForeignPseudoDynasty(__instance)))
+                return;
             LineageService.OnActorPromoted(pActor, NobleTrigger.King);
         }
 

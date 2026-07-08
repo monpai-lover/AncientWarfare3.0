@@ -143,6 +143,7 @@ namespace AncientWarfare3.core.lineage
         public static bool TryDeclareMandate(Kingdom pKingdom, string pReason = "decision",
             string pOriginType = "native", string pClaimantKind = "orthodox", Kingdom pRebelOrigin = null)
         {
+            NormalizeForeignMandateOrigin(pKingdom, pReason, ref pOriginType, ref pClaimantKind);
             if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
             if (!Ready) return false;
 
@@ -317,6 +318,16 @@ namespace AncientWarfare3.core.lineage
             return pReason == "pseudo_foreign_war" ||
                    pReason == "tianming_war" ||
                    pReason == "tianmingrebel_war";
+        }
+
+        private static void NormalizeForeignMandateOrigin(Kingdom pKingdom, string pReason,
+            ref string pOriginType, ref string pClaimantKind)
+        {
+            if (pKingdom?.data == null || LineageService.IsXiaKingdom(pKingdom)) return;
+            if (!IsMandateWarDeclarationReason(pReason)) return;
+            if (pOriginType == "rebel" || pClaimantKind == "rebel") return;
+            pOriginType = "pseudo_foreign";
+            pClaimantKind = "foreign_pseudo";
         }
 
         public static bool CanStabilizeMandate(Kingdom pKingdom)
@@ -507,7 +518,7 @@ namespace AncientWarfare3.core.lineage
             if (defender == mandate && pWinner == WarWinner.Attackers)
             {
                 bool rebel = MandateRebelService.IsRebelKingdom(attacker) || type == WAR_TIANMING_REBEL;
-                bool pseudo = IsPseudoForeignClaimant(attacker);
+                bool pseudo = !LineageService.IsXiaKingdom(attacker) || IsPseudoForeignClaimant(attacker);
                 ClearMandate("war_lost");
                 if (rebel)
                     TryDeclareMandate(attacker, "tianmingrebel_war", "rebel", "rebel", defender);
@@ -1130,6 +1141,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || World.world?.kingdoms == null) return false;
             float own = CalculateMandateCompetitionPower(pKingdom);
             float strongestOther = 0f;
+            float weakestOther = float.MaxValue;
             foreach (Kingdom other in World.world.kingdoms)
             {
                 if (other == pKingdom) continue;
@@ -1138,8 +1150,10 @@ namespace AncientWarfare3.core.lineage
                     continue;
                 float otherPower = CalculateMandateCompetitionPower(other);
                 if (otherPower > strongestOther) strongestOther = otherPower;
+                if (otherPower > 0f && otherPower < weakestOther) weakestOther = otherPower;
             }
-            return MandatePowerRules.HasRequiredLeadForMandate(own, strongestOther);
+            if (weakestOther == float.MaxValue) weakestOther = 0f;
+            return MandatePowerRules.HasRequiredLeadForMandate(own, strongestOther, weakestOther);
         }
 
         private static int CalculateStrongestPowerPenalty(Kingdom pMandate)

@@ -11,8 +11,8 @@ namespace AncientWarfare3.core.lineage
     {
         private const int YEARLY_GUARD_CAP = 12;
         private const int WAR_GUARD_CAP = 20;
-        private const int YEARLY_WALL_CAP = 8;
-        private const int WAR_WALL_CAP = 12;
+        private const int YEARLY_WALL_CAP = 24;
+        private const int WAR_WALL_CAP = 40;
         private const int YEARLY_TOWER_CAP = 1;
         private const int WAR_TOWER_CAP = 2;
         private const int MAX_BORDER_ARMIES = 3;
@@ -358,7 +358,8 @@ namespace AncientWarfare3.core.lineage
 
         private static int BuildBorderWalls(City pCity, Kingdom pMandate, int pCap)
         {
-            if (pCity?.data == null || pCap <= 0 || TopTileLibrary.wall_iron == null) return 0;
+            TopTileType wallType = ResolveBorderWallType();
+            if (pCity?.data == null || pCap <= 0 || wallType == null) return 0;
 
             var candidates = new List<WorldTile>();
             try
@@ -376,13 +377,16 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            candidates.Sort((a, b) => MandateBorderWallRules.CompareWallTileOrder(a.x, a.y, b.x, b.y));
             int built = 0;
+            int orderedIndex = 0;
             foreach (WorldTile tile in candidates)
             {
                 if (built >= pCap) break;
+                if (!MandateBorderWallRules.ShouldBuildWallAtOrderedIndex(orderedIndex++)) continue;
                 try
                 {
-                    tile.setTopTileType(TopTileLibrary.wall_iron);
+                    tile.setTopTileType(wallType);
                     built++;
                 }
                 catch (Exception e)
@@ -391,6 +395,14 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             return built;
+        }
+
+        private static TopTileType ResolveBorderWallType()
+        {
+            TopTileType preferred = TopTileLibrary.wall_order;
+            if (preferred != null && preferred.id == MandateBorderWallRules.PreferredWallTopTileId)
+                return preferred;
+            return preferred ?? TopTileLibrary.wall_ancient ?? TopTileLibrary.wall_iron;
         }
 
         private static int BuildBorderTowers(City pCity, Kingdom pMandate, int pCap)
@@ -454,7 +466,7 @@ namespace AncientWarfare3.core.lineage
                     foreach (WorldTile tile in zone.tiles)
                     {
                         if (tile == null || !IsInsideCity(tile, pCity)) continue;
-                        if (!TouchesOutsideCity(tile, pMandate) && !TouchesOutsideCityBorder(tile, pCity)) continue;
+                        if (!TouchesExternalLandBorder(tile, pMandate)) continue;
                         candidates.Add(tile);
                     }
                 }
@@ -466,11 +478,18 @@ namespace AncientWarfare3.core.lineage
         private static bool IsWallCandidate(WorldTile pTile, City pCity, Kingdom pMandate)
         {
             if (pTile == null || pTile.zone == null || pTile.Type == null) return false;
-            if (!IsInsideCity(pTile, pCity)) return false;
-            if (!pTile.Type.ground || pTile.Type.liquid || pTile.Type.lava || pTile.Type.block) return false;
-            if (pTile.Type.wall || pTile.Type.road || pTile.top_type != null) return false;
-            if (pTile.hasBuilding()) return false;
-            return TouchesOutsideCity(pTile, pMandate) || TouchesOutsideCityBorder(pTile, pCity);
+            if (!MandateBorderWallRules.IsWallBuildTileTerrainValid(
+                    pInsideCity: IsInsideCity(pTile, pCity),
+                    pGround: pTile.Type.ground,
+                    pLiquid: pTile.Type.liquid,
+                    pLava: pTile.Type.lava,
+                    pBlock: pTile.Type.block,
+                    pWall: pTile.Type.wall,
+                    pRoad: pTile.Type.road,
+                    pHasTopTile: pTile.top_type != null,
+                    pHasBuilding: pTile.hasBuilding()))
+                return false;
+            return TouchesExternalLandBorder(pTile, pMandate);
         }
 
         private static bool IsInsideCity(WorldTile pTile, City pCity)
@@ -483,30 +502,27 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        private static bool TouchesOutsideCity(WorldTile pTile, Kingdom pMandate)
+        private static bool TouchesExternalLandBorder(WorldTile pTile, Kingdom pMandate)
         {
             try
             {
                 foreach (WorldTile n in pTile.neighboursAll)
                 {
-                    Kingdom kingdom = n?.zone_city?.kingdom;
-                    if (kingdom?.data == null || kingdom.isNeutral()) continue;
-                    if (kingdom == pMandate || VassalService.GetRootSuzerain(kingdom) == pMandate) continue;
-                    return true;
-                }
-            }
-            catch { }
-            return false;
-        }
-
-        private static bool TouchesOutsideCityBorder(WorldTile pTile, City pCity)
-        {
-            try
-            {
-                foreach (WorldTile n in pTile.neighboursAll)
-                {
-                    if (n == null) continue;
-                    if (n.zone_city != pCity) return true;
+                    if (n == null || n.Type == null) continue;
+                    City city = null;
+                    try { city = n.zone_city; } catch { city = null; }
+                    Kingdom kingdom = city?.kingdom;
+                    bool sameMandateSystem = kingdom != null &&
+                        (kingdom == pMandate || VassalService.GetRootSuzerain(kingdom) == pMandate);
+                    if (MandateBorderWallRules.IsExternalLandBorderNeighbor(
+                            pNeighborHasCity: city?.data != null && kingdom?.data != null,
+                            pNeighborGround: n.Type.ground,
+                            pNeighborLiquid: n.Type.liquid,
+                            pNeighborLava: n.Type.lava,
+                            pNeighborBlock: n.Type.block,
+                            pNeighborNeutral: kingdom == null || kingdom.isNeutral(),
+                            pSameMandateSystem: sameMandateSystem))
+                        return true;
                 }
             }
             catch { }
@@ -521,7 +537,7 @@ namespace AncientWarfare3.core.lineage
                 foreach (TileZone zone in pCity.border_zones)
                 foreach (WorldTile tile in zone.tiles)
                     if (tile != null && tile.Type != null && tile.Type.ground &&
-                        (TouchesOutsideCity(tile, pMandate) || TouchesOutsideCityBorder(tile, pCity)))
+                        TouchesExternalLandBorder(tile, pMandate))
                         return tile;
             }
             catch { }

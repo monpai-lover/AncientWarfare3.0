@@ -17,6 +17,13 @@ namespace AncientWarfare3.core.policy
         public const string SlaveCatchersJobGate = "aw3_city_slave_catchers_job_gate";
         public const string SlaveCatchersTargetScan = "aw3_city_slave_catchers_target_scan";
         public const string SlaveArmyNameScan = "aw3_city_slave_army_name_scan";
+        public const string SlaveArmyExisting = "aw3_city_slave_army_existing";
+        public const string SlaveArmySlaveCount = "aw3_city_slave_army_slave_count";
+        public const string SlaveArmyCaptain = "aw3_city_slave_army_captain";
+        public const string SlaveArmyEnsure = "aw3_city_slave_army_ensure";
+        public const string SlaveArmyFill = "aw3_city_slave_army_fill";
+        public const string SlaveArmyFrontline = "aw3_city_slave_army_frontline";
+        public const string SlaveArmyRecord = "aw3_city_slave_army_record";
         public const string RoyalGuardValidate = "aw3_city_royal_guard_validate";
         public const string RoyalGuardAverage = "aw3_city_royal_guard_average";
         public const string RoyalGuardCandidates = "aw3_city_royal_guard_candidates";
@@ -28,6 +35,10 @@ namespace AncientWarfare3.core.policy
         public const string RoyalGuardFill = "aw3_city_royal_guard_fill";
         public const string RoyalGuardArmy = "aw3_city_royal_guard_army";
         public const string RoyalGuardRefresh = "aw3_city_royal_guard_refresh";
+        public const string RoyalGuardRefreshCaptain = "aw3_city_royal_guard_refresh_captain";
+        public const string RoyalGuardRefreshBatch = "aw3_city_royal_guard_refresh_batch";
+        public const string RoyalGuardRefreshPersist = "aw3_city_royal_guard_refresh_persist";
+        public const string RoyalGuardRefreshRuntime = "aw3_city_royal_guard_refresh_runtime";
         public const string RoyalGuardDismiss = "aw3_city_royal_guard_dismiss";
         public const string ArmyCleanupGuardStrip = "aw3_city_army_cleanup_guard_strip";
         public const string ArmyCleanupSlaveCaptain = "aw3_city_army_cleanup_slave_captain";
@@ -56,6 +67,13 @@ namespace AncientWarfare3.core.policy
             SlaveCatchersJobGate,
             SlaveCatchersTargetScan,
             SlaveArmyNameScan,
+            SlaveArmyExisting,
+            SlaveArmySlaveCount,
+            SlaveArmyCaptain,
+            SlaveArmyEnsure,
+            SlaveArmyFill,
+            SlaveArmyFrontline,
+            SlaveArmyRecord,
             RoyalGuardValidate,
             RoyalGuardAverage,
             RoyalGuardCandidates,
@@ -67,6 +85,10 @@ namespace AncientWarfare3.core.policy
             RoyalGuardFill,
             RoyalGuardArmy,
             RoyalGuardRefresh,
+            RoyalGuardRefreshCaptain,
+            RoyalGuardRefreshBatch,
+            RoyalGuardRefreshPersist,
+            RoyalGuardRefreshRuntime,
             RoyalGuardDismiss,
             ArmyCleanupGuardStrip,
             ArmyCleanupSlaveCaptain,

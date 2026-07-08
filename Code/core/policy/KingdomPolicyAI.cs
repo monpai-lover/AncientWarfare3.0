@@ -254,23 +254,88 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || pKingdom.capital == null || IsAtWar(pKingdom)) return false;
             City current = pKingdom.capital;
-            float currentScore = CapitalScore(current);
+            float currentScore = CapitalScore(current, current, pKingdom);
             float bestScore = currentScore;
 
             foreach (City city in pKingdom.getCities())
             {
-                if (city?.data == null || !city.isAlive() || city == current) continue;
-                float score = CapitalScore(city);
+                if (!CapitalMoveRules.CanConsiderCandidate(
+                        pCandidateAlive: city?.data != null && city.isAlive(),
+                        pIsCurrentCapital: city == current,
+                        pIsCoreCity: WarTerritoryService.HasCore(pKingdom, city),
+                        pHasOwnNeighbor: CountOwnNeighbors(city, pKingdom) > 0))
+                    continue;
+                float score = CapitalScore(city, current, pKingdom);
                 if (score > bestScore) bestScore = score;
             }
 
-            return bestScore >= currentScore * 1.35f + 20f;
+            return CapitalMoveRules.ShouldMoveCapital(currentScore, bestScore);
         }
 
-        private static float CapitalScore(City pCity)
+        private static float CapitalScore(City pCity, City pCurrent, Kingdom pKingdom)
         {
             if (pCity?.data == null || !pCity.isAlive()) return 0f;
-            return pCity.countZones() * 2f + pCity.getPopulationPeople() + pCity.countBuildings() * 0.5f;
+            return CapitalMoveRules.ScoreCity(
+                SafeAge(pCity),
+                SafeAge(pCurrent),
+                SafePopulation(pCity),
+                SafePopulation(pCurrent),
+                SafeZones(pCity),
+                SafeZones(pCurrent),
+                CountOwnNeighbors(pCity, pKingdom),
+                CapitalCentralityScore(pCity, pKingdom));
+        }
+
+        private static int CountOwnNeighbors(City pCity, Kingdom pKingdom)
+        {
+            if (pCity?.data == null || pKingdom?.data == null) return 0;
+            int count = 0;
+            try
+            {
+                foreach (City other in pCity.neighbours_cities)
+                    if (other?.data != null && other.kingdom == pKingdom) count++;
+            }
+            catch { }
+            return count;
+        }
+
+        private static float CapitalCentralityScore(City pCity, Kingdom pKingdom)
+        {
+            if (pCity?.data == null || pKingdom?.data == null) return 0f;
+            float distance = 0f;
+            int count = 0;
+            try
+            {
+                foreach (City other in pKingdom.getCities())
+                {
+                    if (other?.data == null || other == pCity) continue;
+                    WorldTile a = pCity.getTile();
+                    WorldTile b = other.getTile();
+                    if (a == null || b == null) continue;
+                    distance += Toolbox.DistVec2(a.pos, b.pos);
+                    count++;
+                }
+            }
+            catch { }
+            return count <= 0 ? 0f : 60f / (1f + distance / count);
+        }
+
+        private static int SafePopulation(City pCity)
+        {
+            try { return pCity?.getPopulationPeople() ?? 0; }
+            catch { return 0; }
+        }
+
+        private static int SafeZones(City pCity)
+        {
+            try { return pCity?.countZones() ?? 0; }
+            catch { return 0; }
+        }
+
+        private static float SafeAge(City pCity)
+        {
+            try { return pCity?.getAge() ?? 0f; }
+            catch { return 0f; }
         }
     }
 }

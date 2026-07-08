@@ -53,6 +53,79 @@ namespace AncientWarfare3.core.lineage
             return pGuardArmyFound && pGuardArmyUnitCount >= 0;
         }
 
+        public static int MaxFastPathGuardArmyScan(int pMaxActiveGuards, int pRuntimeRefreshLimit)
+        {
+            int maxGuards = pMaxActiveGuards <= 0 ? 1 : pMaxActiveGuards;
+            int refreshLimit = pRuntimeRefreshLimit <= 0 ? 1 : pRuntimeRefreshLimit;
+            return Math.Max(maxGuards + refreshLimit, maxGuards * 2);
+        }
+
+        public static bool ShouldStopFastPathGuardArmyScan(int pScanned, int pActiveCount,
+            int pMaxActiveGuards, int pMaxScan)
+        {
+            int maxActive = pMaxActiveGuards <= 0 ? 1 : pMaxActiveGuards;
+            int maxScan = pMaxScan <= 0 ? maxActive : pMaxScan;
+            return pActiveCount >= maxActive || pScanned >= maxScan;
+        }
+
+        public static bool HasGuardDataForKingdom(bool pGuardFlag, long pGuardKingdomId,
+            long pActorKingdomId, long pTargetKingdomId)
+        {
+            if (pTargetKingdomId < 0) return false;
+            if (pGuardKingdomId >= 0) return pGuardKingdomId == pTargetKingdomId;
+            return pGuardFlag && pActorKingdomId == pTargetKingdomId;
+        }
+
+        public static bool ShouldRemoveStaleActorFromGuardArmy(bool pHasGuardDataForKingdom,
+            bool pActorArmyIsGuardArmy, int pRemovedCount, int pRemovalLimit)
+        {
+            if (pHasGuardDataForKingdom || !pActorArmyIsGuardArmy) return false;
+            int limit = pRemovalLimit <= 0 ? 1 : pRemovalLimit;
+            return pRemovedCount < limit;
+        }
+
+        public static bool ShouldKeepExistingCaptain(bool pExistingCaptainValid, bool pExistingCaptainNoble)
+        {
+            return pExistingCaptainValid && pExistingCaptainNoble;
+        }
+
+        public static bool ShouldDismissActiveGuardsForCaptainShortage(
+            int pActiveGuardCount,
+            int pAvailableNobleCount)
+        {
+            return false;
+        }
+
+        public static bool ShouldDeferGuardMaintenanceForCaptainShortage(
+            int pActiveGuardCount,
+            int pAvailableNobleCount)
+        {
+            return pActiveGuardCount > 0 && pAvailableNobleCount <= 0;
+        }
+
+        public static bool ShouldRefreshGuardInMaintenancePass(bool pIsCaptain, bool pIsNewlyAppointed,
+            int pActorIndex, int pCursor, int pBatchLimit, int pActiveCount)
+        {
+            if (pIsCaptain || pIsNewlyAppointed) return true;
+            if (pActorIndex < 0 || pActiveCount <= 0) return false;
+
+            int activeCount = Math.Max(1, pActiveCount);
+            int cursor = PositiveModulo(pCursor, activeCount);
+            int limit = Math.Max(1, Math.Min(pBatchLimit <= 0 ? 1 : pBatchLimit, activeCount));
+            for (int i = 0; i < limit; i++)
+            {
+                if ((cursor + i) % activeCount == pActorIndex) return true;
+            }
+            return false;
+        }
+
+        public static int NextRefreshCursor(int pCursor, int pActiveCount, int pBatchLimit)
+        {
+            if (pActiveCount <= 0) return 0;
+            int limit = Math.Max(1, pBatchLimit <= 0 ? 1 : pBatchLimit);
+            return PositiveModulo(pCursor + limit, pActiveCount);
+        }
+
         public static bool ShouldFallbackToKingdomScanForActiveGuards(bool pGuardArmyFound, bool pHasGuardStateHint)
         {
             return !pGuardArmyFound && pHasGuardStateHint;
@@ -64,6 +137,12 @@ namespace AncientWarfare3.core.lineage
             int limit = pLimit <= 0 ? 1 : pLimit;
             if (pCurrentCount < limit) return true;
             return pCandidateScore > pLowestScore;
+        }
+
+        public static bool ShouldStopCandidateScan(int pScannedCount, int pMaxScan)
+        {
+            int maxScan = pMaxScan <= 0 ? 1 : pMaxScan;
+            return pScannedCount >= maxScan;
         }
 
         public static bool ShouldPersistGuardIdentityRefresh(

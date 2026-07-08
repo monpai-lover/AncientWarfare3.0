@@ -268,7 +268,7 @@ namespace AncientWarfare3.content.figures
             if (oldName == def.KingdomName) return;     // 已是目标国名,免重复
 
             RecordKingdomRename(pKingdom, oldName, def.KingdomName, pKing);
-            pKingdom.setName(def.KingdomName);          // 套用预留国名(用 setName 走正规 setter,非直改 data)
+            KingdomRenameSyncService.Suppress(() => pKingdom.setName(def.KingdomName));
             FigureStateStore.MarkKingdomApplied(idx, pKingdom.id, def.KingdomName);
 
             ModClass.LogInfo($"历史人物 {def.Key} 成为国王 → 国家 '{oldName}' 改名为 '{def.KingdomName}'");

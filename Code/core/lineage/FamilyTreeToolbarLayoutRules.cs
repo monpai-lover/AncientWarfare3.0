@@ -4,17 +4,16 @@ namespace AncientWarfare3.core.lineage
     {
         public static float RightAlignedX(float pRightInset)
         {
-            return -Abs(pRightInset);
+            return Abs(pRightInset);
         }
 
         public static bool StaysInsideRightEdge(float pWindowWidth, float pElementWidth, float pAnchoredX)
         {
             if (pWindowWidth <= 0f || pElementWidth <= 0f) return false;
-            if (pAnchoredX > 0f) return false;
 
             float half = pWindowWidth * 0.5f;
-            float right = half + pAnchoredX;
-            float left = right - pElementWidth;
+            float right = pAnchoredX + pElementWidth;
+            float left = pAnchoredX;
             return right <= half && left >= -half;
         }
 

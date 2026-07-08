@@ -26,6 +26,10 @@ namespace AncientWarfare3.core.lineage
                 case WarTerritoryService.GOAL_TAKE_MANDATE:
                     score += 180;
                     break;
+                case WarTerritoryService.GOAL_MANDATE_CONQUEST:
+                    score += 140;
+                    if (pHasStrongClaim) score += 40;
+                    break;
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY:
                     if (pHasCore) score += 120;
                     break;

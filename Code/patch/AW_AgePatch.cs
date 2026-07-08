@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using UnityEngine;
 
@@ -16,16 +17,24 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "updateAge")]
         public static void UpdateAge_Postfix(Actor __instance)
         {
-            if (__instance?.data == null) return;
-            if (!LineageService.IsXia(__instance)) return;
-            if (__instance.isRekt() || !__instance.isAlive()) return;
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                if (__instance?.data == null) return;
+                if (!LineageService.IsXia(__instance)) return;
+                if (__instance.isRekt() || !__instance.isAlive()) return;
 
-            bool shouldUseOldHead = ShouldUseXiaOldHead(__instance);
-            __instance.data.get(XIA_OLD_HEAD_ACTIVE, out bool wasOldHead, false);
-            if (!XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead, shouldUseOldHead)) return;
+                bool shouldUseOldHead = ShouldUseXiaOldHead(__instance);
+                __instance.data.get(XIA_OLD_HEAD_ACTIVE, out bool wasOldHead, false);
+                if (!XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead, shouldUseOldHead)) return;
 
-            __instance.data.set(XIA_OLD_HEAD_ACTIVE, shouldUseOldHead);
-            __instance.clearGraphicsFully();
+                __instance.data.set(XIA_OLD_HEAD_ACTIVE, shouldUseOldHead);
+                __instance.clearGraphicsFully();
+            }
+            finally
+            {
+                UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.ActorOldHeadIndex, benchmark);
+            }
         }
 
         internal static bool ShouldUseXiaOldHead(Actor pActor)

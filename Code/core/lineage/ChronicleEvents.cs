@@ -136,6 +136,19 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
             string name = pKing.getName();
+            if (SlaveKingAbdicationService.TryConsumeReason(pKing.data.id, out string slaveReason))
+            {
+                string text = " \u56E0\u6CA6\u4E3A\u5974\u96B6\u9000\u4F4D\uFF08" +
+                              SlaveService.ReasonLabel(slaveReason) + "\uFF09";
+                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE,
+                    HistoryText.Actor(pKing, name) + text);
+                HistoryWriter.RecordPerson(pKing.data.id, pKingdom, name,
+                    PersonEvent.ABDICATE, HistoryText.Actor(pKing, name) + text, ChronicleCategory.HONOR);
+                ReignRecordWriter.ReignInfo slaveReign =
+                    ReignRecordWriter.CloseOpenReign(pKingdom, "abdicated", pKing);
+                PosthumousTitleService.OnReignEnded(pKingdom, pKing, "abdicated", slaveReign);
+                return;
+            }
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE,
                 HistoryText.Actor(pKing, name) + " 退位");
             if (ChronicleGate.IsNobleActor(pKing))

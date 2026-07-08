@@ -28,11 +28,13 @@ namespace AncientWarfare3.core.lineage
             return pOwnPower + pVassalPower * VassalPowerWeight;
         }
 
-        public static bool HasRequiredLeadForMandate(float pCandidatePower, float pStrongestOtherPower)
+        public static bool HasRequiredLeadForMandate(float pCandidatePower, float pStrongestOtherPower,
+            float pWeakestOtherPower)
         {
             if (pCandidatePower <= 0f) return false;
             if (pStrongestOtherPower <= 0f) return true;
-            return pCandidatePower + 0.001f >= pStrongestOtherPower * RequiredMandateLeadRatio;
+            float weakest = pWeakestOtherPower > 0f ? pWeakestOtherPower : pStrongestOtherPower;
+            return pCandidatePower + 0.001f >= (pStrongestOtherPower + weakest) * RequiredMandateLeadRatio;
         }
 
         public static bool IsEligibleCompetitor(bool pIsValidCivilKingdom, bool pIsVassal,

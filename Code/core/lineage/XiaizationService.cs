@@ -56,13 +56,17 @@ namespace AncientWarfare3.core.lineage
         public static bool CanUseMandateSystem(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            return LineageService.IsXiaKingdom(pKingdom) || IsHumanKingdom(pKingdom) || GetLevel(pKingdom) >= LevelPseudoDynasty;
+            return XiaizationEligibilityRules.CanUseMandateSystem(
+                LineageService.IsXiaKingdom(pKingdom),
+                GetLevel(pKingdom));
         }
 
         public static bool CanUsePolicySystem(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            return LineageService.IsXiaKingdom(pKingdom) || IsHumanKingdom(pKingdom) || GetLevel(pKingdom) >= LevelPseudoDynasty;
+            return XiaizationEligibilityRules.CanUsePolicySystem(
+                LineageService.IsXiaKingdom(pKingdom),
+                GetLevel(pKingdom));
         }
 
         public static bool DefaultPolicyEnabled(Kingdom pKingdom)
@@ -132,6 +136,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || LineageService.IsXiaKingdom(pKingdom)) return;
             if (TrySetLevel(pKingdom, LevelPseudoDynasty, "pseudo_mandate", true))
                 TryEnablePolicySystem(pKingdom, pAi: true);
+            LineageService.EnsureForeignPseudoDynastyLineage(pKingdom);
         }
 
         public static void CompleteXiaizedCity(City pCity, Kingdom pOwner, string pOccupationType)

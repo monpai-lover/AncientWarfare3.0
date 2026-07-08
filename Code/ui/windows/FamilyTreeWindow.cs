@@ -27,7 +27,7 @@ namespace AncientWarfare3.ui.windows
         private const float VIEWPORT_W = 430f; // 树画布保持完整宽度,工具入口在窗口右侧内缩
         private const float VIEWPORT_H = 230f;
         private const float VIEWPORT_X = 0f;
-        private const float SIDE_RIGHT_INSET = 12f;
+        private const float SIDE_RIGHT_INSET = 80f;
         private static readonly float SIDE_RIGHT = FamilyTreeToolbarLayoutRules.RightAlignedX(SIDE_RIGHT_INSET);
         private const float RENAME_TOP = -164f;
         private static readonly Vector2 SIDE_BUTTON_SIZE = new Vector2(78, 20);
