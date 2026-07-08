@@ -2701,6 +2701,20 @@ namespace WarFabricationRuleTests
                     pGuardArmyFound: true,
                     pGuardArmyUnitCount: 1))
                 throw new Exception("Royal guard active list should prefer the dedicated guard army.");
+            if (!RoyalGuardMaintenanceRules.ShouldUseRosterFastPathForActiveGuards(
+                    pGuardArmyFound: false,
+                    pHasRoster: true))
+                throw new Exception("Royal guard active list should use the roster before a kingdom-wide scan.");
+            if (RoyalGuardMaintenanceRules.ShouldUseRosterFastPathForActiveGuards(
+                    pGuardArmyFound: true,
+                    pHasRoster: true))
+                throw new Exception("Royal guard roster lookup should not replace a real guard army fast path.");
+            if (!RoyalGuardMaintenanceRules.ShouldUseRosterForDismiss(
+                    pHasRoster: true))
+                throw new Exception("Royal guard dismissals should use the stored roster when it exists.");
+            if (RoyalGuardMaintenanceRules.ShouldUseRosterForDismiss(
+                    pHasRoster: false))
+                throw new Exception("Royal guard dismissals without a roster must keep the legacy bounded fallback.");
             if (RoyalGuardMaintenanceRules.ShouldFallbackToKingdomScanForActiveGuards(
                     pGuardArmyFound: true,
                     pHasGuardStateHint: true))
@@ -2735,6 +2749,16 @@ namespace WarFabricationRuleTests
                     pScannedCount: 255,
                     pMaxScan: 256))
                 throw new Exception("Royal guard candidate scans should not stop before the hard cap.");
+            if (RoyalGuardMaintenanceRules.NextBoundedScanCursor(
+                    pStartCursor: 10,
+                    pScannedCount: 64,
+                    pScanComplete: false) != 74)
+                throw new Exception("Bounded royal guard scans should continue from the next unscanned actor.");
+            if (RoyalGuardMaintenanceRules.NextBoundedScanCursor(
+                    pStartCursor: 10,
+                    pScannedCount: 64,
+                    pScanComplete: true) != 0)
+                throw new Exception("Completed royal guard scans should reset their cursor.");
             if (RoyalGuardMaintenanceRules.MaxFastPathGuardArmyScan(20, 4) != 40)
                 throw new Exception("Royal guard fast path should cap oversized army scans to twice the guard limit.");
             if (!RoyalGuardMaintenanceRules.ShouldStopFastPathGuardArmyScan(

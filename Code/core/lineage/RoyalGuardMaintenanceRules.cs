@@ -53,6 +53,16 @@ namespace AncientWarfare3.core.lineage
             return pGuardArmyFound && pGuardArmyUnitCount >= 0;
         }
 
+        public static bool ShouldUseRosterFastPathForActiveGuards(bool pGuardArmyFound, bool pHasRoster)
+        {
+            return !pGuardArmyFound && pHasRoster;
+        }
+
+        public static bool ShouldUseRosterForDismiss(bool pHasRoster)
+        {
+            return pHasRoster;
+        }
+
         public static int MaxFastPathGuardArmyScan(int pMaxActiveGuards, int pRuntimeRefreshLimit)
         {
             int maxGuards = pMaxActiveGuards <= 0 ? 1 : pMaxActiveGuards;
@@ -162,6 +172,14 @@ namespace AncientWarfare3.core.lineage
         {
             int maxScan = pMaxScan <= 0 ? 1 : pMaxScan;
             return pScannedCount >= maxScan;
+        }
+
+        public static int NextBoundedScanCursor(int pStartCursor, int pScannedCount, bool pScanComplete)
+        {
+            if (pScanComplete) return 0;
+            int start = Math.Max(0, pStartCursor);
+            int scanned = Math.Max(0, pScannedCount);
+            return start + scanned;
         }
 
         public static bool ShouldPersistGuardIdentityRefresh(
