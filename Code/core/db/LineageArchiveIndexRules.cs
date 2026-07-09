@@ -100,7 +100,16 @@ namespace AncientWarfare3.core.db
                 Index("idx_VassalRelation_vassal_active", VassalRelationTableItem.GetTableName(),
                     "VASSAL_ID, ACTIVE, START_TIME"),
                 Index("idx_VassalRelation_suzerain_active", VassalRelationTableItem.GetTableName(),
-                    "SUZERAIN_ID, ACTIVE, START_TIME")
+                    "SUZERAIN_ID, ACTIVE, START_TIME"),
+
+                Index("idx_KingdomCourtState_kingdom", KingdomCourtStateTableItem.GetTableName(),
+                    "KINGDOM_ID"),
+                Index("idx_CourtOfficer_kingdom_active", CourtOfficerTableItem.GetTableName(),
+                    "KINGDOM_ID, ACTIVE, LAYER, OFFICE_ID"),
+                Index("idx_CourtOfficer_actor_active", CourtOfficerTableItem.GetTableName(),
+                    "ACTOR_ID, ACTIVE, KINGDOM_ID"),
+                Index("idx_CityBureauState_kingdom_city", CityBureauStateTableItem.GetTableName(),
+                    "KINGDOM_ID, CITY_ID")
             };
         }
 

@@ -36,6 +36,13 @@ namespace CourtSystemRuleTests
                 Expect(CourtAIRules.ScoreResearch(CourtSchoolId.Military, "aw_tech_chariot_training", atWar: true, mandateExists: false) > CourtAIRules.ScoreResearch(CourtSchoolId.Military, "aw_tech_chariot_training", atWar: false, mandateExists: false), "military values wartime training");
                 Expect(CourtAIRules.ScoreDecision(CourtSchoolId.Diplomat, "aw_decision_declare_war", cities: 4, atWar: false, unstable: false) < CourtAIRules.ScoreDecision(CourtSchoolId.Military, "aw_decision_declare_war", cities: 4, atWar: false, unstable: false), "military favors war more than diplomat");
 
+                string encoded = CourtStateCodec.EncodeFactionCache(new[] { CourtSchoolId.Ru, CourtSchoolId.Legalist }, new[] { 4.5f, 8f });
+                ExpectEqual("ru=4.5;fa=8", encoded, "encoded faction cache");
+                var decoded = CourtStateCodec.DecodeFactionCache(encoded);
+                ExpectEqual(2, decoded.Count, "decoded faction count");
+                ExpectEqual(8f, decoded[CourtSchoolId.Legalist], "decoded legalist value");
+                ExpectEqual("", CourtStateCodec.EncodeFactionCache(new string[0], new float[0]), "empty faction cache");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }
