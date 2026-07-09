@@ -470,6 +470,8 @@ namespace AncientWarfare3.ui.windows
             switch (pRole)
             {
                 case "king": return AW_L10n.Text("aw_role_king", "\u541B\u4E3B");
+                case "heir_shizi": return AW_L10n.Text("aw_heir_shizi", "\u4E16\u5B50");
+                case "heir_taizi": return AW_L10n.Text("aw_heir_taizi", "\u592A\u5B50");
                 case "city_leader": return AW_L10n.Text("aw_role_city_leader", "\u57CE\u4E3B");
                 case "clan_chief": return AW_L10n.Text("aw_role_clan_chief", "\u6C0F\u65CF\u5BB6\u4E3B");
                 case "royal_guard_captain": return AW_L10n.Text("aw_role_royal_guard_captain", "\u7981\u536B\u519B\u7EDF\u9886");

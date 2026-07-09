@@ -516,6 +516,29 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pActor));
         }
 
+        public static void OnImportantCaptiveReleasedAsNoble(Actor pActor, string pReason, Kingdom pKingdom, City pCity)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            string reason = SlaveService.ReasonLabel(pReason);
+            Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+
+            HistoryText message = HistoryText.Actor(pActor, name) +
+                                  H("aw_hist_captive_noble_released") +
+                                  HistoryText.PlainText(reason) + H("aw_hist_paren_close");
+            HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
+                PersonEvent.FREED_SLAVE, message, ChronicleCategory.HONOR,
+                HistoryTarget.Actor(pActor));
+
+            if (city?.data != null)
+                HistoryWriter.RecordCity(city, kingdom, CityEvent.FREED_SLAVE,
+                    HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
+                    H("aw_hist_captive_noble_city_released") +
+                    HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
+                    HistoryTarget.Actor(pActor));
+        }
+
         public static void OnRetiredSoldier(Actor pActor, Kingdom pKingdom, City pCity)
         {
             if (pActor?.data == null) return;

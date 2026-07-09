@@ -1087,7 +1087,7 @@ namespace AncientWarfare3.core.lineage
 
                 // 平民/奴隶不进氏族大树 → 探测里也跳过(否则会显示展开+号却展开为空)。
                 string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(cid);
-                if (status == LineageStatus.SLAVE) continue;
+                if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy(status)) continue;
 
                 probe.has_children = true; // 至少有一个大树可见(非平民)子代
 
@@ -1122,9 +1122,8 @@ namespace AncientWarfare3.core.lineage
                     $"JOIN descendants d ON e.PARENT_ID=d.ID) " +
                     $"SELECT EXISTS(SELECT 1 FROM descendants d " +
                     $"JOIN {ActorArchiveTableItem.GetTableName()} a ON a.ID=d.ID " +
-                    $"WHERE a.IS_ALIVE=1 AND IFNULL(a.STATUS,'')<>@slave LIMIT 1)";
+                    $"WHERE a.IS_ALIVE=1 LIMIT 1)";
                 cmd.Parameters.AddWithValue("@id", pNodeId);
-                cmd.Parameters.AddWithValue("@slave", LineageStatus.SLAVE);
                 object o = cmd.ExecuteScalar();
                 return o != null && o != System.DBNull.Value && System.Convert.ToInt64(o) != 0;
             }
@@ -1384,6 +1383,15 @@ namespace AncientWarfare3.core.lineage
             string color = pNode.kingdom_color;
             if (string.IsNullOrEmpty(color)) color = pLive.kingdom?.getColor()?.color_text ?? "";
 
+            pLive.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
+            if (!string.IsNullOrEmpty(captiveTitle))
+            {
+                pLive.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
+                pNode.social_title = captiveTitle;
+                pNode.social_title_color = string.IsNullOrEmpty(captiveColor) ? color : captiveColor;
+                return;
+            }
+
             pLive.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
             if (!string.IsNullOrEmpty(formerTitle))
             {
@@ -1436,9 +1444,7 @@ namespace AncientWarfare3.core.lineage
             if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
-                pNode.social_title = string.IsNullOrEmpty(kingdomName)
-                    ? "\u7EE7\u627F\u4EBA"
-                    : kingdomName + " \u7EE7\u627F\u4EBA";
+                pNode.social_title = HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom);
                 pNode.social_title_color = color;
             }
         }
@@ -1464,6 +1470,9 @@ namespace AncientWarfare3.core.lineage
 
             if (!string.IsNullOrEmpty(pNode.social_title))
             {
+                if (HeirTitleRules.IsGenericHeirTitle(pNode.social_title))
+                    pNode.social_title = HeirTitleRules.BuildSocialTitle(pNode.kingdom_name,
+                        MandateService.IsMandateKingdom(World.world?.kingdoms?.get(pNode.kingdom_id)));
                 if (string.IsNullOrEmpty(pNode.social_title_color))
                     pNode.social_title_color = pNode.kingdom_color;
                 return;

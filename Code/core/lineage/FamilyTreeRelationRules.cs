@@ -15,6 +15,11 @@ namespace AncientWarfare3.core.lineage
             return requestedByUi && hasLiveChild && currentParentCount < 2;
         }
 
+        public static bool ShouldShowStatusInGenealogy(string pStatus)
+        {
+            return true;
+        }
+
         public static List<long> MergeRelationIds(params IEnumerable<long>[] pSources)
         {
             var result = new List<long>();

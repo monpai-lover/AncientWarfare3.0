@@ -925,7 +925,7 @@ namespace AncientWarfare3.ui.windows
         /// <summary>是否平民/奴隶身份(氏族大树跳过,不绘制)。</summary>
         private static bool IsHiddenInBigTreeStatus(string pStatus)
         {
-            return pStatus == LineageStatus.SLAVE;
+            return !FamilyTreeRelationRules.ShouldShowStatusInGenealogy(pStatus);
         }
 
         private void MeasureWidth(TreeLayoutNode pNode)

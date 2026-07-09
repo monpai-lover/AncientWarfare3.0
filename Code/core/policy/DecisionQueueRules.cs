@@ -13,5 +13,12 @@ namespace AncientWarfare3.core.policy
         {
             return !string.IsNullOrEmpty(currentDecisionId) && !string.IsNullOrEmpty(nextDecisionId);
         }
+
+        public static bool ShouldForceReplaceCurrentDecision(string currentDecisionId, string nextDecisionId)
+        {
+            return !string.IsNullOrEmpty(currentDecisionId) &&
+                   !string.IsNullOrEmpty(nextDecisionId) &&
+                   currentDecisionId != nextDecisionId;
+        }
     }
 }

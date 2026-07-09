@@ -258,6 +258,13 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
+                pActor.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
+                if (!string.IsNullOrEmpty(captiveTitle))
+                {
+                    pActor.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
+                    return (captiveTitle, string.IsNullOrEmpty(captiveColor) ? color : captiveColor);
+                }
+
                 pActor.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
                 if (!string.IsNullOrEmpty(formerTitle))
                 {
@@ -290,9 +297,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
                 if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
-                    return (string.IsNullOrEmpty(pKingdomName)
-                        ? "\u7EE7\u627F\u4EBA"
-                        : pKingdomName + " \u7EE7\u627F\u4EBA", color);
+                    return (HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom), color);
             }
             catch { }
 

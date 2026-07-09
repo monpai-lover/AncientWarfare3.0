@@ -304,6 +304,7 @@ namespace WarFabricationRuleTests
             ExpectArmyRetreatRules();
             ExpectCityOccupationAccelerationRules();
             ExpectFamilyTreePortraitFrameRules();
+            ExpectFamilyTreeVisibilityRules();
             ExpectClanBannerFrameRules();
             ExpectFamilyTreeToolbarLayoutRules();
             ExpectVassalNameplateFlagLayoutRules();
@@ -1705,6 +1706,18 @@ namespace WarFabricationRuleTests
                     formerKingdomId: 10,
                     captorKingdomId: 20))
                 throw new Exception("Non-king captives must not be treated as captured rulers.");
+            if (!CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
+                    wasKingBeforeRelocation: true,
+                    wasLeaderBeforeRelocation: false))
+                throw new Exception("Captured kings should be released as noble dependents instead of remaining slaves.");
+            if (!CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
+                    wasKingBeforeRelocation: false,
+                    wasLeaderBeforeRelocation: true))
+                throw new Exception("Captured city leaders should be released as noble dependents instead of remaining slaves.");
+            if (CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
+                    wasKingBeforeRelocation: false,
+                    wasLeaderBeforeRelocation: false))
+                throw new Exception("Ordinary captives should remain under normal slavery rules.");
         }
 
         private static void ExpectPosthumousTitleRules()
@@ -3010,6 +3023,18 @@ namespace WarFabricationRuleTests
                 throw new Exception("Non-Mandate heirs should be titled shizi.");
             if (HeirTitleRules.TitleKey(pIsMandateKingdom: true) != "aw_heir_taizi")
                 throw new Exception("Mandate heirs should be titled taizi.");
+            if (HeirTitleRules.DefaultTitleText(pIsMandateKingdom: false) != "\u4e16\u5b50")
+                throw new Exception("Non-Mandate heir display text should be shizi.");
+            if (HeirTitleRules.DefaultTitleText(pIsMandateKingdom: true) != "\u592a\u5b50")
+                throw new Exception("Mandate heir display text should be taizi.");
+            if (HeirTitleRules.BuildSocialTitle("\u5468", pIsMandateKingdom: false) != "\u5468 \u4e16\u5b50")
+                throw new Exception("Family/history heir snapshots should use shizi instead of generic heir.");
+            if (HeirTitleRules.BuildSocialTitle("\u5468", pIsMandateKingdom: true) != "\u5468 \u592a\u5b50")
+                throw new Exception("Mandate family/history heir snapshots should use taizi instead of generic heir.");
+            if (HeirTitleRules.RoleSnapshot(pIsMandateKingdom: false) != "heir_shizi")
+                throw new Exception("Non-Mandate history role snapshots should preserve shizi.");
+            if (HeirTitleRules.RoleSnapshot(pIsMandateKingdom: true) != "heir_taizi")
+                throw new Exception("Mandate history role snapshots should preserve taizi.");
             if (!HeirTitleRules.ShouldRewriteOriginalHeirTitle("heir"))
                 throw new Exception("Original heir stats rows should be rewritten.");
             if (HeirTitleRules.ShouldRewriteOriginalHeirTitle("village_statistics_king"))
@@ -3732,6 +3757,18 @@ namespace WarFabricationRuleTests
                 throw new Exception("Army captain family tree nodes must show a role frame.");
         }
 
+        private static void ExpectFamilyTreeVisibilityRules()
+        {
+            if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy("noble"))
+                throw new Exception("Noble actors must be visible in genealogy.");
+            if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy("common_lineage"))
+                throw new Exception("Common lineage actors must be visible in genealogy.");
+            if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy("slave_lineage"))
+                throw new Exception("Slave actors must remain visible in clan and family trees.");
+            if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy(""))
+                throw new Exception("Actors with missing status should stay visible when relation data exists.");
+        }
+
         private static void ExpectClanBannerFrameRules()
         {
             if (!ClanBannerFrameRules.ShouldCacheDefaultFrame(
@@ -3871,6 +3908,15 @@ namespace WarFabricationRuleTests
                     currentDecisionId: "",
                     nextDecisionId: "aw_decision_royal_expansion"))
                 throw new Exception("An empty decision slot should start the decision immediately, not queue it.");
+
+            if (!DecisionQueueRules.ShouldForceReplaceCurrentDecision(
+                    currentDecisionId: "aw_decision_title_upgrade",
+                    nextDecisionId: "aw_decision_royal_expansion"))
+                throw new Exception("Manual UI selection should replace the current decision instead of queueing it.");
+            if (DecisionQueueRules.ShouldForceReplaceCurrentDecision(
+                    currentDecisionId: "aw_decision_title_upgrade",
+                    nextDecisionId: "aw_decision_title_upgrade"))
+                throw new Exception("Selecting the current decision again should not replace it.");
         }
 
         private static void ExpectPolicyNodeLockRules()

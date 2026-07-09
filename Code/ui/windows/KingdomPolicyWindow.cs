@@ -151,6 +151,7 @@ namespace AncientWarfare3.ui.windows
             Transform viewport = BackgroundTransform.Find("Scroll View/Viewport");
             var viewRect = viewport != null ? viewport.GetComponent<RectTransform>() : null;
             if (viewRect != null) viewRect.sizeDelta = new Vector2(_contentWidth, _viewportHeight);
+            EnsureViewportMask(viewport);
 
             Transform scrollbar = BackgroundTransform.Find("Scroll View/Scrollbar Vertical");
             HideNativeScrollbarVisual(scrollbar);
@@ -185,6 +186,13 @@ namespace AncientWarfare3.ui.windows
                 graphic.enabled = false;
                 graphic.raycastTarget = false;
             }
+        }
+
+        private static void EnsureViewportMask(Transform pViewport)
+        {
+            if (pViewport == null) return;
+            if (pViewport.GetComponent<RectMask2D>() == null)
+                pViewport.gameObject.AddComponent<RectMask2D>();
         }
 
         private void EnsureCanvas()

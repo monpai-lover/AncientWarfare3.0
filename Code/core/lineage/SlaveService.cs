@@ -257,6 +257,7 @@ namespace AncientWarfare3.core.lineage
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
+            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget);
             Kingdom formerRulerKingdom = wasKingBeforeRelocation ? targetKingdom : null;
 
             pTarget.cancelAllBeh();
@@ -272,7 +273,8 @@ namespace AncientWarfare3.core.lineage
             bool changed = Enslave(pTarget, "battlefield_capture", captor, city, captorKingdom,
                 pForceRecord: true, pForceNationalRecord: nationalRecord,
                 pFormerRulerKingdom: formerRulerKingdom,
-                pWasKingBeforeRelocation: wasKingBeforeRelocation);
+                pWasKingBeforeRelocation: wasKingBeforeRelocation,
+                pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
             if (!changed) return false;
 
             QueueWarSlaveCaptureSummary(captorKingdom, city, 1);
@@ -286,6 +288,7 @@ namespace AncientWarfare3.core.lineage
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
+            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget);
             Kingdom formerRulerKingdom = wasKingBeforeRelocation ? pTarget.kingdom : null;
             City city = pCatcher.city ?? pCatcher.kingdom?.capital;
             Kingdom kingdom = pCatcher.kingdom ?? city?.kingdom;
@@ -295,7 +298,8 @@ namespace AncientWarfare3.core.lineage
             bool changed = Enslave(pTarget, "captured", pCatcher, city, kingdom, pForceRecord: true,
                 pForceNationalRecord: nationalRecord,
                 pFormerRulerKingdom: formerRulerKingdom,
-                pWasKingBeforeRelocation: wasKingBeforeRelocation);
+                pWasKingBeforeRelocation: wasKingBeforeRelocation,
+                pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
             if (changed)
                 QueueWarSlaveCaptureSummary(kingdom, city, 1);
             CheckCitySlaveLabor(city);
@@ -305,7 +309,7 @@ namespace AncientWarfare3.core.lineage
         public static bool Enslave(Actor pActor, string pReason, Actor pCaptor = null,
             City pContextCity = null, Kingdom pContextKingdom = null, bool pForceRecord = false,
             bool pForceNationalRecord = false, Kingdom pFormerRulerKingdom = null,
-            bool pWasKingBeforeRelocation = false)
+            bool pWasKingBeforeRelocation = false, bool pWasLeaderBeforeRelocation = false)
         {
             Kingdom contextKingdom = pContextKingdom ?? pActor?.kingdom ?? pContextCity?.kingdom;
             if (!IsSlaveryEnabled(contextKingdom)) return false;
@@ -313,8 +317,12 @@ namespace AncientWarfare3.core.lineage
 
             bool wasSlave = IsSlave(pActor);
             bool liveWasKing = SafeIsKing(pActor);
+            bool liveWasLeader = SafeIsCityLeader(pActor);
             bool wasKing = pWasKingBeforeRelocation || liveWasKing;
+            bool wasLeader = pWasLeaderBeforeRelocation || liveWasLeader;
             Kingdom formerKingdom = pFormerRulerKingdom ?? (liveWasKing ? pActor.kingdom : null);
+            bool releaseAsNobleDependent = CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
+                wasKing, wasLeader);
             bool preserveCapturedRuler = CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
                 wasKing,
                 formerKingdom?.id ?? -1L,
@@ -338,6 +346,10 @@ namespace AncientWarfare3.core.lineage
                 formerKingdom ?? contextKingdom);
             if (!abdicated && preserveCapturedRuler)
                 CloseCapturedRulerOpenReign(pActor, formerKingdom);
+
+            if (releaseAsNobleDependent)
+                ReleaseImportantCaptiveAsNobleDependent(pActor, pReason, contextKingdom ?? pActor.kingdom,
+                    pContextCity ?? pActor.city, wasKing);
 
             CheckCitySlaveLabor(pContextCity ?? pActor.city);
             return !wasSlave || pForceRecord;
@@ -867,6 +879,12 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
+        private static bool SafeIsCityLeader(Actor pActor)
+        {
+            try { return pActor?.data != null && pActor.isCityLeader(); }
+            catch { return false; }
+        }
+
         private static bool HasCaptureTargetForCity(City pCity)
         {
             if (pCity?.data == null || pCity.kingdom == null) return false;
@@ -1057,6 +1075,41 @@ namespace AncientWarfare3.core.lineage
             LineageService.ApplyDisplayName(pActor);
             LineageService.ArchiveActor(pActor, pAlive: true);
             pActor.clearGraphicsFully();
+        }
+
+        private static void ReleaseImportantCaptiveAsNobleDependent(Actor pActor, string pReason,
+            Kingdom pKingdom, City pCity, bool pWasKing)
+        {
+            if (pActor?.data == null || !IsSlave(pActor)) return;
+
+            pActor.removeTrait(LineageKeys.TRAIT_SLAVE);
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
+            pActor.data.set(LineageKeys.FREEDMAN, true);
+            pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+
+            try
+            {
+                LineageService.OnActorPromoted(pActor, pWasKing ? NobleTrigger.King : NobleTrigger.CityLeader);
+            }
+            catch { }
+
+            pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
+
+            string color = HistoryColors.FromKingdom(pKingdom ?? pActor.kingdom);
+            pActor.data.set(LineageKeys.CAPTIVE_NOBLE_TITLE,
+                HistoryLocalizationRules.Text("aw_hist_captive_noble_title"));
+            pActor.data.set(LineageKeys.CAPTIVE_NOBLE_COLOR, color);
+
+            BreakInvalidLover(pActor);
+            LineageService.ApplyDisplayName(pActor);
+            LineageService.ArchiveActor(pActor, pAlive: true);
+            pActor.clearGraphicsFully();
+
+            UpsertSlaveState(pActor, pActive: false, pCity ?? pActor.city, pKingdom ?? pActor.kingdom);
+            ChronicleEvents.OnImportantCaptiveReleasedAsNoble(pActor, pReason, pKingdom, pCity);
         }
 
         private static void RememberCapturedRulerContext(Actor pActor, Kingdom pFormerKingdom)
@@ -1536,6 +1589,7 @@ namespace AncientWarfare3.core.lineage
                 "born_slave" => HistoryLocalizationRules.Text("aw_hist_slave_reason_born_slave", pLanguage),
                 "military_merit" => HistoryLocalizationRules.Text("aw_hist_slave_reason_military_merit", pLanguage),
                 "promoted" => HistoryLocalizationRules.Text("aw_hist_slave_reason_promoted", pLanguage),
+                "noble_dependent" => HistoryLocalizationRules.Text("aw_hist_slave_reason_noble_dependent", pLanguage),
                 _ => string.IsNullOrEmpty(pReason) ? HistoryLocalizationRules.Text("aw_hist_slave_reason_registered", pLanguage) : pReason
             };
         }

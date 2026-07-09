@@ -123,6 +123,13 @@ namespace AncientWarfare3.core.lineage
             try { if (pActor.isKing()) return "king"; } catch { }
             try
             {
+                pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+                if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    return HeirTitleRules.RoleSnapshot(MandateService.IsMandateKingdom(pActor.kingdom));
+            }
+            catch { }
+            try
+            {
                 pActor.data.get(LineageKeys.ROYAL_GUARD_CAPTAIN, out bool captain, false);
                 if (captain) return "royal_guard_captain";
                 pActor.data.get(LineageKeys.ROYAL_GUARD, out bool guard, false);
@@ -160,6 +167,8 @@ namespace AncientWarfare3.core.lineage
             switch (pRole)
             {
                 case "king": return "\u541b\u4e3b";
+                case "heir_shizi": return "\u4e16\u5b50";
+                case "heir_taizi": return "\u592a\u5b50";
                 case "city_leader": return "\u57ce\u4e3b";
                 case "clan_chief": return "\u6c0f\u65cf\u5bb6\u4e3b";
                 case "royal_guard_captain": return "\u7981\u536b\u519b\u7edf\u9886";

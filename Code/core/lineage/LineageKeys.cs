@@ -94,6 +94,8 @@ namespace AncientWarfare3.core.lineage
         public const string SOLDIER_SERVICE_START_TIME = "aw_soldier_service_start_time";
         public const string SLAVE_MERIT = "aw_slave_merit";
         public const string FREEDMAN = "aw_freedman";
+        public const string CAPTIVE_NOBLE_TITLE = "aw_captive_noble_title";
+        public const string CAPTIVE_NOBLE_COLOR = "aw_captive_noble_color";
         public const string SLAVE_ARMY_ENABLED = "aw_slave_army_enabled";
         public const string SLAVE_ARMY_RECORDED = "aw_slave_army_recorded";
         public const string SLAVE_LABOR_RECORDED = "aw_slave_labor_recorded";

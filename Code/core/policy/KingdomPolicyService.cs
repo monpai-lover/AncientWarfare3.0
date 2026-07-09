@@ -267,11 +267,12 @@ namespace AncientWarfare3.core.policy
             if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_absorb_vassal")
-                return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom));
+                return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom),
+                    pForceReplace: true);
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_declare_war")
                 return false;
             if (def.Kind == PolicyNodeKind.Decision && IsTargetedFabricationDecision(def.Id))
-                return StartTargetedFabricationDecision(pKingdom, def.Id);
+                return StartTargetedFabricationDecision(pKingdom, def.Id, pForceReplace: true);
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_seek_suzerain")
                 return false;
             EnsureInitialized(pKingdom);
@@ -313,14 +314,6 @@ namespace AncientWarfare3.core.policy
             EnsureInitialized(pKingdom);
             if (GetCurrent(pKingdom, def.Kind) == def.Id) return false;
 
-            if (def.Kind == PolicyNodeKind.Decision &&
-                DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
-            {
-                EnqueueDecisionBack(pKingdom, CreateSimpleDecisionItem(def.Id, 0f));
-                UpsertSnapshot(pKingdom);
-                return true;
-            }
-
             pKingdom.data.set(CurrentKey(def.Kind), def.Id);
             pKingdom.data.set(ProgressKey(def.Kind), 0f);
             if (def.Kind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
@@ -328,7 +321,8 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
-        public static bool StartDecisionWithTarget(Kingdom pKingdom, string pNodeId, Kingdom pTarget)
+        public static bool StartDecisionWithTarget(Kingdom pKingdom, string pNodeId, Kingdom pTarget,
+            bool pForceReplace = false)
         {
             if (pKingdom?.data == null || pTarget?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
@@ -348,7 +342,8 @@ namespace AncientWarfare3.core.policy
 
             var item = CreateSimpleDecisionItem(def.Id, 0f);
             FillDecisionTarget(item, pTarget);
-            if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
+            if (!pForceReplace &&
+                DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
             {
                 EnqueueDecisionBack(pKingdom, item);
                 UpsertSnapshot(pKingdom);
@@ -357,13 +352,14 @@ namespace AncientWarfare3.core.policy
 
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, def.Id);
             pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
+            ClearDecisionTarget(pKingdom);
             SetDecisionTarget(pKingdom, pTarget);
             UpsertSnapshot(pKingdom);
             return true;
         }
 
         public static bool StartFabricationDecision(Kingdom pKingdom, Kingdom pTarget, City pTargetCity,
-            string pProjectType)
+            string pProjectType, bool pForceReplace = false)
         {
             if (pKingdom?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
@@ -397,7 +393,7 @@ namespace AncientWarfare3.core.policy
             {
                 EnqueueCurrentDecisionFront(pKingdom);
             }
-            else if (DecisionQueueRules.ShouldQueueDecisionWhenBusy(current, def.Id))
+            else if (!pForceReplace && DecisionQueueRules.ShouldQueueDecisionWhenBusy(current, def.Id))
             {
                 EnqueueDecisionBack(pKingdom, item);
                 UpsertSnapshot(pKingdom);
@@ -406,6 +402,7 @@ namespace AncientWarfare3.core.policy
 
             pKingdom.data.set(LineageKeys.DECISION_CURRENT, def.Id);
             pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
+            ClearDecisionTarget(pKingdom);
             SetDecisionTarget(pKingdom, target);
             pKingdom.data.set(LineageKeys.DECISION_PROJECT_TYPE, pProjectType ?? "");
             pKingdom.data.set(LineageKeys.DECISION_WAR_TARGET_CITY_ID, city?.data?.id ?? -1L);
@@ -528,13 +525,14 @@ namespace AncientWarfare3.core.policy
             return WarFabricationRules.CanExposeFabricationDecision(pDefId, hasCoreTarget, hasClaimTarget);
         }
 
-        private static bool StartTargetedFabricationDecision(Kingdom pKingdom, string pDefId)
+        private static bool StartTargetedFabricationDecision(Kingdom pKingdom, string pDefId,
+            bool pForceReplace = false)
         {
             if (pDefId == "aw_decision_fabricate_core")
             {
                 City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
                 return KingdomPolicyService.StartFabricationDecision(pKingdom, pKingdom, city,
-                    WarTerritoryService.PROJECT_CORE);
+                    WarTerritoryService.PROJECT_CORE, pForceReplace);
             }
 
             if (pDefId != "aw_decision_fabricate_weak_claim" &&
@@ -546,7 +544,8 @@ namespace AncientWarfare3.core.policy
             string projectType = pDefId == "aw_decision_fabricate_strong_claim"
                 ? WarTerritoryService.PROJECT_STRONG_CLAIM
                 : WarTerritoryService.PROJECT_WEAK_CLAIM;
-            return KingdomPolicyService.StartFabricationDecision(pKingdom, target, targetCity, projectType);
+            return KingdomPolicyService.StartFabricationDecision(pKingdom, target, targetCity, projectType,
+                pForceReplace);
         }
 
         private static string FabricationDecisionId(string pProjectType)

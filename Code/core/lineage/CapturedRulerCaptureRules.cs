@@ -10,5 +10,11 @@ namespace AncientWarfare3.core.lineage
                    captorKingdomId >= 0 &&
                    formerKingdomId != captorKingdomId;
         }
+
+        public static bool ShouldReleaseAsNobleDependent(bool wasKingBeforeRelocation,
+            bool wasLeaderBeforeRelocation)
+        {
+            return wasKingBeforeRelocation || wasLeaderBeforeRelocation;
+        }
     }
 }
