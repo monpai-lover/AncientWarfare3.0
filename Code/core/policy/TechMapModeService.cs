@@ -65,13 +65,18 @@ namespace AncientWarfare3.core.policy
             string current = string.IsNullOrEmpty(report.current_name)
                 ? AW_L10n.Text("aw_tech_mapmode_idle", "No current tech")
                 : report.current_name + " " + Mathf.RoundToInt(report.current_fraction * 100f) + "%";
-            return AW_L10n.Text("aw_tech_mapmode_level", "Tech level") + ": " + report.level + "/" +
-                   report.max_level +
-                   "\n" + AW_L10n.Text("aw_tech_mapmode_completed", "Completed techs") + ": " +
-                   report.completed_count + "/" + report.total_count +
-                   "\n" + AW_L10n.Text("aw_tech_mapmode_current", "Current research") + ": " + current +
-                   "\n" + AW_L10n.Text("aw_tech_mapmode_points", "Tech points") + ": " +
-                   Mathf.FloorToInt(KingdomPolicyService.GetTechPoints(pKingdom));
+            string text = AW_L10n.Text("aw_tech_mapmode_level", "Tech level") + ": " + report.level + "/" +
+                          report.max_level +
+                          "\n" + AW_L10n.Text("aw_tech_mapmode_completed", "Completed techs") + ": " +
+                          report.completed_count + "/" + report.total_count +
+                          "\n" + AW_L10n.Text("aw_tech_mapmode_current", "Current research") + ": " + current +
+                          "\n" + AW_L10n.Text("aw_tech_mapmode_points", "Tech points") + ": " +
+                          Mathf.FloorToInt(KingdomPolicyService.GetTechPoints(pKingdom));
+            float frontierMultiplier = KingdomPolicyService.GetTechFrontierMultiplier(pKingdom);
+            if (frontierMultiplier < 0.999f)
+                text += "\n" + AW_L10n.Text("aw_tech_mapmode_frontier_slowdown", "Frontier slowdown") +
+                        ": -" + Mathf.RoundToInt((1f - frontierMultiplier) * 100f) + "%";
+            return text;
         }
 
         public static void DirtyMap()

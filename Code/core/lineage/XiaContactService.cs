@@ -23,17 +23,18 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.data.set(LineageKeys.XIA_CONTACT_MIXED_CHILD_EVENTS, 0);
 
             bool borders = BordersXiaContactKingdom(pKingdom);
+            bool nearby = !borders && NearbyXiaContactKingdom(pKingdom);
             bool diplomacy = HasAllianceWithXiaContactKingdom(pKingdom);
             bool vassal = HasVassalContactWithXia(pKingdom);
             int occupied = CountOccupiedXiaCities(pKingdom);
             bool official = HasOfficialXiaContact(pKingdom);
 
             float gain = XiaContactRules.CalculateYearlyGain(borders, diplomacy, vassal, occupied, mixedChildren,
-                official);
+                official, nearby);
             if (gain <= 0f) return;
 
             string sources = XiaContactRules.BuildSourceMask(borders, diplomacy, vassal, occupied, mixedChildren,
-                official);
+                official, nearby);
             pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK, sources);
             pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_GAIN, gain);
 
@@ -79,6 +80,35 @@ namespace AncientWarfare3.core.lineage
             }
 
             return false;
+        }
+
+        private static bool NearbyXiaContactKingdom(Kingdom pKingdom)
+        {
+            foreach (City city in pKingdom.getCities())
+            {
+                if (city?.data == null || city.isRekt()) continue;
+                try
+                {
+                    foreach (TileZone nearZone in city.neighbour_zones)
+                    {
+                        if (IsXiaZone(nearZone, pKingdom)) return true;
+                        TileZone[] around = nearZone?.neighbours_all;
+                        if (around == null) continue;
+                        for (int i = 0; i < around.Length; i++)
+                            if (IsXiaZone(around[i], pKingdom))
+                                return true;
+                    }
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        private static bool IsXiaZone(TileZone pZone, Kingdom pOwnKingdom)
+        {
+            Kingdom other = pZone?.city?.kingdom;
+            return other != null && other != pOwnKingdom && IsXiaContactKingdom(other);
         }
 
         private static bool HasAllianceWithXiaContactKingdom(Kingdom pKingdom)

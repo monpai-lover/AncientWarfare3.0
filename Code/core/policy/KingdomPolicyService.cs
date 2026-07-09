@@ -58,6 +58,8 @@ namespace AncientWarfare3.core.policy
     {
         private const float MAX_POINTS = 999f;
         public const float MAX_YEARLY_SPEND = 18f;
+        private static int _techFrontierCacheYear = int.MinValue;
+        private static int _techFrontierMaxLevel = 1;
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
@@ -870,6 +872,16 @@ namespace AncientWarfare3.core.policy
             return report;
         }
 
+        public static float GetTechFrontierMultiplier(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 1f;
+            TechLevelReport report = GetTechLevelReport(pKingdom);
+            return TechResearchPaceRules.FrontierMultiplier(
+                pIsTech: true,
+                pOwnTechLevel: report.level,
+                pWorldMaxTechLevel: GetWorldMaxTechLevelForYear());
+        }
+
         public static string GetCurrentSummary(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return "";
@@ -1009,7 +1021,10 @@ namespace AncientWarfare3.core.policy
             float rawSpend = Mathf.Min(points, MAX_YEARLY_SPEND);
             float progressMultiplier = 1f;
             if (pKind == PolicyNodeKind.Tech)
+            {
                 progressMultiplier = CityTechService.GetNeighborTechResearchBonus(pKingdom, def.Id);
+                progressMultiplier *= GetTechFrontierMultiplier(pKingdom);
+            }
 
             float effectiveProgress = Mathf.Min(remaining, rawSpend * progressMultiplier);
             float spend = progressMultiplier <= 0f ? effectiveProgress : effectiveProgress / progressMultiplier;
@@ -1047,6 +1062,32 @@ namespace AncientWarfare3.core.policy
                 StartNextQueuedDecisionIfEmpty(pKingdom);
             }
             UpsertSnapshot(pKingdom);
+        }
+
+        private static int GetWorldMaxTechLevelForYear()
+        {
+            int year = Date.getCurrentYear();
+            if (_techFrontierCacheYear == year) return _techFrontierMaxLevel;
+            _techFrontierCacheYear = year;
+            _techFrontierMaxLevel = 1;
+
+            try
+            {
+                if (World.world?.kingdoms == null) return _techFrontierMaxLevel;
+                foreach (Kingdom kingdom in World.world.kingdoms)
+                {
+                    if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) continue;
+                    if (!CanUsePolicySystem(kingdom)) continue;
+                    int level = GetTechLevelReport(kingdom).level;
+                    if (level > _techFrontierMaxLevel) _techFrontierMaxLevel = level;
+                }
+            }
+            catch
+            {
+                _techFrontierMaxLevel = Math.Max(1, _techFrontierMaxLevel);
+            }
+
+            return _techFrontierMaxLevel;
         }
 
         private static bool ApplyEffect(Kingdom pKingdom, KingdomPolicyDef pDef)

@@ -14,15 +14,18 @@ namespace AncientWarfare3.core.lineage
         public const float OccupiedXiaCityGain = 8f;
         public const float MixedChildGain = 2f;
         public const float OfficialContactGain = 6f;
+        public const float NearbyGain = 2f;
 
         private const int MaxOccupiedCitiesPerYear = 5;
         private const int MaxMixedChildEventsPerYear = 8;
 
         public static float CalculateYearlyGain(bool pBordersXia, bool pDiplomaticContact, bool pVassalContact,
-            int pOccupiedXiaCityCount, int pMixedChildEvents, bool pOfficialContact = false)
+            int pOccupiedXiaCityCount, int pMixedChildEvents, bool pOfficialContact = false,
+            bool pNearbyXiaContact = false)
         {
             float gain = 0f;
             if (pBordersXia) gain += BorderGain;
+            else if (pNearbyXiaContact) gain += NearbyGain;
             if (pDiplomaticContact) gain += DiplomaticGain;
             if (pVassalContact) gain += VassalGain;
             if (pOfficialContact) gain += OfficialContactGain;
@@ -32,10 +35,12 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static string BuildSourceMask(bool pBordersXia, bool pDiplomaticContact, bool pVassalContact,
-            int pOccupiedXiaCityCount, int pMixedChildEvents, bool pOfficialContact = false)
+            int pOccupiedXiaCityCount, int pMixedChildEvents, bool pOfficialContact = false,
+            bool pNearbyXiaContact = false)
         {
             var parts = new System.Collections.Generic.List<string>();
             if (pBordersXia) parts.Add("border");
+            else if (pNearbyXiaContact) parts.Add("nearby");
             if (pDiplomaticContact) parts.Add("diplomacy");
             if (pVassalContact) parts.Add("vassal");
             if (pOccupiedXiaCityCount > 0) parts.Add("occupation");
@@ -52,6 +57,7 @@ namespace AncientWarfare3.core.lineage
             if (ContainsSource(pSourceMask, "vassal")) return "xia_vassal_contact";
             if (ContainsSource(pSourceMask, "diplomacy")) return "xia_diplomatic_contact";
             if (ContainsSource(pSourceMask, "border")) return "xia_border_contact";
+            if (ContainsSource(pSourceMask, "nearby")) return "xia_nearby_contact";
             return "xia_contact";
         }
 

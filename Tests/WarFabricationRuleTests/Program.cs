@@ -311,6 +311,7 @@ namespace WarFabricationRuleTests
             ExpectCoreFabricationSlotRules();
             ExpectDecisionQueueRules();
             ExpectPolicyNodeLockRules();
+            ExpectTechResearchPaceRules();
             ExpectForeignOccupationDetectionRules();
             ExpectMandateSuccessionRules();
             ExpectMandateDeclarationOriginRules();
@@ -2029,6 +2030,16 @@ namespace WarFabricationRuleTests
                 pOfficialContact: true);
             if (Math.Abs(gain - 27f) > 0.001f)
                 throw new Exception($"Xia contact yearly gain should combine border/diplomacy/occupation/mixed child/official contact, got {gain}.");
+            float nearbyGain = XiaContactRules.CalculateYearlyGain(
+                pBordersXia: false,
+                pDiplomaticContact: false,
+                pVassalContact: false,
+                pOccupiedXiaCityCount: 0,
+                pMixedChildEvents: 0,
+                pOfficialContact: false,
+                pNearbyXiaContact: true);
+            if (Math.Abs(nearbyGain - XiaContactRules.NearbyGain) > 0.001f)
+                throw new Exception($"Nearby Xia kingdoms should create soft yearly Xia contact, got {nearbyGain}.");
 
             string sourceMask = XiaContactRules.BuildSourceMask(
                 pBordersXia: true,
@@ -2042,6 +2053,18 @@ namespace WarFabricationRuleTests
 
             if (XiaContactRules.PrimaryReason(sourceMask) != "xia_occupation_contact")
                 throw new Exception("Occupation should be the primary Xia contact reason when present.");
+            string nearbySourceMask = XiaContactRules.BuildSourceMask(
+                pBordersXia: false,
+                pDiplomaticContact: false,
+                pVassalContact: false,
+                pOccupiedXiaCityCount: 0,
+                pMixedChildEvents: 0,
+                pOfficialContact: false,
+                pNearbyXiaContact: true);
+            if (nearbySourceMask != "nearby")
+                throw new Exception($"Unexpected nearby Xia contact source mask '{nearbySourceMask}'.");
+            if (XiaContactRules.PrimaryReason(nearbySourceMask) != "xia_nearby_contact")
+                throw new Exception("Nearby Xia kingdoms should be recorded as nearby Xia contact.");
 
             if (XiaContactRules.LevelForProgress(0f) != 0)
                 throw new Exception("No Xia contact progress should remain level 0.");
@@ -3833,6 +3856,39 @@ namespace WarFabricationRuleTests
                 throw new Exception("Expected empty lock set to allow start.");
             if (PolicyNodeLockRules.ShouldAllowStart("aw_decision_declare_war", "aw_decision_declare_war"))
                 throw new Exception("Expected locked war decision to be rejected.");
+        }
+
+        private static void ExpectTechResearchPaceRules()
+        {
+            if (Math.Abs(TechResearchPaceRules.FrontierMultiplier(
+                    pIsTech: true,
+                    pOwnTechLevel: 3,
+                    pWorldMaxTechLevel: 3) - 1f) > 0.001f)
+                throw new Exception("Tech level 3 should not receive frontier slowdown.");
+
+            if (Math.Abs(TechResearchPaceRules.FrontierMultiplier(
+                    pIsTech: true,
+                    pOwnTechLevel: 4,
+                    pWorldMaxTechLevel: 4) - TechResearchPaceRules.Level4FrontierMultiplier) > 0.001f)
+                throw new Exception("A level 4 world-leading tech kingdom should research more slowly.");
+
+            if (Math.Abs(TechResearchPaceRules.FrontierMultiplier(
+                    pIsTech: true,
+                    pOwnTechLevel: 5,
+                    pWorldMaxTechLevel: 5) - TechResearchPaceRules.Level5FrontierMultiplier) > 0.001f)
+                throw new Exception("A level 5 world-leading tech kingdom should receive the strongest slowdown.");
+
+            if (Math.Abs(TechResearchPaceRules.FrontierMultiplier(
+                    pIsTech: true,
+                    pOwnTechLevel: 4,
+                    pWorldMaxTechLevel: 5) - 1f) > 0.001f)
+                throw new Exception("A high tech kingdom should not slow down when it is no longer the highest tech level.");
+
+            if (Math.Abs(TechResearchPaceRules.FrontierMultiplier(
+                    pIsTech: false,
+                    pOwnTechLevel: 5,
+                    pWorldMaxTechLevel: 5) - 1f) > 0.001f)
+                throw new Exception("Frontier slowdown must not affect social policies or decisions.");
         }
 
         private static void ExpectForeignOccupationDetectionRules()

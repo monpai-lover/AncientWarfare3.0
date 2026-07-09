@@ -459,6 +459,7 @@ namespace AncientWarfare3.core.lineage
                 switch (part)
                 {
                     case "border": labels.Add("\u63A5\u58E4"); break;
+                    case "nearby": labels.Add("\u90BB\u8FD1"); break;
                     case "diplomacy": labels.Add("\u7ED3\u76DF"); break;
                     case "vassal": labels.Add("\u9644\u5EB8"); break;
                     case "occupation": labels.Add("\u7EDF\u6CBB\u590F\u5730"); break;
