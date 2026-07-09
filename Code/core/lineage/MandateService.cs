@@ -58,6 +58,9 @@ namespace AncientWarfare3.core.lineage
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
+
         public static bool IsMandateKingdom(Kingdom pKingdom)
         {
             return pKingdom?.data != null && GetCurrentMandateKingdom()?.id == pKingdom.id;
@@ -124,14 +127,15 @@ namespace AncientWarfare3.core.lineage
 
             if (Mathf.Abs(delta) >= 5 || crisis == "collapse" || crisis == "lost")
                 RecordEvent("mandate_yearly", pKingdom, pKingdom.king, null, delta, nextValue,
-                    pKingdom.name + " 天命变化 " + Signed(delta) + "，当前 " + nextValue);
+                    pKingdom.name + T("aw_hist_mandate_changed_mid") + Signed(delta) +
+                    T("aw_hist_mandate_current") + nextValue);
 
             if (nextValue <= MIN_VALUE)
             {
                 if (HasMandateProtection(pKingdom))
                 {
                     RecordEvent("mandate_protected", pKingdom, pKingdom.king, null, 0, nextValue,
-                        pKingdom.king.getName() + " 受天命护持，低天命暂未崩解王朝");
+                        pKingdom.king.getName() + T("aw_hist_mandate_protected"));
                 }
                 else
                 {
@@ -194,13 +198,13 @@ namespace AncientWarfare3.core.lineage
 
             string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
             RecordEvent(startEventType, pKingdom, king, null, 0, START_VALUE,
-                pKingdom.name + " 受命称帝，建立" + dynastyName);
+                pKingdom.name + T("aw_hist_mandate_claimed_mid") + dynastyName);
             HistoryWriter.RecordKingdom(pKingdom, startEventType,
-                HistoryText.Kingdom(pKingdom) + " 受命称帝，建立" + HistoryText.PlainText(dynastyName),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_claimed_mid") + HistoryText.PlainText(dynastyName),
                 HistoryTarget.Kingdom(pKingdom));
             if (king?.data != null)
                 HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), startEventType,
-                    HistoryText.Actor(king) + " 受天命为帝", ChronicleCategory.HONOR,
+                    HistoryText.Actor(king) + H("aw_hist_actor_claimed_mandate"), ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
 
             DirtyAllMaps();
@@ -346,7 +350,7 @@ namespace AncientWarfare3.core.lineage
                 Mathf.Clamp(r.dynasty_prestige + 3, 0, 999),
                 r.core_control, r.vassal_loyalty, CrisisLevel(r.mandate_value), Date.getCurrentYear());
             HistoryWriter.RecordKingdom(pKingdom, "mandate_ritual",
-                HistoryText.Kingdom(pKingdom) + " 祭天整顿，重申天命",
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_ritual"),
                 HistoryTarget.Kingdom(pKingdom));
             return true;
         }
@@ -378,9 +382,9 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.set(LineageKeys.MANDATE_SUCCESSION_CRISIS_YEAR, year);
             ChangeMandate(pKingdom, -4, "mandate_succession_crisis",
-                (pKingdom.name ?? "") + " \u56FD\u672C\u4E0D\u7A33\uFF0C\u8BF8\u57CE\u4E00\u5EA6\u6709\u79BB\u5FC3");
+                (pKingdom.name ?? "") + T("aw_hist_mandate_succession_unstable"));
             HistoryWriter.RecordKingdom(pKingdom, "mandate_succession_crisis",
-                HistoryText.Kingdom(pKingdom) + " \u56FD\u672C\u4E0D\u7A33\uFF0C\u5929\u547D\u56E0\u7EE7\u627F\u5371\u673A\u53D7\u635F",
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_succession_damaged"),
                 HistoryTarget.Kingdom(pKingdom));
         }
 
@@ -423,7 +427,7 @@ namespace AncientWarfare3.core.lineage
                 _coreCityIds.Add(pCity.id);
                 UpdateOriginalCoreCount(report.period_id);
                 RecordEvent("mandate_core_added", pKingdom, pKingdom.king, pCity, 0, report.mandate_value,
-                    (pCity.data.name ?? "") + " 纳入天命法理核心");
+                    (pCity.data.name ?? "") + T("aw_hist_mandate_core_added"));
             }
             catch (Exception e)
             {
@@ -469,10 +473,12 @@ namespace AncientWarfare3.core.lineage
             if (current?.data != null)
             {
                 HistoryWriter.RecordKingdom(current, "mandate_end",
-                    HistoryText.Kingdom(current) + " 失去天命（" + HistoryText.PlainText(EndReasonLabel(pReason)) + "）",
+                    HistoryText.Kingdom(current) + H("aw_hist_mandate_lost_prefix") +
+                    HistoryText.PlainText(EndReasonLabel(pReason)) + H("aw_hist_paren_close"),
                     HistoryTarget.Kingdom(current));
                 RecordEvent("mandate_end", current, current.king, null, 0, report.mandate_value,
-                    current.name + " 失去天命：" + EndReasonLabel(pReason));
+                    current.name + T("aw_hist_mandate_lost_prefix") + EndReasonLabel(pReason) +
+                    T("aw_hist_paren_close"));
             }
 
             MarkDirty();
@@ -483,7 +489,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             HistoryWriter.RecordKingdom(pKingdom, "mandate_collapse",
-                HistoryText.Kingdom(pKingdom) + " 天命崩解，天下大乱",
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_collapse"),
                 HistoryTarget.Kingdom(pKingdom));
             MandateRebelService.OnMandateCollapse(pKingdom, pReason);
             ClearMandate(pReason);
@@ -499,7 +505,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
             RecordEvent("mandate_war_start", defender, defender.king, null, -5, ReadReport().mandate_value,
-                attacker.name + " 向 " + defender.name + " 发起天命战争");
+                attacker.name + T("aw_hist_mandate_war_declared_mid") + defender.name +
+                T("aw_hist_mandate_war_declared_suffix"));
             ChangeMandate(defender, -5, "mandate_war_start");
             MandateBorderDefenseService.OnMandateWarStarted(pWar);
         }
@@ -697,51 +704,56 @@ namespace AncientWarfare3.core.lineage
         {
             if (Date.getCurrentYear() > int.MinValue) return BuildDynastyTooltipClean(pKingdom);
             MandateReport r = ReadReport();
-            if (!r.active) return "当前没有天命王朝";
+            if (!r.active) return T("aw_hist_mandate_none");
             if (pKingdom?.data == null) return r.dynasty_name;
             bool inSystem = pKingdom.id == r.kingdom_id ||
                             VassalService.GetRootSuzerain(pKingdom)?.id == r.kingdom_id;
-            return r.dynasty_name + "\n天命国: " + r.kingdom_name +
-                   "\n天命值: " + r.mandate_value +
-                   "\n皇权: " + r.imperial_authority +
-                   "\n法理控制: " + Mathf.RoundToInt(r.core_control * 100f) + "%" +
-                   "\n当前区域: " + (inSystem ? "天命体系" : "体系之外");
+            return r.dynasty_name + "\n" + T("aw_hist_mandate_map_realm") + r.kingdom_name +
+                   "\n" + T("aw_hist_mandate_value") + r.mandate_value +
+                   "\n" + T("aw_hist_mandate_authority") + r.imperial_authority +
+                   "\n" + T("aw_hist_mandate_core_control") + Mathf.RoundToInt(r.core_control * 100f) + "%" +
+                   "\n" + T("aw_hist_mandate_current_zone") +
+                   (inSystem ? T("aw_hist_mandate_inside") : T("aw_hist_mandate_outside"));
         }
 
         public static string BuildCoreTooltip(Kingdom pKingdom)
         {
             if (Date.getCurrentYear() > int.MinValue) return BuildCoreTooltipClean(pKingdom);
             MandateReport r = ReadReport();
-            if (r.period_id < 0) return "当前没有天命法理";
-            return "天命法理\n天命国: " + (r.kingdom_name == "" ? "无" : r.kingdom_name) +
-                   "\n核心城市: " + r.controlled_core_count + "/" + r.core_count +
-                   "\n控制率: " + Mathf.RoundToInt(r.core_control * 100f) + "%" +
-                   (pKingdom?.data != null ? "\n当前国家: " + pKingdom.name : "");
+            if (r.period_id < 0) return T("aw_hist_mandate_no_core");
+            return T("aw_hist_mandate_core_title") + "\n" + T("aw_hist_mandate_map_realm") +
+                   (r.kingdom_name == "" ? T("aw_hist_none") : r.kingdom_name) +
+                   "\n" + T("aw_hist_mandate_core_city_count") + r.controlled_core_count + "/" + r.core_count +
+                   "\n" + T("aw_hist_mandate_control_ratio") + Mathf.RoundToInt(r.core_control * 100f) + "%" +
+                   (pKingdom?.data != null ? "\n" + T("aw_hist_mandate_current_kingdom") + pKingdom.name : "");
         }
 
         private static string BuildDynastyTooltipClean(Kingdom pKingdom)
         {
             MandateReport r = ReadReport();
-            if (!r.active) return "\u5F53\u524D\u6CA1\u6709\u5929\u547D\u738B\u671D";
+            if (!r.active) return T("aw_hist_mandate_none");
             bool inSystem = pKingdom?.data != null &&
                             (pKingdom.id == r.kingdom_id ||
                              VassalService.GetRootSuzerain(pKingdom)?.id == r.kingdom_id);
             MandateRebelReport rebels = MandateRebelService.ReadReport();
             ForeignOccupationReport occupation = ForeignOccupationService.ReadReport();
             string text = r.dynasty_name +
-                          "\n\u5929\u547D\u56FD: " + r.kingdom_name +
-                          "\n\u5929\u547D\u503C: " + r.mandate_value +
-                          "\n\u7687\u6743: " + r.imperial_authority +
-                          "\n\u6765\u6E90: " + OriginLabel(r.origin_type) +
-                          "\n\u6807\u8BC6: " + MandateMapMarkerService.MarkerLabel(r.map_marker_kind) +
-                          "\n\u6CD5\u7406\u63A7\u5236: " + r.controlled_core_count + "/" + r.core_count +
+                          "\n" + T("aw_hist_mandate_map_realm") + r.kingdom_name +
+                          "\n" + T("aw_hist_mandate_value") + r.mandate_value +
+                          "\n" + T("aw_hist_mandate_authority") + r.imperial_authority +
+                          "\n" + T("aw_hist_mandate_source") + OriginLabel(r.origin_type) +
+                          "\n" + T("aw_hist_mandate_marker") + MandateMapMarkerService.MarkerLabel(r.map_marker_kind) +
+                          "\n" + T("aw_hist_mandate_core_control") + r.controlled_core_count + "/" + r.core_count +
                           " (" + Mathf.RoundToInt(r.core_control * 100f) + "%)" +
-                          "\n\u5F53\u524D\u533A\u57DF: " + (inSystem ? "\u5929\u547D\u4F53\u7CFB" : "\u4F53\u7CFB\u4E4B\u5916");
+                          "\n" + T("aw_hist_mandate_current_zone") +
+                          (inSystem ? T("aw_hist_mandate_inside") : T("aw_hist_mandate_outside"));
             if (rebels.active_count > 0)
-                text += "\n\u4E49\u519B: " + rebels.active_count + " \u8D77\uFF0C\u6700\u5F3A " +
+                text += "\n" + T("aw_hist_mandate_rebels") + rebels.active_count +
+                        T("aw_hist_mandate_uprising_count") +
                         rebels.strongest_name + " " + Mathf.RoundToInt(rebels.strongest_core_control * 100f) + "%";
             if (occupation.active_count > 0)
-                text += "\n\u5916\u65CF\u5360\u9886: " + occupation.active_count + " \u57CE\uFF0C\u6700\u9AD8\u6C11\u6028 " +
+                text += "\n" + T("aw_hist_mandate_foreign_occupation") + occupation.active_count +
+                        T("aw_hist_mandate_city_count_mid") +
                         Mathf.RoundToInt(occupation.max_resentment);
             return text;
         }
@@ -749,28 +761,29 @@ namespace AncientWarfare3.core.lineage
         private static string BuildCoreTooltipClean(Kingdom pKingdom)
         {
             MandateReport r = ReadReport();
-            if (r.period_id < 0) return "\u5F53\u524D\u6CA1\u6709\u5929\u547D\u6CD5\u7406";
+            if (r.period_id < 0) return T("aw_hist_mandate_no_core");
             string owner = "";
             if (pKingdom?.data != null)
             {
-                owner = "\n\u5F53\u524D\u56FD\u5BB6: " + pKingdom.name;
+                owner = "\n" + T("aw_hist_mandate_current_kingdom") + pKingdom.name;
                 owner += "\n" + MandateCoreTooltipRules.BuildPointedKingdomControlLine(
                     pKingdom.name, GetCoreControlRatioFor(pKingdom));
             }
-            return "\u5929\u547D\u6CD5\u7406" +
-                   "\n\u5929\u547D\u56FD: " + (string.IsNullOrEmpty(r.kingdom_name) ? "\u65E0" : r.kingdom_name) +
-                   "\n\u6838\u5FC3\u57CE\u5E02: " + r.controlled_core_count + "/" + r.core_count +
-                   "\n\u521D\u59CB\u6CD5\u7406: " + r.original_core_count +
-                   "\n\u63A7\u5236\u7387: " + Mathf.RoundToInt(r.core_control * 100f) + "%" + owner;
+            return T("aw_hist_mandate_core_title") +
+                   "\n" + T("aw_hist_mandate_map_realm") +
+                   (string.IsNullOrEmpty(r.kingdom_name) ? T("aw_hist_none") : r.kingdom_name) +
+                   "\n" + T("aw_hist_mandate_core_city_count") + r.controlled_core_count + "/" + r.core_count +
+                   "\n" + T("aw_hist_mandate_original_core") + r.original_core_count +
+                   "\n" + T("aw_hist_mandate_control_ratio") + Mathf.RoundToInt(r.core_control * 100f) + "%" + owner;
         }
 
         private static string OriginLabel(string pOrigin)
         {
             switch (pOrigin)
             {
-                case "rebel": return "\u4E49\u519B\u53D7\u547D";
-                case "pseudo_foreign": return "\u5916\u65CF\u4F2A\u671D";
-                default: return "\u6B63\u7EDF\u53D7\u547D";
+                case "rebel": return WarDisplayLabelRules.EventLabel("mandate_declared_rebel");
+                case "pseudo_foreign": return WarDisplayLabelRules.EventLabel("mandate_declared_foreign_pseudo");
+                default: return WarDisplayLabelRules.EventLabel("mandate_declared_orthodox");
             }
         }
 
@@ -864,7 +877,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next,
-                pKingdom.name + " 天命变化 " + Signed(pDelta) + "，当前 " + next);
+                pKingdom.name + T("aw_hist_mandate_changed_mid") + Signed(pDelta) +
+                T("aw_hist_mandate_current") + next);
         }
 
         private static MandateReport ReadReportFromDb()
@@ -1303,7 +1317,9 @@ namespace AncientWarfare3.core.lineage
         private static string MakeDynastyName(Kingdom pKingdom)
         {
             string name = pKingdom?.name ?? "";
-            return string.IsNullOrEmpty(name) ? "天命王朝" : name + "朝";
+            return string.IsNullOrEmpty(name)
+                ? T("aw_hist_mandate_dynasty_default")
+                : name + T("aw_hist_mandate_dynasty_suffix");
         }
 
         private static string CrisisLevel(int pValue)
@@ -1324,11 +1340,11 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pReason)
             {
-                case "low_mandate": return "天命过低";
-                case "war_lost": return "天命战争失败";
-                case "kingdom_fell": return "王朝灭亡";
-                case "replaced": return "改朝换代";
-                default: return string.IsNullOrEmpty(pReason) ? "结束" : pReason;
+                case "low_mandate": return T("aw_hist_mandate_end_low_mandate");
+                case "war_lost": return T("aw_hist_mandate_end_war_lost");
+                case "kingdom_fell": return T("aw_hist_mandate_end_kingdom_fell");
+                case "replaced": return T("aw_hist_mandate_end_replaced");
+                default: return string.IsNullOrEmpty(pReason) ? T("aw_hist_mandate_end_generic") : pReason;
             }
         }
 

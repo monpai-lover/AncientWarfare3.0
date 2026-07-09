@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static string TABLE => EraPeriodTableItem.GetTableName();
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
 
         public static void OnEraChanged(Kingdom pKingdom, string pNewStem)
         {
@@ -38,7 +39,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("END_TIME",   -1.0),
                     ColumnVal.Create("START_YEAR", year));
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ERA_CHANGE,
-                    HistoryText.PlainText("改元 ") + HistoryText.Colored(pNewStem, color));
+                    H("aw_hist_era_changed") + HistoryText.Colored(pNewStem, color));
             }
             catch (Exception e) { ModClass.LogWarning("EraRecordWriter.OnEraChanged: " + e.Message); }
         }

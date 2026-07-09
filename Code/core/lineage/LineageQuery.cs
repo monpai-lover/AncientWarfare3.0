@@ -1384,6 +1384,15 @@ namespace AncientWarfare3.core.lineage
             string color = pNode.kingdom_color;
             if (string.IsNullOrEmpty(color)) color = pLive.kingdom?.getColor()?.color_text ?? "";
 
+            pLive.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
+            if (!string.IsNullOrEmpty(formerTitle))
+            {
+                pLive.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
+                pNode.social_title = formerTitle;
+                pNode.social_title_color = string.IsNullOrEmpty(formerColor) ? color : formerColor;
+                return;
+            }
+
             if (pLive.isKing())
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";

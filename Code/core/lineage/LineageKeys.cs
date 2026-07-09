@@ -68,6 +68,9 @@ namespace AncientWarfare3.core.lineage
         public const string TRAIT_SLAVE = "slave";
         public const string TRAIT_VETERAN = "veteran";
         public const string TRAIT_GUARD = "\u7981\u536B\u519B";
+        public const string TRAIT_FORMER_KING = "formerking";
+        public const string TRAIT_GENERAL = "aw_general";
+        public const string TRAIT_ARMY_COMMANDER = "aw_army_commander";
         public const string TRAIT_FIEF_SOLDIER = "aw_fief_soldier";
         public const string SLAVERY_ENABLED = "aw_slavery_enabled";
         public const string CHRONICLE_LAST_ORIGINAL_CLAN_ID = "aw_chronicle_last_original_clan";
@@ -161,6 +164,11 @@ namespace AncientWarfare3.core.lineage
         public const string CITY_FIEF_GENERAL_ID = "aw_city_fief_general_id";
         public const string CITY_FIEF_GENERAL_NAME = "aw_city_fief_general_name";
         public const string GENERAL_RISK_RECORDED_YEAR = "aw_general_risk_recorded_year";
+        public const string FORMER_KINGDOM_ID = "aw_former_kingdom_id";
+        public const string FORMER_KINGDOM_NAME = "aw_former_kingdom_name";
+        public const string FORMER_KINGDOM_COLOR = "aw_former_kingdom_color";
+        public const string FORMER_KING_TITLE = "aw_former_king_title";
+        public const string FORMER_KING_MANDATE = "aw_former_king_mandate";
 
         public const int NOBLE_DECAY_DISTANCE = 3;
 

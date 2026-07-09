@@ -8,6 +8,9 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     public static class ChronicleEvents
     {
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
+
         // setKing:新王就位 → 国家换君 + 人物成王。新王==旧记录则跳过(用 data 上的标记防同王重复)。
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
@@ -24,13 +27,14 @@ namespace AncientWarfare3.core.lineage
 
             // 国家·换君
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,
-                HistoryText.Actor(pNewKing, kingName) + " 即位为君");
+                HistoryText.Actor(pNewKing, kingName) + H("aw_hist_king_ascended"));
             KingdomArchiveWriter.Upsert(pKingdom);
 
             // 人物·成王(仅入谱贵族)
             if (ChronicleGate.IsNobleActor(pNewKing))
                 HistoryWriter.RecordPerson(pNewKing.data.id, pKingdom, kingName, PersonEvent.BECOME_KING,
-                    HistoryText.Actor(pNewKing, kingName) + " 即位为 " + HistoryText.Kingdom(pKingdom) + " 之君",
+                    HistoryText.Actor(pNewKing, kingName) + H("aw_hist_person_ascended_prefix") +
+                    HistoryText.Kingdom(pKingdom) + H("aw_hist_person_ascended_suffix"),
                     ChronicleCategory.HONOR);
 
             // 结构表：君主世系 + 朝代（先关旧 reign，再开新 reign）
@@ -46,7 +50,7 @@ namespace AncientWarfare3.core.lineage
             if (!FormerRulerRecordRules.ShouldRecordLostThrone(pPreviousKingId, pNewKingId, alive)) return;
 
             string name = previous.getName();
-            HistoryText text = HistoryText.Actor(previous, name) + HistoryText.PlainText(" \u5931\u4F4D");
+            HistoryText text = HistoryText.Actor(previous, name) + H("aw_hist_lost_throne");
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE, text, HistoryTarget.Actor(previous));
             HistoryWriter.RecordPerson(previous.data.id, pKingdom, name,
                 PersonEvent.ABDICATE, text, ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
@@ -63,12 +67,12 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(color)) color = HistoryColors.FromKingdom(pKingdom);
 
             HistoryText text = HistoryText.Actor(pNewKing) +
-                               HistoryText.PlainText("\u7531\u65c1\u7cfb\u5165\u7ee7\uff0c\u6062\u590d") +
+                               H("aw_hist_collateral_restore_mid") +
                                HistoryText.Colored(label, color) +
-                               HistoryText.PlainText("\u5b97\u7edf");
+                               H("aw_hist_collateral_restore_suffix");
             if (pPreviousKing?.data != null)
-                text += HistoryText.PlainText("\uff08\u524d\u541b ") + HistoryText.Actor(pPreviousKing) +
-                        HistoryText.PlainText("\uff09");
+                text += H("aw_hist_previous_ruler_prefix") + HistoryText.Actor(pPreviousKing) +
+                        H("aw_hist_paren_close");
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COLLATERAL_RESTORE, text,
                 HistoryTarget.Actor(pNewKing));
@@ -86,10 +90,10 @@ namespace AncientWarfare3.core.lineage
 
         private static string BuildRestoredShiLabel(ShiBranchInfo pBranch)
         {
-            if (pBranch == null) return "\u65e7\u6c0f";
+            if (pBranch == null) return T("aw_hist_old_shi") + "\u6c0f";
             string city = pBranch.origin_city_name ?? "";
             string clan = pBranch.clan_name ?? "";
-            if (string.IsNullOrEmpty(clan)) clan = "\u65e7";
+            if (string.IsNullOrEmpty(clan)) clan = T("aw_hist_old_shi");
             return city + clan + "\u6c0f";
         }
 
@@ -98,7 +102,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.FOUND,
-                HistoryText.Kingdom(pKingdom) + " 建立");
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_kingdom_founded_suffix"));
             KingdomArchiveWriter.Upsert(pKingdom); // 建国快照(名/旗/颜色/建国时间)
         }
 
@@ -108,14 +112,16 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.DESTROYED,
-                HistoryText.Kingdom(pKingdom) + " 灭亡");
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_kingdom_destroyed_suffix"));
+            Actor king = pKingdom.king;
+            bool wasMandateKingdom = MandateService.IsMandateKingdom(pKingdom);
+            FormerKingService.OnKingdomDestroyed(pKingdom, king, wasMandateKingdom);
             KingdomArchiveWriter.EnsureRow(pKingdom);
             RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
             VassalService.OnKingdomDestroyed(pKingdom);
             MandateService.OnKingdomDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）
-            Actor king = pKingdom.king;
             ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "kingdom_fell", king);
             if (king?.data != null)
                 PosthumousTitleService.OnReignEnded(pKingdom, king, "kingdom_fell", reign);
@@ -138,8 +144,9 @@ namespace AncientWarfare3.core.lineage
             string name = pKing.getName();
             if (SlaveKingAbdicationService.TryConsumeReason(pKing.data.id, out string slaveReason))
             {
-                string text = " \u56E0\u6CA6\u4E3A\u5974\u96B6\u9000\u4F4D\uFF08" +
-                              SlaveService.ReasonLabel(slaveReason) + "\uFF09";
+                HistoryText text = H("aw_hist_slave_abdicated_prefix") +
+                                   HistoryText.PlainText(SlaveService.ReasonLabel(slaveReason)) +
+                                   H("aw_hist_paren_close");
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE,
                     HistoryText.Actor(pKing, name) + text);
                 HistoryWriter.RecordPerson(pKing.data.id, pKingdom, name,
@@ -150,10 +157,10 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ABDICATE,
-                HistoryText.Actor(pKing, name) + " 退位");
+                HistoryText.Actor(pKing, name) + H("aw_hist_abdicated"));
             if (ChronicleGate.IsNobleActor(pKing))
                 HistoryWriter.RecordPerson(pKing.data.id, pKingdom, name,
-                    PersonEvent.ABDICATE, HistoryText.Actor(pKing, name) + " 退位", ChronicleCategory.HONOR);
+                    PersonEvent.ABDICATE, HistoryText.Actor(pKing, name) + H("aw_hist_abdicated"), ChronicleCategory.HONOR);
             ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "abdicated", pKing);
             PosthumousTitleService.OnReignEnded(pKingdom, pKing, "abdicated", reign);
         }
@@ -165,10 +172,11 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pCity.kingdom;                 // 建城者所属国(newCityEvent 时已设)
             string cityName = pCity.data.name;
             HistoryText kingdomPart = kingdom != null
-                ? HistoryText.PlainText("隶属于 ") + HistoryText.Kingdom(kingdom) + " 的"
+                ? H("aw_hist_belongs_to_prefix") + HistoryText.Kingdom(kingdom) + H("aw_hist_belongs_to_suffix")
                 : HistoryText.PlainText("");
             HistoryWriter.RecordCity(pCity, kingdom, CityEvent.CITY_FOUND,
-                HistoryText.City(pCity, kingdom, cityName) + " 作为" + kingdomPart + "城市建立");
+                HistoryText.City(pCity, kingdom, cityName) + H("aw_hist_city_founded_prefix") +
+                kingdomPart + H("aw_hist_city_founded_suffix"));
             KingdomArchiveWriter.Upsert(kingdom);
             WarTerritoryService.EnsureCore(kingdom, pCity, "founded", "自建城市");
         }
@@ -193,36 +201,37 @@ namespace AncientWarfare3.core.lineage
                 if (oldArchivable)
                 {
                     HistoryWriter.RecordCity(pCity, pOldKingdom, CityEvent.CITY_TRANSFER,
-                        HistoryText.City(pCity, pOldKingdom) + " \u8131\u79BB" +
-                        HistoryText.Kingdom(pOldKingdom, oldName) + "\uFF0C\u6210\u4E3A\u65E0\u6240\u5C5E\u57CE\u5E02");
+                        HistoryText.City(pCity, pOldKingdom) + H("aw_hist_city_left_owner") +
+                        HistoryText.Kingdom(pOldKingdom, oldName) + H("aw_hist_city_became_unowned"));
                     HistoryWriter.RecordKingdom(pOldKingdom, KingdomEvent.CITY_LOST,
-                        HistoryText.PlainText("\u5931\u53BB ") + HistoryText.City(pCity, pOldKingdom) +
-                        "\uFF08\u57CE\u5E02\u5E9F\u5F03\u6216\u65E0\u6240\u5C5E\uFF09");
+                        H("aw_hist_lost_city_prefix") + HistoryText.City(pCity, pOldKingdom) +
+                        H("aw_hist_city_abandoned_note"));
                     KingdomArchiveWriter.Upsert(pOldKingdom);
                 }
                 else
                 {
                     HistoryWriter.RecordCity(pCity, pNewKingdom, CityEvent.CITY_TRANSFER,
-                        HistoryText.City(pCity, pNewKingdom) + " \u5F52\u5C5E" +
+                        HistoryText.City(pCity, pNewKingdom) + H("aw_hist_city_joined") +
                         HistoryText.Kingdom(pNewKingdom, newName));
                     HistoryWriter.RecordKingdom(pNewKingdom, KingdomEvent.CITY_GAINED,
-                        HistoryText.PlainText("\u593A\u5F97 ") + HistoryText.City(pCity, pNewKingdom) +
-                        "\uFF08\u539F\u4E3A\u65E0\u6240\u5C5E\u57CE\u5E02\uFF09");
+                        H("aw_hist_gained_city_prefix") + HistoryText.City(pCity, pNewKingdom) +
+                        H("aw_hist_city_former_unowned_note"));
                     KingdomArchiveWriter.Upsert(pNewKingdom);
                 }
                 return;
             }
             HistoryWriter.RecordCity(pCity, pNewKingdom, CityEvent.CITY_TRANSFER,
-                HistoryText.City(pCity, pNewKingdom) + " 由 " + HistoryText.Kingdom(pOldKingdom, oldName) +
-                " 易主至 " + HistoryText.Kingdom(pNewKingdom, newName));
+                HistoryText.City(pCity, pNewKingdom) + H("aw_hist_city_transfer_from") +
+                HistoryText.Kingdom(pOldKingdom, oldName) + H("aw_hist_city_transfer_to") +
+                HistoryText.Kingdom(pNewKingdom, newName));
 
             // 国家视角(批2):旧国失城、新国得城(同一信号,双国各记 KingdomHistory)。
             HistoryWriter.RecordKingdom(pOldKingdom, KingdomEvent.CITY_LOST,
-                HistoryText.PlainText("失去 ") + HistoryText.City(pCity, pOldKingdom) +
-                "(归 " + HistoryText.Kingdom(pNewKingdom, newName) + ")");
+                H("aw_hist_lost_city_prefix") + HistoryText.City(pCity, pOldKingdom) +
+                H("aw_hist_city_to_kingdom_prefix") + HistoryText.Kingdom(pNewKingdom, newName) + ")");
             HistoryWriter.RecordKingdom(pNewKingdom, KingdomEvent.CITY_GAINED,
-                HistoryText.PlainText("夺得 ") + HistoryText.City(pCity, pNewKingdom) +
-                "(原属 " + HistoryText.Kingdom(pOldKingdom, oldName) + ")");
+                H("aw_hist_gained_city_prefix") + HistoryText.City(pCity, pNewKingdom) +
+                H("aw_hist_city_from_kingdom_prefix") + HistoryText.Kingdom(pOldKingdom, oldName) + ")");
             KingdomArchiveWriter.Upsert(pOldKingdom);
             KingdomArchiveWriter.Upsert(pNewKingdom);
         }
@@ -238,7 +247,8 @@ namespace AncientWarfare3.core.lineage
             if (pSelf?.data == null) return;
             string label = string.IsNullOrEmpty(pWarType) ? "" : "（" + WarDisplayLabelRules.Label(pWarType) + "）";
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_START,
-                HistoryText.PlainText("与 ") + HistoryText.Kingdom(pOpponent, pOpponentName) + " 爆发战争" + label);
+                H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
+                H("aw_hist_war_started") + HistoryText.PlainText(label));
         }
 
         // 战争结束:给双方各记一条 war_end 国家史。
@@ -251,7 +261,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pSelf?.data == null) return;
             HistoryWriter.RecordKingdom(pSelf, KingdomEvent.WAR_END,
-                HistoryText.PlainText("与 ") + HistoryText.Kingdom(pOpponent, pOpponentName) + " 的战争结束:" + pResult);
+                H("aw_hist_war_with_prefix") + HistoryText.Kingdom(pOpponent, pOpponentName) +
+                H("aw_hist_war_ended_mid") + pResult);
             SlaveService.FlushPendingWarSlaveCaptures(pSelf);
         }
 
@@ -262,7 +273,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pBaby?.data == null) return;
             string babyName = pBaby.getName();
-            string kind = pBaby.isSexMale() ? "子" : "女";
+            string kind = pBaby.isSexMale() ? T("aw_hist_son") : T("aw_hist_daughter");
             RecordParentHadChild(pParent1, pBaby, babyName, kind);
             RecordParentHadChild(pParent2, pBaby, babyName, kind);
         }
@@ -272,7 +283,8 @@ namespace AncientWarfare3.core.lineage
             if (!ChronicleGate.IsNobleActor(pParent)) return;
             HistoryWriter.RecordPerson(pParent.data.id, pParent.kingdom, pParent.getName(),
                 PersonEvent.HAD_CHILD,
-                HistoryText.Actor(pParent) + " 喜得" + pKind + " " + HistoryText.Actor(pBaby, pBabyName),
+                HistoryText.Actor(pParent) + H("aw_hist_had_child") + HistoryText.PlainText(pKind + " ") +
+                HistoryText.Actor(pBaby, pBabyName),
                 ChronicleCategory.LIFE);
         }
 
@@ -282,10 +294,11 @@ namespace AncientWarfare3.core.lineage
             if (!ChronicleGate.IsNobleActor(pActor) && !LineageService.HasOriginalClan(pActor)) return;
             string name = pActor.getName();
             City city = pActor.city;
-            string cityName = city?.data != null ? city.data.name : "某城";
+            string cityName = city?.data != null ? city.data.name : T("aw_unknown_city");
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
                 PersonEvent.BECOME_LEADER,
-                HistoryText.Actor(pActor, name) + " 受封为 " + HistoryText.City(city, pActor.kingdom, cityName) + " 城主",
+                HistoryText.Actor(pActor, name) + H("aw_hist_enfeoffed_leader_prefix") +
+                HistoryText.City(city, pActor.kingdom, cityName) + H("aw_hist_city_leader_suffix"),
                 ChronicleCategory.HONOR);
         }
 
@@ -295,7 +308,7 @@ namespace AncientWarfare3.core.lineage
             if (!ChronicleGate.IsNobleActor(pActor) && !LineageService.HasOriginalClan(pActor)) return;
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
-                PersonEvent.BECOME_CLAN_CHIEF, HistoryText.Actor(pActor, name) + " 成为家主", ChronicleCategory.CLAN);
+                PersonEvent.BECOME_CLAN_CHIEF, HistoryText.Actor(pActor, name) + H("aw_hist_became_clan_chief"), ChronicleCategory.CLAN);
         }
 
         /// <summary>被逐出氏族。</summary>
@@ -305,7 +318,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CHRONICLE_LAST_ORIGINAL_CLAN_ID, -1L);
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
-                PersonEvent.EXILED_CLAN, HistoryText.Actor(pActor, name) + " 被逐出氏族", ChronicleCategory.CLAN);
+                PersonEvent.EXILED_CLAN, HistoryText.Actor(pActor, name) + H("aw_hist_exiled_from_clan"), ChronicleCategory.CLAN);
         }
 
         /// <summary>Original WorldBox clan membership, independent from AW lineage.</summary>
@@ -321,10 +334,10 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CHRONICLE_LAST_ORIGINAL_CLAN_ID, clanId);
 
             string name = pActor.getName();
-            string clanName = string.IsNullOrEmpty(pClan.data.name) ? "\u6C0F\u65CF" : pClan.data.name;
+            string clanName = string.IsNullOrEmpty(pClan.data.name) ? T("aw_hist_clan_fallback") : pClan.data.name;
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
                 PersonEvent.JOINED_CLAN,
-                HistoryText.Actor(pActor, name) + " \u52A0\u5165\u6C0F\u65CF " +
+                HistoryText.Actor(pActor, name) + H("aw_hist_joined_clan") +
                 HistoryText.ClanName(clanName, pClan, pActor.kingdom),
                 ChronicleCategory.CLAN,
                 HistoryTarget.Actor(pActor));
@@ -333,13 +346,13 @@ namespace AncientWarfare3.core.lineage
         /// <summary>发动叛乱:人物记一条 + 原属国国家史记一条。</summary>
         public static void OnRebellion(Actor pActor, Kingdom pOldKingdom)
         {
-            string name = pActor != null ? pActor.getName() : "某人";
+            string name = pActor != null ? pActor.getName() : T("aw_hist_someone");
             if (ChronicleGate.IsNobleActor(pActor))
                 HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
-                    PersonEvent.REBELLION, HistoryText.Actor(pActor, name) + " 起兵反叛", ChronicleCategory.WAR);
+                    PersonEvent.REBELLION, HistoryText.Actor(pActor, name) + H("aw_hist_rebelled"), ChronicleCategory.WAR);
             if (pOldKingdom?.data != null)
                 HistoryWriter.RecordKingdom(pOldKingdom, KingdomEvent.REBELLION,
-                    HistoryText.Actor(pActor, name) + " 在境内起兵反叛");
+                    HistoryText.Actor(pActor, name) + H("aw_hist_rebelled_in_realm"));
         }
 
         /// <summary>入伍(成为战士)。仅贵族。</summary>
@@ -348,7 +361,7 @@ namespace AncientWarfare3.core.lineage
             if (!ChronicleGate.IsNobleActor(pActor)) return;
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name,
-                PersonEvent.ENLISTED, HistoryText.Actor(pActor, name) + " 入伍从军", ChronicleCategory.WAR);
+                PersonEvent.ENLISTED, HistoryText.Actor(pActor, name) + H("aw_hist_enlisted"), ChronicleCategory.WAR);
         }
 
         /// <summary>
@@ -365,18 +378,20 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.ENSLAVED,
-                HistoryText.Actor(pActor, name) + " 沦为奴隶（" + reason + "）",
+                HistoryText.Actor(pActor, name) + H("aw_hist_enslaved") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                 ChronicleCategory.SOCIAL,
                 HistoryTarget.Actor(pActor));
 
             if (kingdom?.data != null && (pForceNationalRecord || IsNationalSlaveEvent(pActor)))
                 HistoryWriter.RecordKingdom(kingdom, KingdomEvent.ENSLAVED,
-                    HistoryText.Actor(pActor, name) + " 被俘获为奴（" + reason + "）",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_captured_as_slave") +
+                    HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.ENSLAVED,
-                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 被编入奴籍（" + reason + "）",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
+                    H("aw_hist_registered_slave") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -388,18 +403,18 @@ namespace AncientWarfare3.core.lineage
             string reason = SlaveService.ReasonLabel(pReason);
             HistoryText captor = pCaptorKingdom?.data != null
                 ? HistoryText.Kingdom(pCaptorKingdom)
-                : HistoryText.PlainText("\u654c\u56fd");
+                : H("aw_hist_enemy_realm");
             HistoryText text = HistoryText.Actor(pActor, name) +
-                               HistoryText.PlainText("\u4ee5") +
+                               H("aw_hist_as_former_ruler_mid") +
                                HistoryText.Kingdom(pFormerKingdom) +
-                               HistoryText.PlainText("\u541b\u4e3b\u4e4b\u8eab\u88ab") +
+                               H("aw_hist_ruler_of_former_kingdom") +
                                captor +
-                               HistoryText.PlainText("\u4fd8\u83b7\uff0c\u6ca6\u4e3a\u5974\u96b6\uff08" +
-                                                     reason + "\uff09");
+                               H("aw_hist_captured_enslaved") +
+                               HistoryText.PlainText(reason) + H("aw_hist_paren_close");
             if (pCaptor?.data != null)
-                text += HistoryText.PlainText("\uff0c\u4fd8\u83b7\u8005 ") + HistoryText.Actor(pCaptor);
+                text += H("aw_hist_captor_prefix") + HistoryText.Actor(pCaptor);
             if (pCaptorCity?.data != null)
-                text += HistoryText.PlainText("\uff0c\u5b89\u7f6e\u4e8e") +
+                text += H("aw_hist_placed_in_city") +
                         HistoryText.City(pCaptorCity, pCaptorKingdom);
 
             HistoryWriter.RecordKingdom(pFormerKingdom, KingdomEvent.ENSLAVED, text,
@@ -419,18 +434,21 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.FREED_SLAVE,
-                HistoryText.Actor(pActor, name) + " 脱离奴籍，成为平民（" + reason + "）",
+                HistoryText.Actor(pActor, name) + H("aw_hist_freed_slave") +
+                HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                 ChronicleCategory.SOCIAL,
                 HistoryTarget.Actor(pActor));
 
             if (kingdom?.data != null && IsNationalSlaveEvent(pActor))
                 HistoryWriter.RecordKingdom(kingdom, KingdomEvent.FREED_SLAVE,
-                    HistoryText.Actor(pActor, name) + " 脱离奴籍（" + reason + "）",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_freed_slave_short") +
+                    HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.FREED_SLAVE,
-                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 脱离奴籍（" + reason + "）",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
+                    H("aw_hist_city_freed_slave") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -443,13 +461,14 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.RETIRED_SOLDIER,
-                HistoryText.Actor(pActor, name) + " 退伍为老兵，不再应征",
+                HistoryText.Actor(pActor, name) + H("aw_hist_retired_soldier"),
                 ChronicleCategory.WAR,
                 HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.RETIRED_SOLDIER,
-                    HistoryText.Actor(pActor, name) + " 自 " + HistoryText.City(city, kingdom) + " 退伍",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_retired_from_city") +
+                    HistoryText.City(city, kingdom) + H("aw_hist_retired_from_city_suffix"),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -462,13 +481,14 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.SLAVE_ENLISTED,
-                HistoryText.Actor(pActor, name) + " 以奴隶兵身份入伍",
+                HistoryText.Actor(pActor, name) + H("aw_hist_slave_enlisted"),
                 ChronicleCategory.WAR,
                 HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.SLAVE_ENLISTED,
-                    HistoryText.Actor(pActor, name) + " 在 " + HistoryText.City(city, kingdom) + " 被编入奴隶军",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_in_city") +
+                    HistoryText.City(city, kingdom) + H("aw_hist_slave_army_joined"),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -478,7 +498,9 @@ namespace AncientWarfare3.core.lineage
             string name = pActor.getName();
             Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
             City city = pCity ?? pActor.city;
-            string meritText = "立下军功 " + pPoints + " 点，累计 " + pTotal + " 点";
+            HistoryText meritText = H("aw_hist_merit_prefix") + HistoryText.PlainText(pPoints.ToString()) +
+                                    H("aw_hist_merit_mid") + HistoryText.PlainText(pTotal.ToString()) +
+                                    H("aw_hist_merit_suffix");
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.SLAVE_MERIT,
@@ -488,7 +510,7 @@ namespace AncientWarfare3.core.lineage
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.SLAVE_MERIT,
-                    HistoryText.Actor(pActor, name) + " 奴隶兵" + meritText,
+                    HistoryText.Actor(pActor, name) + H("aw_hist_slave_soldier") + meritText,
                     HistoryTarget.Actor(pActor));
         }
 
@@ -496,18 +518,19 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.SLAVE_ARMY_FORMED,
-                HistoryText.Kingdom(pKingdom) + " 开始编组奴隶军");
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_slave_army_formed"));
 
             if (pCity?.data != null)
                 HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.SLAVE_ARMY_FORMED,
-                    HistoryText.City(pCity, pKingdom) + " 开始编组奴隶军");
+                    HistoryText.City(pCity, pKingdom) + H("aw_hist_slave_army_formed"));
         }
 
         public static void OnSlaveLaborStarted(Kingdom pKingdom, City pCity, int pSlaveCount)
         {
             if (pCity?.data != null)
                 HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.SLAVE_LABOR_STARTED,
-                    HistoryText.City(pCity, pKingdom) + " 登记奴隶劳役，奴隶 " + pSlaveCount.ToString() + " 人");
+                    HistoryText.City(pCity, pKingdom) + H("aw_hist_slave_labor_started_prefix") +
+                    HistoryText.PlainText(pSlaveCount.ToString()) + H("aw_hist_people_count"));
         }
 
         public static void OnWarSlavesCaptured(Kingdom pKingdom, City pCity, string pCityName, int pSlaveCount)
@@ -515,17 +538,17 @@ namespace AncientWarfare3.core.lineage
             if (pSlaveCount <= 0) return;
             bool hasCity = IsHistoryCityValid(pCity);
             HistoryText cityText = HistoryText.City(pCity, pKingdom,
-                string.IsNullOrEmpty(pCityName) ? "\u67D0\u57CE" : pCityName);
+                string.IsNullOrEmpty(pCityName) ? T("aw_unknown_city") : pCityName);
             if (pKingdom?.data != null)
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ENSLAVED,
-                    HistoryText.Kingdom(pKingdom) + " \u5728\u6218\u4E89\u7ED3\u7B97\u4E2D\u4FD8\u83B7\u5974\u96B6 " + pSlaveCount.ToString() +
-                    " \u540D\uFF0C\u5B89\u7F6E\u4E8E " + cityText,
+                    HistoryText.Kingdom(pKingdom) + H("aw_hist_war_slave_capture_prefix") +
+                    HistoryText.PlainText(pSlaveCount.ToString()) + H("aw_hist_war_slave_capture_mid") + cityText,
                     hasCity ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pKingdom));
 
             if (hasCity)
                 HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.ENSLAVED,
-                    cityText + " \u5B89\u7F6E\u6218\u4E89\u4FD8\u83B7\u5974\u96B6 " +
-                    pSlaveCount.ToString() + " \u540D");
+                    cityText + H("aw_hist_city_war_slave_capture_prefix") +
+                    HistoryText.PlainText(pSlaveCount.ToString()) + H("aw_hist_city_war_slave_capture_suffix"));
         }
 
         private static bool IsHistoryCityValid(City pCity)
@@ -537,9 +560,9 @@ namespace AncientWarfare3.core.lineage
         public static void OnRoyalGuardFormed(Kingdom pKingdom, string pGuardName)
         {
             if (pKingdom?.data == null) return;
-            string guardName = string.IsNullOrEmpty(pGuardName) ? "\u7981\u536B\u519B" : pGuardName;
+            string guardName = string.IsNullOrEmpty(pGuardName) ? T("aw_hist_royal_guard_default") : pGuardName;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.ROYAL_GUARD_FORMED,
-                HistoryText.Kingdom(pKingdom) + " \u8BBE\u7ACB" + HistoryText.PlainText(guardName),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_royal_guard_founded") + HistoryText.PlainText(guardName),
                 HistoryTarget.Kingdom(pKingdom));
         }
 
@@ -550,19 +573,19 @@ namespace AncientWarfare3.core.lineage
             string name = pActor.getName();
             Kingdom kingdom = pKingdom ?? pActor.kingdom ?? pCity?.kingdom;
             City city = pCity ?? pActor.city;
-            string guardName = string.IsNullOrEmpty(pGuardName) ? "\u7981\u536B\u519B" : pGuardName;
-            string role = pCaptain ? "\u7EDF\u9886" : "\u5165\u9009";
+            string guardName = string.IsNullOrEmpty(pGuardName) ? T("aw_hist_royal_guard_default") : pGuardName;
+            HistoryText role = pCaptain ? H("aw_hist_royal_guard_captain") : H("aw_hist_royal_guard_member");
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.ROYAL_GUARD_APPOINTED,
-                HistoryText.Actor(pActor, name) + " " + role + HistoryText.PlainText(guardName),
+                HistoryText.Actor(pActor, name) + HistoryText.PlainText(" ") + role + HistoryText.PlainText(guardName),
                 ChronicleCategory.WAR,
                 HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.ROYAL_GUARD_APPOINTED,
-                    HistoryText.Actor(pActor, name) + " \u5728" + HistoryText.City(city, kingdom) +
-                    " " + role + HistoryText.PlainText(guardName),
+                    HistoryText.Actor(pActor, name) + H("aw_hist_royal_guard_in_city_mid") +
+                    HistoryText.City(city, kingdom) + HistoryText.PlainText(" ") + role + HistoryText.PlainText(guardName),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -576,14 +599,15 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, kingdom, name,
                 PersonEvent.ROYAL_GUARD_DISMISSED,
-                HistoryText.Actor(pActor, name) + " \u79BB\u5F00\u7981\u536B\u519B\uFF08" + reason + "\uFF09",
+                HistoryText.Actor(pActor, name) + H("aw_hist_left_royal_guard") +
+                HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                 ChronicleCategory.WAR,
                 HistoryTarget.Actor(pActor));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.ROYAL_GUARD_DISMISSED,
-                    HistoryText.Actor(pActor, name) + " \u5728" + HistoryText.City(city, kingdom) +
-                    " \u79BB\u5F00\u7981\u536B\u519B\uFF08" + reason + "\uFF09",
+                    HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
+                    H("aw_hist_left_royal_guard") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
         }
 
@@ -596,14 +620,14 @@ namespace AncientWarfare3.core.lineage
         {
             return pReason switch
             {
-                "died" => "\u6218\u6B7B\u6216\u8EAB\u6545",
-                "no_king" => "\u65E0\u5728\u4F4D\u541B\u4E3B",
-                "no_noble_captain" => "\u65E0\u8D35\u65CF\u7EDF\u9886",
-                "over_limit" => "\u540D\u989D\u8C03\u6574",
-                "invalid" => "\u8D44\u683C\u4E0D\u7B26",
-                "enslaved" => "\u6CA6\u4E3A\u5974\u96B6",
-                "became_leader" => "\u53D7\u4EFB\u57CE\u4E3B",
-                _ => string.IsNullOrEmpty(pReason) ? "\u79BB\u4EFB" : pReason
+                "died" => T("aw_hist_guard_reason_died"),
+                "no_king" => T("aw_hist_guard_reason_no_king"),
+                "no_noble_captain" => T("aw_hist_guard_reason_no_noble_captain"),
+                "over_limit" => T("aw_hist_guard_reason_over_limit"),
+                "invalid" => T("aw_hist_guard_reason_invalid"),
+                "enslaved" => T("aw_hist_guard_reason_enslaved"),
+                "became_leader" => T("aw_hist_guard_reason_became_leader"),
+                _ => string.IsNullOrEmpty(pReason) ? T("aw_hist_guard_reason_left") : pReason
             };
         }
 
@@ -618,14 +642,15 @@ namespace AncientWarfare3.core.lineage
                 string kname = pKiller.getName();
                 HistoryWriter.RecordPerson(pKiller.data.id, pKiller.kingdom, kname,
                     PersonEvent.IMPORTANT_KILL,
-                    HistoryText.Actor(pKiller, kname) + " 击杀了 " + HistoryText.Actor(pDead),
+                    HistoryText.Actor(pKiller, kname) + H("aw_hist_killed") + HistoryText.Actor(pDead),
                     ChronicleCategory.WAR);
             }
 
             // 被杀重要人物 → 国家史留痕。
             if (deadImportant && pDeadPrevKingdom?.data != null)
                 HistoryWriter.RecordKingdom(pDeadPrevKingdom, KingdomEvent.NOTABLE_DEATH,
-                    HistoryText.Actor(pDead) + " 为 " + HistoryText.Actor(pKiller) + " 所杀");
+                    HistoryText.Actor(pDead) + H("aw_hist_was_killed_by") +
+                    HistoryText.Actor(pKiller) + H("aw_hist_was_killed_by_suffix"));
         }
 
         // 恋爱双向去重:同一对(min_max id)本会话只记一次。
@@ -650,7 +675,8 @@ namespace AncientWarfare3.core.lineage
             string name = pSelf.getName();
             HistoryWriter.RecordPerson(pSelf.data.id, pSelf.kingdom, name,
                 PersonEvent.FELL_IN_LOVE,
-                HistoryText.Actor(pSelf, name) + " 与 " + HistoryText.Actor(pOther) + " 坠入爱河",
+                HistoryText.Actor(pSelf, name) + H("aw_hist_fell_in_love") +
+                HistoryText.Actor(pOther) + H("aw_hist_fell_in_love_suffix"),
                 ChronicleCategory.BOND);
         }
 
@@ -666,15 +692,15 @@ namespace AncientWarfare3.core.lineage
 
             // 配偶
             Actor lover = pDead.hasLover() ? pDead.lover : null;
-            RecordBondDeath(lover, pDead, deadName, "伴侣");
+            RecordBondDeath(lover, pDead, deadName, T("aw_hist_partner"));
 
             // 父母(用 data 上的 parent id 取,已验证字段;避免依赖 getParents 的具体返回类型)
-            RecordBondDeath(GetUnit(pDead.data.parent_id_1), pDead, deadName, "亲人");
-            RecordBondDeath(GetUnit(pDead.data.parent_id_2), pDead, deadName, "亲人");
+            RecordBondDeath(GetUnit(pDead.data.parent_id_1), pDead, deadName, T("aw_hist_relative"));
+            RecordBondDeath(GetUnit(pDead.data.parent_id_2), pDead, deadName, T("aw_hist_relative"));
 
             // 子女
             foreach (Actor child in GetChildren(pDead))
-                RecordBondDeath(child, pDead, deadName, "亲人");
+                RecordBondDeath(child, pDead, deadName, T("aw_hist_relative"));
         }
 
         private static Actor GetUnit(long pId)
@@ -690,7 +716,8 @@ namespace AncientWarfare3.core.lineage
             string name = pMourner.getName();
             HistoryWriter.RecordPerson(pMourner.data.id, pMourner.kingdom, name,
                 PersonEvent.BOND_DEATH,
-                HistoryText.Actor(pMourner, name) + " 痛失" + pRelation + " " + HistoryText.Actor(pDead, pDeadName),
+                HistoryText.Actor(pMourner, name) + H("aw_hist_lost_bond") +
+                HistoryText.PlainText(pRelation + " ") + HistoryText.Actor(pDead, pDeadName),
                 ChronicleCategory.BOND);
         }
 

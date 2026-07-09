@@ -166,6 +166,7 @@ namespace WarFabricationRuleTests
             ExpectHistoryEventLabel("war_start", "\u6218\u4e89\u7206\u53d1");
             ExpectHistoryEventLabel("mandate_ruler_title", "\u8ffd\u4e0a\u5e99\u8c25");
             ExpectHistoryEventLabel("weak_claim_decision", "\u5236\u9020\u5f31\u5ba3\u79f0");
+            ExpectHistoryLocalizationRules();
             ExpectHistoryContentNormalization(
                 "\u53d6\u5f97\u5ba3\u6218\u7406\u7531\uff1aweak_claim_decision",
                 "\u53d6\u5f97\u5ba3\u6218\u7406\u7531\uff1a\u5236\u9020\u5f31\u5ba3\u79f0");
@@ -332,6 +333,7 @@ namespace WarFabricationRuleTests
             ExpectRoyalSuccessionBirthRules();
             ExpectFormerRulerPosthumousRules();
             ExpectFormerRulerRecordRules();
+            ExpectFormerKingTraitRules();
             ExpectSetKingPostfixRules();
             ExpectCityEconomyMilestoneRules();
             ExpectAncestryDisplayRules();
@@ -345,11 +347,13 @@ namespace WarFabricationRuleTests
             ExpectKingdomYearSchedulerRules();
             ExpectFiefCacheRules();
             ExpectXiaNameRepairRules();
+            ExpectXiaCityNameLibraryRules();
             ExpectCityTechChronicleRules();
             ExpectCityMaintenanceBenchmarkRules();
             ExpectUpdateAgeBenchmarkRules();
             ExpectDeathBondRules();
             ExpectXiaItemEffectRules();
+            ExpectTraitIconUsageRules();
             ExpectVisibleClanRenameRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
@@ -600,6 +604,60 @@ namespace WarFabricationRuleTests
             string actual = WarDisplayLabelRules.EventLabel(pKey);
             if (actual != pExpected)
                 throw new Exception($"Expected history event label '{pExpected}', got '{actual}'.");
+        }
+
+        private static void ExpectHistoryLocalizationRules()
+        {
+            if (WarDisplayLabelRules.Label("vassal_war", "en") != "Vassal War")
+                throw new Exception("War labels should support English.");
+            if (WarDisplayLabelRules.Label("vassal_war", "ch") != "\u9644\u5eb8\u6230\u722d")
+                throw new Exception("War labels should support Traditional Chinese.");
+            if (WarDisplayLabelRules.EventLabel("mandate_declared_foreign_pseudo", "en") != "Foreign Pseudo-Dynasty")
+                throw new Exception("Mandate history event labels should support English.");
+            if (WarDisplayLabelRules.EventLabel("mandate_declared_foreign_pseudo", "ch") != "\u5916\u65cf\u507d\u671d")
+                throw new Exception("Mandate history event labels should support Traditional Chinese.");
+            if (WarDisplayLabelRules.NormalizeEmbeddedKeys("war_start:tianmingrebel", "en") != "war_start:Rebel Mandate War")
+                throw new Exception("Embedded history labels should normalize in English.");
+            if (HistoryLocalizationRules.Text("aw_hist_kingdom_founded_suffix", "en") != " was founded")
+                throw new Exception("History templates should provide English text.");
+            if (HistoryLocalizationRules.Text("aw_hist_kingdom_founded_suffix", "ch") != " \u5efa\u7acb")
+                throw new Exception("History templates should provide Traditional Chinese text.");
+            if (HistoryLocalizationRules.Text("aw_hist_city_transfer_to", "en") != " transferred to ")
+                throw new Exception("City history transfer templates should provide English text.");
+            if (HistoryLocalizationRules.Text("aw_hist_slave_army_formed", "ch") != " \u958b\u59cb\u7de8\u7d44\u5974\u96b8\u8ecd")
+                throw new Exception("Slave army history templates should provide Traditional Chinese text.");
+            if (HistoryLocalizationRules.Text("aw_hist_slave_reason_city_fall", "en") != "captured when the city fell")
+                throw new Exception("Slave reason labels should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_slave_reason_military_merit", "ch") != "\u8ecd\u529f\u91cb\u5974")
+                throw new Exception("Slave reason labels should support Traditional Chinese.");
+            if (HistoryLocalizationRules.Text("aw_hist_posthumous_title_label", "en") != "Posthumous title:")
+                throw new Exception("Posthumous tooltip labels should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_posthumous_dimension_war", "ch") != "\u6230\u529f")
+                throw new Exception("Posthumous score dimensions should support Traditional Chinese.");
+            if (HistoryLocalizationRules.Text("aw_hist_paren_open", "en") != " (")
+                throw new Exception("History punctuation templates should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_colon", "en") != ": ")
+                throw new Exception("History colon templates should support English spacing.");
+            if (HistoryLocalizationRules.Text("aw_hist_goal_mandate_conquest", "en") != "Mandate Conquest")
+                throw new Exception("Mandate conquest goal labels should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_project_core", "ch") != "\u88fd\u9020\u6838\u5fc3")
+                throw new Exception("War project labels should support Traditional Chinese.");
+            if (HistoryLocalizationRules.Text("aw_map_can_mandate_conquest", "en") != "Can launch Mandate conquest")
+                throw new Exception("War target tooltips should support English Mandate conquest labels.");
+            if (WarDisplayLabelRules.Label("mandate_conquest", "en") != "Mandate Conquest")
+                throw new Exception("Mandate conquest war labels should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_war_claim_created_mid", "en") != " gained a casus belli against ")
+                throw new Exception("War claim history templates should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_vassal_absorb_mid", "ch") != " 吞併附庸 ")
+                throw new Exception("Vassal history templates should support Traditional Chinese.");
+            if (HistoryLocalizationRules.Text("aw_hist_former_king_after_fall_mid", "en") != " became ")
+                throw new Exception("Former ruler history templates should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_mandate_ruler_title_mid", "ch") != " 追上天命廟諡：")
+                throw new Exception("Mandate ruler title history templates should support Traditional Chinese.");
+            if (HistoryLocalizationRules.Text("aw_hist_general_high_risk_person", "en") != " held troops independently and alarmed the court")
+                throw new Exception("General history templates should support English.");
+            if (HistoryLocalizationRules.Text("aw_hist_era_changed", "ch") != "改元 ")
+                throw new Exception("Era change history templates should support Traditional Chinese.");
         }
 
         private static void ExpectVassalWarBlocked(string pReason,
@@ -1681,6 +1739,46 @@ namespace WarFabricationRuleTests
                 throw new Exception("Dead previous rulers are handled by death/posthumous records.");
         }
 
+        private static void ExpectFormerKingTraitRules()
+        {
+            if (!FormerKingTraitRules.ShouldMarkFormerKing(
+                    pKingdomDestroyed: true,
+                    pWasLastKing: true,
+                    pFormerKingAlive: true))
+                throw new Exception("A living last king of a destroyed kingdom should receive formerking.");
+            if (FormerKingTraitRules.ShouldMarkFormerKing(
+                    pKingdomDestroyed: true,
+                    pWasLastKing: true,
+                    pFormerKingAlive: false))
+                throw new Exception("A dead last king should not receive a living formerking trait.");
+            if (FormerKingTraitRules.ShouldMarkFormerKing(
+                    pKingdomDestroyed: true,
+                    pWasLastKing: false,
+                    pFormerKingAlive: true))
+                throw new Exception("Only the final king should receive formerking on kingdom fall.");
+
+            if (!FormerKingTraitRules.ShouldUseMandateDeposedTitle(
+                    pIsMandateKingdom: true,
+                    pEndReason: "kingdom_fell",
+                    pFormerKingAlive: true))
+                throw new Exception("A living fallen Mandate ruler should receive a deposed-emperor title.");
+            if (FormerKingTraitRules.ShouldUseMandateDeposedTitle(
+                    pIsMandateKingdom: true,
+                    pEndReason: "kingdom_fell",
+                    pFormerKingAlive: false))
+                throw new Exception("A dead fallen Mandate ruler should stay on normal posthumous handling.");
+            if (FormerKingTraitRules.ShouldUseMandateDeposedTitle(
+                    pIsMandateKingdom: false,
+                    pEndReason: "kingdom_fell",
+                    pFormerKingAlive: true))
+                throw new Exception("Ordinary fallen kingdoms should not use deposed-emperor titles.");
+
+            if (FormerKingTraitRules.BuildMandateDeposedTitle("\u5468") != "\u5468\u5E9F\u5E1D")
+                throw new Exception("Mandate former kings should use the dynasty prefix plus Deposed Emperor.");
+            if (FormerKingTraitRules.BuildMandateDeposedTitle("\u5927\u5468") != "\u5927\u5E9F\u5E1D")
+                throw new Exception("Mandate former king title should use the first kingdom character.");
+        }
+
         private static void ExpectSetKingPostfixRules()
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad: false, pActorIsActualKing: true))
@@ -2444,6 +2542,24 @@ namespace WarFabricationRuleTests
                 throw new Exception("A valid Xia religion name must not be repaired.");
         }
 
+        private static void ExpectXiaCityNameLibraryRules()
+        {
+            var names = XiaCityNameLibraryRules.ExtractQuotedNames("\"广南\",\"淮阴\", \"广南\", \"\"");
+            if (names.Count != 2 || names[0] != "广南" || names[1] != "淮阴")
+                throw new Exception("Xia city name import should extract quoted names with stable de-duplication.");
+
+            var imported = XiaCityNameLibraryRules.GetImportedCityNames();
+            if (imported.Count != 502 || imported[0] != "广南" || imported[imported.Count - 1] != "田州")
+                throw new Exception("Xia city name library should mirror the Sui/Zhou imported place list.");
+
+            if (!XiaCityNameLibraryRules.ShouldUseOnlyRealCityTemplates(new[] { "real" }))
+                throw new Exception("Xia city fallback generator should accept the real-name template.");
+            if (XiaCityNameLibraryRules.ShouldUseOnlyRealCityTemplates(new[] { "real", "prefix,suffix" }))
+                throw new Exception("Xia city fallback generator must reject legacy prefix/suffix templates.");
+            if (!XiaCityNameLibraryRules.IsLegacyCityTemplate("{中文城名上}{中文城名下}"))
+                throw new Exception("Chinese_Name Xia city generator must reject the old split-name template.");
+        }
+
         private static void ExpectCityTechChronicleRules()
         {
             if (!CityTechChronicleRules.ShouldRecordNationalCompletionInKingdomHistory())
@@ -2558,6 +2674,20 @@ namespace WarFabricationRuleTests
         {
             if (XiaItemEffectRules.ShouldApplyQingStatusEffect())
                 throw new Exception("Qing hit effect should not use status effects; slash animation is enough.");
+        }
+
+        private static void ExpectTraitIconUsageRules()
+        {
+            if (TraitIconUsageRules.IconForTrait("figure") != "ui/Icons/traits/iconhistorical")
+                throw new Exception("Historical figure trait should use iconhistorical.");
+            if (TraitIconUsageRules.IconForTrait("aw_general") != "ui/Icons/traits/icondajiang")
+                throw new Exception("General trait should use icondajiang.");
+            if (TraitIconUsageRules.IconForTrait("aw_army_commander") != "ui/Icons/traits/iconjiang")
+                throw new Exception("Army commander trait should use iconjiang.");
+            if (TraitIconUsageRules.IconForTrait("formerking") != "ui/Icons/traits/iconformerking")
+                throw new Exception("Former king trait should use iconformerking.");
+            if (TraitIconUsageRules.IconForTrait("zhuhou") != "ui/Icons/traits/iconzhuhou")
+                throw new Exception("Zhuhou identity should keep iconzhuhou.");
         }
 
         private static void ExpectVisibleClanRenameRules()

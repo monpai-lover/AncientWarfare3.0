@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.lineage
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         public static bool IsAw3AllowedWarStart => _allowWarStartDepth > 0;
 
@@ -166,8 +168,8 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CREATED_BY_NAME", king?.getName() ?? ""));
 
                 HistoryWriter.RecordKingdom(pSource, "war_claim_created",
-                    HistoryText.Kingdom(pSource) + " \u5bf9" + HistoryText.Kingdom(pTarget) +
-                    " \u53d6\u5f97\u5ba3\u6218\u7406\u7531\uff1a" +
+                    HistoryText.Kingdom(pSource) + H("aw_hist_war_claim_created_mid") +
+                    HistoryText.Kingdom(pTarget) + H("aw_hist_war_claim_created_reason") +
                     HistoryText.PlainText(ReasonLabel(pReasonKey, pWarType)),
                     HistoryTarget.Kingdom(pTarget));
                 return claimId;
@@ -378,7 +380,7 @@ namespace AncientWarfare3.core.lineage
             pAttacker.data.set("aw_war_legitimacy_penalty", Mathf.Clamp(penalty + 15, 0, 100));
 
             HistoryWriter.RecordKingdom(pAttacker, "no_cb_war",
-                HistoryText.Kingdom(pAttacker) + " \u65e0\u6545\u5174\u5175\uff0c\u653b\u4f10" +
+                HistoryText.Kingdom(pAttacker) + H("aw_hist_no_cb_war_mid") +
                 HistoryText.Kingdom(pDefender),
                 HistoryTarget.Kingdom(pDefender));
         }
@@ -386,11 +388,12 @@ namespace AncientWarfare3.core.lineage
         private static void RecordWarDecision(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             string pReasonKey, bool pNoCb, bool pSystemWar)
         {
-            string reason = pNoCb ? "\u65e0\u7406\u7531\u5ba3\u6218" : ReasonLabel(pReasonKey, pWarType);
+            string reason = pNoCb ? T("aw_hist_label_no_cb") : ReasonLabel(pReasonKey, pWarType);
             string eventType = pSystemWar ? "system_war_start" : "war_decision_start";
             HistoryWriter.RecordKingdom(pAttacker, eventType,
-                HistoryText.Kingdom(pAttacker) + " \u4ee5" + HistoryText.PlainText(reason) +
-                " \u5bf9" + HistoryText.Kingdom(pDefender) + " \u5f00\u6218",
+                HistoryText.Kingdom(pAttacker) + H("aw_hist_war_decision_with") +
+                HistoryText.PlainText(reason) + H("aw_hist_war_decision_against") +
+                HistoryText.Kingdom(pDefender) + H("aw_hist_war_decision_suffix"),
                 HistoryTarget.Kingdom(pDefender));
         }
 
@@ -398,31 +401,31 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pReasonKey)
             {
-                case "fabricate_core": return "\u5236\u9020\u6838\u5fc3";
-                case "core_reclaim": return "\u6536\u590d\u6838\u5fc3";
-                case "weak_claim": return "\u5f31\u5ba3\u79f0";
-                case "weak_claim_decision": return "\u5236\u9020\u5f31\u5ba3\u79f0";
-                case "strong_claim": return "\u5f3a\u5ba3\u79f0";
-                case "strong_claim_decision": return "\u5236\u9020\u5f3a\u5ba3\u79f0";
-                case "claim_war": return "\u6309\u5ba3\u79f0\u5ba3\u6218";
-                case "force_vassal": return "\u5f3a\u5236\u81e3\u670d";
-                case "restoration": return "\u590d\u56fd";
-                case "tianming": return "\u593a\u53d6\u5929\u547d";
-                case "mandate_conquest": return "\u5929\u547d\u5f81\u670d";
-                case "no_cb": return "\u65e0\u7406\u7531\u5ba3\u6218";
+                case "fabricate_core": return WarDisplayLabelRules.Label("fabricate_core");
+                case "core_reclaim": return WarDisplayLabelRules.Label("core_reclaim");
+                case "weak_claim": return WarDisplayLabelRules.Label("weak_claim");
+                case "weak_claim_decision": return WarDisplayLabelRules.Label("weak_claim_decision");
+                case "strong_claim": return WarDisplayLabelRules.Label("strong_claim");
+                case "strong_claim_decision": return WarDisplayLabelRules.Label("strong_claim_decision");
+                case "claim_war": return WarDisplayLabelRules.Label("claim_war");
+                case "force_vassal": return WarDisplayLabelRules.Label("force_vassal");
+                case "restoration": return WarDisplayLabelRules.Label("restoration");
+                case "tianming": return WarDisplayLabelRules.Label("tianming");
+                case "mandate_conquest": return WarDisplayLabelRules.Label("mandate_conquest");
+                case "no_cb": return WarDisplayLabelRules.Label("no_cb");
             }
 
             switch (pWarType)
             {
-                case "vassal_war": return "\u5f3a\u5236\u81e3\u670d";
-                case "independence_war": return "\u8131\u79bb\u5b97\u4e3b";
-                case "reclaim": return "\u6536\u590d\u65e7\u571f";
-                case WAR_RESTORATION: return "\u590d\u56fd";
-                case MandateService.WAR_TIANMING: return "\u593a\u53d6\u5929\u547d";
-                case MandateService.WAR_TIANMING_REBEL: return "\u4e49\u519b\u8ba8\u5929\u547d";
-                case GeneralRebellionService.WAR_GENERAL_REBELLION: return "\u5927\u5c06\u53db\u4e71";
-                case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return "\u5c01\u5730\u72ec\u7acb";
-                default: return string.IsNullOrEmpty(pReasonKey) ? "\u5ba3\u6218\u7406\u7531" : pReasonKey;
+                case "vassal_war": return WarDisplayLabelRules.Label("vassal_war");
+                case "independence_war": return WarDisplayLabelRules.Label("independence_war");
+                case "reclaim": return WarDisplayLabelRules.Label("core_reclaim");
+                case WAR_RESTORATION: return WarDisplayLabelRules.Label("restoration_war");
+                case MandateService.WAR_TIANMING: return WarDisplayLabelRules.Label("tianming");
+                case MandateService.WAR_TIANMING_REBEL: return WarDisplayLabelRules.Label("tianmingrebel");
+                case GeneralRebellionService.WAR_GENERAL_REBELLION: return WarDisplayLabelRules.Label("general_rebellion_war");
+                case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return WarDisplayLabelRules.Label("fief_independence_war");
+                default: return string.IsNullOrEmpty(pReasonKey) ? T("aw_hist_goal_generic") : pReasonKey;
             }
         }
 

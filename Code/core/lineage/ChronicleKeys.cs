@@ -27,6 +27,7 @@ namespace AncientWarfare3.core.lineage
         public const string BOND_DEATH = "bond_death";
         public const string ABDICATE = "abdicate";
         public const string POSTHUMOUS = "posthumous";
+        public const string FORMER_KING = "former_king";
         public const string ENSLAVED = "enslaved";
         public const string FREED_SLAVE = "freed_slave";
         public const string RETIRED_SOLDIER = "retired_soldier";

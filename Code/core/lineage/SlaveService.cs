@@ -589,14 +589,15 @@ namespace AncientWarfare3.core.lineage
                 if (existingId != cityId) continue;
                 summary.count += pCount;
                 if (summary.city == null) summary.city = pCity;
-                if (string.IsNullOrEmpty(summary.cityName)) summary.cityName = pCity?.data?.name ?? "某城";
+                if (string.IsNullOrEmpty(summary.cityName))
+                    summary.cityName = pCity?.data?.name ?? HistoryLocalizationRules.Text("aw_unknown_city");
                 return;
             }
 
             summaries.Add(new PendingSlaveCaptureSummary
             {
                 city = pCity,
-                cityName = pCity?.data?.name ?? "某城",
+                cityName = pCity?.data?.name ?? HistoryLocalizationRules.Text("aw_unknown_city"),
                 count = pCount
             });
         }
@@ -1511,18 +1512,23 @@ namespace AncientWarfare3.core.lineage
 
         public static string ReasonLabel(string pReason)
         {
+            return ReasonLabel(pReason, HistoryLocalizationRules.CurrentLanguage());
+        }
+
+        public static string ReasonLabel(string pReason, string pLanguage)
+        {
             return pReason switch
             {
-                "city_fall" => "城破被俘",
-                "captured" => "俘获",
-                "battlefield_capture" => "\u6218\u573A\u4FD8\u83B7",
-                "foreign_occupation" => "\u5916\u65CF\u5360\u9886",
-                "slave_king" => "\u56FD\u738B\u4E3A\u5974",
-                "slave_only_rebel" => "\u5974\u96B6\u56FD\u6539\u7F16\u4E3A\u4E49\u519B",
-                "born_slave" => "奴籍所生",
-                "military_merit" => "军功释奴",
-                "promoted" => "因受任官职释奴",
-                _ => string.IsNullOrEmpty(pReason) ? "奴籍登记" : pReason
+                "city_fall" => HistoryLocalizationRules.Text("aw_hist_slave_reason_city_fall", pLanguage),
+                "captured" => HistoryLocalizationRules.Text("aw_hist_slave_reason_captured", pLanguage),
+                "battlefield_capture" => HistoryLocalizationRules.Text("aw_hist_slave_reason_battlefield_capture", pLanguage),
+                "foreign_occupation" => HistoryLocalizationRules.Text("aw_hist_slave_reason_foreign_occupation", pLanguage),
+                "slave_king" => HistoryLocalizationRules.Text("aw_hist_slave_reason_slave_king", pLanguage),
+                "slave_only_rebel" => HistoryLocalizationRules.Text("aw_hist_slave_reason_slave_only_rebel", pLanguage),
+                "born_slave" => HistoryLocalizationRules.Text("aw_hist_slave_reason_born_slave", pLanguage),
+                "military_merit" => HistoryLocalizationRules.Text("aw_hist_slave_reason_military_merit", pLanguage),
+                "promoted" => HistoryLocalizationRules.Text("aw_hist_slave_reason_promoted", pLanguage),
+                _ => string.IsNullOrEmpty(pReason) ? HistoryLocalizationRules.Text("aw_hist_slave_reason_registered", pLanguage) : pReason
             };
         }
     }

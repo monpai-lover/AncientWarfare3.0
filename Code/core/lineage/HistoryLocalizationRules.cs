@@ -1,0 +1,436 @@
+namespace AncientWarfare3.core.lineage
+{
+    public static class HistoryLocalizationRules
+    {
+        public static string CurrentLanguage()
+        {
+            try
+            {
+                string lang = LocalizedTextManager.instance?.language;
+                return NormalizeLanguage(lang);
+            }
+            catch
+            {
+                return "cz";
+            }
+        }
+
+        public static string NormalizeLanguage(string pLanguage)
+        {
+            if (string.IsNullOrEmpty(pLanguage)) return "cz";
+            string lang = pLanguage.Trim().ToLowerInvariant();
+            if (lang == "zh-hant" || lang == "traditional_chinese") return "ch";
+            if (lang == "zh-hans" || lang == "simplified_chinese") return "cz";
+            if (lang == "en") return "en";
+            if (lang == "ch") return "ch";
+            return "cz";
+        }
+
+        public static string Text(string pKey)
+        {
+            return Text(pKey, CurrentLanguage());
+        }
+
+        public static string Text(string pKey, string pLanguage)
+        {
+            if (string.IsNullOrEmpty(pKey)) return "";
+            string lang = NormalizeLanguage(pLanguage);
+            foreach (Entry entry in Entries)
+            {
+                if (entry.Key != pKey) continue;
+                return lang == "en" ? entry.En : lang == "ch" ? entry.Ch : entry.Cz;
+            }
+            return pKey;
+        }
+
+        public static HistoryText H(string pKey)
+        {
+            return HistoryText.PlainText(Text(pKey));
+        }
+
+        public static HistoryText H(string pKey, string pLanguage)
+        {
+            return HistoryText.PlainText(Text(pKey, pLanguage));
+        }
+
+        private readonly struct Entry
+        {
+            public readonly string Key;
+            public readonly string Cz;
+            public readonly string En;
+            public readonly string Ch;
+
+            public Entry(string pKey, string pCz, string pEn, string pCh)
+            {
+                Key = pKey;
+                Cz = pCz;
+                En = pEn;
+                Ch = pCh;
+            }
+        }
+
+        private static readonly Entry[] Entries =
+        {
+            // War and decision labels
+            new Entry("aw_hist_label_fabricate_core", "制造核心", "Fabricate Core", "製造核心"),
+            new Entry("aw_hist_label_fabricate_weak_claim", "制造弱宣称", "Fabricate Weak Claim", "製造弱宣稱"),
+            new Entry("aw_hist_label_fabricate_strong_claim", "制造强宣称", "Fabricate Strong Claim", "製造強宣稱"),
+            new Entry("aw_hist_label_core_reclaim", "收复核心", "Reclaim Core", "收復核心"),
+            new Entry("aw_hist_label_claim_war", "按宣称宣战", "Claim War", "按宣稱宣戰"),
+            new Entry("aw_hist_label_force_vassal", "强制臣服", "Force Vassalization", "強制臣服"),
+            new Entry("aw_hist_label_vassal_war", "附庸战争", "Vassal War", "附庸戰爭"),
+            new Entry("aw_hist_label_independence_war", "独立战争", "Independence War", "獨立戰爭"),
+            new Entry("aw_hist_label_restoration_war", "复国战争", "Restoration War", "復國戰爭"),
+            new Entry("aw_hist_label_no_cb", "无理由宣战", "No-CB War", "無理由宣戰"),
+            new Entry("aw_hist_label_tianming", "夺取天命", "Seize Mandate", "奪取天命"),
+            new Entry("aw_hist_label_mandate_conquest", "天命征服", "Mandate Conquest", "天命征服"),
+            new Entry("aw_hist_label_tianmingrebel", "义军天命战争", "Rebel Mandate War", "義軍天命戰爭"),
+            new Entry("aw_hist_label_general_rebellion_war", "大将叛乱", "General Rebellion", "大將叛亂"),
+            new Entry("aw_hist_label_fief_independence_war", "封地独立", "Fief Independence", "封地獨立"),
+
+            // Event labels
+            new Entry("aw_hist_event_war_claim_created", "制造宣称", "Claim Fabricated", "製造宣稱"),
+            new Entry("aw_hist_event_war_project_started", "开始战争筹备", "War Project Started", "開始戰爭籌備"),
+            new Entry("aw_hist_event_war_project_completed", "完成战争筹备", "War Project Completed", "完成戰爭籌備"),
+            new Entry("aw_hist_event_war_goal_set", "设定战争目标", "War Goal Set", "設定戰爭目標"),
+            new Entry("aw_hist_event_war_decision", "战争决策", "War Decision", "戰爭決策"),
+            new Entry("aw_hist_event_war_start", "战争爆发", "War Began", "戰爭爆發"),
+            new Entry("aw_hist_event_war_end", "战争结束", "War Ended", "戰爭結束"),
+            new Entry("aw_hist_event_mandate_start", "受命称帝", "Mandate Claimed", "受命稱帝"),
+            new Entry("aw_hist_event_mandate_declared_orthodox", "正统受命", "Orthodox Mandate", "正統受命"),
+            new Entry("aw_hist_event_mandate_declared_rebel", "义军受命", "Rebel Mandate", "義軍受命"),
+            new Entry("aw_hist_event_mandate_declared_foreign_pseudo", "外族伪朝", "Foreign Pseudo-Dynasty", "外族偽朝"),
+            new Entry("aw_hist_event_mandate_end", "失去天命", "Mandate Lost", "失去天命"),
+            new Entry("aw_hist_event_mandate_yearly", "天命年度变化", "Annual Mandate Change", "天命年度變化"),
+            new Entry("aw_hist_event_mandate_war_start", "天命战争开始", "Mandate War Began", "天命戰爭開始"),
+            new Entry("aw_hist_event_mandate_war_won", "天命战争胜利", "Mandate War Won", "天命戰爭勝利"),
+            new Entry("aw_hist_event_mandate_ritual", "祭天整顿", "Mandate Ritual", "祭天整頓"),
+            new Entry("aw_hist_event_mandate_year_name", "改元", "Era Name Changed", "改元"),
+            new Entry("aw_hist_event_mandate_ruler_title", "追上庙谥", "Temple/Posthumous Title", "追上廟諡"),
+            new Entry("aw_hist_event_former_king", "亡国之君", "Former Ruler", "亡國之君"),
+            new Entry("aw_hist_event_mandate_succession_crisis", "继承危机", "Succession Crisis", "繼承危機"),
+            new Entry("aw_hist_event_succession_collateral_restore", "恢复宗统", "Lineal Restoration", "恢復宗統"),
+            new Entry("aw_hist_event_person_collateral_restore", "恢复宗统", "Lineal Restoration", "恢復宗統"),
+            new Entry("aw_hist_event_mandate_collapse", "天命崩解", "Mandate Collapse", "天命崩解"),
+            new Entry("aw_hist_event_city_economy_role", "城市经济定位", "City Economic Role", "城市經濟定位"),
+            new Entry("aw_hist_event_city_economy_tax", "城市税收", "City Tax", "城市稅收"),
+            new Entry("aw_hist_event_unknown", "未记录", "Unrecorded", "未記錄"),
+
+            // Dynamic history text fragments
+            new Entry("aw_hist_king_ascended", " 即位为君", " ascended as ruler", " 即位為君"),
+            new Entry("aw_hist_person_ascended_prefix", " 即位为 ", " ascended as ruler of ", " 即位為 "),
+            new Entry("aw_hist_person_ascended_suffix", " 之君", "", " 之君"),
+            new Entry("aw_hist_lost_throne", " 失位", " lost the throne", " 失位"),
+            new Entry("aw_hist_collateral_restore_mid", "由旁系入继，恢复", " entered by collateral succession and restored ", "由旁系入繼，恢復"),
+            new Entry("aw_hist_collateral_restore_suffix", "宗统", " legitimacy", "宗統"),
+            new Entry("aw_hist_previous_ruler_prefix", "（前君 ", " (former ruler ", "（前君 "),
+            new Entry("aw_hist_paren_open", "（", " (", "（"),
+            new Entry("aw_hist_paren_close", "）", ")", "）"),
+            new Entry("aw_hist_colon", "：", ": ", "："),
+            new Entry("aw_hist_old_shi", "旧", "old", "舊"),
+            new Entry("aw_hist_kingdom_founded_suffix", " 建立", " was founded", " 建立"),
+            new Entry("aw_hist_kingdom_destroyed_suffix", " 灭亡", " was destroyed", " 滅亡"),
+            new Entry("aw_hist_abdicated", " 退位", " abdicated", " 退位"),
+            new Entry("aw_hist_slave_abdicated_prefix", " 因沦为奴隶退位（", " abdicated after being enslaved (", " 因淪為奴隸退位（"),
+            new Entry("aw_hist_belongs_to_prefix", "隶属于 ", "belonging to ", "隸屬於 "),
+            new Entry("aw_hist_belongs_to_suffix", " 的", " ", " 的"),
+            new Entry("aw_hist_city_founded_prefix", " 作为", " was founded as a ", " 作為"),
+            new Entry("aw_hist_city_founded_suffix", "城市建立", " city", "城市建立"),
+            new Entry("aw_hist_city_left_owner", " 脱离", " left ", " 脫離"),
+            new Entry("aw_hist_city_became_unowned", "，成为无所属城市", " and became unowned", "，成為無所屬城市"),
+            new Entry("aw_hist_lost_city_prefix", "失去 ", "Lost ", "失去 "),
+            new Entry("aw_hist_city_abandoned_note", "（城市废弃或无所属）", " (city abandoned or unowned)", "（城市廢棄或無所屬）"),
+            new Entry("aw_hist_city_joined", " 归属", " joined ", " 歸屬"),
+            new Entry("aw_hist_gained_city_prefix", "夺得 ", "Gained ", "奪得 "),
+            new Entry("aw_hist_city_former_unowned_note", "（原为无所属城市）", " (formerly unowned)", "（原為無所屬城市）"),
+            new Entry("aw_hist_city_transfer_from", " 由 ", " from ", " 由 "),
+            new Entry("aw_hist_city_transfer_to", " 易主至 ", " transferred to ", " 易主至 "),
+            new Entry("aw_hist_city_to_kingdom_prefix", "(归 ", " (to ", "(歸 "),
+            new Entry("aw_hist_city_from_kingdom_prefix", "(原属 ", " (from ", "(原屬 "),
+            new Entry("aw_hist_war_with_prefix", "与 ", "War with ", "與 "),
+            new Entry("aw_hist_war_started", " 爆发战争", " began", " 爆發戰爭"),
+            new Entry("aw_hist_war_ended_mid", " 的战争结束:", " ended: ", " 的戰爭結束："),
+            new Entry("aw_hist_war_claim_created_mid", " 取得对", " gained a casus belli against ", " 取得對"),
+            new Entry("aw_hist_war_claim_created_reason", "的宣战理由：", ": ", "的宣戰理由："),
+            new Entry("aw_hist_no_cb_war_mid", " 无故兴兵，攻伐", " attacked without cause: ", " 無故興兵，攻伐"),
+            new Entry("aw_hist_war_decision_with", " 以", " declared war with ", " 以"),
+            new Entry("aw_hist_war_decision_against", " 对", " against ", " 對"),
+            new Entry("aw_hist_war_decision_suffix", " 开战", "", " 開戰"),
+            new Entry("aw_hist_son", "子", "son", "子"),
+            new Entry("aw_hist_daughter", "女", "daughter", "女"),
+            new Entry("aw_hist_had_child", " 喜得", " had a ", " 喜得"),
+            new Entry("aw_hist_enfeoffed_leader_prefix", " 受封为 ", " was appointed leader of ", " 受封為 "),
+            new Entry("aw_hist_city_leader_suffix", " 城主", "", " 城主"),
+            new Entry("aw_hist_became_clan_chief", " 成为家主", " became clan chief", " 成為家主"),
+            new Entry("aw_hist_exiled_from_clan", " 被逐出氏族", " was exiled from the clan", " 被逐出氏族"),
+            new Entry("aw_hist_joined_clan", " 加入氏族 ", " joined clan ", " 加入氏族 "),
+            new Entry("aw_hist_clan_fallback", "氏族", "clan", "氏族"),
+            new Entry("aw_hist_someone", "某人", "someone", "某人"),
+            new Entry("aw_hist_rebelled", " 起兵反叛", " raised a rebellion", " 起兵反叛"),
+            new Entry("aw_hist_rebelled_in_realm", " 在境内起兵反叛", " rebelled within the realm", " 在境內起兵反叛"),
+            new Entry("aw_hist_enlisted", " 入伍从军", " enlisted as a soldier", " 入伍從軍"),
+            new Entry("aw_hist_enslaved", " 沦为奴隶（", " was enslaved (", " 淪為奴隸（"),
+            new Entry("aw_hist_captured_as_slave", " 被俘获为奴（", " was captured as a slave (", " 被俘獲為奴（"),
+            new Entry("aw_hist_in_city", " 在 ", " in ", " 在 "),
+            new Entry("aw_hist_registered_slave", " 被编入奴籍（", " was registered as a slave (", " 被編入奴籍（"),
+            new Entry("aw_hist_as_former_ruler_mid", "以", "as ruler of ", "以"),
+            new Entry("aw_hist_ruler_of_former_kingdom", "君主之身被", " was captured by ", "君主之身被"),
+            new Entry("aw_hist_captured_enslaved", "俘获，沦为奴隶（", " and enslaved (", "俘獲，淪為奴隸（"),
+            new Entry("aw_hist_captor_prefix", "，俘获者 ", ", captor ", "，俘獲者 "),
+            new Entry("aw_hist_placed_in_city", "，安置于", ", settled in ", "，安置於"),
+            new Entry("aw_hist_enemy_realm", "敌国", "enemy realm", "敵國"),
+            new Entry("aw_hist_freed_slave", " 脱离奴籍，成为平民（", " was freed from slavery and became a commoner (", " 脫離奴籍，成為平民（"),
+            new Entry("aw_hist_freed_slave_short", " 脱离奴籍（", " was freed from slavery (", " 脫離奴籍（"),
+            new Entry("aw_hist_city_freed_slave", " 脱离奴籍（", " was freed from slavery (", " 脫離奴籍（"),
+            new Entry("aw_hist_retired_soldier", " 退伍为老兵，不再应征", " retired as a veteran and will not be conscripted again", " 退伍為老兵，不再應徵"),
+            new Entry("aw_hist_retired_from_city", " 自 ", " retired from ", " 自 "),
+            new Entry("aw_hist_retired_from_city_suffix", " 退伍", "", " 退伍"),
+            new Entry("aw_hist_slave_enlisted", " 以奴隶兵身份入伍", " enlisted as a slave soldier", " 以奴隸兵身份入伍"),
+            new Entry("aw_hist_slave_army_joined", " 被编入奴隶军", " was assigned to the slave army", " 被編入奴隸軍"),
+            new Entry("aw_hist_merit_prefix", "立下军功 ", "earned ", "立下軍功 "),
+            new Entry("aw_hist_merit_mid", " 点，累计 ", " merit points, total ", " 點，累計 "),
+            new Entry("aw_hist_merit_suffix", " 点", " points", " 點"),
+            new Entry("aw_hist_slave_soldier", " 奴隶兵", " slave soldier ", " 奴隸兵"),
+            new Entry("aw_hist_slave_army_formed", " 开始编组奴隶军", " began organizing a slave army", " 開始編組奴隸軍"),
+            new Entry("aw_hist_slave_labor_started_prefix", " 登记奴隶劳役，奴隶 ", " registered slave labor: ", " 登記奴隸勞役，奴隸 "),
+            new Entry("aw_hist_people_count", " 人", " people", " 人"),
+            new Entry("aw_hist_war_slave_capture_prefix", " 在战争结算中俘获奴隶 ", " captured ", " 在戰爭結算中俘獲奴隸 "),
+            new Entry("aw_hist_war_slave_capture_mid", " 名，安置于 ", " slaves in the war settlement and settled them in ", " 名，安置於 "),
+            new Entry("aw_hist_city_war_slave_capture_prefix", " 安置战争俘获奴隶 ", " settled ", " 安置戰爭俘獲奴隸 "),
+            new Entry("aw_hist_city_war_slave_capture_suffix", " 名", " captured slaves", " 名"),
+            new Entry("aw_hist_royal_guard_default", "禁卫军", "Royal Guard", "禁衛軍"),
+            new Entry("aw_hist_royal_guard_founded", " 设立", " established ", " 設立"),
+            new Entry("aw_hist_royal_guard_captain", "统领", "captained ", "統領"),
+            new Entry("aw_hist_royal_guard_member", "入选", "joined ", "入選"),
+            new Entry("aw_hist_royal_guard_in_city_mid", " 在", " in ", " 在"),
+            new Entry("aw_hist_left_royal_guard", " 离开禁卫军（", " left the Royal Guard (", " 離開禁衛軍（"),
+            new Entry("aw_hist_killed", " 击杀了 ", " killed ", " 擊殺了 "),
+            new Entry("aw_hist_was_killed_by", " 为 ", " was killed by ", " 為 "),
+            new Entry("aw_hist_was_killed_by_suffix", " 所杀", "", " 所殺"),
+            new Entry("aw_hist_fell_in_love", " 与 ", " fell in love with ", " 與 "),
+            new Entry("aw_hist_fell_in_love_suffix", " 坠入爱河", "", " 墜入愛河"),
+            new Entry("aw_hist_partner", "伴侣", "partner", "伴侶"),
+            new Entry("aw_hist_relative", "亲人", "relative", "親人"),
+            new Entry("aw_hist_lost_bond", " 痛失", " mourned the loss of ", " 痛失"),
+
+            // Reason labels
+            new Entry("aw_hist_slave_reason_city_fall", "城破被俘", "captured when the city fell", "城破被俘"),
+            new Entry("aw_hist_slave_reason_captured", "俘获", "captured", "俘獲"),
+            new Entry("aw_hist_slave_reason_battlefield_capture", "战场俘获", "captured on the battlefield", "戰場俘獲"),
+            new Entry("aw_hist_slave_reason_foreign_occupation", "外族占领", "foreign occupation", "外族佔領"),
+            new Entry("aw_hist_slave_reason_slave_king", "国王为奴", "enslaved king", "國王為奴"),
+            new Entry("aw_hist_slave_reason_slave_only_rebel", "奴隶国改编为义军", "slave-only realm reorganized as rebels", "奴隸國改編為義軍"),
+            new Entry("aw_hist_slave_reason_born_slave", "奴籍所生", "born into slavery", "奴籍所生"),
+            new Entry("aw_hist_slave_reason_military_merit", "军功释奴", "freed by military merit", "軍功釋奴"),
+            new Entry("aw_hist_slave_reason_promoted", "因受任官职释奴", "freed by appointment to office", "因受任官職釋奴"),
+            new Entry("aw_hist_slave_reason_registered", "奴籍登记", "slave registration", "奴籍登記"),
+            new Entry("aw_hist_guard_reason_died", "战死或身故", "dead", "戰死或身故"),
+            new Entry("aw_hist_guard_reason_no_king", "无在位君主", "no reigning ruler", "無在位君主"),
+            new Entry("aw_hist_guard_reason_no_noble_captain", "无贵族统领", "no noble captain", "無貴族統領"),
+            new Entry("aw_hist_guard_reason_over_limit", "名额调整", "roster adjustment", "名額調整"),
+            new Entry("aw_hist_guard_reason_invalid", "资格不符", "ineligible", "資格不符"),
+            new Entry("aw_hist_guard_reason_enslaved", "沦为奴隶", "enslaved", "淪為奴隸"),
+            new Entry("aw_hist_guard_reason_became_leader", "受任城主", "appointed city leader", "受任城主"),
+            new Entry("aw_hist_guard_reason_left", "离任", "left office", "離任"),
+
+            // Vassal history text
+            new Entry("aw_hist_vassal_absorb_mid", " 吞并附庸 ", " annexed vassal ", " 吞併附庸 "),
+            new Entry("aw_hist_vassal_absorbed_mid", " 被 ", " was annexed by ", " 被 "),
+            new Entry("aw_hist_vassal_absorbed_suffix", " 吞并", "", " 吞併"),
+            new Entry("aw_hist_vassal_became_suffix", "，成为附庸", ", becoming a vassal", "，成為附庸"),
+            new Entry("aw_hist_vassal_get_mid", " 收 ", " accepted ", " 收 "),
+            new Entry("aw_hist_vassal_get_suffix", " 为附庸", " as a vassal", " 為附庸"),
+            new Entry("aw_hist_vassal_independence_war_verb", "通过独立战争脱离", "broke from", "通過獨立戰爭脫離"),
+            new Entry("aw_hist_vassal_left_verb", "脱离", "left", "脫離"),
+            new Entry("aw_hist_vassal_independent_suffix", " 独立", " and became independent", " 獨立"),
+            new Entry("aw_hist_vassal_suzerain_fallback", "宗主国", "suzerain", "宗主國"),
+            new Entry("aw_hist_vassal_lost_mid", " 失去附庸 ", " lost vassal ", " 失去附庸 "),
+            new Entry("aw_hist_vassal_fell_suffix", "（亡国）", " (destroyed)", "（亡國）"),
+            new Entry("aw_hist_vassal_suzerain_fell_mid", " 因宗主 ", " regained independence after suzerain ", " 因宗主 "),
+            new Entry("aw_hist_vassal_suzerain_fell_suffix", " 灭亡而恢复独立", " fell", " 滅亡而恢復獨立"),
+            new Entry("aw_hist_vassal_set_reason_active", "因外部威胁主动臣属于 ", "voluntarily submitted to ", "因外部威脅主動臣屬於 "),
+            new Entry("aw_hist_vassal_set_reason_war", "战败后臣属于 ", "submitted after defeat to ", "戰敗後臣屬於 "),
+            new Entry("aw_hist_vassal_set_reason_reparent", "因附庸体系重整转臣属于 ", "was reassigned under ", "因附庸體系重整轉臣屬於 "),
+            new Entry("aw_hist_vassal_set_reason_suzerain_fell", "因旧宗主灭亡改臣属于 ", "changed allegiance to ", "因舊宗主滅亡改臣屬於 "),
+            new Entry("aw_hist_vassal_set_reason_manual", "臣属于 ", "submitted to ", "臣屬於 "),
+            new Entry("aw_hist_vassal_get_reason_active", "主动臣属", "voluntary submission", "主動臣屬"),
+            new Entry("aw_hist_vassal_get_reason_war", "战争臣服", "war submission", "戰爭臣服"),
+            new Entry("aw_hist_vassal_get_reason_reparent", "体系重整", "vassal system reorganization", "體系重整"),
+            new Entry("aw_hist_vassal_get_reason_suzerain_fell", "改投宗主", "changed suzerain", "改投宗主"),
+            new Entry("aw_hist_vassal_get_reason_manual", "上帝设定", "manual setting", "上帝設定"),
+            new Entry("aw_hist_vassal_get_reason_generic", "臣属", "submission", "臣屬"),
+            new Entry("aw_hist_former_king_title_common", "亡国之君", "Former Ruler", "亡國之君"),
+            new Entry("aw_hist_former_king_at", "在", " after ", "在"),
+            new Entry("aw_hist_former_king_after_fall_mid", "灭亡后成为", " became ", "滅亡後成為"),
+            new Entry("aw_hist_former_king_fell", "", " fell", ""),
+            new Entry("aw_hist_mandate_ruler_title_mid", " 追上天命庙谥：", " received Mandate temple/posthumous title: ", " 追上天命廟諡："),
+            new Entry("aw_hist_general_high_risk_person", " 拥兵自重，朝野侧目", " held troops independently and alarmed the court", " 擁兵自重，朝野側目"),
+            new Entry("aw_hist_general_high_risk_kingdom", " 拥兵自重，风险 ", " held troops independently, risk ", " 擁兵自重，風險 "),
+            new Entry("aw_hist_general_in_city", " 在", " in ", " 在"),
+            new Entry("aw_hist_general_high_risk_city", " 拥兵自重", " held troops independently", " 擁兵自重"),
+            new Entry("aw_hist_general_based_on", " 据", " used ", " 據"),
+            new Entry("aw_hist_general_self_rule", " 起兵自立", " as a base and rose independently", " 起兵自立"),
+            new Entry("aw_hist_general_rebelled", " 起兵叛乱", " raised a rebellion", " 起兵叛亂"),
+            new Entry("aw_hist_general_founded_by", " 由", " was founded by ", " 由"),
+            new Entry("aw_hist_general_rebel_founded", " 起兵建立", " in rebellion", " 起兵建立"),
+            new Entry("aw_hist_general_became", " 成为", " became ", " 成為"),
+            new Entry("aw_hist_general_rebel_base", " 叛军根据地", "'s rebel base", " 叛軍根據地"),
+            new Entry("aw_hist_general_palace_coup_success", " 发动逼宫并夺取王位", " staged a palace coup and seized the throne", " 發動逼宮並奪取王位"),
+            new Entry("aw_hist_general_palace_coup_failed", " 发动逼宫失败", " staged a failed palace coup", " 發動逼宮失敗"),
+            new Entry("aw_hist_general_risk_label", "，风险 ", ", risk ", "，風險 "),
+            new Entry("aw_hist_general_with_city", " 以", " used ", " 以"),
+            new Entry("aw_hist_general_defected_to", " 投附", " to defect to ", " 投附"),
+            new Entry("aw_hist_general_power_risk", "，拥兵风险 ", ", military power risk ", "，擁兵風險 "),
+            new Entry("aw_hist_general_followed", " 随", " followed ", " 隨"),
+            new Entry("aw_hist_general_changed_to", " 改投", " and switched allegiance to ", " 改投"),
+            new Entry("aw_hist_general_supports", " 主张奉", " advocated restoring ", " 主張奉"),
+            new Entry("aw_hist_general_restore_mid", " 复国，向", " and declared restoration war on ", " 復國，向"),
+            new Entry("aw_hist_general_declare_war_risk", " 宣战，风险 ", ", risk ", " 宣戰，風險 "),
+            new Entry("aw_hist_era_changed", "改元 ", "Changed era to ", "改元 "),
+
+            // Mandate text
+            new Entry("aw_hist_mandate_changed_mid", " 天命变化 ", " Mandate changed by ", " 天命變化 "),
+            new Entry("aw_hist_mandate_current", "，当前 ", ", now ", "，目前 "),
+            new Entry("aw_hist_mandate_protected", " 受天命护持，低天命暂未崩解王朝", " was protected by the Mandate; low Mandate did not collapse the dynasty yet", " 受天命護持，低天命暫未崩解王朝"),
+            new Entry("aw_hist_mandate_claimed_mid", " 受命称帝，建立", " claimed the Mandate and founded ", " 受命稱帝，建立"),
+            new Entry("aw_hist_actor_claimed_mandate", " 受天命为帝", " became emperor by the Mandate", " 受天命為帝"),
+            new Entry("aw_hist_mandate_ritual", " 祭天整顿，重申天命", " performed rites and reaffirmed the Mandate", " 祭天整頓，重申天命"),
+            new Entry("aw_hist_mandate_core_added", " 纳入天命法理核心", " was added to Mandate legal cores", " 納入天命法理核心"),
+            new Entry("aw_hist_mandate_lost_prefix", " 失去天命（", " lost the Mandate (", " 失去天命（"),
+            new Entry("aw_hist_mandate_collapse", " 天命崩解，天下大乱", " suffered Mandate collapse; the realm fell into chaos", " 天命崩解，天下大亂"),
+            new Entry("aw_hist_mandate_war_declared_mid", " 向 ", " launched a Mandate war against ", " 向 "),
+            new Entry("aw_hist_mandate_war_declared_suffix", " 发起天命战争", "", " 發起天命戰爭"),
+            new Entry("aw_hist_mandate_none", "当前没有天命王朝", "No current Mandate dynasty", "目前沒有天命王朝"),
+            new Entry("aw_hist_mandate_map_realm", "天命国: ", "Mandate realm: ", "天命國："),
+            new Entry("aw_hist_mandate_value", "天命值: ", "Mandate: ", "天命值："),
+            new Entry("aw_hist_mandate_authority", "皇权: ", "Authority: ", "皇權："),
+            new Entry("aw_hist_mandate_core_control", "法理控制: ", "Core control: ", "法理控制："),
+            new Entry("aw_hist_mandate_inside", "天命体系", "inside Mandate system", "天命體系"),
+            new Entry("aw_hist_mandate_outside", "体系之外", "outside system", "體系之外"),
+            new Entry("aw_hist_mandate_current_zone", "当前区域: ", "Current zone: ", "目前區域："),
+            new Entry("aw_hist_mandate_core_title", "天命法理", "Mandate Legal Core", "天命法理"),
+            new Entry("aw_hist_mandate_no_core", "当前没有天命法理", "No current Mandate legal core", "目前沒有天命法理"),
+            new Entry("aw_hist_mandate_core_city_count", "核心城市: ", "Core cities: ", "核心城市："),
+            new Entry("aw_hist_mandate_original_core", "初始法理: ", "Original cores: ", "初始法理："),
+            new Entry("aw_hist_mandate_control_ratio", "控制率: ", "Control: ", "控制率："),
+            new Entry("aw_hist_mandate_current_kingdom", "当前国家: ", "Current realm: ", "目前國家："),
+            new Entry("aw_hist_mandate_source", "来源: ", "Origin: ", "來源："),
+            new Entry("aw_hist_mandate_marker", "标识: ", "Marker: ", "標識："),
+            new Entry("aw_hist_mandate_rebels", "义军: ", "Rebels: ", "義軍："),
+            new Entry("aw_hist_mandate_foreign_occupation", "外族占领: ", "Foreign occupation: ", "外族佔領："),
+            new Entry("aw_hist_mandate_uprising_count", " 起，最强 ", " uprisings, strongest ", " 起，最強 "),
+            new Entry("aw_hist_mandate_city_count_mid", " 城，最高民怨 ", " cities, max unrest ", " 城，最高民怨 "),
+            new Entry("aw_hist_none", "无", "none", "無"),
+            new Entry("aw_hist_mandate_dynasty_suffix", "朝", " Dynasty", "朝"),
+            new Entry("aw_hist_mandate_dynasty_default", "天命王朝", "Mandate Dynasty", "天命王朝"),
+            new Entry("aw_hist_mandate_end_low_mandate", "天命过低", "Mandate too low", "天命過低"),
+            new Entry("aw_hist_mandate_end_war_lost", "天命战争失败", "lost Mandate war", "天命戰爭失敗"),
+            new Entry("aw_hist_mandate_end_kingdom_fell", "王朝灭亡", "dynasty destroyed", "王朝滅亡"),
+            new Entry("aw_hist_mandate_end_replaced", "改朝换代", "dynasty replaced", "改朝換代"),
+            new Entry("aw_hist_mandate_end_generic", "结束", "ended", "結束"),
+
+            // Posthumous title text and tooltip
+            new Entry("aw_hist_posthumous_title_label", "谥号：", "Posthumous title:", "諡號："),
+            new Entry("aw_hist_posthumous_grade_label", "评等：", "Grade:", "評等："),
+            new Entry("aw_hist_posthumous_dimension_label", "主因：", "Main factor:", "主因："),
+            new Entry("aw_hist_posthumous_total_label", "总分：", "Total:", "總分："),
+            new Entry("aw_hist_posthumous_civil_label", "民生 ", "Civil ", "民生 "),
+            new Entry("aw_hist_posthumous_territory_label", "疆域 ", "Territory ", "疆域 "),
+            new Entry("aw_hist_posthumous_war_label", "战功 ", "War ", "戰功 "),
+            new Entry("aw_hist_posthumous_order_label", "秩序 ", "Order ", "秩序 "),
+            new Entry("aw_hist_posthumous_ending_label", "结局 ", "Ending ", "結局 "),
+            new Entry("aw_hist_posthumous_title_deposed", "，称为：", ", titled: ", "，稱為："),
+            new Entry("aw_hist_posthumous_title_abdicated", "，退号为：", ", retirement title: ", "，退號為："),
+            new Entry("aw_hist_posthumous_title_normal", "，谥为：", ", posthumously titled: ", "，諡為："),
+            new Entry("aw_hist_posthumous_end_abdicated", "退位", "abdicated", "退位"),
+            new Entry("aw_hist_posthumous_end_kingdom_fell", "国亡", "lost the realm", "國亡"),
+            new Entry("aw_hist_posthumous_end_died", "驾崩", "died", "駕崩"),
+            new Entry("aw_hist_posthumous_end_captured_slave", "被俘后身故", "died in captivity", "被俘後身故"),
+            new Entry("aw_hist_posthumous_grade_praise_high", "上谥", "High praise", "上諡"),
+            new Entry("aw_hist_posthumous_grade_praise", "美谥", "Praise", "美諡"),
+            new Entry("aw_hist_posthumous_grade_neutral", "平谥", "Neutral", "平諡"),
+            new Entry("aw_hist_posthumous_grade_blame", "下谥", "Blame", "下諡"),
+            new Entry("aw_hist_posthumous_grade_blame_high", "恶谥", "Severe blame", "惡諡"),
+            new Entry("aw_hist_posthumous_unknown", "未知", "Unknown", "未知"),
+            new Entry("aw_hist_posthumous_dimension_civil", "民生", "Civil affairs", "民生"),
+            new Entry("aw_hist_posthumous_dimension_territory", "疆域", "Territory", "疆域"),
+            new Entry("aw_hist_posthumous_dimension_war", "战功", "War merit", "戰功"),
+            new Entry("aw_hist_posthumous_dimension_order", "秩序", "Order", "秩序"),
+            new Entry("aw_hist_posthumous_dimension_ending", "结局", "Ending", "結局"),
+            new Entry("aw_hist_posthumous_dimension_balanced", "综合", "Overall", "綜合"),
+            new Entry("aw_hist_posthumous_reason_civil", "民生", "Civil", "民生"),
+            new Entry("aw_hist_posthumous_reason_territory", " 疆域", " Territory", " 疆域"),
+            new Entry("aw_hist_posthumous_reason_war", " 战功", " War", " 戰功"),
+            new Entry("aw_hist_posthumous_reason_order", " 秩序", " Order", " 秩序"),
+            new Entry("aw_hist_posthumous_reason_ending", " 结局", " Ending", " 結局"),
+            new Entry("aw_hist_posthumous_reason_wins", "；胜", "; wins ", "；勝"),
+            new Entry("aw_hist_posthumous_reason_losses", " 负", " losses ", " 負"),
+            new Entry("aw_hist_posthumous_reason_city", " 城", " cities ", " 城"),
+            new Entry("aw_hist_posthumous_reason_army", " 军", " army ", " 軍"),
+            new Entry("aw_hist_posthumous_reason_reign", " 在位", " reigned ", " 在位"),
+            new Entry("aw_hist_posthumous_reason_year", "年", " years", "年"),
+            new Entry("aw_hist_posthumous_reason_death_cause", "；死因：", "; cause of death: ", "；死因："),
+
+            // Mandate crisis history
+            new Entry("aw_hist_mandate_succession_unstable", " 国本不稳，诸城一度有离心", " suffered succession instability; cities briefly wavered", " 國本不穩，諸城一度有離心"),
+            new Entry("aw_hist_mandate_succession_damaged", " 国本不稳，天命因继承危机受损", " suffered succession instability and Mandate damage", " 國本不穩，天命因繼承危機受損")
+            ,
+            // War territory, goals, claims and core map text
+            new Entry("aw_hist_core_mark_mid", " 将 ", " marked ", " 將 "),
+            new Entry("aw_hist_core_mark_suffix", " 列为核心领土", " as core territory", " 列為核心領土"),
+            new Entry("aw_hist_core_city_became_mid", " 成为 ", " became core territory of ", " 成為 "),
+            new Entry("aw_hist_core_city_became_suffix", " 的核心领土", "", " 的核心領土"),
+            new Entry("aw_hist_project_started_prefix", " 开始", " started ", " 開始"),
+            new Entry("aw_hist_project_completed_prefix", " 完成", " completed ", " 完成"),
+            new Entry("aw_hist_project_target_mid", "，目标为 ", ", target: ", "，目標為 "),
+            new Entry("aw_hist_war_goal_set_mid", " 设定战争目标：", " set war goal: ", " 設定戰爭目標："),
+            new Entry("aw_hist_war_goal_achieved_mid", " 达成战争目标：", " achieved war goal: ", " 達成戰爭目標："),
+            new Entry("aw_hist_war_goal_defender_failed_mid", " 战败，被迫接受战争目标：", " was defeated and accepted war goal: ", " 戰敗，被迫接受戰爭目標："),
+            new Entry("aw_hist_city_taken_by_goal_mid", " 因战争目标归于 ", " was transferred by war goal to ", " 因戰爭目標歸於 "),
+            new Entry("aw_hist_war_goal_failed_mid", " 未能达成战争目标：", " failed war goal: ", " 未能達成戰爭目標："),
+            new Entry("aw_hist_project_core", "制造核心", "Fabricate Core", "製造核心"),
+            new Entry("aw_hist_project_strong_claim", "制造强宣称", "Fabricate Strong Claim", "製造強宣稱"),
+            new Entry("aw_hist_project_weak_claim", "制造弱宣称", "Fabricate Weak Claim", "製造弱宣稱"),
+            new Entry("aw_hist_project_prepare", "战争准备", "War Preparation", "戰爭準備"),
+            new Entry("aw_hist_goal_take_core_city", "收复核心城市", "Reclaim Core City", "收復核心城市"),
+            new Entry("aw_hist_goal_press_claim_city", "夺取宣称城市", "Press City Claim", "奪取宣稱城市"),
+            new Entry("aw_hist_goal_press_strong_claim_city", "强宣称战争", "Strong Claim War", "強宣稱戰爭"),
+            new Entry("aw_hist_goal_press_weak_claim_city", "弱宣称战争", "Weak Claim War", "弱宣稱戰爭"),
+            new Entry("aw_hist_goal_take_mandate", "夺取天命", "Seize Mandate", "奪取天命"),
+            new Entry("aw_hist_goal_mandate_conquest", "天命征服", "Mandate Conquest", "天命征服"),
+            new Entry("aw_hist_goal_force_vassal", "强制臣服", "Force Vassalization", "強制臣服"),
+            new Entry("aw_hist_goal_independence", "脱离宗主", "Break From Suzerain", "脫離宗主"),
+            new Entry("aw_hist_goal_restore_kingdom", "复国", "Restore Kingdom", "復國"),
+            new Entry("aw_hist_goal_no_cb", "强宣", "Forced War", "強宣"),
+            new Entry("aw_hist_goal_generic", "战争目标", "War Goal", "戰爭目標"),
+            new Entry("aw_hist_goal_defender_win", "守方胜利", "defender victory", "守方勝利"),
+            new Entry("aw_hist_goal_peace_unresolved", "议和未决", "peace unresolved", "議和未決"),
+            new Entry("aw_map_focus_realm", "查看国：", "Focus realm: ", "查看國："),
+            new Entry("aw_map_hover_realm", "当前国：", "Hovered realm: ", "目前國："),
+            new Entry("aw_map_core_cities", "核心城市：", "Core cities: ", "核心城市："),
+            new Entry("aw_map_non_core", "非核心领土：", "Non-core territory: ", "非核心領土："),
+            new Entry("aw_map_pending_core", "制造核心中：", "Fabricating cores: ", "製造核心中："),
+            new Entry("aw_map_strong_claim", "强宣称：", "Strong claims: ", "強宣稱："),
+            new Entry("aw_map_weak_claim", "弱宣称：", "Weak claims: ", "弱宣稱："),
+            new Entry("aw_map_pending_claim", "制造宣称中：", "Fabricating claims: ", "製造宣稱中："),
+            new Entry("aw_map_power_ratio", "国力比：", "Power ratio: ", "國力比："),
+            new Entry("aw_map_reclaimable_core", "可收复核心：", "Reclaimable cores: ", "可收復核心："),
+            new Entry("aw_map_pending", "制造中：", "Pending: ", "製造中："),
+            new Entry("aw_map_can_mandate_conquest", "可发动天命征服", "Can launch Mandate conquest", "可發動天命征服"),
+            new Entry("aw_map_can_force_vassal", "可发动附庸战争", "Can launch vassalization war", "可發動附庸戰爭"),
+            new Entry("aw_map_can_restore", "可发动复国战争：持有亡国王室宣称 ", "Can launch restoration war: hosted royal claims ", "可發動復國戰爭：持有亡國王室宣稱 "),
+            new Entry("aw_map_restore_blocked", "持有复国宣称，但目标被附庸体系或战争状态阻断", "Restoration claim exists but vassal system or war state blocks it", "持有復國宣稱，但目標被附庸體系或戰爭狀態阻斷"),
+            new Entry("aw_map_can_no_cb", "可强宣，但会产生惩罚", "Can force war, with penalties", "可強宣，但會產生懲罰"),
+            new Entry("aw_map_count_suffix", " 个", "", " 個"),
+            new Entry("aw_map_status_core", "核心", "Core", "核心"),
+            new Entry("aw_map_status_fabricate_core", "制造核心", "Fabricating Core", "製造核心"),
+            new Entry("aw_map_status_non_core", "非核心领土", "Non-Core Territory", "非核心領土"),
+            new Entry("aw_map_status_core_claim", "核心宣称", "Core Claim", "核心宣稱"),
+            new Entry("aw_map_status_strong_claim", "强宣称", "Strong Claim", "強宣稱"),
+            new Entry("aw_map_status_weak_claim", "弱宣称", "Weak Claim", "弱宣稱"),
+            new Entry("aw_map_status_fabricate_strong_claim", "制造强宣称", "Fabricating Strong Claim", "製造強宣稱"),
+            new Entry("aw_map_status_fabricate_weak_claim", "制造弱宣称", "Fabricating Weak Claim", "製造弱宣稱"),
+            new Entry("aw_unknown_city", "某城", "unknown city", "某城")
+        };
+    }
+}

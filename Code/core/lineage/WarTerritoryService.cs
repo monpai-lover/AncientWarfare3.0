@@ -33,6 +33,8 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static readonly Dictionary<string, bool> OwnedNonCoreCache = new Dictionary<string, bool>();
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         internal sealed class WarGoalRequest
         {
@@ -215,11 +217,11 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("ACTIVE", 1));
 
                 HistoryWriter.RecordKingdom(pKingdom, "war_core_created",
-                    HistoryText.Kingdom(pKingdom) + " 将 " + HistoryText.City(pCity, pKingdom) +
-                    " 列为核心领土", HistoryTarget.City(pCity));
+                    HistoryText.Kingdom(pKingdom) + H("aw_hist_core_mark_mid") +
+                    HistoryText.City(pCity, pKingdom) + H("aw_hist_core_mark_suffix"), HistoryTarget.City(pCity));
                 HistoryWriter.RecordCity(pCity, pKingdom, "war_core_created",
-                    HistoryText.City(pCity, pKingdom) + " 成为 " + HistoryText.Kingdom(pKingdom) +
-                    " 的核心领土", HistoryTarget.Kingdom(pKingdom));
+                    HistoryText.City(pCity, pKingdom) + H("aw_hist_core_city_became_mid") +
+                    HistoryText.Kingdom(pKingdom) + H("aw_hist_core_city_became_suffix"), HistoryTarget.Kingdom(pKingdom));
                 MandateService.OnKingdomCoreCreated(pKingdom, pCity, pSourceType);
                 DirtyWarMaps();
                 return coreId;
@@ -282,8 +284,9 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("CREATED_BY_NAME", king?.getName() ?? ""));
 
                 HistoryWriter.RecordKingdom(pSource, "war_project_started",
-                    HistoryText.Kingdom(pSource) + " 开始" + HistoryText.PlainText(ProjectLabel(pProjectType)) +
-                    "，目标为 " + TargetText(pTarget, pTargetCity),
+                    HistoryText.Kingdom(pSource) + H("aw_hist_project_started_prefix") +
+                    HistoryText.PlainText(ProjectLabel(pProjectType)) +
+                    H("aw_hist_project_target_mid") + TargetText(pTarget, pTargetCity),
                     pTargetCity?.data != null ? HistoryTarget.City(pTargetCity) : HistoryTarget.Kingdom(pTarget));
                 DirtyWarMaps();
                 return projectId;
@@ -496,7 +499,8 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("RESULT", ""));
 
                 HistoryWriter.RecordKingdom(attacker, "war_goal_set",
-                    HistoryText.Kingdom(attacker) + " 设定战争目标：" + HistoryText.PlainText(GoalLabel(pGoal.goal_type)) +
+                    HistoryText.Kingdom(attacker) + H("aw_hist_war_goal_set_mid") +
+                    HistoryText.PlainText(GoalLabel(pGoal.goal_type)) +
                     GoalTargetText(pGoal), GoalHistoryTarget(pGoal, defender));
             }
             catch (Exception e)
@@ -526,7 +530,7 @@ namespace AncientWarfare3.core.lineage
             if (FindCoreId(pFocus.id, pCity.data.id) >= 0)
             {
                 result.status = "core";
-                result.label = "核心";
+                result.label = T("aw_map_status_core");
                 return result;
             }
 
@@ -536,7 +540,7 @@ namespace AncientWarfare3.core.lineage
             if (pending.project_id >= 0)
             {
                 result.status = "pending_core";
-                result.label = "制造核心";
+                result.label = T("aw_map_status_fabricate_core");
                 result.progress = pending.progress;
                 result.cost = pending.cost;
                 return result;
@@ -545,7 +549,7 @@ namespace AncientWarfare3.core.lineage
             if (pCity.kingdom == pFocus)
             {
                 result.status = "owned_non_core";
-                result.label = "非核心领土";
+                result.label = T("aw_map_status_non_core");
             }
             return result;
         }
@@ -569,7 +573,7 @@ namespace AncientWarfare3.core.lineage
             if (FindCoreId(pFocus.id, pCity.data.id) >= 0)
             {
                 result.status = "strong_claim";
-                result.label = "核心宣称";
+                result.label = T("aw_map_status_core_claim");
                 return result;
             }
 
@@ -577,7 +581,9 @@ namespace AncientWarfare3.core.lineage
             if (claim.claim_id >= 0)
             {
                 result.status = claim.claim_type == CLAIM_STRONG ? "strong_claim" : "weak_claim";
-                result.label = claim.claim_type == CLAIM_STRONG ? "强宣称" : "弱宣称";
+                result.label = claim.claim_type == CLAIM_STRONG
+                    ? T("aw_map_status_strong_claim")
+                    : T("aw_map_status_weak_claim");
                 result.expires_time = claim.expires_time;
                 return result;
             }
@@ -591,7 +597,9 @@ namespace AncientWarfare3.core.lineage
             if (pending.project_id >= 0)
             {
                 result.status = "pending_claim";
-                result.label = pending.project_type == PROJECT_STRONG_CLAIM ? "制造强宣称" : "制造弱宣称";
+                result.label = pending.project_type == PROJECT_STRONG_CLAIM
+                    ? T("aw_map_status_fabricate_strong_claim")
+                    : T("aw_map_status_fabricate_weak_claim");
                 result.progress = pending.progress;
                 result.cost = pending.cost;
             }
@@ -601,26 +609,26 @@ namespace AncientWarfare3.core.lineage
         public static string BuildCoreTooltip(Kingdom pFocus, Kingdom pHover)
         {
             if (pFocus?.data == null) return "";
-            var lines = new List<string> { "查看国：" + pFocus.name };
-            if (pHover?.data != null) lines.Add("当前国：" + pHover.name);
+            var lines = new List<string> { T("aw_map_focus_realm") + pFocus.name };
+            if (pHover?.data != null) lines.Add(T("aw_map_hover_realm") + pHover.name);
             int cores = CountCores(pFocus.id);
             int pending = CountProjects(pFocus.id, PROJECT_CORE);
             int nonCoreOwned = CountOwnedNonCore(pFocus);
-            lines.Add("核心城市：" + cores);
-            lines.Add("非核心领土：" + nonCoreOwned);
-            lines.Add("制造核心中：" + pending);
+            lines.Add(T("aw_map_core_cities") + cores);
+            lines.Add(T("aw_map_non_core") + nonCoreOwned);
+            lines.Add(T("aw_map_pending_core") + pending);
             return string.Join("\n", lines.ToArray());
         }
 
         public static string BuildClaimTooltip(Kingdom pFocus, Kingdom pHover)
         {
             if (pFocus?.data == null) return "";
-            var lines = new List<string> { "查看国：" + pFocus.name };
-            if (pHover?.data != null) lines.Add("当前国：" + pHover.name);
-            lines.Add("强宣称：" + WarTargetSelectionRules.CountStrongClaimsForDisplay(
+            var lines = new List<string> { T("aw_map_focus_realm") + pFocus.name };
+            if (pHover?.data != null) lines.Add(T("aw_map_hover_realm") + pHover.name);
+            lines.Add(T("aw_map_strong_claim") + WarTargetSelectionRules.CountStrongClaimsForDisplay(
                 CountClaims(pFocus.id, CLAIM_STRONG), CountCores(pFocus.id)));
-            lines.Add("弱宣称：" + CountClaims(pFocus.id, CLAIM_WEAK));
-            lines.Add("制造宣称中：" + CountProjects(pFocus.id, PROJECT_WEAK_CLAIM, PROJECT_STRONG_CLAIM));
+            lines.Add(T("aw_map_weak_claim") + CountClaims(pFocus.id, CLAIM_WEAK));
+            lines.Add(T("aw_map_pending_claim") + CountProjects(pFocus.id, PROJECT_WEAK_CLAIM, PROJECT_STRONG_CLAIM));
             return string.Join("\n", lines.ToArray());
         }
 
@@ -730,19 +738,19 @@ namespace AncientWarfare3.core.lineage
             if (!vassalBlocked && MandateService.GetCurrentMandateKingdom() == pTarget &&
                 WarDecisionService.HasValidCasusBelli(pSource, pTarget, MandateService.WAR_TIANMING))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
-                    GOAL_TAKE_MANDATE, "\u593A\u53D6\u5929\u547D",
+                    GOAL_TAKE_MANDATE, GoalLabel(GOAL_TAKE_MANDATE),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
             if (CanUseMandateConquest(pSource, pTarget))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
-                    GOAL_MANDATE_CONQUEST, "\u5929\u547D\u5F81\u670D",
+                    GOAL_MANDATE_CONQUEST, GoalLabel(GOAL_MANDATE_CONQUEST),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: true, hasWeakClaim: false,
                     restorationStrength: 0));
 
             City city = FindBestCoreTargetCity(pSource, pTarget, out long coreId);
             if (!vassalBlocked && city?.data != null)
-                result.Add(MakeOption(pTarget, city, GOAL_TAKE_CORE_CITY, "\u6536\u590d\u6838\u5fc3",
+                result.Add(MakeOption(pTarget, city, GOAL_TAKE_CORE_CITY, GoalLabel(GOAL_TAKE_CORE_CITY),
                     coreId, -1, -1, null, hasCore: true, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
@@ -752,7 +760,7 @@ namespace AncientWarfare3.core.lineage
                 ClaimRow claim = FindBestClaim(pSource.id, pTarget.id, city?.data?.id ?? -1L);
                 bool strong = claim.claim_type == CLAIM_STRONG;
                 result.Add(MakeOption(pTarget, city, GOAL_PRESS_CLAIM_CITY,
-                    strong ? "\u5f3a\u5ba3\u79f0\u6218\u4e89" : "\u5f31\u5ba3\u79f0\u6218\u4e89",
+                    strong ? T("aw_hist_goal_press_strong_claim_city") : T("aw_hist_goal_press_weak_claim_city"),
                     -1, claimId, -1, null, hasCore: false, hasStrongClaim: strong, hasWeakClaim: !strong,
                     restorationStrength: 0));
             }
@@ -761,23 +769,23 @@ namespace AncientWarfare3.core.lineage
             if (!vassalBlocked && restoration != null && restoration.claim_id >= 0 && restorationCity?.data != null)
             {
                 Actor claimant = FindActor(restoration.claimant_actor_id);
-                result.Add(MakeOption(pTarget, restorationCity, GOAL_RESTORE_KINGDOM, "\u590d\u56fd",
+                result.Add(MakeOption(pTarget, restorationCity, GOAL_RESTORE_KINGDOM, GoalLabel(GOAL_RESTORE_KINGDOM),
                     -1, -1, restoration.claim_id, claimant, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: restoration.claim_strength));
             }
 
             if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(pSource, pTarget, "vassal_war"))
-                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, "\u5f3a\u5236\u81e3\u670d",
+                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, GoalLabel(GOAL_FORCE_VASSAL),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
             if (VassalService.GetSuzerain(pSource) == pTarget && !IsAlreadyAtWar(pSource, pTarget))
-                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_INDEPENDENCE, "\u72ec\u7acb\u6218\u4e89",
+                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_INDEPENDENCE, GoalLabel(GOAL_INDEPENDENCE),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
             if (!vassalBlocked && CanNoCb(pSource))
-                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_NO_CB, "\u65e0\u7406\u7531\u5ba3\u6218",
+                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_NO_CB, GoalLabel(GOAL_NO_CB),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
@@ -876,18 +884,19 @@ namespace AncientWarfare3.core.lineage
             if (pReport?.target == null) return "";
             var lines = new List<string>
             {
-                "国力比：" + pReport.power_ratio.ToString("0.00"),
-                "可收复核心：" + pReport.core_count,
-                "强宣称：" + pReport.strong_claim_count,
-                "弱宣称：" + pReport.weak_claim_count,
-                "制造中：" + pReport.pending_count
+                T("aw_map_power_ratio") + pReport.power_ratio.ToString("0.00"),
+                T("aw_map_reclaimable_core") + pReport.core_count,
+                T("aw_map_strong_claim") + pReport.strong_claim_count,
+                T("aw_map_weak_claim") + pReport.weak_claim_count,
+                T("aw_map_pending") + pReport.pending_count
             };
-            if (pReport.can_force_vassal) lines.Add("可发动附庸战争");
+            if (pReport.can_mandate_conquest) lines.Add(T("aw_map_can_mandate_conquest"));
+            if (pReport.can_force_vassal) lines.Add(T("aw_map_can_force_vassal"));
             if (pReport.restoration_claim_count > 0)
                 lines.Add(pReport.can_restore
-                    ? "可发动复国战争：持有亡国王室宣称 " + pReport.restoration_claim_count + " 个"
-                    : "持有复国宣称，但目标被附庸体系或战争状态阻断");
-            if (pReport.can_no_cb) lines.Add("可强宣，但会产生惩罚");
+                    ? T("aw_map_can_restore") + pReport.restoration_claim_count + T("aw_map_count_suffix")
+                    : T("aw_map_restore_blocked"));
+            if (pReport.can_no_cb) lines.Add(T("aw_map_can_no_cb"));
             return string.Join("\n", lines.ToArray());
         }
 
@@ -1121,7 +1130,7 @@ namespace AncientWarfare3.core.lineage
 
             if (pRow.project_type == PROJECT_CORE && city?.data != null)
             {
-                EnsureCore(source, city, "fabricated", "制造核心");
+                EnsureCore(source, city, "fabricated", T("aw_hist_project_core"));
             }
             else if (pRow.project_type == PROJECT_STRONG_CLAIM)
             {
@@ -1136,8 +1145,9 @@ namespace AncientWarfare3.core.lineage
 
             CloseProject(pRow.project_id, completed: true);
             HistoryWriter.RecordKingdom(source, "war_project_completed",
-                HistoryText.Kingdom(source) + " 完成" + HistoryText.PlainText(ProjectLabel(pRow.project_type)) +
-                "，目标为 " + TargetText(target, city),
+                HistoryText.Kingdom(source) + H("aw_hist_project_completed_prefix") +
+                HistoryText.PlainText(ProjectLabel(pRow.project_type)) +
+                H("aw_hist_project_target_mid") + TargetText(target, city),
                 city?.data != null ? HistoryTarget.City(city) : HistoryTarget.Kingdom(target));
         }
 
@@ -1218,11 +1228,11 @@ namespace AncientWarfare3.core.lineage
             }
             else if (pWinner == WarWinner.Defenders)
             {
-                RecordGoalFailure(attacker, defender, targetCity, pGoal, "守方胜利");
+                RecordGoalFailure(attacker, defender, targetCity, pGoal, T("aw_hist_goal_defender_win"));
             }
             else
             {
-                RecordGoalFailure(attacker, defender, targetCity, pGoal, "议和未决");
+                RecordGoalFailure(attacker, defender, targetCity, pGoal, T("aw_hist_goal_peace_unresolved"));
             }
 
             MarkGoalResolved(pGoal.war_goal_id, result);
@@ -1276,7 +1286,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("TARGET_CITY_NAME", pCity?.data?.name ?? pGoal.target_city_name ?? ""),
                     ColumnVal.Create("CLAIMANT_ACTOR_ID", pClaimant?.data?.id ?? pGoal.claimant_actor_id),
                     ColumnVal.Create("CLAIMANT_NAME", pClaimant?.getName() ?? ""),
-                    ColumnVal.Create("TERMS_TEXT", GoalLabel(pGoal.goal_type) + ":" + (pResult ?? "")),
+                    ColumnVal.Create("TERMS_TEXT", GoalLabel(pGoal.goal_type) + T("aw_hist_colon") + (pResult ?? "")),
                     ColumnVal.Create("WORLD_TIME", LineageService.CurTime()));
             }
             catch (Exception e)
@@ -1292,17 +1302,17 @@ namespace AncientWarfare3.core.lineage
                 ? HistoryText.City(pCity, pAttacker)
                 : HistoryText.Kingdom(pDefender, pGoal.target_kingdom_name);
             HistoryWriter.RecordKingdom(pAttacker, "war_goal_enforced",
-                HistoryText.Kingdom(pAttacker) + " 达成战争目标：" +
+                HistoryText.Kingdom(pAttacker) + H("aw_hist_war_goal_achieved_mid") +
                 HistoryText.PlainText(GoalLabel(pGoal.goal_type)) + " " + target,
                 pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pDefender));
             if (pDefender?.data != null)
                 HistoryWriter.RecordKingdom(pDefender, "war_goal_lost",
-                    HistoryText.Kingdom(pDefender) + " 战败，被迫接受战争目标：" +
+                    HistoryText.Kingdom(pDefender) + H("aw_hist_war_goal_defender_failed_mid") +
                     HistoryText.PlainText(GoalLabel(pGoal.goal_type)) + " " + target,
                     pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pAttacker));
             if (pCity?.data != null)
                 HistoryWriter.RecordCity(pCity, pAttacker, "war_goal_city",
-                    HistoryText.City(pCity, pAttacker) + " 因战争目标归于 " + HistoryText.Kingdom(pAttacker),
+                    HistoryText.City(pCity, pAttacker) + H("aw_hist_city_taken_by_goal_mid") + HistoryText.Kingdom(pAttacker),
                     HistoryTarget.Kingdom(pAttacker));
         }
 
@@ -1314,9 +1324,9 @@ namespace AncientWarfare3.core.lineage
                 ? HistoryText.City(pCity, pAttacker)
                 : HistoryText.Kingdom(pDefender, pGoal.target_kingdom_name);
             HistoryWriter.RecordKingdom(pAttacker, "war_goal_failed",
-                HistoryText.Kingdom(pAttacker) + " 未能达成战争目标：" +
+                HistoryText.Kingdom(pAttacker) + H("aw_hist_war_goal_failed_mid") +
                 HistoryText.PlainText(GoalLabel(pGoal.goal_type)) + " " + target +
-                "（" + HistoryText.PlainText(pReason) + "）",
+                H("aw_hist_paren_open") + HistoryText.PlainText(pReason) + H("aw_hist_paren_close"),
                 pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pDefender));
         }
 
@@ -1347,9 +1357,9 @@ namespace AncientWarfare3.core.lineage
 
         private static string GoalTargetText(WarGoalRequest pGoal)
         {
-            if (pGoal?.target_city?.data != null) return "：" + pGoal.target_city.data.name;
-            if (pGoal?.target_kingdom?.data != null) return "：" + pGoal.target_kingdom.name;
-            if (pGoal?.claimant?.data != null) return "：" + pGoal.claimant.getName();
+            if (pGoal?.target_city?.data != null) return T("aw_hist_colon") + pGoal.target_city.data.name;
+            if (pGoal?.target_kingdom?.data != null) return T("aw_hist_colon") + pGoal.target_kingdom.name;
+            if (pGoal?.claimant?.data != null) return T("aw_hist_colon") + pGoal.claimant.getName();
             return "";
         }
 
@@ -1364,10 +1374,10 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pProjectType)
             {
-                case PROJECT_CORE: return "制造核心";
-                case PROJECT_STRONG_CLAIM: return "制造强宣称";
-                case PROJECT_WEAK_CLAIM: return "制造弱宣称";
-                default: return "战争准备";
+                case PROJECT_CORE: return T("aw_hist_project_core");
+                case PROJECT_STRONG_CLAIM: return T("aw_hist_project_strong_claim");
+                case PROJECT_WEAK_CLAIM: return T("aw_hist_project_weak_claim");
+                default: return T("aw_hist_project_prepare");
             }
         }
 
@@ -1375,14 +1385,15 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pGoalType)
             {
-                case GOAL_TAKE_CORE_CITY: return "收复核心城市";
-                case GOAL_PRESS_CLAIM_CITY: return "夺取宣称城市";
-                case GOAL_TAKE_MANDATE: return "夺取天命";
-                case GOAL_FORCE_VASSAL: return "强制臣服";
-                case GOAL_INDEPENDENCE: return "脱离宗主";
-                case GOAL_RESTORE_KINGDOM: return "复国";
-                case GOAL_NO_CB: return "强宣";
-                default: return "战争目标";
+                case GOAL_TAKE_CORE_CITY: return T("aw_hist_goal_take_core_city");
+                case GOAL_PRESS_CLAIM_CITY: return T("aw_hist_goal_press_claim_city");
+                case GOAL_TAKE_MANDATE: return T("aw_hist_goal_take_mandate");
+                case GOAL_MANDATE_CONQUEST: return T("aw_hist_goal_mandate_conquest");
+                case GOAL_FORCE_VASSAL: return T("aw_hist_goal_force_vassal");
+                case GOAL_INDEPENDENCE: return T("aw_hist_goal_independence");
+                case GOAL_RESTORE_KINGDOM: return T("aw_hist_goal_restore_kingdom");
+                case GOAL_NO_CB: return T("aw_hist_goal_no_cb");
+                default: return T("aw_hist_goal_generic");
             }
         }
 

@@ -10,6 +10,8 @@ namespace AncientWarfare3.core.lineage
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         public static void OnMandateReignEnded(Kingdom pKingdom, Actor pKing,
             ReignRecordWriter.ReignInfo pReign, string pEndReason)
@@ -102,8 +104,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             ReignRecordWriter.SetPosthumous(pReign.ReignId, pFull, color);
-            string message = (pKing.getName() ?? "") + " \u8ffd\u4e0a\u5929\u547d\u5e99\u8c25\uff1a" + pFull;
-            HistoryText rich = HistoryText.Actor(pKing) + " \u8ffd\u4e0a\u5929\u547d\u5e99\u8c25\uff1a" +
+            string message = (pKing.getName() ?? "") + T("aw_hist_mandate_ruler_title_mid") + pFull;
+            HistoryText rich = HistoryText.Actor(pKing) + H("aw_hist_mandate_ruler_title_mid") +
                                HistoryText.Colored(pFull, color);
             MandateService.RecordMandateEvent("mandate_ruler_title", pKingdom, pKing, null,
                 0, MandateService.ReadReport().mandate_value, message);

@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
 
         private const int HIGH_RISK_RECORD_COOLDOWN = 15;
         private const int REBELLION_RISK_THRESHOLD = 92;
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
 
         public static void OnKingdomRiskCheck(Kingdom pKingdom)
         {
@@ -109,18 +110,19 @@ namespace AncientWarfare3.core.lineage
             City city = FiefService.GetFiefCity(pGeneral) ?? pGeneral.city;
             HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(),
                 PersonEvent.GENERAL_RISK,
-                HistoryText.Actor(pGeneral) + " \u62E5\u5175\u81EA\u91CD\uFF0C\u671D\u91CE\u4FA7\u76EE",
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_high_risk_person"),
                 ChronicleCategory.WAR,
                 city?.data != null ? HistoryTarget.City(city) : HistoryTarget.Actor(pGeneral));
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.GENERAL_RISK,
-                HistoryText.Actor(pGeneral) + " \u62E5\u5175\u81EA\u91CD\uFF0C\u98CE\u9669 " +
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_high_risk_kingdom") +
                 HistoryText.PlainText(pRisk.ToString()),
                 HistoryTarget.Actor(pGeneral));
 
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, pKingdom, CityEvent.GENERAL_RISK,
-                    HistoryText.Actor(pGeneral) + " \u5728" + HistoryText.City(city, pKingdom) + " \u62E5\u5175\u81EA\u91CD",
+                    HistoryText.Actor(pGeneral) + H("aw_hist_general_in_city") +
+                    HistoryText.City(city, pKingdom) + H("aw_hist_general_high_risk_city"),
                     HistoryTarget.Actor(pGeneral));
         }
 
@@ -249,20 +251,22 @@ namespace AncientWarfare3.core.lineage
         {
             HistoryWriter.RecordPerson(pGeneral.data.id, pRebel, pGeneral.getName(),
                 PersonEvent.GENERAL_REBELLION,
-                HistoryText.Actor(pGeneral) + " \u636E" + HistoryText.City(pBaseCity, pRebel) +
-                " \u8D77\u5175\u81EA\u7ACB",
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_based_on") +
+                HistoryText.City(pBaseCity, pRebel) + H("aw_hist_general_self_rule"),
                 ChronicleCategory.WAR,
                 HistoryTarget.Kingdom(pRebel));
 
             HistoryWriter.RecordKingdom(pOldKingdom, KingdomEvent.GENERAL_REBELLION,
-                HistoryText.Actor(pGeneral) + " \u636E" + HistoryText.City(pBaseCity, pOldKingdom) +
-                " \u8D77\u5175\u53DB\u4E71",
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_based_on") +
+                HistoryText.City(pBaseCity, pOldKingdom) + H("aw_hist_general_rebelled"),
                 HistoryTarget.Kingdom(pRebel));
             HistoryWriter.RecordKingdom(pRebel, KingdomEvent.GENERAL_REBELLION,
-                HistoryText.Kingdom(pRebel) + " \u7531" + HistoryText.Actor(pGeneral) + " \u8D77\u5175\u5EFA\u7ACB",
+                HistoryText.Kingdom(pRebel) + H("aw_hist_general_founded_by") +
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_rebel_founded"),
                 HistoryTarget.Actor(pGeneral));
             HistoryWriter.RecordCity(pBaseCity, pRebel, CityEvent.GENERAL_REBELLION,
-                HistoryText.City(pBaseCity, pRebel) + " \u6210\u4E3A" + HistoryText.Actor(pGeneral) + " \u53DB\u519B\u6839\u636E\u5730",
+                HistoryText.City(pBaseCity, pRebel) + H("aw_hist_general_became") +
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_rebel_base"),
                 HistoryTarget.Actor(pGeneral));
         }
 
@@ -270,8 +274,8 @@ namespace AncientWarfare3.core.lineage
         {
             string eventKey = pSuccess ? "general_palace_coup_success" : "general_palace_coup_failed";
             HistoryText text = HistoryText.Actor(pGeneral) +
-                               HistoryText.PlainText(pSuccess ? " 发动逼宫并夺取王位" : " 发动逼宫失败") +
-                               HistoryText.PlainText("，风险 ") + HistoryText.PlainText(pRisk.ToString());
+                               H(pSuccess ? "aw_hist_general_palace_coup_success" : "aw_hist_general_palace_coup_failed") +
+                               H("aw_hist_general_risk_label") + HistoryText.PlainText(pRisk.ToString());
             HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(), eventKey,
                 text, ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
             HistoryWriter.RecordKingdom(pKingdom, eventKey, text, HistoryTarget.Actor(pGeneral));
@@ -279,25 +283,27 @@ namespace AncientWarfare3.core.lineage
 
         private static void RecordDefection(Actor pGeneral, Kingdom pOldKingdom, Kingdom pNewKingdom, City pCity, int pRisk)
         {
-            HistoryText text = HistoryText.Actor(pGeneral) + " 以" + HistoryText.City(pCity, pNewKingdom) +
-                               " 投附" + HistoryText.Kingdom(pNewKingdom) +
-                               "，拥兵风险 " + HistoryText.PlainText(pRisk.ToString());
+            HistoryText text = HistoryText.Actor(pGeneral) + H("aw_hist_general_with_city") +
+                               HistoryText.City(pCity, pNewKingdom) +
+                               H("aw_hist_general_defected_to") + HistoryText.Kingdom(pNewKingdom) +
+                               H("aw_hist_general_power_risk") + HistoryText.PlainText(pRisk.ToString());
             HistoryWriter.RecordPerson(pGeneral.data.id, pNewKingdom, pGeneral.getName(), "general_defection",
                 text, ChronicleCategory.WAR, HistoryTarget.Kingdom(pNewKingdom));
             HistoryWriter.RecordKingdom(pOldKingdom, "general_defection_lost", text, HistoryTarget.City(pCity));
             HistoryWriter.RecordKingdom(pNewKingdom, "general_defection_gain", text, HistoryTarget.City(pCity));
             HistoryWriter.RecordCity(pCity, pNewKingdom, "general_defection",
-                HistoryText.City(pCity, pNewKingdom) + " 随" + HistoryText.Actor(pGeneral) +
-                " 改投" + HistoryText.Kingdom(pNewKingdom), HistoryTarget.Actor(pGeneral));
+                HistoryText.City(pCity, pNewKingdom) + H("aw_hist_general_followed") +
+                HistoryText.Actor(pGeneral) + H("aw_hist_general_changed_to") +
+                HistoryText.Kingdom(pNewKingdom), HistoryTarget.Actor(pGeneral));
         }
 
         private static void RecordRestorationSupport(Actor pGeneral, Kingdom pKingdom, Kingdom pTarget,
             City pCity, Actor pClaimant, int pRisk)
         {
-            HistoryText text = HistoryText.Actor(pGeneral) + " 主张奉" +
+            HistoryText text = HistoryText.Actor(pGeneral) + H("aw_hist_general_supports") +
                                HistoryText.Actor(pClaimant, pClaimant?.getName() ?? "") +
-                               " 复国，向" + HistoryText.Kingdom(pTarget) +
-                               " 宣战，风险 " + HistoryText.PlainText(pRisk.ToString());
+                               H("aw_hist_general_restore_mid") + HistoryText.Kingdom(pTarget) +
+                               H("aw_hist_general_declare_war_risk") + HistoryText.PlainText(pRisk.ToString());
             HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(), "general_support_restoration",
                 text, ChronicleCategory.WAR, pCity?.data != null ? HistoryTarget.City(pCity) : HistoryTarget.Kingdom(pTarget));
             HistoryWriter.RecordKingdom(pKingdom, "general_support_restoration",

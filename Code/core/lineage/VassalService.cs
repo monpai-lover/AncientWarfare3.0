@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.lineage
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         internal sealed class KingdomDestroyWarCleanupState
         {
@@ -371,10 +373,11 @@ namespace AncientWarfare3.core.lineage
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, -1L);
 
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_absorb",
-                KingdomLabel(pSuzerain) + " \u541E\u5E76\u9644\u5EB8 " + KingdomLabel(pVassal),
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_absorb_mid") + KingdomLabel(pVassal),
                 HistoryTarget.Kingdom(pVassal));
             HistoryWriter.RecordKingdom(pVassal, "vassal_absorbed",
-                KingdomLabel(pVassal) + " \u88AB " + KingdomLabel(pSuzerain) + " \u541E\u5E76",
+                KingdomLabel(pVassal) + H("aw_hist_vassal_absorbed_mid") +
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_absorbed_suffix"),
                 HistoryTarget.Kingdom(pSuzerain));
             DirtyVassalMap();
             return true;
@@ -893,24 +896,28 @@ namespace AncientWarfare3.core.lineage
             string reason = VassalSetReasonLabel(pReason);
             HistoryWriter.RecordKingdom(pVassal, "vassal_set",
                 KingdomLabel(pVassal) + " " + HistoryText.PlainText(reason) +
-                KingdomLabel(pSuzerain) + "\uFF0C\u6210\u4E3A\u9644\u5EB8",
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_became_suffix"),
                 HistoryTarget.Kingdom(pSuzerain));
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_get",
-                KingdomLabel(pSuzerain) + " \u6536 " + KingdomLabel(pVassal) +
-                " \u4E3A\u9644\u5EB8\uFF08" + HistoryText.PlainText(VassalGetReasonLabel(pReason)) + "\uFF09",
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_get_mid") + KingdomLabel(pVassal) +
+                H("aw_hist_vassal_get_suffix") + H("aw_hist_paren_open") +
+                HistoryText.PlainText(VassalGetReasonLabel(pReason)) + H("aw_hist_paren_close"),
                 HistoryTarget.Kingdom(pVassal));
         }
 
         private static void RecordVassalEnd(Kingdom pVassal, Kingdom pSuzerain, string pReason)
         {
-            string verb = pReason == "independence_war" ? "\u901A\u8FC7\u72EC\u7ACB\u6218\u4E89\u8131\u79BB" : "\u8131\u79BB";
+            string verb = pReason == "independence_war"
+                ? T("aw_hist_vassal_independence_war_verb")
+                : T("aw_hist_vassal_left_verb");
             HistoryWriter.RecordKingdom(pVassal, "vassal_end",
                 KingdomLabel(pVassal) + " " + verb + " " +
-                KingdomLabel(pSuzerain, "\u5B97\u4E3B\u56FD") + " \u72EC\u7ACB",
+                KingdomLabel(pSuzerain, T("aw_hist_vassal_suzerain_fallback")) +
+                H("aw_hist_vassal_independent_suffix"),
                 HistoryTarget.Kingdom(pSuzerain));
             if (pSuzerain?.data != null)
                 HistoryWriter.RecordKingdom(pSuzerain, "vassal_lost",
-                    KingdomLabel(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " + KingdomLabel(pVassal),
+                    KingdomLabel(pSuzerain) + H("aw_hist_vassal_lost_mid") + KingdomLabel(pVassal),
                     HistoryTarget.Kingdom(pVassal));
         }
 
@@ -918,8 +925,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pSuzerain?.data == null) return;
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_lost",
-                KingdomLabel(pSuzerain) + " \u5931\u53BB\u9644\u5EB8 " +
-                KingdomLabel(pVassal) + "\uFF08\u4EA1\u56FD\uFF09",
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_lost_mid") +
+                KingdomLabel(pVassal) + H("aw_hist_vassal_fell_suffix"),
                 HistoryTarget.Kingdom(pVassal));
         }
 
@@ -927,9 +934,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pVassal?.data == null) return;
             HistoryWriter.RecordKingdom(pVassal, "vassal_end",
-                KingdomLabel(pVassal) + " \u56E0\u5B97\u4E3B " +
-                KingdomLabel(pSuzerain, "\u5B97\u4E3B\u56FD") +
-                " \u706D\u4EA1\u800C\u6062\u590D\u72EC\u7ACB",
+                KingdomLabel(pVassal) + H("aw_hist_vassal_suzerain_fell_mid") +
+                KingdomLabel(pSuzerain, T("aw_hist_vassal_suzerain_fallback")) +
+                H("aw_hist_vassal_suzerain_fell_suffix"),
                 HistoryTarget.Kingdom(pSuzerain));
         }
 
@@ -943,12 +950,12 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pReason ?? "")
             {
-                case "active_vassal": return "\u56E0\u5916\u90E8\u5A01\u80C1\u4E3B\u52A8\u81E3\u5C5E\u4E8E ";
-                case "vassal_war": return "\u6218\u8D25\u540E\u81E3\u5C5E\u4E8E ";
-                case "absorbed_reparent": return "\u56E0\u9644\u5EB8\u4F53\u7CFB\u91CD\u6574\u8F6C\u81E3\u5C5E\u4E8E ";
-                case "suzerain_fell_reparent": return "\u56E0\u65E7\u5B97\u4E3B\u706D\u4EA1\u6539\u81E3\u5C5E\u4E8E ";
-                case "manual": return "\u81E3\u5C5E\u4E8E ";
-                default: return "\u81E3\u5C5E\u4E8E ";
+                case "active_vassal": return T("aw_hist_vassal_set_reason_active");
+                case "vassal_war": return T("aw_hist_vassal_set_reason_war");
+                case "absorbed_reparent": return T("aw_hist_vassal_set_reason_reparent");
+                case "suzerain_fell_reparent": return T("aw_hist_vassal_set_reason_suzerain_fell");
+                case "manual": return T("aw_hist_vassal_set_reason_manual");
+                default: return T("aw_hist_vassal_set_reason_manual");
             }
         }
 
@@ -956,12 +963,12 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pReason ?? "")
             {
-                case "active_vassal": return "\u4E3B\u52A8\u81E3\u5C5E";
-                case "vassal_war": return "\u6218\u4E89\u81E3\u670D";
-                case "absorbed_reparent": return "\u4F53\u7CFB\u91CD\u6574";
-                case "suzerain_fell_reparent": return "\u6539\u6295\u5B97\u4E3B";
-                case "manual": return "\u4E0A\u5E1D\u8BBE\u5B9A";
-                default: return "\u81E3\u5C5E";
+                case "active_vassal": return T("aw_hist_vassal_get_reason_active");
+                case "vassal_war": return T("aw_hist_vassal_get_reason_war");
+                case "absorbed_reparent": return T("aw_hist_vassal_get_reason_reparent");
+                case "suzerain_fell_reparent": return T("aw_hist_vassal_get_reason_suzerain_fell");
+                case "manual": return T("aw_hist_vassal_get_reason_manual");
+                default: return T("aw_hist_vassal_get_reason_generic");
             }
         }
 

@@ -258,6 +258,17 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
+                pActor.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
+                if (!string.IsNullOrEmpty(formerTitle))
+                {
+                    pActor.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
+                    return (formerTitle, string.IsNullOrEmpty(formerColor) ? color : formerColor);
+                }
+            }
+            catch { }
+
+            try
+            {
                 if (pActor.isKing())
                 {
                     string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pActor.kingdom));

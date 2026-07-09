@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
     internal static class PosthumousTitleService
     {
         private static readonly System.Random Rng = new System.Random();
+        private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
 
         private struct PosthumousKingdomContext
         {
@@ -52,16 +53,30 @@ namespace AncientWarfare3.core.lineage
             string suffix = KingdomTitleService.GetTitleChar(kingdomTitle);
             if (string.IsNullOrEmpty(suffix)) suffix = "君";
 
-            bool mandateKingdom = pContext.IsMandate;
+            bool mandateKingdom = pContext.IsMandate || HasFormerMandateSnapshot(pKing, pContext.KingdomId);
+            bool useMandateDeposedTitle = FormerKingTraitRules.ShouldUseMandateDeposedTitle(
+                mandateKingdom, pEndReason, IsActorAlive(pKing));
             bool useOrdinaryFirstEmperorTaizu = PosthumousTitleRules.ShouldUseTaizuForOrdinaryFirstEmperor(
                 mandateKingdom,
                 kingdomTitle == KingdomTitle.Emperor,
                 HasPriorEmperorTitle(pContext.KingdomId, pReign.ReignId, suffix));
-            string fullTitle = PosthumousTitleRules.BuildFullTitle(
-                FirstChar(pContext.KingdomName), titleChar, suffix, useOrdinaryFirstEmperorTaizu);
+            string fullTitle;
+            if (useMandateDeposedTitle)
+            {
+                titleChar = "\u5E9F";
+                suffix = "\u5E1D";
+                fullTitle = FormerKingTraitRules.BuildMandateDeposedTitle(pContext.KingdomName);
+            }
+            else
+            {
+                fullTitle = PosthumousTitleRules.BuildFullTitle(
+                    FirstChar(pContext.KingdomName), titleChar, suffix, useOrdinaryFirstEmperorTaizu);
+            }
             string titleColor = HistoryColors.Normalize(pContext.KingdomColor);
             string evalKey = EvalKey(eval.Grade);
-            string titleKind = pEndReason == "abdicated" ? "abdication" : "posthumous";
+            string titleKind = useMandateDeposedTitle
+                ? "deposed"
+                : pEndReason == "abdicated" ? "abdication" : "posthumous";
 
             long recordId = TableIdAllocator.Next(db, PosthumousTitleTableItem.GetTableName(), "RECORD_ID");
             try
@@ -99,10 +114,10 @@ namespace AncientWarfare3.core.lineage
 
             if (pReign.IsValid)
                 ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
-            if (mandateKingdom && pContext.LiveKingdom?.data != null)
+            if (mandateKingdom && !useMandateDeposedTitle && pContext.LiveKingdom?.data != null)
                 MandateRulerTitleService.OnMandateReignEnded(pContext.LiveKingdom, pKing, pReign, pEndReason);
 
-            HistoryText posthumousText = BuildTitleEventText(pKing, pEndReason, fullTitle, titleColor, eval.Reason);
+            HistoryText posthumousText = BuildTitleEventText(pKing, pEndReason, fullTitle, titleColor, eval.Reason, titleKind);
             /*
                 EndVerb(pEndReason) + "，谥为：" + HistoryText.Colored(fullTitle, titleColor) +
                 HistoryText.PlainText("（" + eval.Reason + "）");
@@ -266,14 +281,36 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static HistoryText BuildTitleEventText(Actor pKing, string pEndReason, string pFullTitle,
-            string pTitleColor, string pReason)
+            string pTitleColor, string pReason, string pTitleKind)
         {
             string verb = EndVerb(pEndReason);
-            string label = pEndReason == "abdicated" ? "，退号为：" : "，谥为：";
+            string label = pTitleKind == "deposed"
+                ? T("aw_hist_posthumous_title_deposed")
+                : pEndReason == "abdicated"
+                    ? T("aw_hist_posthumous_title_abdicated")
+                    : T("aw_hist_posthumous_title_normal");
             return HistoryText.Actor(pKing, pKing.getName()) +
                    HistoryText.PlainText(verb + label) +
                    HistoryText.Colored(pFullTitle, pTitleColor) +
                    HistoryText.PlainText("（" + pReason + "）");
+        }
+
+        private static bool IsActorAlive(Actor pActor)
+        {
+            try { return pActor?.data != null && !pActor.isRekt() && pActor.isAlive(); }
+            catch { return false; }
+        }
+
+        private static bool HasFormerMandateSnapshot(Actor pActor, long pKingdomId)
+        {
+            if (pActor?.data == null || pKingdomId < 0) return false;
+            try
+            {
+                pActor.data.get(LineageKeys.FORMER_KINGDOM_ID, out long formerKingdomId, -1L);
+                pActor.data.get(LineageKeys.FORMER_KING_MANDATE, out bool formerMandate, false);
+                return formerMandate && formerKingdomId == pKingdomId;
+            }
+            catch { return false; }
         }
 
         public static string BuildTooltip(long pActorId)
@@ -303,15 +340,15 @@ namespace AncientWarfare3.core.lineage
                 int order = SafeInt(r, 8);
                 int ending = SafeInt(r, 9);
 
-                return "谥号：" + title +
-                       "\n评等：" + GradeLabel(grade) +
-                       "\n主因：" + DimensionLabel(dim) +
-                       "\n总分：" + FormatSigned(total) +
-                       "\n民生 " + FormatSigned(civil) +
-                       " / 疆域 " + FormatSigned(territory) +
-                       " / 战功 " + FormatSigned(war) +
-                       " / 秩序 " + FormatSigned(order) +
-                       " / 结局 " + FormatSigned(ending) +
+                return T("aw_hist_posthumous_title_label") + title +
+                       "\n" + T("aw_hist_posthumous_grade_label") + GradeLabel(grade) +
+                       "\n" + T("aw_hist_posthumous_dimension_label") + DimensionLabel(dim) +
+                       "\n" + T("aw_hist_posthumous_total_label") + FormatSigned(total) +
+                       "\n" + T("aw_hist_posthumous_civil_label") + FormatSigned(civil) +
+                       " / " + T("aw_hist_posthumous_territory_label") + FormatSigned(territory) +
+                       " / " + T("aw_hist_posthumous_war_label") + FormatSigned(war) +
+                       " / " + T("aw_hist_posthumous_order_label") + FormatSigned(order) +
+                       " / " + T("aw_hist_posthumous_ending_label") + FormatSigned(ending) +
                        (string.IsNullOrEmpty(reason) ? "" : "\n" + reason);
             }
             catch { return ""; }
@@ -361,18 +398,19 @@ namespace AncientWarfare3.core.lineage
                 PosthumousGrade.BlameHigh;
 
             PosthumousDimension dominant = DominantDimension(civil, territory, war, order, ending);
-            string reason = "民生" + FormatSigned(civil) +
-                            " 疆域" + FormatSigned(territory) +
-                            " 战功" + FormatSigned(war) +
-                            " 秩序" + FormatSigned(order) +
-                            " 结局" + FormatSigned(ending) +
-                            "；胜" + pReign.WarWins +
-                            " 负" + pReign.WarLosses +
-                            " 城" + FormatSigned(cityDelta) +
-                            " 军" + FormatSigned(armyDelta) +
-                            " 在位" + years + "年";
+            string reason = T("aw_hist_posthumous_reason_civil") + FormatSigned(civil) +
+                            T("aw_hist_posthumous_reason_territory") + FormatSigned(territory) +
+                            T("aw_hist_posthumous_reason_war") + FormatSigned(war) +
+                            T("aw_hist_posthumous_reason_order") + FormatSigned(order) +
+                            T("aw_hist_posthumous_reason_ending") + FormatSigned(ending) +
+                            T("aw_hist_posthumous_reason_wins") + pReign.WarWins +
+                            T("aw_hist_posthumous_reason_losses") + pReign.WarLosses +
+                            T("aw_hist_posthumous_reason_city") + FormatSigned(cityDelta) +
+                            T("aw_hist_posthumous_reason_army") + FormatSigned(armyDelta) +
+                            T("aw_hist_posthumous_reason_reign") + years +
+                            T("aw_hist_posthumous_reason_year");
             if (!string.IsNullOrEmpty(pReign.DeathCause))
-                reason += "；死因：" + pReign.DeathCause;
+                reason += T("aw_hist_posthumous_reason_death_cause") + pReign.DeathCause;
 
             return new PosthumousEvaluation
             {
@@ -635,12 +673,12 @@ namespace AncientWarfare3.core.lineage
 
         private static string EndVerb(string pEndReason)
         {
-            if (pEndReason == "captured_slave") return "\u88ab\u4fd8\u540e\u8eab\u6545";
+            if (pEndReason == "captured_slave") return T("aw_hist_posthumous_end_captured_slave");
             return pEndReason switch
             {
-                "abdicated" => "退位",
-                "kingdom_fell" => "国亡",
-                _ => "驾崩"
+                "abdicated" => T("aw_hist_posthumous_end_abdicated"),
+                "kingdom_fell" => T("aw_hist_posthumous_end_kingdom_fell"),
+                _ => T("aw_hist_posthumous_end_died")
             };
         }
 
@@ -686,12 +724,12 @@ namespace AncientWarfare3.core.lineage
         {
             return pGrade switch
             {
-                "praise_high" => "上谥",
-                "praise" => "美谥",
-                "neutral" => "平谥",
-                "blame" => "下谥",
-                "blame_high" => "恶谥",
-                _ => string.IsNullOrEmpty(pGrade) ? "未知" : pGrade
+                "praise_high" => T("aw_hist_posthumous_grade_praise_high"),
+                "praise" => T("aw_hist_posthumous_grade_praise"),
+                "neutral" => T("aw_hist_posthumous_grade_neutral"),
+                "blame" => T("aw_hist_posthumous_grade_blame"),
+                "blame_high" => T("aw_hist_posthumous_grade_blame_high"),
+                _ => string.IsNullOrEmpty(pGrade) ? T("aw_hist_posthumous_unknown") : pGrade
             };
         }
 
@@ -699,13 +737,13 @@ namespace AncientWarfare3.core.lineage
         {
             return pDimension switch
             {
-                "civil" => "民生",
-                "territory" => "疆域",
-                "war" => "战功",
-                "order" => "秩序",
-                "ending" => "结局",
-                "balanced" => "综合",
-                _ => string.IsNullOrEmpty(pDimension) ? "综合" : pDimension
+                "civil" => T("aw_hist_posthumous_dimension_civil"),
+                "territory" => T("aw_hist_posthumous_dimension_territory"),
+                "war" => T("aw_hist_posthumous_dimension_war"),
+                "order" => T("aw_hist_posthumous_dimension_order"),
+                "ending" => T("aw_hist_posthumous_dimension_ending"),
+                "balanced" => T("aw_hist_posthumous_dimension_balanced"),
+                _ => string.IsNullOrEmpty(pDimension) ? T("aw_hist_posthumous_dimension_balanced") : pDimension
             };
         }
 
