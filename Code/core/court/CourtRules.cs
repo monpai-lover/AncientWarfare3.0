@@ -35,5 +35,10 @@ namespace AncientWarfare3.core.court
         {
             return ShouldRefreshCourt(currentYear, lastRefreshYear, CandidateRefreshIntervalYears);
         }
+
+        public static bool CanHoldOffice(bool alive, bool sameKingdom, bool slave, bool madness)
+        {
+            return alive && sameKingdom && !slave && !madness;
+        }
     }
 }

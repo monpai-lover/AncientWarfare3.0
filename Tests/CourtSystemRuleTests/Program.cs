@@ -47,6 +47,11 @@ namespace CourtSystemRuleTests
                 ExpectEqual(CourtTraitId.Legalist, CourtTraitRules.TraitForSchool(CourtSchoolId.Legalist), "legalist trait id");
                 ExpectEqual("", CourtTraitRules.TraitForSchool("unknown"), "unknown trait id");
 
+                Expect(CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: false, madness: false), "valid office holder");
+                Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: false, slave: false, madness: false), "foreign holder rejected");
+                Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: true, madness: false), "slave holder rejected");
+                Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: false, madness: true), "madness holder rejected");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }
