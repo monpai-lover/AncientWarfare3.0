@@ -230,6 +230,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null) return false;
+            if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_absorb_vassal")
                 return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom));
@@ -265,6 +266,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null || IsCompleted(pKingdom, def)) return false;
+            if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_absorb_vassal")
                 return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom));
@@ -298,6 +300,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
+            if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             EnsureInitialized(pKingdom);
 
@@ -333,6 +336,7 @@ namespace AncientWarfare3.core.policy
             string defId = FabricationDecisionId(pProjectType);
             KingdomPolicyDef def = KingdomPolicyDefs.Get(defId);
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
+            if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             EnsureInitialized(pKingdom);
 
@@ -385,6 +389,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get("aw_decision_declare_war");
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
+            if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
             string goalType = pGoalType ?? "";
             string warType = pWarType ?? WarDecisionService.WAR_NORMAL;
@@ -656,6 +661,7 @@ namespace AncientWarfare3.core.policy
         public static PolicyNodeStatus GetStatus(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pKingdom?.data == null || pDef == null) return PolicyNodeStatus.Locked;
+            if (!CanAccessPolicyNode(pKingdom, pDef)) return PolicyNodeStatus.Locked;
             if (IsCompleted(pKingdom, pDef)) return PolicyNodeStatus.Completed;
             if (IsNodeLocked(pKingdom, pDef.Id)) return PolicyNodeStatus.Locked;
             if (GetCurrent(pKingdom, pDef.Kind) == pDef.Id) return PolicyNodeStatus.Current;
@@ -909,10 +915,27 @@ namespace AncientWarfare3.core.policy
         private static bool ShouldIgnoreRequirement(Kingdom pKingdom, KingdomPolicyDef pDef,
             PolicyNodeKind pKind, string pRequirementId)
         {
-            return pDef?.Id == "aw_decision_claim_mandate" &&
-                   pKind == PolicyNodeKind.Social &&
-                   pRequirementId == "aw_policy_mandate_rites" &&
-                   IsHistoricalFigureKing(pKingdom);
+            if (pDef?.Id == "aw_decision_claim_mandate" &&
+                pKind == PolicyNodeKind.Social &&
+                pRequirementId == "aw_policy_mandate_rites" &&
+                IsHistoricalFigureKing(pKingdom))
+                return true;
+
+            return XiaizationService.IsXiaizationPolicy(pDef) &&
+                   !LineageService.IsXiaKingdom(pKingdom) &&
+                   XiaizationService.GetLevel(pKingdom) >= XiaizationService.LevelPseudoDynasty &&
+                   pKind == PolicyNodeKind.Tech &&
+                   pRequirementId == "aw_tech_writing";
+        }
+
+        private static bool CanAccessPolicyNode(Kingdom pKingdom, KingdomPolicyDef pDef)
+        {
+            if (pKingdom?.data == null || pDef == null) return false;
+            return XiaizationEligibilityRules.CanUsePolicyNode(
+                LineageService.IsXiaKingdom(pKingdom),
+                XiaizationService.GetLevel(pKingdom),
+                pDef.Id,
+                XiaizationService.IsXiaizationPolicy(pDef));
         }
 
         private static bool IsHistoricalFigureKing(Kingdom pKingdom)
@@ -961,6 +984,14 @@ namespace AncientWarfare3.core.policy
                 return;
             }
             if (IsNodeLocked(pKingdom, def.Id))
+            {
+                pKingdom.data.set(CurrentKey(pKind), "");
+                pKingdom.data.set(ProgressKey(pKind), 0f);
+                if (pKind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
+                UpsertSnapshot(pKingdom);
+                return;
+            }
+            if (!CanAccessPolicyNode(pKingdom, def))
             {
                 pKingdom.data.set(CurrentKey(pKind), "");
                 pKingdom.data.set(ProgressKey(pKind), 0f);

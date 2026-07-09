@@ -14,7 +14,11 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null || __instance.isRekt() || __instance.isNeutral()) return;
 
             long benchmark = UpdateAgeBenchmark.Begin();
-            try { XiaizationService.OnKingdomYear(__instance); }
+            try
+            {
+                XiaContactService.OnKingdomYear(__instance);
+                XiaizationService.OnKingdomYear(__instance);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomXiaizationIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();

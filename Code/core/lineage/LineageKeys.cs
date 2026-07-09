@@ -62,6 +62,13 @@ namespace AncientWarfare3.core.lineage
         public const string XIAIZATION_LEVEL = "aw_xiaization_level";
         public const string XIAIZATION_LEGITIMACY = "aw_xiaization_legitimacy";
         public const string XIAIZATION_LAST_YEAR = "aw_xiaization_last_year";
+        public const string XIAIZATION_PSEUDO_DYNASTY = "aw_xiaization_pseudo_dynasty";
+        public const string XIA_CONTACT_PROGRESS = "aw_xia_contact_progress";
+        public const string XIA_CONTACT_LAST_YEAR = "aw_xia_contact_last_year";
+        public const string XIA_CONTACT_MIXED_CHILD_EVENTS = "aw_xia_contact_mixed_child_events";
+        public const string XIA_CONTACT_LAST_SOURCE_MASK = "aw_xia_contact_last_source_mask";
+        public const string XIA_CONTACT_LAST_GAIN = "aw_xia_contact_last_gain";
+        public const string XIA_CONTACT_TOTAL_MIXED_CHILDREN = "aw_xia_contact_total_mixed_children";
 
         public const string TRAIT_GUIZU = "guizu";
         public const string TRAIT_ZHUHOU = "zhuhou";

@@ -409,25 +409,7 @@ namespace AncientWarfare3.core.policy
 
         private static bool ShowKingdomTooltip(TileZone pZone, MetaTypeAsset pAsset, int pZoneOption)
         {
-            if (TechMapModeService.IsActive() &&
-                AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None, AWMapModeMetaTypes.Tech))
-            {
-                City city = GetCityForZone(pZone);
-                Kingdom cityKingdom = city?.kingdom;
-                if (city?.data == null || cityKingdom?.data == null) return false;
-                Tooltip.hideTooltip(city, true, "city");
-                Tooltip.show(city, "city", new TooltipData
-                {
-                    city = city,
-                    kingdom = cityKingdom,
-                    tooltip_scale = 0.7f,
-                    is_sim_tooltip = true
-                });
-                return true;
-            }
-
-            if (DevelopmentMapModeService.IsActive() &&
-                AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None, AWMapModeMetaTypes.Development))
+            if (AWMapModeMetaRules.ShouldUseCityTooltipForMapMode(pAsset?.map_mode ?? MetaType.None))
             {
                 City city = GetCityForZone(pZone);
                 Kingdom cityKingdom = city?.kingdom;

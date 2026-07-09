@@ -84,6 +84,30 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
+        public static bool ShouldUseCityTooltipForPowerId(string pPowerId)
+        {
+            switch (pPowerId ?? "")
+            {
+                case TechMapModeService.POWER_ID:
+                case DevelopmentMapModeService.POWER_ID:
+                case WarCoreMapModeService.POWER_ID:
+                case WarClaimMapModeService.POWER_ID:
+                case MandateCoreMapModeService.POWER_ID:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool ShouldUseCityTooltipForMapMode(MetaType pMapMode)
+        {
+            return pMapMode == AWMapModeMetaTypes.Tech ||
+                   pMapMode == AWMapModeMetaTypes.Development ||
+                   pMapMode == AWMapModeMetaTypes.WarCore ||
+                   pMapMode == AWMapModeMetaTypes.WarClaim ||
+                   pMapMode == AWMapModeMetaTypes.MandateCore;
+        }
+
         public static string BuildFocusedCityStatusCacheKey(long pFocusId, long pCityId)
         {
             if (pFocusId < 0 || pCityId < 0) return "";

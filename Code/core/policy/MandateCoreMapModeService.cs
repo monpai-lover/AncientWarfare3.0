@@ -37,6 +37,11 @@ namespace AncientWarfare3.core.policy
             return MandateService.BuildCoreTooltip(pKingdom);
         }
 
+        public static string BuildTooltip(City pCity, Kingdom pKingdom)
+        {
+            return MandateService.BuildCoreTooltip(pCity, pKingdom);
+        }
+
         public static void DirtyMap()
         {
             try

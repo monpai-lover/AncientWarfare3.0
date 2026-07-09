@@ -1,4 +1,3 @@
-#if 一米_中文名
 using AncientWarfare3.content;
 using HarmonyLib;
 
@@ -61,4 +60,3 @@ namespace AncientWarfare3.patch
         }
     }
 }
-#endif

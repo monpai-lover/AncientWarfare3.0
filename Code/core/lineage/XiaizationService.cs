@@ -58,7 +58,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return false;
             return XiaizationEligibilityRules.CanUseMandateSystem(
                 LineageService.IsXiaKingdom(pKingdom),
-                GetLevel(pKingdom));
+                GetLevel(pKingdom),
+                IsForeignPseudoDynasty(pKingdom));
         }
 
         public static bool CanUsePolicySystem(Kingdom pKingdom)
@@ -81,9 +82,51 @@ namespace AncientWarfare3.core.lineage
             return LineageService.IsXiaKingdom(pKingdom) || GetLevel(pKingdom) >= LevelPseudoDynasty;
         }
 
+        public static float GetContactProgress(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0f;
+            pKingdom.data.get(LineageKeys.XIA_CONTACT_PROGRESS, out float value, 0f);
+            return Mathf.Clamp(value, 0f, XiaContactRules.PolicyUnlockProgress);
+        }
+
+        public static bool RegisterContactProgress(Kingdom pKingdom, float pGain, string pReason, bool pRecord)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() || LineageService.IsXiaKingdom(pKingdom)) return false;
+            if (pGain <= 0f) return false;
+
+            float current = GetContactProgress(pKingdom);
+            float next = Mathf.Clamp(current + pGain, 0f, XiaContactRules.PolicyUnlockProgress);
+            int targetLevel = XiaContactRules.LevelForProgress(next);
+            if (next <= current && GetLevel(pKingdom) >= targetLevel) return false;
+
+            pKingdom.data.set(LineageKeys.XIA_CONTACT_PROGRESS, next);
+            bool changed = targetLevel > 0 && TrySetLevel(pKingdom, targetLevel, pReason ?? "xia_contact", pRecord);
+            if (targetLevel >= LevelPseudoDynasty)
+                TryEnablePolicySystem(pKingdom, pAi: true);
+
+            UpsertKingdomState(pKingdom, Math.Max(GetLevel(pKingdom), targetLevel), CurrentLegitimacy(pKingdom),
+                HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom), ReadStableYears(pKingdom));
+            return changed || next > current;
+        }
+
         public static bool IsForeignPseudoDynasty(Kingdom pKingdom)
         {
-            return pKingdom?.data != null && !LineageService.IsXiaKingdom(pKingdom) && GetLevel(pKingdom) >= LevelPseudoDynasty;
+            if (pKingdom?.data == null || LineageService.IsXiaKingdom(pKingdom)) return false;
+            int level = GetLevel(pKingdom);
+            if (level < LevelPseudoDynasty) return false;
+            pKingdom.data.get(LineageKeys.XIAIZATION_PSEUDO_DYNASTY, out bool pseudo, false);
+            if (pseudo) return true;
+            string legitimacy = CurrentLegitimacy(pKingdom);
+            return legitimacy == "pseudo_mandate" || legitimacy == TYPE_PSEUDO_DYNASTY;
+        }
+
+        public static bool UsesXiaizedInstitutionSystem(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            return XiaizationEligibilityRules.CanUseInstitutionSystem(
+                LineageService.IsXiaKingdom(pKingdom),
+                GetLevel(pKingdom),
+                IsForeignPseudoDynasty(pKingdom));
         }
 
         public static int GetLevel(Kingdom pKingdom)
@@ -114,8 +157,16 @@ namespace AncientWarfare3.core.lineage
             {
                 "\u5165\u590F\u72B6\u6001: " + LevelLabel(level)
             };
+            float contact = GetContactProgress(pKingdom);
+            if (contact > 0.1f && !LineageService.IsXiaKingdom(pKingdom))
+                lines.Add("\u5165\u590F\u63A5\u89E6: " + Mathf.RoundToInt(contact) + "%");
+            string sourceText = ContactSourceText(pKingdom);
+            if (!string.IsNullOrEmpty(sourceText))
+                lines.Add("\u63A5\u89E6\u6765\u6E90: " + sourceText);
             if (IsForeignPseudoDynasty(pKingdom))
                 lines.Add("\u4F2A\u671D: \u4FDD\u7559\u5916\u65CF\u8840\u7EDF\uFF0C\u884C\u590F\u5236");
+            else if (UsesXiaizedInstitutionSystem(pKingdom) && !LineageService.IsXiaKingdom(pKingdom))
+                lines.Add("\u884C\u590F\u5236: \u4FDD\u7559\u539F\u79CD\u65CF\u8D34\u56FE\u4E0E\u8840\u7EDF\uFF0C\u63A5\u5165 AW3 \u5B98\u5236");
             float resentment = MaxCityResentment(pKingdom);
             if (resentment > 0.1f)
                 lines.Add("\u6C11\u6028\u6700\u9AD8: " + Mathf.RoundToInt(resentment));
@@ -134,6 +185,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnPseudoMandateDeclared(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || LineageService.IsXiaKingdom(pKingdom)) return;
+            pKingdom.data.set(LineageKeys.XIAIZATION_PSEUDO_DYNASTY, true);
             if (TrySetLevel(pKingdom, LevelPseudoDynasty, "pseudo_mandate", true))
                 TryEnablePolicySystem(pKingdom, pAi: true);
             LineageService.EnsureForeignPseudoDynastyLineage(pKingdom);
@@ -161,7 +213,9 @@ namespace AncientWarfare3.core.lineage
                 case "aw_policy_adopt_xia_rites":
                     return TrySetLevel(pKingdom, LevelAdoptedRites, "adopt_xia_rites", true);
                 case "aw_policy_xia_law_institutions":
-                    return TrySetLevel(pKingdom, LevelXiaInstitutions, "xia_law_institutions", true);
+                    bool changed = TrySetLevel(pKingdom, LevelXiaInstitutions, "xia_law_institutions", true);
+                    LineageService.EnsureForeignPseudoDynastyLineage(pKingdom);
+                    return changed;
                 case "aw_decision_appease_xia_cities":
                     AppeaseXiaCities(pKingdom);
                     return true;
@@ -197,7 +251,7 @@ namespace AncientWarfare3.core.lineage
         public static int ScoreResearch(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pKingdom?.data == null || pDef == null) return 0;
-            if (!IsForeignPseudoDynasty(pKingdom)) return 0;
+            if (LineageService.IsXiaKingdom(pKingdom) || GetLevel(pKingdom) < LevelPseudoDynasty) return 0;
             switch (pDef.Id)
             {
                 case "aw_policy_adopt_xia_rites": return 520;
@@ -210,6 +264,8 @@ namespace AncientWarfare3.core.lineage
         private static void EnsureForeignOccupier(Kingdom pKingdom, City pCity, string pType, int pLevel)
         {
             if (pKingdom?.data == null || LineageService.IsXiaKingdom(pKingdom)) return;
+            if (pType == TYPE_PSEUDO_DYNASTY)
+                pKingdom.data.set(LineageKeys.XIAIZATION_PSEUDO_DYNASTY, true);
             bool changed = TrySetLevel(pKingdom, pLevel, pType, false);
             TryEnablePolicySystem(pKingdom, pAi: true);
             UpsertKingdomState(pKingdom, Math.Max(GetLevel(pKingdom), pLevel), pType,
@@ -391,6 +447,28 @@ namespace AncientWarfare3.core.lineage
             return value ?? "";
         }
 
+        private static string ContactSourceText(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK, out string raw, "");
+            if (string.IsNullOrEmpty(raw)) return "";
+
+            var labels = new List<string>();
+            foreach (string part in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                switch (part)
+                {
+                    case "border": labels.Add("\u63A5\u58E4"); break;
+                    case "diplomacy": labels.Add("\u7ED3\u76DF"); break;
+                    case "vassal": labels.Add("\u9644\u5EB8"); break;
+                    case "occupation": labels.Add("\u7EDF\u6CBB\u590F\u5730"); break;
+                    case "mixed": labels.Add("\u901A\u5A5A\u6DF7\u8840"); break;
+                    case "official": labels.Add("\u5B98\u5458\u63A5\u89E6"); break;
+                }
+            }
+            return labels.Count == 0 ? "" : string.Join("/", labels.ToArray());
+        }
+
         private static int ReadStableYears(Kingdom pKingdom)
         {
             if (!Ready || pKingdom?.data == null) return 0;
@@ -484,8 +562,8 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pLevel)
             {
-                case LevelForeignOccupier: return "\u5165\u636E\u590F\u5730";
-                case LevelPseudoDynasty: return "\u4F2A\u671D\u5165\u590F";
+                case LevelForeignOccupier: return "\u77E5\u590F";
+                case LevelPseudoDynasty: return "\u91C7\u590F\u4FD7";
                 case LevelAdoptedRites: return "\u91C7\u590F\u793C";
                 case LevelXiaInstitutions: return "\u884C\u590F\u5236";
                 case LevelXiaizedDynasty: return "\u5165\u590F\u738B\u671D";
@@ -497,6 +575,8 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pLevel)
             {
+                case LevelForeignOccupier: return "\u4E0E\u590F\u5730\u63A5\u89E6\u65E5\u6DF1\uFF0C\u5F00\u59CB\u77E5\u590F";
+                case LevelPseudoDynasty: return "\u91C7\u590F\u4FD7\uFF0C\u53EF\u4ECE\u5165\u590F\u8DEF\u7EBF\u63A5\u5165\u56FD\u7B56";
                 case LevelAdoptedRites: return "\u91C7\u590F\u793C\uFF0C\u5C06\u796D\u7940\u548C\u671D\u4EEA\u6539\u4F5C\u590F\u5236";
                 case LevelXiaInstitutions: return "\u884C\u590F\u5236\uFF0C\u63A5\u5165\u590F\u5730\u653F\u4F53\u4E0E\u5F8B\u4EE4";
                 case LevelXiaizedDynasty: return "\u6210\u4E3A\u5165\u590F\u738B\u671D";

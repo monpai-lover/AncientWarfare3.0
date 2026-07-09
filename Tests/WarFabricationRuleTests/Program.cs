@@ -315,6 +315,7 @@ namespace WarFabricationRuleTests
             ExpectMandateSuccessionRules();
             ExpectMandateDeclarationOriginRules();
             ExpectXiaizationEligibilityRules();
+            ExpectXiaContactRules();
             ExpectForeignPseudoLineageRules();
             ExpectMandatePowerRules();
             ExpectMandateStartRecordRules();
@@ -347,6 +348,7 @@ namespace WarFabricationRuleTests
             ExpectKingdomYearSchedulerRules();
             ExpectFiefCacheRules();
             ExpectXiaNameRepairRules();
+            ExpectXiaFallbackNameRules();
             ExpectXiaCityNameLibraryRules();
             ExpectCityTechChronicleRules();
             ExpectCityMaintenanceBenchmarkRules();
@@ -1062,6 +1064,17 @@ namespace WarFabricationRuleTests
 
             if (AWMapModeMetaRules.NormalizeMapColorHex("") != "#242424")
                 throw new Exception("Empty map colors must normalize to the fallback color.");
+
+            if (!AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_tech_level_mapmode") ||
+                !AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_development_mapmode") ||
+                !AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_core_mapmode") ||
+                !AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_claim_mapmode") ||
+                !AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_mandate_core_mapmode"))
+                throw new Exception("City-scoped mapmodes must pass the hovered city into tooltip rendering.");
+
+            if (AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_vassal_mapmode") ||
+                AWMapModeMetaRules.ShouldUseCityTooltipForPowerId("aw_mandate_dynasty_mapmode"))
+                throw new Exception("Network-level mapmodes should keep kingdom-scoped tooltip rendering.");
         }
 
         private static void ExpectMandateCoreTooltipRules()
@@ -1074,6 +1087,24 @@ namespace WarFabricationRuleTests
 
             if (MandateCoreTooltipRules.BuildPointedKingdomControlLine("", 0.5f) != "")
                 throw new Exception("Mandate legal-core tooltip should skip pointed kingdom control when no kingdom is hovered.");
+
+            string countLine = MandateCoreTooltipRules.BuildPointedKingdomCoreCountLine(
+                "\u95fd", 3, 12, "\u6307\u5411\u56fd\u5bb6\u62e5\u6709\u6cd5\u7406\u5730\uff1a");
+            if (!countLine.Contains("\u95fd") || !countLine.Contains("3/12"))
+                throw new Exception("Mandate legal-core tooltip must show the hovered kingdom's legal-core city count.");
+
+            string cityLine = MapModeTooltipTextRules.BuildPointedCityStatusBlock(
+                "\u6307\u5411\u57ce\u5e02\uff1a",
+                "\u57ce\u5e02\u72b6\u6001\uff1a",
+                "\u8fdb\u5ea6\uff1a",
+                "\u4f1a\u7a3d",
+                "\u5236\u9020\u6838\u5fc3",
+                45.0,
+                100.0);
+            if (!cityLine.Contains("\u6307\u5411\u57ce\u5e02\uff1a\u4f1a\u7a3d") ||
+                !cityLine.Contains("\u57ce\u5e02\u72b6\u6001\uff1a\u5236\u9020\u6838\u5fc3") ||
+                !cityLine.Contains("\u8fdb\u5ea6\uff1a45%"))
+                throw new Exception("Mapmode tooltips must include hovered city status and project progress.");
         }
 
         private static void ExpectMandateSuccessionRules()
@@ -1952,14 +1983,93 @@ namespace WarFabricationRuleTests
                 throw new Exception("Foreign kingdoms must not claim Mandate through ordinary peaceful/decision paths.");
             if (XiaizationEligibilityRules.CanUsePolicySystem(pIsXiaKingdom: false, pXiaizationLevel: 0))
                 throw new Exception("Foreign kingdoms must not use AW3 policy by default before pseudo-dynasty Xiaization.");
-            if (!XiaizationEligibilityRules.CanUseMandateSystem(
+            if (XiaizationEligibilityRules.CanUseMandateSystem(
                     pIsXiaKingdom: false,
                     pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel))
+                throw new Exception("Soft-contact Level 2 foreign kingdoms must not use the Mandate system.");
+            if (!XiaizationEligibilityRules.CanUseMandateSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel,
+                    pIsForeignPseudoDynasty: true))
                 throw new Exception("Foreign pseudo-dynasties should use Mandate maintenance after seizing Mandate.");
+            if (!XiaizationEligibilityRules.CanUseMandateSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.XiaInstitutionsLevel,
+                    pIsForeignPseudoDynasty: false))
+                throw new Exception("Level 4 foreign Xiaized kingdoms should use the Mandate system.");
             if (!XiaizationEligibilityRules.CanUsePolicySystem(
                     pIsXiaKingdom: false,
                     pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel))
                 throw new Exception("Foreign pseudo-dynasties should use AW3 policy/decision systems after Xiaization.");
+            if (XiaizationEligibilityRules.CanUseInstitutionSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel,
+                    pIsForeignPseudoDynasty: false))
+                throw new Exception("Soft-contact Level 2 foreign kingdoms must not enter the full lineage institution system.");
+            if (!XiaizationEligibilityRules.CanUseInstitutionSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel,
+                    pIsForeignPseudoDynasty: true))
+                throw new Exception("Foreign pseudo-dynasties should enter the lineage institution system.");
+            if (!XiaizationEligibilityRules.CanUseInstitutionSystem(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.XiaInstitutionsLevel,
+                    pIsForeignPseudoDynasty: false))
+                throw new Exception("Level 4 foreign Xiaized kingdoms should enter the lineage institution system.");
+        }
+
+        private static void ExpectXiaContactRules()
+        {
+            float gain = XiaContactRules.CalculateYearlyGain(
+                pBordersXia: true,
+                pDiplomaticContact: true,
+                pVassalContact: false,
+                pOccupiedXiaCityCount: 1,
+                pMixedChildEvents: 2,
+                pOfficialContact: true);
+            if (Math.Abs(gain - 27f) > 0.001f)
+                throw new Exception($"Xia contact yearly gain should combine border/diplomacy/occupation/mixed child/official contact, got {gain}.");
+
+            string sourceMask = XiaContactRules.BuildSourceMask(
+                pBordersXia: true,
+                pDiplomaticContact: true,
+                pVassalContact: false,
+                pOccupiedXiaCityCount: 2,
+                pMixedChildEvents: 1,
+                pOfficialContact: true);
+            if (sourceMask != "border;diplomacy;occupation;mixed;official")
+                throw new Exception("Xia contact source mask should be stable and compact, got " + sourceMask + ".");
+
+            if (XiaContactRules.PrimaryReason(sourceMask) != "xia_occupation_contact")
+                throw new Exception("Occupation should be the primary Xia contact reason when present.");
+
+            if (XiaContactRules.LevelForProgress(0f) != 0)
+                throw new Exception("No Xia contact progress should remain level 0.");
+            if (XiaContactRules.LevelForProgress(1f) != XiaContactRules.LevelKnownXia)
+                throw new Exception("Any Xia contact progress should mark the kingdom as knowing Xia.");
+            if (XiaContactRules.LevelForProgress(XiaContactRules.PolicyUnlockProgress - 0.01f) != XiaContactRules.LevelKnownXia)
+                throw new Exception("Soft Xia contact should not unlock policy before the progress threshold.");
+            if (XiaContactRules.LevelForProgress(XiaContactRules.PolicyUnlockProgress) != XiaContactRules.LevelAdoptCustoms)
+                throw new Exception("Soft Xia contact should unlock the Xiaization route at the policy threshold.");
+
+            if (!XiaizationEligibilityRules.CanUsePolicyNode(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel,
+                    pNodeId: "aw_policy_adopt_xia_rites",
+                    pIsXiaizationPolicy: true))
+                throw new Exception("Level 2 foreign Xiaized kingdoms should be able to research the Xiaization route.");
+            if (XiaizationEligibilityRules.CanUsePolicyNode(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.PseudoDynastyLevel,
+                    pNodeId: "aw_tech_writing",
+                    pIsXiaizationPolicy: false))
+                throw new Exception("Level 2 foreign Xiaized kingdoms must not open the full tech tree before adopting Xia institutions.");
+            if (!XiaizationEligibilityRules.CanUsePolicyNode(
+                    pIsXiaKingdom: false,
+                    pXiaizationLevel: XiaizationEligibilityRules.XiaInstitutionsLevel,
+                    pNodeId: "aw_tech_writing",
+                    pIsXiaizationPolicy: false))
+                throw new Exception("Level 4 foreign Xiaized kingdoms should open the full AW3 policy tree.");
         }
 
         private static void ExpectForeignPseudoLineageRules()
@@ -2540,6 +2650,28 @@ namespace WarFabricationRuleTests
                 throw new Exception("Placeholder Xia religion names must be repaired.");
             if (XiaNameRepairRules.IsInvalidXiaReligionName("\u793E\u7A37\u793C"))
                 throw new Exception("A valid Xia religion name must not be repaired.");
+        }
+
+        private static void ExpectXiaFallbackNameRules()
+        {
+            if (XiaFallbackNameRules.FirstUsefulMetaName("NAME", "", "\u5468") != "\u5468")
+                throw new Exception("Fallback selector must skip NAME placeholders before accepting a real meta name.");
+            if (XiaFallbackNameRules.FirstUsefulSubspeciesName("\u590F\u4EBA", "\u590F\u4EBA\u4EBA", "\u534E\u590F\u4EBA") != "\u534E\u590F\u4EBA")
+                throw new Exception("Subspecies fallback selector must skip bare or duplicated Xia names.");
+
+            for (long seed = 0; seed < 24; seed++)
+            {
+                if (XiaNameRepairRules.IsInvalidGeneratedMetaName(XiaFallbackNameRules.LocalKingdomName(seed)))
+                    throw new Exception("Local kingdom fallback must not produce placeholder names.");
+                if (XiaNameRepairRules.IsInvalidGeneratedMetaName(XiaFallbackNameRules.LocalLanguageName(seed)))
+                    throw new Exception("Local language fallback must not produce placeholder names.");
+                if (XiaNameRepairRules.IsInvalidXiaReligionName(XiaFallbackNameRules.LocalReligionName(seed)))
+                    throw new Exception("Local religion fallback must not produce placeholder names.");
+                if (XiaNameRepairRules.IsInvalidGeneratedMetaName(XiaFallbackNameRules.LocalCultureName(seed)))
+                    throw new Exception("Local culture fallback must not produce placeholder names.");
+                if (XiaNameRepairRules.IsInvalidXiaSubspeciesName(XiaFallbackNameRules.LocalSubspeciesName(seed)))
+                    throw new Exception("Local subspecies fallback must not produce bare or duplicated Xia names.");
+            }
         }
 
         private static void ExpectXiaCityNameLibraryRules()

@@ -718,7 +718,7 @@ namespace AncientWarfare3.core.lineage
 
         public static string BuildCoreTooltip(Kingdom pKingdom)
         {
-            if (Date.getCurrentYear() > int.MinValue) return BuildCoreTooltipClean(pKingdom);
+            if (Date.getCurrentYear() > int.MinValue) return BuildCoreTooltipClean(pKingdom, null);
             MandateReport r = ReadReport();
             if (r.period_id < 0) return T("aw_hist_mandate_no_core");
             return T("aw_hist_mandate_core_title") + "\n" + T("aw_hist_mandate_map_realm") +
@@ -726,6 +726,12 @@ namespace AncientWarfare3.core.lineage
                    "\n" + T("aw_hist_mandate_core_city_count") + r.controlled_core_count + "/" + r.core_count +
                    "\n" + T("aw_hist_mandate_control_ratio") + Mathf.RoundToInt(r.core_control * 100f) + "%" +
                    (pKingdom?.data != null ? "\n" + T("aw_hist_mandate_current_kingdom") + pKingdom.name : "");
+        }
+
+        public static string BuildCoreTooltip(City pCity, Kingdom pKingdom)
+        {
+            if (Date.getCurrentYear() > int.MinValue) return BuildCoreTooltipClean(pKingdom, pCity);
+            return BuildCoreTooltip(pKingdom);
         }
 
         private static string BuildDynastyTooltipClean(Kingdom pKingdom)
@@ -758,23 +764,54 @@ namespace AncientWarfare3.core.lineage
             return text;
         }
 
-        private static string BuildCoreTooltipClean(Kingdom pKingdom)
+        private static string BuildCoreTooltipClean(Kingdom pKingdom, City pCity)
         {
             MandateReport r = ReadReport();
             if (r.period_id < 0) return T("aw_hist_mandate_no_core");
             string owner = "";
             if (pKingdom?.data != null)
             {
+                int pointedCount = CountControlledCoreCities(pKingdom, r.period_id);
                 owner = "\n" + T("aw_hist_mandate_current_kingdom") + pKingdom.name;
+                owner += "\n" + MandateCoreTooltipRules.BuildPointedKingdomCoreCountLine(
+                    pKingdom.name, pointedCount, r.core_count, T("aw_hist_mandate_pointed_core_count"));
                 owner += "\n" + MandateCoreTooltipRules.BuildPointedKingdomControlLine(
-                    pKingdom.name, GetCoreControlRatioFor(pKingdom));
+                    pKingdom.name, r.core_count <= 0 ? 1f : pointedCount / (float)r.core_count,
+                    T("aw_hist_mandate_pointed_control"));
             }
+
+            string city = "";
+            if (pCity?.data != null)
+            {
+                city = "\n" + MapModeTooltipTextRules.BuildPointedCityStatusBlock(
+                    T("aw_map_hover_city"),
+                    T("aw_map_city_status"),
+                    T("aw_map_progress"),
+                    pCity.data.name ?? "",
+                    MandateCoreStatusLabel(GetCoreMapStatus(pCity)),
+                    0.0,
+                    0.0);
+            }
+
             return T("aw_hist_mandate_core_title") +
                    "\n" + T("aw_hist_mandate_map_realm") +
                    (string.IsNullOrEmpty(r.kingdom_name) ? T("aw_hist_none") : r.kingdom_name) +
                    "\n" + T("aw_hist_mandate_core_city_count") + r.controlled_core_count + "/" + r.core_count +
                    "\n" + T("aw_hist_mandate_original_core") + r.original_core_count +
-                   "\n" + T("aw_hist_mandate_control_ratio") + Mathf.RoundToInt(r.core_control * 100f) + "%" + owner;
+                   "\n" + T("aw_hist_mandate_control_ratio") + Mathf.RoundToInt(r.core_control * 100f) + "%" +
+                   owner + city;
+        }
+
+        private static string MandateCoreStatusLabel(string pStatus)
+        {
+            switch (pStatus ?? "")
+            {
+                case "controlled": return T("aw_hist_mandate_core_status_controlled");
+                case "vassal": return T("aw_hist_mandate_core_status_vassal");
+                case "lost": return T("aw_hist_mandate_core_status_lost");
+                case "orphan": return T("aw_hist_mandate_core_status_orphan");
+                default: return T("aw_map_status_none");
+            }
         }
 
         private static string OriginLabel(string pOrigin)

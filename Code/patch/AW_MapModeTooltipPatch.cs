@@ -12,8 +12,9 @@ namespace AncientWarfare3.patch
         public static bool ShowKingdom_Prefix(Tooltip pTooltip, string pType, TooltipData pData)
         {
             Kingdom kingdom = pData?.kingdom;
+            City city = pData?.city;
             if (kingdom?.data == null) return true;
-            return !TryShowMapModeTooltip(pTooltip, null, kingdom);
+            return !TryShowMapModeTooltip(pTooltip, city, kingdom);
         }
 
         [HarmonyPrefix]
@@ -34,29 +35,29 @@ namespace AncientWarfare3.patch
             {
                 if (WarCoreMapModeService.IsClaimLayerSelected())
                 {
-                    ShowMapModeTooltip(pTooltip, kingdom, "aw_claim_mapmode_tooltip",
-                        "Claim Map", WarClaimMapModeService.BuildTooltip(kingdom), "#E8C36A");
+                    ShowHoverMapModeTooltip(pTooltip, city, kingdom, "aw_claim_mapmode_tooltip",
+                        "Claim Map", WarClaimMapModeService.BuildTooltip(city, kingdom), "#E8C36A");
                     return true;
                 }
 
-                ShowMapModeTooltip(pTooltip, kingdom, "aw_core_mapmode_tooltip",
-                    "Core Map", WarCoreMapModeService.BuildTooltip(kingdom), "#8FE8A0");
+                ShowHoverMapModeTooltip(pTooltip, city, kingdom, "aw_core_mapmode_tooltip",
+                    "Core Map", WarCoreMapModeService.BuildTooltip(city, kingdom), "#8FE8A0");
                 return true;
             }
 
             if (selected == WarClaimMapModeService.POWER_ID ||
                 (selected == null && WarClaimMapModeService.IsActive()))
             {
-                ShowMapModeTooltip(pTooltip, kingdom, "aw_claim_mapmode_tooltip",
-                    "Claim Map", WarClaimMapModeService.BuildTooltip(kingdom), "#E8C36A");
+                ShowHoverMapModeTooltip(pTooltip, city, kingdom, "aw_claim_mapmode_tooltip",
+                    "Claim Map", WarClaimMapModeService.BuildTooltip(city, kingdom), "#E8C36A");
                 return true;
             }
 
             if (selected == MandateCoreMapModeService.POWER_ID ||
                 (selected == null && MandateCoreMapModeService.IsActive()))
             {
-                ShowMapModeTooltip(pTooltip, kingdom, "aw_mandate_core_mapmode_tooltip",
-                    "Mandate Core Map", MandateCoreMapModeService.BuildTooltip(kingdom), "#A8DDE8");
+                ShowHoverMapModeTooltip(pTooltip, city, kingdom, "aw_mandate_core_mapmode_tooltip",
+                    "Mandate Core Map", MandateCoreMapModeService.BuildTooltip(city, kingdom), "#A8DDE8");
                 return true;
             }
 
@@ -121,6 +122,18 @@ namespace AncientWarfare3.patch
             }
 
             return false;
+        }
+
+        private static void ShowHoverMapModeTooltip(Tooltip pTooltip, City pCity, Kingdom pKingdom,
+            string pTitleKey, string pFallbackTitle, string pBody, string pColor)
+        {
+            if (pCity?.data != null)
+            {
+                ShowCityMapModeTooltip(pTooltip, pCity, pTitleKey, pFallbackTitle, pBody, pColor);
+                return;
+            }
+
+            ShowMapModeTooltip(pTooltip, pKingdom, pTitleKey, pFallbackTitle, pBody, pColor);
         }
 
         private static void ShowMapModeTooltip(Tooltip pTooltip, Kingdom pKingdom, string pTitleKey,

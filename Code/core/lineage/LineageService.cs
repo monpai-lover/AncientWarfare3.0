@@ -67,7 +67,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                 IsXia(pActor),
-                XiaizationService.IsForeignPseudoDynasty(pActor.kingdom),
+                XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom),
                 IsXiaKingdom(pActor.kingdom),
                 lineageId >= 0);
         }
@@ -76,7 +76,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             return IsXia(pActor) || IsXiaKingdom(pActor.kingdom) ||
-                   XiaizationService.IsForeignPseudoDynasty(pActor.kingdom);
+                   XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom);
         }
 
         public static void EnsureOriginalClanArchived(Actor pActor, bool pRecordHistory = true)
@@ -564,7 +564,7 @@ namespace AncientWarfare3.core.lineage
         public static void EnsureForeignPseudoDynastyLineage(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || IsXiaKingdom(pKingdom)) return;
-            if (!XiaizationService.IsForeignPseudoDynasty(pKingdom)) return;
+            if (!XiaizationService.UsesXiaizedInstitutionSystem(pKingdom)) return;
 
             var seen = new HashSet<long>();
             EnsureForeignPseudoOfficialLineage(pKingdom.king, NobleTrigger.King, seen);
@@ -1351,7 +1351,8 @@ namespace AncientWarfare3.core.lineage
 
             foreach (var actor in new List<Actor>(pKingdom.getUnits()))
             {
-                bool pseudoActor = XiaizationService.IsForeignPseudoDynasty(pKingdom) && UsesAwLineageSystem(actor);
+                bool pseudoActor = XiaizationService.UsesXiaizedInstitutionSystem(pKingdom) &&
+                                   UsesAwLineageSystem(actor);
                 if (!IsXia(actor) && !pseudoActor) continue;
 
                 actor.data.get(LineageKeys.CLAN_NAME, out string clan, "");

@@ -13,7 +13,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
             return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
                 LineageService.IsXia(pActor),
-                XiaizationService.IsForeignPseudoDynasty(pActor.kingdom),
+                XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom),
                 LineageService.IsXiaKingdom(pActor.kingdom),
                 lid >= 0);
         }

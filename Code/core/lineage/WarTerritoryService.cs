@@ -620,6 +620,24 @@ namespace AncientWarfare3.core.lineage
             return string.Join("\n", lines.ToArray());
         }
 
+        public static string BuildCoreTooltip(Kingdom pFocus, Kingdom pHover, City pHoverCity)
+        {
+            string text = BuildCoreTooltip(pFocus, pHover);
+            if (pFocus?.data == null || pHoverCity?.data == null) return text;
+
+            TerritoryStatus status = GetCoreStatus(pFocus, pHoverCity);
+            string cityBlock = MapModeTooltipTextRules.BuildPointedCityStatusBlock(
+                T("aw_map_hover_city"),
+                T("aw_map_city_status"),
+                T("aw_map_progress"),
+                pHoverCity.data.name ?? "",
+                string.IsNullOrEmpty(status.label) ? T("aw_map_status_none") : status.label,
+                status.progress,
+                status.cost);
+            if (string.IsNullOrEmpty(cityBlock)) return text;
+            return string.IsNullOrEmpty(text) ? cityBlock : text + "\n" + cityBlock;
+        }
+
         public static string BuildClaimTooltip(Kingdom pFocus, Kingdom pHover)
         {
             if (pFocus?.data == null) return "";
@@ -630,6 +648,24 @@ namespace AncientWarfare3.core.lineage
             lines.Add(T("aw_map_weak_claim") + CountClaims(pFocus.id, CLAIM_WEAK));
             lines.Add(T("aw_map_pending_claim") + CountProjects(pFocus.id, PROJECT_WEAK_CLAIM, PROJECT_STRONG_CLAIM));
             return string.Join("\n", lines.ToArray());
+        }
+
+        public static string BuildClaimTooltip(Kingdom pFocus, Kingdom pHover, City pHoverCity)
+        {
+            string text = BuildClaimTooltip(pFocus, pHover);
+            if (pFocus?.data == null || pHoverCity?.data == null) return text;
+
+            TerritoryStatus status = GetClaimStatus(pFocus, pHoverCity);
+            string cityBlock = MapModeTooltipTextRules.BuildPointedCityStatusBlock(
+                T("aw_map_hover_city"),
+                T("aw_map_city_status"),
+                T("aw_map_progress"),
+                pHoverCity.data.name ?? "",
+                string.IsNullOrEmpty(status.label) ? T("aw_map_status_none") : status.label,
+                status.progress,
+                status.cost);
+            if (string.IsNullOrEmpty(cityBlock)) return text;
+            return string.IsNullOrEmpty(text) ? cityBlock : text + "\n" + cityBlock;
         }
 
         public static bool CanUseMandateConquest(Kingdom pSource, Kingdom pTarget)

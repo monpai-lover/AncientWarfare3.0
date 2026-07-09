@@ -314,6 +314,12 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_mandate_original_core", "初始法理: ", "Original cores: ", "初始法理："),
             new Entry("aw_hist_mandate_control_ratio", "控制率: ", "Control: ", "控制率："),
             new Entry("aw_hist_mandate_current_kingdom", "当前国家: ", "Current realm: ", "目前國家："),
+            new Entry("aw_hist_mandate_pointed_core_count", "指向国家拥有法理地: ", "Hovered realm cores: ", "指向國家擁有法理地："),
+            new Entry("aw_hist_mandate_pointed_control", "指向国家控制率: ", "Hovered realm control: ", "指向國家控制率："),
+            new Entry("aw_hist_mandate_core_status_controlled", "天命国直属法理", "Mandate realm direct core", "天命國直屬法理"),
+            new Entry("aw_hist_mandate_core_status_vassal", "天命附庸控制法理", "Mandate vassal core", "天命附庸控制法理"),
+            new Entry("aw_hist_mandate_core_status_lost", "失控法理", "Lost legal core", "失控法理"),
+            new Entry("aw_hist_mandate_core_status_orphan", "无天命王朝法理", "Orphan legal core", "無天命王朝法理"),
             new Entry("aw_hist_mandate_source", "来源: ", "Origin: ", "來源："),
             new Entry("aw_hist_mandate_marker", "标识: ", "Marker: ", "標識："),
             new Entry("aw_hist_mandate_rebels", "义军: ", "Rebels: ", "義軍："),
@@ -407,6 +413,9 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_goal_peace_unresolved", "议和未决", "peace unresolved", "議和未決"),
             new Entry("aw_map_focus_realm", "查看国：", "Focus realm: ", "查看國："),
             new Entry("aw_map_hover_realm", "当前国：", "Hovered realm: ", "目前國："),
+            new Entry("aw_map_hover_city", "指向城市：", "Hovered city: ", "指向城市："),
+            new Entry("aw_map_city_status", "城市状态：", "City status: ", "城市狀態："),
+            new Entry("aw_map_progress", "进度：", "Progress: ", "進度："),
             new Entry("aw_map_core_cities", "核心城市：", "Core cities: ", "核心城市："),
             new Entry("aw_map_non_core", "非核心领土：", "Non-core territory: ", "非核心領土："),
             new Entry("aw_map_pending_core", "制造核心中：", "Fabricating cores: ", "製造核心中："),
@@ -430,6 +439,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_map_status_weak_claim", "弱宣称", "Weak Claim", "弱宣稱"),
             new Entry("aw_map_status_fabricate_strong_claim", "制造强宣称", "Fabricating Strong Claim", "製造強宣稱"),
             new Entry("aw_map_status_fabricate_weak_claim", "制造弱宣称", "Fabricating Weak Claim", "製造弱宣稱"),
+            new Entry("aw_map_status_none", "无", "None", "無"),
             new Entry("aw_unknown_city", "某城", "unknown city", "某城")
         };
     }

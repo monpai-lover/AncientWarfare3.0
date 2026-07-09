@@ -1,7 +1,9 @@
-#if 一米_中文名
 using System;
 using System.Collections.Generic;
+
+#if 一米_中文名
 using Chinese_Name;
+#endif
 
 namespace AncientWarfare3.content
 {
@@ -216,47 +218,53 @@ namespace AncientWarfare3.content
 
         private static string GenerateKingdomName(Kingdom pKingdom)
         {
-            string name = GenerateChineseName(XiaNameSets.KingdomGenerator, p =>
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.KingdomGenerator, p =>
             {
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.KingdomGenerator);
                 ParameterGetters.GetKingdomParameterGetter(generator.parameter_getter)(pKingdom, p);
             });
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
+#endif
+
+            string name = GenerateVanillaName(XiaNameSets.KingdomGenerator, pKingdom?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
 
-            name = GenerateVanillaName(XiaNameSets.KingdomGenerator, pKingdom?.getID() ?? 0L);
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
-
-            return GenerateLocalKingdomName(pKingdom);
+            return XiaFallbackNameRules.LocalKingdomName(pKingdom?.getID() ?? 0L);
         }
 
         private static string GenerateLanguageName(Language pLanguage)
         {
-            string name = GenerateChineseName(XiaNameSets.LanguageGenerator, p =>
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.LanguageGenerator, p =>
             {
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.LanguageGenerator);
                 ParameterGetters.GetLanguageParameterGetter(generator.parameter_getter)(pLanguage, p);
             });
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
+#endif
+
+            string name = GenerateVanillaName(XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
 
-            name = GenerateVanillaName(XiaNameSets.LanguageGenerator, pLanguage?.getID() ?? 0L);
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
-
-            return "夏语";
+            return XiaFallbackNameRules.LocalLanguageName(pLanguage?.getID() ?? 0L);
         }
 
         private static string GenerateReligionName(Religion pReligion)
         {
-            string name = GenerateChineseName(XiaNameSets.ReligionGenerator, p =>
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.ReligionGenerator, p =>
             {
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.ReligionGenerator);
                 ParameterGetters.GetReligionParameterGetter(generator.parameter_getter)(pReligion, p);
             });
+            if (!XiaNameRepairRules.IsInvalidXiaReligionName(chineseName)) return chineseName;
+#endif
+
+            string name = GenerateVanillaName(XiaNameSets.ReligionGenerator, pReligion?.getID() ?? 0L);
             if (!XiaNameRepairRules.IsInvalidXiaReligionName(name)) return name;
 
-            name = GenerateVanillaName(XiaNameSets.ReligionGenerator, pReligion?.getID() ?? 0L);
-            if (!XiaNameRepairRules.IsInvalidXiaReligionName(name)) return name;
-
-            return GenerateLocalReligionName(pReligion);
+            return XiaFallbackNameRules.LocalReligionName(pReligion?.getID() ?? 0L);
         }
 
         private static string GenerateCultureName(Culture pCulture)
@@ -264,17 +272,19 @@ namespace AncientWarfare3.content
             string originName = GenerateOriginCultureName(pCulture);
             if (!string.IsNullOrEmpty(originName)) return originName;
 
-            string name = GenerateChineseName(XiaNameSets.CultureGenerator, p =>
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.CultureGenerator, p =>
             {
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.CultureGenerator);
                 ParameterGetters.GetCultureParameterGetter(generator.parameter_getter)(pCulture, p);
             });
+            if (!IsInvalidGeneratedName(chineseName)) return chineseName;
+#endif
+
+            string name = GenerateVanillaName(XiaNameSets.CultureGenerator, pCulture?.getID() ?? 0L);
             if (!IsInvalidGeneratedName(name)) return name;
 
-            name = GenerateVanillaName(XiaNameSets.CultureGenerator, pCulture?.getID() ?? 0L);
-            if (!IsInvalidGeneratedName(name)) return name;
-
-            return GenerateLocalCultureName(pCulture);
+            return XiaFallbackNameRules.LocalCultureName(pCulture?.getID() ?? 0L);
         }
 
         private static string GenerateOriginCultureName(Culture pCulture)
@@ -308,17 +318,19 @@ namespace AncientWarfare3.content
 
         private static string GenerateSubspeciesName(Subspecies pSubspecies)
         {
-            string name = GenerateChineseName(XiaNameSets.SubspeciesGenerator, p =>
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.SubspeciesGenerator, p =>
             {
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.SubspeciesGenerator);
                 ParameterGetters.GetSubspeciesParameterGetter(generator.parameter_getter)(pSubspecies, p);
             });
+            if (IsUsefulSubspeciesName(chineseName)) return chineseName;
+#endif
+
+            string name = GenerateVanillaName(XiaNameSets.SubspeciesGenerator, pSubspecies?.getID() ?? 0L);
             if (IsUsefulSubspeciesName(name)) return name;
 
-            name = GenerateVanillaName(XiaNameSets.SubspeciesGenerator, pSubspecies?.getID() ?? 0L);
-            if (IsUsefulSubspeciesName(name)) return name;
-
-            return GenerateLocalSubspeciesName(pSubspecies);
+            return XiaFallbackNameRules.LocalSubspeciesName(pSubspecies?.getID() ?? 0L);
         }
 
         private static bool IsUsefulSubspeciesName(string pName)
@@ -332,64 +344,7 @@ namespace AncientWarfare3.content
             return XiaNameRepairRules.IsInvalidXiaSubspeciesName(pName);
         }
 
-        private static string GenerateLocalKingdomName(Kingdom pKingdom)
-        {
-            string[] fixedNames =
-            {
-                "夏", "商", "周", "秦", "汉", "魏", "晋", "楚", "齐", "鲁", "燕", "赵",
-                "宋", "郑", "卫", "陈", "蔡", "吴", "越", "唐", "虞"
-            };
-
-            long id = pKingdom?.getID() ?? DateTime.UtcNow.Ticks;
-            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
-            return fixedNames[random.Next(fixedNames.Length)];
-        }
-
-        private static string GenerateLocalReligionName(Religion pReligion)
-        {
-            string[] fixedNames =
-            {
-                "社稷礼", "宗庙礼", "礼乐祖祀", "华夏大礼", "诸夏礼",
-                "天命礼", "王畿祖祀", "河洛礼", "先王祀典", "九州王礼"
-            };
-
-            long id = pReligion?.getID() ?? DateTime.UtcNow.Ticks;
-            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
-            return fixedNames[random.Next(fixedNames.Length)];
-        }
-
-        private static string GenerateLocalSubspeciesName(Subspecies pSubspecies)
-        {
-            string[] fixedNames =
-            {
-                "华夏人", "诸夏人", "河洛夏人", "中原夏人", "九州夏人",
-                "王畿夏人", "礼乐夏人", "玄鸟夏人", "青铜夏人", "邦国夏人"
-            };
-            string[] prefixes =
-            {
-                "河洛", "中原", "九州", "王畿", "礼乐", "玄鸟", "青铜", "邦国", "洛邑", "镐京"
-            };
-
-            long id = pSubspecies?.getID() ?? DateTime.UtcNow.Ticks;
-            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
-            if (random.NextDouble() < 0.45)
-                return fixedNames[random.Next(fixedNames.Length)];
-            return prefixes[random.Next(prefixes.Length)] + "夏人";
-        }
-
-        private static string GenerateLocalCultureName(Culture pCulture)
-        {
-            string[] fixedNames =
-            {
-                "诸夏文化", "华夏文化", "中原礼制", "河洛雅风", "九州礼乐",
-                "青铜礼制", "王畿雅风", "邦国礼制"
-            };
-
-            long id = pCulture?.getID() ?? DateTime.UtcNow.Ticks;
-            var random = new System.Random(unchecked((int)(id * 1103515245L + 12345L)));
-            return fixedNames[random.Next(fixedNames.Length)];
-        }
-
+#if 一米_中文名
         private static string GenerateChineseName(string pGeneratorId, Action<Dictionary<string, string>> pFillParameters)
         {
             try
@@ -408,6 +363,7 @@ namespace AncientWarfare3.content
                 return null;
             }
         }
+#endif
 
         private static string GenerateVanillaName(string pGeneratorId, long pSeed)
         {
@@ -426,4 +382,3 @@ namespace AncientWarfare3.content
         }
     }
 }
-#endif

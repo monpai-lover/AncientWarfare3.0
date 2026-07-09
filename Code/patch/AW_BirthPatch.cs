@@ -39,6 +39,7 @@ namespace AncientWarfare3.patch
             // 编年史:给贵族父/母各记一条"喜得子/女"(谱系继承已在上一步完成,名字已就绪)。
             ChronicleEvents.OnHadChild(pParent1, pParent2, pBaby);
             LineageService.OnMixedAncestryBorn(pBaby, pParent1, pParent2);
+            XiaContactService.OnMixedChildBorn(pBaby, pParent1, pParent2);
         }
     }
 }

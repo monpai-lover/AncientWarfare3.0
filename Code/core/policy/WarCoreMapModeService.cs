@@ -58,6 +58,12 @@ namespace AncientWarfare3.core.policy
             return WarTerritoryService.BuildCoreTooltip(focus, pHover);
         }
 
+        public static string BuildTooltip(City pCity, Kingdom pHover)
+        {
+            Kingdom focus = GetFocusedKingdom();
+            return WarTerritoryService.BuildCoreTooltip(focus, pHover, pCity);
+        }
+
         public static string GetColorKeyForZone(TileZone pZone)
         {
             return GetColorKeyForCity(GetFocusedKingdom(), pZone?.city);
