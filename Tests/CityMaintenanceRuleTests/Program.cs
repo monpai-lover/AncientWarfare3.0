@@ -9,8 +9,10 @@ namespace CityMaintenanceRuleTests
         {
             ExpectStaggeredCityMaintenance();
             ExpectRetirementCheapGate();
+            ExpectRetirementStateReadGate();
             ExpectCityRetirementScanGate();
             ExpectOldHeadRefreshGate();
+            ExpectSlaveFoodQuotaGate();
             ExpectSlaveArmyMaintenanceGate();
             ExpectArmyAiSafetyGate();
             ExpectArmySaveSafetyGate();
@@ -103,6 +105,42 @@ namespace CityMaintenanceRuleTests
                 throw new Exception("City retirement scan fallback should remain available if actor updateAge retirement is disabled.");
         }
 
+        private static void ExpectRetirementStateReadGate()
+        {
+            if (SoldierRetirementRules.ShouldReadRetirementState(
+                    isSupportedActor: true,
+                    isRekt: false,
+                    isWarrior: false))
+                throw new Exception("Non-warriors should not read retired-soldier state during actor updateAge.");
+            if (!SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(
+                    isSupportedActor: true,
+                    isRekt: false,
+                    isWarrior: true))
+                throw new Exception("Supported live warriors should enter actor updateAge retirement checks.");
+            if (SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(
+                    isSupportedActor: false,
+                    isRekt: false,
+                    isWarrior: true))
+                throw new Exception("Unsupported actors should not enter actor updateAge retirement checks.");
+            if (SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(
+                    isSupportedActor: true,
+                    isRekt: false,
+                    isWarrior: false))
+                throw new Exception("Non-warriors should not enter actor updateAge retirement checks.");
+
+            if (SoldierRetirementRules.ShouldReadRetirementState(
+                    isSupportedActor: false,
+                    isRekt: false,
+                    isWarrior: true))
+                throw new Exception("Unsupported actors should not read retired-soldier state.");
+
+            if (!SoldierRetirementRules.ShouldReadRetirementState(
+                    isSupportedActor: true,
+                    isRekt: false,
+                    isWarrior: true))
+                throw new Exception("Supported active warriors should read retired-soldier state.");
+        }
+
         private static void ExpectOldHeadRefreshGate()
         {
             if (XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead: false, shouldUseOldHead: false))
@@ -116,6 +154,33 @@ namespace CityMaintenanceRuleTests
 
             if (XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead: true, shouldUseOldHead: true))
                 throw new Exception("Stable old-head Xia actors should skip graphics refresh.");
+        }
+
+        private static void ExpectSlaveFoodQuotaGate()
+        {
+            if (SlaveFoodQuotaRules.ShouldCountSlavesForFoodQuota(
+                    pHasCity: true,
+                    pSlaveryEnabled: false,
+                    pForceCount: false))
+                throw new Exception("Cities in kingdoms without slavery should not scan residents for slave food quota.");
+
+            if (SlaveFoodQuotaRules.ShouldCountSlavesForFoodQuota(
+                    pHasCity: false,
+                    pSlaveryEnabled: true,
+                    pForceCount: true))
+                throw new Exception("Invalid cities should not scan slave food quota.");
+
+            if (!SlaveFoodQuotaRules.ShouldCountSlavesForFoodQuota(
+                    pHasCity: true,
+                    pSlaveryEnabled: true,
+                    pForceCount: false))
+                throw new Exception("Slavery-enabled cities should count slaves for food quota.");
+
+            if (!SlaveFoodQuotaRules.ShouldCountSlavesForFoodQuota(
+                    pHasCity: true,
+                    pSlaveryEnabled: false,
+                    pForceCount: true))
+                throw new Exception("Actual slave food requests should be allowed to force a quota recount.");
         }
 
         private static void ExpectSlaveArmyMaintenanceGate()

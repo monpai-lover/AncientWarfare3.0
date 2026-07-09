@@ -72,20 +72,47 @@ namespace AncientWarfare3.core.policy
             if (lastYear == currentYear) return;
             pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, currentYear);
 
-            AddYearlyPoints(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try { AddYearlyPoints(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyPointsIndex, benchmark); }
+
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
-            KingdomPolicyAI.TryFillEmptySlots(pKingdom);
-            AdvanceCurrent(pKingdom, PolicyNodeKind.Tech);
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { KingdomPolicyAI.TryFillEmptySlots(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAiIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { AdvanceCurrent(pKingdom, PolicyNodeKind.Tech); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceTechIndex, benchmark); }
+
             AdvanceCoreFabrication(pKingdom);
-            AdvanceCurrent(pKingdom, PolicyNodeKind.Social);
-            AdvanceCurrent(pKingdom, PolicyNodeKind.Decision);
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { AdvanceCurrent(pKingdom, PolicyNodeKind.Social); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceSocialIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { AdvanceCurrent(pKingdom, PolicyNodeKind.Decision); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceDecisionIndex, benchmark); }
+
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
-            KingdomPolicyAI.TryFillEmptySlots(pKingdom);
-            UpsertSnapshot(pKingdom);
-            TechMapModeService.DirtyMapIfActive();
-            DevelopmentMapModeService.DirtyMapIfActive();
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { KingdomPolicyAI.TryFillEmptySlots(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAiIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { UpsertSnapshot(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicySnapshotIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                TechMapModeService.DirtyMapIfActive();
+                DevelopmentMapModeService.DirtyMapIfActive();
+            }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyMapDirtyIndex, benchmark); }
         }
 
         public static bool CanUsePolicySystem(Kingdom pKingdom)

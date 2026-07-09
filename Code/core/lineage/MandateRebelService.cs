@@ -21,6 +21,9 @@ namespace AncientWarfare3.core.lineage
         private const int REBEL_BUFF_YEARS = 25;
         private const float MOBILIZATION_TARGET = 0.80f;
         private const int MOBILIZE_CAP_PER_YEAR = 30;
+        private static int _activeClaimantCacheYear = int.MinValue;
+        private static int _activeClaimantCacheKingdomCount = -1;
+        private static bool _activeClaimantCacheValue;
 
         public static bool IsRebelKingdom(Kingdom pKingdom)
         {
@@ -42,9 +45,22 @@ namespace AncientWarfare3.core.lineage
         public static bool HasActiveRebelClaimants()
         {
             if (World.world?.kingdoms == null) return false;
+            int year = Date.getCurrentYear();
+            int kingdomCount = World.world.kingdoms.list?.Count ?? -1;
+            if (MandateRebelStateRules.ShouldUseActiveClaimantCache(_activeClaimantCacheYear, year,
+                    _activeClaimantCacheKingdomCount, kingdomCount))
+                return _activeClaimantCacheValue;
+
+            _activeClaimantCacheYear = year;
+            _activeClaimantCacheKingdomCount = kingdomCount;
+            _activeClaimantCacheValue = false;
             foreach (Kingdom kingdom in World.world.kingdoms)
-                if (IsRebelKingdom(kingdom)) return true;
-            return false;
+            {
+                if (!IsRebelKingdom(kingdom)) continue;
+                _activeClaimantCacheValue = true;
+                break;
+            }
+            return _activeClaimantCacheValue;
         }
 
         public static MandateRebelReport ReadReport()

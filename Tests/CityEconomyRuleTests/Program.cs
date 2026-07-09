@@ -86,6 +86,8 @@ namespace CityEconomyRuleTests
             ExpectDevelopmentAverage();
             ExpectNewCityTechSyncRules();
             ExpectNeighborBonusRule();
+            ExpectCityTechUpdateRules();
+            ExpectCityEconomyUpdateRules();
 
             Console.WriteLine("City economy rule tests passed.");
             return 0;
@@ -196,6 +198,79 @@ namespace CityEconomyRuleTests
                 throw new Exception("Expected economy city tech reports to skip neighbor bonus.");
             if (CityTechReportRules.ShouldLoadNeighborBonus(includeNeighborBonus: true, currentTechId: ""))
                 throw new Exception("Expected reports without current tech to skip neighbor bonus scans.");
+        }
+
+        private static void ExpectCityTechUpdateRules()
+        {
+            if (!CityTechUpdateRules.ShouldSkipStableAdoptedUpdate(
+                    existingAdopted: true,
+                    nextAdopted: true,
+                    existingAdoption: 100.0,
+                    nextAdoption: 100.0,
+                    existingExposure: 0.0,
+                    nextExposure: 0.0,
+                    sameOwner: true))
+                throw new Exception("Expected stable adopted city tech rows to skip yearly DB updates.");
+
+            if (CityTechUpdateRules.ShouldSkipStableAdoptedUpdate(
+                    existingAdopted: false,
+                    nextAdopted: true,
+                    existingAdoption: 80.0,
+                    nextAdoption: 100.0,
+                    existingExposure: 0.0,
+                    nextExposure: 0.0,
+                    sameOwner: true))
+                throw new Exception("Expected newly adopted city tech rows to write DB updates.");
+
+            if (CityTechUpdateRules.ShouldSkipStableAdoptedUpdate(
+                    existingAdopted: true,
+                    nextAdopted: true,
+                    existingAdoption: 100.0,
+                    nextAdoption: 100.0,
+                    existingExposure: 0.0,
+                    nextExposure: 0.0,
+                    sameOwner: false))
+                throw new Exception("Expected ownership changes to keep DB rows in sync.");
+        }
+
+        private static void ExpectCityEconomyUpdateRules()
+        {
+            var previous = new CityEconomyStoredState
+            {
+                has_record = true,
+                kingdom_id = 12,
+                role = CityEconomyRole.MarketTrade.ToString(),
+                policy_points = 1.2f,
+                tech_points = 0.8f,
+                tax_value = 10f,
+                manpower = 3f,
+                food_stability = 4f,
+                unrest_risk = 2f
+            };
+            var same = new CityEconomyContribution(1.2001f, 0.8001f, 10.0001f, 3.0001f, 4.0001f, 2.0001f);
+            if (!CityEconomyUpdateRules.ShouldSkipStableUpdate(previous, 12, CityEconomyRole.MarketTrade.ToString(), same))
+                throw new Exception("Expected stable city economy rows to skip yearly DB updates.");
+
+            var changed = new CityEconomyContribution(1.2f, 0.8f, 14f, 3f, 4f, 2f);
+            if (CityEconomyUpdateRules.ShouldSkipStableUpdate(previous, 12, CityEconomyRole.MarketTrade.ToString(), changed))
+                throw new Exception("Expected changed economy values to keep DB updates.");
+
+            if (CityEconomyUpdateRules.ShouldSkipStableUpdate(previous, 99, CityEconomyRole.MarketTrade.ToString(), same))
+                throw new Exception("Expected ownership changes to keep DB updates.");
+
+            if (!CityEconomyUpdateRules.ShouldCountSlavesForEconomy(pSlaveryEnabled: true, pHasCity: true))
+                throw new Exception("Enabled slavery cities should count slave population for economy.");
+            if (CityEconomyUpdateRules.ShouldCountSlavesForEconomy(pSlaveryEnabled: false, pHasCity: true))
+                throw new Exception("Disabled slavery kingdoms should skip city slave scans for economy.");
+            if (CityEconomyUpdateRules.ShouldCountSlavesForEconomy(pSlaveryEnabled: true, pHasCity: false))
+                throw new Exception("Invalid cities should not count slave population for economy.");
+
+            if (!CityEconomyUpdateRules.ShouldUseContributionCache(pHasCache: true, pCachedYear: 20, pCurrentYear: 20))
+                throw new Exception("City economy contribution sums should reuse same-year cache.");
+            if (CityEconomyUpdateRules.ShouldUseContributionCache(pHasCache: true, pCachedYear: 19, pCurrentYear: 20))
+                throw new Exception("City economy contribution sums must refresh across years.");
+            if (CityEconomyUpdateRules.ShouldUseContributionCache(pHasCache: false, pCachedYear: 20, pCurrentYear: 20))
+                throw new Exception("Missing contribution cache must read DB.");
         }
     }
 }

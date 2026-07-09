@@ -55,6 +55,9 @@ namespace AncientWarfare3.core.lineage
         private static ColorAsset _coreControlledColor;
         private static ColorAsset _coreVassalColor;
         private static ColorAsset _coreLostColor;
+        private static int _autoCandidateYear = int.MinValue;
+        private static int _autoCandidateKingdomCount = -1;
+        private static long _autoCandidateKingdomId = -1L;
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
@@ -856,8 +859,59 @@ namespace AncientWarfare3.core.lineage
 
         private static void TryAutoDeclareMandate(Kingdom pKingdom)
         {
-            if (!CanDeclareMandate(pKingdom, out _)) return;
+            if (pKingdom?.data == null || pKingdom.id != GetAutoMandateCandidateId()) return;
             TryDeclareMandate(pKingdom, "auto");
+        }
+
+        private static long GetAutoMandateCandidateId()
+        {
+            int year = Date.getCurrentYear();
+            int kingdomCount = World.world?.kingdoms?.list?.Count ?? -1;
+            if (_autoCandidateYear == year && _autoCandidateKingdomCount == kingdomCount)
+                return _autoCandidateKingdomId;
+
+            _autoCandidateYear = year;
+            _autoCandidateKingdomCount = kingdomCount;
+            _autoCandidateKingdomId = -1L;
+
+            if (World.world?.kingdoms == null) return -1L;
+            MandateReport last = ReadReport();
+            var ids = new List<long>();
+            var powers = new List<float>();
+            var eligible = new List<bool>();
+
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                ids.Add(kingdom?.id ?? -1L);
+                bool canCompete = IsAutoMandateCandidateBaseEligible(kingdom, last);
+                eligible.Add(canCompete);
+                powers.Add(canCompete ? CalculateMandateCompetitionPower(kingdom) : 0f);
+            }
+
+            int winner = MandatePowerRules.SelectWinningCandidateIndex(powers.ToArray(), eligible.ToArray());
+            if (winner >= 0 && winner < ids.Count)
+                _autoCandidateKingdomId = ids[winner];
+            return _autoCandidateKingdomId;
+        }
+
+        private static bool IsAutoMandateCandidateBaseEligible(Kingdom pKingdom, MandateReport pLast)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
+                return false;
+            if (!pKingdom.hasKing() || pKingdom.king?.data == null) return false;
+            if (VassalService.IsVassalKingdom(pKingdom)) return false;
+            if (!IsSupportedKingdom(pKingdom)) return false;
+
+            bool historicalFigure = IsHistoricalFigureKing(pKingdom);
+            KingdomTitle title = KingdomTitleService.GetTitle(pKingdom);
+            int cityCount = CountCities(pKingdom);
+            if (!MandateDeclarationRules.HasEnoughRealmToDeclare(cityCount, (int)title,
+                    historicalFigure, 4, (int)KingdomTitle.King))
+                return false;
+
+            return !MandateDeclarationRules.NeedsLegalCoreControl(pLast.core_count, pLast.active) ||
+                   MandateDeclarationRules.HasEnoughLegalCoreControl(
+                       GetCoreControlRatio(pKingdom, pLast.period_id), RESTORE_CORE_THRESHOLD);
         }
 
         private static int CalculateYearlyDelta(Kingdom pKingdom, MandateReport pReport)

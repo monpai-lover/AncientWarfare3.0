@@ -34,6 +34,21 @@ namespace AncientWarfare3.core.policy
         }
     }
 
+    public sealed class CityEconomyStoredState
+    {
+        public bool has_record;
+        public long kingdom_id = -1L;
+        public string city_name = "";
+        public string kingdom_name = "";
+        public string role = "";
+        public float policy_points;
+        public float tech_points;
+        public float tax_value;
+        public float manpower;
+        public float food_stability;
+        public float unrest_risk;
+    }
+
     public static class CityEconomyRules
     {
         public static string RoleNameKey(CityEconomyRole pRole)
@@ -125,6 +140,41 @@ namespace AncientWarfare3.core.policy
 
             tax *= 1f + slaveFactor * 0.12f;
             return new CityEconomyContribution(policy, tech, tax, manpower, food, Mathf.Clamp(unrest, 0f, 100f));
+        }
+    }
+
+    public static class CityEconomyUpdateRules
+    {
+        private const float EPSILON = 0.01f;
+
+        public static bool ShouldSkipStableUpdate(CityEconomyStoredState pPrevious, long pKingdomId,
+            string pRole, CityEconomyContribution pContribution, bool pMetadataChanged = false)
+        {
+            if (pPrevious == null || !pPrevious.has_record) return false;
+            if (pMetadataChanged) return false;
+            if (pPrevious.kingdom_id != pKingdomId) return false;
+            if (pPrevious.role != (pRole ?? "")) return false;
+            return Close(pPrevious.policy_points, pContribution.PolicyPoints) &&
+                   Close(pPrevious.tech_points, pContribution.TechPoints) &&
+                   Close(pPrevious.tax_value, pContribution.TaxValue) &&
+                   Close(pPrevious.manpower, pContribution.Manpower) &&
+                   Close(pPrevious.food_stability, pContribution.FoodStability) &&
+                   Close(pPrevious.unrest_risk, pContribution.UnrestRisk);
+        }
+
+        public static bool ShouldCountSlavesForEconomy(bool pSlaveryEnabled, bool pHasCity)
+        {
+            return pHasCity && pSlaveryEnabled;
+        }
+
+        public static bool ShouldUseContributionCache(bool pHasCache, int pCachedYear, int pCurrentYear)
+        {
+            return pHasCache && pCachedYear == pCurrentYear;
+        }
+
+        private static bool Close(float pA, float pB)
+        {
+            return Mathf.Abs(pA - pB) <= EPSILON;
         }
     }
 

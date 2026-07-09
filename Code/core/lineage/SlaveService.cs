@@ -109,9 +109,16 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        public static void ResetSlaveFoodQuota(City pCity)
+        public static void ResetSlaveFoodQuota(City pCity, bool pForceCount = false)
         {
             if (pCity?.data == null) return;
+
+            Kingdom kingdom = pCity.kingdom;
+            if (!SlaveFoodQuotaRules.ShouldCountSlavesForFoodQuota(
+                    pHasCity: true,
+                    pSlaveryEnabled: IsSlaveryEnabled(kingdom),
+                    pForceCount: pForceCount))
+                return;
 
             int quota = CountSlaves(pCity) > 0 ? (int)(pCity.countFood() * 0.1f) : 0;
             pCity.data.set(LineageKeys.SLAVE_FOOD_YEAR, Date.getCurrentYear());
@@ -126,7 +133,7 @@ namespace AncientWarfare3.core.lineage
             int year = Date.getCurrentYear();
             pCity.data.get(LineageKeys.SLAVE_FOOD_YEAR, out int quotaYear, int.MinValue);
             if (quotaYear != year)
-                ResetSlaveFoodQuota(pCity);
+                ResetSlaveFoodQuota(pCity, pForceCount: true);
 
             pCity.data.get(LineageKeys.SLAVE_FOOD_QUOTA, out int quota, 0);
             if (quota <= 0) return false;
@@ -389,6 +396,7 @@ namespace AncientWarfare3.core.lineage
             bool supportedActor = IsSupportedSlaveryActor(pActor);
             bool rekt = pActor.isRekt();
             bool warrior = pActor.isWarrior();
+            if (!SoldierRetirementRules.ShouldReadRetirementState(supportedActor, rekt, warrior)) return false;
             bool alreadyRetired = IsRetiredSoldier(pActor);
             float lifespan = pActor.stats["lifespan"];
             if (!SoldierRetirementRules.ShouldRunExpensiveRetirementChecks(supportedActor, rekt, warrior,
@@ -1372,7 +1380,7 @@ namespace AncientWarfare3.core.lineage
             SetSlaveArmyEnabled(pKingdom, true);
         }
 
-        private static bool IsSupportedSlaveryActor(Actor pActor)
+        internal static bool IsSupportedSlaveryActor(Actor pActor)
         {
             return LineageService.IsXia(pActor) || LineageService.IsHuman(pActor);
         }

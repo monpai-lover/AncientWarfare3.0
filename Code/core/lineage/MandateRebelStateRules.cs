@@ -17,5 +17,11 @@ namespace AncientWarfare3.core.lineage
                 ? KingdomPolicyDefs.ClassDefault
                 : pClassState;
         }
+
+        public static bool ShouldUseActiveClaimantCache(int pCachedYear, int pCurrentYear,
+            int pCachedKingdomCount, int pCurrentKingdomCount)
+        {
+            return pCachedYear == pCurrentYear && pCachedKingdomCount == pCurrentKingdomCount;
+        }
     }
 }

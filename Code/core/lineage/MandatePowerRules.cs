@@ -46,6 +46,36 @@ namespace AncientWarfare3.core.lineage
             return pIsValidCivilKingdom && !pIsVassal && pSupportsMandateSystem;
         }
 
+        public static int SelectWinningCandidateIndex(float[] pPowers, bool[] pEligible)
+        {
+            if (pPowers == null || pEligible == null || pPowers.Length == 0 || pPowers.Length != pEligible.Length)
+                return -1;
+
+            int bestIndex = -1;
+            float bestPower = 0f;
+            for (int i = 0; i < pPowers.Length; i++)
+            {
+                if (!pEligible[i]) continue;
+                float power = pPowers[i];
+                if (power <= bestPower) continue;
+                bestPower = power;
+                bestIndex = i;
+            }
+            if (bestIndex < 0) return -1;
+
+            float strongestOther = 0f;
+            float weakestOther = float.MaxValue;
+            for (int i = 0; i < pPowers.Length; i++)
+            {
+                if (i == bestIndex || !pEligible[i]) continue;
+                float power = pPowers[i];
+                if (power > strongestOther) strongestOther = power;
+                if (power > 0f && power < weakestOther) weakestOther = power;
+            }
+            if (weakestOther == float.MaxValue) weakestOther = 0f;
+            return HasRequiredLeadForMandate(bestPower, strongestOther, weakestOther) ? bestIndex : -1;
+        }
+
         public static int CalculateStrongestPowerPenalty(float pMandatePower, float pStrongestPower)
         {
             float mandate = pMandatePower < 1f ? 1f : pMandatePower;

@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 
 namespace AncientWarfare3.core.policy
@@ -19,7 +20,7 @@ namespace AncientWarfare3.core.policy
             s_counts[pIndex]++;
         }
 
-        public static void Flush()
+        public static void Flush(long pFullStartTicks = 0L)
         {
             if (!Bench.bench_enabled)
             {
@@ -31,14 +32,24 @@ namespace AncientWarfare3.core.policy
             int totalCalls = 0;
             for (int i = 0; i < s_ticks.Length; i++)
             {
+                if (!UpdateAgeBenchmarkRules.IsTopLevelIndex(i)) continue;
                 totalTicks += s_ticks[i];
                 totalCalls += s_counts[i];
+            }
+
+            if (pFullStartTicks > 0L)
+            {
+                long fullTicks = Stopwatch.GetTimestamp() - pFullStartTicks;
+                Save(UpdateAgeBenchmarkRules.FullWall, fullTicks, 1, UpdateAgeBenchmarkRules.ParentGroup);
+                Save(UpdateAgeBenchmarkRules.UnaccountedWall, Math.Max(0L, fullTicks - totalTicks), 1,
+                    UpdateAgeBenchmarkRules.ParentGroup);
             }
 
             Save(UpdateAgeBenchmarkRules.Total, totalTicks, totalCalls, UpdateAgeBenchmarkRules.ParentGroup);
             for (int i = 0; i < UpdateAgeBenchmarkRules.EntryIds.Length; i++)
             {
-                Save(UpdateAgeBenchmarkRules.EntryIds[i], s_ticks[i], s_counts[i], UpdateAgeBenchmarkRules.Total);
+                Save(UpdateAgeBenchmarkRules.EntryIds[i], s_ticks[i], s_counts[i],
+                    UpdateAgeBenchmarkRules.ParentForIndex(i));
             }
 
             Reset();

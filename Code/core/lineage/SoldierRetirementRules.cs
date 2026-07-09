@@ -22,6 +22,18 @@ namespace AncientWarfare3.core.lineage
             return age >= lifespan * retirementAgeRatio;
         }
 
+        public static bool ShouldReadRetirementState(bool isSupportedActor, bool isRekt, bool isWarrior)
+        {
+            if (!isSupportedActor) return false;
+            if (isRekt) return false;
+            return isWarrior;
+        }
+
+        public static bool ShouldEnterActorUpdateAgeRetirement(bool isSupportedActor, bool isRekt, bool isWarrior)
+        {
+            return ShouldReadRetirementState(isSupportedActor, isRekt, isWarrior);
+        }
+
         public static bool ShouldRunCityRetirementScan(bool pActorUpdateAgeRetirementEnabled, bool pMaintenanceDue)
         {
             if (!pMaintenanceDue) return false;

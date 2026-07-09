@@ -33,6 +33,13 @@ namespace AncientWarfare3.core.policy
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static int _neighborCacheYear = int.MinValue;
+        private static readonly Dictionary<string, NeighborInfluence> NeighborInfluenceCache =
+            new Dictionary<string, NeighborInfluence>();
+        private static readonly Dictionary<string, float> NeighborBonusCache = new Dictionary<string, float>();
+        private static int _adoptedCityCacheYear = int.MinValue;
+        private static readonly Dictionary<string, HashSet<long>> AdoptedCityIdsByTech =
+            new Dictionary<string, HashSet<long>>();
 
         public static void OnNationalTechCompleted(Kingdom pKingdom, KingdomPolicyDef pTech)
         {
@@ -67,35 +74,45 @@ namespace AncientWarfare3.core.policy
             if (lastYear == year) return;
             pKingdom.data.set(LineageKeys.CITY_TECH_LAST_YEAR, year);
 
-            foreach (string techId in CompletedTechIds(pKingdom))
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
             {
-                KingdomPolicyDef tech = KingdomPolicyDefs.Get(techId);
-                if (tech == null || tech.Kind != PolicyNodeKind.Tech) continue;
-                SpreadCompletedTech(pKingdom, tech);
+                foreach (string techId in CompletedTechIds(pKingdom))
+                {
+                    KingdomPolicyDef tech = KingdomPolicyDefs.Get(techId);
+                    if (tech == null || tech.Kind != PolicyNodeKind.Tech) continue;
+                    SpreadCompletedTech(pKingdom, tech);
+                }
             }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityTechSpreadCompletedIndex, benchmark); }
 
             string current = KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech);
             if (!string.IsNullOrEmpty(current))
-                AddNeighborExposure(pKingdom, current);
+            {
+                benchmark = UpdateAgeBenchmark.Begin();
+                try { AddNeighborExposure(pKingdom, current); }
+                finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityTechNeighborExposureIndex, benchmark); }
+            }
         }
 
         public static float GetNeighborTechResearchBonus(Kingdom pKingdom, string pTechId)
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId) || !Ready) return 1f;
-            NeighborInfluence best = FindBestNeighborInfluence(pKingdom, pTechId);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            NeighborInfluence best;
+            try { best = GetCachedNeighborInfluence(pKingdom, pTechId); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityTechNeighborInfluenceIndex, benchmark); }
             if (best == null) return 1f;
 
-            float closeness = Mathf.Clamp01(1f - best.distance / NEIGHBOR_RANGE);
-            float relation = RelationFactor(pKingdom, best.sourceKingdom);
-            return Mathf.Clamp(1f + 0.35f * closeness * relation, 1f, 1.35f);
+            return CalculateNeighborBonus(pKingdom, best);
         }
 
         public static string BuildNeighborBonusTooltip(Kingdom pKingdom, string pTechId)
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId) || !Ready) return "";
-            NeighborInfluence best = FindBestNeighborInfluence(pKingdom, pTechId);
+            NeighborInfluence best = GetCachedNeighborInfluence(pKingdom, pTechId);
             if (best == null) return "";
-            int pct = Mathf.RoundToInt((GetNeighborTechResearchBonus(pKingdom, pTechId) - 1f) * 100f);
+            int pct = Mathf.RoundToInt((CalculateNeighborBonus(pKingdom, best) - 1f) * 100f);
             if (pct <= 0) return "";
             return "\u90BB\u56FD\u601D\u6F6E +" + pct + "%: " +
                    (best.sourceKingdom?.name ?? "") + " " + (best.sourceCity?.data?.name ?? "");
@@ -310,27 +327,39 @@ namespace AncientWarfare3.core.policy
 
         private static void SpreadCompletedTech(Kingdom pKingdom, KingdomPolicyDef pTech)
         {
+            Dictionary<long, TechStateRow> states = ReadTechStatesForKingdom(pKingdom.id, pTech.Id);
             City capital = pKingdom.capital;
-            if (capital?.data != null)
-                UpsertProgress(capital, pTech.Id, ADOPTED, 0, "capital", capital, pKingdom, true);
+            if (capital?.data != null &&
+                (!states.TryGetValue(capital.id, out TechStateRow capitalState) || !capitalState.adopted))
+            {
+                UpsertProgress(capital, pTech.Id, ADOPTED, 0, "capital", capital, pKingdom, true, states);
+            }
 
             List<City> cities = GetCities(pKingdom);
-            List<City> adopted = cities.Where(p => IsAdopted(p, pTech.Id)).ToList();
+            var adopted = new List<City>();
+            foreach (City city in cities)
+            {
+                if (city?.data == null) continue;
+                if (states.TryGetValue(city.id, out TechStateRow state) && state.adopted)
+                    adopted.Add(city);
+            }
             if (adopted.Count == 0 && capital?.data != null) adopted.Add(capital);
             if (adopted.Count == 0) return;
 
             foreach (City city in cities)
             {
-                if (city?.data == null || city == capital || IsAdopted(city, pTech.Id)) continue;
+                if (city?.data == null || city == capital) continue;
+                states.TryGetValue(city.id, out TechStateRow state);
+                if (state != null && state.adopted) continue;
                 City source = FindNearest(city, adopted);
                 if (source?.data == null) continue;
 
-                double oldProgress = Math.Max(ReadAdoption(city, pTech.Id), ReadExposure(city, pTech.Id));
+                double oldProgress = state == null ? 0.0 : Math.Max(state.adoption_progress, state.exposure_progress);
                 float gain = CalculateSameKingdomGain(city, source, pKingdom, source == capital);
                 double next = Math.Min(ADOPTED, oldProgress + gain);
                 bool becameAdopted = oldProgress < ADOPTED && next >= ADOPTED;
                 UpsertProgress(city, pTech.Id, next, 0, source == capital ? "capital" : "same_kingdom",
-                    source, pKingdom, becameAdopted);
+                    source, pKingdom, becameAdopted, states);
 
                 if (!becameAdopted) continue;
                 HistoryWriter.RecordCity(city, pKingdom, CityEvent.TECH_ADOPTED,
@@ -356,12 +385,12 @@ namespace AncientWarfare3.core.policy
 
         private static void AddNeighborExposure(Kingdom pKingdom, string pTechId)
         {
-            NeighborInfluence best = FindBestNeighborInfluence(pKingdom, pTechId);
+            NeighborInfluence best = GetCachedNeighborInfluence(pKingdom, pTechId);
             if (best == null || best.targetCity?.data == null) return;
 
             double old = ReadExposure(best.targetCity, pTechId);
             if (old >= MAX_EXPOSURE || IsAdopted(best.targetCity, pTechId)) return;
-            float bonus = GetNeighborTechResearchBonus(pKingdom, pTechId);
+            float bonus = CalculateNeighborBonus(pKingdom, best);
             double next = Math.Min(MAX_EXPOSURE, old + 4.0 * bonus);
             UpsertProgress(best.targetCity, pTechId, ReadAdoption(best.targetCity, pTechId), next, "neighbor",
                 best.sourceCity, best.sourceKingdom, false);
@@ -375,11 +404,24 @@ namespace AncientWarfare3.core.policy
             public float distance;
         }
 
+        private sealed class TechStateRow
+        {
+            public long record_id = -1;
+            public long city_id = -1;
+            public long kingdom_id = -1;
+            public bool adopted;
+            public double adoption_progress;
+            public double exposure_progress;
+            public double adopted_time = -1.0;
+        }
+
         private static NeighborInfluence FindBestNeighborInfluence(Kingdom pKingdom, string pTechId)
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId) || World.world?.kingdoms == null) return null;
             List<City> ownCities = GetCities(pKingdom);
             if (ownCities.Count == 0) return null;
+            HashSet<long> adoptedSourceCityIds = ReadAdoptedCityIds(pTechId);
+            if (adoptedSourceCityIds.Count == 0) return null;
 
             NeighborInfluence best = null;
             foreach (Kingdom other in World.world.kingdoms)
@@ -387,7 +429,7 @@ namespace AncientWarfare3.core.policy
                 if (other?.data == null || other == pKingdom || other.isRekt() || other.isNeutral()) continue;
                 foreach (City source in GetCities(other))
                 {
-                    if (!IsAdopted(source, pTechId)) continue;
+                    if (!adoptedSourceCityIds.Contains(source.id)) continue;
                     foreach (City target in ownCities)
                     {
                         float dist = Distance(target, source);
@@ -406,6 +448,50 @@ namespace AncientWarfare3.core.policy
             return best;
         }
 
+        private static NeighborInfluence GetCachedNeighborInfluence(Kingdom pKingdom, string pTechId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId)) return null;
+            EnsureNeighborCacheYear();
+            string key = NeighborCacheKey(pKingdom, pTechId);
+            if (NeighborInfluenceCache.ContainsKey(key)) return NeighborInfluenceCache[key];
+            NeighborInfluence best = FindBestNeighborInfluence(pKingdom, pTechId);
+            NeighborInfluenceCache[key] = best;
+            return best;
+        }
+
+        private static float CalculateNeighborBonus(Kingdom pKingdom, NeighborInfluence pBest)
+        {
+            if (pBest == null) return 1f;
+            EnsureNeighborCacheYear();
+            string key = NeighborCacheKey(pKingdom, pBest.sourceKingdom, pBest.sourceCity, pBest.targetCity);
+            if (NeighborBonusCache.TryGetValue(key, out float cached)) return cached;
+            float closeness = Mathf.Clamp01(1f - pBest.distance / NEIGHBOR_RANGE);
+            float relation = RelationFactor(pKingdom, pBest.sourceKingdom);
+            float bonus = Mathf.Clamp(1f + 0.35f * closeness * relation, 1f, 1.35f);
+            NeighborBonusCache[key] = bonus;
+            return bonus;
+        }
+
+        private static string NeighborCacheKey(Kingdom pKingdom, string pTechId)
+        {
+            return (pKingdom?.id ?? -1L) + "|" + (pTechId ?? "");
+        }
+
+        private static string NeighborCacheKey(Kingdom pKingdom, Kingdom pSource, City pSourceCity, City pTargetCity)
+        {
+            return (pKingdom?.id ?? -1L) + "|" + (pSource?.id ?? -1L) + "|" +
+                   (pSourceCity?.id ?? -1L) + "|" + (pTargetCity?.id ?? -1L);
+        }
+
+        private static void EnsureNeighborCacheYear()
+        {
+            int year = Date.getCurrentYear();
+            if (_neighborCacheYear == year) return;
+            _neighborCacheYear = year;
+            NeighborInfluenceCache.Clear();
+            NeighborBonusCache.Clear();
+        }
+
         private static float RelationFactor(Kingdom pKingdom, Kingdom pOther)
         {
             if (pKingdom?.data == null || pOther?.data == null) return 0.65f;
@@ -421,15 +507,28 @@ namespace AncientWarfare3.core.policy
         }
 
         private static bool UpsertProgress(City pCity, string pTechId, double pAdoption, double pExposure,
-            string pSourceType, City pSourceCity, Kingdom pSourceKingdom, bool pAdopted)
+            string pSourceType, City pSourceCity, Kingdom pSourceKingdom, bool pAdopted,
+            Dictionary<long, TechStateRow> pStateByCity = null)
         {
             if (pCity?.data == null || string.IsNullOrEmpty(pTechId) || !Ready) return false;
-            long existing = FindRecordId(pCity.id, pTechId);
+            TechStateRow cachedState = null;
+            bool hasCachedState = pStateByCity != null && pStateByCity.TryGetValue(pCity.id, out cachedState);
+            long existing = hasCachedState ? cachedState.record_id : FindRecordId(pCity.id, pTechId);
             double now = LineageService.CurTime();
-            bool alreadyAdopted = existing >= 0 && IsAdopted(pCity, pTechId);
             double adoption = Math.Max(0, Math.Min(ADOPTED, pAdoption));
             double exposure = Math.Max(0, Math.Min(MAX_EXPOSURE, pExposure));
             bool adopted = pAdopted || adoption >= ADOPTED;
+            bool alreadyAdopted = hasCachedState ? cachedState.adopted : existing >= 0 && IsAdopted(pCity, pTechId);
+            double existingAdoption = hasCachedState ? cachedState.adoption_progress : 0.0;
+            double existingExposure = hasCachedState ? cachedState.exposure_progress : 0.0;
+            bool sameOwner = hasCachedState && cachedState.kingdom_id == (pCity.kingdom?.id ?? -1L);
+            double nextAdoption = adopted ? ADOPTED : adoption;
+            if (hasCachedState && CityTechUpdateRules.ShouldSkipStableAdoptedUpdate(cachedState.adopted, adopted,
+                    existingAdoption, nextAdoption, existingExposure, exposure, sameOwner))
+                return false;
+            double adoptedTime = adopted && !alreadyAdopted
+                ? now
+                : hasCachedState ? cachedState.adopted_time : ReadAdoptedTime(existing);
 
             var values = new[]
             {
@@ -444,7 +543,7 @@ namespace AncientWarfare3.core.policy
                 ColumnVal.Create("SOURCE_TYPE", pSourceType ?? ""),
                 ColumnVal.Create("SOURCE_CITY_ID", pSourceCity?.id ?? -1L),
                 ColumnVal.Create("SOURCE_KINGDOM_ID", pSourceKingdom?.id ?? -1L),
-                ColumnVal.Create("ADOPTED_TIME", adopted && !alreadyAdopted ? now : ReadAdoptedTime(existing)),
+                ColumnVal.Create("ADOPTED_TIME", adoptedTime),
                 ColumnVal.Create("UPDATED_TIME", now)
             };
 
@@ -455,6 +554,9 @@ namespace AncientWarfare3.core.policy
                     DB.UpdateValue(CityTechStateTableItem.GetTableName(),
                         new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("RECORD_ID", existing) },
                         values);
+                    UpdateCachedState(pStateByCity, pCity, pTechId, existing, adopted, nextAdoption, exposure,
+                        adoptedTime);
+                    if (adopted && !alreadyAdopted) InvalidateTechCaches(pTechId);
                     return adopted && !alreadyAdopted;
                 }
 
@@ -466,6 +568,9 @@ namespace AncientWarfare3.core.policy
                 };
                 insert.AddRange(values);
                 DB.Insert(CityTechStateTableItem.GetTableName(), insert.ToArray());
+                UpdateCachedState(pStateByCity, pCity, pTechId, id, adopted, nextAdoption, exposure,
+                    adopted ? now : -1.0);
+                if (adopted) InvalidateTechCaches(pTechId);
                 return adopted;
             }
             catch (Exception e)
@@ -473,6 +578,101 @@ namespace AncientWarfare3.core.policy
                 ModClass.LogWarning("CityTechState upsert failed: " + e.Message);
                 return false;
             }
+        }
+
+        private static Dictionary<long, TechStateRow> ReadTechStatesForKingdom(long pKingdomId, string pTechId)
+        {
+            var result = new Dictionary<long, TechStateRow>();
+            if (!Ready || pKingdomId < 0 || string.IsNullOrEmpty(pTechId)) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT RECORD_ID,CITY_ID,KINGDOM_ID,ADOPTED,ADOPTION_PROGRESS,EXPOSURE_PROGRESS,ADOPTED_TIME " +
+                                  "FROM " + CityTechStateTableItem.GetTableName() +
+                                  " WHERE KINGDOM_ID=@kingdom AND TECH_ID=@tech";
+                cmd.Parameters.AddWithValue("@kingdom", pKingdomId);
+                cmd.Parameters.AddWithValue("@tech", pTechId);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var row = new TechStateRow
+                    {
+                        record_id = ToLong(reader, 0),
+                        city_id = ToLong(reader, 1),
+                        kingdom_id = ToLong(reader, 2),
+                        adopted = ToInt(reader, 3) == 1,
+                        adoption_progress = ToDouble(reader, 4),
+                        exposure_progress = ToDouble(reader, 5),
+                        adopted_time = ToDouble(reader, 6)
+                    };
+                    if (row.city_id >= 0) result[row.city_id] = row;
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static HashSet<long> ReadAdoptedCityIds(string pTechId)
+        {
+            EnsureAdoptedCityCacheYear();
+            if (AdoptedCityIdsByTech.TryGetValue(pTechId, out HashSet<long> cached)) return cached;
+
+            var result = new HashSet<long>();
+            if (!Ready || string.IsNullOrEmpty(pTechId))
+            {
+                AdoptedCityIdsByTech[pTechId ?? ""] = result;
+                return result;
+            }
+
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT CITY_ID FROM " + CityTechStateTableItem.GetTableName() +
+                                  " WHERE TECH_ID=@tech AND ADOPTED=1";
+                cmd.Parameters.AddWithValue("@tech", pTechId);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long id = ToLong(reader, 0);
+                    if (id >= 0) result.Add(id);
+                }
+            }
+            catch { }
+
+            AdoptedCityIdsByTech[pTechId] = result;
+            return result;
+        }
+
+        private static void UpdateCachedState(Dictionary<long, TechStateRow> pStateByCity, City pCity, string pTechId,
+            long pRecordId, bool pAdopted, double pAdoption, double pExposure, double pAdoptedTime)
+        {
+            if (pStateByCity == null || pCity?.data == null || string.IsNullOrEmpty(pTechId)) return;
+            pStateByCity[pCity.id] = new TechStateRow
+            {
+                record_id = pRecordId,
+                city_id = pCity.id,
+                kingdom_id = pCity.kingdom?.id ?? -1L,
+                adopted = pAdopted,
+                adoption_progress = pAdoption,
+                exposure_progress = pExposure,
+                adopted_time = pAdoptedTime
+            };
+        }
+
+        private static void EnsureAdoptedCityCacheYear()
+        {
+            int year = Date.getCurrentYear();
+            if (_adoptedCityCacheYear == year) return;
+            _adoptedCityCacheYear = year;
+            AdoptedCityIdsByTech.Clear();
+        }
+
+        private static void InvalidateTechCaches(string pTechId)
+        {
+            if (!string.IsNullOrEmpty(pTechId))
+                AdoptedCityIdsByTech.Remove(pTechId);
+            NeighborInfluenceCache.Clear();
+            NeighborBonusCache.Clear();
         }
 
         private static long FindRecordId(long pCityId, string pTechId)

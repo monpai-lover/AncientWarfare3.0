@@ -2187,6 +2187,24 @@ namespace WarFabricationRuleTests
                     pSupportsMandateSystem: true))
                 throw new Exception("Independent supported kingdoms should compete for strongest-Mandate status.");
 
+            int winner = MandatePowerRules.SelectWinningCandidateIndex(
+                new[] { 80f, 138f, 100f, 20f },
+                new[] { true, true, true, true });
+            if (winner != 1)
+                throw new Exception($"Expected strongest valid Mandate claimant index 1, got {winner}.");
+
+            int blocked = MandatePowerRules.SelectWinningCandidateIndex(
+                new[] { 80f, 137.99f, 100f, 20f },
+                new[] { true, true, true, true });
+            if (blocked != -1)
+                throw new Exception("Mandate candidate table must apply the same lead threshold as direct checks.");
+
+            int ignored = MandatePowerRules.SelectWinningCandidateIndex(
+                new[] { 400f, 138f, 100f, 20f },
+                new[] { false, true, true, true });
+            if (ignored != 1)
+                throw new Exception($"Ineligible high-power kingdoms must not win Mandate selection, got {ignored}.");
+
             if (MandatePowerRules.CalculateStrongestPowerPenalty(
                     pMandatePower: 100f,
                     pStrongestPower: 100f) != 0)
@@ -2243,6 +2261,15 @@ namespace WarFabricationRuleTests
 
             if (MandateRebelStateRules.SettledClassAfterRebellion("peasant_rebel") != "default")
                 throw new Exception("A peasant rebel kingdom should return to ordinary political class after rebellion war settlement.");
+            if (!MandateRebelStateRules.ShouldUseActiveClaimantCache(
+                    pCachedYear: 12, pCurrentYear: 12, pCachedKingdomCount: 8, pCurrentKingdomCount: 8))
+                throw new Exception("Active rebel claimant scan should reuse same-year same-count cache.");
+            if (MandateRebelStateRules.ShouldUseActiveClaimantCache(
+                    pCachedYear: 11, pCurrentYear: 12, pCachedKingdomCount: 8, pCurrentKingdomCount: 8))
+                throw new Exception("Active rebel claimant scan cache must expire across years.");
+            if (MandateRebelStateRules.ShouldUseActiveClaimantCache(
+                    pCachedYear: 12, pCurrentYear: 12, pCachedKingdomCount: 7, pCurrentKingdomCount: 8))
+                throw new Exception("Active rebel claimant scan cache must expire when kingdom count changes.");
         }
 
         private static void ExpectRepublicGovernmentRules()
@@ -2789,6 +2816,16 @@ namespace WarFabricationRuleTests
                 throw new Exception("AW3 updateAge total benchmark should appear under vanilla update_age.");
             if (UpdateAgeBenchmarkRules.Total != "aw3_update_age_total")
                 throw new Exception("UpdateAge details should use the AW3 update-age parent entry.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_update_object_age_wall"))
+                throw new Exception("UpdateAge benchmark needs a full MapBox.updateObjectAge wall-clock entry.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_update_age_unaccounted_wall"))
+                throw new Exception("UpdateAge benchmark needs an unaccounted wall-clock entry for vanilla/overhead time.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_actor_update_age_wall"))
+                throw new Exception("UpdateAge benchmark needs full actor updateAge wall-clock entry.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_update_age_wall"))
+                throw new Exception("UpdateAge benchmark needs full city updateAge wall-clock entry.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_wall"))
+                throw new Exception("UpdateAge benchmark needs full kingdom updateAge wall-clock entry.");
             if (!UpdateAgeBenchmarkRules.Contains("aw3_actor_update_age_retirement"))
                 throw new Exception("Actor retirement updateAge benchmark entry is missing.");
             if (!UpdateAgeBenchmarkRules.Contains("aw3_actor_update_age_old_head"))
@@ -2805,6 +2842,20 @@ namespace WarFabricationRuleTests
                 throw new Exception("Kingdom vassal AI updateAge benchmark entry is missing.");
             if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_update_age_general"))
                 throw new Exception("Kingdom general updateAge benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_kingdom_policy_ai"))
+                throw new Exception("Kingdom policy AI sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_tech_spread_completed"))
+                throw new Exception("City tech completed-spread sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_tech_neighbor_influence"))
+                throw new Exception("City tech neighbor-influence sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_economy_update_cities"))
+                throw new Exception("City economy per-city sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_economy_tech_report"))
+                throw new Exception("City economy tech-report sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_economy_slave_count"))
+                throw new Exception("City economy slave-count sub-benchmark entry is missing.");
+            if (!UpdateAgeBenchmarkRules.Contains("aw3_city_economy_db_upsert"))
+                throw new Exception("City economy DB-upsert sub-benchmark entry is missing.");
         }
 
         private static void ExpectDeathBondRules()

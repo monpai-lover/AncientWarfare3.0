@@ -15,6 +15,12 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "updateAge")]
         public static void UpdateAge_Postfix(Actor __instance)
         {
+            if (__instance?.data == null) return;
+            bool supportedActor = SlaveService.IsSupportedSlaveryActor(__instance);
+            bool rekt = __instance.isRekt();
+            bool warrior = __instance.isWarrior();
+            if (!SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(supportedActor, rekt, warrior)) return;
+
             long benchmark = UpdateAgeBenchmark.Begin();
             try
             {

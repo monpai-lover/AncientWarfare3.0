@@ -19,10 +19,19 @@ namespace AncientWarfare3.core.policy
         public float unrest_risk;
     }
 
+    internal sealed class CityEconomyContributionSums
+    {
+        public int year = int.MinValue;
+        public float policy_points;
+        public float tech_points;
+    }
+
     internal static class CityEconomyService
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static readonly Dictionary<long, CityEconomyContributionSums> ContributionCache =
+            new Dictionary<long, CityEconomyContributionSums>();
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
@@ -35,19 +44,27 @@ namespace AncientWarfare3.core.policy
             if (lastYear == year) return;
             pKingdom.data.set(LineageKeys.CITY_ECONOMY_LAST_YEAR, year);
 
-            foreach (City city in pKingdom.getCities())
-                UpdateCity(pKingdom, city, year);
-            DevelopmentMapModeService.DirtyMapIfActive();
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                    UpdateCity(pKingdom, city, year);
+            }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyUpdateCitiesIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { DevelopmentMapModeService.DirtyMapIfActive(); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyMapDirtyIndex, benchmark); }
         }
 
         public static float GetPolicyContribution(Kingdom pKingdom)
         {
-            return SumContribution(pKingdom, "POLICY_POINTS");
+            return GetContributionSums(pKingdom).policy_points;
         }
 
         public static float GetTechContribution(Kingdom pKingdom)
         {
-            return SumContribution(pKingdom, "TECH_POINTS");
+            return GetContributionSums(pKingdom).tech_points;
         }
 
         public static CityEconomySnapshot GetSnapshot(City pCity)
@@ -80,14 +97,29 @@ namespace AncientWarfare3.core.policy
         {
             if (pCity?.data == null || pCity.isRekt()) return;
             bool activeFief = FiefService.IsActiveFief(pCity);
-            CityTechReport tech = CityTechService.GetCityReport(pCity, pIncludeNeighborBonus: false);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            CityTechReport tech;
+            try { tech = CityTechService.GetCityReport(pCity, pIncludeNeighborBonus: false); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyTechReportIndex, benchmark); }
             CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief, tech);
             int population = SafePopulation(pCity);
             bool nonCore = IsNonCore(pKingdom, pCity);
+            benchmark = UpdateAgeBenchmark.Begin();
+            int slavePopulation;
+            try
+            {
+                slavePopulation = CityEconomyUpdateRules.ShouldCountSlavesForEconomy(
+                    SlaveService.IsSlaveryEnabled(pKingdom), pCity?.data != null)
+                    ? CountSlavePopulation(pCity)
+                    : 0;
+            }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomySlaveCountIndex, benchmark); }
             CityEconomyContribution contribution = CityEconomyRules.CalculateContribution(role, population,
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
-                CountSlavePopulation(pCity), nonCore, activeFief);
-            Upsert(pKingdom, pCity, role, contribution, pYear);
+                slavePopulation, nonCore, activeFief);
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { Upsert(pKingdom, pCity, role, contribution, pYear); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyDbUpsertIndex, benchmark); }
         }
 
         private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief, CityTechReport pTech)
@@ -103,8 +135,17 @@ namespace AncientWarfare3.core.policy
             CityEconomyContribution pContribution, int pYear)
         {
             string role = pRole.ToString();
-            string previous = ReadRole(pCity.id);
-            bool existed = !string.IsNullOrEmpty(previous);
+            CityEconomyStoredState previousState = ReadStoredState(pCity.id);
+            bool existed = previousState.has_record;
+            string previous = previousState.role;
+            bool metadataChanged = previousState.has_record &&
+                                   (!string.Equals(previousState.city_name, pCity.data.name ?? "",
+                                        StringComparison.Ordinal) ||
+                                    !string.Equals(previousState.kingdom_name, pKingdom.name ?? "",
+                                        StringComparison.Ordinal));
+            if (CityEconomyUpdateRules.ShouldSkipStableUpdate(previousState, pKingdom.id, role, pContribution,
+                    metadataChanged))
+                return;
             var constraints = new List<SimpleColumnConstraint>
             {
                 SimpleColumnConstraint.CreateEq("CITY_ID", pCity.id)
@@ -148,43 +189,74 @@ namespace AncientWarfare3.core.policy
                     ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
             }
 
+            InvalidateContributionCache(pKingdom.id);
             RecordEconomyMilestone(pKingdom, pCity, previous, role, pContribution, existed);
         }
 
-        private static string ReadRole(long pCityId)
+        private static CityEconomyStoredState ReadStoredState(long pCityId)
         {
-            if (!Ready || pCityId < 0) return "";
+            var state = new CityEconomyStoredState();
+            if (!Ready || pCityId < 0) return state;
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ROLE FROM " + CityEconomyStateTableItem.GetTableName() + " WHERE CITY_ID=@city";
+                cmd.CommandText = "SELECT KINGDOM_ID,CITY_NAME,KINGDOM_NAME,ROLE,POLICY_POINTS,TECH_POINTS," +
+                                  "TAX_VALUE,MANPOWER,FOOD_STABILITY,UNREST_RISK FROM " +
+                                  CityEconomyStateTableItem.GetTableName() + " WHERE CITY_ID=@city LIMIT 1";
                 cmd.Parameters.AddWithValue("@city", pCityId);
-                object value = cmd.ExecuteScalar();
-                return value == null || value == DBNull.Value ? "" : Convert.ToString(value);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                if (!reader.Read()) return state;
+                state.has_record = true;
+                state.kingdom_id = reader.IsDBNull(0) ? -1L : Convert.ToInt64(reader.GetValue(0));
+                state.city_name = reader.IsDBNull(1) ? "" : Convert.ToString(reader.GetValue(1));
+                state.kingdom_name = reader.IsDBNull(2) ? "" : Convert.ToString(reader.GetValue(2));
+                state.role = reader.IsDBNull(3) ? "" : Convert.ToString(reader.GetValue(3));
+                state.policy_points = ReadFloat(reader, 4);
+                state.tech_points = ReadFloat(reader, 5);
+                state.tax_value = ReadFloat(reader, 6);
+                state.manpower = ReadFloat(reader, 7);
+                state.food_stability = ReadFloat(reader, 8);
+                state.unrest_risk = ReadFloat(reader, 9);
             }
             catch
             {
-                return "";
             }
+            return state;
         }
 
-        private static float SumContribution(Kingdom pKingdom, string pColumn)
+        private static CityEconomyContributionSums GetContributionSums(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null || !Ready) return 0f;
+            var empty = new CityEconomyContributionSums { year = Date.getCurrentYear() };
+            if (pKingdom?.data == null || !Ready) return empty;
+            int year = Date.getCurrentYear();
+            if (ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached) &&
+                CityEconomyUpdateRules.ShouldUseContributionCache(true, cached.year, year))
+                return cached;
+
+            var sums = new CityEconomyContributionSums { year = year };
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT SUM(" + pColumn + ") FROM " +
+                cmd.CommandText = "SELECT SUM(POLICY_POINTS),SUM(TECH_POINTS) FROM " +
                                   CityEconomyStateTableItem.GetTableName() + " WHERE KINGDOM_ID=@kingdom";
                 cmd.Parameters.AddWithValue("@kingdom", pKingdom.id);
-                object value = cmd.ExecuteScalar();
-                if (value == null || value == DBNull.Value) return 0f;
-                return Convert.ToSingle(value);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    sums.policy_points = reader.IsDBNull(0) ? 0f : Convert.ToSingle(reader.GetValue(0));
+                    sums.tech_points = reader.IsDBNull(1) ? 0f : Convert.ToSingle(reader.GetValue(1));
+                }
             }
             catch
             {
-                return 0f;
             }
+            ContributionCache[pKingdom.id] = sums;
+            return sums;
+        }
+
+        private static void InvalidateContributionCache(long pKingdomId)
+        {
+            if (pKingdomId >= 0) ContributionCache.Remove(pKingdomId);
         }
 
         private static float ReadFloat(SQLiteDataReader pReader, int pIndex)
