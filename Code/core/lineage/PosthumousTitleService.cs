@@ -487,6 +487,7 @@ namespace AncientWarfare3.core.lineage
         private static int ScoreEnding(string pEndReason, string pDeathCause)
         {
             if (pEndReason == "kingdom_fell") return -3;
+            if (pEndReason == "captured_executed") return -3;
             if (pEndReason == "captured_slave") return -2;
             if (pEndReason == "abdicated") return 1;
             if (string.IsNullOrEmpty(pDeathCause)) return 0;
@@ -527,6 +528,8 @@ namespace AncientWarfare3.core.lineage
 
             if (pEndReason == "captured_slave")
                 return PickByPriority(new[] { "\u54c0", "\u95f5", "\u6000", "\u610d" }, pKingdomId);
+            if (pEndReason == "captured_executed")
+                return PickByPriority(new[] { "\u610d", "\u54c0", "\u6000", "\u5389" }, pKingdomId);
 
             if (pEval.Years < 3 && !pEval.Founder)
                 return PickByPriority(new[] { "殇", "悼", "怀", "少" }, pKingdomId);
@@ -674,6 +677,7 @@ namespace AncientWarfare3.core.lineage
         private static string EndVerb(string pEndReason)
         {
             if (pEndReason == "captured_slave") return T("aw_hist_posthumous_end_captured_slave");
+            if (pEndReason == "captured_executed") return T("aw_hist_posthumous_end_captured_executed");
             return pEndReason switch
             {
                 "abdicated" => T("aw_hist_posthumous_end_abdicated"),

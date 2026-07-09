@@ -290,6 +290,7 @@ namespace WarFabricationRuleTests
             ExpectMetaWindowSafetyRules();
             ExpectPathfindingSafetyRules();
             ExpectRestorationSettlementRules();
+            ExpectRoyalRestorationClaimRules();
             ExpectWarGoalControlRules();
             ExpectSlaveArmyNameRefreshRule();
             ExpectCityMaintenanceThrottleRules();
@@ -305,6 +306,7 @@ namespace WarFabricationRuleTests
             ExpectCityOccupationAccelerationRules();
             ExpectFamilyTreePortraitFrameRules();
             ExpectFamilyTreeVisibilityRules();
+            ExpectFamilyTreeLabelLayoutRules();
             ExpectClanBannerFrameRules();
             ExpectFamilyTreeToolbarLayoutRules();
             ExpectVassalNameplateFlagLayoutRules();
@@ -339,6 +341,7 @@ namespace WarFabricationRuleTests
             ExpectFormerKingTraitRules();
             ExpectSetKingPostfixRules();
             ExpectCityEconomyMilestoneRules();
+            ExpectCityEconomyUpdateCacheRules();
             ExpectAncestryDisplayRules();
             ExpectMandateMapMarkerRules();
             ExpectLineageArchiveIndexRules();
@@ -353,6 +356,8 @@ namespace WarFabricationRuleTests
             ExpectXiaFallbackNameRules();
             ExpectXiaCityNameLibraryRules();
             ExpectCityTechChronicleRules();
+            ExpectCityTechSpreadRules();
+            ExpectCityTechNeighborRules();
             ExpectCityMaintenanceBenchmarkRules();
             ExpectUpdateAgeBenchmarkRules();
             ExpectDeathBondRules();
@@ -2695,6 +2700,18 @@ namespace WarFabricationRuleTests
                 throw new Exception("Unchanged ordinary economy records should stay quiet.");
         }
 
+        private static void ExpectCityEconomyUpdateCacheRules()
+        {
+            if (!CityEconomyUpdateRules.ShouldUseBatchTechReports(pReady: true, pCityCount: 2))
+                throw new Exception("City economy should use a batch tech-report query for multi-city kingdoms.");
+            if (CityEconomyUpdateRules.ShouldUseBatchTechReports(pReady: false, pCityCount: 2))
+                throw new Exception("City economy should not use batch tech reports before the DB is ready.");
+            if (CityEconomyUpdateRules.ShouldUseBatchTechReports(pReady: true, pCityCount: 0))
+                throw new Exception("City economy should not build batch caches without cities.");
+            if (!CityEconomyUpdateRules.ShouldUseBatchStoredStates(pReady: true, pCityCount: 3))
+                throw new Exception("City economy should read stored states in one batch for city loops.");
+        }
+
         private static void ExpectXiaNameRepairRules()
         {
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName("NAME"))
@@ -2761,6 +2778,32 @@ namespace WarFabricationRuleTests
                 throw new Exception("National tech completion must remain visible in kingdom history.");
             if (CityTechChronicleRules.ShouldRecordCityAdoptionInKingdomHistory())
                 throw new Exception("City tech adoption/transmission must be kept in city chronicles only.");
+        }
+
+        private static void ExpectCityTechSpreadRules()
+        {
+            if (!CityTechSpreadRules.ShouldSkipFullyAdoptedSpread(pCityCount: 4, pAdoptedCityCount: 4))
+                throw new Exception("Fully adopted tech should skip yearly spread loops.");
+            if (CityTechSpreadRules.ShouldSkipFullyAdoptedSpread(pCityCount: 4, pAdoptedCityCount: 3))
+                throw new Exception("Partially adopted tech must keep spreading.");
+            if (CityTechSpreadRules.ShouldSkipFullyAdoptedSpread(pCityCount: 0, pAdoptedCityCount: 0))
+                throw new Exception("Invalid city counts should not be treated as fully adopted.");
+        }
+
+        private static void ExpectCityTechNeighborRules()
+        {
+            if (!CityTechNeighborRules.ShouldConsiderNeighborKingdom(
+                    pHasKingdom: true, pSameKingdom: false, pIsRekt: false, pIsNeutral: false))
+                throw new Exception("Valid neighboring kingdoms should be considered for tech influence.");
+            if (CityTechNeighborRules.ShouldConsiderNeighborKingdom(
+                    pHasKingdom: true, pSameKingdom: true, pIsRekt: false, pIsNeutral: false))
+                throw new Exception("Own kingdom should not be considered as neighbor influence.");
+            if (CityTechNeighborRules.ShouldConsiderNeighborKingdom(
+                    pHasKingdom: true, pSameKingdom: false, pIsRekt: true, pIsNeutral: false))
+                throw new Exception("Destroyed kingdoms should not be scanned for neighbor influence.");
+            if (CityTechNeighborRules.ShouldConsiderNeighborKingdom(
+                    pHasKingdom: false, pSameKingdom: false, pIsRekt: false, pIsNeutral: false))
+                throw new Exception("Missing neighbor kingdoms should not be scanned.");
         }
 
         private static void ExpectCityMaintenanceBenchmarkRules()
@@ -2952,6 +2995,44 @@ namespace WarFabricationRuleTests
             if (RestorationSettlementRules.ShouldMoveClaimantToTargetCityBeforeKingdomCreation(
                     pClaimantInTargetCity: true))
                 throw new Exception("Restoration should not move a claimant who is already in the target city.");
+        }
+
+        private static void ExpectRoyalRestorationClaimRules()
+        {
+            if (!RoyalRestorationClaimRules.IsEligibleClaimant(
+                    pHasActor: true,
+                    pIsRekt: false,
+                    pIsMale: true,
+                    pIsMad: false))
+                throw new Exception("Male live royal claimants should be eligible for restoration.");
+            if (RoyalRestorationClaimRules.IsEligibleClaimant(
+                    pHasActor: true,
+                    pIsRekt: false,
+                    pIsMale: false,
+                    pIsMad: false))
+                throw new Exception("Female actors must not receive restoration claims.");
+            if (RoyalRestorationClaimRules.IsEligibleClaimant(
+                    pHasActor: true,
+                    pIsRekt: true,
+                    pIsMale: true,
+                    pIsMad: false))
+                throw new Exception("Dead or invalid actors must not receive restoration claims.");
+            if (RoyalRestorationClaimRules.IsEligibleClaimant(
+                    pHasActor: true,
+                    pIsRekt: false,
+                    pIsMale: true,
+                    pIsMad: true))
+                throw new Exception("Mad claimants must not be used to restore kingdoms.");
+            if (RoyalRestorationClaimRules.ShouldUseHostedClaim(
+                    pHasClaim: true,
+                    pHasEligibleClaimant: false,
+                    pHasTargetCity: true))
+                throw new Exception("Restoration targets must ignore claims whose claimant cannot be king.");
+            if (!RoyalRestorationClaimRules.ShouldUseHostedClaim(
+                    pHasClaim: true,
+                    pHasEligibleClaimant: true,
+                    pHasTargetCity: true))
+                throw new Exception("Valid male claimant and target city should expose restoration.");
         }
 
         private static void ExpectWarGoalControlRules()
@@ -3513,6 +3594,26 @@ namespace WarFabricationRuleTests
                     pActiveCount: 20,
                     pBatchLimit: 4) != 2)
                 throw new Exception("Royal guard refresh cursor should advance and wrap.");
+            if (RoyalGuardMaintenanceRules.ShouldWriteGuardRoster("1,2,3", "1,2,3"))
+                throw new Exception("Royal guard roster writes should be skipped when the serialized roster is unchanged.");
+            if (!RoyalGuardMaintenanceRules.ShouldWriteGuardRoster("1,2,3", "1,2,4"))
+                throw new Exception("Royal guard roster writes should still run when the serialized roster changes.");
+            if (!RoyalGuardMaintenanceRules.ShouldRecordExpensiveIdentityRefresh(
+                    pWasGuard: false,
+                    pWasCaptain: false,
+                    pCaptain: false,
+                    pMissingTrait: false,
+                    pKingdomChanged: false,
+                    pNameChanged: false))
+                throw new Exception("New royal guards still need archive and graphics refresh.");
+            if (RoyalGuardMaintenanceRules.ShouldRecordExpensiveIdentityRefresh(
+                    pWasGuard: true,
+                    pWasCaptain: false,
+                    pCaptain: false,
+                    pMissingTrait: false,
+                    pKingdomChanged: false,
+                    pNameChanged: true))
+                throw new Exception("Royal guard name-only refresh should not rebuild actor graphics.");
         }
 
         private static void ExpectAwArmyRoleRules()
@@ -3629,6 +3730,20 @@ namespace WarFabricationRuleTests
                     pCaptainValid: true,
                     pCitySlaveCount: 20))
                 throw new Exception("A full valid slave army should skip expensive fill scans.");
+            if (SlaveArmyMaintenanceRules.ShouldCountCitySlavesForStableCheck(
+                    pArmyExists: true,
+                    pTotalWarriors: 25,
+                    pSlaveWarriors: 20,
+                    pNonSlaveWarriors: 5,
+                    pCaptainValid: true))
+                throw new Exception("A full valid slave army should not count every city slave before skipping fill.");
+            if (!SlaveArmyMaintenanceRules.ShouldCountCitySlavesForStableCheck(
+                    pArmyExists: true,
+                    pTotalWarriors: 10,
+                    pSlaveWarriors: 8,
+                    pNonSlaveWarriors: 2,
+                    pCaptainValid: true))
+                throw new Exception("An underfilled slave army still needs city slave counts before skipping fill.");
             if (!SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
                     pArmyExists: true,
                     pTotalWarriors: 10,
@@ -3769,6 +3884,33 @@ namespace WarFabricationRuleTests
                 throw new Exception("Actors with missing status should stay visible when relation data exists.");
         }
 
+        private static void ExpectFamilyTreeLabelLayoutRules()
+        {
+            const string male = "\u2642";
+            const string self = "\u672C\u4EBA";
+            const string father = "\u7236";
+            const string shortName = "\u59EC\u53D1";
+            const string longForeignName = "\u8D39\u5965\u591A\u7F57\u5A03\u53F6\u83B2\u5A1C";
+
+            string shortLabel = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(father, shortName, male, self);
+            if (shortLabel != father + " " + shortName + male)
+                throw new Exception("Short family tree labels should remain readable and unmodified.");
+
+            string compact = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(father, longForeignName, male, self);
+            if (!compact.StartsWith(father + " "))
+                throw new Exception("Compacted family tree labels must keep the relation prefix.");
+            if (!compact.EndsWith(male))
+                throw new Exception("Compacted family tree labels must keep the sex suffix.");
+            if (!compact.Contains("..."))
+                throw new Exception("Long foreign family tree labels must be visibly compacted.");
+            if (!FamilyTreeLabelLayoutRules.FitsNodeNameLine(compact))
+                throw new Exception("Compacted family tree labels must fit inside the fixed node name line.");
+
+            string selfLabel = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(self, shortName, male, self);
+            if (selfLabel.StartsWith(self + " "))
+                throw new Exception("The self relation should not be duplicated in the node name label.");
+        }
+
         private static void ExpectClanBannerFrameRules()
         {
             if (!ClanBannerFrameRules.ShouldCacheDefaultFrame(
@@ -3823,8 +3965,10 @@ namespace WarFabricationRuleTests
 
         private static void ExpectVassalNameplateFlagLayoutRules()
         {
-            if (VassalNameplateFlagLayoutRules.FlagSize < 20f)
-                throw new Exception("Suzerain nameplate flag must be large enough to read on the kingdom nameplate.");
+            const float originalNameplateKingdomFlagVisualSize = 32.4f;
+
+            if (Math.Abs(VassalNameplateFlagLayoutRules.FlagSize - originalNameplateKingdomFlagVisualSize) > 0.01f)
+                throw new Exception("Suzerain nameplate flag must match the original kingdom banner visual size on the nameplate.");
             if (VassalNameplateFlagLayoutRules.IconInset < 1f ||
                 VassalNameplateFlagLayoutRules.IconInset >= VassalNameplateFlagLayoutRules.FlagSize / 3f)
                 throw new Exception("Suzerain nameplate flag icon inset should keep the banner visible without shrinking it too much.");
@@ -4080,6 +4224,22 @@ namespace WarFabricationRuleTests
                 throw new Exception("A same-day city history period with events should be kept.");
             if (HistoryPeriodRules.ShouldKeepPeriod(121.0, 2.0, pEventCount: 0))
                 throw new Exception("Empty inverted city history periods should be dropped.");
+            if (!HistoryPeriodRules.IsSameCityOwnerSnapshot(-1, "\u7fca", 1024, "\u7fca"))
+                throw new Exception("City history should not split one owner period just because some events missed owner id.");
+            if (!HistoryPeriodRules.IsSameCityOwnerSnapshot(1024, "\u7fca", -1, "\u7fca"))
+                throw new Exception("City history should merge later name-only events into the same owner period.");
+            if (HistoryPeriodRules.IsSameCityOwnerSnapshot(1024, "\u7fca", 2048, "\u95fd"))
+                throw new Exception("Different city owners must still start separate city history periods.");
+            if (SlaveChronicleRules.ShouldRecordIndividualCityEnslavement("city_fall"))
+                throw new Exception("City-fall slavery should use the city war-slave summary instead of per-captive city spam.");
+            if (SlaveChronicleRules.ShouldRecordIndividualCityEnslavement("battlefield_capture"))
+                throw new Exception("Battlefield captures should use the city war-slave summary instead of per-captive city spam.");
+            if (SlaveChronicleRules.ShouldRecordIndividualCityEnslavement("captured"))
+                throw new Exception("Slave-catcher captures should not split city periods with per-captive city spam.");
+            if (SlaveChronicleRules.ShouldRecordIndividualCityEnslavement("foreign_occupation"))
+                throw new Exception("Foreign occupation enslavement should stay out of individual city slave records.");
+            if (!SlaveChronicleRules.ShouldRecordIndividualCityEnslavement("born_slave"))
+                throw new Exception("Local born-slave events can stay visible in city chronicles.");
         }
 
         private static void ExpectKingdomRenameRules()

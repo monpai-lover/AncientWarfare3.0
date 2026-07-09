@@ -22,12 +22,15 @@ namespace AncientWarfare3.core.lineage
             if (mixedChildren > 0)
                 pKingdom.data.set(LineageKeys.XIA_CONTACT_MIXED_CHILD_EVENTS, 0);
 
-            bool borders = BordersXiaContactKingdom(pKingdom);
-            bool nearby = !borders && NearbyXiaContactKingdom(pKingdom);
+            List<City> cities = GetCities(pKingdom);
+            if (cities.Count == 0) return;
+
+            bool borders = BordersXiaContactKingdom(pKingdom, cities);
+            bool nearby = !borders && NearbyXiaContactKingdom(pKingdom, cities);
             bool diplomacy = HasAllianceWithXiaContactKingdom(pKingdom);
             bool vassal = HasVassalContactWithXia(pKingdom);
-            int occupied = CountOccupiedXiaCities(pKingdom);
-            bool official = HasOfficialXiaContact(pKingdom);
+            int occupied = CountOccupiedXiaCities(cities);
+            bool official = HasOfficialXiaContact(pKingdom, cities);
 
             float gain = XiaContactRules.CalculateYearlyGain(borders, diplomacy, vassal, occupied, mixedChildren,
                 official, nearby);
@@ -64,9 +67,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.XIA_CONTACT_TOTAL_MIXED_CHILDREN, Math.Min(999999, total + 1));
         }
 
-        private static bool BordersXiaContactKingdom(Kingdom pKingdom)
+        private static bool BordersXiaContactKingdom(Kingdom pKingdom, List<City> pCities)
         {
-            foreach (City city in pKingdom.getCities())
+            foreach (City city in pCities)
             {
                 if (city?.data == null || city.isRekt()) continue;
                 try
@@ -82,9 +85,9 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        private static bool NearbyXiaContactKingdom(Kingdom pKingdom)
+        private static bool NearbyXiaContactKingdom(Kingdom pKingdom, List<City> pCities)
         {
-            foreach (City city in pKingdom.getCities())
+            foreach (City city in pCities)
             {
                 if (city?.data == null || city.isRekt()) continue;
                 try
@@ -150,10 +153,10 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static bool HasOfficialXiaContact(Kingdom pKingdom)
+        private static bool HasOfficialXiaContact(Kingdom pKingdom, List<City> pCities)
         {
             if (IsXiaContactOfficial(pKingdom?.king)) return true;
-            foreach (City city in pKingdom.getCities())
+            foreach (City city in pCities)
             {
                 if (city?.data == null || city.isRekt()) continue;
                 if (IsXiaContactOfficial(city.leader)) return true;
@@ -173,15 +176,28 @@ namespace AncientWarfare3.core.lineage
             return LineageService.IsXia(pActor) || LineageService.UsesAwLineageSystem(pActor);
         }
 
-        private static int CountOccupiedXiaCities(Kingdom pKingdom)
+        private static int CountOccupiedXiaCities(List<City> pCities)
         {
             int count = 0;
-            foreach (City city in pKingdom.getCities())
+            foreach (City city in pCities)
             {
                 if (city?.data == null || city.isRekt()) continue;
                 if (IsXiaOriginCity(city)) count++;
             }
             return count;
+        }
+
+        private static List<City> GetCities(Kingdom pKingdom)
+        {
+            var result = new List<City>();
+            if (pKingdom?.data == null) return result;
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                    if (city?.data != null && !city.isRekt()) result.Add(city);
+            }
+            catch { }
+            return result;
         }
 
         private static bool IsXiaOriginCity(City pCity)

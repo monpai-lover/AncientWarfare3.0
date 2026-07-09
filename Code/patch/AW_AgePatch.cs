@@ -17,14 +17,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "updateAge")]
         public static void UpdateAge_Postfix(Actor __instance)
         {
+            if (__instance?.data == null) return;
+            if (!LineageService.IsXia(__instance)) return;
+            if (__instance.isRekt() || !__instance.isAlive()) return;
+
             long benchmark = UpdateAgeBenchmark.Begin();
             try
             {
-                if (__instance?.data == null) return;
-                if (!LineageService.IsXia(__instance)) return;
-                if (__instance.isRekt() || !__instance.isAlive()) return;
-
-                bool shouldUseOldHead = ShouldUseXiaOldHead(__instance);
+                bool shouldUseOldHead = __instance.getAge() >= XIA_OLD_HEAD_AGE;
                 __instance.data.get(XIA_OLD_HEAD_ACTIVE, out bool wasOldHead, false);
                 if (!XiaOldHeadRefreshRules.ShouldRefresh(wasOldHead, shouldUseOldHead)) return;
 

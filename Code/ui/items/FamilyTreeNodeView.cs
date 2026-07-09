@@ -100,13 +100,18 @@ namespace AncientWarfare3.ui.items
             var nrect = nameObj.GetComponent<RectTransform>();
             nrect.anchorMin = new Vector2(0.5f, 1f); nrect.anchorMax = new Vector2(0.5f, 1f);
             nrect.pivot = new Vector2(0.5f, 1f);
-            nrect.sizeDelta = new Vector2(NODE_W + 20, 14);
+            nrect.sizeDelta = new Vector2(NODE_W, 14);
             nrect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP)); // 往下挪,避开头像与外溢旗帜
             _nameText = nameObj.GetComponent<Text>();
             _nameText.font = LocalizedTextManager.current_font;
             _nameText.fontSize = 9;
             _nameText.alignment = TextAnchor.UpperCenter;
-            _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _nameText.verticalOverflow = VerticalWrapMode.Truncate;
+            _nameText.resizeTextForBestFit = true;
+            _nameText.resizeTextMinSize = 7;
+            _nameText.resizeTextMaxSize = 9;
+            _nameText.raycastTarget = false;
 
             var socialObj = new GameObject("SocialTitle", typeof(RectTransform), typeof(Text));
             socialObj.transform.SetParent(transform, false);
@@ -221,8 +226,7 @@ namespace AncientWarfare3.ui.items
             string sex = pNode.sex == 0 ? "♂" : "♀";
             string relation = pNode.relation_label ?? "";
             string self = AW_L10n.Text("aw_relation_self", "\u672C\u4EBA");
-            string relationPrefix = !string.IsNullOrEmpty(relation) && relation != self ? relation + " " : "";
-            _nameText.text = relationPrefix + pNode.display_name + sex;
+            _nameText.text = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(relation, pNode.display_name, sex, self);
             _nameText.color = ResolveNameColor(pNode);
             if (_socialText != null)
             {

@@ -73,6 +73,7 @@ namespace MandateRulerTitleRuleTests
             ExpectCoreSync(true, pIsActiveMandateKingdom: true, pCoreAlreadyLegal: false);
             ExpectCoreSync(false, pIsActiveMandateKingdom: false, pCoreAlreadyLegal: false);
             ExpectCoreSync(false, pIsActiveMandateKingdom: true, pCoreAlreadyLegal: true);
+            ExpectMandateLegalCoreInheritanceRules();
 
             ExpectNameplateSuffix("mandate_emperor", "\u671d", title: 4, isMandate: true);
             ExpectNameplateSuffix("normal_emperor", "\u5e1d\u56fd", title: 4, isMandate: false);
@@ -169,6 +170,26 @@ namespace MandateRulerTitleRuleTests
                 pIsActiveMandateKingdom, pCoreAlreadyLegal);
             if (actual != expected)
                 throw new Exception($"Expected legal core sync {expected}, got {actual}.");
+        }
+
+        private static void ExpectMandateLegalCoreInheritanceRules()
+        {
+            if (!MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
+                    pPreviousPeriodId: 7, pCityId: 12, pAlreadyInsertedInNewPeriod: false))
+                throw new Exception("A new Mandate period should inherit active legal cores from the previous period.");
+            if (MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
+                    pPreviousPeriodId: -1, pCityId: 12, pAlreadyInsertedInNewPeriod: false))
+                throw new Exception("The first Mandate period should not try to inherit missing previous cores.");
+            if (MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
+                    pPreviousPeriodId: 7, pCityId: 12, pAlreadyInsertedInNewPeriod: true))
+                throw new Exception("Mandate legal-core inheritance must not duplicate a city already inserted into the new period.");
+
+            if (!MandateLegalCoreInheritanceRules.ShouldAddFoundingCore(
+                    pCityId: 21, pAlreadyInsertedInNewPeriod: false))
+                throw new Exception("New Mandate founding cities should be added as legal cores.");
+            if (MandateLegalCoreInheritanceRules.ShouldAddFoundingCore(
+                    pCityId: 21, pAlreadyInsertedInNewPeriod: true))
+                throw new Exception("A founding city already inherited as old legal core must not be inserted twice.");
         }
 
         private static void ExpectNameplateSuffix(string label, string expected, int title, bool isMandate,

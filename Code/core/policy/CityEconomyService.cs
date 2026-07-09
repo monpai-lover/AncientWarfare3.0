@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.policy
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private const int SQL_IN_CHUNK_SIZE = 128;
         private static readonly Dictionary<long, CityEconomyContributionSums> ContributionCache =
             new Dictionary<long, CityEconomyContributionSums>();
 
@@ -47,8 +48,19 @@ namespace AncientWarfare3.core.policy
             long benchmark = UpdateAgeBenchmark.Begin();
             try
             {
-                foreach (City city in pKingdom.getCities())
-                    UpdateCity(pKingdom, city, year);
+                List<City> cities = GetCities(pKingdom);
+                Dictionary<long, CityTechReport> techReports =
+                    CityEconomyUpdateRules.ShouldUseBatchTechReports(Ready, cities.Count)
+                        ? CityTechService.GetCityReportsForCities(cities, pIncludeNeighborBonus: false)
+                        : null;
+                Dictionary<long, CityEconomyStoredState> storedStates =
+                    CityEconomyUpdateRules.ShouldUseBatchStoredStates(Ready, cities.Count)
+                        ? ReadStoredStatesForCities(cities)
+                        : null;
+                bool slaveryEnabled = SlaveService.IsSlaveryEnabled(pKingdom);
+                int cityCount = cities.Count;
+                foreach (City city in cities)
+                    UpdateCity(pKingdom, city, year, cityCount, slaveryEnabled, techReports, storedStates);
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyUpdateCitiesIndex, benchmark); }
 
@@ -93,23 +105,30 @@ namespace AncientWarfare3.core.policy
             return snapshot;
         }
 
-        private static void UpdateCity(Kingdom pKingdom, City pCity, int pYear)
+        private static void UpdateCity(Kingdom pKingdom, City pCity, int pYear, int pCityCount,
+            bool pSlaveryEnabled, Dictionary<long, CityTechReport> pTechReports,
+            Dictionary<long, CityEconomyStoredState> pStoredStates)
         {
             if (pCity?.data == null || pCity.isRekt()) return;
             bool activeFief = FiefService.IsActiveFief(pCity);
             long benchmark = UpdateAgeBenchmark.Begin();
-            CityTechReport tech;
-            try { tech = CityTechService.GetCityReport(pCity, pIncludeNeighborBonus: false); }
+            CityTechReport tech = null;
+            try
+            {
+                if (pTechReports == null || !pTechReports.TryGetValue(pCity.id, out tech))
+                    tech = CityTechService.GetCityReport(pCity, pIncludeNeighborBonus: false);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyTechReportIndex, benchmark); }
-            CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief, tech);
+            if (tech == null) tech = new CityTechReport();
             int population = SafePopulation(pCity);
             bool nonCore = IsNonCore(pKingdom, pCity);
+            CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief, tech, population, nonCore, pCityCount);
             benchmark = UpdateAgeBenchmark.Begin();
             int slavePopulation;
             try
             {
                 slavePopulation = CityEconomyUpdateRules.ShouldCountSlavesForEconomy(
-                    SlaveService.IsSlaveryEnabled(pKingdom), pCity?.data != null)
+                    pSlaveryEnabled, pCity?.data != null)
                     ? CountSlavePopulation(pCity)
                     : 0;
             }
@@ -118,24 +137,30 @@ namespace AncientWarfare3.core.policy
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
                 slavePopulation, nonCore, activeFief);
             benchmark = UpdateAgeBenchmark.Begin();
-            try { Upsert(pKingdom, pCity, role, contribution, pYear); }
+            try
+            {
+                CityEconomyStoredState previous = null;
+                pStoredStates?.TryGetValue(pCity.id, out previous);
+                Upsert(pKingdom, pCity, role, contribution, pYear, previous);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyDbUpsertIndex, benchmark); }
         }
 
-        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief, CityTechReport pTech)
+        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief,
+            CityTechReport pTech, int pPopulation, bool pNonCore, int pCityCount)
         {
-            return CityEconomyRules.SelectRole(pKingdom.capital == pCity, SafePopulation(pCity),
+            return CityEconomyRules.SelectRole(pKingdom.capital == pCity, pPopulation,
                 CountBuildings(pCity, "market"), CountBuildings(pCity, "farm"),
                 CountBuildings(pCity, "barracks"), CountBuildings(pCity, "workshop"),
-                pTech.adopted_count, pTech.total_count, IsBorderCity(pKingdom, pCity),
-                IsOccupiedUnrest(pKingdom, pCity), pActiveFief);
+                pTech.adopted_count, pTech.total_count, IsBorderCity(pKingdom, pCity, pCityCount),
+                pNonCore, pActiveFief);
         }
 
         private static void Upsert(Kingdom pKingdom, City pCity, CityEconomyRole pRole,
-            CityEconomyContribution pContribution, int pYear)
+            CityEconomyContribution pContribution, int pYear, CityEconomyStoredState pCachedState = null)
         {
             string role = pRole.ToString();
-            CityEconomyStoredState previousState = ReadStoredState(pCity.id);
+            CityEconomyStoredState previousState = pCachedState ?? ReadStoredState(pCity.id);
             bool existed = previousState.has_record;
             string previous = previousState.role;
             bool metadataChanged = previousState.has_record &&
@@ -222,6 +247,70 @@ namespace AncientWarfare3.core.policy
             {
             }
             return state;
+        }
+
+        private static Dictionary<long, CityEconomyStoredState> ReadStoredStatesForCities(List<City> pCities)
+        {
+            var result = new Dictionary<long, CityEconomyStoredState>();
+            if (!Ready || pCities == null || pCities.Count == 0) return result;
+
+            var cityIds = new List<long>();
+            var seen = new HashSet<long>();
+            foreach (City city in pCities)
+            {
+                if (city?.data == null || !seen.Add(city.id)) continue;
+                cityIds.Add(city.id);
+            }
+            if (cityIds.Count == 0) return result;
+
+            for (int offset = 0; offset < cityIds.Count; offset += SQL_IN_CHUNK_SIZE)
+                ReadStoredStatesChunk(cityIds, offset, Math.Min(SQL_IN_CHUNK_SIZE, cityIds.Count - offset), result);
+            return result;
+        }
+
+        private static void ReadStoredStatesChunk(List<long> pCityIds, int pOffset, int pCount,
+            Dictionary<long, CityEconomyStoredState> pResult)
+        {
+            if (pCityIds == null || pResult == null || pCount <= 0) return;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                var parameters = new List<string>(pCount);
+                for (int i = 0; i < pCount; i++)
+                {
+                    string parameter = "@city" + i;
+                    parameters.Add(parameter);
+                    cmd.Parameters.AddWithValue(parameter, pCityIds[pOffset + i]);
+                }
+
+                cmd.CommandText = "SELECT CITY_ID,KINGDOM_ID,CITY_NAME,KINGDOM_NAME,ROLE,POLICY_POINTS,TECH_POINTS," +
+                                  "TAX_VALUE,MANPOWER,FOOD_STABILITY,UNREST_RISK FROM " +
+                                  CityEconomyStateTableItem.GetTableName() +
+                                  " WHERE CITY_ID IN (" + string.Join(",", parameters.ToArray()) + ")";
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long cityId = reader.IsDBNull(0) ? -1L : Convert.ToInt64(reader.GetValue(0));
+                    if (cityId < 0) continue;
+                    pResult[cityId] = new CityEconomyStoredState
+                    {
+                        has_record = true,
+                        kingdom_id = reader.IsDBNull(1) ? -1L : Convert.ToInt64(reader.GetValue(1)),
+                        city_name = reader.IsDBNull(2) ? "" : Convert.ToString(reader.GetValue(2)),
+                        kingdom_name = reader.IsDBNull(3) ? "" : Convert.ToString(reader.GetValue(3)),
+                        role = reader.IsDBNull(4) ? "" : Convert.ToString(reader.GetValue(4)),
+                        policy_points = ReadFloat(reader, 5),
+                        tech_points = ReadFloat(reader, 6),
+                        tax_value = ReadFloat(reader, 7),
+                        manpower = ReadFloat(reader, 8),
+                        food_stability = ReadFloat(reader, 9),
+                        unrest_risk = ReadFloat(reader, 10)
+                    };
+                }
+            }
+            catch
+            {
+            }
         }
 
         private static CityEconomyContributionSums GetContributionSums(Kingdom pKingdom)
@@ -317,14 +406,9 @@ namespace AncientWarfare3.core.policy
             return count;
         }
 
-        private static bool IsBorderCity(Kingdom pKingdom, City pCity)
+        private static bool IsBorderCity(Kingdom pKingdom, City pCity, int pCityCount)
         {
-            return pKingdom?.capital != pCity && SafeCityCount(pKingdom) > 1;
-        }
-
-        private static bool IsOccupiedUnrest(Kingdom pKingdom, City pCity)
-        {
-            return IsNonCore(pKingdom, pCity);
+            return pKingdom?.capital != pCity && pCityCount > 1;
         }
 
         private static bool IsNonCore(Kingdom pKingdom, City pCity)
@@ -357,10 +441,13 @@ namespace AncientWarfare3.core.policy
             }
         }
 
-        private static int SafeCityCount(Kingdom pKingdom)
+        private static List<City> GetCities(Kingdom pKingdom)
         {
-            try { return pKingdom?.countCities() ?? 0; }
-            catch { return 0; }
+            var result = new List<City>();
+            if (pKingdom?.data == null) return result;
+            foreach (City city in pKingdom.getCities())
+                if (city?.data != null && !city.isRekt() && city.isAlive()) result.Add(city);
+            return result;
         }
     }
 }

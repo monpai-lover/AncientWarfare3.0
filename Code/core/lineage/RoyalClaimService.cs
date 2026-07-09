@@ -61,7 +61,7 @@ namespace AncientWarfare3.core.lineage
             foreach (long actorId in candidates)
             {
                 Actor actor = World.world?.units?.get(actorId);
-                if (actor?.data == null || actor.isRekt()) continue;
+                if (!IsEligibleRestorationClaimant(actor)) continue;
                 CreateClaim(actor, pKingdom);
             }
         }
@@ -161,6 +161,12 @@ namespace AncientWarfare3.core.lineage
             if (claim.claimId < 0) return;
 
             Actor claimant = World.world?.units?.get(claim.claimantId);
+            if (!IsEligibleRestorationClaimant(claimant))
+            {
+                ResolveClaim(claim.claimId, "invalid_claimant");
+                return;
+            }
+
             Kingdom restored = TryRestoreKingdomForClaim(pHost, claimant, claim, pTargetCity, pWarId);
             HistoryText text = HistoryText.Kingdom(pHost) + " \u4ee5" +
                                HistoryText.Actor(claimant, claim.claimantName) +
@@ -182,7 +188,7 @@ namespace AncientWarfare3.core.lineage
         private static Kingdom TryRestoreKingdomForClaim(Kingdom pHost, Actor pClaimant, ClaimRow pClaim,
             City pTargetCity, long pWarId)
         {
-            if (pHost?.data == null || pClaimant?.data == null || pClaimant.isRekt()) return null;
+            if (pHost?.data == null || !IsEligibleRestorationClaimant(pClaimant)) return null;
             if (pTargetCity?.data == null || pTargetCity.isRekt()) return null;
 
             Kingdom restored = null;
@@ -223,6 +229,7 @@ namespace AncientWarfare3.core.lineage
         private static void CreateClaim(Actor pClaimant, Kingdom pOriginalKingdom)
         {
             if (pClaimant?.data == null || pOriginalKingdom?.data == null) return;
+            if (!IsEligibleRestorationClaimant(pClaimant)) return;
             if (HasActiveClaim(pClaimant.data.id, pOriginalKingdom.id)) return;
 
             pClaimant.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
@@ -328,6 +335,7 @@ namespace AncientWarfare3.core.lineage
             cmd.CommandText =
                 $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID FROM {RoyalClaimTableItem.GetTableName()} WHERE ACTIVE=1";
             var updates = new List<(long claimId, long hostId, string hostName)>();
+            var invalidClaims = new List<long>();
             using (var reader = (SQLiteDataReader)cmd.ExecuteReader())
             {
                 while (reader.Read())
@@ -335,10 +343,17 @@ namespace AncientWarfare3.core.lineage
                     long claimId = reader.GetInt64(0);
                     long actorId = reader.GetInt64(1);
                     Actor actor = World.world?.units?.get(actorId);
-                    if (actor?.kingdom?.data == null) continue;
+                    if (!IsEligibleRestorationClaimant(actor) || actor.kingdom?.data == null)
+                    {
+                        invalidClaims.Add(claimId);
+                        continue;
+                    }
                     updates.Add((claimId, actor.kingdom.id, actor.kingdom.name ?? ""));
                 }
             }
+
+            foreach (long claimId in invalidClaims)
+                ResolveClaim(claimId, "invalid_claimant");
 
             foreach (var update in updates)
             {
@@ -356,6 +371,15 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("ACTIVE", 0),
                 ColumnVal.Create("RESOLVED_TIME", LineageService.CurTime()),
                 ColumnVal.Create("RESOLVED_REASON", pReason ?? ""));
+        }
+
+        internal static bool IsEligibleRestorationClaimant(Actor pActor)
+        {
+            return RoyalRestorationClaimRules.IsEligibleClaimant(
+                pHasActor: pActor?.data != null,
+                pIsRekt: pActor?.isRekt() ?? true,
+                pIsMale: pActor?.isSexMale() ?? false,
+                pIsMad: pActor?.hasTrait("madness") ?? false);
         }
     }
 }

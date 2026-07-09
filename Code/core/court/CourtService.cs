@@ -67,24 +67,29 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtFounded(pKingdom, targetMode == "official");
             }
 
+            List<Actor> yearRoster = CourtRules.ShouldUseSingleYearRoster(CourtRules.CentralOfficeCount)
+                ? BuildYearRoster(pKingdom)
+                : null;
+
             long benchmark = UpdateAgeBenchmark.Begin();
-            try { ValidateOfficers(pKingdom); }
+            try { ValidateOfficers(pKingdom, yearRoster); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtOfficerValidateIndex, benchmark); }
 
+            HashSet<string> occupiedOffices = BuildActiveOfficeSet(pKingdom, yearRoster);
             benchmark = UpdateAgeBenchmark.Begin();
-            try { EnsureMinimumCourt(pKingdom); }
+            try { EnsureMinimumCourt(pKingdom, yearRoster, occupiedOffices); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtCandidateRefreshIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();
-            try { RecalculateFactionCache(pKingdom); }
+            try { RecalculateFactionCache(pKingdom, yearRoster); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtFactionRecalcIndex, benchmark); }
 
             UpsertCourtSnapshot(pKingdom);
         }
 
-        private static void ValidateOfficers(Kingdom pKingdom)
+        private static void ValidateOfficers(Kingdom pKingdom, List<Actor> pRoster)
         {
-            foreach (Actor actor in SafeUnits(pKingdom))
+            foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
                 if (courtKingdomId != pKingdom.id) continue;
@@ -99,46 +104,51 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static void EnsureMinimumCourt(Kingdom pKingdom)
+        private static void EnsureMinimumCourt(Kingdom pKingdom, List<Actor> pRoster, HashSet<string> pOccupiedOffices)
         {
             if (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)) return;
 
-            AssignKingIfEmpty(pKingdom);
+            AssignKingIfEmpty(pKingdom, pOccupiedOffices);
             if (!HasOfficialCourt(pKingdom)) return;
 
-            FillCentralOffice(pKingdom, CourtOfficeId.Chancellor, CourtSchoolId.Ru);
-            FillCentralOffice(pKingdom, CourtOfficeId.Censor, CourtSchoolId.Legalist);
-            FillCentralOffice(pKingdom, CourtOfficeId.Marshal, CourtSchoolId.Military);
-            FillCentralOffice(pKingdom, CourtOfficeId.Justice, CourtSchoolId.Legalist);
-            FillCentralOffice(pKingdom, CourtOfficeId.Steward, CourtSchoolId.Agrarian);
-            FillCentralOffice(pKingdom, CourtOfficeId.Erudite, CourtSchoolId.Ru);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Chancellor, CourtSchoolId.Ru);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Censor, CourtSchoolId.Legalist);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Marshal, CourtSchoolId.Military);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Justice, CourtSchoolId.Legalist);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Steward, CourtSchoolId.Agrarian);
+            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Erudite, CourtSchoolId.Ru);
         }
 
-        private static void AssignKingIfEmpty(Kingdom pKingdom)
+        private static void AssignKingIfEmpty(Kingdom pKingdom, HashSet<string> pOccupiedOffices)
         {
             Actor king = pKingdom.king;
             if (king?.data == null || king.isRekt()) return;
             king.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (!string.IsNullOrEmpty(office)) return;
             SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive, "king_council", CourtSchoolId.PrimitiveMinister, null);
+            pOccupiedOffices?.Add("king_council");
         }
 
-        private static void FillCentralOffice(Kingdom pKingdom, string pOfficeId, string pPreferredSchool)
+        private static void FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,
+            HashSet<string> pOccupiedOffices, string pOfficeId, string pPreferredSchool)
         {
-            if (HasActiveOffice(pKingdom, pOfficeId)) return;
+            if (pOccupiedOffices != null && pOccupiedOffices.Contains(pOfficeId)) return;
+            if (pOccupiedOffices == null && HasActiveOffice(pKingdom, pOfficeId)) return;
 
-            Actor candidate = FindBestCandidate(pKingdom, pOfficeId, pPreferredSchool);
+            Actor candidate = FindBestCandidate(pKingdom, pRoster, pOfficeId, pPreferredSchool);
             if (candidate == null) return;
             SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central, pOfficeId, pPreferredSchool, null);
+            pOccupiedOffices?.Add(pOfficeId);
         }
 
-        private static Actor FindBestCandidate(Kingdom pKingdom, string pOfficeId, string pPreferredSchool)
+        private static Actor FindBestCandidate(Kingdom pKingdom, List<Actor> pRoster,
+            string pOfficeId, string pPreferredSchool)
         {
             Actor best = null;
             float bestScore = -1f;
             int seen = 0;
 
-            foreach (Actor actor in SafeUnits(pKingdom))
+            foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 if (++seen > CandidateLimit * 8) break;
                 if (actor?.data == null || actor.isRekt()) continue;
@@ -218,10 +228,10 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static void RecalculateFactionCache(Kingdom pKingdom)
+        private static void RecalculateFactionCache(Kingdom pKingdom, List<Actor> pRoster)
         {
             var values = new Dictionary<string, float>();
-            foreach (Actor actor in SafeUnits(pKingdom))
+            foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
                 if (courtKingdomId != pKingdom.id) continue;
@@ -297,6 +307,29 @@ namespace AncientWarfare3.core.court
             {
                 AncientWarfare3.ModClass.LogWarning("KingdomCourtState upsert failed: " + e.Message);
             }
+        }
+
+        private static List<Actor> BuildYearRoster(Kingdom pKingdom)
+        {
+            return SafeUnits(pKingdom).ToList();
+        }
+
+        private static HashSet<string> BuildActiveOfficeSet(Kingdom pKingdom, List<Actor> pRoster)
+        {
+            var result = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
+            {
+                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+                if (courtKingdomId != pKingdom.id) continue;
+                actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+                if (!string.IsNullOrEmpty(office)) result.Add(office);
+            }
+            return result;
+        }
+
+        private static IEnumerable<Actor> RosterOrSafeUnits(Kingdom pKingdom, List<Actor> pRoster)
+        {
+            return pRoster ?? SafeUnits(pKingdom);
         }
 
         private static bool HasActiveOffice(Kingdom pKingdom, string pOfficeId)

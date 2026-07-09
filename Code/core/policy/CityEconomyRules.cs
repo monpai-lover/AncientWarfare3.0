@@ -172,6 +172,16 @@ namespace AncientWarfare3.core.policy
             return pHasCache && pCachedYear == pCurrentYear;
         }
 
+        public static bool ShouldUseBatchTechReports(bool pReady, int pCityCount)
+        {
+            return pReady && pCityCount > 0;
+        }
+
+        public static bool ShouldUseBatchStoredStates(bool pReady, int pCityCount)
+        {
+            return pReady && pCityCount > 0;
+        }
+
         private static bool Close(float pA, float pB)
         {
             return Mathf.Abs(pA - pB) <= EPSILON;

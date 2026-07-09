@@ -155,6 +155,25 @@ namespace AncientWarfare3.core.lineage
             return PositiveModulo(pCursor + limit, pActiveCount);
         }
 
+        public static bool ShouldWriteGuardRoster(string pCurrentRoster, string pNextRoster)
+        {
+            return !string.Equals(pCurrentRoster ?? "", pNextRoster ?? "", StringComparison.Ordinal);
+        }
+
+        public static bool ShouldRecordExpensiveIdentityRefresh(
+            bool pWasGuard,
+            bool pWasCaptain,
+            bool pCaptain,
+            bool pMissingTrait,
+            bool pKingdomChanged,
+            bool pNameChanged)
+        {
+            if (!pWasGuard) return true;
+            if (pWasCaptain != pCaptain) return true;
+            if (pMissingTrait) return true;
+            return pKingdomChanged;
+        }
+
         public static bool ShouldFallbackToKingdomScanForActiveGuards(bool pGuardArmyFound, bool pHasGuardStateHint)
         {
             return !pGuardArmyFound && pHasGuardStateHint;

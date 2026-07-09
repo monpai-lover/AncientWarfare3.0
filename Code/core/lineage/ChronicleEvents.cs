@@ -452,7 +452,7 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
 
-            if (city?.data != null)
+            if (city?.data != null && SlaveChronicleRules.ShouldRecordIndividualCityEnslavement(pReason))
                 HistoryWriter.RecordCity(city, kingdom, CityEvent.ENSLAVED,
                     HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
                     H("aw_hist_registered_slave") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
@@ -486,6 +486,51 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordPerson(pActor.data.id, pFormerKingdom, name,
                 PersonEvent.ENSLAVED, text, ChronicleCategory.HONOR,
                 HistoryTarget.Kingdom(pFormerKingdom));
+        }
+
+        public static void OnImportantCaptiveExecuted(Actor pActor, string pReason, Kingdom pFormerKingdom,
+            Kingdom pCaptorKingdom, City pCaptorCity, Actor pCaptor, string pDominantSchool)
+        {
+            if (pActor?.data == null) return;
+            string name = pActor.getName();
+            string reason = SlaveService.ReasonLabel(pReason);
+            HistoryText captorKingdom = pCaptorKingdom?.data != null
+                ? HistoryText.Kingdom(pCaptorKingdom)
+                : H("aw_hist_enemy_realm");
+            HistoryText school = HistoryText.PlainText(CaptiveTreatmentRules.SchoolLabel(pDominantSchool));
+            HistoryText text = HistoryText.Actor(pActor, name) +
+                               H("aw_hist_captive_executed_mid") +
+                               HistoryText.PlainText(reason) + H("aw_hist_paren_close") +
+                               H("aw_hist_captive_executed_school_mid") + school +
+                               H("aw_hist_captive_executed_school_suffix");
+            if (pCaptor?.data != null)
+                text += H("aw_hist_captor_prefix") + HistoryText.Actor(pCaptor);
+            if (pCaptorCity?.data != null)
+                text += H("aw_hist_placed_in_city") + HistoryText.City(pCaptorCity, pCaptorKingdom);
+
+            Kingdom personContext = pFormerKingdom?.data != null ? pFormerKingdom : pCaptorKingdom;
+            HistoryWriter.RecordPerson(pActor.data.id, personContext, name,
+                PersonEvent.CAPTIVE_EXECUTED, text, ChronicleCategory.HONOR,
+                pCaptorKingdom?.data != null ? HistoryTarget.Kingdom(pCaptorKingdom) : HistoryTarget.Actor(pActor));
+
+            if (pFormerKingdom?.data != null)
+            {
+                HistoryText formerText = HistoryText.Actor(pActor, name) +
+                                         H("aw_hist_captive_executed_former_mid") +
+                                         captorKingdom +
+                                         H("aw_hist_captive_executed_former_suffix");
+                HistoryWriter.RecordKingdom(pFormerKingdom, KingdomEvent.CAPTIVE_EXECUTED, formerText,
+                    HistoryTarget.Actor(pActor));
+            }
+
+            if (pCaptorKingdom?.data != null)
+            {
+                HistoryWriter.RecordKingdom(pCaptorKingdom, KingdomEvent.CAPTIVE_EXECUTED,
+                    captorKingdom + H("aw_hist_captive_executed_captor_mid") +
+                    HistoryText.Actor(pActor, name) +
+                    H("aw_hist_captive_executed_captor_suffix") + school,
+                    HistoryTarget.Actor(pActor));
+            }
         }
 
         public static void OnFreedSlave(Actor pActor, string pReason, Kingdom pKingdom, City pCity)

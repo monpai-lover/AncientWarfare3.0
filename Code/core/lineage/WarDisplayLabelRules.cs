@@ -80,6 +80,7 @@ namespace AncientWarfare3.core.lineage
                 case "mandate_year_name": return T("aw_hist_event_mandate_year_name", pLanguage);
                 case "mandate_ruler_title": return T("aw_hist_event_mandate_ruler_title", pLanguage);
                 case "former_king": return T("aw_hist_event_former_king", pLanguage);
+                case "captive_executed": return T("aw_hist_event_captive_executed", pLanguage);
                 case "mandate_succession_crisis": return T("aw_hist_event_mandate_succession_crisis", pLanguage);
                 case "succession_collateral_restore": return T("aw_hist_event_succession_collateral_restore", pLanguage);
                 case "person_collateral_restore": return T("aw_hist_event_person_collateral_restore", pLanguage);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
@@ -257,8 +258,8 @@ namespace AncientWarfare3.core.lineage
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
-            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget);
-            Kingdom formerRulerKingdom = wasKingBeforeRelocation ? targetKingdom : null;
+            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget) || SafeIsArmyLeader(pTarget);
+            Kingdom formerRulerKingdom = (wasKingBeforeRelocation || wasLeaderBeforeRelocation) ? targetKingdom : null;
 
             pTarget.cancelAllBeh();
             pTarget.clearAttackTarget();
@@ -277,7 +278,8 @@ namespace AncientWarfare3.core.lineage
                 pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
             if (!changed) return false;
 
-            QueueWarSlaveCaptureSummary(captorKingdom, city, 1);
+            if (ShouldCountAsWarSlaveCapture(pTarget))
+                QueueWarSlaveCaptureSummary(captorKingdom, city, 1);
             CheckCitySlaveLabor(city);
             return true;
         }
@@ -288,8 +290,8 @@ namespace AncientWarfare3.core.lineage
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
-            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget);
-            Kingdom formerRulerKingdom = wasKingBeforeRelocation ? pTarget.kingdom : null;
+            bool wasLeaderBeforeRelocation = SafeIsCityLeader(pTarget) || SafeIsArmyLeader(pTarget);
+            Kingdom formerRulerKingdom = (wasKingBeforeRelocation || wasLeaderBeforeRelocation) ? pTarget.kingdom : null;
             City city = pCatcher.city ?? pCatcher.kingdom?.capital;
             Kingdom kingdom = pCatcher.kingdom ?? city?.kingdom;
             if (city?.data == null || kingdom?.data == null) return false;
@@ -300,7 +302,7 @@ namespace AncientWarfare3.core.lineage
                 pFormerRulerKingdom: formerRulerKingdom,
                 pWasKingBeforeRelocation: wasKingBeforeRelocation,
                 pWasLeaderBeforeRelocation: wasLeaderBeforeRelocation);
-            if (changed)
+            if (changed && ShouldCountAsWarSlaveCapture(pTarget))
                 QueueWarSlaveCaptureSummary(kingdom, city, 1);
             CheckCitySlaveLabor(city);
             return changed;
@@ -317,18 +319,42 @@ namespace AncientWarfare3.core.lineage
 
             bool wasSlave = IsSlave(pActor);
             bool liveWasKing = SafeIsKing(pActor);
-            bool liveWasLeader = SafeIsCityLeader(pActor);
+            bool liveWasLeader = SafeIsCityLeader(pActor) || SafeIsArmyLeader(pActor);
             bool wasKing = pWasKingBeforeRelocation || liveWasKing;
             bool wasLeader = pWasLeaderBeforeRelocation || liveWasLeader;
             Kingdom formerKingdom = pFormerRulerKingdom ?? (liveWasKing ? pActor.kingdom : null);
-            bool releaseAsNobleDependent = CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
-                wasKing, wasLeader);
             bool preserveCapturedRuler = CapturedRulerCaptureRules.ShouldPreserveFormerKingContext(
                 wasKing,
                 formerKingdom?.id ?? -1L,
                 contextKingdom?.id ?? -1L);
             if (!preserveCapturedRuler && !liveWasKing)
                 formerKingdom = null;
+
+            string dominantSchool = GetDominantCourtSchool(contextKingdom);
+            CaptiveTreatmentAction captiveTreatment = CaptiveTreatmentRules.Decide(
+                dominantSchool,
+                wasKing,
+                wasLeader,
+                IsAtWar(contextKingdom, formerKingdom),
+                EstimateHostilePowerRatio(formerKingdom, contextKingdom));
+
+            if (captiveTreatment == CaptiveTreatmentAction.ExecuteCaptive)
+            {
+                if (preserveCapturedRuler)
+                    RememberCapturedRulerContext(pActor, formerKingdom);
+                if (preserveCapturedRuler)
+                    CloseCapturedRulerOpenReign(pActor, formerKingdom, "captured_executed");
+
+                ChronicleEvents.OnImportantCaptiveExecuted(pActor, pReason, formerKingdom,
+                    contextKingdom ?? pActor.kingdom, pContextCity ?? pActor.city, pCaptor, dominantSchool);
+                ExecuteImportantCaptive(pActor, pCaptor, dominantSchool);
+                CheckCitySlaveLabor(pContextCity ?? pActor.city);
+                return !wasSlave || pForceRecord;
+            }
+
+            bool releaseAsNobleDependent = captiveTreatment == CaptiveTreatmentAction.SettleAsNobleDependent &&
+                                           CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
+                                               wasKing, wasLeader);
             ApplySlaveIdentity(pActor, pReason, pCaptor);
             if (preserveCapturedRuler)
                 RememberCapturedRulerContext(pActor, formerKingdom);
@@ -345,7 +371,7 @@ namespace AncientWarfare3.core.lineage
             bool abdicated = SlaveKingAbdicationService.TryForceAbdicate(pActor, pReason, wasKing, wasSlave,
                 formerKingdom ?? contextKingdom);
             if (!abdicated && preserveCapturedRuler)
-                CloseCapturedRulerOpenReign(pActor, formerKingdom);
+                CloseCapturedRulerOpenReign(pActor, formerKingdom, "captured_slave");
 
             if (releaseAsNobleDependent)
                 ReleaseImportantCaptiveAsNobleDependent(pActor, pReason, contextKingdom ?? pActor.kingdom,
@@ -577,7 +603,8 @@ namespace AncientWarfare3.core.lineage
             int target = Math.Min(MAX_CITY_FALL_SLAVES, Math.Max(1, (int)Math.Ceiling(candidates.Count * CITY_FALL_SLAVE_RATIO)));
             int enslaved = 0;
             for (int i = 0; i < target && i < candidates.Count; i++)
-                if (Enslave(candidates[i], "city_fall", null, pCity, pNewKingdom))
+                if (Enslave(candidates[i], "city_fall", null, pCity, pNewKingdom) &&
+                    ShouldCountAsWarSlaveCapture(candidates[i]))
                     enslaved++;
             QueueWarSlaveCaptureSummary(pNewKingdom, pCity, enslaved);
         }
@@ -702,9 +729,21 @@ namespace AncientWarfare3.core.lineage
                 Actor existingCaptain = army.getCaptain();
                 bool captainValid = CanBeSlaveArmyCaptainCandidate(existingCaptain, kingdom, pCity,
                     pRequireWarrior: true);
-                Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-                slaveCount = CountSlaves(pCity);
-                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+                if (SlaveArmyMaintenanceRules.ShouldCountCitySlavesForStableCheck(
+                        pArmyExists: true,
+                        pTotalWarriors: total,
+                        pSlaveWarriors: slaves,
+                        pNonSlaveWarriors: nonSlaves,
+                        pCaptainValid: captainValid))
+                {
+                    Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+                    slaveCount = CountSlaves(pCity);
+                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
+                }
+                else
+                {
+                    slaveCount = slaves;
+                }
                 if (SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
                         pArmyExists: true,
                         pTotalWarriors: total,
@@ -865,7 +904,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return false;
             if (!IsSupportedSlaveryActor(pActor)) return false;
             if (pActor.isRekt()) return false;
-            if ((pActor.isKing() || pActor.isCityLeader()) && !pAllowImportantCapture) return false;
+            if ((pActor.isKing() || pActor.isCityLeader() || SafeIsArmyLeader(pActor)) && !pAllowImportantCapture) return false;
             if (HeirService.IsCurrentHeir(pActor.kingdom, pActor)) return false;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
             if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
@@ -883,6 +922,48 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pActor?.data != null && pActor.isCityLeader(); }
             catch { return false; }
+        }
+
+        private static bool SafeIsArmyLeader(Actor pActor)
+        {
+            try
+            {
+                if (pActor?.data == null) return false;
+                if (GeneralService.IsGeneral(pActor)) return true;
+                return pActor.hasArmy() && pActor.army?.getCaptain() == pActor;
+            }
+            catch { return false; }
+        }
+
+        private static bool ShouldCountAsWarSlaveCapture(Actor pActor)
+        {
+            return pActor?.data != null && pActor.isAlive() && IsSlave(pActor);
+        }
+
+        private static string GetDominantCourtSchool(Kingdom pKingdom)
+        {
+            try
+            {
+                return CourtService.GetSnapshot(pKingdom).dominant_school ?? CourtSchoolId.None;
+            }
+            catch { return CourtSchoolId.None; }
+        }
+
+        private static bool IsAtWar(Kingdom pCaptor, Kingdom pFormer)
+        {
+            try { return pCaptor?.data != null && pFormer?.data != null && pCaptor.isEnemy(pFormer); }
+            catch { return false; }
+        }
+
+        private static float EstimateHostilePowerRatio(Kingdom pFormer, Kingdom pCaptor)
+        {
+            try
+            {
+                float captorPower = Math.Max(1f, VassalService.GetPowerScore(pCaptor, pIncludeVassals: true));
+                float formerPower = Math.Max(1f, VassalService.GetPowerScore(pFormer, pIncludeVassals: true));
+                return formerPower / captorPower;
+            }
+            catch { return 1f; }
         }
 
         private static bool HasCaptureTargetForCity(City pCity)
@@ -1018,7 +1099,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
-            return pActor.isKing() || pActor.isCityLeader();
+            return pActor.isKing() || pActor.isCityLeader() || SafeIsArmyLeader(pActor);
         }
 
         public static bool IsSlaveArmy(Army pArmy)
@@ -1121,12 +1202,31 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CAPTURED_RULER_TITLE, (int)KingdomTitleService.GetTitle(pFormerKingdom));
         }
 
-        private static void CloseCapturedRulerOpenReign(Actor pActor, Kingdom pFormerKingdom)
+        private static void CloseCapturedRulerOpenReign(Actor pActor, Kingdom pFormerKingdom, string pEndReason)
         {
             if (pActor?.data == null || pFormerKingdom?.data == null) return;
             ReignRecordWriter.ReignInfo open = ReignRecordWriter.ReadOpenReignInfo(pFormerKingdom.id);
             if (!open.IsValid || open.KingActorId != pActor.data.id) return;
-            ReignRecordWriter.CloseOpenReign(pFormerKingdom, "captured_slave", pActor);
+            ReignRecordWriter.CloseOpenReign(pFormerKingdom,
+                string.IsNullOrEmpty(pEndReason) ? "captured_slave" : pEndReason,
+                pActor);
+        }
+
+        private static void ExecuteImportantCaptive(Actor pActor, Actor pCaptor, string pDominantSchool)
+        {
+            if (pActor?.data == null || !pActor.isAlive()) return;
+            string school = CaptiveTreatmentRules.SchoolLabel(pDominantSchool);
+            string cause = HistoryLocalizationRules.Text("aw_death_cause_captive_execution");
+            if (!string.IsNullOrEmpty(school))
+                cause += HistoryLocalizationRules.Text("aw_death_cause_captive_execution_school") + school;
+            if (pCaptor?.data != null)
+                cause += HistoryLocalizationRules.Text("aw_death_cause_captive_execution_by") + pCaptor.getName();
+            pActor.data.set(LineageKeys.DEATH_CAUSE, cause);
+            pActor.cancelAllBeh();
+            pActor.clearAttackTarget();
+            pActor.beh_actor_target = null;
+            pActor.attackedBy = null;
+            pActor.dieSimpleNone();
         }
 
         private static void BreakInvalidLover(Actor pActor)
@@ -1191,13 +1291,37 @@ namespace AncientWarfare3.core.lineage
             }
 
             CountArmyComposition(pArmy, out int total, out int slaves, out int nonSlaves);
-            foreach (Actor cadre in pCity.getUnits())
+            var cadreCandidates = new List<Actor>(SlaveArmyFormationRules.MaxNonSlaveCadres);
+            var slaveCandidates = new List<Actor>(SLAVE_ARMY_FILL_BATCH_LIMIT);
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (unit?.data == null || unit.isRekt() || unit.army == pArmy) continue;
+                if (unit != captain &&
+                    cadreCandidates.Count < SlaveArmyFormationRules.MaxNonSlaveCadres &&
+                    CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity, pRequireWarrior: false))
+                {
+                    cadreCandidates.Add(unit);
+                }
+                else if (slaveCandidates.Count < SLAVE_ARMY_FILL_BATCH_LIMIT &&
+                         unit.isAdult() &&
+                         IsSlave(unit) &&
+                         !IsRetiredSoldier(unit) &&
+                         !RoyalGuardService.IsRoyalGuard(unit) &&
+                         unit.asset?.is_boat != true)
+                {
+                    slaveCandidates.Add(unit);
+                }
+
+                if (cadreCandidates.Count >= SlaveArmyFormationRules.MaxNonSlaveCadres &&
+                    slaveCandidates.Count >= SLAVE_ARMY_FILL_BATCH_LIMIT)
+                    break;
+            }
+
+            foreach (Actor cadre in cadreCandidates)
             {
                 if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
                 if (total >= MAX_SLAVE_ARMY_SIZE) break;
                 if (nonSlaves >= SlaveArmyFormationRules.MaxNonSlaveCadres) break;
-                if (cadre == captain || cadre.army == pArmy) continue;
-                if (!CanBeSlaveArmyCaptainCandidate(cadre, pCity.kingdom, pCity, pRequireWarrior: false)) continue;
                 if (!EnsureWarriorForSlaveArmy(pCity, cadre)) continue;
                 AWArmyService.AddToArmy(cadre, pArmy);
                 total++;
@@ -1205,14 +1329,10 @@ namespace AncientWarfare3.core.lineage
                 addedThisPass++;
             }
 
-            foreach (Actor slave in pCity.getUnits())
+            foreach (Actor slave in slaveCandidates)
             {
                 if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
                 if (total >= MAX_SLAVE_ARMY_SIZE) break;
-                if (slave?.data == null || slave.isRekt() || !slave.isAdult()) continue;
-                if (!IsSlave(slave) || IsRetiredSoldier(slave)) continue;
-                if (RoyalGuardService.IsRoyalGuard(slave)) continue;
-                if (slave.asset?.is_boat == true) continue;
                 if (slave.army == pArmy) continue;
                 if (!EnsureWarriorForSlaveArmy(pCity, slave)) continue;
                 if (!SlaveArmyFormationRules.CanAddSlaveToArmy(total, slaves, nonSlaves)) break;

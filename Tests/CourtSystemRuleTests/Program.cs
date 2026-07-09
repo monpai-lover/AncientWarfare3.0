@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 
 namespace CourtSystemRuleTests
 {
@@ -20,6 +21,8 @@ namespace CourtSystemRuleTests
 
                 Expect(CourtRules.ShouldRefreshCourt(currentYear: 40, lastRefreshYear: 35, intervalYears: 5), "refresh interval reached");
                 Expect(!CourtRules.ShouldRefreshCourt(currentYear: 40, lastRefreshYear: 38, intervalYears: 5), "refresh interval not reached");
+                Expect(CourtRules.ShouldUseSingleYearRoster(CourtRules.CentralOfficeCount), "multi-office court refresh uses one yearly roster snapshot");
+                Expect(!CourtRules.ShouldUseSingleYearRoster(1), "single-office court refresh can skip roster snapshot overhead");
 
                 ExpectEqual(CourtSchoolId.Legalist, CourtInfluenceRules.DominantSchool("ru=12;fa=20;dao=3;mo=4", CourtSchoolId.Ru), "dominant legalist");
                 ExpectEqual(0.625f, CourtInfluenceRules.Concentration(25f, 40f), "concentration");
@@ -46,6 +49,27 @@ namespace CourtSystemRuleTests
                 ExpectEqual(CourtTraitId.Ru, CourtTraitRules.TraitForSchool(CourtSchoolId.Ru), "ru trait id");
                 ExpectEqual(CourtTraitId.Legalist, CourtTraitRules.TraitForSchool(CourtSchoolId.Legalist), "legalist trait id");
                 ExpectEqual("", CourtTraitRules.TraitForSchool("unknown"), "unknown trait id");
+
+                ExpectEqual(CaptiveTreatmentAction.SettleAsNobleDependent,
+                    CaptiveTreatmentRules.Decide(CourtSchoolId.Ru, wasKing: true, wasLeader: false,
+                        captorAtWar: true, hostilePowerRatio: 1.5f),
+                    "ru court settles captured rulers");
+                ExpectEqual(CaptiveTreatmentAction.ExecuteCaptive,
+                    CaptiveTreatmentRules.Decide(CourtSchoolId.Legalist, wasKing: true, wasLeader: false,
+                        captorAtWar: true, hostilePowerRatio: 1.2f),
+                    "legalist court executes hostile captured kings");
+                ExpectEqual(CaptiveTreatmentAction.ExecuteCaptive,
+                    CaptiveTreatmentRules.Decide(CourtSchoolId.Military, wasKing: false, wasLeader: true,
+                        captorAtWar: true, hostilePowerRatio: 1.0f),
+                    "military court executes wartime captured leaders");
+                ExpectEqual(CaptiveTreatmentAction.SettleAsNobleDependent,
+                    CaptiveTreatmentRules.Decide(CourtSchoolId.Mohist, wasKing: true, wasLeader: true,
+                        captorAtWar: true, hostilePowerRatio: 3.0f),
+                    "mohist court avoids executing important captives");
+                ExpectEqual(CaptiveTreatmentAction.KeepAsSlave,
+                    CaptiveTreatmentRules.Decide(CourtSchoolId.Legalist, wasKing: false, wasLeader: false,
+                        captorAtWar: true, hostilePowerRatio: 1.0f),
+                    "ordinary captives stay in normal slavery flow");
 
                 Expect(CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: false, madness: false), "valid office holder");
                 Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: false, slave: false, madness: false), "foreign holder rejected");

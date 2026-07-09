@@ -392,9 +392,16 @@ namespace AncientWarfare3.core.lineage
                 long eventOwnerId = e.context_kingdom_id;
                 string eventOwnerName = !string.IsNullOrEmpty(e.context_kingdom_name) ? e.context_kingdom_name : (e.kingdom_name ?? "");
                 string eventOwnerColor = !string.IsNullOrEmpty(e.context_kingdom_color) ? e.context_kingdom_color : e.kingdom_color;
-                string ownerToken = eventOwnerId >= 0 ? eventOwnerId.ToString() : eventOwnerName;
-                string currentOwnerToken = ownerId >= 0 ? ownerId.ToString() : (current?.owner_name ?? "");
-                if (current == null || ownerToken != currentOwnerToken)
+                string currentOwnerName = current?.owner_name ?? "";
+                bool sameOwner = current != null &&
+                    HistoryPeriodRules.IsSameCityOwnerSnapshot(ownerId, currentOwnerName, eventOwnerId, eventOwnerName);
+                string currentOwnerToken = current == null
+                    ? ""
+                    : HistoryPeriodRules.BuildCityOwnerToken(ownerId, currentOwnerName);
+                string ownerToken = sameOwner
+                    ? currentOwnerToken
+                    : HistoryPeriodRules.BuildCityOwnerToken(eventOwnerId, eventOwnerName);
+                if (current == null || !sameOwner)
                 {
                     ownerId = eventOwnerId;
                     ownerStart = e.world_time;

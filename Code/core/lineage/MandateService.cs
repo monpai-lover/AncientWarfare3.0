@@ -154,6 +154,8 @@ namespace AncientWarfare3.core.lineage
             if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
             if (!Ready) return false;
 
+            MandateReport previousReport = ReadReport();
+            long previousPeriodId = previousReport.active ? previousReport.period_id : -1L;
             Kingdom old = GetCurrentMandateKingdom();
             if (old?.data != null && old != pKingdom)
                 ClearMandate("replaced");
@@ -196,7 +198,7 @@ namespace AncientWarfare3.core.lineage
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
             if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
             YearNameService.ChangeYearName(pKingdom);
-            CreateLegalCores(pKingdom, periodId);
+            CreateLegalCores(pKingdom, periodId, previousPeriodId);
             UpdateOriginalCoreCount(periodId);
 
             string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
@@ -1106,25 +1108,33 @@ namespace AncientWarfare3.core.lineage
             catch { return LineageService.CurTime(); }
         }
 
-        private static void CreateLegalCores(Kingdom pKingdom, long pPeriodId)
+        private static void CreateLegalCores(Kingdom pKingdom, long pPeriodId, long pPreviousPeriodId)
         {
             if (!Ready || pKingdom?.data == null) return;
             int count = 0;
+            var inserted = new HashSet<long>();
+
+            foreach (CoreCitySnapshot core in ReadCoreCitySnapshots(pPreviousPeriodId))
+            {
+                if (!MandateLegalCoreInheritanceRules.ShouldInheritPreviousCore(
+                        pPreviousPeriodId, core.city_id, inserted.Contains(core.city_id)))
+                    continue;
+                if (!InsertLegalCore(pPeriodId, core.city_id, core.city_name, core.original_kingdom_id,
+                        core.original_kingdom_name, core.original_kingdom_color, "inherited"))
+                    continue;
+                inserted.Add(core.city_id);
+                count++;
+            }
+
             foreach (City city in pKingdom.getCities())
             {
                 if (city?.data == null || city.isRekt()) continue;
-                long coreId = TableIdAllocator.Next(DB, MandateCoreCityTableItem.GetTableName(), "CORE_ID");
-                DB.Insert(MandateCoreCityTableItem.GetTableName(),
-                    ColumnVal.Create("CORE_ID", coreId),
-                    ColumnVal.Create("PERIOD_ID", pPeriodId),
-                    ColumnVal.Create("CITY_ID", city.id),
-                    ColumnVal.Create("CITY_NAME", city.data.name ?? ""),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_ID", pKingdom.id),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_NAME", pKingdom.name ?? ""),
-                    ColumnVal.Create("ORIGINAL_KINGDOM_COLOR", HistoryColors.FromKingdom(pKingdom)),
-                    ColumnVal.Create("CORE_TYPE", "founding"),
-                    ColumnVal.Create("ADDED_TIME", LineageService.CurTime()),
-                    ColumnVal.Create("ACTIVE", 1));
+                if (!MandateLegalCoreInheritanceRules.ShouldAddFoundingCore(city.id, inserted.Contains(city.id)))
+                    continue;
+                if (!InsertLegalCore(pPeriodId, city.id, city.data.name ?? "", pKingdom.id, pKingdom.name ?? "",
+                        HistoryColors.FromKingdom(pKingdom), "founding"))
+                    continue;
+                inserted.Add(city.id);
                 count++;
             }
 
@@ -1132,6 +1142,70 @@ namespace AncientWarfare3.core.lineage
                 new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("PERIOD_ID", pPeriodId) },
                 ColumnVal.Create("LEGAL_CORE_COUNT", count));
             MarkDirty();
+        }
+
+        private static bool InsertLegalCore(long pPeriodId, long pCityId, string pCityName, long pOriginalKingdomId,
+            string pOriginalKingdomName, string pOriginalKingdomColor, string pCoreType)
+        {
+            if (!Ready || pPeriodId < 0 || pCityId < 0) return false;
+            try
+            {
+                long coreId = TableIdAllocator.Next(DB, MandateCoreCityTableItem.GetTableName(), "CORE_ID");
+                DB.Insert(MandateCoreCityTableItem.GetTableName(),
+                    ColumnVal.Create("CORE_ID", coreId),
+                    ColumnVal.Create("PERIOD_ID", pPeriodId),
+                    ColumnVal.Create("CITY_ID", pCityId),
+                    ColumnVal.Create("CITY_NAME", pCityName ?? ""),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_ID", pOriginalKingdomId),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_NAME", pOriginalKingdomName ?? ""),
+                    ColumnVal.Create("ORIGINAL_KINGDOM_COLOR", HistoryColors.Normalize(pOriginalKingdomColor)),
+                    ColumnVal.Create("CORE_TYPE", string.IsNullOrEmpty(pCoreType) ? "founding" : pCoreType),
+                    ColumnVal.Create("ADDED_TIME", LineageService.CurTime()),
+                    ColumnVal.Create("ACTIVE", 1));
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Mandate legal core insert failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private static List<CoreCitySnapshot> ReadCoreCitySnapshots(long pPeriodId)
+        {
+            var result = new List<CoreCitySnapshot>();
+            if (!Ready || pPeriodId < 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT CITY_ID, CITY_NAME, ORIGINAL_KINGDOM_ID, ORIGINAL_KINGDOM_NAME, " +
+                                  "ORIGINAL_KINGDOM_COLOR FROM " + MandateCoreCityTableItem.GetTableName() +
+                                  " WHERE PERIOD_ID=@p AND ACTIVE=1 ORDER BY CORE_ID ASC";
+                cmd.Parameters.AddWithValue("@p", pPeriodId);
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    result.Add(new CoreCitySnapshot
+                    {
+                        city_id = ToLong(reader, 0),
+                        city_name = ToString(reader, 1),
+                        original_kingdom_id = ToLong(reader, 2),
+                        original_kingdom_name = ToString(reader, 3),
+                        original_kingdom_color = ToString(reader, 4)
+                    });
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private struct CoreCitySnapshot
+        {
+            public long city_id;
+            public string city_name;
+            public long original_kingdom_id;
+            public string original_kingdom_name;
+            public string original_kingdom_color;
         }
 
         private static void UpdateOriginalCoreCount(long pPeriodId)

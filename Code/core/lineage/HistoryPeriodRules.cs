@@ -27,5 +27,26 @@ namespace AncientWarfare3.core.lineage
             if (pEndTime < 0) return true;
             return pEndTime + EPSILON >= pStartTime;
         }
+
+        public static bool IsSameCityOwnerSnapshot(long pCurrentOwnerId, string pCurrentOwnerName,
+            long pEventOwnerId, string pEventOwnerName)
+        {
+            if (pCurrentOwnerId >= 0 && pEventOwnerId >= 0)
+                return pCurrentOwnerId == pEventOwnerId;
+
+            string currentName = NormalizeOwnerName(pCurrentOwnerName);
+            string eventName = NormalizeOwnerName(pEventOwnerName);
+            return currentName.Length > 0 && currentName == eventName;
+        }
+
+        public static string BuildCityOwnerToken(long pOwnerId, string pOwnerName)
+        {
+            return pOwnerId >= 0 ? pOwnerId.ToString() : NormalizeOwnerName(pOwnerName);
+        }
+
+        private static string NormalizeOwnerName(string pName)
+        {
+            return string.IsNullOrWhiteSpace(pName) ? "" : pName.Trim();
+        }
     }
 }

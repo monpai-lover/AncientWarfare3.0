@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.policy
         private const float SAME_KINGDOM_BASE_GAIN = 9f;
         private const float MAX_YEARLY_GAIN = 28f;
         private const int NEIGHBOR_RANGE = 75;
+        private const int SQL_IN_CHUNK_SIZE = 128;
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
@@ -161,6 +162,83 @@ namespace AncientWarfare3.core.policy
             if (CityTechReportRules.ShouldLoadNeighborBonus(pIncludeNeighborBonus, currentTech))
                 report.neighbor_bonus = GetNeighborTechResearchBonus(pCity.kingdom, currentTech);
             return report;
+        }
+
+        public static Dictionary<long, CityTechReport> GetCityReportsForCities(IEnumerable<City> pCities,
+            bool pIncludeNeighborBonus = false)
+        {
+            var reports = new Dictionary<long, CityTechReport>();
+            var cityIds = new List<long>();
+            int totalTechCount = KingdomPolicyDefs.Techs.Count();
+            if (pCities == null) return reports;
+
+            foreach (City city in pCities)
+            {
+                if (city?.data == null || reports.ContainsKey(city.id)) continue;
+                reports[city.id] = new CityTechReport { total_count = totalTechCount };
+                cityIds.Add(city.id);
+            }
+
+            if (!Ready || cityIds.Count == 0) return reports;
+
+            for (int offset = 0; offset < cityIds.Count; offset += SQL_IN_CHUNK_SIZE)
+                ReadCityReportsChunk(cityIds, offset, Math.Min(SQL_IN_CHUNK_SIZE, cityIds.Count - offset), reports);
+
+            if (!pIncludeNeighborBonus) return reports;
+            foreach (City city in pCities)
+            {
+                if (city?.data == null || !reports.TryGetValue(city.id, out CityTechReport report)) continue;
+                string currentTech = KingdomPolicyService.GetCurrent(city.kingdom, PolicyNodeKind.Tech);
+                if (CityTechReportRules.ShouldLoadNeighborBonus(true, currentTech))
+                    report.neighbor_bonus = GetNeighborTechResearchBonus(city.kingdom, currentTech);
+            }
+            return reports;
+        }
+
+        private static void ReadCityReportsChunk(List<long> pCityIds, int pOffset, int pCount,
+            Dictionary<long, CityTechReport> pReports)
+        {
+            if (!Ready || pCityIds == null || pReports == null || pCount <= 0) return;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                var parameters = new List<string>(pCount);
+                for (int i = 0; i < pCount; i++)
+                {
+                    string parameter = "@city" + i;
+                    parameters.Add(parameter);
+                    cmd.Parameters.AddWithValue(parameter, pCityIds[pOffset + i]);
+                }
+
+                cmd.CommandText = "SELECT CITY_ID,TECH_ID,ADOPTED,ADOPTION_PROGRESS,EXPOSURE_PROGRESS," +
+                                  "SOURCE_CITY_ID,SOURCE_KINGDOM_ID FROM " +
+                                  CityTechStateTableItem.GetTableName() +
+                                  " WHERE CITY_ID IN (" + string.Join(",", parameters.ToArray()) + ")";
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long cityId = ToLong(reader, 0);
+                    if (!pReports.TryGetValue(cityId, out CityTechReport report)) continue;
+                    bool adopted = ToInt(reader, 2) == 1;
+                    double adoption = ToDouble(reader, 3);
+                    double exposure = ToDouble(reader, 4);
+                    if (adopted)
+                    {
+                        report.adopted_count++;
+                        report.adoption_score += 1f;
+                        continue;
+                    }
+
+                    double progress = Math.Max(adoption, exposure);
+                    report.adoption_score += (float)(progress / ADOPTED) * 0.55f;
+                    if (progress <= report.spreading_progress * ADOPTED) continue;
+                    report.spreading_tech = ToString(reader, 1);
+                    report.spreading_progress = (float)(progress / ADOPTED);
+                    report.source_city_name = FindCity(ToLong(reader, 5))?.data?.name ?? "";
+                    report.source_kingdom_name = FindKingdom(ToLong(reader, 6))?.name ?? "";
+                }
+            }
+            catch { }
         }
 
         public static Color32 GetCityMapColor(City pCity)
@@ -345,6 +423,7 @@ namespace AncientWarfare3.core.policy
             }
             if (adopted.Count == 0 && capital?.data != null) adopted.Add(capital);
             if (adopted.Count == 0) return;
+            if (CityTechSpreadRules.ShouldSkipFullyAdoptedSpread(cities.Count, adopted.Count)) return;
 
             foreach (City city in cities)
             {
@@ -417,21 +496,28 @@ namespace AncientWarfare3.core.policy
 
         private static NeighborInfluence FindBestNeighborInfluence(Kingdom pKingdom, string pTechId)
         {
-            if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId) || World.world?.kingdoms == null) return null;
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pTechId)) return null;
             List<City> ownCities = GetCities(pKingdom);
             if (ownCities.Count == 0) return null;
             HashSet<long> adoptedSourceCityIds = ReadAdoptedCityIds(pTechId);
             if (adoptedSourceCityIds.Count == 0) return null;
 
             NeighborInfluence best = null;
-            foreach (Kingdom other in World.world.kingdoms)
+            foreach (City target in ownCities)
             {
-                if (other?.data == null || other == pKingdom || other.isRekt() || other.isNeutral()) continue;
-                foreach (City source in GetCities(other))
+                if (target?.data == null) continue;
+                foreach (Kingdom other in NeighborKingdoms(target))
                 {
-                    if (!adoptedSourceCityIds.Contains(source.id)) continue;
-                    foreach (City target in ownCities)
+                    if (!CityTechNeighborRules.ShouldConsiderNeighborKingdom(
+                            pHasKingdom: other?.data != null,
+                            pSameKingdom: other == pKingdom,
+                            pIsRekt: other?.isRekt() ?? true,
+                            pIsNeutral: other?.isNeutral() ?? true))
+                        continue;
+
+                    foreach (City source in GetCities(other))
                     {
+                        if (!adoptedSourceCityIds.Contains(source.id)) continue;
                         float dist = Distance(target, source);
                         if (dist > NEIGHBOR_RANGE) continue;
                         if (best != null && dist >= best.distance) continue;
@@ -446,6 +532,35 @@ namespace AncientWarfare3.core.policy
                 }
             }
             return best;
+        }
+
+        private static List<Kingdom> NeighborKingdoms(City pCity)
+        {
+            var result = new List<Kingdom>();
+            if (pCity?.data == null) return result;
+            var seen = new HashSet<long>();
+            Kingdom own = pCity.kingdom;
+            try
+            {
+                foreach (Kingdom other in pCity.neighbours_kingdoms)
+                {
+                    if (other?.data == null || !seen.Add(other.id)) continue;
+                    result.Add(other);
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (TileZone zone in pCity.neighbour_zones)
+                {
+                    Kingdom other = zone?.city?.kingdom;
+                    if (other?.data == null || other == own || !seen.Add(other.id)) continue;
+                    result.Add(other);
+                }
+            }
+            catch { }
+            return result;
         }
 
         private static NeighborInfluence GetCachedNeighborInfluence(Kingdom pKingdom, string pTechId)

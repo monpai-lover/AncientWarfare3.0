@@ -16,4 +16,23 @@ namespace AncientWarfare3.core.policy
                    Math.Abs(existingExposure - nextExposure) <= EPSILON;
         }
     }
+
+    public static class CityTechSpreadRules
+    {
+        public static bool ShouldSkipFullyAdoptedSpread(int pCityCount, int pAdoptedCityCount)
+        {
+            return pCityCount > 0 && pAdoptedCityCount >= pCityCount;
+        }
+    }
+
+    public static class CityTechNeighborRules
+    {
+        public static bool ShouldConsiderNeighborKingdom(bool pHasKingdom, bool pSameKingdom,
+            bool pIsRekt, bool pIsNeutral)
+        {
+            if (!pHasKingdom) return false;
+            if (pSameKingdom) return false;
+            return !pIsRekt && !pIsNeutral;
+        }
+    }
 }

@@ -46,6 +46,9 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.updateAge))]
         public static void CityUpdateAge_Postfix(City __instance)
         {
+            if (__instance?.data == null) return;
+            if (!SlaveService.IsSlaveryEnabled(__instance.kingdom)) return;
+
             long benchmark = UpdateAgeBenchmark.Begin();
             try
             {

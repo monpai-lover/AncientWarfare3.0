@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.lineage
         public const string POSTHUMOUS = "posthumous";
         public const string FORMER_KING = "former_king";
         public const string ENSLAVED = "enslaved";
+        public const string CAPTIVE_EXECUTED = "captive_executed";
         public const string FREED_SLAVE = "freed_slave";
         public const string RETIRED_SOLDIER = "retired_soldier";
         public const string SLAVE_ENLISTED = "slave_enlisted";
@@ -65,6 +66,7 @@ namespace AncientWarfare3.core.lineage
         public const string NOTABLE_DEATH = "notable_death";
         public const string POSTHUMOUS = "posthumous";
         public const string ENSLAVED = "enslaved";
+        public const string CAPTIVE_EXECUTED = "captive_executed";
         public const string FREED_SLAVE = "freed_slave";
         public const string RETIRED_SOLDIER = "retired_soldier";
         public const string SLAVE_ENLISTED = "slave_enlisted";

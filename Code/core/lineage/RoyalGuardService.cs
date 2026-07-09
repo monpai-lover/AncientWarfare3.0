@@ -483,7 +483,7 @@ namespace AncientWarfare3.core.lineage
                 if (!HasGuardDataForKingdom(actor, pKingdom)) continue;
                 if (!IsStillValidGuard(actor, pKingdom))
                 {
-                    DismissGuard(actor, "invalid");
+                    DismissGuard(actor, "invalid", pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                     continue;
                 }
 
@@ -518,7 +518,7 @@ namespace AncientWarfare3.core.lineage
                 if (!IsRoyalGuard(unit)) continue;
                 if (!IsStillValidGuard(unit, pKingdom))
                 {
-                    DismissGuard(unit, "invalid");
+                    DismissGuard(unit, "invalid", pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                     continue;
                 }
                 pActive.Add(unit);
@@ -579,7 +579,7 @@ namespace AncientWarfare3.core.lineage
                 if (pInvalidDismisses < STALE_GUARD_ARMY_CLEANUP_LIMIT)
                 {
                     pInvalidDismisses++;
-                    DismissGuard(pActor, "invalid");
+                    DismissGuard(pActor, "invalid", pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                 }
                 return;
             }
@@ -630,7 +630,9 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             if (pActors == null || pActors.Count == 0)
             {
-                pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, "");
+                pKingdom.data.get(LineageKeys.ROYAL_GUARD_ROSTER_IDS, out string currentEmpty, "");
+                if (RoyalGuardMaintenanceRules.ShouldWriteGuardRoster(currentEmpty, ""))
+                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, "");
                 return;
             }
 
@@ -643,7 +645,10 @@ namespace AncientWarfare3.core.lineage
                 if (ids.Contains(id)) continue;
                 ids.Add(id);
             }
-            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, string.Join(",", ids.ToArray()));
+            string next = string.Join(",", ids.ToArray());
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ROSTER_IDS, out string current, "");
+            if (RoyalGuardMaintenanceRules.ShouldWriteGuardRoster(current, next))
+                pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, next);
         }
 
         private static void AddGuardToRoster(Kingdom pKingdom, Actor pActor)
@@ -668,7 +673,9 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             if (pIds == null || pIds.Count == 0)
             {
-                pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, "");
+                pKingdom.data.get(LineageKeys.ROYAL_GUARD_ROSTER_IDS, out string currentEmpty, "");
+                if (RoyalGuardMaintenanceRules.ShouldWriteGuardRoster(currentEmpty, ""))
+                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, "");
                 return;
             }
 
@@ -681,7 +688,10 @@ namespace AncientWarfare3.core.lineage
                 if (ids.Contains(text)) continue;
                 ids.Add(text);
             }
-            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, string.Join(",", ids.ToArray()));
+            string next = string.Join(",", ids.ToArray());
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ROSTER_IDS, out string current, "");
+            if (RoyalGuardMaintenanceRules.ShouldWriteGuardRoster(current, next))
+                pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, next);
         }
 
         private static void RemoveStaleActorFromGuardArmy(Actor pActor, Army pGuardArmy)
@@ -1018,9 +1028,19 @@ namespace AncientWarfare3.core.lineage
 
             if (!persistRefresh) return;
 
+            bool expensiveRefresh = RoyalGuardMaintenanceRules.ShouldRecordExpensiveIdentityRefresh(
+                pWasGuard: wasGuard,
+                pWasCaptain: wasCaptain,
+                pCaptain: pCaptain,
+                pMissingTrait: !hasTrait,
+                pKingdomChanged: guardKingdomId != pKingdom.id,
+                pNameChanged: (previousGuardName ?? "") != (pGuardName ?? ""));
             UpsertGuardState(pActor, pActive: true, pCaptain, ChronicleGate.IsNobleActor(pActor), pGuardName, "");
-            LineageService.ArchiveActor(pActor, pAlive: true);
-            pActor.clearGraphicsFully();
+            if (expensiveRefresh)
+            {
+                LineageService.ArchiveActor(pActor, pAlive: true);
+                pActor.clearGraphicsFully();
+            }
 
             if (!wasGuard || wasCaptain != pCaptain)
                 ChronicleEvents.OnRoyalGuardAppointed(pActor, pKingdom, pActor.city, pGuardName, pCaptain);
@@ -1046,7 +1066,7 @@ namespace AncientWarfare3.core.lineage
                 CollectActiveGuardsFromArmy(guardArmy, pKingdom, active);
                 foreach (Actor guard in active)
                     if (IsRoyalGuard(guard))
-                        DismissGuard(guard, pReason);
+                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
                 ClearKingdomGuardStateHints(pKingdom);
                 return;
@@ -1059,7 +1079,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     Actor guard = GetActorById(actorId);
                     if (IsRoyalGuard(guard))
-                        DismissGuard(guard, pReason);
+                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                 }
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
                 ClearKingdomGuardStateHints(pKingdom);
@@ -1093,7 +1113,7 @@ namespace AncientWarfare3.core.lineage
                 {
                     pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, scanned - 1);
                     foreach (Actor guard in toDismiss)
-                        DismissGuard(guard, pReason);
+                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                     return false;
                 }
 
@@ -1115,7 +1135,7 @@ namespace AncientWarfare3.core.lineage
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
             foreach (Actor guard in new List<Actor>(pActive))
                 if (IsRoyalGuard(guard))
-                    DismissGuard(guard, pReason);
+                    DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
         }
 
@@ -1140,6 +1160,12 @@ namespace AncientWarfare3.core.lineage
 
         private static void DismissGuard(Actor pActor, string pReason, bool pRecord, bool pKeepTrait)
         {
+            DismissGuard(pActor, pReason, pRecord, pKeepTrait, pUpdateRoster: true);
+        }
+
+        private static void DismissGuard(Actor pActor, string pReason, bool pRecord, bool pKeepTrait,
+            bool pUpdateRoster)
+        {
             if (pActor?.data == null || !IsRoyalGuard(pActor)) return;
 
             Kingdom kingdom = pActor.kingdom;
@@ -1151,7 +1177,8 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.ROYAL_GUARD_CAPTAIN, false);
             pActor.data.set(LineageKeys.ROYAL_GUARD_KINGDOM_ID, -1L);
             pActor.data.set(LineageKeys.ROYAL_GUARD_NAME, "");
-            RemoveGuardFromRoster(kingdom, pActor);
+            if (pUpdateRoster)
+                RemoveGuardFromRoster(kingdom, pActor);
             if (!pKeepTrait && pActor.hasTrait(LineageKeys.TRAIT_GUARD))
                 pActor.removeTrait(LineageKeys.TRAIT_GUARD);
             ClearGuardCitizenJob(pActor);
