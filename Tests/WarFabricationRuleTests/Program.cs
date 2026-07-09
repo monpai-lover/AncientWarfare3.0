@@ -299,6 +299,9 @@ namespace WarFabricationRuleTests
             ExpectSlaveCaptureCommandRules();
             ExpectNonCoreLoyaltyRules();
             ExpectWarTerritoryCacheRules();
+            ExpectHeirTitleRules();
+            ExpectArmyRetreatRules();
+            ExpectCityOccupationAccelerationRules();
             ExpectFamilyTreePortraitFrameRules();
             ExpectClanBannerFrameRules();
             ExpectFamilyTreeToolbarLayoutRules();
@@ -2638,6 +2641,22 @@ namespace WarFabricationRuleTests
                     pTargetCityControlledByAttackerSystem: true))
                 throw new Exception("Controlled claim targets should allow immediate war-goal settlement.");
 
+            if (!WarGoalControlRules.ShouldResolveTransferredCityGoal(
+                    "mandate_conquest",
+                    pTargetCityMatchesGoal: true,
+                    pNewOwnerIsWarAttacker: true))
+                throw new Exception("Mandate conquest target captures should settle the war.");
+
+            if (!WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "restore_kingdom",
+                    pTargetCityControlledByAttackerSystem: true))
+                throw new Exception("Restoration target control should settle the war.");
+
+            if (WarGoalControlRules.ShouldResolveControlledCityGoal(
+                    "take_mandate",
+                    pTargetCityControlledByAttackerSystem: true))
+                throw new Exception("Taking the Mandate itself must not settle from a single captured city.");
+
             if (WarGoalControlRules.ShouldResolveControlledCityGoal(
                     "force_vassal",
                     pTargetCityControlledByAttackerSystem: true))
@@ -2647,6 +2666,117 @@ namespace WarFabricationRuleTests
                     "take_core_city",
                     pTargetCityControlledByAttackerSystem: false))
                 throw new Exception("Uncontrolled city goals must not settle.");
+        }
+
+        private static void ExpectHeirTitleRules()
+        {
+            if (HeirTitleRules.TitleKey(pIsMandateKingdom: false) != "aw_heir_shizi")
+                throw new Exception("Non-Mandate heirs should be titled shizi.");
+            if (HeirTitleRules.TitleKey(pIsMandateKingdom: true) != "aw_heir_taizi")
+                throw new Exception("Mandate heirs should be titled taizi.");
+            if (!HeirTitleRules.ShouldRewriteOriginalHeirTitle("heir"))
+                throw new Exception("Original heir stats rows should be rewritten.");
+            if (HeirTitleRules.ShouldRewriteOriginalHeirTitle("village_statistics_king"))
+                throw new Exception("Only the heir row title should be rewritten.");
+        }
+
+        private static void ExpectArmyRetreatRules()
+        {
+            if (ArmyRetreatRules.ShouldRetreat(
+                    pRole: "",
+                    pBaselineUnits: 10,
+                    pCurrentUnits: 4,
+                    pCaptainAlive: true,
+                    pIsAttacking: true,
+                    pCooldownActive: false) == false)
+                throw new Exception("Normal armies below 45 percent of their attack strength should retreat.");
+
+            if (ArmyRetreatRules.ShouldRetreat(
+                    pRole: "",
+                    pBaselineUnits: 10,
+                    pCurrentUnits: 5,
+                    pCaptainAlive: true,
+                    pIsAttacking: true,
+                    pCooldownActive: false))
+                throw new Exception("Normal armies at half strength should keep fighting.");
+
+            if (!ArmyRetreatRules.ShouldRetreat(
+                    pRole: AWArmyRole.SlaveArmy,
+                    pBaselineUnits: 10,
+                    pCurrentUnits: 3,
+                    pCaptainAlive: true,
+                    pIsAttacking: true,
+                    pCooldownActive: false))
+                throw new Exception("Slave armies should retreat when they collapse below their looser threshold.");
+
+            if (ArmyRetreatRules.ShouldRetreat(
+                    pRole: AWArmyRole.RoyalGuard,
+                    pBaselineUnits: 20,
+                    pCurrentUnits: 2,
+                    pCaptainAlive: true,
+                    pIsAttacking: true,
+                    pCooldownActive: false))
+                throw new Exception("Royal guards should not use the normal retreat mechanic.");
+
+            if (ArmyRetreatRules.ShouldRetreat(
+                    pRole: "",
+                    pBaselineUnits: 7,
+                    pCurrentUnits: 1,
+                    pCaptainAlive: true,
+                    pIsAttacking: true,
+                    pCooldownActive: false))
+                throw new Exception("Tiny armies should not trigger retreat churn.");
+
+            if (!ArmyRetreatRules.ShouldRetreat(
+                    pRole: "",
+                    pBaselineUnits: 10,
+                    pCurrentUnits: 5,
+                    pCaptainAlive: false,
+                    pIsAttacking: true,
+                    pCooldownActive: false))
+                throw new Exception("Armies with a lost captain should retreat earlier.");
+
+            if (!ArmyRetreatRules.ShouldSkipAttackWhileRetreating(pRetreatUntilYear: 25, pCurrentYear: 24))
+                throw new Exception("Retreating armies should stop attack AI until the cooldown ends.");
+            if (ArmyRetreatRules.ShouldSkipAttackWhileRetreating(pRetreatUntilYear: 25, pCurrentYear: 25))
+                throw new Exception("Retreat cooldown should expire at its end year.");
+        }
+
+        private static void ExpectCityOccupationAccelerationRules()
+        {
+            if (CityOccupationAccelerationRules.ExtraCapturePoints(
+                    pIsBeingCapturedByEnemy: false,
+                    pHasDefenders: false,
+                    pHasCityControlGoal: true,
+                    pWatchTowerCount: 0) != 0f)
+                throw new Exception("Occupation acceleration should require an enemy capture.");
+
+            float goalBonus = CityOccupationAccelerationRules.ExtraCapturePoints(
+                pIsBeingCapturedByEnemy: true,
+                pHasDefenders: false,
+                pHasCityControlGoal: true,
+                pWatchTowerCount: 0);
+            float normalBonus = CityOccupationAccelerationRules.ExtraCapturePoints(
+                pIsBeingCapturedByEnemy: true,
+                pHasDefenders: false,
+                pHasCityControlGoal: false,
+                pWatchTowerCount: 0);
+            if (goalBonus <= normalBonus || normalBonus <= 0f)
+                throw new Exception("War-goal cities should capture faster than ordinary undefended cities.");
+
+            if (CityOccupationAccelerationRules.ExtraCapturePoints(
+                    pIsBeingCapturedByEnemy: true,
+                    pHasDefenders: true,
+                    pHasCityControlGoal: true,
+                    pWatchTowerCount: 0) != 0f)
+                throw new Exception("Cities with defenders should not receive occupation acceleration.");
+
+            if (CityOccupationAccelerationRules.ExtraCapturePoints(
+                    pIsBeingCapturedByEnemy: true,
+                    pHasDefenders: false,
+                    pHasCityControlGoal: true,
+                    pWatchTowerCount: 2) >= goalBonus)
+                throw new Exception("Watch towers should reduce the occupation acceleration bonus.");
         }
 
         private static void ExpectSlaveArmyNameRefreshRule()

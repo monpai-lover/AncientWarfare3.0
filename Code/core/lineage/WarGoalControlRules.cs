@@ -18,7 +18,10 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsCityControlGoal(string pGoalType)
         {
-            return pGoalType == "take_core_city" || pGoalType == "press_claim_city";
+            return pGoalType == "take_core_city" ||
+                   pGoalType == "press_claim_city" ||
+                   pGoalType == "mandate_conquest" ||
+                   pGoalType == "restore_kingdom";
         }
     }
 }

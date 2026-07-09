@@ -114,6 +114,33 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool HasOpenCityControlGoalForAttacker(City pCity, Kingdom pCapturingKingdom)
+        {
+            if (pCity?.data == null || pCapturingKingdom?.data == null || !Ready) return false;
+            try
+            {
+                foreach (War war in pCapturingKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    foreach (GoalRow goal in ReadOpenGoals(war.data.id))
+                    {
+                        bool targetCityMatches = goal.target_city_id == pCity.data.id || goal.target_city_id == pCity.id;
+                        if (!targetCityMatches) continue;
+                        Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ?? war.getMainAttacker();
+                        if (!IsOnAttackerSideOrSystem(war, pCapturingKingdom, attacker)) continue;
+                        if (WarGoalControlRules.ShouldResolveControlledCityGoal(goal.goal_type, true))
+                            return true;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("WarTerritoryService.HasOpenCityControlGoalForAttacker failed: " + e.Message);
+            }
+
+            return false;
+        }
+
         private static List<War> GetCandidateWarsForTransferredCity(City pCity, Kingdom pNewKingdom)
         {
             var result = new List<War>();

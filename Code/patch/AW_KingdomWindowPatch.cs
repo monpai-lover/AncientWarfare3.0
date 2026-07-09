@@ -1,3 +1,4 @@
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
 
@@ -47,11 +48,12 @@ namespace AncientWarfare3.patch
         // 用 KingdomWindow(继承未 override)会解析 null 致 PatchAll 失败(见记忆 aw3-harmony-inherited-method-pitfall)。
         [HarmonyPrefix]
         [HarmonyPatch(typeof(StatsWindow), "tryToShowActor")]
-        public static bool TryToShowActor_Prefix(string pTitle, long pID, Actor pObject)
+        public static bool TryToShowActor_Prefix(ref string pTitle, long pID, Actor pObject)
         {
-            if (pTitle != "heir") return true; // 只管继承人行
+            if (!HeirTitleRules.ShouldRewriteOriginalHeirTitle(pTitle)) return true; // 只管继承人行
             Actor actor = pObject != null ? pObject : World.world.units.get(pID);
             if (actor == null || actor.isRekt()) return false; // 无继承人 → 不画空行
+            pTitle = HeirTitleRules.TitleKey(SelectedMetas.selected_kingdom);
             return true;
         }
     }

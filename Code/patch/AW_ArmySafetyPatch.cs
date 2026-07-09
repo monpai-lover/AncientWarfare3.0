@@ -22,7 +22,13 @@ namespace AncientWarfare3.patch
                 pHasCurrentTile: pActor?.current_tile != null,
                 pHasCurrentZone: pActor?.current_tile?.zone != null);
 
-            if (!skip) return true;
+            if (skip)
+            {
+                __result = BehResult.Stop;
+                return false;
+            }
+
+            if (!ArmyRetreatService.ShouldStopAttack(pActor)) return true;
             __result = BehResult.Stop;
             return false;
         }

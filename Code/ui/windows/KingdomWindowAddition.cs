@@ -653,7 +653,21 @@ namespace AncientWarfare3.ui.windows
                 else _heirAvatar.gameObject.SetActive(false);
                 // 无继承人时隐藏"继承人"文字标签(留空头像位占位即可,不显文字)。
                 Transform heirLabel = _heirCol.transform.Find("Label");
-                if (heirLabel != null) heirLabel.gameObject.SetActive(hasHeir);
+                if (heirLabel != null)
+                {
+                    heirLabel.gameObject.SetActive(hasHeir);
+                    if (hasHeir)
+                    {
+                        string key = HeirTitleRules.TitleKey(kingdom);
+                        LocalizedText localized = heirLabel.GetComponent<LocalizedText>();
+                        if (localized != null) localized.setKeyAndUpdate(key);
+                        else
+                        {
+                            Text text = heirLabel.GetComponent<Text>();
+                            if (text != null) text.text = AW_L10n.Text(key, key);
+                        }
+                    }
+                }
             }
         }
 

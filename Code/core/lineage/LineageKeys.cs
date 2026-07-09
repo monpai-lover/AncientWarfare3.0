@@ -45,6 +45,10 @@ namespace AncientWarfare3.core.lineage
         public const string AW_ARMY_CITY_ID = "aw_army_city_id";
         public const string AW_ARMY_ANCHOR_X = "aw_army_anchor_x";
         public const string AW_ARMY_ANCHOR_Y = "aw_army_anchor_y";
+        public const string AW_ARMY_RETREAT_BASELINE = "aw_army_retreat_baseline";
+        public const string AW_ARMY_RETREAT_UNTIL_YEAR = "aw_army_retreat_until_year";
+        public const string AW_ARMY_RETREAT_CITY_ID = "aw_army_retreat_city_id";
+        public const string AW_ARMY_RETREAT_TARGET_CITY_ID = "aw_army_retreat_target_city_id";
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";

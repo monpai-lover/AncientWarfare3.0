@@ -65,6 +65,8 @@ aw_view_family_tree,查看该人的家族树,View this person's family tree,查�
 aw_year_name,年号,Era Name,年號
 aw_kingdom_title,爵位,Title,爵位
 aw_heir,继承人,Heir,繼承人
+aw_heir_shizi,世子,Heir Apparent,世子
+aw_heir_taizi,太子,Crown Prince,太子
 aw_lineage_overview_btn,姓族总览,Lineage Overview,姓族總覽
 aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,View all surname and branch lineage archives,查看所有姓與氏支的譜系檔案
 xia,夏人,Xia,夏人
