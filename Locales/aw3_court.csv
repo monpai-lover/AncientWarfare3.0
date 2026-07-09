@@ -11,6 +11,10 @@ aw_court_dominant_school,主流学派,Dominant School,主流學派
 aw_court_faction_composition,学派构成,Faction Composition,學派構成
 aw_court_tooltip_cached,官场数据按低频缓存刷新，打开窗口不会实时扫描全国人物,Court data uses cached refresh and does not scan every actor when opened,官場資料按低頻快取刷新，打開窗口不會即時掃描全國人物
 aw_court_no_officer,空缺,Vacant,空缺
+aw_court_action_appoint,任命,Appoint,任命
+aw_court_action_dismiss,罢免,Dismiss,罷免
+aw_court_action_transfer,调任,Transfer,調任
+aw_court_action_support_school,扶持学派,Support School,扶持學派
 aw_court_school_ru,儒家,Ru School,儒家
 aw_court_school_fa,法家,Legalist School,法家
 aw_court_school_dao,道家,Daoist School,道家
