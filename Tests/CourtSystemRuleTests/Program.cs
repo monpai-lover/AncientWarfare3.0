@@ -52,6 +52,12 @@ namespace CourtSystemRuleTests
                 Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: true, madness: false), "slave holder rejected");
                 Expect(!CourtRules.CanHoldOffice(alive: true, sameKingdom: true, slave: false, madness: true), "madness holder rejected");
 
+                int baseWar = CourtAIRules.ScoreDecision(CourtSchoolId.None, "aw_decision_declare_war", cities: 5, atWar: false, unstable: false);
+                int militaryWar = CourtAIRules.ScoreDecision(CourtSchoolId.Military, "aw_decision_declare_war", cities: 5, atWar: false, unstable: false);
+                int daoWar = CourtAIRules.ScoreDecision(CourtSchoolId.Dao, "aw_decision_declare_war", cities: 5, atWar: false, unstable: false);
+                Expect(militaryWar > baseWar, "military court raises war decision");
+                Expect(daoWar < baseWar, "dao court lowers war decision");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }

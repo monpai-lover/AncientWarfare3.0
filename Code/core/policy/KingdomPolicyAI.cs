@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.policy
@@ -122,14 +123,24 @@ namespace AncientWarfare3.core.policy
         private static int ScoreDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
-            return KingdomDecisionPriorityRules.ScoreDecision(
+            int cities = CountCities(pKingdom);
+            int baseScore = KingdomDecisionPriorityRules.ScoreDecision(
                 pDef.Id,
                 MandateService.CanStabilizeMandate(pKingdom),
                 RoyalExpansionDecisionService.CanExecute(pKingdom),
-                CountCities(pKingdom),
+                cities,
                 SlaveService.IsSlaveryEnabled(pKingdom),
                 XiaizationService.ScoreResearch(pKingdom, pDef),
                 string.IsNullOrEmpty(yearName));
+
+            CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                return baseScore + CourtAIRules.ScoreDecision(court.dominant_school, pDef.Id,
+                    cities, IsAtWar(pKingdom), court.efficiency < 35f);
+            }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtAiBiasIndex, benchmark); }
         }
 
         private static bool ShouldAutoStartDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
@@ -214,6 +225,11 @@ namespace AncientWarfare3.core.policy
                         context += 120;
                     break;
             }
+
+            CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try { context += CourtAIRules.ScoreResearch(court.dominant_school, pDef.Id, atWar, MandateService.Exists); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtAiBiasIndex, benchmark); }
 
             return orderScore + context;
         }

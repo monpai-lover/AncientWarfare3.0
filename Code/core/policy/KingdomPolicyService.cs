@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.utils;
@@ -66,6 +67,10 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null || pKingdom.isRekt()) return;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return;
             EnsureInitialized(pKingdom);
+
+            long courtBenchmark = UpdateAgeBenchmark.Begin();
+            try { CourtService.OnKingdomYear(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtYearTickIndex, courtBenchmark); }
 
             int currentYear = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.POLICY_LAST_YEAR, out int lastYear, int.MinValue);

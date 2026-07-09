@@ -59,9 +59,18 @@ namespace AncientWarfare3.core.court
             if (!CourtRules.ShouldRefreshCourt(year, lastYear, CourtRules.DefaultRefreshIntervalYears)) return;
             pKingdom.data.set(LineageKeys.COURT_LAST_REFRESH_YEAR, year);
 
-            ValidateOfficers(pKingdom);
-            EnsureMinimumCourt(pKingdom);
-            RecalculateFactionCache(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try { ValidateOfficers(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtOfficerValidateIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { EnsureMinimumCourt(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtCandidateRefreshIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { RecalculateFactionCache(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtFactionRecalcIndex, benchmark); }
+
             UpsertCourtSnapshot(pKingdom);
         }
 

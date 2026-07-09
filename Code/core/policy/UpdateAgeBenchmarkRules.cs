@@ -35,17 +35,24 @@ namespace AncientWarfare3.core.policy
         public const int KingdomPolicyAdvanceDecisionIndex = 22;
         public const int KingdomPolicySnapshotIndex = 23;
         public const int KingdomPolicyMapDirtyIndex = 24;
-        public const int CityTechSpreadCompletedIndex = 25;
-        public const int CityTechNeighborExposureIndex = 26;
-        public const int CityTechNeighborInfluenceIndex = 27;
-        public const int CityEconomyUpdateCitiesIndex = 28;
-        public const int CityEconomyMapDirtyIndex = 29;
-        public const int CityEconomyTechReportIndex = 30;
-        public const int CityEconomySlaveCountIndex = 31;
-        public const int CityEconomyDbUpsertIndex = 32;
-        public const int ActorFullWallIndex = 33;
-        public const int CityFullWallIndex = 34;
-        public const int KingdomFullWallIndex = 35;
+        public const int KingdomCourtYearTickIndex = 25;
+        public const int KingdomCourtCandidateRefreshIndex = 26;
+        public const int KingdomCourtOfficerValidateIndex = 27;
+        public const int KingdomCourtFactionRecalcIndex = 28;
+        public const int KingdomCourtAiBiasIndex = 29;
+        public const int KingdomCourtUiBuildIndex = 30;
+        public const int KingdomCityBureauRefreshIndex = 31;
+        public const int CityTechSpreadCompletedIndex = 32;
+        public const int CityTechNeighborExposureIndex = 33;
+        public const int CityTechNeighborInfluenceIndex = 34;
+        public const int CityEconomyUpdateCitiesIndex = 35;
+        public const int CityEconomyMapDirtyIndex = 36;
+        public const int CityEconomyTechReportIndex = 37;
+        public const int CityEconomySlaveCountIndex = 38;
+        public const int CityEconomyDbUpsertIndex = 39;
+        public const int ActorFullWallIndex = 40;
+        public const int CityFullWallIndex = 41;
+        public const int KingdomFullWallIndex = 42;
 
         public const string ActorRetirement = "aw3_actor_update_age_retirement";
         public const string ActorOldHead = "aw3_actor_update_age_old_head";
@@ -72,6 +79,13 @@ namespace AncientWarfare3.core.policy
         public const string KingdomPolicyAdvanceDecision = "aw3_kingdom_policy_advance_decision";
         public const string KingdomPolicySnapshot = "aw3_kingdom_policy_snapshot";
         public const string KingdomPolicyMapDirty = "aw3_kingdom_policy_map_dirty";
+        public const string KingdomCourtYearTick = "aw3_court_year_tick";
+        public const string KingdomCourtCandidateRefresh = "aw3_court_candidate_refresh";
+        public const string KingdomCourtOfficerValidate = "aw3_court_officer_validate";
+        public const string KingdomCourtFactionRecalc = "aw3_court_faction_recalc";
+        public const string KingdomCourtAiBias = "aw3_court_ai_policy_bias";
+        public const string KingdomCourtUiBuild = "aw3_court_ui_build";
+        public const string KingdomCityBureauRefresh = "aw3_city_bureau_refresh";
         public const string CityTechSpreadCompleted = "aw3_city_tech_spread_completed";
         public const string CityTechNeighborExposure = "aw3_city_tech_neighbor_exposure";
         public const string CityTechNeighborInfluence = "aw3_city_tech_neighbor_influence";
@@ -111,6 +125,13 @@ namespace AncientWarfare3.core.policy
             KingdomPolicyAdvanceDecision,
             KingdomPolicySnapshot,
             KingdomPolicyMapDirty,
+            KingdomCourtYearTick,
+            KingdomCourtCandidateRefresh,
+            KingdomCourtOfficerValidate,
+            KingdomCourtFactionRecalc,
+            KingdomCourtAiBias,
+            KingdomCourtUiBuild,
+            KingdomCityBureauRefresh,
             CityTechSpreadCompleted,
             CityTechNeighborExposure,
             CityTechNeighborInfluence,
@@ -143,6 +164,8 @@ namespace AncientWarfare3.core.policy
         public static string ParentForIndex(int pIndex)
         {
             if (pIndex >= KingdomPolicyPointsIndex && pIndex <= KingdomPolicyMapDirtyIndex)
+                return KingdomPolicy;
+            if (pIndex >= KingdomCourtYearTickIndex && pIndex <= KingdomCityBureauRefreshIndex)
                 return KingdomPolicy;
             if (pIndex >= CityTechSpreadCompletedIndex && pIndex <= CityTechNeighborInfluenceIndex)
                 return KingdomCityTech;
