@@ -39,6 +39,7 @@ namespace AncientWarfare3.core.policy
         public string completed_policies = "";
         public string completed_techs = "";
         public string completed_decisions = "";
+        public string locked_nodes = "";
     }
 
     internal sealed class TechLevelReport
@@ -146,6 +147,7 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_ID, out long currentCoreCityId, -1L);
             pKingdom.data.get(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, out string currentCoreCityName, "");
             pKingdom.data.get(LineageKeys.CORE_FAB_QUEUE, out string coreQueue, "");
+            pKingdom.data.get(LineageKeys.POLICY_LOCKED_NODES, out string lockedNodes, "");
             if (currentPolicy == null) pKingdom.data.set(LineageKeys.POLICY_CURRENT, "");
             if (currentTech == null) pKingdom.data.set(LineageKeys.TECH_CURRENT, "");
             if (currentDecision == null) pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
@@ -153,7 +155,73 @@ namespace AncientWarfare3.core.policy
             if (currentCoreCityId < -1L) pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, -1L);
             if (currentCoreCityName == null) pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, "");
             if (coreQueue == null) pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, "");
+            if (lockedNodes == null) pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, "");
             MigrateCurrentCoreDecisionToDedicatedSlot(pKingdom);
+        }
+
+        public static string GetLockedNodesRaw(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return "";
+            pKingdom.data.get(LineageKeys.POLICY_LOCKED_NODES, out string raw, "");
+            return raw ?? "";
+        }
+
+        public static bool IsNodeLocked(Kingdom pKingdom, string pNodeId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pNodeId)) return false;
+            return PolicyNodeLockRules.IsLocked(GetLockedNodesRaw(pKingdom), pNodeId);
+        }
+
+        public static bool SetNodeLocked(Kingdom pKingdom, string pNodeId, bool pLocked)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pNodeId)) return false;
+            if (KingdomPolicyDefs.Get(pNodeId) == null) return false;
+            EnsureInitialized(pKingdom);
+
+            string raw = GetLockedNodesRaw(pKingdom);
+            string next = PolicyNodeLockRules.SetLocked(raw, pNodeId, pLocked);
+            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, next);
+            if (pLocked) CleanLockedNodeSideEffects(pKingdom, pNodeId);
+            UpsertSnapshot(pKingdom);
+            return true;
+        }
+
+        public static bool ToggleNodeLocked(Kingdom pKingdom, string pNodeId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pNodeId)) return false;
+            return SetNodeLocked(pKingdom, pNodeId, !IsNodeLocked(pKingdom, pNodeId));
+        }
+
+        private static void CleanLockedNodeSideEffects(Kingdom pKingdom, string pNodeId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pNodeId)) return;
+
+            if (PolicyNodeLockRules.ShouldClearCurrent(pNodeId, GetCurrent(pKingdom, PolicyNodeKind.Tech)))
+            {
+                pKingdom.data.set(LineageKeys.TECH_CURRENT, "");
+                pKingdom.data.set(LineageKeys.TECH_PROGRESS, 0f);
+            }
+
+            if (PolicyNodeLockRules.ShouldClearCurrent(pNodeId, GetCurrent(pKingdom, PolicyNodeKind.Social)))
+            {
+                pKingdom.data.set(LineageKeys.POLICY_CURRENT, "");
+                pKingdom.data.set(LineageKeys.POLICY_PROGRESS, 0f);
+            }
+
+            if (PolicyNodeLockRules.ShouldClearCurrent(pNodeId, GetCurrent(pKingdom, PolicyNodeKind.Decision)))
+            {
+                pKingdom.data.set(LineageKeys.DECISION_CURRENT, "");
+                pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
+                ClearDecisionTarget(pKingdom);
+            }
+
+            RemoveQueuedDecision(pKingdom, pNodeId);
+
+            if (PolicyNodeLockRules.ShouldClearCoreFabrication(pNodeId))
+            {
+                ClearCoreFabricationCurrent(pKingdom);
+                WriteCoreFabricationQueue(pKingdom, new List<KingdomDecisionQueueItem>());
+            }
         }
 
         public static bool StartResearch(Kingdom pKingdom, string pNodeId)
@@ -162,6 +230,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_absorb_vassal")
                 return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom));
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_declare_war")
@@ -196,6 +265,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null || IsCompleted(pKingdom, def)) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_absorb_vassal")
                 return StartDecisionWithTarget(pKingdom, def.Id, VassalService.FindBestAbsorbVassalTarget(pKingdom));
             if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_declare_war")
@@ -228,6 +298,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
             EnsureInitialized(pKingdom);
 
             if (def.Id == "aw_decision_absorb_vassal" &&
@@ -262,6 +333,7 @@ namespace AncientWarfare3.core.policy
             string defId = FabricationDecisionId(pProjectType);
             KingdomPolicyDef def = KingdomPolicyDefs.Get(defId);
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
             EnsureInitialized(pKingdom);
 
             City city = pTargetCity;
@@ -313,6 +385,7 @@ namespace AncientWarfare3.core.policy
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get("aw_decision_declare_war");
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
             string goalType = pGoalType ?? "";
             string warType = pWarType ?? WarDecisionService.WAR_NORMAL;
             bool basicAllowed = WarDecisionService.CanQueueWarPair(pKingdom, pTarget, warType, out _);
@@ -547,6 +620,7 @@ namespace AncientWarfare3.core.policy
         private static void MigrateCurrentCoreDecisionToDedicatedSlot(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId)) return;
             pKingdom.data.get(LineageKeys.DECISION_CURRENT, out string current, "");
             if (current != DecisionQueueRules.FabricateCoreDecisionId) return;
             pKingdom.data.get(LineageKeys.DECISION_PROJECT_TYPE, out string projectType, "");
@@ -583,6 +657,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || pDef == null) return PolicyNodeStatus.Locked;
             if (IsCompleted(pKingdom, pDef)) return PolicyNodeStatus.Completed;
+            if (IsNodeLocked(pKingdom, pDef.Id)) return PolicyNodeStatus.Locked;
             if (GetCurrent(pKingdom, pDef.Kind) == pDef.Id) return PolicyNodeStatus.Current;
             return AreRequirementsMet(pKingdom, pDef) ? PolicyNodeStatus.Available : PolicyNodeStatus.Locked;
         }
@@ -709,6 +784,7 @@ namespace AncientWarfare3.core.policy
             snapshot.completed_policies = GetCompletedRaw(pKingdom, PolicyNodeKind.Social);
             snapshot.completed_techs = GetCompletedRaw(pKingdom, PolicyNodeKind.Tech);
             snapshot.completed_decisions = GetCompletedRaw(pKingdom, PolicyNodeKind.Decision);
+            snapshot.locked_nodes = GetLockedNodesRaw(pKingdom);
             return snapshot;
         }
 
@@ -746,6 +822,8 @@ namespace AncientWarfare3.core.policy
                 pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, pSnapshot.core_fab_queue ?? "");
                 pKingdom.data.set(LineageKeys.DECISION_COMPLETED, pSnapshot.completed_decisions ?? "");
             }
+
+            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, pSnapshot.locked_nodes ?? "");
 
             UpsertSnapshot(pKingdom);
         }
@@ -880,6 +958,14 @@ namespace AncientWarfare3.core.policy
             {
                 pKingdom.data.set(CurrentKey(pKind), "");
                 pKingdom.data.set(ProgressKey(pKind), 0f);
+                return;
+            }
+            if (IsNodeLocked(pKingdom, def.Id))
+            {
+                pKingdom.data.set(CurrentKey(pKind), "");
+                pKingdom.data.set(ProgressKey(pKind), 0f);
+                if (pKind == PolicyNodeKind.Decision) ClearDecisionTarget(pKingdom);
+                UpsertSnapshot(pKingdom);
                 return;
             }
 
@@ -1234,6 +1320,7 @@ namespace AncientWarfare3.core.policy
         private static bool StartCoreFabrication(Kingdom pKingdom, City pCity)
         {
             if (pKingdom?.data == null) return false;
+            if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId)) return false;
             City city = pCity ?? WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
             if (city?.data == null) return false;
 
@@ -1295,6 +1382,7 @@ namespace AncientWarfare3.core.policy
         private static void TryStartCoreFabrication(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId)) return;
             if (GetCoreFabricationCityId(pKingdom) < 0 && StartNextQueuedCoreFabrication(pKingdom))
                 return;
             City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
@@ -1305,6 +1393,14 @@ namespace AncientWarfare3.core.policy
         private static void AdvanceCoreFabrication(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId))
+            {
+                ClearCoreFabricationCurrent(pKingdom);
+                WriteCoreFabricationQueue(pKingdom, new List<KingdomDecisionQueueItem>());
+                UpsertSnapshot(pKingdom);
+                return;
+            }
+
             long cityId = GetCoreFabricationCityId(pKingdom);
             if (cityId < 0) return;
 
@@ -1343,6 +1439,7 @@ namespace AncientWarfare3.core.policy
         private static bool StartNextQueuedCoreFabrication(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || GetCoreFabricationCityId(pKingdom) >= 0) return false;
+            if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId)) return false;
             List<KingdomDecisionQueueItem> queue = ReadCoreFabricationQueue(pKingdom);
             while (queue.Count > 0)
             {
@@ -1369,6 +1466,15 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return;
             pKingdom.data.set(LineageKeys.DECISION_QUEUE, KingdomDecisionQueueCodec.Encode(pItems));
+        }
+
+        private static void RemoveQueuedDecision(Kingdom pKingdom, string pDecisionId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pDecisionId)) return;
+            List<KingdomDecisionQueueItem> queue = ReadDecisionQueue(pKingdom);
+            int before = queue.Count;
+            queue.RemoveAll(p => p?.decision_id == pDecisionId);
+            if (queue.Count != before) WriteDecisionQueue(pKingdom, queue);
         }
 
         private static void EnqueueDecisionBack(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
@@ -1483,6 +1589,7 @@ namespace AncientWarfare3.core.policy
                 KingdomDecisionQueueItem item = queue[0];
                 queue.RemoveAt(0);
                 WriteDecisionQueue(pKingdom, queue);
+                if (IsNodeLocked(pKingdom, item.decision_id)) continue;
                 if (item.decision_id == DecisionQueueRules.FabricateCoreDecisionId)
                 {
                     StartCoreFabrication(pKingdom, FindCity(item.war_target_city_id));
@@ -1502,6 +1609,7 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null || pItem == null || string.IsNullOrEmpty(pItem.decision_id)) return false;
             KingdomPolicyDef def = KingdomPolicyDefs.Get(pItem.decision_id);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
+            if (IsNodeLocked(pKingdom, def.Id)) return false;
 
             switch (pItem.decision_id)
             {
@@ -1925,6 +2033,7 @@ namespace AncientWarfare3.core.policy
                 ColumnVal.Create("COMPLETED_POLICIES", GetCompletedRaw(pKingdom, PolicyNodeKind.Social)),
                 ColumnVal.Create("COMPLETED_TECHS", GetCompletedRaw(pKingdom, PolicyNodeKind.Tech)),
                 ColumnVal.Create("COMPLETED_DECISIONS", GetCompletedRaw(pKingdom, PolicyNodeKind.Decision)),
+                ColumnVal.Create("LOCKED_NODES", GetLockedNodesRaw(pKingdom)),
                 ColumnVal.Create("UPDATED_TIME", LineageService.CurTime())
             };
 

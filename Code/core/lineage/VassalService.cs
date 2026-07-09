@@ -319,6 +319,7 @@ namespace AncientWarfare3.core.lineage
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, relationId);
             RecordVassalSet(pVassal, pSuzerain, pReason);
             DirtyVassalMap();
+            PullVassalIntoSuzerainWars(pVassal, pSuzerain);
             return true;
         }
 
@@ -436,6 +437,23 @@ namespace AncientWarfare3.core.lineage
 
             if (type == "reclaim" && pWinner == WarWinner.Attackers && !WarTerritoryService.HasWarGoal(pWar.data.id))
                 RoyalClaimService.OnReclaimWarWon(attacker, defender, pWar.data.id);
+        }
+
+        public static void OnKingdomYear(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral()) return;
+            try
+            {
+                List<Kingdom> vassals = GetVassals(pKingdom, pRecursive: true);
+                if (vassals.Count == 0) return;
+
+                foreach (War war in pKingdom.getWars())
+                    PullVassalsIntoSuzerainWar(war, pKingdom, vassals);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.OnKingdomYear: " + e.Message);
+            }
         }
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
@@ -745,6 +763,54 @@ namespace AncientWarfare3.core.lineage
             {
                 if (vassal == pMain || vassal == pEnemy || vassal.isRekt()) continue;
                 JoinSide(pWar, vassal, attackers);
+            }
+        }
+
+        private static void PullVassalsIntoSuzerainWar(War pWar, Kingdom pSuzerain, List<Kingdom> pVassals)
+        {
+            if (pWar?.data == null || pWar.hasEnded() || pSuzerain?.data == null || pVassals == null) return;
+
+            bool suzerainAttacker = false;
+            bool suzerainDefender = false;
+            try { suzerainAttacker = pWar.isAttacker(pSuzerain); } catch { }
+            try { suzerainDefender = pWar.isDefender(pSuzerain); } catch { }
+            if (!suzerainAttacker && !suzerainDefender) return;
+
+            foreach (Kingdom vassal in pVassals)
+            {
+                if (vassal?.data == null || vassal == pSuzerain || vassal.isRekt()) continue;
+
+                bool vassalAttacker = false;
+                bool vassalDefender = false;
+                try { vassalAttacker = pWar.isAttacker(vassal); } catch { }
+                try { vassalDefender = pWar.isDefender(vassal); } catch { }
+
+                bool vassalHelping = suzerainAttacker ? vassalAttacker : vassalDefender;
+                bool vassalOpposes = suzerainAttacker ? vassalDefender : vassalAttacker;
+                bool vassalInWar = vassalAttacker || vassalDefender;
+                if (!VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                        pSuzerainInWar: true,
+                        pVassalAlreadyHelping: vassalHelping,
+                        pVassalAlreadyInWar: vassalInWar,
+                        pVassalOpposesSuzerain: vassalOpposes))
+                    continue;
+
+                JoinSide(pWar, vassal, suzerainAttacker);
+            }
+        }
+
+        private static void PullVassalIntoSuzerainWars(Kingdom pVassal, Kingdom pSuzerain)
+        {
+            if (pVassal?.data == null || pSuzerain?.data == null || pSuzerain.isRekt()) return;
+            try
+            {
+                var vassals = new List<Kingdom> { pVassal };
+                foreach (War war in pSuzerain.getWars())
+                    PullVassalsIntoSuzerainWar(war, pSuzerain, vassals);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.PullVassalIntoSuzerainWars: " + e.Message);
             }
         }
 

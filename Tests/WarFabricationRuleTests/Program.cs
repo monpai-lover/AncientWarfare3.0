@@ -154,6 +154,7 @@ namespace WarFabricationRuleTests
                 pTargetAtWar: false);
             ExpectVassalRelationRules();
             ExpectVassalIndependenceRules();
+            ExpectVassalWarSupportRules();
 
             ExpectDecisionTargetLine("\u76ee\u6807\uff1a\u8d8a");
             ExpectDecisionTargetLine("");
@@ -305,6 +306,7 @@ namespace WarFabricationRuleTests
             ExpectFabricateCoreDecisionPriority();
             ExpectCoreFabricationSlotRules();
             ExpectDecisionQueueRules();
+            ExpectPolicyNodeLockRules();
             ExpectForeignOccupationDetectionRules();
             ExpectMandateSuccessionRules();
             ExpectMandateDeclarationOriginRules();
@@ -704,6 +706,37 @@ namespace WarFabricationRuleTests
                     pOpinion: -90,
                     pRandomRoll: 0.2f))
                 throw new Exception("A long-term hostile vassal should still be able to attempt independence.");
+        }
+
+        private static void ExpectVassalWarSupportRules()
+        {
+            if (!VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                    pSuzerainInWar: true,
+                    pVassalAlreadyHelping: false,
+                    pVassalAlreadyInWar: false,
+                    pVassalOpposesSuzerain: false))
+                throw new Exception("A vassal absent from its suzerain's war should be pulled into the suzerain side.");
+
+            if (VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                    pSuzerainInWar: true,
+                    pVassalAlreadyHelping: true,
+                    pVassalAlreadyInWar: true,
+                    pVassalOpposesSuzerain: false))
+                throw new Exception("A vassal already helping its suzerain must not be joined again.");
+
+            if (VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                    pSuzerainInWar: true,
+                    pVassalAlreadyHelping: false,
+                    pVassalAlreadyInWar: true,
+                    pVassalOpposesSuzerain: true))
+                throw new Exception("A vassal on the opposite side must not be force-switched by support maintenance.");
+
+            if (VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                    pSuzerainInWar: false,
+                    pVassalAlreadyHelping: false,
+                    pVassalAlreadyInWar: false,
+                    pVassalOpposesSuzerain: false))
+                throw new Exception("Vassal support maintenance should only run for active suzerain wars.");
         }
 
         private static void ExpectWarDecisionSummary(string pExpected, string pReason, string pTargetKingdom,
@@ -3372,6 +3405,42 @@ namespace WarFabricationRuleTests
                     currentDecisionId: "",
                     nextDecisionId: "aw_decision_royal_expansion"))
                 throw new Exception("An empty decision slot should start the decision immediately, not queue it.");
+        }
+
+        private static void ExpectPolicyNodeLockRules()
+        {
+            if (!PolicyNodeLockRules.IsLocked("aw_policy_slave_army;aw_tech_city_defense",
+                    "aw_policy_slave_army"))
+                throw new Exception("Expected node to be locked.");
+            if (PolicyNodeLockRules.IsLocked("aw_policy_slave_army;aw_tech_city_defense",
+                    "aw_policy_name_integration"))
+                throw new Exception("Expected unrelated node to be unlocked.");
+            if (PolicyNodeLockRules.ShouldAllowStart("aw_decision_claim_mandate",
+                    "aw_decision_claim_mandate"))
+                throw new Exception("Expected locked decision start to be rejected.");
+            if (!PolicyNodeLockRules.ShouldAllowStart("aw_decision_claim_mandate",
+                    "aw_decision_year_name"))
+                throw new Exception("Expected unlocked decision start to be allowed.");
+            if (!PolicyNodeLockRules.ShouldClearCurrent("aw_tech_city_defense", "aw_tech_city_defense"))
+                throw new Exception("Expected matching current node to be cleared.");
+            if (PolicyNodeLockRules.ShouldClearCurrent("aw_tech_city_defense", "aw_tech_writing"))
+                throw new Exception("Expected different current node to remain.");
+            if (!PolicyNodeLockRules.ShouldClearCoreFabrication("aw_decision_fabricate_core"))
+                throw new Exception("Expected core fabrication lock to clear dedicated slot.");
+            if (PolicyNodeLockRules.ShouldClearCoreFabrication("aw_decision_fabricate_weak_claim"))
+                throw new Exception("Expected weak claim lock not to clear core fabrication.");
+
+            string locked = PolicyNodeLockRules.SetLocked("", "aw_policy_slave_army", true);
+            if (!PolicyNodeLockRules.IsLocked(locked, "aw_policy_slave_army"))
+                throw new Exception("Expected SetLocked to add node.");
+            locked = PolicyNodeLockRules.SetLocked(locked, "aw_policy_slave_army", false);
+            if (PolicyNodeLockRules.IsLocked(locked, "aw_policy_slave_army"))
+                throw new Exception("Expected SetLocked false to remove node.");
+
+            if (!PolicyNodeLockRules.ShouldAllowStart("", "aw_decision_declare_war"))
+                throw new Exception("Expected empty lock set to allow start.");
+            if (PolicyNodeLockRules.ShouldAllowStart("aw_decision_declare_war", "aw_decision_declare_war"))
+                throw new Exception("Expected locked war decision to be rejected.");
         }
 
         private static void ExpectForeignOccupationDetectionRules()

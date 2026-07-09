@@ -157,3 +157,11 @@ aw_core_fabrication_current,当前,Current,目前
 aw_core_fabrication_project_count,队列项目,Queue Items,隊列項目
 aw_core_fabrication_click_next,点击加入,Click to Add,點擊加入
 aw_core_fabrication_no_target,没有可制造核心的城市,No city available for core fabrication,沒有可製造核心的城市
+aw_policy_node_locked,已锁定,Locked,已鎖定
+aw_policy_node_locked_by_player,玩家锁定,Locked by player,玩家鎖定
+aw_policy_lock_node,锁定该项,Lock Node,鎖定該項
+aw_policy_unlock_node,解除锁定,Unlock Node,解除鎖定
+aw_policy_lock_node_desc,玩家和AI都不能选择该项,Player and AI cannot select this node,玩家和AI都不能選擇該項
+aw_policy_unlock_node_desc,恢复该项的正常选择,Restore normal selection for this node,恢復該項的正常選擇
+aw_policy_locked_count,锁定项,Locked Nodes,鎖定項
+aw_policy_core_fabrication_locked,制造核心已锁定,Core fabrication is locked,製造核心已鎖定

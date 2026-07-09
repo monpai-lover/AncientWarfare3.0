@@ -141,6 +141,7 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_LAST_YEAR = "aw_policy_last_year";
         public const string POLICY_ENABLED = "aw_policy_enabled";
         public const string POLICY_AI_ENABLED = "aw_policy_ai_enabled";
+        public const string POLICY_LOCKED_NODES = "aw_policy_locked_nodes";
         public const string POLICY_AI_LAST_DECISION_YEAR = "aw_policy_ai_last_decision_year";
         public const string POLICY_AI_LAST_PROMOTION_YEAR = "aw_policy_ai_last_promotion_year";
         public const string POLICY_AI_LAST_CAPITAL_MOVE_YEAR = "aw_policy_ai_last_capital_move_year";

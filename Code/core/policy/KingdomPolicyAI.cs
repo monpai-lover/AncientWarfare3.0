@@ -62,6 +62,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return null;
             return KingdomPolicyDefs.Decisions
+                .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
                 .Where(def => IsAvailable(pKingdom, def))
                 .Where(def => ShouldAutoStartDecision(pKingdom, def))
                 .OrderByDescending(def => ScoreDecision(pKingdom, def))
@@ -76,6 +77,7 @@ namespace AncientWarfare3.core.policy
                 : KingdomPolicyDefs.SocialPolicies;
 
             return defs
+                .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
                 .Where(def => IsAvailable(pKingdom, def))
                 .OrderByDescending(def => ScoreResearch(pKingdom, def))
                 .FirstOrDefault();

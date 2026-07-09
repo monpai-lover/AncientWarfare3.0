@@ -633,6 +633,12 @@ namespace AncientWarfare3.ui.windows
                     "\u5236\u9020\u6838\u5FC3\u4F7F\u7528\u72EC\u7ACB\u961F\u5217\uFF0C\u4E0D\u5360\u7528\u5E38\u6001\u51B3\u7B56\u69FD\u3002")
             };
 
+            if (KingdomPolicyService.IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId))
+            {
+                lines.Add(AW_L10n.Text("aw_policy_core_fabrication_locked", "\u5236\u9020\u6838\u5FC3\u5DF2\u9501\u5B9A"));
+                return string.Join("\n", lines.ToArray());
+            }
+
             long currentCityId = KingdomPolicyService.GetCoreFabricationCityId(pKingdom);
             if (currentCityId >= 0)
             {
@@ -771,15 +777,20 @@ namespace AncientWarfare3.ui.windows
 
         private void BuildCoreFabricationSidebarButton(Kingdom pKingdom, Vector2 pPos, Vector2 pSize)
         {
+            bool locked = KingdomPolicyService.IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId);
             int count = KingdomPolicyService.CountCoreFabricationProjects(pKingdom);
             int progress = Mathf.FloorToInt(KingdomPolicyService.GetCoreFabricationProgressFraction(pKingdom) * 100f);
-            string label = CoreFabricationSlotRules.BuildSidebarLabel(
+            string label = locked
+                ? AW_L10n.Text("aw_policy_node_locked", "\u5DF2\u9501\u5B9A")
+                : CoreFabricationSlotRules.BuildSidebarLabel(
                 KingdomPolicyService.GetCoreFabricationCityName(pKingdom), count, progress,
                 AW_L10n.Text("aw_core_fabrication_queue", "\u6838\u5FC3\u961F\u5217"),
                 AW_L10n.Text("aw_war_cb_core", "\u6838\u5FC3"));
             var box = CreateButtonBox("CoreFabricationQueue", label, pPos, pSize,
                 new Color(1f, 0.93f, 0.68f, 1f), () =>
                 {
+                    if (KingdomPolicyService.IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId))
+                        return;
                     City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
                     if (city?.data != null)
                         KingdomPolicyService.StartFabricationDecision(pKingdom, pKingdom, city,
@@ -787,7 +798,10 @@ namespace AncientWarfare3.ui.windows
                     Refresh();
                 });
             Image img = box.GetComponent<Image>();
-            if (img != null && count > 0) img.color = new Color(0.58f, 0.47f, 0.22f, 0.96f);
+            if (img != null && locked) img.color = NodeLockedBackground();
+            else if (img != null && count > 0) img.color = new Color(0.58f, 0.47f, 0.22f, 0.96f);
+            var button = box.GetComponent<Button>();
+            if (button != null) button.interactable = !locked;
             SetTip(box, AW_L10n.Text("aw_core_fabrication_queue", "\u6838\u5FC3\u961F\u5217"),
                 BuildCoreFabricationSidebarTooltip(pKingdom));
         }
@@ -1055,6 +1069,7 @@ namespace AncientWarfare3.ui.windows
         private void BuildNode(Kingdom pKingdom, KingdomPolicyDef pDef, Vector2 pPos, Transform pParent)
         {
             PolicyNodeStatus status = KingdomPolicyService.GetStatus(pKingdom, pDef);
+            bool playerLocked = KingdomPolicyService.IsNodeLocked(pKingdom, pDef.Id);
             bool forceMode = _mode == PolicyPanelMode.Research || _mode == PolicyPanelMode.Decision;
             string name = PolicyName(pDef);
             if (status == PolicyNodeStatus.Current)
@@ -1073,14 +1088,15 @@ namespace AncientWarfare3.ui.windows
 
             var button = box.GetComponent<Button>();
             if (button != null)
-                button.interactable = forceMode
+                button.interactable = !playerLocked && (forceMode
                     ? status != PolicyNodeStatus.Completed
-                    : status == PolicyNodeStatus.Available;
+                    : status == PolicyNodeStatus.Available);
 
             Image img = box.GetComponent<Image>();
-            if (img != null) img.color = NodeBackground(status);
+            if (img != null) img.color = playerLocked ? NodeLockedBackground() : NodeBackground(status);
             AddNodeIcon(box.transform, pDef);
             AddCrossRequirementBadge(box.transform, pDef);
+            AddNodeLockToggle(box.transform, pKingdom, pDef);
             SetTip(box, PolicyName(pDef), BuildNodeTooltip(pKingdom, pDef, status, forceMode));
         }
 
@@ -1203,6 +1219,48 @@ namespace AncientWarfare3.ui.windows
                 new Vector2(NODE_W - 16f, -3f), new Vector2(13f, 13f));
         }
 
+        private void AddNodeLockToggle(Transform pNode, Kingdom pKingdom, KingdomPolicyDef pDef)
+        {
+            if (pNode == null || pKingdom?.data == null || pDef == null) return;
+            bool locked = KingdomPolicyService.IsNodeLocked(pKingdom, pDef.Id);
+            var obj = new GameObject("PolicyNodeLock", typeof(RectTransform), typeof(Image), typeof(Button), typeof(TipButton));
+            obj.transform.SetParent(pNode, false);
+
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.sizeDelta = new Vector2(15f, 15f);
+            rect.anchoredPosition = new Vector2(NODE_W - 18f, -3f);
+
+            var img = obj.GetComponent<Image>();
+            AW_UIStyle.ApplyButton(img, 0.95f);
+            img.color = locked ? new Color(0.76f, 0.28f, 0.22f, 1f) : new Color(0.34f, 0.42f, 0.52f, 0.96f);
+
+            Sprite sprite = SpriteTextureLoader.getSprite(locked ? "ui/icons/iconLock" : "ui/icons/iconUnlock")
+                            ?? SpriteTextureLoader.getSprite("ui/icons/iconPlotsList");
+            if (sprite != null)
+                CreateIconObject("Icon", obj.transform, sprite, new Vector2(2f, -2f), new Vector2(11f, 11f));
+            else
+                CreateTextObject("Text", obj.transform, locked ? "X" : "L",
+                    new Vector2(1f, 0f), new Vector2(-1f, 0f), TextAnchor.MiddleCenter, 8, Color.white);
+
+            var button = obj.GetComponent<Button>();
+            button.onClick.AddListener(() =>
+            {
+                if (KingdomPolicyService.ToggleNodeLocked(pKingdom, pDef.Id))
+                    Refresh();
+            });
+
+            string title = locked
+                ? AW_L10n.Text("aw_policy_unlock_node", "\u89E3\u9664\u9501\u5B9A")
+                : AW_L10n.Text("aw_policy_lock_node", "\u9501\u5B9A\u8BE5\u9879");
+            string desc = locked
+                ? AW_L10n.Text("aw_policy_unlock_node_desc", "\u6062\u590D\u8BE5\u9879\u7684\u6B63\u5E38\u9009\u62E9")
+                : AW_L10n.Text("aw_policy_lock_node_desc", "\u73A9\u5BB6\u548CAI\u90FD\u4E0D\u80FD\u9009\u62E9\u8BE5\u9879");
+            SetTip(obj, title, PolicyName(pDef) + "\n" + desc);
+        }
+
         private static Vector2 TopLeft(float pX, float pY)
         {
             return new Vector2(pX, -pY);
@@ -1247,14 +1305,22 @@ namespace AncientWarfare3.ui.windows
         private static string BuildNodeTooltip(Kingdom pKingdom, KingdomPolicyDef pDef, PolicyNodeStatus pStatus,
             bool pForceMode)
         {
+            bool playerLocked = KingdomPolicyService.IsNodeLocked(pKingdom, pDef?.Id);
             var lines = new List<string>
             {
                 PolicyDesc(pDef),
                 AW_L10n.Text("aw_policy_cost", "\u9700\u6C42") + ": " + Mathf.CeilToInt(pDef.Cost),
-                AW_L10n.Text("aw_policy_status", "\u72B6\u6001") + ": " + StatusText(pStatus)
+                AW_L10n.Text("aw_policy_status", "\u72B6\u6001") + ": " +
+                (playerLocked
+                    ? AW_L10n.Text("aw_policy_node_locked_by_player", "\u73A9\u5BB6\u9501\u5B9A")
+                    : StatusText(pStatus))
             };
 
-            if (pForceMode && pStatus != PolicyNodeStatus.Completed)
+            if (playerLocked)
+                lines.Add(AW_L10n.Text("aw_policy_lock_node_desc",
+                    "\u73A9\u5BB6\u548CAI\u90FD\u4E0D\u80FD\u9009\u62E9\u8BE5\u9879"));
+
+            if (pForceMode && !playerLocked && pStatus != PolicyNodeStatus.Completed)
                 lines.Add(AW_L10n.Text("aw_policy_force_switch_hint", "\u70B9\u51FB\u5F3A\u5236\u5207\u6362\u4E3A\u5F53\u524D\u7814\u53D1"));
 
             if (pStatus == PolicyNodeStatus.Current)
@@ -1405,6 +1471,11 @@ namespace AncientWarfare3.ui.windows
             if (pStatus == PolicyNodeStatus.Completed) return new Color(0.35f, 0.55f, 0.35f, 0.95f);
             if (pStatus == PolicyNodeStatus.Current) return new Color(0.65f, 0.52f, 0.22f, 0.95f);
             return Color.white;
+        }
+
+        private static Color NodeLockedBackground()
+        {
+            return new Color(0.38f, 0.22f, 0.22f, 0.9f);
         }
 
         private static void SetTip(GameObject pOwner, string pTitle, string pDesc)

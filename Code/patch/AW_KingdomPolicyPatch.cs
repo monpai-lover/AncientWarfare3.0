@@ -67,7 +67,11 @@ namespace AncientWarfare3.patch
                 finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarAiIndex, benchmark); }
 
                 benchmark = UpdateAgeBenchmark.Begin();
-                try { VassalAIService.OnKingdomYear(__instance); }
+                try
+                {
+                    VassalService.OnKingdomYear(__instance);
+                    VassalAIService.OnKingdomYear(__instance);
+                }
                 finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomVassalAiIndex, benchmark); }
             }
 

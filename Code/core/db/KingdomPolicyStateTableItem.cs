@@ -28,6 +28,7 @@ namespace AncientWarfare3.core.db
         public string completed_policies;
         public string completed_techs;
         public string completed_decisions;
+        public string locked_nodes;
         public double updated_time;
     }
 }
