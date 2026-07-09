@@ -173,6 +173,7 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_LAST_REFRESH_YEAR = "aw_court_last_refresh_year";
         public const string COURT_LAST_CANDIDATE_YEAR = "aw_court_last_candidate_year";
         public const string COURT_LAST_STRONG_EVENT_YEAR = "aw_court_last_strong_event_year";
+        public const string COURT_DOMINANT_SINCE_YEAR = "aw_court_dominant_since_year";
         public const string COURT_OFFICE_ID = "aw_court_office_id";
         public const string COURT_LAYER = "aw_court_layer";
         public const string COURT_SCHOOL = "aw_court_school";

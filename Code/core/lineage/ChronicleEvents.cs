@@ -137,6 +137,39 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pKingdom));
         }
 
+        public static void OnCourtOfficerDismissed(Actor pActor, Kingdom pKingdom, string pOfficeId, string pReason)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return;
+            if (!ChronicleGate.IsImportant(pActor) && !ChronicleGate.IsNobleActor(pActor)) return;
+
+            string name = pActor.getName();
+            HistoryText text = HistoryText.Actor(pActor, name) +
+                               H("aw_hist_court_dismissed_mid") +
+                               HistoryText.PlainText(CourtOfficeName(pOfficeId));
+            HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
+                PersonEvent.COURT_OFFICER_DISMISSED, text, ChronicleCategory.SOCIAL,
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtReformEvent(Kingdom pKingdom, string pDominantSchool)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_REFORM_EVENT,
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_reform_mid") +
+                HistoryText.PlainText(CourtSchoolName(pDominantSchool)) + H("aw_hist_court_reform_suffix"),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtCityBureau(Kingdom pKingdom, string pCityName, string pSchoolId)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_CITY_BUREAU,
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_bureau_mid") +
+                HistoryText.PlainText(pCityName ?? "") + H("aw_hist_court_bureau_suffix") +
+                HistoryText.PlainText(CourtSchoolName(pSchoolId)),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
         private static string CourtOfficeName(string pOfficeId)
         {
             string key = "aw_court_office_" + (pOfficeId ?? "");
