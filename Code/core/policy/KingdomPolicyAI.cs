@@ -19,7 +19,8 @@ namespace AncientWarfare3.core.policy
             "aw_tech_enfeoffment_study",
             "aw_tech_granary_accounting",
             "aw_tech_city_defense",
-            "aw_tech_rites_music"
+            "aw_tech_rites_music",
+            "aw_tech_official_court"
         };
 
         private static readonly string[] SocialOrder =

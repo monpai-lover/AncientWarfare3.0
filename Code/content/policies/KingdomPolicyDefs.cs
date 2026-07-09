@@ -190,6 +190,20 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_tech_official_court",
+                Kind = PolicyNodeKind.Tech,
+                NameKey = "aw_tech_official_court",
+                DescKey = "aw_tech_official_court_desc",
+                FallbackName = "\u5B98\u573A\u5236\u5EA6",
+                FallbackDesc = "\u5C06\u539F\u59CB\u671D\u4F1A\u5347\u7EA7\u4E3A\u767E\u5BB6\u5B98\u573A\uFF0C\u5141\u8BB8\u8D24\u4EBA\u5165\u4ED5\u5E76\u5F71\u54CD\u56FD\u5BB6\u8DEF\u7EBF\u3002",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 90f,
+                RequiredTechs = new[] { "aw_tech_writing", "aw_tech_rites_music" },
+                Column = 6,
+                Row = 2
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_tech_enfeoffment_study",
                 Kind = PolicyNodeKind.Tech,
                 NameKey = "aw_tech_enfeoffment_study",

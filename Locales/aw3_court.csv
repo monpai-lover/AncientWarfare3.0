@@ -1,0 +1,30 @@
+key,cz,en,ch
+aw_tech_official_court,官场制度,Official Court,官場制度
+aw_tech_official_court_desc,将原始朝会升级为百家官场，允许贤人入仕并影响国家路线,Upgrade primitive council into a court of schools that steers state policy,將原始朝會升級為百家官場，允許賢人入仕並影響國家路線
+aw_court_button_primitive,原始朝会,Primitive Council,原始朝會
+aw_court_button_official,百家官场,Hundred Schools Court,百家官場
+aw_court_button_locked,官场未启用,Court Locked,官場未啟用
+aw_court_title,百家官场,Court of the Hundred Schools,百家官場
+aw_court_primitive_title,原始朝会,Primitive Council,原始朝會
+aw_court_efficiency,官场效率,Court Efficiency,官場效率
+aw_court_dominant_school,主流学派,Dominant School,主流學派
+aw_court_no_officer,空缺,Vacant,空缺
+aw_court_school_ru,儒家,Ru School,儒家
+aw_court_school_fa,法家,Legalist School,法家
+aw_court_school_dao,道家,Daoist School,道家
+aw_court_school_mo,墨家,Mohist School,墨家
+aw_court_school_bing,兵家,Military School,兵家
+aw_court_school_zongheng,纵横家,Diplomat School,縱橫家
+aw_court_school_nong,农家,Agrarian School,農家
+aw_court_school_yinyang,阴阳家,Yin-Yang School,陰陽家
+aw_court_school_ming,名家,Logician School,名家
+aw_court_office_chancellor,丞相,Chancellor,丞相
+aw_court_office_censor,御史,Censor,御史
+aw_court_office_marshal,司马,Marshal,司馬
+aw_court_office_justice,司寇,Justice Minister,司寇
+aw_court_office_steward,司徒,Steward,司徒
+aw_court_office_erudite,博士祭酒,Erudite Director,博士祭酒
+aw_court_layer_central,中央官场,Central Court,中央官場
+aw_court_layer_city,地方官署,City Bureau,地方官署
+aw_court_layer_military,军府,Military Bureau,軍府
+aw_court_layer_censor,监察,Inspection,監察

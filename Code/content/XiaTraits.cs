@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.content
@@ -102,6 +103,24 @@ namespace AncientWarfare3.content
             slave.rate_birth = 0;
             slave.rate_inherit = 100;
             slave.special_effect_interval = 3;
+            RegisterCourtSchoolTrait(CourtTraitId.Ru, "ui/Icons/traits/iconRujia",
+                stewardship: 2f, diplomacy: 1f, warfare: 0f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Legalist, "ui/Icons/traits/iconfajia",
+                stewardship: 2f, diplomacy: 0f, warfare: 1f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Dao, "ui/Icons/traits/icontao",
+                stewardship: 1f, diplomacy: 1f, warfare: -1f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Mohist, "ui/Icons/traits/iconmo",
+                stewardship: 1f, diplomacy: 0f, warfare: 1f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Military, "ui/Icons/traits/iconbinfa",
+                stewardship: 0f, diplomacy: 0f, warfare: 3f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Diplomat, "ui/Icons/traits/iconzonheng",
+                stewardship: 0f, diplomacy: 3f, warfare: 0f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Agrarian, "ui/icons/iconFood",
+                stewardship: 2f, diplomacy: 0f, warfare: 0f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.YinYang, "ui/icons/iconCulture",
+                stewardship: 1f, diplomacy: 1f, warfare: 0f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Logician, "ui/icons/iconKnowledge",
+                stewardship: 0f, diplomacy: 2f, warfare: 0f, intelligence: 2f);
             // TODO[批I-奴隶]: action_special_effect = 周期性强制 setProfession(Slave)
         }
 
@@ -144,6 +163,19 @@ namespace AncientWarfare3.content
                 other.addOpposite(trait.id);
             }
             _socialIdentityTraits.Add(trait);
+            return trait;
+        }
+
+        private static ActorTrait RegisterCourtSchoolTrait(string pId, string pIcon, float stewardship,
+            float diplomacy, float warfare, float intelligence)
+        {
+            var trait = NewTrait(pId, pIcon, XiaTraitGroups.AW2);
+            trait.needs_to_be_explored = false;
+            trait.unlocked_with_achievement = false;
+            trait.base_stats["stewardship"] = stewardship;
+            trait.base_stats["diplomacy"] = diplomacy;
+            trait.base_stats["warfare"] = warfare;
+            trait.base_stats["intelligence"] = intelligence;
             return trait;
         }
     }

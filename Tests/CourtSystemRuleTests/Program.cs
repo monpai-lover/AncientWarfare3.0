@@ -43,6 +43,10 @@ namespace CourtSystemRuleTests
                 ExpectEqual(8f, decoded[CourtSchoolId.Legalist], "decoded legalist value");
                 ExpectEqual("", CourtStateCodec.EncodeFactionCache(new string[0], new float[0]), "empty faction cache");
 
+                ExpectEqual(CourtTraitId.Ru, CourtTraitRules.TraitForSchool(CourtSchoolId.Ru), "ru trait id");
+                ExpectEqual(CourtTraitId.Legalist, CourtTraitRules.TraitForSchool(CourtSchoolId.Legalist), "legalist trait id");
+                ExpectEqual("", CourtTraitRules.TraitForSchool("unknown"), "unknown trait id");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }
