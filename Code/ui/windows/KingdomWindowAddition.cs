@@ -1,5 +1,6 @@
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
@@ -43,6 +44,9 @@ namespace AncientWarfare3.ui.windows
         private TipButton _policyDecisionTip;
         private Text _vassalStatusText;
         private TipButton _vassalStatusTip;
+        private Text _courtText;
+        private Image _courtIcon;
+        private TipButton _courtTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -82,7 +86,7 @@ namespace AncientWarfare3.ui.windows
                        ?? content.gameObject.AddComponent<AutoVertLayoutGroup>();
 
             // 中段横排 200×36(照 AW2 custom_part)。
-            var custom = root.BeginHoriGroup(new Vector2(206, 36), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
+            var custom = root.BeginHoriGroup(new Vector2(206, CourtUiRules.KingdomMiddleHeight), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 2, 2));
             custom.name = MIDDLE_OBJ;
             _middle = custom.gameObject;
             // 插到 content_motto 兄弟位之后(新版 motto 在 content_motto 容器,非 AW2 的直接 MottoName)。
@@ -94,12 +98,12 @@ namespace AncientWarfare3.ui.windows
             custom.AddChild(_kingCol);
 
             // 中:竖排(年号框 + 一排两个国策占位框)。
-            var middleBar = custom.BeginVertGroup(new Vector2(114, 36), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
+            var middleBar = custom.BeginVertGroup(new Vector2(114, CourtUiRules.KingdomMiddleHeight), TextAnchor.UpperCenter, 2, new RectOffset(0, 0, 0, 0));
 
-            GameObject yearBox = BuildBox("Year", new Vector2(114, 16), out _yearText);
+            GameObject yearBox = BuildBox("Year", new Vector2(114, CourtUiRules.PolicyRowHeight), out _yearText);
             middleBar.AddChild(yearBox);
 
-            var policyRow = middleBar.BeginHoriGroup(new Vector2(114, 16), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
+            var policyRow = middleBar.BeginHoriGroup(new Vector2(114, CourtUiRules.PolicyRowHeight), TextAnchor.MiddleCenter, 2, new RectOffset(0, 0, 0, 0));
             policyRow.AddChild(BuildPolicyIconButton("PolicyState", new Vector2(28, 16),
                 "ui/icons/iconDiplomacy", out _policyStateText, out _policyStateIcon, out _policyStateTip, OpenClassStateWindow));
             policyRow.AddChild(BuildPolicyIconButton("PolicyExec", new Vector2(28, 16),
@@ -108,6 +112,10 @@ namespace AncientWarfare3.ui.windows
                 "ui/icons/iconPlotsList", out _policyDecisionText, out _policyDecisionIcon, out _policyDecisionTip, OpenDecisionWindow));
             policyRow.AddChild(BuildTextButton("VassalStatus", new Vector2(22, 16),
                 out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow));
+
+            middleBar.AddChild(BuildPolicyIconButton("CourtStatus",
+                new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
+                "ui/icons/iconDiplomacy", out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
@@ -149,8 +157,11 @@ namespace AncientWarfare3.ui.windows
         private void CacheRefs(GameObject middle)
         {
             _middle = middle;
+            SetLayoutSize(middle.transform, 206f, CourtUiRules.KingdomMiddleHeight);
             _yearText = middle.GetComponentsInChildren<Text>(true)
                               .FirstOrDefault(t => t.transform.parent != null && t.transform.parent.name == "Year");
+            Transform middleBar = middle.transform.FindRecursive("Year")?.parent;
+            SetLayoutSize(middleBar, CourtUiRules.CourtButtonWidth, CourtUiRules.KingdomMiddleHeight);
             CachePolicyBox(middle.transform.FindRecursive("PolicyState"), out _policyStateText, out _policyStateIcon,
                 out _policyStateTip, OpenClassStateWindow);
             CachePolicyBox(middle.transform.FindRecursive("PolicyExec"), out _policyExecText, out _policyExecIcon,
@@ -184,6 +195,21 @@ namespace AncientWarfare3.ui.windows
             else
             {
                 CacheTextButton(vassal, out _vassalStatusText, out _vassalStatusTip, OpenVassalWindow);
+            }
+            Transform court = middle.transform.FindRecursive("CourtStatus");
+            if (court == null)
+            {
+                if (middleBar != null)
+                {
+                    GameObject obj = BuildPolicyIconButton("CourtStatus",
+                        new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
+                        "ui/icons/iconDiplomacy", out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow);
+                    obj.transform.SetParent(middleBar, false);
+                }
+            }
+            else
+            {
+                CachePolicyBox(court, out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow);
             }
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
@@ -426,6 +452,13 @@ namespace AncientWarfare3.ui.windows
             VassalRelationWindow.Open(kingdom.id);
         }
 
+        private void OpenCourtWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom == null || kingdom.isRekt()) return;
+            CourtWindow.Open(kingdom.id);
+        }
+
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
 
         private void RefreshPolicyBoxes(Kingdom pKingdom)
@@ -509,6 +542,45 @@ namespace AncientWarfare3.ui.windows
             }
             SetPolicyTip(_vassalStatusTip, AW_L10n.Text("aw_vassal_relations", "\u9644\u5EB8\u5173\u7CFB"),
                 VassalService.GetStatusTooltip(pKingdom));
+        }
+
+        private void RefreshCourtButton(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            bool policyEnabled = KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom);
+            bool officialCourt = policyEnabled && CourtService.HasOfficialCourt(pKingdom);
+            string title = !policyEnabled
+                ? AW_L10n.Text("aw_court_button_locked", "\u5B98\u573A\u672A\u542F\u7528")
+                : officialCourt
+                    ? AW_L10n.Text("aw_court_button_official", "\u767E\u5BB6\u5B98\u573A")
+                    : AW_L10n.Text("aw_court_button_primitive", "\u539F\u59CB\u671D\u4F1A");
+
+            if (_courtText != null)
+            {
+                _courtText.text = title;
+                _courtText.color = policyEnabled ? Color.white : new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+
+            SetPolicyIcon(_courtIcon, officialCourt ? "ui/icons/iconDiplomacy" : "ui/icons/iconKingdomList");
+            CourtSnapshot snapshot = CourtService.GetSnapshot(pKingdom);
+            string desc;
+            if (!policyEnabled)
+            {
+                desc = (KingdomPolicyService.CanUsePolicySystem(pKingdom)
+                        ? AW_L10n.Text("aw_policy_disabled", "\u56FD\u7B56\u672A\u542F\u7528")
+                        : AW_L10n.Text("aw_policy_unsupported", "\u5F53\u524D\u7269\u79CD\u4E0D\u652F\u6301AW3\u56FD\u7B56")) +
+                       "\n" + AW_L10n.Text("aw_court_tooltip_cached",
+                           "\u5B98\u573A\u6570\u636E\u6309\u4F4E\u9891\u7F13\u5B58\u5237\u65B0\uFF0C\u6253\u5F00\u7A97\u53E3\u4E0D\u4F1A\u5B9E\u65F6\u626B\u63CF\u5168\u56FD\u4EBA\u7269");
+            }
+            else
+            {
+                desc = AW_L10n.Text("aw_court_dominant_school", "\u4E3B\u6D41\u5B66\u6D3E") + ": " +
+                       CourtSchoolName(snapshot.dominant_school) + "\n" +
+                       AW_L10n.Text("aw_court_efficiency", "\u5B98\u573A\u6548\u7387") + ": " +
+                       Mathf.FloorToInt(snapshot.efficiency);
+            }
+
+            SetPolicyTip(_courtTip, title, desc);
         }
 
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
@@ -595,6 +667,24 @@ namespace AncientWarfare3.ui.windows
             return "\u90E8\u843D\u5236";
         }
 
+        private static string CourtSchoolName(string pSchoolId)
+        {
+            switch (pSchoolId)
+            {
+                case CourtSchoolId.Ru: return AW_L10n.Text("aw_court_school_ru", "\u5112\u5BB6");
+                case CourtSchoolId.Legalist: return AW_L10n.Text("aw_court_school_fa", "\u6CD5\u5BB6");
+                case CourtSchoolId.Dao: return AW_L10n.Text("aw_court_school_dao", "\u9053\u5BB6");
+                case CourtSchoolId.Mohist: return AW_L10n.Text("aw_court_school_mo", "\u58A8\u5BB6");
+                case CourtSchoolId.Military: return AW_L10n.Text("aw_court_school_bing", "\u5175\u5BB6");
+                case CourtSchoolId.Diplomat: return AW_L10n.Text("aw_court_school_zongheng", "\u7EB5\u6A2A\u5BB6");
+                case CourtSchoolId.Agrarian: return AW_L10n.Text("aw_court_school_nong", "\u519C\u5BB6");
+                case CourtSchoolId.YinYang: return AW_L10n.Text("aw_court_school_yinyang", "\u9634\u9633\u5BB6");
+                case CourtSchoolId.Logician: return AW_L10n.Text("aw_court_school_ming", "\u540D\u5BB6");
+                case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "\u539F\u59CB\u671D\u4F1A");
+                default: return AW_L10n.Text("aw_policy_idle", "\u5F85\u5B9A");
+            }
+        }
+
         private static void SetPolicyTip(TipButton pTip, string pTitle, string pDesc)
         {
             if (pTip == null) return;
@@ -631,6 +721,7 @@ namespace AncientWarfare3.ui.windows
 
             // 国王列(头像 + "国王"标签):有王整列显示,无王整列隐藏。
             RefreshPolicyBoxes(kingdom);
+            RefreshCourtButton(kingdom);
             RefreshVassalButton(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {
@@ -676,6 +767,19 @@ namespace AncientWarfare3.ui.windows
             ColorAsset color = KingdomFlagBuilder.ResolveColor(HistoryColors.FromKingdom(pKingdom),
                 pKingdom?.data?.color_id ?? -1);
             return color != null ? color.getColorText() : Color.white;
+        }
+
+        private static void SetLayoutSize(Transform pTransform, float pWidth, float pHeight)
+        {
+            if (pTransform == null) return;
+            RectTransform rect = pTransform.GetComponent<RectTransform>();
+            if (rect != null) rect.sizeDelta = new Vector2(pWidth, pHeight);
+            LayoutElement layout = pTransform.GetComponent<LayoutElement>();
+            if (layout == null) return;
+            layout.minWidth = pWidth;
+            layout.preferredWidth = pWidth;
+            layout.minHeight = pHeight;
+            layout.preferredHeight = pHeight;
         }
     }
 }

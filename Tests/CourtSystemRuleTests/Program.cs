@@ -58,6 +58,10 @@ namespace CourtSystemRuleTests
                 Expect(militaryWar > baseWar, "military court raises war decision");
                 Expect(daoWar < baseWar, "dao court lowers war decision");
 
+                ExpectEqual(54f, CourtUiRules.KingdomMiddleHeight, "court middle row height");
+                ExpectEqual(114f, CourtUiRules.CourtButtonWidth, "court wide button width");
+                ExpectEqual(16f, CourtUiRules.CourtButtonHeight, "court wide button height");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }

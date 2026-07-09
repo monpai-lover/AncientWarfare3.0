@@ -8,6 +8,8 @@ aw_court_title,百家官场,Court of the Hundred Schools,百家官場
 aw_court_primitive_title,原始朝会,Primitive Council,原始朝會
 aw_court_efficiency,官场效率,Court Efficiency,官場效率
 aw_court_dominant_school,主流学派,Dominant School,主流學派
+aw_court_faction_composition,学派构成,Faction Composition,學派構成
+aw_court_tooltip_cached,官场数据按低频缓存刷新，打开窗口不会实时扫描全国人物,Court data uses cached refresh and does not scan every actor when opened,官場資料按低頻快取刷新，打開窗口不會即時掃描全國人物
 aw_court_no_officer,空缺,Vacant,空缺
 aw_court_school_ru,儒家,Ru School,儒家
 aw_court_school_fa,法家,Legalist School,法家
