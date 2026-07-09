@@ -171,6 +171,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pGeneral?.data == null || !Ready) return;
             pGeneral.data.set(LineageKeys.GENERAL_ACTIVE, false);
+            ClearGeneralTrait(pGeneral);
             try
             {
                 DB.UpdateValue(GeneralStateTableItem.GetTableName(),
@@ -184,6 +185,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void RefreshGenerals(Kingdom pKingdom)
         {
+            RefreshArmyCommanderTraits(pKingdom);
             List<Actor> active = GetActiveGenerals(pKingdom);
             int limit = MaxGeneralCount(pKingdom);
             if (active.Count >= limit) return;
@@ -203,6 +205,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null || pActor.kingdom?.data == null || !CanRemainGeneral(pActor, pActor.kingdom)) return false;
             bool already = IsGeneral(pActor);
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, true);
+            ApplyGeneralTrait(pActor);
             UpsertGeneral(pActor, pActor.kingdom, pActive: true, pInitialScore: pScore);
             if (already) return false;
 
@@ -383,6 +386,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return;
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, false);
+            ClearGeneralTrait(pActor);
             if (!Ready) return;
             try
             {
@@ -392,6 +396,47 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("END_REASON", pReason ?? ""));
             }
             catch { }
+        }
+
+        private static void RefreshArmyCommanderTraits(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (unit?.data == null) continue;
+                bool shouldHave = ShouldHaveArmyCommanderTrait(unit, pKingdom);
+                bool hasTrait = unit.hasTrait(LineageKeys.TRAIT_ARMY_COMMANDER);
+                if (shouldHave && !hasTrait)
+                    unit.addTrait(LineageKeys.TRAIT_ARMY_COMMANDER);
+                else if (!shouldHave && hasTrait)
+                    unit.removeTrait(LineageKeys.TRAIT_ARMY_COMMANDER);
+            }
+        }
+
+        private static bool ShouldHaveArmyCommanderTrait(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAlive()) return false;
+            if (!pActor.isAdult() || pActor.isKing()) return false;
+            if (IsGeneral(pActor) || SlaveService.IsSlave(pActor)) return false;
+            if (pActor.hasTrait("madness")) return false;
+            return IsArmyCaptain(pActor);
+        }
+
+        private static void ApplyGeneralTrait(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            if (pActor.hasTrait(LineageKeys.TRAIT_ARMY_COMMANDER))
+                pActor.removeTrait(LineageKeys.TRAIT_ARMY_COMMANDER);
+            if (!pActor.hasTrait(LineageKeys.TRAIT_GENERAL))
+                pActor.addTrait(LineageKeys.TRAIT_GENERAL);
+        }
+
+        private static void ClearGeneralTrait(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            if (pActor.hasTrait(LineageKeys.TRAIT_GENERAL))
+                pActor.removeTrait(LineageKeys.TRAIT_GENERAL);
         }
 
         internal static int CountPersonalPower(Actor pGeneral)

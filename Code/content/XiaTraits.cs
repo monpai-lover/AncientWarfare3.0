@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.content
 {
@@ -24,7 +25,7 @@ namespace AncientWarfare3.content
             // ===== aw2 组:属性/身份特质 =====
 
             // figure 特殊人物:血+15、政务+10
-            var figure = NewTrait("figure", "ui/Icons/traits/iconfigure", XiaTraitGroups.AW2);
+            var figure = NewTrait("figure", TraitIconUsageRules.IconForTrait("figure"), XiaTraitGroups.AW2);
             figure.base_stats["health"] = 15f;      // 旧 mod_health +15
             figure.base_stats["stewardship"] = 10f;
 
@@ -44,8 +45,18 @@ namespace AncientWarfare3.content
             // TODO[批F-天命]: action_special_effect = tianmingP(>17岁非国王尝试篡位,全种族只留1个first,10年冷却)
 
             // formerking 亡国之君。special_effect=残部逻辑(批F)
-            var formerking = NewTrait("formerking", "ui/Icons/traits/iconformerking", XiaTraitGroups.AW2);
+            var formerking = NewTrait(LineageKeys.TRAIT_FORMER_KING,
+                TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_FORMER_KING), XiaTraitGroups.AW2);
             // TODO[批F-天命]: action_special_effect = Actionlib.former
+
+            var general = NewTrait(LineageKeys.TRAIT_GENERAL,
+                TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_GENERAL), XiaTraitGroups.AW2);
+            general.base_stats["warfare"] = 2f;
+            general.base_stats["stewardship"] = 1f;
+
+            var armyCommander = NewTrait(LineageKeys.TRAIT_ARMY_COMMANDER,
+                TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_ARMY_COMMANDER), XiaTraitGroups.AW2);
+            armyCommander.base_stats["warfare"] = 1f;
 
             // 禁卫军:小幅精锐加成，避免 AW2 版本的超模伤害/速度。
             var jinwei = NewTrait("禁卫军", "ui/Icons/traits/iconjinwei", XiaTraitGroups.AW2);
@@ -73,7 +84,8 @@ namespace AncientWarfare3.content
             // ===== aw_social_identity 组:社会身份(互斥) =====
 
             // zhuhou 诸侯:血+5、政务+5
-            var zhuhou = NewSocialIdentity("zhuhou", "ui/Icons/traits/iconzhuhou");
+            var zhuhou = NewSocialIdentity(LineageKeys.TRAIT_ZHUHOU,
+                TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_ZHUHOU));
             zhuhou.base_stats["health"] = 5f;       // 旧 mod_health +5
             zhuhou.base_stats["stewardship"] = 5f;
 

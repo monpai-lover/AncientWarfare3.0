@@ -4,11 +4,7 @@
         "templates": [
             {
                 "format": "{Xia真实城名}",
-                "weight": 6
-            },
-            {
-                "format": "{中文城名上}{中文城名下}",
-                "weight": 3
+                "weight": 1
             }
         ]
     }

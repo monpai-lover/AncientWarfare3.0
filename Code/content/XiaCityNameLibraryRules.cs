@@ -1,0 +1,92 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+
+namespace AncientWarfare3.content
+{
+    public static class XiaCityNameLibraryRules
+    {
+        public const string ImportedCityNamesCsv =
+            "广南,淮阴,昌平,太原,榆次,静乐,碎叶,玄池,长道,同谷,武都,盘堤,万年,渭南,蓝田,咸阳,醴泉,富平,泾阳,武功,许昌,汝南,荆北,新野,兴元,襄阳,周至,京兆,夏绥,朔方,玄菟,京畿,海西,海东,下邽,华阴,潼关,华山,冯翊,郃阳,白水,韩城,新平,永寿,安化,方渠,萧关,阴盘,安定,临泾,襄平,建业,汉中,羲和,剑阁,永安,南中,建宁,成都,上洛,扶风,汧阳,彭原,顺化,洛交,中部,咸宁,延安,灵武,会宁,五原,嵩山,阳翟,鲁山,弘农,朱阳,芮城,崤谷,银川,宁朔,怀德,榆林,新秦,九原,安康,汉南,保定,平凉,梓潼,南海,交趾,巴蜀,会稽,柴桑,建安,江夏,江陵,荆南,长沙,武陵,零陵,桂阳,吴越,麟游,陈仓,岐山,鹑觚,良原,上邽,藩安,曲阜,海阴,东阳,秦岭,清水,汴宋,东林,陇城,街亭,成纪,伏羌,襄武,渭源,溢乐,祐川,灵川,南亭,昌明,荆楚,下邳,武威,天水,赤水,广陵,淮南,寿春,庐江,北平,陈留,濮阳,南皮,平原,北海,司隶,蓟,陇南,邺,宛,上庸,晋阳,延福,城平,大斌,鸣沙,凤翔,汧源,华亭,平高,德阳,严州,山州,峦州,罗州,潘州,容州,辩州,白州,牢州,钦州,禺州,滚州,汤州,武峨州,粤州,芝州,爱州,福禄州,长州,罐州,林州,景州,峰州,陆州,廉州,雷州,笼州,环州,德化州,郎茫州,崖州,儋州,琼州,振州,万安州,幽州,并州,冀州,华州,同州,坊州,丹州,凤翔府,邪州,泾州,陇州,宁州,庆州,娜州,定州,绥州,秦州,成州,渭州,兰州,临州,河州,武州,洮州,廓州,叠州,宕州,凉州,甘州,瓜州,伊州,沙州,西州,银州,夏州,灵州,盐州,丰州,会州,宥州,胜州,麟州,成都府,汉州,彭州,蜀州,眉州,锦州,剑州,梓州,阆州,果州,遂州,普州,陵州,资州,荣州,简州,嘉州,邛州,雅州,黎州,泸州,茂州,翼州,涂州,炎州,彻州,向州,冉州,穹州,笮州,戎州,嵩州,松州,文州,扶州,龙州,当州,悉州,恭州,保州,真州,霸州,柘州,长安,宋州,汴州,孟州,陕州,郑州,虢州,汝州,许州,蔡州,陈州,颍州,亳州,濮州,郓州,泗州,海州,兖州,徐州,宿州,沂州,密州,齐州,青州,棣州,莱州,登州,洛阳,吴,绛州,晋州,隰州,汾州,慈州,潞州,泽州,沁州,辽州,蔚州,忻州,岚州,石州,朔州,云州,小沛,怀州,卫州,相州,魏州,澶州,博州,贝州,洛州,磁州,邢州,赵州,深州,沧州,德州,祁州,易州,瀛州,莫州,豫州,涿州,檀州,妫州,平州,顺州,归顺州,营州,燕州,威州,慎州,玄州,崇州,夷宾州,师州,鲜州,带州,沃州,昌州,归义州,瑞州,信州,青山州,凛州,扬州,兴州,凤州,利州,通州,洋州,合州,集州,巴州,蓬州,壁州,商州,金州,开州,渠州,渝州,邓州,唐州,均州,房州,隋州,郢州,襄州,复州,江陵府,硖州,归州,夔州,万州,忠州,交州,益州,楚州,和州,濠州,寿州,光州,蕲州,申州,黄州,安州,舒州,江州,润州,常州,苏州,湖州,杭州,越州,明州,台州,婺州,衢州,睦州,歙州,处州,温州,福州,泉州,建州,汀州,漳州,宣州,池州,洪州,虔州,抚州,吉州,袁州,鄂州,岳州,潭州,衡州,澧州,朗州,永州,道州,郴州,邵州,连州,黔州,辰州,施州,巫州,夷州,播州,思州,费州,南州,溪州,溱州,珍州,珜州,云南,虎牢关,阳平关,陈仓关,壶关,葭萌关,广州,韶州,潮州,循州,贺州,端州,新州,康州,封州,泷州,恩州,春州,高州,藤州,义州,窦州,勤州,桂州,昭州,富州,梧州,蒙州,龚州,浔州,郁林州,平琴州,宾州,澄州,绣州,象州,柳州,融州,邕州,贵州,党州,横州,田州";
+
+        private static readonly IReadOnlyList<string> s_importedCityNames = SplitCsv(ImportedCityNamesCsv);
+
+        public static IReadOnlyList<string> GetImportedCityNames()
+        {
+            return s_importedCityNames;
+        }
+
+        public static IReadOnlyList<string> ExtractQuotedNames(string pText)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            if (string.IsNullOrEmpty(pText))
+            {
+                return result;
+            }
+
+            foreach (Match match in Regex.Matches(pText, "\"([^\"]+)\""))
+            {
+                string name = match.Groups[1].Value.Trim();
+                if (name.Length == 0 || !seen.Add(name))
+                {
+                    continue;
+                }
+                result.Add(name);
+            }
+
+            return result;
+        }
+
+        public static bool ShouldUseOnlyRealCityTemplates(IEnumerable<string> pTemplates)
+        {
+            if (pTemplates == null)
+            {
+                return false;
+            }
+
+            int count = 0;
+            foreach (string template in pTemplates)
+            {
+                count++;
+                if (!string.Equals(template?.Trim(), "real", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return count == 1;
+        }
+
+        public static bool IsLegacyCityTemplate(string pTemplate)
+        {
+            if (string.IsNullOrWhiteSpace(pTemplate))
+            {
+                return false;
+            }
+
+            string template = pTemplate.Trim();
+            return template.IndexOf("prefix", StringComparison.Ordinal) >= 0 ||
+                   template.IndexOf("suffix", StringComparison.Ordinal) >= 0 ||
+                   template.IndexOf("中文城名上", StringComparison.Ordinal) >= 0 ||
+                   template.IndexOf("中文城名下", StringComparison.Ordinal) >= 0;
+        }
+
+        private static IReadOnlyList<string> SplitCsv(string pCsv)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string raw in pCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string name = raw.Trim();
+                if (name.Length == 0 || !seen.Add(name))
+                {
+                    continue;
+                }
+                result.Add(name);
+            }
+
+            return result;
+        }
+    }
+}
