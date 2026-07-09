@@ -4,6 +4,7 @@ obj/
 Tests/**/bin/
 Tests/**/obj/
 *.user
+.worktrees/
 
 # —— IDE ——
 .vs/
