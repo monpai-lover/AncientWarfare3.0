@@ -1,4 +1,6 @@
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -95,6 +97,68 @@ namespace AncientWarfare3.core.lineage
             string clan = pBranch.clan_name ?? "";
             if (string.IsNullOrEmpty(clan)) clan = T("aw_hist_old_shi");
             return city + clan + "\u6c0f";
+        }
+
+        public static void OnCourtFounded(Kingdom pKingdom, bool pOfficial)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_FOUNDED,
+                HistoryText.Kingdom(pKingdom) +
+                (pOfficial ? H("aw_hist_court_founded_official") : H("aw_hist_court_founded_primitive")),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtOfficerAppointed(Actor pActor, Kingdom pKingdom, string pOfficeId, string pSchoolId)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return;
+            string name = pActor.getName();
+            HistoryText text = HistoryText.Actor(pActor, name) +
+                               H("aw_hist_court_entered_as") +
+                               HistoryText.PlainText(CourtOfficeName(pOfficeId)) +
+                               H("aw_hist_court_school_mid") +
+                               HistoryText.PlainText(CourtSchoolName(pSchoolId));
+
+            if (ChronicleGate.IsImportant(pActor) || ChronicleGate.IsNobleActor(pActor))
+                HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
+                    PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.HONOR,
+                    HistoryTarget.Kingdom(pKingdom));
+
+            if (ChronicleGate.IsImportant(pActor))
+                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_OFFICER_APPOINTED, text,
+                    HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnCourtFactionDominant(Kingdom pKingdom, string pSchoolId)
+        {
+            if (pKingdom?.data == null || string.IsNullOrEmpty(pSchoolId)) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_FACTION_DOMINANT,
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_dominant_mid") +
+                HistoryText.PlainText(CourtSchoolName(pSchoolId)) + H("aw_hist_court_dominant_suffix"),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        private static string CourtOfficeName(string pOfficeId)
+        {
+            string key = "aw_court_office_" + (pOfficeId ?? "");
+            return AW_L10n.Text(key, pOfficeId ?? "");
+        }
+
+        private static string CourtSchoolName(string pSchoolId)
+        {
+            switch (pSchoolId ?? "")
+            {
+                case CourtSchoolId.Ru: return AW_L10n.Text("aw_court_school_ru", "Ru");
+                case CourtSchoolId.Legalist: return AW_L10n.Text("aw_court_school_fa", "Legalist");
+                case CourtSchoolId.Dao: return AW_L10n.Text("aw_court_school_dao", "Dao");
+                case CourtSchoolId.Mohist: return AW_L10n.Text("aw_court_school_mo", "Mohist");
+                case CourtSchoolId.Military: return AW_L10n.Text("aw_court_school_bing", "Military");
+                case CourtSchoolId.Diplomat: return AW_L10n.Text("aw_court_school_zongheng", "Diplomat");
+                case CourtSchoolId.Agrarian: return AW_L10n.Text("aw_court_school_nong", "Agrarian");
+                case CourtSchoolId.YinYang: return AW_L10n.Text("aw_court_school_yinyang", "Yin-Yang");
+                case CourtSchoolId.Logician: return AW_L10n.Text("aw_court_school_ming", "Logician");
+                case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
+                default: return string.IsNullOrEmpty(pSchoolId) ? T("aw_hist_none") : pSchoolId;
+            }
         }
 
         public static void OnKingdomFounded(Kingdom pKingdom)

@@ -43,6 +43,8 @@ namespace AncientWarfare3.core.lineage
         public const string GENERAL_RISK = "general_risk";
         public const string GENERAL_REBELLION = "general_rebellion";
         public const string COLLATERAL_RESTORE = "person_collateral_restore";
+        public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
+        public const string COURT_OFFICER_DISMISSED = "court_officer_dismissed";
     }
 
     internal static class KingdomEvent
@@ -86,6 +88,10 @@ namespace AncientWarfare3.core.lineage
         public const string GENERAL_RISK = "general_risk";
         public const string GENERAL_REBELLION = "general_rebellion";
         public const string COLLATERAL_RESTORE = "succession_collateral_restore";
+        public const string COURT_FOUNDED = "court_founded";
+        public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
+        public const string COURT_FACTION_DOMINANT = "court_faction_dominant";
+        public const string COURT_REFORM_EVENT = "court_reform_event";
     }
 
     internal static class CityEvent
@@ -110,5 +116,6 @@ namespace AncientWarfare3.core.lineage
         public const string FIEF_GRANTED = "fief_granted";
         public const string GENERAL_RISK = "general_risk";
         public const string GENERAL_REBELLION = "general_rebellion";
+        public const string COURT_CITY_BUREAU = "court_city_bureau";
     }
 }

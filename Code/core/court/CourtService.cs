@@ -59,6 +59,14 @@ namespace AncientWarfare3.core.court
             if (!CourtRules.ShouldRefreshCourt(year, lastYear, CourtRules.DefaultRefreshIntervalYears)) return;
             pKingdom.data.set(LineageKeys.COURT_LAST_REFRESH_YEAR, year);
 
+            string targetMode = HasOfficialCourt(pKingdom) ? "official" : "primitive";
+            pKingdom.data.get(LineageKeys.COURT_MODE, out string previousMode, "");
+            if (previousMode != targetMode)
+            {
+                pKingdom.data.set(LineageKeys.COURT_MODE, targetMode);
+                ChronicleEvents.OnCourtFounded(pKingdom, targetMode == "official");
+            }
+
             long benchmark = UpdateAgeBenchmark.Begin();
             try { ValidateOfficers(pKingdom); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtOfficerValidateIndex, benchmark); }
@@ -176,6 +184,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             SyncSchoolTrait(pActor, active: true);
+            ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
         }
 
         private static void ClearOfficer(Actor pActor, string pReason)
@@ -231,6 +240,7 @@ namespace AncientWarfare3.core.court
             float[] influenceValues = schools.Select(s => values[s]).ToArray();
             string encoded = CourtStateCodec.EncodeFactionCache(schools, influenceValues);
             string dominant = CourtInfluenceRules.DominantSchool(encoded, "");
+            pKingdom.data.get(LineageKeys.COURT_DOMINANT_SCHOOL, out string previousDominant, "");
             float total = influenceValues.Sum();
             float dominantValue = string.IsNullOrEmpty(dominant) || !values.ContainsKey(dominant) ? 0f : values[dominant];
 
@@ -239,6 +249,8 @@ namespace AncientWarfare3.core.court
             pKingdom.data.set(LineageKeys.COURT_CONCENTRATION, CourtInfluenceRules.Concentration(dominantValue, total));
             pKingdom.data.set(LineageKeys.COURT_EFFICIENCY, total <= 0f ? 0f : Math.Min(100f, 35f + total * 3f));
             pKingdom.data.set(LineageKeys.COURT_MODE, HasOfficialCourt(pKingdom) ? "official" : "primitive");
+            if (!string.IsNullOrEmpty(dominant) && previousDominant != dominant)
+                ChronicleEvents.OnCourtFactionDominant(pKingdom, dominant);
         }
 
         private static void UpsertCourtSnapshot(Kingdom pKingdom)

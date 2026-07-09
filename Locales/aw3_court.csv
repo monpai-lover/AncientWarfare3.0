@@ -24,7 +24,11 @@ aw_court_office_marshal,司马,Marshal,司馬
 aw_court_office_justice,司寇,Justice Minister,司寇
 aw_court_office_steward,司徒,Steward,司徒
 aw_court_office_erudite,博士祭酒,Erudite Director,博士祭酒
+aw_court_office_king_council,君主朝会,Ruler Council,君主朝會
 aw_court_layer_central,中央官场,Central Court,中央官場
 aw_court_layer_city,地方官署,City Bureau,地方官署
 aw_court_layer_military,军府,Military Bureau,軍府
 aw_court_layer_censor,监察,Inspection,監察
+aw_court_event_founded,建立官场,Founded the court,建立官場
+aw_court_event_primitive,形成原始朝会,Formed a primitive council,形成原始朝會
+aw_court_event_dominant,学派主导官场,A school dominates the court,學派主導官場
