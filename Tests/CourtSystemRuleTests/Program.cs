@@ -86,6 +86,64 @@ namespace CourtSystemRuleTests
                 ExpectEqual(114f, CourtUiRules.CourtButtonWidth, "court wide button width");
                 ExpectEqual(16f, CourtUiRules.CourtButtonHeight, "court wide button height");
 
+                Expect(CourtBureauRules.ShouldRefreshCityBureau(currentYear: 60, lastRefreshYear: 55,
+                        hasOfficialCourt: true),
+                    "official court refreshes city bureau on interval");
+                Expect(!CourtBureauRules.ShouldRefreshCityBureau(currentYear: 60, lastRefreshYear: 58,
+                        hasOfficialCourt: true),
+                    "city bureau refresh respects interval");
+                Expect(!CourtBureauRules.ShouldRefreshCityBureau(currentYear: 60, lastRefreshYear: 40,
+                        hasOfficialCourt: false),
+                    "primitive court skips city bureau refresh");
+                ExpectEqual(70f, CourtBureauRules.BureauEfficiency(officeSlots: 3, filledSlots: 2),
+                    "partial city bureau efficiency");
+                ExpectEqual(100f, CourtBureauRules.BureauEfficiency(officeSlots: 2, filledSlots: 3),
+                    "overfilled city bureau clamps efficiency");
+                ExpectEqual(CourtOfficeId.Governor,
+                    CourtBureauRules.CityOfficeForSlot(0, pIsCapital: false),
+                    "first city office is governor");
+                ExpectEqual(CourtOfficeId.GranaryOfficer,
+                    CourtBureauRules.CityOfficeForSlot(1, pIsCapital: false),
+                    "second city office is granary officer");
+                ExpectEqual(CourtOfficeId.Constable,
+                    CourtBureauRules.CityOfficeForSlot(2, pIsCapital: false),
+                    "third city office is constable");
+                ExpectEqual(CourtSchoolId.Agrarian,
+                    CourtBureauRules.PreferredSchoolForCityOffice(CourtOfficeId.GranaryOfficer),
+                    "granary officer prefers agrarian school");
+                ExpectEqual(2, CourtBureauRules.FilledSlots(officeSlots: 3, courtEfficiency: 70f),
+                    "filled bureau slots scale with court efficiency");
+                ExpectEqual(3, CourtBureauRules.FilledSlots(officeSlots: 3, courtEfficiency: 100f),
+                    "efficient court staffs every bureau slot");
+                ExpectEqual(0, CourtBureauRules.FilledSlots(officeSlots: 3, courtEfficiency: 0f),
+                    "collapsed court staffs no bureau slot");
+
+                Expect(CourtOfficerRecordRules.ShouldInsertNewActiveRecord(
+                        hasActiveRecord: false, sameKingdom: false, sameOffice: false, sameLayer: false),
+                    "missing officer record creates active row");
+                Expect(!CourtOfficerRecordRules.ShouldInsertNewActiveRecord(
+                        hasActiveRecord: true, sameKingdom: true, sameOffice: true, sameLayer: true),
+                    "same active officer row is updated not duplicated");
+                Expect(CourtOfficerRecordRules.ShouldCloseActiveRecord(hasActiveRecord: true),
+                    "active officer row closes on dismissal");
+                ExpectEqual(1, CourtOfficerRecordRules.ActiveFlag(true), "active flag");
+                ExpectEqual(0, CourtOfficerRecordRules.ActiveFlag(false), "inactive flag");
+
+                Expect(CourtEventRules.ShouldFireStrongEvent(currentYear: 80, lastStrongEventYear: 60,
+                        yearsDominant: 8, dominantShare: 0.61f, crisis: false, weakKing: false),
+                    "strong court event fires after cooldown");
+                Expect(!CourtEventRules.ShouldFireStrongEvent(currentYear: 80, lastStrongEventYear: 74,
+                        yearsDominant: 8, dominantShare: 0.61f, crisis: false, weakKing: false),
+                    "strong court event blocked by cooldown");
+                ExpectEqual(75, CourtEventRules.NextDominantSinceYear(currentYear: 80,
+                        previousDominant: CourtSchoolId.Ru, dominant: CourtSchoolId.Ru,
+                        previousSinceYear: 75),
+                    "same dominant school keeps since year");
+                ExpectEqual(80, CourtEventRules.NextDominantSinceYear(currentYear: 80,
+                        previousDominant: CourtSchoolId.Ru, dominant: CourtSchoolId.Legalist,
+                        previousSinceYear: 75),
+                    "new dominant school resets since year");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }

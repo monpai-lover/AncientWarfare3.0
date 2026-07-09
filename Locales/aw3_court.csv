@@ -31,6 +31,12 @@ aw_court_office_justice,司寇,Justice Minister,司寇
 aw_court_office_steward,司徒,Steward,司徒
 aw_court_office_erudite,博士祭酒,Erudite Director,博士祭酒
 aw_court_office_king_council,君主朝会,Ruler Council,君主朝會
+aw_court_office_governor,郡守,Governor,郡守
+aw_court_office_granary_officer,仓曹,Granary Officer,倉曹
+aw_court_office_constable,县尉,Constable,縣尉
+aw_court_central_officers,中央官员,Central Officers,中央官員
+aw_court_local_bureaus,地方官署,Local Bureaus,地方官署
+aw_court_office_slots,官职数,Slots,官職數
 aw_court_layer_central,中央官场,Central Court,中央官場
 aw_court_layer_city,地方官署,City Bureau,地方官署
 aw_court_layer_military,军府,Military Bureau,軍府

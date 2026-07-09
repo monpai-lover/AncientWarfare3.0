@@ -108,6 +108,13 @@ namespace AncientWarfare3.ui.windows
                     }
                 }
 
+                if (official)
+                {
+                    y += 6f;
+                    y = AddOfficerSection(kingdom, y);
+                    y = AddBureauSection(kingdom, y);
+                }
+
                 y += 6f;
                 AddText("CacheNote", AW_L10n.Text("aw_court_tooltip_cached",
                         "Court data uses cached refresh and does not scan every actor when opened."),
@@ -159,6 +166,59 @@ namespace AncientWarfare3.ui.windows
             RectTransform rect = ContentTransform != null ? ContentTransform.GetComponent<RectTransform>() : null;
             if (rect == null) return;
             rect.sizeDelta = new Vector2(rect.sizeDelta.x, Mathf.Max(pHeight, 80f));
+        }
+
+        private float AddOfficerSection(Kingdom pKingdom, float pY)
+        {
+            AddText("OfficerHeader", AW_L10n.Text("aw_court_central_officers", "Central Officers"),
+                pY, HEADER_H, 11, new Color(1f, 0.88f, 0.55f, 1f));
+            pY += HEADER_H;
+
+            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 16);
+            if (officers.Count == 0)
+            {
+                AddText("NoOfficer", AW_L10n.Text("aw_court_no_officer", "Vacant"),
+                    pY, ROW_H, 10, new Color(0.78f, 0.78f, 0.78f, 1f));
+                return pY + ROW_H;
+            }
+
+            for (int i = 0; i < officers.Count; i++)
+            {
+                CourtOfficerView o = officers[i];
+                string line = OfficeName(o.office_id) + " - " + o.actor_name +
+                              " (" + SchoolName(o.school_id) + ")";
+                AddText("Officer" + i, line, pY, ROW_H, 10, Color.white);
+                pY += ROW_H;
+            }
+            return pY;
+        }
+
+        private float AddBureauSection(Kingdom pKingdom, float pY)
+        {
+            List<CityBureauView> bureaus = CourtService.GetCityBureaus(pKingdom, 12);
+            if (bureaus.Count == 0) return pY;
+
+            pY += 6f;
+            AddText("BureauHeader", AW_L10n.Text("aw_court_local_bureaus", "Local Bureaus"),
+                pY, HEADER_H, 11, new Color(1f, 0.88f, 0.55f, 1f));
+            pY += HEADER_H;
+
+            for (int i = 0; i < bureaus.Count; i++)
+            {
+                CityBureauView b = bureaus[i];
+                string line = b.city_name + " - " +
+                              AW_L10n.Text("aw_court_office_slots", "Slots") + " " + b.office_slots + ", " +
+                              SchoolName(b.local_school) + ", " +
+                              AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + " " + Mathf.FloorToInt(b.efficiency);
+                AddText("Bureau" + i, line, pY, ROW_H, 10, Color.white);
+                pY += ROW_H;
+            }
+            return pY;
+        }
+
+        private static string OfficeName(string pOfficeId)
+        {
+            return AW_L10n.Text("aw_court_office_" + (pOfficeId ?? ""), pOfficeId ?? "");
         }
 
         private static List<string> BuildFactionRows(string pEncoded)
