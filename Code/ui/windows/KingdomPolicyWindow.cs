@@ -1372,6 +1372,7 @@ namespace AncientWarfare3.ui.windows
             {
                 case "invalid": return AW_L10n.Text("aw_mandate_req_invalid", "\u65E0\u6548\u56FD\u5BB6");
                 case "no_king": return AW_L10n.Text("aw_mandate_req_no_king", "\u6CA1\u6709\u5728\u4F4D\u541B\u4E3B");
+                case "already_exists": return AW_L10n.Text("aw_mandate_req_already_exists", "\u5F53\u524D\u5DF2\u6709\u5929\u547D\u738B\u671D");
                 case "vassal": return AW_L10n.Text("aw_mandate_req_vassal", "\u9644\u5EB8\u56FD\u4E0D\u80FD\u53D7\u547D");
                 case "unsupported": return AW_L10n.Text("aw_mandate_req_unsupported", "\u672A\u63A5\u5165\u5929\u547D\u4F53\u7CFB");
                 case "too_small": return AW_L10n.Text("aw_mandate_req_too_small", "\u56FD\u5BB6\u8FC7\u5C0F");

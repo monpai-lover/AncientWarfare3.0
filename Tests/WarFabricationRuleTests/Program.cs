@@ -2114,12 +2114,34 @@ namespace WarFabricationRuleTests
 
         private static void ExpectMandateDeclarationOriginRules()
         {
+            if (MandateDeclarationRules.CanStartOrdinaryDeclaration(
+                    pMandateAlreadyExists: true,
+                    out string reason) || reason != "already_exists")
+                throw new Exception("Ordinary declarations must be blocked while a Mandate dynasty is active.");
+
+            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(
+                    pMandateAlreadyExists: false,
+                    out reason) || reason != "")
+                throw new Exception("Ordinary declarations must remain available when no Mandate dynasty is active.");
+
+            if (MandateDeclarationRules.CanCreateNewPeriod(
+                    pMandateActive: true,
+                    pCurrentKingdomId: 42L,
+                    pCandidateKingdomId: 42L))
+                throw new Exception("The active Mandate kingdom must not create a duplicate Mandate period.");
+
+            if (!MandateDeclarationRules.CanCreateNewPeriod(
+                    pMandateActive: false,
+                    pCurrentKingdomId: 42L,
+                    pCandidateKingdomId: 42L))
+                throw new Exception("A former Mandate kingdom may found a new period after the old Mandate has ended.");
+
             if (MandateDeclarationRules.CanDeclareForeignPseudo(
                     pIsXiaKingdom: false,
                     pWonMandateWar: false,
                     pHasEnoughLegalCoreControl: true,
                     pMandateAlreadyExists: false,
-                    out string reason) || reason != "requires_mandate_war")
+                    out reason) || reason != "requires_mandate_war")
                 throw new Exception("Foreign pseudo-dynasties must not claim Mandate through a normal decision.");
 
             if (!MandateDeclarationRules.CanDeclareForeignPseudo(

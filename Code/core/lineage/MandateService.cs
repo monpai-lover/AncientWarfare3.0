@@ -155,6 +155,9 @@ namespace AncientWarfare3.core.lineage
             if (!Ready) return false;
 
             MandateReport previousReport = ReadReport();
+            if (!MandateDeclarationRules.CanCreateNewPeriod(
+                    previousReport.active, previousReport.kingdom_id, pKingdom.id))
+                return false;
             long previousPeriodId = previousReport.active ? previousReport.period_id : -1L;
             Kingdom old = GetCurrentMandateKingdom();
             if (old?.data != null && old != pKingdom)
@@ -229,6 +232,9 @@ namespace AncientWarfare3.core.lineage
                 pReason = "no_king";
                 return false;
             }
+            MandateReport last = ReadReport();
+            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(last.active, out pReason))
+                return false;
             if (VassalService.IsVassalKingdom(pKingdom))
             {
                 pReason = "vassal";
@@ -250,7 +256,6 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            MandateReport last = ReadReport();
             if (MandateDeclarationRules.NeedsLegalCoreControl(last.core_count, last.active) &&
                 !MandateDeclarationRules.HasEnoughLegalCoreControl(
                     GetCoreControlRatio(pKingdom, last.period_id), RESTORE_CORE_THRESHOLD))

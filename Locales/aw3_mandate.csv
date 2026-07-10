@@ -38,6 +38,7 @@ aw_decision_mandate_ritual,祭天整顿,Mandate Ritual,祭天整顿
 aw_decision_mandate_ritual_desc,消耗政治点数强化天命，小幅提升皇权和王朝威望。,Spend political points to reinforce Mandate authority and dynasty prestige,消耗政治点数强化天命，小幅提升皇权和王朝威望。
 aw_mandate_req_invalid,无效国家,Invalid realm,無效國家
 aw_mandate_req_no_king,没有在位君主,No reigning ruler,沒有在位君主
+aw_mandate_req_already_exists,当前已有天命王朝,A Mandate dynasty already exists,當前已有天命王朝
 aw_mandate_req_vassal,附庸国不能受命,Vassals cannot claim the Mandate,附庸國不能受命
 aw_mandate_req_unsupported,未接入天命体系,Not connected to the Mandate system,未接入天命體系
 aw_mandate_req_too_small,国家过小,Realm too small,國家過小

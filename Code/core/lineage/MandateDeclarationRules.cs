@@ -2,6 +2,24 @@ namespace AncientWarfare3.core.lineage
 {
     public static class MandateDeclarationRules
     {
+        public static bool CanStartOrdinaryDeclaration(bool pMandateAlreadyExists, out string pReason)
+        {
+            if (pMandateAlreadyExists)
+            {
+                pReason = "already_exists";
+                return false;
+            }
+
+            pReason = "";
+            return true;
+        }
+
+        public static bool CanCreateNewPeriod(bool pMandateActive, long pCurrentKingdomId,
+            long pCandidateKingdomId)
+        {
+            return !pMandateActive || pCurrentKingdomId != pCandidateKingdomId;
+        }
+
         public static bool HasEnoughRealmToDeclare(int pCityCount, int pTitle,
             bool pHistoricalFigureKing, int pMinimumCities, int pKingTitleValue)
         {
