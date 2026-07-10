@@ -1,5 +1,26 @@
 namespace AncientWarfare3.core.lineage
 {
+    public readonly struct HeirCandidateRank
+    {
+        public readonly long ActorId;
+        public readonly bool Eligible;
+        public readonly bool IsAgnaticDescendantOfKing;
+        public readonly int GenerationDelta;
+        public readonly double BirthTime;
+        public readonly bool IsAdult;
+
+        public HeirCandidateRank(long actorId, bool eligible, bool isAgnaticDescendantOfKing,
+            int generationDelta, double birthTime, bool isAdult)
+        {
+            ActorId = actorId;
+            Eligible = eligible;
+            IsAgnaticDescendantOfKing = isAgnaticDescendantOfKing;
+            GenerationDelta = generationDelta;
+            BirthTime = birthTime;
+            IsAdult = isAdult;
+        }
+    }
+
     // 继承人辈分就近查找的纯规则:按"氏族大谱内合法男系 + 辈分"分层与排序。
     // 顺序:直系后裔(由近及远) → 同辈 → 旁系过继;严禁辈分高于国王者。
     public static class HeirGenerationRules
@@ -44,6 +65,35 @@ namespace AncientWarfare3.core.lineage
         {
             return pTier == TierDirectDescendant || pTier == TierSameGeneration ||
                    pTier == TierCollateral || pTier == TierElderCollateral;
+        }
+
+        public static long SelectBestCandidateId(
+            System.Collections.Generic.IEnumerable<HeirCandidateRank> pCandidates)
+        {
+            long bestId = -1L;
+            int bestTier = TierIneligible;
+            int bestDelta = 0;
+            double bestBirth = 0;
+            bool bestAdult = false;
+            if (pCandidates == null) return bestId;
+
+            foreach (HeirCandidateRank candidate in pCandidates)
+            {
+                if (!candidate.Eligible) continue;
+                int tier = ClassifyTier(candidate.IsAgnaticDescendantOfKing,
+                    candidate.GenerationDelta);
+                if (!IsEligible(tier)) continue;
+                if (bestId >= 0 && Compare(
+                        tier, candidate.GenerationDelta, candidate.BirthTime, candidate.IsAdult,
+                        bestTier, bestDelta, bestBirth, bestAdult) >= 0)
+                    continue;
+                bestId = candidate.ActorId;
+                bestTier = tier;
+                bestDelta = candidate.GenerationDelta;
+                bestBirth = candidate.BirthTime;
+                bestAdult = candidate.IsAdult;
+            }
+            return bestId;
         }
     }
 }

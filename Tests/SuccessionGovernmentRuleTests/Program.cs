@@ -37,6 +37,24 @@ namespace SuccessionGovernmentRuleTests
             Expect(survivingBrotherTier == HeirGenerationRules.TierDirectDescendant,
                 "Another living son must remain a direct heir after the crown-prince branch dies.");
 
+            var familyCandidates = new[]
+            {
+                new HeirCandidateRank(actorId: 101, eligible: false,
+                    isAgnaticDescendantOfKing: true, generationDelta: 1,
+                    birthTime: 10, isAdult: true),
+                new HeirCandidateRank(actorId: 102, eligible: false,
+                    isAgnaticDescendantOfKing: true, generationDelta: 2,
+                    birthTime: 30, isAdult: true),
+                new HeirCandidateRank(actorId: 103, eligible: true,
+                    isAgnaticDescendantOfKing: true, generationDelta: 1,
+                    birthTime: 20, isAdult: true),
+                new HeirCandidateRank(actorId: 104, eligible: true,
+                    isAgnaticDescendantOfKing: false, generationDelta: 0,
+                    birthTime: 5, isAdult: true)
+            };
+            Expect(HeirGenerationRules.SelectBestCandidateId(familyCandidates) == 103,
+                "When the crown prince and his son are dead, the surviving brother must inherit.");
+
             Expect(SuccessionTransitionRules.IsOfficialRoleEligible(
                     pIsKing: false, pIsCityLeader: true, pIsGeneral: true,
                     pIsArmyCaptain: true, pHasFief: true),
