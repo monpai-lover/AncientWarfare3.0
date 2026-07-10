@@ -21,5 +21,11 @@ namespace AncientWarfare3.core.lineage
                    pKingdomMatches &&
                    pAnchorMatches;
         }
+
+        public static bool ShouldCleanupDuplicates(bool pCreated, bool pReanchored,
+            bool pPostLoadRepair)
+        {
+            return pCreated || pReanchored || pPostLoadRepair;
+        }
     }
 }

@@ -9,6 +9,12 @@ namespace AncientWarfare3.core.lineage
             return pIsRepublic || pIsRebel || pKingdomExtinct;
         }
 
+        public static bool ShouldInspectNormalArmyForGuards(bool pIsGuardArmy,
+            bool pHasGuardStateHint)
+        {
+            return !pIsGuardArmy && pHasGuardStateHint;
+        }
+
         public static bool ShouldPreserveGuards(bool pSuccessionPending, bool pIsRepublic,
             bool pIsRebel, bool pKingdomExtinct)
         {

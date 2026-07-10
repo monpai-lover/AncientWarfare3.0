@@ -11,5 +11,12 @@ namespace AncientWarfare3.core.lineage
         {
             return pNow + (pCooldown > 0.0 ? pCooldown : 0.0);
         }
+
+        public static int ChunkRadiusForTileRadius(int pTileRadius, int pChunkSize)
+        {
+            if (pTileRadius <= 0) return 0;
+            int chunkSize = System.Math.Max(1, pChunkSize);
+            return (pTileRadius + chunkSize - 1) / chunkSize;
+        }
     }
 }

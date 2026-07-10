@@ -16,6 +16,10 @@ namespace CityMaintenanceRuleTests
             ExpectSlaveFoodQuotaGate();
             ExpectSlaveArmyMaintenanceGate();
             ExpectSlaveArmyFillPipeline();
+            ExpectSlaveLaborPerformanceGate();
+            ExpectSlaveArmyPerformanceRules();
+            ExpectSpecialArmyCleanupLifecycle();
+            ExpectSlaveMeritPersistence();
             ExpectArmyAiSafetyGate();
             ExpectArmySaveSafetyGate();
 
@@ -277,6 +281,83 @@ namespace CityMaintenanceRuleTests
                 !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillPromotion) ||
                 !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillAttach))
                 throw new Exception("Slave army fill must expose scan, promotion, and attach profiler labels.");
+        }
+
+        private static void ExpectSlaveLaborPerformanceGate()
+        {
+            if (SlaveArmyMaintenanceRules.ShouldCheckSlaveLabor(
+                    pHasCity: true, pHasKingdom: true, pSlaveryEnabled: false,
+                    pAlreadyRecordedForKingdom: false, pMaintenanceDue: true))
+                throw new Exception("Non-slavery cities must skip slave-labor resident scans.");
+            if (!SlaveArmyMaintenanceRules.ShouldCheckSlaveLabor(
+                    pHasCity: true, pHasKingdom: true, pSlaveryEnabled: true,
+                    pAlreadyRecordedForKingdom: false, pMaintenanceDue: true))
+                throw new Exception("Due slavery cities must run slave-labor recording.");
+            if (SlaveArmyMaintenanceRules.ShouldCheckSlaveLabor(
+                    pHasCity: true, pHasKingdom: true, pSlaveryEnabled: true,
+                    pAlreadyRecordedForKingdom: true, pMaintenanceDue: true))
+                throw new Exception("Recorded slave labor must remain a constant-time fast path.");
+        }
+
+        private static void ExpectSlaveArmyPerformanceRules()
+        {
+            if (SlaveArmyMaintenanceRules.ShouldInferSlaveArmyComposition(
+                    pRoleMarkedSlaveArmy: false, pSlaveryEnabled: false))
+                throw new Exception("Ordinary non-slavery armies must skip composition scans.");
+            if (!SlaveArmyMaintenanceRules.ShouldInferSlaveArmyComposition(
+                    pRoleMarkedSlaveArmy: false, pSlaveryEnabled: true))
+                throw new Exception("Legacy armies in slavery kingdoms retain composition fallback.");
+            if (!SlaveArmyMaintenanceRules.HasReachedFormationThreshold(3, 3) ||
+                SlaveArmyMaintenanceRules.HasReachedFormationThreshold(2, 3))
+                throw new Exception("Slave formation counting must stop exactly at the minimum.");
+            if (!SlaveArmyMaintenanceRules.ShouldReuseFrontlineTarget(
+                    pHasEntry: true, pTargetAlive: true, pStillHostile: true,
+                    pSameIsland: true, pNow: 10.0, pExpiresAt: 20.0))
+                throw new Exception("A valid same-island frontline target should be shared.");
+            if (SlaveArmyMaintenanceRules.ShouldReuseFrontlineTarget(
+                    pHasEntry: true, pTargetAlive: false, pStillHostile: true,
+                    pSameIsland: true, pNow: 10.0, pExpiresAt: 20.0))
+                throw new Exception("Dead frontline targets must invalidate the cache.");
+            if (SlaveArmyMaintenanceRules.ShouldIssueFrontlineOrder(
+                    pAlreadyTargetsActor: true, pIsMoving: true))
+                throw new Exception("Identical active path orders must not be reissued.");
+            if (!SlaveArmyMaintenanceRules.ShouldIssueFrontlineOrder(
+                    pAlreadyTargetsActor: true, pIsMoving: false))
+                throw new Exception("Interrupted units must be allowed to resume the same target.");
+        }
+
+        private static void ExpectSpecialArmyCleanupLifecycle()
+        {
+            if (SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: false, pReanchored: false, pPostLoadRepair: false))
+                throw new Exception("Valid EnsureArmy cache hits must skip global duplicate scans.");
+            if (!SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: true, pReanchored: false, pPostLoadRepair: false) ||
+                !SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: false, pReanchored: true, pPostLoadRepair: false) ||
+                !SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: false, pReanchored: false, pPostLoadRepair: true))
+                throw new Exception("Create, re-anchor, and load repair must retain duplicate recovery.");
+        }
+
+        private static void ExpectSlaveMeritPersistence()
+        {
+            if (SlaveMeritPersistenceRules.ShouldPersist(
+                    pOldMerit: 0, pNewMerit: 1, pPoints: 1,
+                    pMilestone: 4, pFreedomThreshold: 8))
+                throw new Exception("An ordinary one-point kill must not synchronously write SQLite.");
+            if (!SlaveMeritPersistenceRules.ShouldPersist(
+                    pOldMerit: 3, pNewMerit: 4, pPoints: 1,
+                    pMilestone: 4, pFreedomThreshold: 8))
+                throw new Exception("Crossing a merit milestone must persist archive state.");
+            if (!SlaveMeritPersistenceRules.ShouldPersist(
+                    pOldMerit: 1, pNewMerit: 5, pPoints: 4,
+                    pMilestone: 4, pFreedomThreshold: 8))
+                throw new Exception("Important multi-point kills must persist archive state.");
+            if (SlaveMeritPersistenceRules.ShouldPersist(
+                    pOldMerit: 7, pNewMerit: 8, pPoints: 1,
+                    pMilestone: 4, pFreedomThreshold: 8))
+                throw new Exception("Freedom performs the final write and must avoid a duplicate write.");
         }
 
         private static void ExpectArmyAiSafetyGate()

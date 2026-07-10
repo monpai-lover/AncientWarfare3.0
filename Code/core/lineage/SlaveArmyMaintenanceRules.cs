@@ -14,6 +14,36 @@ namespace AncientWarfare3.core.lineage
             return pSlaveryEnabled && pSlaveArmyEnabled && (pOnSchedule || pContinuationDue);
         }
 
+        public static bool ShouldCheckSlaveLabor(bool pHasCity, bool pHasKingdom,
+            bool pSlaveryEnabled, bool pAlreadyRecordedForKingdom, bool pMaintenanceDue)
+        {
+            return pHasCity && pHasKingdom && pSlaveryEnabled &&
+                   !pAlreadyRecordedForKingdom && pMaintenanceDue;
+        }
+
+        public static bool ShouldInferSlaveArmyComposition(bool pRoleMarkedSlaveArmy,
+            bool pSlaveryEnabled)
+        {
+            return !pRoleMarkedSlaveArmy && pSlaveryEnabled;
+        }
+
+        public static bool HasReachedFormationThreshold(int pCount, int pThreshold)
+        {
+            return pCount >= System.Math.Max(1, pThreshold);
+        }
+
+        public static bool ShouldReuseFrontlineTarget(bool pHasEntry, bool pTargetAlive,
+            bool pStillHostile, bool pSameIsland, double pNow, double pExpiresAt)
+        {
+            return pHasEntry && pTargetAlive && pStillHostile && pSameIsland &&
+                   pNow <= pExpiresAt;
+        }
+
+        public static bool ShouldIssueFrontlineOrder(bool pAlreadyTargetsActor, bool pIsMoving)
+        {
+            return !pAlreadyTargetsActor || !pIsMoving;
+        }
+
         public static bool ShouldPromoteCandidate(bool pCompositionAllowsCandidate,
             bool pAlreadyWarrior, int pPromotionsThisPass, int pPromotionLimit)
         {

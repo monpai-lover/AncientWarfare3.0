@@ -20,6 +20,8 @@ namespace RoyalGuardActionRuleTests
             ExpectGraphicsRebuildBudget();
             ExpectDismissScanGate();
             ExpectDissolutionRules();
+            ExpectGuardArmyCleanupGate();
+            ExpectGuardSpatialSearchRadius();
 
             if (RoyalGuardActionRules.WaitAfterNoThreat(2f, 5f) != 2f)
                 throw new Exception("Expected royal guard no-threat wait low bound.");
@@ -180,6 +182,26 @@ namespace RoyalGuardActionRuleTests
                 throw new Exception("Guard hints must remain until all guards are dismissed.");
             if (!RoyalGuardMaintenanceRules.ShouldClearDismissState(pDismissComplete: true))
                 throw new Exception("Completed guard dissolution should clear its state hints.");
+        }
+
+        private static void ExpectGuardArmyCleanupGate()
+        {
+            if (RoyalGuardMaintenanceRules.ShouldInspectNormalArmyForGuards(
+                    pIsGuardArmy: false, pHasGuardStateHint: false))
+                throw new Exception("Armies in kingdoms without guard state must skip member copies.");
+            if (!RoyalGuardMaintenanceRules.ShouldInspectNormalArmyForGuards(
+                    pIsGuardArmy: false, pHasGuardStateHint: true))
+                throw new Exception("A guard-state hint must retain compatibility cleanup.");
+            if (RoyalGuardMaintenanceRules.ShouldInspectNormalArmyForGuards(
+                    pIsGuardArmy: true, pHasGuardStateHint: true))
+                throw new Exception("The guard army itself must never be stripped.");
+        }
+
+        private static void ExpectGuardSpatialSearchRadius()
+        {
+            if (ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(10, 16) != 1 ||
+                ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(0, 16) != 0)
+                throw new Exception("Guard spatial search must cover the minimum chunk square.");
         }
     }
 }
