@@ -2116,11 +2116,13 @@ namespace WarFabricationRuleTests
         {
             if (MandateDeclarationRules.CanStartOrdinaryDeclaration(
                     pMandateAlreadyExists: true,
+                    pMandateRitesCompleted: true,
                     out string reason) || reason != "already_exists")
                 throw new Exception("Ordinary declarations must be blocked while a Mandate dynasty is active.");
 
             if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(
                     pMandateAlreadyExists: false,
+                    pMandateRitesCompleted: true,
                     out reason) || reason != "")
                 throw new Exception("Ordinary declarations must remain available when no Mandate dynasty is active.");
 

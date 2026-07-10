@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.content.policies
 {
@@ -476,12 +477,12 @@ namespace AncientWarfare3.content.policies
                 FallbackName = "\u5929\u547D\u793C\u5236",
                 FallbackDesc = "\u628A\u53D7\u547D\u3001\u796D\u5929\u548C\u6539\u5143\u7EB3\u5165\u56FD\u5BB6\u793C\u5236\uFF0C\u4E3A\u5929\u547D\u738B\u671D\u63D0\u4F9B\u5408\u6CD5\u6027\u6846\u67B6\u3002",
                 IconPath = "ui/Icons/traits/iconTianming",
-                Cost = 105f,
-                RequiredPolicies = new[] { "aw_policy_early_law", "aw_policy_ancestral_rites" },
-                RequiredTechs = new[] { "aw_tech_rites_music", "aw_tech_granary_accounting" },
+                Cost = MandatePolicyDefinitionRules.MandateRitesCost,
+                RequiredPolicies = new[] { MandatePolicyDefinitionRules.RequiredPolicy },
+                RequiredTechs = new[] { MandatePolicyDefinitionRules.RequiredTech },
                 ClassAfter = ClassAristocrat,
-                Column = 6,
-                Row = 1
+                Column = MandatePolicyDefinitionRules.MandateRitesColumn,
+                Row = MandatePolicyDefinitionRules.MandateRitesRow
             },
             new KingdomPolicyDef
             {

@@ -958,12 +958,6 @@ namespace AncientWarfare3.core.policy
         private static bool ShouldIgnoreRequirement(Kingdom pKingdom, KingdomPolicyDef pDef,
             PolicyNodeKind pKind, string pRequirementId)
         {
-            if (pDef?.Id == "aw_decision_claim_mandate" &&
-                pKind == PolicyNodeKind.Social &&
-                pRequirementId == "aw_policy_mandate_rites" &&
-                IsHistoricalFigureKing(pKingdom))
-                return true;
-
             return XiaizationService.IsXiaizationPolicy(pDef) &&
                    !LineageService.IsXiaKingdom(pKingdom) &&
                    XiaizationService.GetLevel(pKingdom) >= XiaizationService.LevelPseudoDynasty &&

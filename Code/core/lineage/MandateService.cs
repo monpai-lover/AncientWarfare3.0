@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
+using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
@@ -233,7 +234,10 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             MandateReport last = ReadReport();
-            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(last.active, out pReason))
+            bool mandateRitesCompleted = KingdomPolicyService.IsCompleted(
+                pKingdom, PolicyNodeKind.Social, "aw_policy_mandate_rites");
+            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(
+                    last.active, mandateRitesCompleted, out pReason))
                 return false;
             if (VassalService.IsVassalKingdom(pKingdom))
             {
@@ -284,6 +288,27 @@ namespace AncientWarfare3.core.lineage
         {
             bool rebelOrigin = pOriginType == "rebel" || pClaimantKind == "rebel";
             bool foreignPseudo = pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo";
+            bool successfulOrdinaryWar = pDeclarationReason == "tianming_war";
+            if (successfulOrdinaryWar)
+            {
+                pReason = "";
+                if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
+                {
+                    pReason = "invalid";
+                    return false;
+                }
+                if (!pKingdom.hasKing())
+                {
+                    pReason = "no_king";
+                    return false;
+                }
+                if (Exists)
+                {
+                    pReason = "already_exists";
+                    return false;
+                }
+                return true;
+            }
             if (rebelOrigin || foreignPseudo)
             {
                 pReason = "";
@@ -908,6 +933,9 @@ namespace AncientWarfare3.core.lineage
             if (!pKingdom.hasKing() || pKingdom.king?.data == null) return false;
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
             if (!IsSupportedKingdom(pKingdom)) return false;
+            if (!KingdomPolicyService.IsCompleted(
+                    pKingdom, PolicyNodeKind.Social, "aw_policy_mandate_rites"))
+                return false;
 
             bool historicalFigure = IsHistoricalFigureKing(pKingdom);
             KingdomTitle title = KingdomTitleService.GetTitle(pKingdom);

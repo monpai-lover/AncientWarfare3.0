@@ -2,15 +2,33 @@ namespace AncientWarfare3.core.lineage
 {
     public static class MandateDeclarationRules
     {
-        public static bool CanStartOrdinaryDeclaration(bool pMandateAlreadyExists, out string pReason)
+        public static bool CanStartOrdinaryDeclaration(bool pMandateAlreadyExists,
+            bool pMandateRitesCompleted, out string pReason)
         {
             if (pMandateAlreadyExists)
             {
                 pReason = "already_exists";
                 return false;
             }
+            if (!pMandateRitesCompleted)
+            {
+                pReason = "requires_mandate_rites";
+                return false;
+            }
 
             pReason = "";
+            return true;
+        }
+
+        public static bool RequiresMandateRitesForOrigin(string pDeclarationReason,
+            string pOriginType, string pClaimantKind)
+        {
+            if (pDeclarationReason == "tianming_war" ||
+                pDeclarationReason == "tianmingrebel_war" ||
+                pDeclarationReason == "pseudo_foreign_war")
+                return false;
+            if (pOriginType == "rebel" || pClaimantKind == "rebel") return false;
+            if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo") return false;
             return true;
         }
 

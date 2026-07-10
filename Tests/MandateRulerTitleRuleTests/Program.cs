@@ -214,6 +214,33 @@ namespace MandateRulerTitleRuleTests
 
         private static void ExpectMandateDeclarationRules()
         {
+            if (MandateDeclarationRules.CanStartOrdinaryDeclaration(
+                    pMandateAlreadyExists: false,
+                    pMandateRitesCompleted: false,
+                    out string missingReason) || missingReason != "requires_mandate_rites")
+                throw new Exception("Ordinary Mandate claims must require Mandate Rites.");
+
+            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(
+                    pMandateAlreadyExists: false,
+                    pMandateRitesCompleted: true,
+                    out _))
+                throw new Exception("Completed Mandate Rites should pass the ordinary policy gate.");
+
+            if (MandateDeclarationRules.RequiresMandateRitesForOrigin(
+                    pDeclarationReason: "tianming_war", pOriginType: "", pClaimantKind: ""))
+                throw new Exception("A successful Mandate war must remain a policy-gate exception.");
+            if (!MandateDeclarationRules.RequiresMandateRitesForOrigin(
+                    pDeclarationReason: "auto", pOriginType: "", pClaimantKind: ""))
+                throw new Exception("Automatic ordinary claims must require Mandate Rites.");
+
+            if (MandatePolicyDefinitionRules.MandateRitesColumn != 4 ||
+                MandatePolicyDefinitionRules.MandateRitesRow != 2 ||
+                MandatePolicyDefinitionRules.MandateRitesCost != 90f)
+                throw new Exception("Mandate Rites must move earlier and cost 90.");
+            if (MandatePolicyDefinitionRules.RequiredPolicy != "aw_policy_ancestral_rites" ||
+                MandatePolicyDefinitionRules.RequiredTech != "aw_tech_rites_music")
+                throw new Exception("Mandate Rites dependencies must be Ancestral Rites and Rites/Music only.");
+
             if (!MandateDeclarationRules.HasEnoughRealmToDeclare(
                     pCityCount: 4,
                     pTitle: 0,
