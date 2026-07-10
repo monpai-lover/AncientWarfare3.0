@@ -22,7 +22,10 @@ namespace AncientWarfare3.core.lineage
         private const int SLAVE_CATCHER_SEARCH_RADIUS = 80;
         private const int MIN_SLAVES_FOR_SLAVE_ARMY = 3;
         private const int MAX_SLAVE_ARMY_SIZE = 25;
-        private const int SLAVE_ARMY_FILL_BATCH_LIMIT = 6;
+        private const int SLAVE_ARMY_FILL_BATCH_LIMIT = 4;
+        private const int SLAVE_ARMY_PROMOTION_LIMIT = 2;
+        private const int SLAVE_ARMY_CANDIDATE_SCAN_LIMIT = 32;
+        private const int SLAVE_ARMY_CONTINUATION_DELAY = 2;
         private const int MAX_CITY_FALL_SLAVES = 8;
         private const int MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 5;
         private const int SLAVE_MIN_SERVICE_YEARS_BEFORE_RETIREMENT = 8;
@@ -711,10 +714,13 @@ namespace AncientWarfare3.core.lineage
             bool slaveryEnabled = IsSlaveryEnabled(kingdom);
             bool slaveArmyEnabled = IsSlaveArmyEnabled(kingdom);
             if (!slaveryEnabled || !slaveArmyEnabled) return;
+            int now = (int)LineageService.CurTime();
             bool onSchedule = ShouldRunCityMaintenanceStaggered(pCity, LineageKeys.SLAVE_ARMY_LAST_CHECK,
                 CITY_SLAVE_ARMY_CHECK_INTERVAL);
-            if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(slaveryEnabled, slaveArmyEnabled, onSchedule)) return;
-            int now = (int)LineageService.CurTime();
+            pCity.data.get(LineageKeys.SLAVE_ARMY_FILL_CONTINUE_TIME, out int continueAt, -1);
+            bool continuationDue = continueAt >= 0 && (now >= continueAt || now < continueAt - 1000);
+            if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    slaveryEnabled, slaveArmyEnabled, onSchedule, continuationDue)) return;
             pCity.data.get(LineageKeys.SLAVE_ARMY_FAILURE_YEAR, out int lastFailure, -1);
             if (SlaveArmyMaintenanceRules.ShouldSkipAfterFailedMaintenance(
                     now, lastFailure, SLAVE_ARMY_FAILED_MAINTENANCE_COOLDOWN))
@@ -755,6 +761,7 @@ namespace AncientWarfare3.core.lineage
                     Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting,
                         CityMaintenanceBenchmarkRules.Group);
                     ClearSlaveArmyMaintenanceFailure(pCity);
+                    ClearSlaveArmyFillContinuation(pCity);
                     AssignSlaveCatcherJobToCaptain(existingCaptain);
                     if (SlaveArmyMaintenanceRules.ShouldDriveFrontline(
                             pHasArmy: true,
@@ -808,9 +815,12 @@ namespace AncientWarfare3.core.lineage
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             _formingSlaveArmy = true;
             int addedThisPass = 0;
+            bool fillScanComplete = true;
+            CountArmyComposition(army, out int finalTotal, out int finalSlaves, out int finalNonSlaves);
             try
             {
-                addedThisPass = FillSlaveArmy(army, pCity);
+                addedThisPass = FillSlaveArmy(army, pCity,
+                    ref finalTotal, ref finalSlaves, ref finalNonSlaves, out fillScanComplete);
             }
             finally
             {
@@ -818,11 +828,10 @@ namespace AncientWarfare3.core.lineage
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             EnsureNonSlaveCaptain(army);
-            CountArmyComposition(army, out int finalTotal, out int finalSlaves, out int finalNonSlaves);
             Actor finalCaptain = army.getCaptain();
             bool finalCaptainValid = CanBeSlaveArmyCaptainCandidate(finalCaptain, kingdom, pCity,
                 pRequireWarrior: true);
-            if (addedThisPass > 0 || SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
+            if (addedThisPass > 0 || !fillScanComplete || SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
                     pArmyExists: true,
                     pTotalWarriors: finalTotal,
                     pSlaveWarriors: finalSlaves,
@@ -832,6 +841,13 @@ namespace AncientWarfare3.core.lineage
                 ClearSlaveArmyMaintenanceFailure(pCity);
             else
                 MarkSlaveArmyMaintenanceFailure(pCity, now);
+            bool armyUnderfilled = finalTotal < MAX_SLAVE_ARMY_SIZE;
+            if (SlaveArmyMaintenanceRules.ShouldScheduleContinuation(
+                    armyUnderfilled, fillScanComplete, addedThisPass))
+                pCity.data.set(LineageKeys.SLAVE_ARMY_FILL_CONTINUE_TIME,
+                    now + SLAVE_ARMY_CONTINUATION_DELAY);
+            else
+                pCity.data.set(LineageKeys.SLAVE_ARMY_FILL_CONTINUE_TIME, -1);
             AssignSlaveCatcherJobToCaptain(army.getCaptain());
             if (SlaveArmyMaintenanceRules.ShouldDriveFrontline(
                     pHasArmy: true,
@@ -1278,72 +1294,128 @@ namespace AncientWarfare3.core.lineage
             return TryRaiseNonSlaveCaptain(pCity);
         }
 
-        private static int FillSlaveArmy(Army pArmy, City pCity)
+        private static int FillSlaveArmy(Army pArmy, City pCity,
+            ref int pTotal, ref int pSlaves, ref int pNonSlaves, out bool pScanComplete)
         {
+            pScanComplete = true;
             if (pArmy?.data == null || pCity?.data == null) return 0;
 
             int addedThisPass = 0;
+            int promotionsThisPass = 0;
             Actor captain = pArmy.getCaptain();
-            if (CanBeSlaveArmyCaptainCandidate(captain, pCity.kingdom, pCity, pRequireWarrior: false) &&
-                EnsureWarriorForSlaveArmy(pCity, captain))
+            var readyCadres = new List<Actor>(SLAVE_ARMY_FILL_BATCH_LIMIT);
+            var readySlaves = new List<Actor>(SLAVE_ARMY_FILL_BATCH_LIMIT);
+            var promotionCadres = new List<Actor>(SLAVE_ARMY_PROMOTION_LIMIT);
+            var promotionSlaves = new List<Actor>(SLAVE_ARMY_PROMOTION_LIMIT);
+
+            if (captain?.data != null && captain.army != pArmy &&
+                CanBeSlaveArmyCaptainCandidate(captain, pCity.kingdom, pCity, pRequireWarrior: false))
             {
-                AWArmyService.AddToArmy(captain, pArmy);
+                if (captain.isWarrior()) readyCadres.Add(captain);
+                else promotionCadres.Add(captain);
             }
 
-            CountArmyComposition(pArmy, out int total, out int slaves, out int nonSlaves);
-            var cadreCandidates = new List<Actor>(SlaveArmyFormationRules.MaxNonSlaveCadres);
-            var slaveCandidates = new List<Actor>(SLAVE_ARMY_FILL_BATCH_LIMIT);
+            pCity.data.get(LineageKeys.SLAVE_ARMY_FILL_SCAN_CURSOR, out int cursor, 0);
+            if (cursor < 0) cursor = 0;
+            int skipped = 0;
+            int scanned = 0;
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFillScan, CityMaintenanceBenchmarkRules.Group);
             foreach (Actor unit in pCity.getUnits())
             {
-                if (unit?.data == null || unit.isRekt() || unit.army == pArmy) continue;
-                if (unit != captain &&
-                    cadreCandidates.Count < SlaveArmyFormationRules.MaxNonSlaveCadres &&
-                    CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity, pRequireWarrior: false))
+                if (skipped++ < cursor) continue;
+                if (scanned >= SLAVE_ARMY_CANDIDATE_SCAN_LIMIT)
                 {
-                    cadreCandidates.Add(unit);
-                }
-                else if (slaveCandidates.Count < SLAVE_ARMY_FILL_BATCH_LIMIT &&
-                         unit.isAdult() &&
-                         IsSlave(unit) &&
-                         !IsRetiredSoldier(unit) &&
-                         !RoyalGuardService.IsRoyalGuard(unit) &&
-                         unit.asset?.is_boat != true)
-                {
-                    slaveCandidates.Add(unit);
-                }
-
-                if (cadreCandidates.Count >= SlaveArmyFormationRules.MaxNonSlaveCadres &&
-                    slaveCandidates.Count >= SLAVE_ARMY_FILL_BATCH_LIMIT)
+                    pScanComplete = false;
                     break;
-            }
+                }
+                scanned++;
+                if (unit?.data == null || unit.isRekt() || unit.army == pArmy) continue;
 
-            foreach (Actor cadre in cadreCandidates)
-            {
-                if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
-                if (total >= MAX_SLAVE_ARMY_SIZE) break;
-                if (nonSlaves >= SlaveArmyFormationRules.MaxNonSlaveCadres) break;
-                if (!EnsureWarriorForSlaveArmy(pCity, cadre)) continue;
-                AWArmyService.AddToArmy(cadre, pArmy);
-                total++;
-                nonSlaves++;
-                addedThisPass++;
-            }
+                bool cadre = unit != captain &&
+                             CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity,
+                                 pRequireWarrior: false);
+                bool slave = unit.isAdult() && IsSlave(unit) && !IsRetiredSoldier(unit) &&
+                             !RoyalGuardService.IsRoyalGuard(unit) && unit.asset?.is_boat != true;
+                if (!cadre && !slave) continue;
 
-            foreach (Actor slave in slaveCandidates)
-            {
-                if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(addedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) break;
-                if (total >= MAX_SLAVE_ARMY_SIZE) break;
-                if (slave.army == pArmy) continue;
-                if (!EnsureWarriorForSlaveArmy(pCity, slave)) continue;
-                if (!SlaveArmyFormationRules.CanAddSlaveToArmy(total, slaves, nonSlaves)) break;
-                AWArmyService.AddToArmy(slave, pArmy);
-                slave.data.set(LineageKeys.SLAVE_SOLDIER, true);
-                total++;
-                slaves++;
-                addedThisPass++;
+                bool useReadyList = SlaveArmyMaintenanceRules.ShouldPreferReadyWarrior(
+                    unit.isWarrior(), promotionCadres.Count + promotionSlaves.Count > 0);
+                if (useReadyList)
+                {
+                    List<Actor> list = cadre ? readyCadres : readySlaves;
+                    if (list.Count < SLAVE_ARMY_FILL_BATCH_LIMIT) list.Add(unit);
+                }
+                else
+                {
+                    List<Actor> list = cadre ? promotionCadres : promotionSlaves;
+                    if (list.Count < SLAVE_ARMY_PROMOTION_LIMIT) list.Add(unit);
+                }
             }
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFillScan,
+                CityMaintenanceBenchmarkRules.Group);
+            pCity.data.set(LineageKeys.SLAVE_ARMY_FILL_SCAN_CURSOR,
+                SlaveArmyMaintenanceRules.NextScanCursor(cursor, scanned, pScanComplete));
 
+            AttachSlaveArmyCandidates(readyCadres, pArmy, pCity, pIsSlave: false,
+                pAllowPromotion: false, ref pTotal, ref pSlaves, ref pNonSlaves,
+                ref addedThisPass, ref promotionsThisPass);
+            AttachSlaveArmyCandidates(readySlaves, pArmy, pCity, pIsSlave: true,
+                pAllowPromotion: false, ref pTotal, ref pSlaves, ref pNonSlaves,
+                ref addedThisPass, ref promotionsThisPass);
+            AttachSlaveArmyCandidates(promotionCadres, pArmy, pCity, pIsSlave: false,
+                pAllowPromotion: true, ref pTotal, ref pSlaves, ref pNonSlaves,
+                ref addedThisPass, ref promotionsThisPass);
+            AttachSlaveArmyCandidates(promotionSlaves, pArmy, pCity, pIsSlave: true,
+                pAllowPromotion: true, ref pTotal, ref pSlaves, ref pNonSlaves,
+                ref addedThisPass, ref promotionsThisPass);
             return addedThisPass;
+        }
+
+        private static void AttachSlaveArmyCandidates(List<Actor> pCandidates, Army pArmy, City pCity,
+            bool pIsSlave, bool pAllowPromotion, ref int pTotal, ref int pSlaves, ref int pNonSlaves,
+            ref int pAddedThisPass, ref int pPromotionsThisPass)
+        {
+            foreach (Actor candidate in pCandidates)
+            {
+                if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(
+                        pAddedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) return;
+                if (candidate?.data == null || candidate.army == pArmy) continue;
+
+                bool compositionAllows = pTotal < MAX_SLAVE_ARMY_SIZE &&
+                    (pIsSlave
+                        ? SlaveArmyFormationRules.CanAddSlaveToArmy(pTotal, pSlaves, pNonSlaves)
+                        : pNonSlaves < SlaveArmyFormationRules.MaxNonSlaveCadres);
+                if (!compositionAllows) continue;
+
+                if (!candidate.isWarrior())
+                {
+                    if (!pAllowPromotion || !SlaveArmyMaintenanceRules.ShouldPromoteCandidate(
+                            pCompositionAllowsCandidate: compositionAllows,
+                            pAlreadyWarrior: false,
+                            pPromotionsThisPass: pPromotionsThisPass,
+                            pPromotionLimit: SLAVE_ARMY_PROMOTION_LIMIT))
+                        continue;
+                    Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFillPromotion,
+                        CityMaintenanceBenchmarkRules.Group);
+                    bool promoted = EnsureWarriorForSlaveArmy(pCity, candidate);
+                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFillPromotion,
+                        CityMaintenanceBenchmarkRules.Group);
+                    if (!promoted) continue;
+                    pPromotionsThisPass++;
+                }
+
+                Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFillAttach,
+                    CityMaintenanceBenchmarkRules.Group);
+                AWArmyService.AddToArmy(candidate, pArmy);
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFillAttach,
+                    CityMaintenanceBenchmarkRules.Group);
+                if (candidate.army != pArmy) continue;
+                if (pIsSlave) candidate.data.set(LineageKeys.SLAVE_SOLDIER, true);
+                pTotal++;
+                if (pIsSlave) pSlaves++;
+                else pNonSlaves++;
+                pAddedThisPass++;
+            }
         }
 
         private static void MarkSlaveArmyMaintenanceFailure(City pCity, int pNow)
@@ -1356,6 +1428,13 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCity?.data == null) return;
             pCity.data.set(LineageKeys.SLAVE_ARMY_FAILURE_YEAR, -1);
+        }
+
+        private static void ClearSlaveArmyFillContinuation(City pCity)
+        {
+            if (pCity?.data == null) return;
+            pCity.data.set(LineageKeys.SLAVE_ARMY_FILL_CONTINUE_TIME, -1);
+            pCity.data.set(LineageKeys.SLAVE_ARMY_FILL_SCAN_CURSOR, 0);
         }
 
         private static void AssignSlaveCatcherJobToCaptain(Actor pCaptain)

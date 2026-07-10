@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace CityMaintenanceRuleTests
 {
@@ -14,6 +15,7 @@ namespace CityMaintenanceRuleTests
             ExpectOldHeadRefreshGate();
             ExpectSlaveFoodQuotaGate();
             ExpectSlaveArmyMaintenanceGate();
+            ExpectSlaveArmyFillPipeline();
             ExpectArmyAiSafetyGate();
             ExpectArmySaveSafetyGate();
 
@@ -238,6 +240,43 @@ namespace CityMaintenanceRuleTests
                     pLastFailure: 112,
                     pCooldownYears: 12))
                 throw new Exception("Slave army maintenance should resume after the failed-fill cooldown.");
+        }
+
+        private static void ExpectSlaveArmyFillPipeline()
+        {
+            if (SlaveArmyMaintenanceRules.ShouldPromoteCandidate(
+                    pCompositionAllowsCandidate: false, pAlreadyWarrior: false,
+                    pPromotionsThisPass: 0, pPromotionLimit: 2))
+                throw new Exception("Capacity and composition must be checked before promotion.");
+            if (!SlaveArmyMaintenanceRules.ShouldPromoteCandidate(
+                    pCompositionAllowsCandidate: true, pAlreadyWarrior: false,
+                    pPromotionsThisPass: 1, pPromotionLimit: 2))
+                throw new Exception("An eligible second promotion should be allowed.");
+            if (SlaveArmyMaintenanceRules.ShouldPromoteCandidate(
+                    pCompositionAllowsCandidate: true, pAlreadyWarrior: false,
+                    pPromotionsThisPass: 2, pPromotionLimit: 2))
+                throw new Exception("A third promotion in one pulse must be deferred.");
+            if (!SlaveArmyMaintenanceRules.ShouldPreferReadyWarrior(
+                    pCandidateIsWarrior: true, pHavePromotionCandidate: true))
+                throw new Exception("Existing warriors must be attached before converting citizens.");
+            if (SlaveArmyMaintenanceRules.NextScanCursor(
+                    pStartCursor: 10, pScanned: 16, pScanComplete: false) != 26)
+                throw new Exception("Incomplete candidate scans must persist their cursor.");
+            if (SlaveArmyMaintenanceRules.NextScanCursor(
+                    pStartCursor: 10, pScanned: 16, pScanComplete: true) != 0)
+                throw new Exception("A completed candidate scan must reset its cursor.");
+            if (!SlaveArmyMaintenanceRules.ShouldScheduleContinuation(
+                    pArmyUnderfilled: true, pScanComplete: false, pAddedThisPass: 2))
+                throw new Exception("Underfilled armies with remaining candidates need a short continuation.");
+            if (!SlaveArmyMaintenanceRules.ShouldRunMaintenance(
+                    pSlaveryEnabled: true, pSlaveArmyEnabled: true,
+                    pOnSchedule: false, pContinuationDue: true))
+                throw new Exception("A due short continuation must run before the full maintenance interval.");
+
+            if (!CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillScan) ||
+                !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillPromotion) ||
+                !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillAttach))
+                throw new Exception("Slave army fill must expose scan, promotion, and attach profiler labels.");
         }
 
         private static void ExpectArmyAiSafetyGate()

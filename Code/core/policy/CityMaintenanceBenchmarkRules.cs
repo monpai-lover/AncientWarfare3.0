@@ -22,6 +22,9 @@ namespace AncientWarfare3.core.policy
         public const string SlaveArmyCaptain = "aw3_city_slave_army_captain";
         public const string SlaveArmyEnsure = "aw3_city_slave_army_ensure";
         public const string SlaveArmyFill = "aw3_city_slave_army_fill";
+        public const string SlaveArmyFillScan = "aw3_city_slave_army_fill_scan";
+        public const string SlaveArmyFillPromotion = "aw3_city_slave_army_fill_promotion";
+        public const string SlaveArmyFillAttach = "aw3_city_slave_army_fill_attach";
         public const string SlaveArmyFrontline = "aw3_city_slave_army_frontline";
         public const string SlaveArmyRecord = "aw3_city_slave_army_record";
         public const string RoyalGuardValidate = "aw3_city_royal_guard_validate";
@@ -75,6 +78,9 @@ namespace AncientWarfare3.core.policy
             SlaveArmyCaptain,
             SlaveArmyEnsure,
             SlaveArmyFill,
+            SlaveArmyFillScan,
+            SlaveArmyFillPromotion,
+            SlaveArmyFillAttach,
             SlaveArmyFrontline,
             SlaveArmyRecord,
             RoyalGuardValidate,

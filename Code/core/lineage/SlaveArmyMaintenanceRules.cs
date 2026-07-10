@@ -4,7 +4,40 @@ namespace AncientWarfare3.core.lineage
     {
         public static bool ShouldRunMaintenance(bool pSlaveryEnabled, bool pSlaveArmyEnabled, bool pOnSchedule)
         {
-            return pSlaveryEnabled && pSlaveArmyEnabled && pOnSchedule;
+            return ShouldRunMaintenance(pSlaveryEnabled, pSlaveArmyEnabled, pOnSchedule,
+                pContinuationDue: false);
+        }
+
+        public static bool ShouldRunMaintenance(bool pSlaveryEnabled, bool pSlaveArmyEnabled,
+            bool pOnSchedule, bool pContinuationDue)
+        {
+            return pSlaveryEnabled && pSlaveArmyEnabled && (pOnSchedule || pContinuationDue);
+        }
+
+        public static bool ShouldPromoteCandidate(bool pCompositionAllowsCandidate,
+            bool pAlreadyWarrior, int pPromotionsThisPass, int pPromotionLimit)
+        {
+            if (!pCompositionAllowsCandidate || pAlreadyWarrior) return false;
+            int limit = pPromotionLimit <= 0 ? 1 : pPromotionLimit;
+            return pPromotionsThisPass < limit;
+        }
+
+        public static bool ShouldPreferReadyWarrior(bool pCandidateIsWarrior,
+            bool pHavePromotionCandidate)
+        {
+            return pCandidateIsWarrior;
+        }
+
+        public static int NextScanCursor(int pStartCursor, int pScanned, bool pScanComplete)
+        {
+            if (pScanComplete) return 0;
+            return System.Math.Max(0, pStartCursor) + System.Math.Max(0, pScanned);
+        }
+
+        public static bool ShouldScheduleContinuation(bool pArmyUnderfilled,
+            bool pScanComplete, int pAddedThisPass)
+        {
+            return pArmyUnderfilled && (!pScanComplete || pAddedThisPass > 0);
         }
 
         public static bool ShouldRefreshKingdomArmyNames(bool pIsSlaveArmy)
