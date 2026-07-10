@@ -11,11 +11,18 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(KingdomBehCheckKing), nameof(KingdomBehCheckKing.execute))]
         public static void Execute_Prefix(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null || !MandateService.IsMandateKingdom(pKingdom)) return;
+            if (!UsesManagedLineage(pKingdom)) return;
             if (!pKingdom.hasKing()) return;
             Actor king = pKingdom.king;
             if (king?.data == null || king.isAlive()) return;
             HeirService.PrepareSuccessionBeforeKingDeath(pKingdom, king);
+        }
+
+        private static bool UsesManagedLineage(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   (LineageService.IsXiaKingdom(pKingdom) ||
+                    XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
         }
 
         [HarmonyPrefix]

@@ -24,14 +24,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>閲嶉€夌户鎵夸汉骞跺啓鍏?kingdom.data銆傛柊鐜嬪嵆浣嶅悗璋冪敤銆傚悓姝ョ淮鎶?actor.data 鐨?IS_HEIR 鏍囪(heir 鐨偆 + minimap 鐢?銆?/summary>
         public static void RefreshHeir(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return;
-            EnsureLegitimateLine(pKingdom, pKingdom.king);
-
-            // 鍏堟竻鏃х户鎵夸汉鐨?IS_HEIR 鏍囪(鍗镐换 鈫?鎭㈠鏅€氱毊鑲?鍥炬爣)銆?            ClearOldHeirFlag(pKingdom);
-
-            ClearOldHeirFlag(pKingdom);
-            HeirSelection selection = FindHeir(pKingdom, pKingdom.king, pIncludeRegisteredHeir: false);
-            StoreHeirSelection(pKingdom, selection);
+            RefreshHeirAndReturn(pKingdom);
         }
 
         public static void RememberPreSuccessionKing(Kingdom pKingdom, Actor pKing)
@@ -83,12 +76,59 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return null;
             // 共和国是选举制、不世袭:无世系继承人,首领由随机平民推举(见 RepublicGovernmentService)。
             if (RepublicGovernmentService.IsRepublic(pKingdom)) return null;
-            Actor king = pKingdom.king;
-            EnsureLegitimateLine(pKingdom, king);
+            Actor cached = PeekRegisteredHeir(pKingdom);
+            bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
+            if (SuccessionTransitionRules.ShouldUseCachedHeir(pending, cached?.data != null)) return cached;
+            return RefreshHeirAndReturn(pKingdom);
+        }
+
+        public static Actor PeekRegisteredHeir(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return null;
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            if (heirId < 0) return null;
+            Actor heir = World.world?.units?.get(heirId);
+            return IsRegisteredCandidateEligible(heir, pKingdom) ? heir : null;
+        }
+
+        public static Actor FindHeirReadOnly(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || RepublicGovernmentService.IsRepublic(pKingdom)) return null;
+            Actor cached = PeekRegisteredHeir(pKingdom);
+            if (cached?.data != null) return cached;
+            if (SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king)) return null;
+
+            Actor knownKing = pKingdom.king;
+            long referenceKingId = ResolveReferenceKingId(pKingdom, knownKing);
+            return FindHeir(pKingdom, knownKing, referenceKingId,
+                pIncludeRegisteredHeir: false).Actor;
+        }
+
+        private static Actor RefreshHeirAndReturn(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return null;
+            Actor knownKing = pKingdom.king;
+            EnsureLegitimateLine(pKingdom, knownKing);
+            long referenceKingId = ResolveReferenceKingId(pKingdom, knownKing);
+            bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
+            if (!SuccessionTransitionRules.ShouldOverwriteCachedHeir(pending, referenceKingId >= 0))
+                return PeekRegisteredHeir(pKingdom);
+
             ClearOldHeirFlag(pKingdom);
-            HeirSelection selection = FindHeir(pKingdom, king, pIncludeRegisteredHeir: true);
+            HeirSelection selection = FindHeir(pKingdom, knownKing, referenceKingId,
+                pIncludeRegisteredHeir: false);
             StoreHeirSelection(pKingdom, selection);
             return selection.Actor;
+        }
+
+        private static long ResolveReferenceKingId(Kingdom pKingdom, Actor pKnownKing)
+        {
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(LineageKeys.KINGDOM_PRE_SUCCESSION_KING_ID, out long previousKingId, -1L);
+            return SuccessionTransitionRules.ResolveReferenceKingId(
+                pKnownKing?.data?.id ?? -1L,
+                pKnownKing?.data != null,
+                previousKingId);
         }
 
         public static bool HasHeir(Kingdom pKingdom)
@@ -101,14 +141,15 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pDyingKing?.data == null) return;
             RememberPreSuccessionKing(pKingdom, pDyingKing);
             ClearOldHeirFlag(pKingdom);
-            HeirSelection selection = FindHeir(pKingdom, pDyingKing, pIncludeRegisteredHeir: true);
+            HeirSelection selection = FindHeir(pKingdom, pDyingKing, pDyingKing.data.id,
+                pIncludeRegisteredHeir: true);
             StoreHeirSelection(pKingdom, selection);
         }
 
         public static bool HasSuccessionCandidate(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            if (FindHeir(pKingdom, pKingdom.king, pIncludeRegisteredHeir: false).Actor != null) return true;
+            if (FindHeirReadOnly(pKingdom)?.data != null) return true;
             return ShouldUseOrdinaryFallbackSuccession(pKingdom) && GetLeaderSuccessionCandidate(pKingdom) != null;
         }
 
@@ -308,15 +349,14 @@ namespace AncientWarfare3.core.lineage
         ///     严禁辈分高于国王者,严禁非本姓男系(不改氏硬塞);同辈分内嫡长优先、再论成年。
         ///     全无合法男系 → NONE(绝嗣/亡国)。pIncludeRegisteredHeir 已废弃(取消登记继承人机制)。
         /// </summary>
-        private static HeirSelection FindHeir(Kingdom pKingdom, Actor pKnownKing,
+        private static HeirSelection FindHeir(Kingdom pKingdom, Actor pKnownKing, long pReferenceKingId,
             bool pIncludeRegisteredHeir)
         {
             if (pKingdom?.data == null) return new HeirSelection(null, SuccessionMode.NONE);
             Actor king = pKnownKing ?? pKingdom.king;
             EnsureLegitimateLine(pKingdom, king);
-            if (king?.data == null) return new HeirSelection(null, SuccessionMode.NONE);
-
-            long kingId = king.data.id;
+            long kingId = pReferenceKingId >= 0 ? pReferenceKingId : ResolveReferenceKingId(pKingdom, king);
+            if (kingId < 0) return new HeirSelection(null, SuccessionMode.NONE);
 
             Actor best = null;
             int bestTier = HeirGenerationRules.TierIneligible, bestDelta = 0;
@@ -391,11 +431,21 @@ namespace AncientWarfare3.core.lineage
             if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
             if (!pActor.isSexMale()) return false;
             if (pActor.isRekt() || !pActor.isAlive()) return false;
-            if (pActor.isKing()) return false;
+            if (!SuccessionTransitionRules.IsOfficialRoleEligible(
+                    pActor.isKing(), pIsCityLeader: false, pIsGeneral: false,
+                    pIsArmyCaptain: false, pHasFief: false))
+                return false;
             if (pActor.hasTrait("madness")) return false;
             if (SlaveService.IsSlave(pActor)) return false;
             // 亲缘不再用 LINEAGE_ID(合流后失效)判定,改由调用方按"最近共同父系祖先(同源)"筛选。
             return true;
+        }
+
+        private static bool IsRegisteredCandidateEligible(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (pActor.kingdom != pKingdom) return false;
+            return IsHeirBaseEligible(pActor, pKingdom, pKingdom.king);
         }
 
         private static double SafeCreatedTime(Actor pActor)

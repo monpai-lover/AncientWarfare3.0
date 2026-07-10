@@ -29,5 +29,15 @@ namespace AncientWarfare3.core.lineage
         {
             return pUsesManagedLineage;
         }
+
+        public static bool ShouldUseCachedHeir(bool pSuccessionPending, bool pCachedHeirEligible)
+        {
+            return pSuccessionPending && pCachedHeirEligible;
+        }
+
+        public static bool ShouldOverwriteCachedHeir(bool pSuccessionPending, bool pHasReferenceKing)
+        {
+            return !pSuccessionPending && pHasReferenceKing;
+        }
     }
 }

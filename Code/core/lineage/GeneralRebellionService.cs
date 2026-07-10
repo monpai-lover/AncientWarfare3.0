@@ -92,7 +92,10 @@ namespace AncientWarfare3.core.lineage
                     0, 55);
             }
 
-            bool successionUnstable = HeirService.GetHeir(pKingdom)?.data == null;
+            bool successionPending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
+            bool hasRegisteredHeir = HeirService.FindHeirReadOnly(pKingdom)?.data != null;
+            bool successionUnstable = SuccessionTransitionRules.ShouldTreatMissingHeirAsUnstable(
+                successionPending, hasRegisteredHeir);
             bool recentWarDefeat = false;
             bool capitalThreatened = IsAtWar(pKingdom);
             return GeneralRebellionRules.CalculateKingdomCrisis(weakKingScore, childOrOldRuler,

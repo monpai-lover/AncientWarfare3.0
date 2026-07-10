@@ -103,7 +103,7 @@ namespace AncientWarfare3.patch
 
         private static long GetHeirId(Kingdom pKingdom)
         {
-            Actor heir = HeirService.GetHeir(pKingdom);
+            Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
             return heir?.data?.id ?? -1L;
         }
     }

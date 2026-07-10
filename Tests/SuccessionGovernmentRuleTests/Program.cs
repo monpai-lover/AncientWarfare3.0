@@ -47,6 +47,16 @@ namespace SuccessionGovernmentRuleTests
             Expect(SuccessionTransitionRules.ShouldBlockVanillaMassFragmentation(
                     pUsesManagedLineage: true),
                 "Managed lineage kingdoms must block vanilla all-city fragmentation.");
+
+            Expect(SuccessionTransitionRules.ShouldUseCachedHeir(
+                    pSuccessionPending: true, pCachedHeirEligible: true),
+                "A prepared heir must survive timer_new_king.");
+            Expect(!SuccessionTransitionRules.ShouldOverwriteCachedHeir(
+                    pSuccessionPending: true, pHasReferenceKing: true),
+                "Read-only vacancy lookup must not overwrite aw_heir_id.");
+            Expect(SuccessionTransitionRules.ShouldOverwriteCachedHeir(
+                    pSuccessionPending: false, pHasReferenceKing: true),
+                "An explicit refresh with a valid reference king may update aw_heir_id.");
         }
 
         private static void Expect(bool pCondition, string pMessage)
