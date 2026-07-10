@@ -10,6 +10,7 @@ namespace SuccessionGovernmentRuleTests
             try
             {
                 ExpectSuccessionTransitionRules();
+                ExpectRepublicRules();
                 Console.WriteLine("Succession/government rule tests passed.");
                 return 0;
             }
@@ -57,6 +58,45 @@ namespace SuccessionGovernmentRuleTests
             Expect(SuccessionTransitionRules.ShouldOverwriteCachedHeir(
                     pSuccessionPending: false, pHasReferenceKing: true),
                 "An explicit refresh with a valid reference king may update aw_heir_id.");
+        }
+
+        private static void ExpectRepublicRules()
+        {
+            var strongest = new RepublicCandidateScore(11, diplomacy: 8, warfare: 7, stewardship: 6,
+                level: 4, combatStrength: 20f, age: 30);
+            var weaker = new RepublicCandidateScore(12, diplomacy: 6, warfare: 6, stewardship: 6,
+                level: 9, combatStrength: 90f, age: 50);
+            Expect(RepublicGovernmentRules.CompareCandidates(strongest, weaker) < 0,
+                "The three governing attributes must be the primary republic election score.");
+
+            var tieLowId = new RepublicCandidateScore(20, 6, 6, 6, 3, 20f, 30);
+            var tieHighId = new RepublicCandidateScore(21, 6, 6, 6, 3, 20f, 30);
+            Expect(RepublicGovernmentRules.CompareCandidates(tieLowId, tieHighId) < 0,
+                "Actor ID must make exact election ties deterministic.");
+
+            Expect(RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: false, pHasMonarchyHeir: false, pElectableCount: 2),
+                "True extinction with electable people must create a republic.");
+            Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: true, pHasMonarchyHeir: false, pElectableCount: 2),
+                "A temporary vacancy must not create a republic.");
+            Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: false, pHasMonarchyHeir: false, pElectableCount: 0),
+                "Government state must not change before an electable leader exists.");
+
+            Expect(RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(
+                    pWasRepublic: true, pWasRegisteredRepublicSuccessor: true,
+                    pActorMarkedRepublicLeader: false),
+                "A registered republican successor must keep republic state on accession.");
+            Expect(!RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(
+                    pWasRepublic: true, pWasRegisteredRepublicSuccessor: false,
+                    pActorMarkedRepublicLeader: false),
+                "An unrelated restored king must end republic government.");
+
+            Expect(RepublicGovernmentRules.IsEligibleLeader(
+                    pInLineageSystem: true, pIsMale: true, pIsAdult: true,
+                    pIsAlive: true, pIsSlave: false, pIsKing: false),
+                "Eligible nobles and office holders must not be filtered out of republic elections.");
         }
 
         private static void Expect(bool pCondition, string pMessage)

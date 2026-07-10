@@ -2501,10 +2501,10 @@ namespace WarFabricationRuleTests
                     pInLineageSystem: true, pIsMale: true, pIsAdult: true, pIsAlive: true,
                     pIsSlave: false, pIsKing: false, pIsNoble: false))
                 throw new Exception("An adult living male commoner must be electable as republic leader.");
-            if (RepublicGovernmentRules.IsEligibleCommonerLeader(
+            if (!RepublicGovernmentRules.IsEligibleCommonerLeader(
                     pInLineageSystem: true, pIsMale: true, pIsAdult: true, pIsAlive: true,
                     pIsSlave: false, pIsKing: false, pIsNoble: true))
-                throw new Exception("A noble must not be elected as a commoner republic leader.");
+                throw new Exception("Nobles must remain eligible for ranked republic leadership.");
             if (RepublicGovernmentRules.IsEligibleCommonerLeader(
                     pInLineageSystem: true, pIsMale: false, pIsAdult: true, pIsAlive: true,
                     pIsSlave: false, pIsKing: false, pIsNoble: false))

@@ -24,6 +24,11 @@ namespace AncientWarfare3.core.lineage
         /// <summary>閲嶉€夌户鎵夸汉骞跺啓鍏?kingdom.data銆傛柊鐜嬪嵆浣嶅悗璋冪敤銆傚悓姝ョ淮鎶?actor.data 鐨?IS_HEIR 鏍囪(heir 鐨偆 + minimap 鐢?銆?/summary>
         public static void RefreshHeir(Kingdom pKingdom)
         {
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+            {
+                RepublicGovernmentService.RefreshRepublicSuccessor(pKingdom, pKingdom?.king);
+                return;
+            }
             RefreshHeirAndReturn(pKingdom);
         }
 
@@ -74,8 +79,8 @@ namespace AncientWarfare3.core.lineage
         public static Actor GetHeir(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return null;
-            // 共和国是选举制、不世袭:无世系继承人,首领由随机平民推举(见 RepublicGovernmentService)。
-            if (RepublicGovernmentService.IsRepublic(pKingdom)) return null;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return RepublicGovernmentService.GetRegisteredSuccessor(pKingdom);
             Actor cached = PeekRegisteredHeir(pKingdom);
             bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
             if (SuccessionTransitionRules.ShouldUseCachedHeir(pending, cached?.data != null)) return cached;
@@ -93,7 +98,9 @@ namespace AncientWarfare3.core.lineage
 
         public static Actor FindHeirReadOnly(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null || RepublicGovernmentService.IsRepublic(pKingdom)) return null;
+            if (pKingdom?.data == null) return null;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return RepublicGovernmentService.GetRegisteredSuccessor(pKingdom);
             Actor cached = PeekRegisteredHeir(pKingdom);
             if (cached?.data != null) return cached;
             if (SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king)) return null;
@@ -139,6 +146,12 @@ namespace AncientWarfare3.core.lineage
         public static void PrepareSuccessionBeforeKingDeath(Kingdom pKingdom, Actor pDyingKing)
         {
             if (pKingdom?.data == null || pDyingKing?.data == null) return;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+            {
+                RememberPreSuccessionKing(pKingdom, pDyingKing);
+                RepublicGovernmentService.RefreshRepublicSuccessor(pKingdom, pDyingKing);
+                return;
+            }
             RememberPreSuccessionKing(pKingdom, pDyingKing);
             ClearOldHeirFlag(pKingdom);
             HeirSelection selection = FindHeir(pKingdom, pDyingKing, pDyingKing.data.id,
@@ -215,6 +228,14 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             ClearOldHeirFlag(pKingdom);                       // 娓呮棫缁ф壙浜?IS_HEIR 鏍囪
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, -1L);
+            pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
+        }
+
+        public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
+        {
+            if (pKingdom?.data == null) return;
+            ClearOldHeirFlag(pKingdom);
+            StoreHeirSelection(pKingdom, new HeirSelection(pHeir, pMode));
         }
 
         public static void RecallForSuccession(Kingdom pKingdom, Actor pNewKing, bool pWasRegisteredHeir)

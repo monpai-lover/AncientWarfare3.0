@@ -223,6 +223,7 @@ namespace AncientWarfare3.core.lineage
         public const string COLLATERAL_RESTORE = "collateral_restore";
         public const string CLAN_FALLBACK = "clan_fallback";
         public const string LEADER_FALLBACK = "leader_fallback";
+        public const string REPUBLIC_ELECTIVE = "republic_elective";
     }
 
     internal static class LineageStatus

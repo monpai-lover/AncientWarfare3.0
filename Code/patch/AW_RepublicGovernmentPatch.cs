@@ -18,11 +18,20 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
-            if (pFromLoad || pActor?.data == null) return;
-            // 共和推举的平民首领被设为"王"时不清共和态;只有世袭/城主复位的君主才结束共和。
-            if (RepublicGovernmentRules.ShouldClearRepublicOnNewKing(
-                    RepublicGovernmentService.IsRepublicLeader(pActor)))
-                RepublicGovernmentService.ClearRepublic(__instance, "king_restored");
+            if (pFromLoad || __instance?.data == null || pActor?.data == null) return;
+            bool wasRepublic = RepublicGovernmentService.IsRepublic(__instance);
+            bool registeredSuccessor =
+                RepublicGovernmentService.IsRegisteredRepublicSuccessor(__instance, pActor);
+            bool markedLeader = RepublicGovernmentService.IsRepublicLeader(pActor);
+            if (RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(
+                    wasRepublic, registeredSuccessor, markedLeader))
+            {
+                RepublicGovernmentService.MarkRepublicLeader(pActor);
+                RepublicGovernmentService.RefreshRepublicSuccessor(__instance, pActor);
+                return;
+            }
+
+            RepublicGovernmentService.ClearRepublic(__instance, "king_restored");
         }
     }
 }
