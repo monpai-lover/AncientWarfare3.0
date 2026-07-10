@@ -56,6 +56,9 @@ namespace AncientWarfare3.patch
                 Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuard, CityMaintenanceBenchmarkRules.Group);
                 RoyalGuardService.EnsureKingdomGuard(pCity?.kingdom);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuard, CityMaintenanceBenchmarkRules.Group);
+
+                // 求嗣:无在世男嗣的国王疯狂生育直到有儿子(与禁卫军同在都城错帧触发)。
+                RoyalFertilityService.RefreshHeirUrge(pCity?.kingdom);
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.FiefCommand, CityMaintenanceBenchmarkRules.Group);

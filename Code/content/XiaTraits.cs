@@ -73,6 +73,12 @@ namespace AncientWarfare3.content
             fiefSoldier.base_stats["damage"] = 1f;
             fiefSoldier.base_stats["warfare"] = 1f;
 
+            // 求嗣:无男嗣的国王临时挂此特质,大幅提高 birth_rate(疯狂生育直到有儿子),有子后由周期检查撤销。
+            var heirUrge = NewTrait(LineageKeys.TRAIT_HEIR_URGE, "ui/Icons/traits/iconguizu", XiaTraitGroups.AW2);
+            heirUrge.needs_to_be_explored = false;
+            heirUrge.unlocked_with_achievement = false;
+            heirUrge.base_stats["birth_rate"] = 8f; // Xia 4 + 8 = 12,取整多子
+
             // rebel 反抗者:血+2、外交+35、政务+35、战争+4、同特质聚集。special_effect=义军抱团(批F)
             var rebel = NewTrait("rebel", "ui/Icons/traits/iconrebel", XiaTraitGroups.AW2);
             rebel.same_trait_mod = 20;

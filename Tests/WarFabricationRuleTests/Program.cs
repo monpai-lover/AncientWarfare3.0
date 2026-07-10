@@ -366,6 +366,7 @@ namespace WarFabricationRuleTests
             ExpectVisibleClanRenameRules();
             ExpectBigTreeMaleOnlyRules();
             ExpectHeirGenerationRules();
+            ExpectRoyalFertilityRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
             return 0;
@@ -375,6 +376,29 @@ namespace WarFabricationRuleTests
                 Console.Error.WriteLine(e.GetType().FullName + ": " + e.Message);
                 return 1;
             }
+        }
+
+        private static void ExpectRoyalFertilityRules()
+        {
+            // 无在世男嗣的成年在世男性君主 → 挂求嗣特质(疯狂生育)。
+            if (!RoyalFertilityRules.ShouldUrgeHeir(
+                    pHasKing: true, pKingInLineageSystem: true, pKingFertileAdultAlive: true,
+                    pHasLivingMaleSon: false))
+                throw new Exception("A fertile king with no living son must be urged to produce an heir.");
+            // 已有在世儿子 → 撤销(直到有儿子)。
+            if (RoyalFertilityRules.ShouldUrgeHeir(
+                    pHasKing: true, pKingInLineageSystem: true, pKingFertileAdultAlive: true,
+                    pHasLivingMaleSon: true))
+                throw new Exception("A king who already has a living son must not keep the heir-urge.");
+            // 无王 / 不可生育(未成年/身故) → 不挂。
+            if (RoyalFertilityRules.ShouldUrgeHeir(
+                    pHasKing: false, pKingInLineageSystem: true, pKingFertileAdultAlive: true,
+                    pHasLivingMaleSon: false))
+                throw new Exception("No king means no heir-urge.");
+            if (RoyalFertilityRules.ShouldUrgeHeir(
+                    pHasKing: true, pKingInLineageSystem: true, pKingFertileAdultAlive: false,
+                    pHasLivingMaleSon: false))
+                throw new Exception("A non-fertile/underage/dead king must not be urged.");
         }
 
         private static void ExpectBigTreeMaleOnlyRules()

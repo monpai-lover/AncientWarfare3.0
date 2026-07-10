@@ -78,6 +78,7 @@ namespace AncientWarfare3.core.lineage
         public const string TRAIT_FORMER_KING = "formerking";
         public const string TRAIT_GENERAL = "aw_general";
         public const string TRAIT_ARMY_COMMANDER = "aw_army_commander";
+        public const string TRAIT_HEIR_URGE = "aw_heir_urge";
         public const string TRAIT_FIEF_SOLDIER = "aw_fief_soldier";
         public const string SLAVERY_ENABLED = "aw_slavery_enabled";
         public const string CHRONICLE_LAST_ORIGINAL_CLAN_ID = "aw_chronicle_last_original_clan";
