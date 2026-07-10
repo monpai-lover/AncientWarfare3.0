@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 
@@ -13,6 +14,7 @@ namespace SuccessionGovernmentRuleTests
                 ExpectSuccessionTransitionRules();
                 ExpectRepublicRules();
                 ExpectFragmentationAndInheritanceRules();
+                ExpectFamilyTreeLocateRules();
                 Console.WriteLine("Succession/government rule tests passed.");
                 return 0;
             }
@@ -112,6 +114,39 @@ namespace SuccessionGovernmentRuleTests
             Expect(KingdomPolicyInheritanceRules.SanitizeClassStateForNewKingdom(
                     pSourceClass: "aristocrat", pDefaultClass: "default") == "aristocrat",
                 "Transferable class states must remain unchanged.");
+        }
+
+        private static void ExpectFamilyTreeLocateRules()
+        {
+            var fathers = new Dictionary<long, long>
+            {
+                [4] = 2,
+                [2] = 1,
+                [3] = 9
+            };
+            List<long> path = FamilyTreeRelationRules.BuildAgnaticPath(4, 1,
+                pId => fathers.TryGetValue(pId, out long father) ? father : -1L);
+            Expect(path.Count == 3 && path[0] == 1 && path[1] == 2 && path[2] == 4,
+                "Clan locate must build founder-to-target through fathers only.");
+            Expect(FamilyTreeRelationRules.BuildAgnaticPath(3, 1,
+                    pId => fathers.TryGetValue(pId, out long father) ? father : -1L).Count == 0,
+                "A maternal or unrelated path must not be accepted by the clan tree.");
+
+            Expect(FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                    pParentId: 2, pFatherId: 2, pChildSex: 0, pChildStatus: "noble"),
+                "A visible son belongs under his father.");
+            Expect(!FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                    pParentId: 9, pFatherId: 2, pChildSex: 0, pChildStatus: "noble"),
+                "A maternal male child must not enter the clan tree under his mother.");
+
+            Expect(FamilyTreeRelationRules.ResolveLocateTarget(
+                    pRequestedId: 4, pRequestedVisible: false, pNearestVisibleFatherId: 2,
+                    pRootId: 1, pPathReachable: true) == 2,
+                "A hidden target should center its nearest visible paternal ancestor.");
+            Expect(FamilyTreeRelationRules.ResolveLocateTarget(
+                    pRequestedId: 4, pRequestedVisible: true, pNearestVisibleFatherId: -1,
+                    pRootId: 1, pPathReachable: false) == 1,
+                "An unreachable target must remain in the big tree at its root.");
         }
 
         private static void Expect(bool pCondition, string pMessage)

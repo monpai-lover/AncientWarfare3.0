@@ -63,6 +63,7 @@ namespace AncientWarfare3.ui.windows
         private long _lastTreeRootId = -1;
         private const int MAX_AUTO_EXPAND_VISITS = 160;
         private readonly Dictionary<long, List<long>> _childIdsCache = new Dictionary<long, List<long>>();
+        private readonly Dictionary<long, List<long>> _agnaticChildIdsCache = new Dictionary<long, List<long>>();
         private readonly Dictionary<long, BranchProbe> _probeCache = new Dictionary<long, BranchProbe>();
         private readonly Dictionary<long, bool> _aliveDescendantCache = new Dictionary<long, bool>();
         private int _autoExpandVisited;
@@ -74,6 +75,15 @@ namespace AncientWarfare3.ui.windows
         public static void OpenBigTree(long pShiId)
         {
             long founder = LineageQuery.GetShiBranchFounderId(pShiId);
+            if (founder < 0)
+            {
+                foreach (MemberInfo member in LineageQuery.GetShiMembers(pShiId))
+                {
+                    if (member.sex != 0) continue;
+                    founder = LineageQuery.GetEarliestReachableAgnaticAncestor(member.id);
+                    if (founder >= 0) break;
+                }
+            }
             if (founder < 0) return;
             _mode = Mode.BigTree;
             _rootActorId = founder;
@@ -91,16 +101,50 @@ namespace AncientWarfare3.ui.windows
             if (founder < 0)
             {
                 // 没有始祖记录 → 退回本人小家谱居中,绝不停在默认位置。
-                OpenFamilyTree(pActorId, pShiId);
-                return;
+                founder = ResolveFallbackBigTreeRoot(pActorId);
+                if (founder < 0) return;
             }
+            List<long> path = LineageQuery.GetAgnaticPathToAncestor(pActorId, founder);
+            FamilyTreeNode requested = LineageQuery.GetFamilyTree(pActorId);
+            bool requestedVisible = requested != null &&
+                                    FamilyTreeRelationRules.ShouldShowInBigTree(
+                                        requested.sex, requested.status);
+            long nearestVisibleFather = requestedVisible
+                ? -1L
+                : FindNearestVisibleAgnaticAncestor(pActorId, founder);
+            long locateTarget = FamilyTreeRelationRules.ResolveLocateTarget(
+                pActorId, requestedVisible, nearestVisibleFather, founder, path.Count > 0);
             _mode = Mode.BigTree;
             _rootActorId = founder;
             _backShiId = pShiId;
-            _locateActorId = pActorId;
+            _locateActorId = locateTarget;
             EnsureCreated();
-            Instance?.SeedLocateExpansion(pActorId, founder);
+            Instance?.SeedLocateExpansion(locateTarget, founder);
             ShowOrRefresh(false);
+        }
+
+        private static long ResolveFallbackBigTreeRoot(long pActorId)
+        {
+            FamilyTreeNode node = LineageQuery.GetFamilyTree(pActorId);
+            long agnaticActor = node != null && node.sex == 0
+                ? pActorId
+                : LineageQuery.GetFatherId(pActorId);
+            return LineageQuery.GetEarliestReachableAgnaticAncestor(agnaticActor);
+        }
+
+        private static long FindNearestVisibleAgnaticAncestor(long pActorId, long pRootId)
+        {
+            long current = LineageQuery.GetFatherId(pActorId);
+            var visited = new HashSet<long>();
+            for (int depth = 0; depth <= 96 && current >= 0 && visited.Add(current); depth++)
+            {
+                FamilyTreeNode node = LineageQuery.GetFamilyTree(current);
+                if (node != null && FamilyTreeRelationRules.ShouldShowInBigTree(node.sex, node.status) &&
+                    LineageQuery.GetAgnaticPathToAncestor(current, pRootId).Count > 0)
+                    return current;
+                current = LineageQuery.GetFatherId(current);
+            }
+            return -1L;
         }
 
         public static void OpenFamilyTree(long pCenterActorId, long pShiIdForBackButton)
@@ -474,7 +518,7 @@ namespace AncientWarfare3.ui.windows
             _locateTarget = Vector2.zero;
             ResetQueryCache();
 
-            var path = LineageQuery.GetAncestorPathToFounder(pActorId, pFounderId);
+            var path = LineageQuery.GetAgnaticPathToAncestor(pActorId, pFounderId);
             if (path.Count == 0)
             {
                 _foldDecided.Add(pFounderId);
@@ -500,7 +544,7 @@ namespace AncientWarfare3.ui.windows
             if (!preservePan)
                 _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
             _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
-            bool showTreeTools = false;
+            bool showTreeTools = _mode == Mode.BigTree;
             if (_backButton != null)
                 _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
             if (_backText != null)
@@ -536,14 +580,18 @@ namespace AncientWarfare3.ui.windows
 
             float canvasW = Mathf.Max(VIEWPORT_W, totalW + PAD * 2);
             _canvasRect.sizeDelta = new Vector2(canvasW, _maxDepthY + NODE_H + PAD);
+            if (_mode == Mode.BigTree && _locateActorId >= 0 && !_locateFound)
+            {
+                _locateActorId = root.data.id;
+                _locateTarget = new Vector2(root.centerX, root.topY);
+                _locateFound = true;
+            }
             ApplyLocatePan();
             if (preservePan)
                 _canvasRect.anchoredPosition = savedPan;
 
             // 兜底:大树定位模式下没能把本人渲染出来(链断/不在该氏树内)→ 退回本人小家谱居中,
             // 保证点击定位 100% 居中到目标,绝不停在默认位置。Family 模式清了 _locateActorId,不会递归。
-            if (_mode == Mode.BigTree && _locateActorId >= 0 && !_locateFound)
-                OpenFamilyTree(_locateActorId, _backShiId);
         }
 
         /// <summary>小树:在本人节点正上方画父母行(1~2 个),并连线到本人。点击父母 → 以其为中心重开小树(上溯)。</summary>
@@ -921,7 +969,7 @@ namespace AncientWarfare3.ui.windows
 
             // 仅展开时才查子代 + 建节点(折叠 = 零查询零节点,真懒加载)。
             if (node.expanded)
-                foreach (var cid in GetChildIdsCached(pData.id))
+                foreach (var cid in GetAgnaticChildIdsCached(pData.id))
                 {
                     var cd = BuildTreeNodeData(cid);
                     if (cd == null) continue;
@@ -1085,10 +1133,11 @@ namespace AncientWarfare3.ui.windows
             else
                 return;
 
-            foreach (long cid in GetChildIdsCached(pActorId))
+            foreach (long cid in GetAgnaticChildIdsCached(pActorId))
             {
                 var child = BuildTreeNodeData(cid);
-                if (child == null || IsHiddenInBigTreeStatus(child.status)) continue;
+                if (child == null ||
+                    !FamilyTreeRelationRules.ShouldShowInBigTree(child.sex, child.status)) continue;
                 if (child.founded_branch_shi_id >= 0 && child.id != _rootActorId) continue;
                 if (child.is_alive || HasAliveDescendantCached(child.id))
                     ExpandLiveRecursive(child.id, pDepth + 1);
@@ -1101,10 +1150,11 @@ namespace AncientWarfare3.ui.windows
         {
             if (pDepth > 64) return;
             _foldDecided.Add(pActorId);
-            foreach (long cid in GetChildIdsCached(pActorId))
+            foreach (long cid in GetAgnaticChildIdsCached(pActorId))
             {
                 var child = BuildTreeNodeData(cid);
-                if (child == null || IsHiddenInBigTreeStatus(child.status)) continue;
+                if (child == null ||
+                    !FamilyTreeRelationRules.ShouldShowInBigTree(child.sex, child.status)) continue;
                 MarkCollapsedRecursive(child.id, pDepth + 1);
             }
         }
@@ -1141,6 +1191,7 @@ namespace AncientWarfare3.ui.windows
         private void ResetQueryCache()
         {
             _childIdsCache.Clear();
+            _agnaticChildIdsCache.Clear();
             _probeCache.Clear();
             _aliveDescendantCache.Clear();
             _autoExpandVisited = 0;
@@ -1153,6 +1204,18 @@ namespace AncientWarfare3.ui.windows
                 ids = LineageQuery.GetChildIds(pActorId);
                 _childIdsCache[pActorId] = ids;
             }
+            return ids;
+        }
+
+        private List<long> GetAgnaticChildIdsCached(long pActorId)
+        {
+            if (_agnaticChildIdsCache.TryGetValue(pActorId, out List<long> ids)) return ids;
+            ids = new List<long>();
+            foreach (long childId in GetChildIdsCached(pActorId))
+            {
+                if (LineageQuery.GetFatherId(childId) == pActorId) ids.Add(childId);
+            }
+            _agnaticChildIdsCache[pActorId] = ids;
             return ids;
         }
 

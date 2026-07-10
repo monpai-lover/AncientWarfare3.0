@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
@@ -25,6 +26,47 @@ namespace AncientWarfare3.core.lineage
         {
             if (pSex != 0) return false; // 非男性(女性)不进氏族大树
             return ShouldShowStatusInGenealogy(pStatus);
+        }
+
+        public static List<long> BuildAgnaticPath(long pActorId, long pAncestorId,
+            Func<long, long> pFatherLookup, int pMaxDepth = 96)
+        {
+            var path = new List<long>();
+            if (pActorId < 0 || pAncestorId < 0 || pFatherLookup == null) return path;
+
+            var visited = new HashSet<long>();
+            long current = pActorId;
+            for (int depth = 0; depth <= pMaxDepth; depth++)
+            {
+                if (!visited.Add(current)) break;
+                path.Add(current);
+                if (current == pAncestorId)
+                {
+                    path.Reverse();
+                    return path;
+                }
+                long father = pFatherLookup(current);
+                if (father < 0 || father == current) break;
+                current = father;
+            }
+
+            path.Clear();
+            return path;
+        }
+
+        public static bool ShouldIncludeBigTreeEdge(long pParentId, long pFatherId,
+            int pChildSex, string pChildStatus)
+        {
+            return pParentId >= 0 && pParentId == pFatherId &&
+                   ShouldShowInBigTree(pChildSex, pChildStatus);
+        }
+
+        public static long ResolveLocateTarget(long pRequestedId, bool pRequestedVisible,
+            long pNearestVisibleFatherId, long pRootId, bool pPathReachable)
+        {
+            if (!pPathReachable) return pRootId;
+            if (pRequestedVisible) return pRequestedId;
+            return pNearestVisibleFatherId >= 0 ? pNearestVisibleFatherId : pRootId;
         }
 
         public static List<long> MergeRelationIds(params IEnumerable<long>[] pSources)

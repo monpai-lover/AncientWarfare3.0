@@ -476,6 +476,26 @@ namespace AncientWarfare3.core.lineage
             return path;
         }
 
+        public static List<long> GetAgnaticPathToAncestor(long pActorId, long pAncestorId)
+        {
+            return FamilyTreeRelationRules.BuildAgnaticPath(pActorId, pAncestorId, GetFatherId);
+        }
+
+        public static long GetEarliestReachableAgnaticAncestor(long pActorId)
+        {
+            if (pActorId < 0) return -1L;
+            var visited = new HashSet<long>();
+            long current = pActorId;
+            for (int depth = 0; depth <= 96; depth++)
+            {
+                if (!visited.Add(current)) return current;
+                long father = GetFatherId(current);
+                if (father < 0 || father == current) return current;
+                current = father;
+            }
+            return current;
+        }
+
         public static int GetTreeGenerationInShi(long pActorId, long pShiId)
         {
             if (pActorId < 0) return 0;
@@ -1240,6 +1260,7 @@ namespace AncientWarfare3.core.lineage
             var units = World.world?.units;
             foreach (long cid in childIds)
             {
+                if (GetFatherId(cid) != pNodeId) continue;
                 var live = units?.get(cid);
                 bool liveValid = live != null && !live.isRekt() && live.isAlive();
 
@@ -1269,24 +1290,29 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasAliveDescendant(long pNodeId)
         {
-            var db = DB;
-            if (db == null || pNodeId < 0) return false;
-            try
+            if (pNodeId < 0) return false;
+            var queue = new Queue<long>();
+            var visited = new HashSet<long> { pNodeId };
+            queue.Enqueue(pNodeId);
+            int scanned = 0;
+            while (queue.Count > 0 && scanned < 512)
             {
-                using var cmd = new SQLiteCommand(db);
-                cmd.CommandText =
-                    $"WITH RECURSIVE descendants(ID) AS (" +
-                    $"SELECT CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} WHERE PARENT_ID=@id " +
-                    $"UNION SELECT e.CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} e " +
-                    $"JOIN descendants d ON e.PARENT_ID=d.ID) " +
-                    $"SELECT EXISTS(SELECT 1 FROM descendants d " +
-                    $"JOIN {ActorArchiveTableItem.GetTableName()} a ON a.ID=d.ID " +
-                    $"WHERE a.IS_ALIVE=1 LIMIT 1)";
-                cmd.Parameters.AddWithValue("@id", pNodeId);
-                object o = cmd.ExecuteScalar();
-                return o != null && o != System.DBNull.Value && System.Convert.ToInt64(o) != 0;
+                long parentId = queue.Dequeue();
+                foreach (long childId in GetChildIds(parentId))
+                {
+                    if (GetFatherId(childId) != parentId || !visited.Add(childId)) continue;
+                    scanned++;
+                    Actor live = World.world?.units?.get(childId);
+                    bool liveValid = live != null && !live.isRekt() && live.isAlive();
+                    string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(childId);
+                    int sex = liveValid ? (live.isSexMale() ? 0 : 1) : GetActorSex(childId);
+                    if (!FamilyTreeRelationRules.ShouldShowInBigTree(sex, status)) continue;
+                    if (liveValid || LineageArchiveReader.ReadRow(childId)?.is_alive == 1) return true;
+                    queue.Enqueue(childId);
+                    if (scanned >= 512) break;
+                }
             }
-            catch { return false; }
+            return false;
         }
 
         private static string GetLiveStatus(Actor pLive)
