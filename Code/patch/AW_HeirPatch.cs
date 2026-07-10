@@ -10,6 +10,7 @@ namespace AncientWarfare3.patch
         {
             public Actor PreviousKing;
             public bool  WasRegisteredHeir;
+            public int   PreNobleDistance;
         }
 
         [HarmonyPrefix]
@@ -49,6 +50,10 @@ namespace AncientWarfare3.patch
             __state.PreviousKing = __instance.king;
             HeirService.RememberPreSuccessionKing(__instance, __state.PreviousKing);
 
+            // 成王前捕获"非嫡系代际距离"(AW_PromotionPatch 高优先 Postfix 会先把它归零,这里 Prefix 抢先读)。
+            pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int preNobleDistance, 0);
+            __state.PreNobleDistance = preNobleDistance;
+
             __instance.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
             pActor.data.get(LineageKeys.IS_HEIR, out bool heirFlag, false);
             __state.WasRegisteredHeir = heirFlag || heirId == pActor.data.id;
@@ -67,7 +72,8 @@ namespace AncientWarfare3.patch
             if (pActor != null && __instance.king != pActor) return;
             if (king != null)
             {
-                LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing, __state.WasRegisteredHeir);
+                LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing, __state.WasRegisteredHeir,
+                    __state.PreNobleDistance);
                 HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
             }
 

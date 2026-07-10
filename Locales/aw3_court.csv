@@ -1,4 +1,5 @@
 key,cz,en,ch
+aw_court Title,百家官场,Court of the Hundred Schools,百家官場
 aw_tech_official_court,官场制度,Official Court,官場制度
 aw_tech_official_court_desc,将原始朝会升级为百家官场，允许贤人入仕并影响国家路线,Upgrade primitive council into a court of schools that steers state policy,將原始朝會升級為百家官場，允許賢人入仕並影響國家路線
 aw_court_button_primitive,原始朝会,Primitive Council,原始朝會
@@ -34,6 +35,19 @@ aw_court_office_king_council,君主朝会,Ruler Council,君主朝會
 aw_court_office_governor,郡守,Governor,郡守
 aw_court_office_granary_officer,仓曹,Granary Officer,倉曹
 aw_court_office_constable,县尉,Constable,縣尉
+aw_court_office_zhongshu,中书省,Secretariat,中書省
+aw_court_office_menxia,门下省,Chancellery,門下省
+aw_court_office_shangshu,尚书省,Dept. of State Affairs,尚書省
+aw_court_office_libu,吏部,Ministry of Personnel,吏部
+aw_court_office_hubu,户部,Ministry of Revenue,戶部
+aw_court_office_ribu,礼部,Ministry of Rites,禮部
+aw_court_office_bingbu,兵部,Ministry of War,兵部
+aw_court_office_xingbu,刑部,Ministry of Justice,刑部
+aw_court_office_gongbu,工部,Ministry of Works,工部
+aw_court_tier_sangongjiuqing,三公九卿,Three Excellencies & Nine Ministers,三公九卿
+aw_court_tier_sanshengliubu,三省六部,Three Departments & Six Ministries,三省六部
+aw_tech_three_departments,三省六部制,Three Departments,三省六部制
+aw_tech_three_departments_desc,将三公九卿升级为三省六部，中枢分职集权，官场更高效,Upgrade the Three Excellencies into Three Departments and Six Ministries for a more efficient centralized court,將三公九卿升級為三省六部，中樞分職集權，官場更高效
 aw_court_central_officers,中央官员,Central Officers,中央官員
 aw_court_local_bureaus,地方官署,Local Bureaus,地方官署
 aw_court_office_slots,官职数,Slots,官職數

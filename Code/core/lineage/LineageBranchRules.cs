@@ -38,13 +38,18 @@ namespace AncientWarfare3.core.lineage
             int minAliveForNewBranch,
             long currentKingdomId,
             long originKingdomId,
-            bool alreadyFoundedForKingdom)
+            bool alreadyFoundedForKingdom,
+            int cadetGenerationDistance,
+            int minCadetDistanceForBranch)
         {
             if (!validKingdom || !isXiaKing) return false;
             if (wasHeir || isCurrentHeir || isDirectSuccessionFromPreviousKing) return false;
             if (isCollateralRestoration) return false;
             if (!hasLineage || !hasShi) return false;
             if (isHistoricalFigure || isLineageRootFounder) return false;
+            // 严格:只有关系稀薄的旁支才可建支——须连续 minCadetDistanceForBranch 代都是非嫡系(未任贵族)子孙,
+            // 然后本人成王,才建立新分支。距离不足(近支/直系)一律不建支。
+            if (cadetGenerationDistance < minCadetDistanceForBranch) return false;
             if (aliveInCurrentShi < minAliveForNewBranch) return false;
             if (originKingdomId == currentKingdomId) return false;
             if (alreadyFoundedForKingdom) return false;

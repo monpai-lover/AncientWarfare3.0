@@ -95,6 +95,7 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_FACTION_DOMINANT = "court_faction_dominant";
         public const string COURT_REFORM_EVENT = "court_reform_event";
         public const string COURT_CITY_BUREAU = "court_city_bureau";
+        public const string COURT_TIER_UPGRADED = "court_tier_upgraded";
     }
 
     internal static class CityEvent

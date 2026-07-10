@@ -204,6 +204,20 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_tech_three_departments",
+                Kind = PolicyNodeKind.Tech,
+                NameKey = "aw_tech_three_departments",
+                DescKey = "aw_tech_three_departments_desc",
+                FallbackName = "三省六部制",
+                FallbackDesc = "将三公九卿升级为三省六部，中枢分职集权，官场更高效。",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 150f,
+                RequiredTechs = new[] { "aw_tech_official_court" },
+                Column = 7,
+                Row = 2
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_tech_enfeoffment_study",
                 Kind = PolicyNodeKind.Tech,
                 NameKey = "aw_tech_enfeoffment_study",

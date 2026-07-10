@@ -88,7 +88,12 @@ namespace AncientWarfare3.ui.windows
         {
             if (pShiId < 0) pShiId = LineageQuery.GetActorShiId(pActorId);
             long founder = LineageQuery.GetShiBranchFounderId(pShiId);
-            if (founder < 0) return;
+            if (founder < 0)
+            {
+                // 没有始祖记录 → 退回本人小家谱居中,绝不停在默认位置。
+                OpenFamilyTree(pActorId, pShiId);
+                return;
+            }
             _mode = Mode.BigTree;
             _rootActorId = founder;
             _backShiId = pShiId;
@@ -534,6 +539,11 @@ namespace AncientWarfare3.ui.windows
             ApplyLocatePan();
             if (preservePan)
                 _canvasRect.anchoredPosition = savedPan;
+
+            // 兜底:大树定位模式下没能把本人渲染出来(链断/不在该氏树内)→ 退回本人小家谱居中,
+            // 保证点击定位 100% 居中到目标,绝不停在默认位置。Family 模式清了 _locateActorId,不会递归。
+            if (_mode == Mode.BigTree && _locateActorId >= 0 && !_locateFound)
+                OpenFamilyTree(_locateActorId, _backShiId);
         }
 
         /// <summary>小树:在本人节点正上方画父母行(1~2 个),并连线到本人。点击父母 → 以其为中心重开小树(上溯)。</summary>
@@ -915,8 +925,8 @@ namespace AncientWarfare3.ui.windows
                 {
                     var cd = BuildTreeNodeData(cid);
                     if (cd == null) continue;
-                    // 平民/奴隶不进氏族大树(用户定调:族谱仍记录,但大树不绘制 —— 只能在自己家庭树上溯找到老祖)。
-                    if (IsHiddenInBigTreeStatus(cd.status)) continue;
+                    // 平民/奴隶不进氏族大树;女性也不进氏族大树(只在家族树可见)。
+                    if (!FamilyTreeRelationRules.ShouldShowInBigTree(cd.sex, cd.status)) continue;
                     node.children.Add(BuildLayoutNode(cd, pDepth + 1));
                 }
             return node;

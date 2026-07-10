@@ -14,6 +14,7 @@ namespace AncientWarfare3.core.lineage
         private const int REFILL_SEARCH_THRESHOLD = 12;
         private const int RECRUITMENT_BATCH_LIMIT = 4;
         private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
+        private const int GFX_REBUILD_BUDGET = 2;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
         private const int DISMISS_SCAN_LIMIT = 64;
         private const int ACTIVE_FALLBACK_SCAN_LIMIT = 64;
@@ -203,8 +204,27 @@ namespace AncientWarfare3.core.lineage
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshBatch, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_REFRESH_CURSOR,
                 RoyalGuardMaintenanceRules.NextRefreshCursor(refreshCursor, active.Count, RUNTIME_REFRESH_BATCH_LIMIT));
+            FlushGuardGraphics(active, GFX_REBUILD_BUDGET);
             WriteGuardRoster(pKingdom, active);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefresh, CityMaintenanceBenchmarkRules.Group);
+        }
+
+        // 每趟只重建 pBudget 个标脏禁卫的头像,其余留脏到后续趟,避免编队/改制瞬时把整队头像一次性重建。
+        private static void FlushGuardGraphics(List<Actor> pActive, int pBudget)
+        {
+            if (pActive == null) return;
+            int rebuilt = 0;
+            foreach (Actor guard in pActive)
+            {
+                if (rebuilt >= pBudget) break;
+                if (guard?.data == null || guard.isRekt()) continue;
+                guard.data.get(LineageKeys.ROYAL_GUARD_GFX_DIRTY, out bool dirty, false);
+                if (!RoyalGuardMaintenanceRules.ShouldRebuildGuardGraphicsNow(dirty, rebuilt, pBudget)) continue;
+                guard.clearGraphicsFully();
+                LineageService.ArchiveActor(guard, pAlive: true);
+                guard.data.set(LineageKeys.ROYAL_GUARD_GFX_DIRTY, false);
+                rebuilt++;
+            }
         }
 
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
@@ -1037,10 +1057,8 @@ namespace AncientWarfare3.core.lineage
                 pNameChanged: (previousGuardName ?? "") != (pGuardName ?? ""));
             UpsertGuardState(pActor, pActive: true, pCaptain, ChronicleGate.IsNobleActor(pActor), pGuardName, "");
             if (expensiveRefresh)
-            {
-                LineageService.ArchiveActor(pActor, pAlive: true);
-                pActor.clearGraphicsFully();
-            }
+                // 极贵的头像重建(clearGraphicsFully)+ 归档改到有预算的 FlushGuardGraphics 里做,先标脏。
+                pActor.data.set(LineageKeys.ROYAL_GUARD_GFX_DIRTY, true);
 
             if (!wasGuard || wasCaptain != pCaptain)
                 ChronicleEvents.OnRoyalGuardAppointed(pActor, pKingdom, pActor.city, pGuardName, pCaptain);

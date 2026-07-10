@@ -144,6 +144,32 @@ namespace CourtSystemRuleTests
                         previousSinceYear: 75),
                     "new dominant school resets since year");
 
+                ExpectEqual(CourtTier.Primitive,
+                    CourtTierRules.ResolveTier(hasOfficialCourt: false, hasThreeDepartments: false),
+                    "no official court is primitive tier");
+                ExpectEqual(CourtTier.SanGongJiuQing,
+                    CourtTierRules.ResolveTier(hasOfficialCourt: true, hasThreeDepartments: false),
+                    "official court without three departments is 三公九卿");
+                ExpectEqual(CourtTier.SanShengLiuBu,
+                    CourtTierRules.ResolveTier(hasOfficialCourt: true, hasThreeDepartments: true),
+                    "official court with three departments is 三省六部");
+                Expect(CourtTierRules.IsUpgrade(CourtTier.SanGongJiuQing, CourtTier.SanShengLiuBu),
+                    "三公九卿 → 三省六部 is an upgrade");
+                Expect(!CourtTierRules.IsUpgrade(CourtTier.SanShengLiuBu, CourtTier.SanGongJiuQing),
+                    "downgrade is not an upgrade");
+                ExpectEqual(0, CourtTierRules.CentralOfficesForTier(CourtTier.Primitive).Length,
+                    "primitive tier has no central offices");
+                ExpectEqual(6, CourtTierRules.CentralOfficesForTier(CourtTier.SanGongJiuQing).Length,
+                    "三公九卿 has six central offices");
+                ExpectEqual(9, CourtTierRules.CentralOfficesForTier(CourtTier.SanShengLiuBu).Length,
+                    "三省六部 has nine central offices");
+                ExpectEqual(CourtSchoolId.Military,
+                    CourtTierRules.PreferredSchoolForOffice(CourtOfficeId.Bingbu),
+                    "兵部 prefers military school");
+                ExpectEqual(CourtSchoolId.Mohist,
+                    CourtTierRules.PreferredSchoolForOffice(CourtOfficeId.Gongbu),
+                    "工部 prefers mohist school");
+
                 Console.WriteLine("Court system rule tests passed.");
                 return 0;
             }

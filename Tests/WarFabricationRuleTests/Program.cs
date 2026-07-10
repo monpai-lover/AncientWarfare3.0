@@ -364,6 +364,8 @@ namespace WarFabricationRuleTests
             ExpectXiaItemEffectRules();
             ExpectTraitIconUsageRules();
             ExpectVisibleClanRenameRules();
+            ExpectBigTreeMaleOnlyRules();
+            ExpectHeirGenerationRules();
 
             Console.WriteLine("War fabrication rule tests passed.");
             return 0;
@@ -373,6 +375,69 @@ namespace WarFabricationRuleTests
                 Console.Error.WriteLine(e.GetType().FullName + ": " + e.Message);
                 return 1;
             }
+        }
+
+        private static void ExpectBigTreeMaleOnlyRules()
+        {
+            if (!FamilyTreeRelationRules.ShouldShowInBigTree(pSex: 0, pStatus: "noble"))
+                throw new Exception("Male noble must appear in the clan big tree.");
+            if (FamilyTreeRelationRules.ShouldShowInBigTree(pSex: 1, pStatus: "noble"))
+                throw new Exception("Female must NOT appear in the clan big tree.");
+            if (!FamilyTreeRelationRules.ShouldShowInBigTree(pSex: 0, pStatus: "common_lineage"))
+                throw new Exception("Male commoner still shows in big tree (status filter is open).");
+        }
+
+        private static void ExpectHeirGenerationRules()
+        {
+            // 分层:直系后裔(1) < 同辈(2) < 晚辈旁系(3) < 长辈旁系(4);后代找尽后长辈旁系作末位兜底。
+            if (HeirGenerationRules.ClassifyTier(pIsAgnaticDescendantOfKing: true, pGenerationDelta: 1) !=
+                HeirGenerationRules.TierDirectDescendant)
+                throw new Exception("Son should classify as direct descendant tier.");
+            if (HeirGenerationRules.ClassifyTier(pIsAgnaticDescendantOfKing: true, pGenerationDelta: 3) !=
+                HeirGenerationRules.TierDirectDescendant)
+                throw new Exception("Great-grandson should still be direct descendant tier.");
+            if (HeirGenerationRules.ClassifyTier(pIsAgnaticDescendantOfKing: false, pGenerationDelta: 0) !=
+                HeirGenerationRules.TierSameGeneration)
+                throw new Exception("Same-generation agnatic (non-descendant) should be same-generation tier.");
+            if (HeirGenerationRules.ClassifyTier(pIsAgnaticDescendantOfKing: false, pGenerationDelta: 2) !=
+                HeirGenerationRules.TierCollateral)
+                throw new Exception("Younger collateral should be collateral tier.");
+            if (HeirGenerationRules.ClassifyTier(pIsAgnaticDescendantOfKing: false, pGenerationDelta: -1) !=
+                HeirGenerationRules.TierElderCollateral)
+                throw new Exception("Higher-generation (elder) collateral must be the last-resort elder tier, not ineligible.");
+            if (!HeirGenerationRules.IsEligible(HeirGenerationRules.TierElderCollateral))
+                throw new Exception("Elder collateral must be eligible as a fallback so a valid agnate is never wrongly excluded.");
+
+            // 直系内:辈分近的优先(子 < 孙)。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierDirectDescendant, 1, 100, false,
+                    HeirGenerationRules.TierDirectDescendant, 2, 50, true) >= 0)
+                throw new Exception("A closer-generation direct descendant must outrank a farther one.");
+            // 同辈分内:嫡长(出生早)优先,先于成年。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierDirectDescendant, 1, 30, false,
+                    HeirGenerationRules.TierDirectDescendant, 1, 60, true) >= 0)
+                throw new Exception("The elder-born (嫡长) must outrank a younger adult in the same generation.");
+            // 同辈分同出生序时,成年优先。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierDirectDescendant, 1, 40, true,
+                    HeirGenerationRules.TierDirectDescendant, 1, 40, false) >= 0)
+                throw new Exception("With equal birth order, the adult must outrank the minor.");
+            // 直系优先于同辈,同辈优先于旁系。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierSameGeneration, 0, 10, true,
+                    HeirGenerationRules.TierDirectDescendant, 3, 99, false) <= 0)
+                throw new Exception("Any direct descendant must outrank a same-generation candidate.");
+            // 晚辈旁系(3)优先于长辈旁系(4):只有向下找尽才回溯到长辈。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierCollateral, 2, 10, true,
+                    HeirGenerationRules.TierElderCollateral, -1, 5, true) >= 0)
+                throw new Exception("Younger collateral must outrank elder collateral (go up only after down is exhausted).");
+            // 长辈旁系内:辈分越接近国王(|Δ| 小)越优先(叔父先于叔祖)。
+            if (HeirGenerationRules.Compare(
+                    HeirGenerationRules.TierElderCollateral, -1, 50, true,
+                    HeirGenerationRules.TierElderCollateral, -2, 10, true) >= 0)
+                throw new Exception("A nearer elder collateral (uncle) must outrank a farther one (great-uncle).");
         }
 
         private static void ExpectBlocked(string pReason,
@@ -1272,6 +1337,35 @@ namespace WarFabricationRuleTests
                     belongsToLegitimateShi: false,
                     canTraceToLegitimateBranch: true))
                 throw new Exception("Collateral restoration should accept a branch founder or descendant that traces back to the legitimate line.");
+
+            // 男系(同姓父系)优先:requireAgnatic 时,非男系后裔即便其它条件都满足也不合格。
+            if (MandateSuccessionRules.IsValidCollateralRestorationCandidate(
+                    isXia: true,
+                    isMale: true,
+                    isAlive: true,
+                    isAdult: true,
+                    isKing: false,
+                    hasMadness: false,
+                    sameLineage: true,
+                    belongsToLegitimateShi: true,
+                    canTraceToLegitimateBranch: true,
+                    requireAgnatic: true,
+                    isAgnaticLineDescendant: false))
+                throw new Exception("With requireAgnatic, a non-agnatic candidate must be rejected even if otherwise valid.");
+
+            if (!MandateSuccessionRules.IsValidCollateralRestorationCandidate(
+                    isXia: true,
+                    isMale: true,
+                    isAlive: true,
+                    isAdult: true,
+                    isKing: false,
+                    hasMadness: false,
+                    sameLineage: true,
+                    belongsToLegitimateShi: true,
+                    canTraceToLegitimateBranch: true,
+                    requireAgnatic: true,
+                    isAgnaticLineDescendant: true))
+                throw new Exception("With requireAgnatic, a genuine male-line (same-姓) descendant must be accepted.");
         }
 
         private static void ExpectCollateralSuccessionFallbackRules()
@@ -1441,7 +1535,9 @@ namespace WarFabricationRuleTests
                     minAliveForNewBranch: 8,
                     currentKingdomId: 20,
                     originKingdomId: 10,
-                    alreadyFoundedForKingdom: false))
+                    alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6,
+                    minCadetDistanceForBranch: 4))
                 throw new Exception("Direct father-to-son succession must not create a new shi branch.");
 
             if (LineageBranchRules.ShouldFoundKingBranch(
@@ -1459,7 +1555,9 @@ namespace WarFabricationRuleTests
                     minAliveForNewBranch: 8,
                     currentKingdomId: 20,
                     originKingdomId: 10,
-                    alreadyFoundedForKingdom: false))
+                    alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6,
+                    minCadetDistanceForBranch: 4))
                 throw new Exception("Registered heir succession must not create a new shi branch.");
 
             if (LineageBranchRules.ShouldFoundKingBranch(
@@ -1477,7 +1575,9 @@ namespace WarFabricationRuleTests
                     minAliveForNewBranch: 8,
                     currentKingdomId: 20,
                     originKingdomId: 10,
-                    alreadyFoundedForKingdom: false))
+                    alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6,
+                    minCadetDistanceForBranch: 4))
                 throw new Exception("Collateral restoration must not create a new shi branch.");
 
             if (LineageBranchRules.ShouldApplyCollateralRestoration(
@@ -1516,8 +1616,31 @@ namespace WarFabricationRuleTests
                     minAliveForNewBranch: 8,
                     currentKingdomId: 20,
                     originKingdomId: 10,
-                    alreadyFoundedForKingdom: false))
+                    alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6,
+                    minCadetDistanceForBranch: 4))
                 throw new Exception("A non-heir noble king founding a separate kingdom may create a new shi branch.");
+
+            // 距离不足(近支/直系,连续非嫡代数 < 4)必须不建支——本次收紧建支频率的核心门槛。
+            if (LineageBranchRules.ShouldFoundKingBranch(
+                    validKingdom: true,
+                    isXiaKing: true,
+                    wasHeir: false,
+                    isCurrentHeir: false,
+                    isDirectSuccessionFromPreviousKing: false,
+                    isCollateralRestoration: false,
+                    hasLineage: true,
+                    hasShi: true,
+                    isHistoricalFigure: false,
+                    isLineageRootFounder: false,
+                    aliveInCurrentShi: 12,
+                    minAliveForNewBranch: 8,
+                    currentKingdomId: 20,
+                    originKingdomId: 10,
+                    alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 3,
+                    minCadetDistanceForBranch: 4))
+                throw new Exception("A near-line cadet (<4 non-primary generations) must not create a new shi branch.");
         }
 
         private static void ExpectRoyalGuardSelectionRules()

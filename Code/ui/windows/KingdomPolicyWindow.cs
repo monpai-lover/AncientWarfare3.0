@@ -152,6 +152,9 @@ namespace AncientWarfare3.ui.windows
             var viewRect = viewport != null ? viewport.GetComponent<RectTransform>() : null;
             if (viewRect != null) viewRect.sizeDelta = new Vector2(_contentWidth, _viewportHeight);
             EnsureViewportMask(viewport);
+            // 可拖动的科技/国策/决策节点挂在 ContentTransform 下的 PolicyCanvas 上，
+            // 直接给 ContentTransform 的父视口挂遮罩，才能把自由平移的节点裁剪在窗体框内。
+            EnsureViewportMask(ContentTransform != null ? ContentTransform.parent : null);
 
             Transform scrollbar = BackgroundTransform.Find("Scroll View/Scrollbar Vertical");
             HideNativeScrollbarVisual(scrollbar);

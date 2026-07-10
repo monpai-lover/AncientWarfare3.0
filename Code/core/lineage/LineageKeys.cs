@@ -120,6 +120,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_DISMISS_CURSOR = "aw_royal_guard_dismiss_cursor";
         public const string ROYAL_GUARD_ACTIVE_SCAN_CURSOR = "aw_royal_guard_active_scan_cursor";
         public const string ROYAL_GUARD_CANDIDATE_SCAN_CURSOR = "aw_royal_guard_candidate_scan_cursor";
+        public const string ROYAL_GUARD_GFX_DIRTY = "aw_royal_guard_gfx_dirty";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";
@@ -165,6 +166,7 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_AI_LAST_ROYAL_EXPANSION_YEAR = "aw_policy_ai_last_royal_expansion_year";
         public const string POLICY_AI_LAST_XIA_APPEASE_YEAR = "aw_policy_ai_last_xia_appease_year";
         public const string COURT_MODE = "aw_court_mode";
+        public const string COURT_TIER = "aw_court_tier";
         public const string COURT_DOMINANT_SCHOOL = "aw_court_dominant_school";
         public const string COURT_SECONDARY_SCHOOL = "aw_court_secondary_school";
         public const string COURT_FACTION_CACHE = "aw_court_faction_cache";
@@ -204,6 +206,7 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string KINGDOM_SUCCESSION_MODE = "aw_succession_mode";
         public const string RESTORED_SHI_ID = "aw_restored_shi_id";
+        public const string COLLATERAL_NONAGNATIC = "aw_collateral_nonagnatic";
         public const string KINGDOM_YEAR_NAME = "aw_year_name";
         public const string KINGDOM_YEAR_START = "aw_year_start";
         public const string KINGDOM_TITLE = "aw_title";

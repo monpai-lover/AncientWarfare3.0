@@ -20,6 +20,25 @@ namespace AncientWarfare3.core.court
         public const string Governor = "governor";
         public const string GranaryOfficer = "granary_officer";
         public const string Constable = "constable";
+
+        // 三省六部(Sui-Tang tier)
+        public const string Zhongshu = "zhongshu"; // 中书省
+        public const string Menxia = "menxia";     // 门下省
+        public const string Shangshu = "shangshu"; // 尚书省
+        public const string Libu = "libu";         // 吏部
+        public const string Hubu = "hubu";         // 户部
+        public const string Ribu = "ribu";         // 礼部
+        public const string Bingbu = "bingbu";     // 兵部
+        public const string Xingbu = "xingbu";     // 刑部
+        public const string Gongbu = "gongbu";     // 工部
+    }
+
+    // 官场按科技分历史层级:原始朝会 → 三公九卿 → 三省六部。
+    public static class CourtTier
+    {
+        public const string Primitive = "primitive";
+        public const string SanGongJiuQing = "san_gong_jiu_qing"; // 三公九卿
+        public const string SanShengLiuBu = "san_sheng_liu_bu";   // 三省六部
     }
 
     public static class CourtSchoolId

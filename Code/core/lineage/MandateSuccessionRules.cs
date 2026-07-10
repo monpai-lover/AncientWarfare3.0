@@ -41,8 +41,12 @@ namespace AncientWarfare3.core.lineage
 
         public static bool IsValidCollateralRestorationCandidate(bool isXia, bool isMale, bool isAlive,
             bool isAdult, bool isKing, bool hasMadness, bool sameLineage, bool belongsToLegitimateShi,
-            bool canTraceToLegitimateBranch = false)
+            bool canTraceToLegitimateBranch = false, bool requireAgnatic = false,
+            bool isAgnaticLineDescendant = false)
         {
+            // 男系(同姓父系)优先:要求 agnatic 时,只有真正的男系后裔才合格,
+            // 避免选到父亲是异姓的人来"延续"本姓王统。氏(分支)可不同,不受此限。
+            if (requireAgnatic && !isAgnaticLineDescendant) return false;
             return isXia && isMale && isAlive && isAdult && !isKing && !hasMadness &&
                    sameLineage && (belongsToLegitimateShi || canTraceToLegitimateBranch);
         }

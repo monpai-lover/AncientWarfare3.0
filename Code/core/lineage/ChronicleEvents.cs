@@ -90,6 +90,22 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        // 异姓入继:找不到男系同姓后裔时,新君以真实身份入继大统(不伪造父系),明确记入史册。
+        internal static void OnNonAgnaticSuccession(Kingdom pKingdom, Actor pPreviousKing, Actor pNewKing)
+        {
+            if (pKingdom?.data == null || pNewKing?.data == null) return;
+
+            HistoryText text = HistoryText.Actor(pNewKing) + H("aw_hist_nonagnatic_succession");
+            if (pPreviousKing?.data != null)
+                text += H("aw_hist_previous_ruler_prefix") + HistoryText.Actor(pPreviousKing) +
+                        H("aw_hist_paren_close");
+
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COLLATERAL_RESTORE, text,
+                HistoryTarget.Actor(pNewKing));
+            HistoryWriter.RecordPerson(pNewKing.data.id, pKingdom, pNewKing.getName(),
+                PersonEvent.COLLATERAL_RESTORE, text, ChronicleCategory.SOCIAL, HistoryTarget.Kingdom(pKingdom));
+        }
+
         private static string BuildRestoredShiLabel(ShiBranchInfo pBranch)
         {
             if (pBranch == null) return T("aw_hist_old_shi") + "\u6c0f";
@@ -106,6 +122,28 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.Kingdom(pKingdom) +
                 (pOfficial ? H("aw_hist_court_founded_official") : H("aw_hist_court_founded_primitive")),
                 HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtTierUpgraded(Kingdom pKingdom, string pTier)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_TIER_UPGRADED,
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_tier_mid") +
+                HistoryText.PlainText(CourtTierName(pTier)),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        private static string CourtTierName(string pTier)
+        {
+            switch (pTier ?? "")
+            {
+                case CourtTier.SanShengLiuBu:
+                    return AW_L10n.Text("aw_court_tier_sanshengliubu", "Three Departments and Six Ministries");
+                case CourtTier.SanGongJiuQing:
+                    return AW_L10n.Text("aw_court_tier_sangongjiuqing", "Three Excellencies and Nine Ministers");
+                default:
+                    return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
+            }
         }
 
         public static void OnCourtOfficerAppointed(Actor pActor, Kingdom pKingdom, string pOfficeId, string pSchoolId)

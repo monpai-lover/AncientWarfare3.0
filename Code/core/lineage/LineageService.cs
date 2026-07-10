@@ -20,6 +20,8 @@ namespace AncientWarfare3.core.lineage
         public const string XIA_ASSET_ID = "Xia";
         private const string HUMAN_ASSET_ID = "human";
         private const int MIN_SHI_ALIVE_FOR_NEW_BRANCH = 8;
+        // 建支须"连续 4 代非嫡系(未任贵族)子孙,然后成王"——只有关系稀薄的旁支才可开新氏支。
+        private const int MIN_CADET_DISTANCE_FOR_NEW_BRANCH = 4;
         private const int MIN_HOME_BRANCH_ADULT_MALES_AFTER_BRANCH = 2;
         private const int MAX_PROMOTION_DESCENDANT_SYNC = 512;
 
@@ -683,11 +685,17 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing)
         {
-            OnKingFoundBranch(pKingdom, pKing, null, false);
+            OnKingFoundBranch(pKingdom, pKing, null, false, -1);
         }
 
         public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing, Actor pPreviousKing,
             bool pWasRegisteredHeir)
+        {
+            OnKingFoundBranch(pKingdom, pKing, pPreviousKing, pWasRegisteredHeir, -1);
+        }
+
+        public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing, Actor pPreviousKing,
+            bool pWasRegisteredHeir, int pPreNobleDistance)
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
             if (!IsXia(pKing) && !UsesAwLineageSystem(pKing)) return;
@@ -718,6 +726,10 @@ namespace AncientWarfare3.core.lineage
             long originKingdom = curShiId < 0 ? -1L : LineageQuery.GetShiOriginKingdom(curShiId);
             pKing.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedShi, -1);
             bool alreadyFoundedForKingdom = foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id;
+            // 成王前的"非嫡系代际距离"(距最近贵族祖先的代数)。setKing 前捕获;未知则回退现读(已归零→保守不建支)。
+            int cadetDistance = pPreNobleDistance;
+            if (cadetDistance < 0)
+                pKing.data.get(LineageKeys.NOBLE_DISTANCE, out cadetDistance, 0);
             bool shouldFound = LineageBranchRules.ShouldFoundKingBranch(
                 validKingdom: pKingdom.data != null,
                 isXiaKing: IsXia(pKing) || UsesAwLineageSystem(pKing),
@@ -733,7 +745,9 @@ namespace AncientWarfare3.core.lineage
                 minAliveForNewBranch: MIN_SHI_ALIVE_FOR_NEW_BRANCH,
                 currentKingdomId: pKingdom.id,
                 originKingdomId: originKingdom,
-                alreadyFoundedForKingdom: alreadyFoundedForKingdom);
+                alreadyFoundedForKingdom: alreadyFoundedForKingdom,
+                cadetGenerationDistance: cadetDistance,
+                minCadetDistanceForBranch: MIN_CADET_DISTANCE_FOR_NEW_BRANCH);
             if (!shouldFound) return;
 
             // 1) 原版 clan:从旧 clan 脱离,新建以国王为创始人的 clan。
@@ -775,9 +789,15 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_LINEAGE_ID, out long legitimateLineage, -1L);
             pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID, out long legitimateShi, -1L);
             if (legitimateLineage < 0 || legitimateShi < 0) return;
-            if (!CollateralRestorationTraceService.CanRestoreToLegitimateShi(pKing, legitimateLineage, legitimateShi))
+
+            // 男系(同姓父系)才完整恢复本姓王统;否则以异姓入继处理,不伪造父系/姓氏。
+            bool agnatic = LineageQuery.IsAgnaticDescendant(pKing.data.id, legitimateLineage);
+            if (!agnatic ||
+                !CollateralRestorationTraceService.CanRestoreToLegitimateShi(pKing, legitimateLineage, legitimateShi))
             {
+                pKing.data.set(LineageKeys.COLLATERAL_NONAGNATIC, true);
                 pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
+                ChronicleEvents.OnNonAgnaticSuccession(pKingdom, pPreviousKing, pKing);
                 return;
             }
 
@@ -793,6 +813,7 @@ namespace AncientWarfare3.core.lineage
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
             pKing.data.set(LineageKeys.RESTORED_SHI_ID, legitimateShi);
+            pKing.data.set(LineageKeys.COLLATERAL_NONAGNATIC, false);
             pKingdom.data.set(LineageKeys.KINGDOM_RESTORED_SHI_ID, legitimateShi);
             if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
 

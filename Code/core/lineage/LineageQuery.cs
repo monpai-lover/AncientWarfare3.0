@@ -515,6 +515,164 @@ namespace AncientWarfare3.core.lineage
             return o == null ? -1 : (long)o;
         }
 
+        /// <summary>取角色性别(0=男/1=女);先看在场 actor,再回退档案,查不到返回 -1。</summary>
+        public static int GetActorSex(long pActorId)
+        {
+            if (pActorId < 0) return -1;
+            var live = World.world?.units?.get(pActorId);
+            if (live?.data != null) return live.isSexMale() ? 0 : 1;
+            return LineageArchiveReader.GetSex(pActorId);
+        }
+
+        /// <summary>取角色所属姓(LINEAGE_ID);先看在场 actor,再回退档案。</summary>
+        public static long GetActorLineageId(long pActorId)
+        {
+            if (pActorId < 0) return -1L;
+            var live = World.world?.units?.get(pActorId);
+            if (live?.data != null)
+            {
+                live.data.get(LineageKeys.LINEAGE_ID, out long liveLineage, -1L);
+                if (liveLineage >= 0) return liveLineage;
+            }
+            var row = LineageArchiveReader.ReadRow(pActorId);
+            return row?.lineage_id ?? -1L;
+        }
+
+        /// <summary>取父亲 id(父母中的男性),没有则 -1。</summary>
+        public static long GetFatherId(long pActorId)
+        {
+            if (pActorId < 0) return -1L;
+            foreach (long parentId in GetParentIds(pActorId))
+            {
+                if (parentId < 0) continue;
+                if (GetActorSex(parentId) == 0) return parentId;
+            }
+            return -1L;
+        }
+
+        /// <summary>
+        ///     是否为该姓(LINEAGE_ID)的男系(父→父→…同姓)后裔。氏(SHI/分支)可不同,不受限。
+        ///     沿途任一父亲出现异姓即判否;男系链一路同姓到始祖或链根则判是。
+        /// </summary>
+        public static bool IsAgnaticDescendant(long pActorId, long pLegitimateLineage)
+        {
+            if (pActorId < 0 || pLegitimateLineage < 0) return false;
+            if (GetActorLineageId(pActorId) != pLegitimateLineage) return false;
+
+            long founderId = GetLineageFounderId(pLegitimateLineage);
+            var visited = new HashSet<long>();
+            long current = pActorId;
+            for (int depth = 0; depth <= 96; depth++)
+            {
+                if (founderId >= 0 && current == founderId) return true;
+                if (!visited.Add(current)) return false;
+
+                long fatherId = GetFatherId(current);
+                if (fatherId < 0) return true; // 男系链到头,沿途皆本姓
+                if (GetActorLineageId(fatherId) != pLegitimateLineage) return false; // 异姓父亲
+                current = fatherId;
+            }
+            return false;
+        }
+
+        /// <summary>是否为 pAncestorId 的男系直系后裔(沿父亲链能走到该祖先)。本人不算自己的后裔。</summary>
+        public static bool IsAgnaticDescendantOf(long pDescendantId, long pAncestorId)
+        {
+            if (pDescendantId < 0 || pAncestorId < 0 || pDescendantId == pAncestorId) return false;
+            var visited = new HashSet<long>();
+            long current = pDescendantId;
+            for (int depth = 0; depth <= 96; depth++)
+            {
+                long fatherId = GetFatherId(current);
+                if (fatherId < 0) return false;
+                if (fatherId == pAncestorId) return true;
+                if (!visited.Add(fatherId)) return false;
+                current = fatherId;
+            }
+            return false;
+        }
+
+        /// <summary>
+        ///     沿父系从 actor 往上走到本姓(LINEAGE_ID)男系链顶端,返回最顶端那个同姓祖先的 id。
+        ///     用作 GetLineageFounderId 查不到始祖档案时的兜底锚点,使辈分深度计算不依赖 DB 始祖记录。
+        ///     actor 自身非本姓或无效则返回 -1;链顶(父亲缺失或异姓)即为根。
+        /// </summary>
+        public static long GetAgnaticRootId(long pActorId, long pLegitimateLineage)
+        {
+            if (pActorId < 0 || pLegitimateLineage < 0) return -1L;
+            if (GetActorLineageId(pActorId) != pLegitimateLineage) return -1L;
+            var visited = new HashSet<long>();
+            long current = pActorId;
+            for (int depth = 0; depth <= 96; depth++)
+            {
+                if (!visited.Add(current)) return current;
+                long fatherId = GetFatherId(current);
+                if (fatherId < 0) return current;                              // 父系链到头 → 当前即根
+                if (GetActorLineageId(fatherId) != pLegitimateLineage) return current; // 父异姓 → 当前即根
+                current = fatherId;
+            }
+            return current;
+        }
+
+        /// <summary>
+        ///     两人最近的共同父系祖先(沿父亲链,纯 parent 记录,不看 LINEAGE_ID)——"同源"判定的核心。
+        ///     不受姓氏合流/开创分支改氏/始祖档案缺失影响。返回祖先 id 与各自到该祖先的代数;
+        ///     无共同父系祖先返回 -1。其中一方是另一方的父系祖先时,该祖先即较年长的一方(对应代数为 0)。
+        /// </summary>
+        public static long NearestCommonAgnaticAncestor(long pIdA, long pIdB, out int pDepthA, out int pDepthB)
+        {
+            pDepthA = -1;
+            pDepthB = -1;
+            if (pIdA < 0 || pIdB < 0) return -1L;
+
+            // A 的父系链:id → 到 A 的代数(含 A 自身 = 0)。
+            var depthOfA = new Dictionary<long, int>();
+            long cur = pIdA;
+            for (int d = 0; d <= 96; d++)
+            {
+                if (!depthOfA.ContainsKey(cur)) depthOfA[cur] = d;
+                long father = GetFatherId(cur);
+                if (father < 0 || father == cur || depthOfA.ContainsKey(father)) break;
+                cur = father;
+            }
+
+            // 沿 B 的父系链找首个落在 A 链上的节点 = 最近共同祖先。
+            var visited = new HashSet<long>();
+            cur = pIdB;
+            for (int d = 0; d <= 96; d++)
+            {
+                if (depthOfA.TryGetValue(cur, out int da))
+                {
+                    pDepthA = da;
+                    pDepthB = d;
+                    return cur;
+                }
+                if (!visited.Add(cur)) break;
+                long father = GetFatherId(cur);
+                if (father < 0 || father == cur) break;
+                cur = father;
+            }
+            return -1L;
+        }
+
+        /// <summary>沿父系从 actor 到某祖先/始祖的步数(辈分深度);走不到返回 -1,祖先本人为 0。</summary>
+        public static int GetAgnaticDepth(long pActorId, long pFounderId)
+        {
+            if (pActorId < 0 || pFounderId < 0) return -1;
+            if (pActorId == pFounderId) return 0;
+            var visited = new HashSet<long>();
+            long current = pActorId;
+            for (int steps = 1; steps <= 96; steps++)
+            {
+                long fatherId = GetFatherId(current);
+                if (fatherId < 0) return -1;
+                if (fatherId == pFounderId) return steps;
+                if (!visited.Add(fatherId)) return -1;
+                current = fatherId;
+            }
+            return -1;
+        }
+
         /// <summary>取某氏支的 origin_kingdom_id(始祖建支时的国)。无则 -1。称王分封触发判定用。</summary>
         public static long GetShiOriginKingdom(long pShiId)
         {
@@ -1085,9 +1243,10 @@ namespace AncientWarfare3.core.lineage
                 var live = units?.get(cid);
                 bool liveValid = live != null && !live.isRekt() && live.isAlive();
 
-                // 平民/奴隶不进氏族大树 → 探测里也跳过(否则会显示展开+号却展开为空)。
+                // 平民/奴隶不进氏族大树;女性也不进氏族大树 → 探测里同样跳过(否则会显示 + 号却展开为空)。
                 string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(cid);
-                if (!FamilyTreeRelationRules.ShouldShowStatusInGenealogy(status)) continue;
+                int sex = liveValid ? (live.isSexMale() ? 0 : 1) : LineageArchiveReader.GetSex(cid);
+                if (!FamilyTreeRelationRules.ShouldShowInBigTree(sex, status)) continue;
 
                 probe.has_children = true; // 至少有一个大树可见(非平民)子代
 

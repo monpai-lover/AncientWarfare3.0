@@ -114,7 +114,8 @@ namespace GeneralRebellionRuleTests
                     hasLineage: true, hasShi: true,
                     isHistoricalFigure: false, isLineageRootFounder: false,
                     aliveInCurrentShi: 8, minAliveForNewBranch: 4,
-                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false))
+                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6, minCadetDistanceForBranch: 4))
                 throw new Exception("Expected direct parent-child royal succession to keep the main branch.");
 
             if (LineageBranchRules.ShouldFoundKingBranch(
@@ -123,7 +124,8 @@ namespace GeneralRebellionRuleTests
                     hasLineage: true, hasShi: true,
                     isHistoricalFigure: false, isLineageRootFounder: false,
                     aliveInCurrentShi: 8, minAliveForNewBranch: 4,
-                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false))
+                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6, minCadetDistanceForBranch: 4))
                 throw new Exception("Expected registered heir succession to keep the main branch.");
 
             if (!LineageBranchRules.ShouldFoundKingBranch(
@@ -132,7 +134,8 @@ namespace GeneralRebellionRuleTests
                     hasLineage: true, hasShi: true,
                     isHistoricalFigure: false, isLineageRootFounder: false,
                     aliveInCurrentShi: 8, minAliveForNewBranch: 4,
-                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false))
+                    currentKingdomId: 12, originKingdomId: 3, alreadyFoundedForKingdom: false,
+                    cadetGenerationDistance: 6, minCadetDistanceForBranch: 4))
                 throw new Exception("Expected non-succession king in a foreign/new kingdom to found a branch.");
 
             if (!HistoricalFigureMinimapRules.ShouldDrawIcon(

@@ -129,10 +129,11 @@
 - `CourtService`：按王国低频刷新官场模式、官员有效性、候选任命、学派构成、官场效率和持久化快照。
 - `CourtRules`、`CourtInfluenceRules`、`CourtAIRules`、`CourtTraitRules`：覆盖解锁、城市官署槽位、学派影响、AI 加权和官员学派特质。
 - `CourtBureauRules`、`CourtEventRules`、`CourtOfficerRecordRules`：覆盖地方官署槽位填充与效率、强事件冷却与主导学派计时、官员履历的开/闭判定。
+- `CourtTierRules`：官场按科技分历史层级——原始朝会 →（`aw_tech_official_court`）三公九卿 →（`aw_tech_three_departments`）三省六部；每级有各自的中央官职集合（三公九卿六官 / 三省六部九官），升级记一次官制改革史，改制后清退不属于新层级的旧官。
 - `KingdomCourtState`、`CourtOfficer`、`CityBureauState`：官场持久化结构已接入——中央官员任免写入 `CourtOfficer` 履历（每人至多一条 active 记录，罢免时关闭并写明原因），地方官署按低频写入 `CityBureauState` 快照（槽位、主理学派、官署效率），避免 UI 或 AI 实时扫描全国人物。
 - `KingdomPolicyAI` 已读取官场缓存，法家、儒家、墨家、兵家、纵横家、农家等会影响科技、国策、常态决策和战争倾向。
-- `CourtWindow` 与王国面板入口已接入：四个国策按钮下方是一条宽官场按钮，窗口显示状态、主流学派、效率、学派构成、中央官员和地方官署（均来自低频缓存表）。
-- 历史记录已接入官场建立、重要人物入仕与罢免、学派主导变化、官场变法强事件和地方官署改组；普通官员不刷屏国家史。
+- `CourtWindow` 与王国面板入口已接入：窗口标题用王国旗色，显示当前官制层级、主流学派、效率、学派构成、中央官员（可点击打开人物窗口，仿 EmpireCraft）和地方官署（均来自低频缓存表）。
+- 历史记录已接入官场建立、官制改革升级、重要人物入仕与罢免、学派主导变化、官场变法强事件和地方官署改组；普通官员不刷屏国家史。
 
 ### 7. 奴隶制、奴隶军、退伍
 

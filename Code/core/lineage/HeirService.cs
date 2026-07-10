@@ -106,13 +106,7 @@ namespace AncientWarfare3.core.lineage
         public static bool HasSuccessionCandidate(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long curId, -1L);
-            if (curId >= 0)
-            {
-                Actor current = World.world.units.get(curId);
-                if (IsSuitableRegisteredHeir(current, pKingdom, pKingdom.king)) return true;
-            }
-            if (FindHeir(pKingdom, pKingdom.king, pIncludeRegisteredHeir: true).Actor != null) return true;
+            if (FindHeir(pKingdom, pKingdom.king, pIncludeRegisteredHeir: false).Actor != null) return true;
             return ShouldUseOrdinaryFallbackSuccession(pKingdom) && GetLeaderSuccessionCandidate(pKingdom) != null;
         }
 
@@ -167,8 +161,10 @@ namespace AncientWarfare3.core.lineage
         public static bool IsCurrentHeir(Kingdom pKingdom, Actor pActor)
         {
             if (pKingdom?.data == null || pActor?.data == null) return false;
-            Actor heir = GetHeir(pKingdom);
-            return heir?.data != null && heir.data.id == pActor.data.id;
+            // 读缓存的继承人 id(由王位交代/王室出生/RefreshHeir 事件维护),O(1)。
+            // 不再每次 GetHeir 跑全搜索+副作用——那是奴隶军/禁卫军 per-unit 循环性能崩溃的根因。
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            return heirId >= 0 && heirId == pActor.data.id;
         }
 
         public static void ClearHeir(Kingdom pKingdom)
@@ -305,39 +301,111 @@ namespace AncientWarfare3.core.lineage
             pActor.clearGraphicsFully();
         }
 
-        /// <summary>閫夋渶鍚堥€傜户鎵夸汉:浼樺厛鍥界帇**鐩寸郴鎴愬勾鍎垮瓙(闀垮瓙浼樺厛=created_time鏈€灏?**;
-        /// 鏃犲悎鏍煎効瀛愬啀鎵鹃暱濂?涓よ€呴兘娌℃湁鎵?fallback 鍒?royal_clan銆?/summary>
+        /// <summary>
+        ///     按氏族大谱 + 辈分就近选继承人:直系后裔(子→孙→曾孙…由近及远) → 同辈 → 旁系过继;
+        ///     严禁辈分高于国王者,严禁非本姓男系(不改氏硬塞);同辈分内嫡长优先、再论成年。
+        ///     全无合法男系 → NONE(绝嗣/亡国)。pIncludeRegisteredHeir 已废弃(取消登记继承人机制)。
+        /// </summary>
         private static HeirSelection FindHeir(Kingdom pKingdom, Actor pKnownKing,
             bool pIncludeRegisteredHeir)
         {
-            Actor king = pKnownKing ?? pKingdom.king;
             if (pKingdom?.data == null) return new HeirSelection(null, SuccessionMode.NONE);
+            Actor king = pKnownKing ?? pKingdom.king;
             EnsureLegitimateLine(pKingdom, king);
+            if (king?.data == null) return new HeirSelection(null, SuccessionMode.NONE);
 
-            if (king != null)
+            long kingId = king.data.id;
+
+            Actor best = null;
+            int bestTier = HeirGenerationRules.TierIneligible, bestDelta = 0;
+            double bestBirth = 0; bool bestAdult = false;
+
+            foreach (Actor cand in CollectSuccessionCandidatePool(pKingdom))
             {
-                Actor adultSon = FindAdultDirectSon(king);
-                if (adultSon != null) return new HeirSelection(adultSon, SuccessionMode.DIRECT);
+                if (!IsHeirBaseEligible(cand, pKingdom, king)) continue;
+                long candId = cand.data.id;
+                if (candId == kingId) continue;
 
-                Actor underageSon = PickEldestUnderageDirectSon(king);
-                if (underageSon != null) return new HeirSelection(underageSon, SuccessionMode.UNDERAGE_DIRECT);
+                // 同源判定:与国王的最近共同父系祖先(纯 parent 记录,不看 LINEAGE_ID)。
+                // 姓氏合流后姓辨识失效,故按"同源"而非"同姓"判亲缘;无共同父系祖先 = 非同源 → 排除。
+                long anc = LineageQuery.NearestCommonAgnaticAncestor(kingId, candId,
+                    out int kingDepth, out int candDepth);
+                if (anc < 0) continue;                 // 非同源 → 严禁入选(不会抓不相干的人)
+
+                bool isDesc = kingDepth == 0;          // 共同祖先即国王本人 → 国王男系后裔
+                int delta = candDepth - kingDepth;     // >0 晚辈 / 0 同辈 / <0 长辈
+                int tier = HeirGenerationRules.ClassifyTier(isDesc, delta);
+
+                double birth = SafeCreatedTime(cand);
+                bool adult = SafeIsAdult(cand);
+                if (best == null || HeirGenerationRules.Compare(
+                        tier, delta, birth, adult, bestTier, bestDelta, bestBirth, bestAdult) < 0)
+                {
+                    best = cand; bestTier = tier; bestDelta = delta; bestBirth = birth; bestAdult = adult;
+                }
             }
 
-            if (pIncludeRegisteredHeir)
+            if (best == null)
             {
-                Actor registered = GetRegisteredHeirIfSuitable(pKingdom, king);
-                if (registered != null) return new HeirSelection(registered, SuccessionMode.REGISTERED);
+                // 终极安全网:池循环因谱系记账异常未选出时,直接用国王在世男嗣兜底,杜绝"有子嗣却绝嗣"。
+                Actor directSon = PickEldestLivingSon(king);
+                if (directSon != null)
+                    return new HeirSelection(directSon,
+                        directSon.isAdult() ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT);
+                return new HeirSelection(null, SuccessionMode.NONE); // 真·绝嗣/亡国
             }
 
-            Actor collateral = FindCollateralRestorationHeir(pKingdom, king);
-            if (collateral != null) return new HeirSelection(collateral, SuccessionMode.COLLATERAL_RESTORE);
+            string mode = bestTier == HeirGenerationRules.TierDirectDescendant
+                ? (bestAdult ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT)
+                : SuccessionMode.COLLATERAL_RESTORE;
+            return new HeirSelection(best, mode);
+        }
 
-            if (!ShouldUseOrdinaryFallbackSuccession(pKingdom))
-                return new HeirSelection(null, SuccessionMode.NONE);
+        /// <summary>取国王在世男嗣中的嫡长(出生最早),排除疯癫/奴隶;无则 null。仅作 FindHeir 兜底。</summary>
+        private static Actor PickEldestLivingSon(Actor pKing)
+        {
+            if (pKing?.data == null) return null;
+            Actor best = null;
+            double bestBirth = double.MaxValue;
+            try
+            {
+                foreach (Actor child in pKing.getChildren(false))
+                {
+                    if (child?.data == null || child == pKing) continue;
+                    if (!child.isSexMale() || child.isRekt() || !child.isAlive()) continue;
+                    if (child.isKing() || child.hasTrait("madness")) continue;
+                    if (SlaveService.IsSlave(child)) continue;
+                    double birth = SafeCreatedTime(child);
+                    if (best == null || birth < bestBirth) { best = child; bestBirth = birth; }
+                }
+            }
+            catch { return best; }
+            return best;
+        }
 
-            Actor clanFallback = FindRoyalClanFallbackHeir(pKingdom, king);
-            return new HeirSelection(clanFallback,
-                clanFallback == null ? SuccessionMode.NONE : SuccessionMode.CLAN_FALLBACK);
+        private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)
+        {
+            if (pActor?.data == null || pActor == pKing) return false;
+            if (!LineageService.IsXia(pActor) && !LineageService.UsesAwLineageSystem(pActor)) return false;
+            if (!pActor.isSexMale()) return false;
+            if (pActor.isRekt() || !pActor.isAlive()) return false;
+            if (pActor.isKing()) return false;
+            if (pActor.hasTrait("madness")) return false;
+            if (SlaveService.IsSlave(pActor)) return false;
+            // 亲缘不再用 LINEAGE_ID(合流后失效)判定,改由调用方按"最近共同父系祖先(同源)"筛选。
+            return true;
+        }
+
+        private static double SafeCreatedTime(Actor pActor)
+        {
+            try { return pActor?.data?.created_time ?? double.MaxValue; }
+            catch { return double.MaxValue; }
+        }
+
+        private static bool SafeIsAdult(Actor pActor)
+        {
+            try { return pActor?.data != null && pActor.isAdult(); }
+            catch { return false; }
         }
 
         private static Actor FindHeir(Kingdom pKingdom, Actor pKnownKing = null)
@@ -403,20 +471,31 @@ namespace AncientWarfare3.core.lineage
             if (legitimateLineage < 0) return null;
 
             List<Actor> pool = CollectSuccessionCandidatePool(pKingdom);
+
+            // 男系(同姓父系)优先:氏/分支可不同,但父系必须一路同姓。先成年,再未成年。
+            Actor agnaticAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+                pRequireLegitimateShi: false, pRequireAdult: true, pRequireAgnatic: true);
+            if (agnaticAdult != null) return agnaticAdult;
+
+            Actor agnaticUnderage = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
+                pRequireLegitimateShi: false, pRequireAdult: false, pRequireAgnatic: true);
+            if (agnaticUnderage != null) return agnaticUnderage;
+
+            // 无男系同姓后裔 → 回退(非男系,后续 ApplyCollateralRestoration 会标记为异姓入继)。
             Actor exactAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
-                pRequireLegitimateShi: true, pRequireAdult: true);
+                pRequireLegitimateShi: true, pRequireAdult: true, pRequireAgnatic: false);
             if (exactAdult != null) return exactAdult;
 
             Actor traceableBranchAdult = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
-                pRequireLegitimateShi: false, pRequireAdult: true);
+                pRequireLegitimateShi: false, pRequireAdult: true, pRequireAgnatic: false);
             if (traceableBranchAdult != null) return traceableBranchAdult;
 
             Actor exactUnderage = PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
-                pRequireLegitimateShi: true, pRequireAdult: false);
+                pRequireLegitimateShi: true, pRequireAdult: false, pRequireAgnatic: false);
             if (exactUnderage != null) return exactUnderage;
 
             return PickCollateralCandidate(pool, pKingdom, pKing, legitimateLineage, legitimateShi,
-                pRequireLegitimateShi: false, pRequireAdult: false);
+                pRequireLegitimateShi: false, pRequireAdult: false, pRequireAgnatic: false);
         }
 
         private static List<Actor> CollectSuccessionCandidatePool(Kingdom pKingdom)
@@ -458,14 +537,15 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static Actor PickCollateralCandidate(List<Actor> pCandidates, Kingdom pKingdom, Actor pKing,
-            long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult)
+            long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult,
+            bool pRequireAgnatic)
         {
             Actor best = null;
             int bestScore = int.MaxValue;
             foreach (Actor candidate in pCandidates)
             {
                 if (!IsCollateralCandidate(candidate, pKingdom, pKing, pLegitimateLineage, pLegitimateShi,
-                        pRequireLegitimateShi, pRequireAdult))
+                        pRequireLegitimateShi, pRequireAdult, pRequireAgnatic))
                     continue;
 
                 int score = CollateralCandidateScore(candidate, pKing, pLegitimateShi);
@@ -477,7 +557,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static bool IsCollateralCandidate(Actor pActor, Kingdom pKingdom, Actor pKing,
-            long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult)
+            long pLegitimateLineage, long pLegitimateShi, bool pRequireLegitimateShi, bool pRequireAdult,
+            bool pRequireAgnatic)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
             if (pActor == pKing) return false;
@@ -494,6 +575,15 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineage, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long shi, -1L);
             if (lineage != pLegitimateLineage) return false;
+
+            bool agnatic = LineageQuery.IsAgnaticDescendant(pActor.data.id, pLegitimateLineage);
+            if (pRequireAgnatic)
+                // 男系同姓即合格,氏(分支)可不同。成年/未成年已由上面的 pRequireAdult 分档,这里传 isAdult:true。
+                return MandateSuccessionRules.IsValidCollateralRestorationCandidate(
+                    isXia: true, isMale: true, isAlive: true, isAdult: true, isKing: false,
+                    hasMadness: false, sameLineage: true, belongsToLegitimateShi: true,
+                    canTraceToLegitimateBranch: true, requireAgnatic: true, isAgnaticLineDescendant: agnatic);
+
             bool canRestore = CollateralRestorationTraceService.CanRestoreToLegitimateShi(
                 pActor, pLegitimateLineage, pLegitimateShi);
             if (pRequireLegitimateShi)

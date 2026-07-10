@@ -20,6 +20,13 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        // 氏族大谱(氏族大树)只显示男性;女性只在家族树里可见。status 钩子保留以后可扩展。
+        public static bool ShouldShowInBigTree(int pSex, string pStatus)
+        {
+            if (pSex != 0) return false; // 非男性(女性)不进氏族大树
+            return ShouldShowStatusInGenealogy(pStatus);
+        }
+
         public static List<long> MergeRelationIds(params IEnumerable<long>[] pSources)
         {
             var result = new List<long>();

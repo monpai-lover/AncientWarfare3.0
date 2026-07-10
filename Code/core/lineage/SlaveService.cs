@@ -1506,7 +1506,8 @@ namespace AncientWarfare3.core.lineage
             if (pRequireWarrior && !pActor.isWarrior()) return false;
             if (IsSlave(pActor) || IsRetiredSoldier(pActor)) return false;
             if (pActor.isKing() || pActor.isCityLeader()) return false;
-            if (GeneralService.IsGeneral(pActor) || GeneralService.IsFiefHolder(pActor)) return false;
+            // 热路径:只读将领标志(不查 DB)。IsFiefHolder 在此冗余(封君必是将领,IsGeneral 已涵盖)。
+            if (GeneralService.IsActiveGeneralFast(pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
             if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
             if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;

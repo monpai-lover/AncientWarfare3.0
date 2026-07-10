@@ -10,12 +10,14 @@ namespace AncientWarfare3.core.lineage
         public static bool IsNobleActor(Actor pActor)
         {
             if (pActor?.data == null) return false;
+            // 短路重排(等价原 ShouldUseAwLineageSystem,但把 IsXiaKingdom 从~4 次降到≤1 次):
+            // 无谱系的平民/奴隶最多,先廉价出局;Xia 角色不碰王国判定;其余才算一次王国级判定。
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
-            return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
-                LineageService.IsXia(pActor),
-                XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom),
-                LineageService.IsXiaKingdom(pActor.kingdom),
-                lid >= 0);
+            if (lid < 0) return false;
+            if (LineageService.IsXia(pActor)) return true;
+            Kingdom kingdom = pActor.kingdom;
+            if (LineageService.IsXiaKingdom(kingdom)) return true;
+            return XiaizationService.UsesXiaizedInstitutionSystem(kingdom);
         }
 
         /// <summary>是否"重要人物":国王 / 城主 / 历史人物。用于重要击杀等跨门槛判定。</summary>

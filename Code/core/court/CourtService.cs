@@ -22,6 +22,7 @@ namespace AncientWarfare3.core.court
 
     internal sealed class CourtOfficerView
     {
+        public long actor_id = -1L;
         public string actor_name = "";
         public string office_id = "";
         public string school_id = "";
@@ -53,6 +54,17 @@ namespace AncientWarfare3.core.court
             return KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom) && !HasOfficialCourt(pKingdom);
         }
 
+        public static bool HasThreeDepartments(Kingdom pKingdom)
+        {
+            return HasOfficialCourt(pKingdom) &&
+                   KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_three_departments");
+        }
+
+        public static string ResolveTier(Kingdom pKingdom)
+        {
+            return CourtTierRules.ResolveTier(HasOfficialCourt(pKingdom), HasThreeDepartments(pKingdom));
+        }
+
         public static CourtSnapshot GetSnapshot(Kingdom pKingdom)
         {
             var snapshot = new CourtSnapshot();
@@ -77,7 +89,7 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, INFLUENCE FROM " +
+                cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, INFLUENCE, ACTOR_ID FROM " +
                     CourtOfficerTableItem.GetTableName() +
                     " WHERE KINGDOM_ID = @kid AND ACTIVE = 1 ORDER BY INFLUENCE DESC LIMIT @lim";
                 cmd.Parameters.AddWithValue("@kid", pKingdom.id);
@@ -92,7 +104,8 @@ namespace AncientWarfare3.core.court
                         school_id = reader.IsDBNull(2) ? "" : reader.GetValue(2)?.ToString() ?? "",
                         layer = reader.IsDBNull(3) ? "" : reader.GetValue(3)?.ToString() ?? "",
                         city_id = reader.IsDBNull(4) ? -1L : Convert.ToInt64(reader.GetValue(4)),
-                        influence = reader.IsDBNull(5) ? 0f : (float)Convert.ToDouble(reader.GetValue(5))
+                        influence = reader.IsDBNull(5) ? 0f : (float)Convert.ToDouble(reader.GetValue(5)),
+                        actor_id = reader.IsDBNull(6) ? -1L : Convert.ToInt64(reader.GetValue(6))
                     });
                 }
             }
@@ -148,17 +161,27 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtFounded(pKingdom, targetMode == "official");
             }
 
+            // 官场历史层级(原始 → 三公九卿 → 三省六部):升级时记一次朝廷改制史。
+            string tier = ResolveTier(pKingdom);
+            pKingdom.data.get(LineageKeys.COURT_TIER, out string previousTier, "");
+            if (previousTier != tier)
+            {
+                pKingdom.data.set(LineageKeys.COURT_TIER, tier);
+                if (CourtTierRules.IsUpgrade(previousTier, tier))
+                    ChronicleEvents.OnCourtTierUpgraded(pKingdom, tier);
+            }
+
             List<Actor> yearRoster = CourtRules.ShouldUseSingleYearRoster(CourtRules.CentralOfficeCount)
                 ? BuildYearRoster(pKingdom)
                 : null;
 
             long benchmark = UpdateAgeBenchmark.Begin();
-            try { ValidateOfficers(pKingdom, yearRoster); }
+            try { ValidateOfficers(pKingdom, yearRoster, tier); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtOfficerValidateIndex, benchmark); }
 
             HashSet<string> occupiedOffices = BuildActiveOfficeSet(pKingdom, yearRoster);
             benchmark = UpdateAgeBenchmark.Begin();
-            try { EnsureMinimumCourt(pKingdom, yearRoster, occupiedOffices); }
+            try { EnsureMinimumCourt(pKingdom, yearRoster, occupiedOffices, tier); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtCandidateRefreshIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();
@@ -174,8 +197,9 @@ namespace AncientWarfare3.core.court
             UpsertCourtSnapshot(pKingdom);
         }
 
-        private static void ValidateOfficers(Kingdom pKingdom, List<Actor> pRoster)
+        private static void ValidateOfficers(Kingdom pKingdom, List<Actor> pRoster, string pTier)
         {
+            var tierOffices = new HashSet<string>(CourtTierRules.CentralOfficesForTier(pTier), StringComparer.Ordinal);
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
@@ -186,24 +210,32 @@ namespace AncientWarfare3.core.court
                     sameKingdom: actor.kingdom == pKingdom,
                     slave: actor.hasTrait(LineageKeys.TRAIT_SLAVE),
                     madness: actor.hasTrait("madness"));
-                if (valid) SyncSchoolTrait(actor, active: true);
-                else ClearOfficer(actor, "invalid");
+                if (!valid) { ClearOfficer(actor, "invalid"); continue; }
+
+                // 改制后清退不属于当前层级的中央官(旧三公九卿官在升三省六部后退场)。
+                actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+                actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+                if (layer == CourtOfficeLayer.Central && tierOffices.Count > 0 &&
+                    !string.IsNullOrEmpty(office) && !tierOffices.Contains(office))
+                {
+                    ClearOfficer(actor, "reform");
+                    continue;
+                }
+                SyncSchoolTrait(actor, active: true);
             }
         }
 
-        private static void EnsureMinimumCourt(Kingdom pKingdom, List<Actor> pRoster, HashSet<string> pOccupiedOffices)
+        private static void EnsureMinimumCourt(Kingdom pKingdom, List<Actor> pRoster,
+            HashSet<string> pOccupiedOffices, string pTier)
         {
             if (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)) return;
 
             AssignKingIfEmpty(pKingdom, pOccupiedOffices);
             if (!HasOfficialCourt(pKingdom)) return;
 
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Chancellor, CourtSchoolId.Ru);
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Censor, CourtSchoolId.Legalist);
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Marshal, CourtSchoolId.Military);
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Justice, CourtSchoolId.Legalist);
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Steward, CourtSchoolId.Agrarian);
-            FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, CourtOfficeId.Erudite, CourtSchoolId.Ru);
+            foreach (string office in CourtTierRules.CentralOfficesForTier(pTier))
+                FillCentralOffice(pKingdom, pRoster, pOccupiedOffices, office,
+                    CourtTierRules.PreferredSchoolForOffice(office));
         }
 
         private static void AssignKingIfEmpty(Kingdom pKingdom, HashSet<string> pOccupiedOffices)

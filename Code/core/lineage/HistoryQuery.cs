@@ -411,7 +411,9 @@ namespace AncientWarfare3.core.lineage
                 string key = ownerToken + "|" + (reign == null ? "owner" : (reign.king_actor_id + "@" + reign.start_time.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
                 if (current == null || key != currentKey)
                 {
-                    double start = ownerStart;
+                    // 首段(或刚换国主)才用国主取得城市的时间;同一国主内翻转出的新段用事件自身时间,
+                    // 避免间位期/城内事件段错误沿用陈旧的建城时间(导致"多个建城日段""段起点错配")。
+                    double start = (current == null || !sameOwner) ? ownerStart : e.world_time;
                     if (reign != null && reign.start_time > start) start = reign.start_time;
                     if (current != null)
                         current.end_time = HistoryPeriodRules.NormalizeEndTime(current.start_time, start);

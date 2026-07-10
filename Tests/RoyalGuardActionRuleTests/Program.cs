@@ -17,6 +17,7 @@ namespace RoyalGuardActionRuleTests
 
             ExpectRecruitmentBatching();
             ExpectRuntimeRefreshBatching();
+            ExpectGraphicsRebuildBudget();
             ExpectDismissScanGate();
 
             if (RoyalGuardActionRules.WaitAfterNoThreat(2f, 5f) != 2f)
@@ -81,6 +82,19 @@ namespace RoyalGuardActionRuleTests
                     pRuntimeRefreshesApplied: 0,
                     pRuntimeRefreshLimit: 4))
                 throw new Exception("Expected stable guards to skip runtime refresh.");
+        }
+
+        private static void ExpectGraphicsRebuildBudget()
+        {
+            if (RoyalGuardMaintenanceRules.ShouldRebuildGuardGraphicsNow(
+                    pGfxDirty: false, pRebuiltThisPass: 0, pBudget: 2))
+                throw new Exception("Expected a clean guard to skip the graphics rebuild.");
+            if (!RoyalGuardMaintenanceRules.ShouldRebuildGuardGraphicsNow(
+                    pGfxDirty: true, pRebuiltThisPass: 1, pBudget: 2))
+                throw new Exception("Expected a dirty guard below the per-pass budget to rebuild.");
+            if (RoyalGuardMaintenanceRules.ShouldRebuildGuardGraphicsNow(
+                    pGfxDirty: true, pRebuiltThisPass: 2, pBudget: 2))
+                throw new Exception("Expected the graphics rebuild to defer once the per-pass budget is spent.");
         }
 
         private static void ExpectRecruitmentBatching()

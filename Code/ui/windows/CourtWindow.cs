@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 using NeoModLoader.api;
@@ -30,6 +31,17 @@ namespace AncientWarfare3.ui.windows
             ScrollWindow sw = GetComponent<ScrollWindow>();
             if (sw?.titleText != null)
                 sw.titleText.text = AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
+
+            EnsureContentMask();
+        }
+
+        // 给内容视口挂遮罩，把正文裁剪在窗体框内，避免文字溢出到左侧游戏工具栏上。
+        private void EnsureContentMask()
+        {
+            Transform viewport = ContentTransform != null ? ContentTransform.parent : null;
+            if (viewport == null) return;
+            if (viewport.GetComponent<RectMask2D>() == null)
+                viewport.gameObject.AddComponent<RectMask2D>();
         }
 
         public override void OnNormalEnable()
@@ -55,14 +67,16 @@ namespace AncientWarfare3.ui.windows
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
                 bool policyEnabled = KingdomPolicyService.IsPolicyEnabledForKingdom(kingdom);
                 bool official = policyEnabled && CourtService.HasOfficialCourt(kingdom);
+                string tier = CourtService.ResolveTier(kingdom);
                 string title = !policyEnabled
                     ? AW_L10n.Text("aw_court_button_locked", "Court Locked")
                     : official
-                    ? AW_L10n.Text("aw_court_button_official", "Hundred Schools Court")
+                    ? TierName(tier)
                     : AW_L10n.Text("aw_court_button_primitive", "Primitive Council");
 
+                Color kColor = KingdomColor(kingdom);
                 float y = 0f;
-                AddText("Header", kingdom.name + " - " + title, y, HEADER_H, 12, Color.white);
+                AddText("Header", kingdom.name + " - " + title, y, HEADER_H, 12, kColor);
                 y += HEADER_H + 4f;
 
                 AddText("Mode", AW_L10n.Text("aw_policy_status", "Status") + ": " + title,
@@ -187,7 +201,7 @@ namespace AncientWarfare3.ui.windows
                 CourtOfficerView o = officers[i];
                 string line = OfficeName(o.office_id) + " - " + o.actor_name +
                               " (" + SchoolName(o.school_id) + ")";
-                AddText("Officer" + i, line, pY, ROW_H, 10, Color.white);
+                AddClickableText("Officer" + i, line, pY, ROW_H, 10, Color.white, o.actor_id);
                 pY += ROW_H;
             }
             return pY;
@@ -219,6 +233,47 @@ namespace AncientWarfare3.ui.windows
         private static string OfficeName(string pOfficeId)
         {
             return AW_L10n.Text("aw_court_office_" + (pOfficeId ?? ""), pOfficeId ?? "");
+        }
+
+        private static string TierName(string pTier)
+        {
+            switch (pTier)
+            {
+                case CourtTier.SanShengLiuBu:
+                    return AW_L10n.Text("aw_court_tier_sanshengliubu", "Three Departments and Six Ministries");
+                case CourtTier.SanGongJiuQing:
+                    return AW_L10n.Text("aw_court_tier_sangongjiuqing", "Three Excellencies and Nine Ministers");
+                default:
+                    return AW_L10n.Text("aw_court_button_primitive", "Primitive Council");
+            }
+        }
+
+        private static Color KingdomColor(Kingdom pKingdom)
+        {
+            string hex = HistoryColors.FromKingdom(pKingdom);
+            if (!string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out Color c))
+                return new Color(c.r, c.g, c.b, 1f);
+            return Color.white;
+        }
+
+        // 与 AddText 相同,但让该行可点击打开对应人物窗口(仿 EmpireCraft 的可点官员)。
+        private void AddClickableText(string pName, string pText, float pY, float pHeight, int pSize,
+            Color pColor, long pActorId)
+        {
+            AddText(pName, pText, pY, pHeight, pSize, pColor);
+            if (pActorId < 0 || ContentTransform == null) return;
+            Transform t = ContentTransform.Find(pName);
+            if (t == null) return;
+            Text txt = t.GetComponent<Text>();
+            if (txt != null) txt.raycastTarget = true;
+            Button btn = t.gameObject.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            btn.onClick.RemoveAllListeners();
+            long id = pActorId;
+            btn.onClick.AddListener(() =>
+            {
+                Actor actor = World.world?.units?.get(id);
+                if (actor != null && !actor.isRekt()) ActionLibrary.openUnitWindow(actor);
+            });
         }
 
         private static List<string> BuildFactionRows(string pEncoded)

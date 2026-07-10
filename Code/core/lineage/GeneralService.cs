@@ -91,6 +91,18 @@ namespace AncientWarfare3.core.lineage
             return ReadGeneralActive(pActor.data.id);
         }
 
+        /// <summary>
+        ///     热路径专用:只读 live 的 GENERAL_ACTIVE 标志,**不查 DB**。将领/封君在运行时都会置此标志,
+        ///     足以在批量筛选里排除。读档瞬时可能漏判(下一维护轮自愈),换取零 DB 开销——
+        ///     用于奴隶军/禁卫军等 per-unit 循环,避免每人一次 SQLite 查询。
+        /// </summary>
+        public static bool IsActiveGeneralFast(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.GENERAL_ACTIVE, out bool active, false);
+            return active;
+        }
+
         public static bool IsFiefHolder(Actor pActor)
         {
             return IsGeneral(pActor) && FiefService.GetFiefCityId(pActor) >= 0;
