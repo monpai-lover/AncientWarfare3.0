@@ -85,6 +85,9 @@ namespace SuccessionGovernmentRuleTests
             Expect(SuccessionTransitionRules.ShouldUseCachedHeir(
                     pSuccessionPending: true, pCachedHeirEligible: true),
                 "A prepared heir must survive timer_new_king.");
+            Expect(SuccessionTransitionRules.ShouldUseCachedHeir(
+                    pSuccessionPending: false, pCachedHeirEligible: true),
+                "The prepared surviving brother must still be used after timer_new_king expires and vanilla clears the king.");
             Expect(!SuccessionTransitionRules.ShouldOverwriteCachedHeir(
                     pSuccessionPending: true, pHasReferenceKing: true),
                 "Read-only vacancy lookup must not overwrite aw_heir_id.");

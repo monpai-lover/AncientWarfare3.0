@@ -43,7 +43,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldUseCachedHeir(bool pSuccessionPending, bool pCachedHeirEligible)
         {
-            return pSuccessionPending && pCachedHeirEligible;
+            return pCachedHeirEligible;
         }
 
         public static bool ShouldOverwriteCachedHeir(bool pSuccessionPending, bool pHasReferenceKing)

@@ -786,3 +786,28 @@ rank 1 still leads and the current rank 2 is recorded before a vacancy.
 Run the royal-guard and succession rule projects sequentially, then repeat all
 11 rule projects, the main build, `git diff --check`, repository status, and the
 approved-behavior audit from Task 9.
+
+### Task 11: Preserve the selected collateral heir after vanilla clears the king
+
+**Files:**
+- Modify: `Code/core/lineage/SuccessionTransitionRules.cs`
+- Test: `Tests/SuccessionGovernmentRuleTests/Program.cs`
+
+- [ ] **Step 1: Reproduce the post-timer cache loss**
+
+Model the exact sequence in which the crown prince and his son are dead, a
+surviving brother is selected before the old king dies, `timer_new_king` later
+expires, and vanilla `clearKingData()` removes the king object. Confirm the old
+rule rejects the still-eligible prepared brother after the timer reaches zero.
+
+- [ ] **Step 2: Prefer every eligible prepared heir at accession time**
+
+Allow `GetHeir()` to return the registered heir whenever `PeekRegisteredHeir`
+still validates it, regardless of the timer value. Keep explicit `RefreshHeir`
+calls responsible for selecting the next heir after births and accession, and
+fall back to genealogy only when the prepared actor is missing or ineligible.
+
+- [ ] **Step 3: Run focused and full verification**
+
+Run the succession rule project first, followed by all rule projects, the main
+build, `git diff --check`, and a clean-status check after committing.
