@@ -12,6 +12,15 @@ namespace AncientWarfare3.core.lineage
             return pHasEnemyWar && pInEnemyTerritory;
         }
 
+        public static int CityFallSlaveTargetCount(int pEligibleCount, float pRatio, int pMaximum)
+        {
+            if (pEligibleCount <= 0) return 0;
+            int maximum = System.Math.Max(1, pMaximum);
+            int target = System.Math.Max(1,
+                (int)System.Math.Ceiling(pEligibleCount * System.Math.Max(0f, pRatio)));
+            return System.Math.Min(maximum, target);
+        }
+
         public static float WaitAfterNoTarget(float pMin, float pMax)
         {
             return ClampMin(pMin, pMax);

@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.policy
         public const string Retirements = "aw3_city_retirements";
         public const string SlaveLabor = "aw3_city_slave_labor";
         public const string SlaveCatchers = "aw3_city_slave_catchers";
+        public const string SlaveArmy = "aw3_city_slave_army";
         public const string RoyalGuard = "aw3_city_royal_guard";
         public const string FiefCommand = "aw3_city_fief_command";
         public const string ArmyCleanup = "aw3_city_army_cleanup";
@@ -43,6 +44,10 @@ namespace AncientWarfare3.core.policy
         public const string RoyalGuardRefreshPersist = "aw3_city_royal_guard_refresh_persist";
         public const string RoyalGuardRefreshRuntime = "aw3_city_royal_guard_refresh_runtime";
         public const string RoyalGuardDismiss = "aw3_city_royal_guard_dismiss";
+        public const string RoyalGuardThreatScan = "aw3_ai_royal_guard_threat_scan";
+        public const string SlaveCatcherTargetScan = "aw3_ai_slave_catcher_target_scan";
+        public const string SlaveArmyFrontlineScan = "aw3_ai_slave_army_frontline_scan";
+        public const string SlaveMeritPersist = "aw3_slave_merit_persist";
         public const string ArmyCleanupGuardStrip = "aw3_city_army_cleanup_guard_strip";
         public const string ArmyCleanupSlaveCaptain = "aw3_city_army_cleanup_slave_captain";
         public const string ArmyCleanupSlaveName = "aw3_city_army_cleanup_slave_name";
@@ -65,6 +70,7 @@ namespace AncientWarfare3.core.policy
             Retirements,
             SlaveLabor,
             SlaveCatchers,
+            SlaveArmy,
             RoyalGuard,
             FiefCommand,
             ArmyCleanup,
@@ -99,6 +105,10 @@ namespace AncientWarfare3.core.policy
             RoyalGuardRefreshPersist,
             RoyalGuardRefreshRuntime,
             RoyalGuardDismiss,
+            RoyalGuardThreatScan,
+            SlaveCatcherTargetScan,
+            SlaveArmyFrontlineScan,
+            SlaveMeritPersist,
             ArmyCleanupGuardStrip,
             ArmyCleanupSlaveCaptain,
             ArmyCleanupSlaveName,

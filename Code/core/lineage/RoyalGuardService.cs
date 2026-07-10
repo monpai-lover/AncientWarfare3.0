@@ -30,6 +30,8 @@ namespace AncientWarfare3.core.lineage
         private const int PATROL_MIN_RADIUS = 2;
         private const int PATROL_MAX_RADIUS = 4;
         private const int PATROL_PHASE_INTERVAL = 8;
+        private const int MAP_CHUNK_SIZE = 16;
+        private const int SEARCH_COOLDOWN_PRUNE_THRESHOLD = 256;
         private const double THREAT_SEARCH_MISS_COOLDOWN = 2.0;
         private static readonly MethodInfo NewArmyObjectMethod = ResolveNewArmyObjectMethod();
         private static readonly Dictionary<long, double> ThreatSearchNextAllowed = new Dictionary<long, double>();
@@ -41,6 +43,11 @@ namespace AncientWarfare3.core.lineage
             public Actor actor;
             public float score;
             public bool noble;
+        }
+
+        internal static void ClearRuntimeCaches()
+        {
+            ThreatSearchNextAllowed.Clear();
         }
 
         public static bool IsRoyalGuard(Actor pActor)
@@ -246,7 +253,17 @@ namespace AncientWarfare3.core.lineage
         public static void StripGuardsFromNormalArmy(Army pArmy)
         {
             if (pArmy == null) return;
-            if (IsRoyalGuardArmy(pArmy)) return;
+            bool guardArmy = IsRoyalGuardArmy(pArmy);
+            Kingdom kingdom = null;
+            try { kingdom = pArmy.getKingdom(); }
+            catch { }
+            if (kingdom?.data == null)
+            {
+                try { kingdom = pArmy.getCity()?.kingdom; }
+                catch { }
+            }
+            if (!RoyalGuardMaintenanceRules.ShouldInspectNormalArmyForGuards(
+                    guardArmy, HasKingdomGuardStateHint(kingdom))) return;
 
             foreach (Actor unit in new List<Actor>(pArmy.getUnits()))
             {
@@ -317,20 +334,38 @@ namespace AncientWarfare3.core.lineage
 
             Actor best = null;
             int bestDist = int.MaxValue;
-            using ListPool<Kingdom> enemies = kingdom.getEnemiesKingdoms();
-            foreach (Kingdom enemy in enemies)
+            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardThreatScan,
+                CityMaintenanceBenchmarkRules.Group);
+            try
             {
-                if (enemy?.data == null) continue;
-                foreach (Actor unit in enemy.getUnits())
+                int kingChunkRadius = ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(
+                    PROTECT_RADIUS, MAP_CHUNK_SIZE);
+                foreach (Actor unit in Finder.getUnitsFromChunk(
+                             king.current_tile, kingChunkRadius, PROTECT_RADIUS))
                 {
                     if (!IsValidThreatForGuardCore(pGuard, kingdom, king, unit)) continue;
                     int dist = Toolbox.SquaredDistTile(king.current_tile, unit.current_tile);
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        best = unit;
-                    }
+                    if (dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = unit;
                 }
+
+                int guardChunkRadius = ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(
+                    FOLLOW_RADIUS, MAP_CHUNK_SIZE);
+                foreach (Actor unit in Finder.getUnitsFromChunk(
+                             pGuard.current_tile, guardChunkRadius, FOLLOW_RADIUS))
+                {
+                    if (!IsValidThreatForGuardCore(pGuard, kingdom, king, unit)) continue;
+                    int dist = Toolbox.SquaredDistTile(king.current_tile, unit.current_tile);
+                    if (dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = unit;
+                }
+            }
+            finally
+            {
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardThreatScan,
+                    CityMaintenanceBenchmarkRules.Group);
             }
             MarkThreatSearchResult(pGuard, best);
             return best;
@@ -385,8 +420,24 @@ namespace AncientWarfare3.core.lineage
         {
             if (pGuard?.data == null) return false;
             double now = LineageService.CurTime();
-            ThreatSearchNextAllowed.TryGetValue(pGuard.data.id, out double nextAllowed);
-            return ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed);
+            if (ThreatSearchNextAllowed.TryGetValue(pGuard.data.id, out double nextAllowed))
+            {
+                if (!ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed)) return false;
+                ThreatSearchNextAllowed.Remove(pGuard.data.id);
+            }
+            if (ThreatSearchNextAllowed.Count > SEARCH_COOLDOWN_PRUNE_THRESHOLD)
+                PruneExpiredThreatSearchCooldowns(now);
+            return true;
+        }
+
+        private static void PruneExpiredThreatSearchCooldowns(double pNow)
+        {
+            var expired = new List<long>();
+            foreach (KeyValuePair<long, double> entry in ThreatSearchNextAllowed)
+                if (entry.Value <= pNow)
+                    expired.Add(entry.Key);
+            foreach (long id in expired)
+                ThreatSearchNextAllowed.Remove(id);
         }
 
         private static bool ShouldSearchThreatsNow(Actor pGuard, Kingdom pKingdom, Actor pKing, bool pDirectAttack)
@@ -1165,7 +1216,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return false;
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_RECORDED, out bool recorded, false);
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_ARMY_ID, out long armyId, -1L);
-            return recorded || armyId >= 0;
+            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ROSTER_IDS, out string roster, "");
+            return recorded || armyId >= 0 || !string.IsNullOrEmpty(roster);
         }
 
         private static void ClearKingdomGuardStateHints(Kingdom pKingdom)
@@ -1188,6 +1240,8 @@ namespace AncientWarfare3.core.lineage
             bool pUpdateRoster)
         {
             if (pActor?.data == null || !IsRoyalGuard(pActor)) return;
+
+            ThreatSearchNextAllowed.Remove(pActor.data.id);
 
             Kingdom kingdom = pActor.kingdom;
             City city = pActor.city;

@@ -35,6 +35,12 @@ namespace AncientWarfare3.core.lineage
         private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
         private const int CITY_SLAVE_ARMY_CHECK_INTERVAL = 20;
         private const int SLAVE_ARMY_FAILED_MAINTENANCE_COOLDOWN = 60;
+        private const int MAP_CHUNK_SIZE = 16;
+        private const int SEARCH_COOLDOWN_PRUNE_THRESHOLD = 256;
+        private const int FRONTLINE_CACHE_LIMIT = 128;
+        private const int CITY_WARRIOR_COUNT_CACHE_LIMIT = 512;
+        private const double FRONTLINE_CACHE_TTL = 10.0;
+        private const double CITY_WARRIOR_COUNT_CACHE_TTL = 1.0;
         private const double SLAVE_CAPTURE_SEARCH_MISS_COOLDOWN = 2.0;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MIN = 3f;
         private const float SLAVE_CAPTURE_NO_TARGET_WAIT_MAX = 8f;
@@ -46,13 +52,39 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, double> CaptureSearchNextAllowed = new Dictionary<long, double>();
         private static readonly Dictionary<long, List<PendingSlaveCaptureSummary>> PendingWarSlaveCaptures =
             new Dictionary<long, List<PendingSlaveCaptureSummary>>();
+        private static readonly Dictionary<string, FrontlineTargetCacheEntry> FrontlineTargetCache =
+            new Dictionary<string, FrontlineTargetCacheEntry>();
+        private static readonly Dictionary<long, CityWarriorCountCacheEntry> CityWarriorCountCache =
+            new Dictionary<long, CityWarriorCountCacheEntry>();
         private static bool _formingSlaveArmy;
+
+        private sealed class FrontlineTargetCacheEntry
+        {
+            public long targetId;
+            public double expiresAt;
+        }
+
+        private sealed class CityWarriorCountCacheEntry
+        {
+            public int total;
+            public int slaves;
+            public int nonSlaves;
+            public double expiresAt;
+        }
 
         private sealed class PendingSlaveCaptureSummary
         {
             public City city;
             public string cityName;
             public int count;
+        }
+
+        internal static void ClearRuntimeCaches()
+        {
+            CaptureSearchNextAllowed.Clear();
+            FrontlineTargetCache.Clear();
+            CityWarriorCountCache.Clear();
+            PendingWarSlaveCaptures.Clear();
         }
 
         public static bool IsSlave(Actor pActor)
@@ -124,7 +156,7 @@ namespace AncientWarfare3.core.lineage
                     pForceCount: pForceCount))
                 return;
 
-            int quota = CountSlaves(pCity) > 0 ? (int)(pCity.countFood() * 0.1f) : 0;
+            int quota = HasAnySlave(pCity) ? (int)(pCity.countFood() * 0.1f) : 0;
             pCity.data.set(LineageKeys.SLAVE_FOOD_YEAR, Date.getCurrentYear());
             pCity.data.set(LineageKeys.SLAVE_FOOD_QUOTA, quota);
         }
@@ -195,11 +227,14 @@ namespace AncientWarfare3.core.lineage
             int bestDist = int.MaxValue;
             int radius = Math.Max(pSearchRadius, SLAVE_CATCHER_SEARCH_RADIUS);
             int maxDist = radius * radius;
-            using ListPool<Kingdom> enemies = pCatcher.kingdom.getEnemiesKingdoms();
-            foreach (Kingdom enemy in enemies)
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatcherTargetScan,
+                CityMaintenanceBenchmarkRules.Group);
+            try
             {
-                if (enemy?.data == null) continue;
-                foreach (Actor target in enemy.getUnits())
+                int chunkRadius = ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(
+                    radius, MAP_CHUNK_SIZE);
+                foreach (Actor target in Finder.getUnitsFromChunk(
+                             pCatcher.current_tile, chunkRadius, radius))
                 {
                     if (!CanCaptureTargetForKnownCatcher(pCatcher, target)) continue;
                     int dist = Toolbox.SquaredDistTile(pCatcher.current_tile, target.current_tile);
@@ -207,6 +242,11 @@ namespace AncientWarfare3.core.lineage
                     bestDist = dist;
                     best = target;
                 }
+            }
+            finally
+            {
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatcherTargetScan,
+                    CityMaintenanceBenchmarkRules.Group);
             }
             MarkCaptureSearchResult(pCatcher, best);
             return best;
@@ -359,6 +399,9 @@ namespace AncientWarfare3.core.lineage
                                            CapturedRulerCaptureRules.ShouldReleaseAsNobleDependent(
                                                wasKing, wasLeader);
             ApplySlaveIdentity(pActor, pReason, pCaptor);
+            InvalidateCityWarriorCounts(pActor.city);
+            if (pContextCity != pActor.city)
+                InvalidateCityWarriorCounts(pContextCity);
             if (preserveCapturedRuler)
                 RememberCapturedRulerContext(pActor, formerKingdom);
             UpsertSlaveState(pActor, pActive: true, pContextCity, pContextKingdom);
@@ -414,6 +457,7 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, lineageId >= 0 ? LineageStatus.COMMON : LineageStatus.NONE);
+            InvalidateCityWarriorCounts(pActor.city);
 
             LineageService.ApplyDisplayName(pActor);
             LineageService.ArchiveActor(pActor, pAlive: true);
@@ -454,6 +498,7 @@ namespace AncientWarfare3.core.lineage
             if (!HasServedEnoughForRetirement(pActor)) return false;
 
             pActor.stopBeingWarrior();
+            InvalidateCityWarriorCounts(pActor.city);
             pActor.data.set(LineageKeys.RETIRED_SOLDIER, true);
             pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
             if (!pActor.hasTrait(LineageKeys.TRAIT_VETERAN)) pActor.addTrait(LineageKeys.TRAIT_VETERAN);
@@ -517,7 +562,8 @@ namespace AncientWarfare3.core.lineage
 
             if (!CanUseSlaveArmy(pCity)) return true;
 
-            CountCityWarriors(pCity, out int totalWarriors, out int slaveWarriors, out int nonSlaveWarriors);
+            CountCityWarriorsCached(pCity,
+                out int totalWarriors, out int slaveWarriors, out int nonSlaveWarriors);
             if (nonSlaveWarriors <= 0) return true;
 
             int nextTotal = totalWarriors + 1;
@@ -528,6 +574,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnMadeWarrior(City pCity, Actor pActor)
         {
+            InvalidateCityWarriorCounts(pCity ?? pActor?.city);
             if (pActor?.data == null) return;
             if (!IsSupportedSlaveryActor(pActor)) return;
 
@@ -576,9 +623,28 @@ namespace AncientWarfare3.core.lineage
             else if (pDead.isWarrior()) points = 2;
 
             pKiller.data.get(LineageKeys.SLAVE_MERIT, out int merit, 0);
+            int oldMerit = merit;
             merit += points;
             pKiller.data.set(LineageKeys.SLAVE_MERIT, merit);
-            UpsertSlaveState(pKiller, pActive: true, pKiller.city, pKiller.kingdom);
+            if (SlaveMeritPersistenceRules.ShouldPersist(
+                    pOldMerit: oldMerit,
+                    pNewMerit: merit,
+                    pPoints: points,
+                    pMilestone: 4,
+                    pFreedomThreshold: MERIT_FOR_FREEDOM))
+            {
+                Bench.bench(CityMaintenanceBenchmarkRules.SlaveMeritPersist,
+                    CityMaintenanceBenchmarkRules.Group);
+                try
+                {
+                    UpsertSlaveState(pKiller, pActive: true, pKiller.city, pKiller.kingdom);
+                }
+                finally
+                {
+                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveMeritPersist,
+                        CityMaintenanceBenchmarkRules.Group);
+                }
+            }
 
             if (points >= 4 || merit >= MERIT_FOR_FREEDOM)
                 ChronicleEvents.OnSlaveMerit(pKiller, points, merit, pKiller.kingdom, pKiller.city);
@@ -593,17 +659,21 @@ namespace AncientWarfare3.core.lineage
             if (pOldKingdom == null || pOldKingdom == pNewKingdom) return;
             if (!IsSlaveryEnabled(pNewKingdom)) return;
 
-            var candidates = new List<Actor>();
+            var candidates = new List<Actor>(MAX_CITY_FALL_SLAVES);
+            int eligibleCount = 0;
             foreach (Actor unit in pCity.getUnits())
             {
                 if (unit?.data == null) continue;
                 if (!unit.isAdult()) continue;
                 if (!CanBeEnslaved(unit)) continue;
-                candidates.Add(unit);
+                eligibleCount++;
+                if (candidates.Count < MAX_CITY_FALL_SLAVES)
+                    candidates.Add(unit);
             }
 
-            if (candidates.Count == 0) return;
-            int target = Math.Min(MAX_CITY_FALL_SLAVES, Math.Max(1, (int)Math.Ceiling(candidates.Count * CITY_FALL_SLAVE_RATIO)));
+            int target = SlaveCaptureCommandRules.CityFallSlaveTargetCount(
+                eligibleCount, CITY_FALL_SLAVE_RATIO, MAX_CITY_FALL_SLAVES);
+            if (target <= 0) return;
             int enslaved = 0;
             for (int i = 0; i < target && i < candidates.Count; i++)
                 if (Enslave(candidates[i], "city_fall", null, pCity, pNewKingdom) &&
@@ -657,11 +727,20 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return;
             Kingdom kingdom = pCity.kingdom;
             if (kingdom?.data == null) return;
+            bool slaveryEnabled = IsSlaveryEnabled(kingdom);
+            if (!slaveryEnabled) return;
 
             pCity.data.get(LineageKeys.SLAVE_LABOR_RECORDED, out long recordedKingdomId, -1L);
-            if (recordedKingdomId == kingdom.id) return;
-            if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_LABOR_LAST_CHECK,
-                    CITY_SLAVE_LABOR_CHECK_INTERVAL)) return;
+            bool alreadyRecorded = recordedKingdomId == kingdom.id;
+            if (alreadyRecorded) return;
+            bool maintenanceDue = pForce || ShouldRunCityMaintenanceStaggered(
+                pCity, LineageKeys.SLAVE_LABOR_LAST_CHECK, CITY_SLAVE_LABOR_CHECK_INTERVAL);
+            if (!SlaveArmyMaintenanceRules.ShouldCheckSlaveLabor(
+                    pHasCity: true,
+                    pHasKingdom: true,
+                    pSlaveryEnabled: slaveryEnabled,
+                    pAlreadyRecordedForKingdom: alreadyRecorded,
+                    pMaintenanceDue: maintenanceDue)) return;
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveLaborCount, CityMaintenanceBenchmarkRules.Group);
             int slaveCount = CountSlaves(pCity);
@@ -735,28 +814,13 @@ namespace AncientWarfare3.core.lineage
                 Actor existingCaptain = army.getCaptain();
                 bool captainValid = CanBeSlaveArmyCaptainCandidate(existingCaptain, kingdom, pCity,
                     pRequireWarrior: true);
-                if (SlaveArmyMaintenanceRules.ShouldCountCitySlavesForStableCheck(
-                        pArmyExists: true,
-                        pTotalWarriors: total,
-                        pSlaveWarriors: slaves,
-                        pNonSlaveWarriors: nonSlaves,
-                        pCaptainValid: captainValid))
-                {
-                    Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-                    slaveCount = CountSlaves(pCity);
-                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-                }
-                else
-                {
-                    slaveCount = slaves;
-                }
                 if (SlaveArmyMaintenanceRules.ShouldSkipStableArmyFill(
                         pArmyExists: true,
                         pTotalWarriors: total,
                         pSlaveWarriors: slaves,
                         pNonSlaveWarriors: nonSlaves,
                         pCaptainValid: captainValid,
-                        pCitySlaveCount: slaveCount))
+                        pCitySlaveCount: -1))
                 {
                     Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting,
                         CityMaintenanceBenchmarkRules.Group);
@@ -781,16 +845,16 @@ namespace AncientWarfare3.core.lineage
             }
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyExisting, CityMaintenanceBenchmarkRules.Group);
 
-            if (slaveCount < 0)
+            if (army == null)
             {
                 Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-                slaveCount = CountSlaves(pCity);
+                slaveCount = CountSlavesUpTo(pCity, MIN_SLAVES_FOR_SLAVE_ARMY);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmySlaveCount, CityMaintenanceBenchmarkRules.Group);
-            }
-            if (slaveCount < MIN_SLAVES_FOR_SLAVE_ARMY)
-            {
-                MarkSlaveArmyMaintenanceFailure(pCity, now);
-                return;
+                if (slaveCount < MIN_SLAVES_FOR_SLAVE_ARMY)
+                {
+                    MarkSlaveArmyMaintenanceFailure(pCity, now);
+                    return;
+                }
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyCaptain, CityMaintenanceBenchmarkRules.Group);
@@ -867,7 +931,19 @@ namespace AncientWarfare3.core.lineage
         public static void RenameArmyIfSlaveArmy(Army pArmy)
         {
             if (pArmy == null) return;
-            if (!SlaveArmyMaintenanceRules.ShouldRefreshKingdomArmyNames(IsSlaveArmy(pArmy))) return;
+            bool roleMarked = AWArmyService.IsRoleArmy(pArmy, AWArmyRole.SlaveArmy);
+            if (!roleMarked)
+            {
+                Kingdom kingdom = null;
+                try { kingdom = pArmy.getKingdom(); }
+                catch { }
+                if (kingdom?.data == null)
+                    kingdom = FindArmyAnchorCity(pArmy)?.kingdom;
+                if (!SlaveArmyMaintenanceRules.ShouldInferSlaveArmyComposition(
+                        pRoleMarkedSlaveArmy: false,
+                        pSlaveryEnabled: IsSlaveryEnabled(kingdom))) return;
+                if (!IsSlaveArmy(pArmy)) return;
+            }
             RefreshSingleSlaveArmyName(pArmy);
         }
 
@@ -1047,8 +1123,24 @@ namespace AncientWarfare3.core.lineage
         {
             if (pCatcher?.data == null) return false;
             double now = LineageService.CurTime();
-            CaptureSearchNextAllowed.TryGetValue(pCatcher.data.id, out double nextAllowed);
-            return ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed);
+            if (CaptureSearchNextAllowed.TryGetValue(pCatcher.data.id, out double nextAllowed))
+            {
+                if (!ActorAiSearchThrottleRules.ShouldSearch(now, nextAllowed)) return false;
+                CaptureSearchNextAllowed.Remove(pCatcher.data.id);
+            }
+            if (CaptureSearchNextAllowed.Count > SEARCH_COOLDOWN_PRUNE_THRESHOLD)
+                PruneExpiredCaptureSearchCooldowns(now);
+            return true;
+        }
+
+        private static void PruneExpiredCaptureSearchCooldowns(double pNow)
+        {
+            var expired = new List<long>();
+            foreach (KeyValuePair<long, double> entry in CaptureSearchNextAllowed)
+                if (entry.Value <= pNow)
+                    expired.Add(entry.Key);
+            foreach (long id in expired)
+                CaptureSearchNextAllowed.Remove(id);
         }
 
         private static bool ShouldScanCaptureTargetsFromCurrentPosition(Actor pCatcher)
@@ -1262,7 +1354,8 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null) return false;
             Kingdom kingdom = pCity.kingdom;
             if (!IsSlaveryEnabled(kingdom)) return false;
-            return IsSlaveArmyEnabled(kingdom) && CountSlaves(pCity) >= MIN_SLAVES_FOR_SLAVE_ARMY;
+            return IsSlaveArmyEnabled(kingdom) &&
+                   CountSlavesUpTo(pCity, MIN_SLAVES_FOR_SLAVE_ARMY) >= MIN_SLAVES_FOR_SLAVE_ARMY;
         }
 
         private static bool KingdomHasEnemies(Kingdom pKingdom)
@@ -1465,6 +1558,13 @@ namespace AncientWarfare3.core.lineage
                 if (unit?.data == null || unit.isRekt() || unit.current_tile == null) continue;
                 if (unit.army != pArmy || !unit.isWarrior()) continue;
                 if (!unit.current_tile.isSameIsland(target.current_tile)) continue;
+                bool alreadyTargets = unit.beh_actor_target == target;
+                if (!SlaveArmyMaintenanceRules.ShouldIssueFrontlineOrder(
+                        alreadyTargets, unit.is_moving))
+                {
+                    issued++;
+                    continue;
+                }
                 try
                 {
                     unit.beh_actor_target = target;
@@ -1482,23 +1582,111 @@ namespace AncientWarfare3.core.lineage
             if (origin == null) origin = pCity.getTile();
             if (origin == null) return null;
 
+            Kingdom kingdom = pCity.kingdom;
+            int islandId = -1;
+            try { islandId = origin.region?.island?.id ?? -1; }
+            catch { }
+            string cacheKey = islandId >= 0 ? kingdom.id + "|" + islandId : null;
+            double now = LineageService.CurTime();
+            FrontlineTargetCacheEntry cacheEntry = null;
+            bool hasCacheEntry = cacheKey != null &&
+                                 FrontlineTargetCache.TryGetValue(cacheKey, out cacheEntry);
+            if (hasCacheEntry)
+            {
+                Actor cachedTarget = null;
+                if (cacheEntry.targetId >= 0 && World.world?.units != null)
+                {
+                    try { cachedTarget = World.world.units.get(cacheEntry.targetId); }
+                    catch { }
+                }
+
+                bool targetAlive = cachedTarget?.data != null && !cachedTarget.isRekt();
+                bool stillHostile = false;
+                try
+                {
+                    stillHostile = targetAlive && cachedTarget.kingdom?.data != null &&
+                                   kingdom.isEnemy(cachedTarget.kingdom);
+                }
+                catch { }
+                bool sameIsland = targetAlive && cachedTarget.current_tile != null &&
+                                  origin.isSameIsland(cachedTarget.current_tile);
+                if (SlaveArmyMaintenanceRules.ShouldReuseFrontlineTarget(
+                        pHasEntry: true,
+                        pTargetAlive: targetAlive,
+                        pStillHostile: stillHostile,
+                        pSameIsland: sameIsland,
+                        pNow: now,
+                        pExpiresAt: cacheEntry.expiresAt))
+                    return cachedTarget;
+                if (SlaveArmyMaintenanceRules.ShouldReuseFrontlineMiss(
+                        pHasEntry: true, pCachedMiss: cacheEntry.targetId < 0,
+                        pNow: now, pExpiresAt: cacheEntry.expiresAt))
+                    return null;
+                FrontlineTargetCache.Remove(cacheKey);
+            }
+
             Actor best = null;
             int bestDist = int.MaxValue;
-            using ListPool<Kingdom> enemies = pCity.kingdom.getEnemiesKingdoms();
-            foreach (Kingdom enemy in enemies)
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFrontlineScan,
+                CityMaintenanceBenchmarkRules.Group);
+            try
             {
-                if (enemy?.data == null) continue;
-                foreach (Actor target in enemy.getUnits())
+                using ListPool<Kingdom> enemies = kingdom.getEnemiesKingdoms();
+                foreach (Kingdom enemy in enemies)
                 {
-                    if (target?.data == null || target.isRekt() || target.current_tile == null) continue;
-                    if (!origin.isSameIsland(target.current_tile)) continue;
-                    int dist = Toolbox.SquaredDistTile(origin, target.current_tile);
-                    if (dist >= bestDist) continue;
-                    bestDist = dist;
-                    best = target;
+                    if (enemy?.data == null) continue;
+                    foreach (Actor target in enemy.getUnits())
+                    {
+                        if (target?.data == null || target.isRekt() || target.current_tile == null) continue;
+                        if (!origin.isSameIsland(target.current_tile)) continue;
+                        int dist = Toolbox.SquaredDistTile(origin, target.current_tile);
+                        if (dist >= bestDist) continue;
+                        bestDist = dist;
+                        best = target;
+                    }
                 }
             }
+            finally
+            {
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFrontlineScan,
+                    CityMaintenanceBenchmarkRules.Group);
+            }
+            if (cacheKey != null)
+                CacheFrontlineTarget(cacheKey, best, now);
             return best;
+        }
+
+        private static void CacheFrontlineTarget(string pKey, Actor pTarget, double pNow)
+        {
+            if (string.IsNullOrEmpty(pKey)) return;
+            if (FrontlineTargetCache.Count >= FRONTLINE_CACHE_LIMIT)
+            {
+                var expired = new List<string>();
+                foreach (KeyValuePair<string, FrontlineTargetCacheEntry> entry in FrontlineTargetCache)
+                    if (entry.Value == null || entry.Value.expiresAt < pNow)
+                        expired.Add(entry.Key);
+                foreach (string key in expired)
+                    FrontlineTargetCache.Remove(key);
+            }
+            if (FrontlineTargetCache.Count >= FRONTLINE_CACHE_LIMIT)
+            {
+                string oldestKey = null;
+                double oldestExpiry = double.MaxValue;
+                foreach (KeyValuePair<string, FrontlineTargetCacheEntry> entry in FrontlineTargetCache)
+                {
+                    double expiry = entry.Value?.expiresAt ?? double.MinValue;
+                    if (expiry >= oldestExpiry) continue;
+                    oldestExpiry = expiry;
+                    oldestKey = entry.Key;
+                }
+                if (oldestKey != null) FrontlineTargetCache.Remove(oldestKey);
+            }
+
+            FrontlineTargetCache[pKey] = new FrontlineTargetCacheEntry
+            {
+                targetId = pTarget?.data?.id ?? -1L,
+                expiresAt = pNow + FRONTLINE_CACHE_TTL
+            };
         }
 
         private static string BuildSlaveArmyName(Kingdom pKingdom, City pCity, int pIndex)
@@ -1656,6 +1844,27 @@ namespace AncientWarfare3.core.lineage
             return count;
         }
 
+        private static int CountSlavesUpTo(City pCity, int pThreshold)
+        {
+            if (pCity?.data == null) return 0;
+            int count = 0;
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (!IsSlave(unit)) continue;
+                count++;
+                if (SlaveArmyMaintenanceRules.HasReachedFormationThreshold(count, pThreshold)) break;
+            }
+            return count;
+        }
+
+        private static bool HasAnySlave(City pCity)
+        {
+            if (pCity?.data == null) return false;
+            foreach (Actor unit in pCity.getUnits())
+                if (IsSlave(unit)) return true;
+            return false;
+        }
+
         private static void CountCityWarriors(City pCity, out int pTotal, out int pSlaves, out int pNonSlaves)
         {
             pTotal = 0;
@@ -1670,6 +1879,44 @@ namespace AncientWarfare3.core.lineage
                 if (IsSlave(unit)) pSlaves++;
                 else pNonSlaves++;
             }
+        }
+
+        private static void CountCityWarriorsCached(City pCity,
+            out int pTotal, out int pSlaves, out int pNonSlaves)
+        {
+            pTotal = 0;
+            pSlaves = 0;
+            pNonSlaves = 0;
+            if (pCity?.data == null) return;
+
+            double now = LineageService.CurTime();
+            bool hasEntry = CityWarriorCountCache.TryGetValue(
+                pCity.id, out CityWarriorCountCacheEntry entry);
+            if (SlaveArmyMaintenanceRules.ShouldReuseCityWarriorCounts(
+                    hasEntry, now, entry?.expiresAt ?? -1.0))
+            {
+                pTotal = entry.total;
+                pSlaves = entry.slaves;
+                pNonSlaves = entry.nonSlaves;
+                return;
+            }
+
+            CountCityWarriors(pCity, out pTotal, out pSlaves, out pNonSlaves);
+            if (CityWarriorCountCache.Count >= CITY_WARRIOR_COUNT_CACHE_LIMIT)
+                CityWarriorCountCache.Clear();
+            CityWarriorCountCache[pCity.id] = new CityWarriorCountCacheEntry
+            {
+                total = pTotal,
+                slaves = pSlaves,
+                nonSlaves = pNonSlaves,
+                expiresAt = now + CITY_WARRIOR_COUNT_CACHE_TTL
+            };
+        }
+
+        private static void InvalidateCityWarriorCounts(City pCity)
+        {
+            if (pCity?.data == null) return;
+            CityWarriorCountCache.Remove(pCity.id);
         }
 
         private static Actor PickNonSlaveWarrior(City pCity)

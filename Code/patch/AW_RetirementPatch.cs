@@ -47,9 +47,9 @@ namespace AncientWarfare3.patch
             SlaveService.CheckCitySlaveLabor(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
 
-            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
+            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmy, CityMaintenanceBenchmarkRules.Group);
             SlaveService.EnsureSlaveArmy(pCity);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchers, CityMaintenanceBenchmarkRules.Group);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmy, CityMaintenanceBenchmarkRules.Group);
 
             if (ShouldRunRoyalGuardMaintenance(pCity))
             {

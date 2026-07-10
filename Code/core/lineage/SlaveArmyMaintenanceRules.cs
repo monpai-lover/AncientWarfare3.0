@@ -39,9 +39,21 @@ namespace AncientWarfare3.core.lineage
                    pNow <= pExpiresAt;
         }
 
+        public static bool ShouldReuseFrontlineMiss(bool pHasEntry, bool pCachedMiss,
+            double pNow, double pExpiresAt)
+        {
+            return pHasEntry && pCachedMiss && pNow <= pExpiresAt;
+        }
+
         public static bool ShouldIssueFrontlineOrder(bool pAlreadyTargetsActor, bool pIsMoving)
         {
             return !pAlreadyTargetsActor || !pIsMoving;
+        }
+
+        public static bool ShouldReuseCityWarriorCounts(bool pHasEntry,
+            double pNow, double pExpiresAt)
+        {
+            return pHasEntry && pNow <= pExpiresAt;
         }
 
         public static bool ShouldPromoteCandidate(bool pCompositionAllowsCandidate,

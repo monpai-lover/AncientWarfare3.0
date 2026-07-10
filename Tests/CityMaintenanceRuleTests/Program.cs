@@ -281,6 +281,8 @@ namespace CityMaintenanceRuleTests
                 !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillPromotion) ||
                 !CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmyFillAttach))
                 throw new Exception("Slave army fill must expose scan, promotion, and attach profiler labels.");
+            if (!CityMaintenanceBenchmarkRules.Contains(CityMaintenanceBenchmarkRules.SlaveArmy))
+                throw new Exception("Slave army maintenance must have its own profiler label.");
         }
 
         private static void ExpectSlaveLaborPerformanceGate()
@@ -318,12 +320,23 @@ namespace CityMaintenanceRuleTests
                     pHasEntry: true, pTargetAlive: false, pStillHostile: true,
                     pSameIsland: true, pNow: 10.0, pExpiresAt: 20.0))
                 throw new Exception("Dead frontline targets must invalidate the cache.");
+            if (!SlaveArmyMaintenanceRules.ShouldReuseFrontlineMiss(
+                    pHasEntry: true, pCachedMiss: true, pNow: 10.0, pExpiresAt: 20.0))
+                throw new Exception("A current same-island miss should suppress duplicate global scans.");
+            if (SlaveArmyMaintenanceRules.ShouldReuseFrontlineMiss(
+                    pHasEntry: true, pCachedMiss: true, pNow: 21.0, pExpiresAt: 20.0))
+                throw new Exception("An expired frontline miss must allow a fresh search.");
             if (SlaveArmyMaintenanceRules.ShouldIssueFrontlineOrder(
                     pAlreadyTargetsActor: true, pIsMoving: true))
                 throw new Exception("Identical active path orders must not be reissued.");
             if (!SlaveArmyMaintenanceRules.ShouldIssueFrontlineOrder(
                     pAlreadyTargetsActor: true, pIsMoving: false))
                 throw new Exception("Interrupted units must be allowed to resume the same target.");
+            if (!SlaveArmyMaintenanceRules.ShouldReuseCityWarriorCounts(
+                    pHasEntry: true, pNow: 10.0, pExpiresAt: 11.0) ||
+                SlaveArmyMaintenanceRules.ShouldReuseCityWarriorCounts(
+                    pHasEntry: true, pNow: 12.0, pExpiresAt: 11.0))
+                throw new Exception("Repeated conscription candidates should reuse only current warrior counts.");
         }
 
         private static void ExpectSpecialArmyCleanupLifecycle()

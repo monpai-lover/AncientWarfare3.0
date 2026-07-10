@@ -68,8 +68,12 @@ namespace AncientWarfare3.core.lineage
             City anchor = pAnchorCity ?? pCaptain.city ?? pKingdom.capital;
             bool detached = pDetached && AWArmyRoleRules.ShouldUseDetachedArmy(pRole);
             Army army = FindArmy(pKingdom, pAnchorCity, pRole);
+            bool created = false;
             if (army == null)
+            {
                 army = CreateArmy(pKingdom, anchor, pCaptain, detached);
+                created = army != null;
+            }
             if (army == null) return null;
 
             MarkArmy(army, pKingdom, anchor, pRole, pName);
@@ -78,7 +82,9 @@ namespace AncientWarfare3.core.lineage
                 AddToArmy(pCaptain, army);
                 SetCaptainIfChanged(army, pCaptain);
             }
-            CleanupDuplicateArmies(pKingdom, anchor, pRole, army);
+            if (SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: created, pReanchored: false, pPostLoadRepair: false))
+                CleanupDuplicateArmies(pKingdom, anchor, pRole, army);
             return army;
         }
 
@@ -201,7 +207,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (World.world?.armies == null) return;
             RoleArmyCache.Clear();
+            var snapshot = new List<Army>();
             foreach (Army army in World.world.armies)
+                snapshot.Add(army);
+
+            foreach (Army army in snapshot)
             {
                 if (!IsSpecialArmy(army)) continue;
                 string role = GetRole(army);
@@ -220,11 +230,31 @@ namespace AncientWarfare3.core.lineage
                 CacheArmy(army, kingdom, role);
                 DedupePastCaptains(army);
             }
+
+            var repairedKeys = new HashSet<string>();
+            foreach (Army army in snapshot)
+            {
+                if (!IsSpecialArmy(army)) continue;
+                string role = GetRole(army);
+                City anchor = FindAnchorCity(army);
+                Kingdom kingdom = SafeGetKingdom(army, anchor);
+                if (kingdom?.data == null) continue;
+                string key = SpecialArmyLookupCacheRules.BuildKey(
+                    kingdom.id, role, anchor?.id ?? -1L);
+                if (!repairedKeys.Add(key)) continue;
+                if (SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                        pCreated: false, pReanchored: false, pPostLoadRepair: true))
+                    CleanupDuplicateArmies(kingdom, anchor, role, army);
+                CacheArmy(army, kingdom, role);
+            }
         }
 
         public static void ReanchorArmy(Army pArmy, Kingdom pKingdom, City pAnchorCity, string pRole, string pName)
         {
             MarkArmy(pArmy, pKingdom, pAnchorCity, pRole, pName);
+            if (SpecialArmyLookupCacheRules.ShouldCleanupDuplicates(
+                    pCreated: false, pReanchored: true, pPostLoadRepair: false))
+                CleanupDuplicateArmies(pKingdom, pAnchorCity, pRole, pArmy);
         }
 
         public static List<Army> GetRoleArmies(Kingdom pKingdom, string pRole)

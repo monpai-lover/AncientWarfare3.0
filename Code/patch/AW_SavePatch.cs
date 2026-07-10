@@ -55,6 +55,8 @@ namespace AncientWarfare3.patch
 
         private static void ResetHistoryWindowsAfterArchiveSwitch()
         {
+            try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
+            try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }

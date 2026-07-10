@@ -42,6 +42,7 @@ namespace AncientWarfare3.core.lineage
             if (city?.data == null) return;
 
             bool activeFief = FiefService.IsActiveFief(city);
+            if (!activeFief) return;
             bool slaveArmy = SlaveService.IsSlaveArmy(pArmy);
             bool royalGuardArmy = RoyalGuardService.IsRoyalGuard(pArmy.getCaptain());
             if (!FiefMilitaryRules.ShouldRenameFiefArmy(activeFief, slaveArmy, royalGuardArmy)) return;
