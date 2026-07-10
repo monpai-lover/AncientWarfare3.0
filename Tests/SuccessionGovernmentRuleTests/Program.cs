@@ -136,6 +136,13 @@ namespace SuccessionGovernmentRuleTests
                     pInLineageSystem: true, pIsMale: true, pIsAdult: true,
                     pIsAlive: true, pIsSlave: false, pIsKing: false),
                 "Eligible nobles and office holders must not be filtered out of republic elections.");
+
+            Expect(!RepublicGovernmentRules.ShouldRefreshSuccessorDuringStableReign(
+                    pRegisteredSuccessorEligible: true),
+                "A valid republican successor must not trigger a full national re-ranking every king check.");
+            Expect(RepublicGovernmentRules.ShouldRefreshSuccessorDuringStableReign(
+                    pRegisteredSuccessorEligible: false),
+                "An invalid or missing republican successor must be re-ranked during a stable reign.");
         }
 
         private static void ExpectFragmentationAndInheritanceRules()

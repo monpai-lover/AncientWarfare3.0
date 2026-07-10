@@ -746,3 +746,43 @@ git commit -m "test: 完成继承政体修复回归验证"
 ```
 
 If no adjustment was required, do not create an empty commit.
+
+### Task 10: Harden runtime performance after final code review
+
+**Files:**
+- Modify: `Code/core/lineage/RoyalGuardMaintenanceRules.cs`
+- Modify: `Code/core/lineage/RoyalGuardService.cs`
+- Modify: `Code/core/lineage/RepublicGovernmentRules.cs`
+- Modify: `Code/core/lineage/RepublicGovernmentService.cs`
+- Test: `Tests/RoyalGuardActionRuleTests/Program.cs`
+- Test: `Tests/SuccessionGovernmentRuleTests/Program.cs`
+
+- [ ] **Step 1: Add failing rules for the two reachable performance risks**
+
+Add a guard rule asserting that over-limit trimming shares the two-dismissal
+budget with all other trimming in the same maintenance pass. Add a republic
+rule asserting that an eligible registered successor prevents stable-reign
+re-ranking, while a missing or invalid successor requests a refresh.
+
+Run both focused rule-test projects and confirm they fail because the new rule
+APIs do not exist yet.
+
+- [ ] **Step 2: Share the guard dismissal budget across both trim calls**
+
+Track dismissals inside `EnsureKingdomGuard`, pass only the remaining budget to
+each `TrimExcessGuards` call, and stop trimming when that budget reaches zero.
+Remove the unreachable captain-shortage whole-roster dismissal helper so every
+remaining multi-guard path is visibly bounded.
+
+- [ ] **Step 3: Stop stable republics from sorting the nation every king check**
+
+During an ordinary live-leader check, validate the registered successor in
+constant time. Re-rank only when it is absent or ineligible. Keep the explicit
+refreshes on republic creation, leader accession, and pre-death succession so
+rank 1 still leads and the current rank 2 is recorded before a vacancy.
+
+- [ ] **Step 4: Re-run focused tests, then repeat the full verification gate**
+
+Run the royal-guard and succession rule projects sequentially, then repeat all
+11 rule projects, the main build, `git diff --check`, repository status, and the
+approved-behavior audit from Task 9.

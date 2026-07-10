@@ -22,6 +22,15 @@ namespace AncientWarfare3.core.lineage
             return Math.Min(remaining, budget);
         }
 
+        public static int TrimExcessCountForPass(int pActiveCount, int pDesiredCount,
+            int pHardMaximum, int pRemainingBudget)
+        {
+            if (pRemainingBudget <= 0) return 0;
+            int limit = Math.Max(0, Math.Min(pDesiredCount, pHardMaximum));
+            int excess = Math.Max(0, pActiveCount - limit);
+            return Math.Min(excess, pRemainingBudget);
+        }
+
         public static bool ShouldClearDismissState(bool pDismissComplete)
         {
             return pDismissComplete;

@@ -84,6 +84,12 @@ namespace AncientWarfare3.core.lineage
             return pHasKing && pIsRepublic;
         }
 
+        public static bool ShouldRefreshSuccessorDuringStableReign(
+            bool pRegisteredSuccessorEligible)
+        {
+            return !pRegisteredSuccessorEligible;
+        }
+
         /// <summary>
         ///     共和国推举首领的候选门槛:成年在世男性平民(非奴隶/非现任君主/非在谱贵族),且属本系(Xia/伪officialdom)。
         ///     首领选举产生、不世袭,故取"平民"而非贵族;男性以过 setKing 性别闸。

@@ -168,6 +168,14 @@ namespace RoyalGuardActionRuleTests
             if (RoyalGuardMaintenanceRules.DismissCountForPass(
                     pRemainingCount: 20, pBudget: 2) != 2)
                 throw new Exception("Guard dissolution must obey its per-pass budget.");
+            if (RoyalGuardMaintenanceRules.TrimExcessCountForPass(
+                    pActiveCount: 25, pDesiredCount: 20,
+                    pHardMaximum: 20, pRemainingBudget: 2) != 2)
+                throw new Exception("Over-limit guard trimming must share the per-pass dismissal budget.");
+            if (RoyalGuardMaintenanceRules.TrimExcessCountForPass(
+                    pActiveCount: 25, pDesiredCount: 20,
+                    pHardMaximum: 20, pRemainingBudget: 0) != 0)
+                throw new Exception("Over-limit trimming must stop after the per-pass budget is spent.");
             if (RoyalGuardMaintenanceRules.ShouldClearDismissState(pDismissComplete: false))
                 throw new Exception("Guard hints must remain until all guards are dismissed.");
             if (!RoyalGuardMaintenanceRules.ShouldClearDismissState(pDismissComplete: true))

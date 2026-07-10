@@ -118,7 +118,8 @@ namespace AncientWarfare3.core.lineage
                 return;
 
             string guardName = BuildGuardName(pKingdom);
-            TrimExcessGuards(active, MAX_GUARDS_PER_KINGDOM);
+            int dismissalsThisPass = TrimExcessGuards(active, MAX_GUARDS_PER_KINGDOM,
+                DISMISS_BATCH_LIMIT);
             var newlyAppointed = new List<Actor>(RECRUITMENT_BATCH_LIMIT);
 
             int targetNobles = Math.Max(1, (int)Math.Ceiling(MAX_GUARDS_PER_KINGDOM * MIN_NOBLE_RATIO));
@@ -141,9 +142,6 @@ namespace AncientWarfare3.core.lineage
                     if (RoyalGuardMaintenanceRules.ShouldDeferGuardMaintenanceForCaptainShortage(
                             active.Count, availableNobles))
                         return;
-                    if (RoyalGuardMaintenanceRules.ShouldDismissActiveGuardsForCaptainShortage(
-                            active.Count, availableNobles))
-                        DismissCollectedGuards(active, "no_noble_captain");
                     ClearKingdomGuardStateHints(pKingdom);
                     return;
                 }
@@ -153,7 +151,8 @@ namespace AncientWarfare3.core.lineage
                 desired = Math.Max(1, desired);
                 desired = RoyalGuardMaintenanceRules.ClampDesiredGuardCountForBatch(
                     active.Count, desired, RECRUITMENT_BATCH_LIMIT);
-                TrimExcessGuards(active, desired);
+                dismissalsThisPass += TrimExcessGuards(active, desired,
+                    DISMISS_BATCH_LIMIT - dismissalsThisPass);
 
                 targetNobles = Math.Max(1, (int)Math.Ceiling(desired * MIN_NOBLE_RATIO));
                 Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardFill, CityMaintenanceBenchmarkRules.Group);
@@ -169,9 +168,6 @@ namespace AncientWarfare3.core.lineage
                 if (RoyalGuardMaintenanceRules.ShouldDeferGuardMaintenanceForCaptainShortage(
                         active.Count, availableNobles))
                     return;
-                if (RoyalGuardMaintenanceRules.ShouldDismissActiveGuardsForCaptainShortage(
-                        active.Count, availableNobles))
-                    DismissCollectedGuards(active, "no_noble_captain");
                 ClearKingdomGuardStateHints(pKingdom);
                 return;
             }
@@ -921,17 +917,24 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
-        private static void TrimExcessGuards(List<Actor> pActive, int pDesired)
+        private static int TrimExcessGuards(List<Actor> pActive, int pDesired,
+            int pRemainingBudget)
         {
-            if (pActive.Count <= pDesired && pActive.Count <= MAX_GUARDS_PER_KINGDOM) return;
-            pActive.Sort((a, b) => CombatScore(b).CompareTo(CombatScore(a)));
             int limit = Math.Min(pDesired, MAX_GUARDS_PER_KINGDOM);
-            for (int i = pActive.Count - 1; i >= limit; i--)
+            int trimCount = RoyalGuardMaintenanceRules.TrimExcessCountForPass(
+                pActive.Count, pDesired, MAX_GUARDS_PER_KINGDOM, pRemainingBudget);
+            if (trimCount <= 0) return 0;
+
+            pActive.Sort((a, b) => CombatScore(b).CompareTo(CombatScore(a)));
+            int dismissed = 0;
+            for (int i = pActive.Count - 1; i >= limit && dismissed < trimCount; i--)
             {
                 Actor guard = pActive[i];
                 pActive.RemoveAt(i);
                 DismissGuard(guard, "over_limit");
+                dismissed++;
             }
+            return dismissed;
         }
 
         private static Actor PickCaptain(List<Actor> pActive)
@@ -1155,16 +1158,6 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
             return true;
-        }
-
-        private static void DismissCollectedGuards(List<Actor> pActive, string pReason)
-        {
-            if (pActive == null) return;
-            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
-            foreach (Actor guard in new List<Actor>(pActive))
-                if (IsRoyalGuard(guard))
-                    DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
         }
 
         private static bool HasKingdomGuardStateHint(Kingdom pKingdom)

@@ -103,7 +103,10 @@ namespace AncientWarfare3.core.lineage
                     ClearRepublic(pKingdom, "king_restored");
                     return;
                 }
-                RefreshRepublicSuccessor(pKingdom, pKingdom.king);
+                Actor successor = GetRegisteredSuccessor(pKingdom);
+                if (RepublicGovernmentRules.ShouldRefreshSuccessorDuringStableReign(
+                        successor?.data != null))
+                    RefreshRepublicSuccessor(pKingdom, pKingdom.king);
                 return;
             }
 
