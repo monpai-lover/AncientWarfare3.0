@@ -738,7 +738,7 @@ namespace AncientWarfare3.ui.windows
             if (_heirCol != null && _heirAvatar != null)
             {
                 _heirCol.SetActive(true);
-                Actor heir = HeirService.GetHeir(kingdom);
+                Actor heir = HeirService.FindHeirReadOnly(kingdom);
                 bool hasHeir = heir != null && !heir.isRekt();
                 if (hasHeir) { _heirAvatar.gameObject.SetActive(true); _heirAvatar.show(heir); }
                 else _heirAvatar.gameObject.SetActive(false);

@@ -157,7 +157,7 @@ namespace AncientWarfare3.core.policy
             if (pSourceCity?.data == null || pNewCity?.data == null || pSourceCity == pNewCity) return;
 
             int moved = 1;
-            long heirId = HeirService.GetHeir(pSourceCity.kingdom)?.data?.id ?? -1L;
+            long heirId = HeirService.PeekRegisteredHeir(pSourceCity.kingdom)?.data?.id ?? -1L;
             foreach (Actor unit in pSourceCity.units.LoopRandom())
             {
                 if (moved >= MAX_MOVED_SETTLERS) break;

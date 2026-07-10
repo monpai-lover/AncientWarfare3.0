@@ -39,7 +39,7 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                Actor heir = HeirService.GetHeir(pKingdom);
+                Actor heir = HeirService.FindHeirReadOnly(pKingdom);
                 if (heir?.data != null) candidates.Add(heir.data.id);
             }
             catch { }
@@ -267,7 +267,7 @@ namespace AncientWarfare3.core.lineage
             if (pActor == pOriginalKingdom.king) return 100;
             try
             {
-                Actor heir = HeirService.GetHeir(pOriginalKingdom);
+                Actor heir = HeirService.FindHeirReadOnly(pOriginalKingdom);
                 if (heir?.data != null && heir.data.id == pActor.data.id) return 85;
             }
             catch { }
