@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.lineage
         private const int RECRUITMENT_BATCH_LIMIT = 4;
         private const int RUNTIME_REFRESH_BATCH_LIMIT = 4;
         private const int GFX_REBUILD_BUDGET = 2;
+        private const int DISMISS_BATCH_LIMIT = 2;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
         private const int DISMISS_SCAN_LIMIT = 64;
         private const int ACTIVE_FALLBACK_SCAN_LIMIT = 64;
@@ -72,10 +73,20 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
 
             int now = (int)LineageService.CurTime();
-            if (MandateRebelService.IsRebelKingdom(pKingdom))
+            bool isRepublic = RepublicGovernmentService.IsRepublic(pKingdom);
+            bool isRebel = MandateRebelService.IsRebelKingdom(pKingdom);
+            bool kingdomExtinct = pKingdom.isRekt();
+            bool successionPending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
+            if (RoyalGuardMaintenanceRules.ShouldPreserveGuards(
+                    successionPending, isRepublic, isRebel, kingdomExtinct))
+                return;
+            if (RoyalGuardMaintenanceRules.ShouldDissolveGuards(isRepublic, isRebel, kingdomExtinct))
             {
                 pKingdom.data.set(LineageKeys.ROYAL_GUARD_LAST_CHECK, now);
-                DismissKingdomGuards(pKingdom, "mandate_rebel");
+                string reason = isRepublic ? "republic" : isRebel ? "mandate_rebel" : "kingdom_extinct";
+                bool complete = DismissKingdomGuards(pKingdom, reason);
+                if (RoyalGuardMaintenanceRules.ShouldClearDismissState(complete))
+                    ClearKingdomGuardStateHints(pKingdom);
                 return;
             }
 
@@ -90,21 +101,12 @@ namespace AncientWarfare3.core.lineage
             Actor king = pKingdom.king;
             if (king?.data == null || king.isRekt())
             {
-                DismissKingdomGuards(pKingdom, "no_king");
-                ClearKingdomGuardStateHints(pKingdom);
                 return;
             }
 
             bool kingIsXia = LineageService.IsXia(king);
             if (!kingIsXia)
             {
-                if (RoyalGuardMaintenanceRules.ShouldDismissNonXiaKingdom(
-                        pKingIsXia: false,
-                        pHasGuardStateHint: HasKingdomGuardStateHint(pKingdom)))
-                {
-                    DismissKingdomGuards(pKingdom, "non_xia_king");
-                    ClearKingdomGuardStateHints(pKingdom);
-                }
                 return;
             }
 
@@ -230,11 +232,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
             if (pKingdom?.data == null) return;
-            if (pNewKing == null)
-            {
-                DismissKingdomGuards(pKingdom, "no_king");
-                return;
-            }
+            if (pNewKing == null) return;
             EnsureKingdomGuard(pKingdom, pForce: true);
         }
 
@@ -1067,14 +1065,14 @@ namespace AncientWarfare3.core.lineage
                 CityMaintenanceBenchmarkRules.Group);
         }
 
-        private static void DismissKingdomGuards(Kingdom pKingdom, string pReason)
+        private static bool DismissKingdomGuards(Kingdom pKingdom, string pReason)
         {
-            if (pKingdom?.data == null) return;
+            if (pKingdom?.data == null) return true;
             if (!RoyalGuardMaintenanceRules.ShouldScanKingdomForDismiss(
                     pHasCollectedActiveList: false,
                     pActiveGuardCount: 0,
                     pHasGuardStateHint: HasKingdomGuardStateHint(pKingdom)))
-                return;
+                return true;
 
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
             Army guardArmy = FindGuardArmy(pKingdom);
@@ -1082,32 +1080,34 @@ namespace AncientWarfare3.core.lineage
             {
                 var active = new List<Actor>();
                 CollectActiveGuardsFromArmy(guardArmy, pKingdom, active);
-                foreach (Actor guard in active)
-                    if (IsRoyalGuard(guard))
-                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
+                int dismissCount = RoyalGuardMaintenanceRules.DismissCountForPass(
+                    active.Count, DISMISS_BATCH_LIMIT);
+                for (int i = 0; i < dismissCount; i++)
+                    DismissGuard(active[i], pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
-                ClearKingdomGuardStateHints(pKingdom);
-                return;
+                return active.Count <= dismissCount;
             }
 
             List<long> rosterIds = ReadGuardRosterIds(pKingdom);
             if (RoyalGuardMaintenanceRules.ShouldUseRosterForDismiss(rosterIds.Count > 0))
             {
+                var active = new List<Actor>(rosterIds.Count);
                 foreach (long actorId in rosterIds)
                 {
                     Actor guard = GetActorById(actorId);
-                    if (IsRoyalGuard(guard))
-                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
+                    if (IsRoyalGuard(guard)) active.Add(guard);
                 }
+                int dismissCount = RoyalGuardMaintenanceRules.DismissCountForPass(
+                    active.Count, DISMISS_BATCH_LIMIT);
+                for (int i = 0; i < dismissCount; i++)
+                    DismissGuard(active[i], pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
-                ClearKingdomGuardStateHints(pKingdom);
-                return;
+                return active.Count <= dismissCount;
             }
 
             bool complete = DismissKingdomGuardsBounded(pKingdom, pReason);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardDismiss, CityMaintenanceBenchmarkRules.Group);
-            if (complete)
-                ClearKingdomGuardStateHints(pKingdom);
+            return complete;
         }
 
         private static bool DismissKingdomGuardsBounded(Kingdom pKingdom, string pReason)
@@ -1123,7 +1123,7 @@ namespace AncientWarfare3.core.lineage
 
             int scanned = 0;
             int processed = 0;
-            var toDismiss = new List<Actor>(Math.Min(DISMISS_SCAN_LIMIT, MAX_GUARDS_PER_KINGDOM));
+            var toDismiss = new List<Actor>(DISMISS_BATCH_LIMIT);
             foreach (Actor unit in pKingdom.getUnits())
             {
                 if (scanned++ < cursor) continue;
@@ -1137,7 +1137,17 @@ namespace AncientWarfare3.core.lineage
 
                 processed++;
                 if (IsRoyalGuard(unit))
+                {
                     toDismiss.Add(unit);
+                    if (toDismiss.Count >= DISMISS_BATCH_LIMIT)
+                    {
+                        pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, scanned);
+                        foreach (Actor guard in toDismiss)
+                            DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false,
+                                pUpdateRoster: false);
+                        return false;
+                    }
+                }
             }
 
             foreach (Actor guard in toDismiss)

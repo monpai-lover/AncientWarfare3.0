@@ -4,6 +4,29 @@ namespace AncientWarfare3.core.lineage
 {
     public static class RoyalGuardMaintenanceRules
     {
+        public static bool ShouldDissolveGuards(bool pIsRepublic, bool pIsRebel, bool pKingdomExtinct)
+        {
+            return pIsRepublic || pIsRebel || pKingdomExtinct;
+        }
+
+        public static bool ShouldPreserveGuards(bool pSuccessionPending, bool pIsRepublic,
+            bool pIsRebel, bool pKingdomExtinct)
+        {
+            return pSuccessionPending && !ShouldDissolveGuards(pIsRepublic, pIsRebel, pKingdomExtinct);
+        }
+
+        public static int DismissCountForPass(int pRemainingCount, int pBudget)
+        {
+            int remaining = Math.Max(0, pRemainingCount);
+            int budget = Math.Max(1, pBudget);
+            return Math.Min(remaining, budget);
+        }
+
+        public static bool ShouldClearDismissState(bool pDismissComplete)
+        {
+            return pDismissComplete;
+        }
+
         public static bool ShouldCheckFromCity(bool pHasCity, bool pHasKingdom, bool pHasCapital, bool pIsCapital)
         {
             if (!pHasCity || !pHasKingdom) return false;

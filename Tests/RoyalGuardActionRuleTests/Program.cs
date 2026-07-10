@@ -19,6 +19,7 @@ namespace RoyalGuardActionRuleTests
             ExpectRuntimeRefreshBatching();
             ExpectGraphicsRebuildBudget();
             ExpectDismissScanGate();
+            ExpectDissolutionRules();
 
             if (RoyalGuardActionRules.WaitAfterNoThreat(2f, 5f) != 2f)
                 throw new Exception("Expected royal guard no-threat wait low bound.");
@@ -149,6 +150,28 @@ namespace RoyalGuardActionRuleTests
                     pActiveGuardCount: 0,
                     pHasGuardStateHint: true))
                 throw new Exception("Kingdoms with stale guard state hints may need one full dismiss scan.");
+        }
+
+        private static void ExpectDissolutionRules()
+        {
+            if (!RoyalGuardMaintenanceRules.ShouldPreserveGuards(
+                    pSuccessionPending: true, pIsRepublic: false,
+                    pIsRebel: false, pKingdomExtinct: false))
+                throw new Exception("Royal guards must survive timer_new_king.");
+            if (RoyalGuardMaintenanceRules.ShouldPreserveGuards(
+                    pSuccessionPending: false, pIsRepublic: true,
+                    pIsRebel: false, pKingdomExtinct: false))
+                throw new Exception("Republics must dissolve royal guards.");
+            if (!RoyalGuardMaintenanceRules.ShouldDissolveGuards(
+                    pIsRepublic: true, pIsRebel: false, pKingdomExtinct: false))
+                throw new Exception("Republic government should dissolve a royal guard.");
+            if (RoyalGuardMaintenanceRules.DismissCountForPass(
+                    pRemainingCount: 20, pBudget: 2) != 2)
+                throw new Exception("Guard dissolution must obey its per-pass budget.");
+            if (RoyalGuardMaintenanceRules.ShouldClearDismissState(pDismissComplete: false))
+                throw new Exception("Guard hints must remain until all guards are dismissed.");
+            if (!RoyalGuardMaintenanceRules.ShouldClearDismissState(pDismissComplete: true))
+                throw new Exception("Completed guard dissolution should clear its state hints.");
         }
     }
 }
