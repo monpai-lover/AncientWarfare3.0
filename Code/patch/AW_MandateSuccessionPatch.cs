@@ -29,18 +29,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(KingdomBehCheckKing), "checkKingdomChaos")]
         public static bool CheckKingdomChaos_Prefix(Kingdom pMainKingdom)
         {
-            if (!MandateService.ShouldBlockPeacefulFellApart(pMainKingdom)) return true;
-            MandateService.OnPeacefulFellApartBlocked(pMainKingdom);
-            return false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(KingdomBehCheckKing), "checkShatteredCrownEvent")]
-        public static bool CheckShatteredCrownEvent_Prefix(Kingdom pMainKingdom, Actor pMainKing, Clan pRoyalClan)
-        {
-            if (!MandateService.ShouldBlockPeacefulFellApart(pMainKingdom)) return true;
-            MandateService.OnPeacefulFellApartBlocked(pMainKingdom);
-            return false;
+            bool managed = UsesManagedLineage(pMainKingdom);
+            return !SuccessionTransitionRules.ShouldBlockVanillaMassFragmentation(managed);
         }
     }
 }

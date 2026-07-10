@@ -30,6 +30,11 @@ namespace AncientWarfare3.core.lineage
             return pUsesManagedLineage;
         }
 
+        public static bool ShouldBlockShatteredCrownEvent(bool pUsesManagedLineage)
+        {
+            return false;
+        }
+
         public static bool ShouldUseCachedHeir(bool pSuccessionPending, bool pCachedHeirEligible)
         {
             return pSuccessionPending && pCachedHeirEligible;

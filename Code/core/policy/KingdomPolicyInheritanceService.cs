@@ -36,7 +36,8 @@ namespace AncientWarfare3.core.policy
             KingdomPolicySnapshot src = KingdomPolicyService.ReadSnapshot(source);
             var dst = new KingdomPolicySnapshot
             {
-                class_state = src.class_state,
+                class_state = KingdomPolicyInheritanceRules.SanitizeClassStateForNewKingdom(
+                    src.class_state, KingdomPolicyDefs.ClassDefault),
                 army_state = src.army_state,
                 name_state = src.name_state,
                 enfeoffment_state = src.enfeoffment_state,

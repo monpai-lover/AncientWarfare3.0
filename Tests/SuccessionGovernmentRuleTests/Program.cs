@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace SuccessionGovernmentRuleTests
 {
@@ -11,6 +12,7 @@ namespace SuccessionGovernmentRuleTests
             {
                 ExpectSuccessionTransitionRules();
                 ExpectRepublicRules();
+                ExpectFragmentationAndInheritanceRules();
                 Console.WriteLine("Succession/government rule tests passed.");
                 return 0;
             }
@@ -97,6 +99,19 @@ namespace SuccessionGovernmentRuleTests
                     pInLineageSystem: true, pIsMale: true, pIsAdult: true,
                     pIsAlive: true, pIsSlave: false, pIsKing: false),
                 "Eligible nobles and office holders must not be filtered out of republic elections.");
+        }
+
+        private static void ExpectFragmentationAndInheritanceRules()
+        {
+            Expect(!SuccessionTransitionRules.ShouldBlockShatteredCrownEvent(
+                    pUsesManagedLineage: true),
+                "The explicit shattered_crown culture event must remain available.");
+            Expect(KingdomPolicyInheritanceRules.SanitizeClassStateForNewKingdom(
+                    pSourceClass: "republic", pDefaultClass: "default") == "default",
+                "Split kingdoms must not inherit republic government wholesale.");
+            Expect(KingdomPolicyInheritanceRules.SanitizeClassStateForNewKingdom(
+                    pSourceClass: "aristocrat", pDefaultClass: "default") == "aristocrat",
+                "Transferable class states must remain unchanged.");
         }
 
         private static void Expect(bool pCondition, string pMessage)
