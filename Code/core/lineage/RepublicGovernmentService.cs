@@ -84,6 +84,12 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.REPUBLIC_LEADER, true);
         }
 
+        public static void ClearRepublicLeader(Actor pActor)
+        {
+            if (pActor?.data == null || !IsRepublicLeader(pActor)) return;
+            pActor.data.set(LineageKeys.REPUBLIC_LEADER, false);
+        }
+
         public static void RefreshAfterKingCheck(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral()) return;
@@ -110,6 +116,7 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRepublic(Kingdom pKingdom, string pReason)
         {
             if (pKingdom?.data == null || !IsRepublic(pKingdom)) return;
+            ClearRepublicLeader(pKingdom.king);
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassDefault);
             HeirService.ClearHeir(pKingdom);
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,

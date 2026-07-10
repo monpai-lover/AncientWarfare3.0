@@ -23,14 +23,18 @@ namespace AncientWarfare3.patch
             bool registeredSuccessor =
                 RepublicGovernmentService.IsRegisteredRepublicSuccessor(__instance, pActor);
             bool markedLeader = RepublicGovernmentService.IsRepublicLeader(pActor);
-            if (RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(
-                    wasRepublic, registeredSuccessor, markedLeader))
+            bool preserveRepublic = RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(
+                wasRepublic, registeredSuccessor, markedLeader);
+            if (preserveRepublic)
             {
                 RepublicGovernmentService.MarkRepublicLeader(pActor);
                 RepublicGovernmentService.RefreshRepublicSuccessor(__instance, pActor);
                 return;
             }
 
+            if (RepublicGovernmentRules.ShouldClearRepublicLeaderMarker(
+                    preserveRepublic, markedLeader))
+                RepublicGovernmentService.ClearRepublicLeader(pActor);
             RepublicGovernmentService.ClearRepublic(__instance, "king_restored");
         }
     }

@@ -73,6 +73,12 @@ namespace AncientWarfare3.core.lineage
             return pWasRepublic && (pWasRegisteredRepublicSuccessor || pActorMarkedRepublicLeader);
         }
 
+        public static bool ShouldClearRepublicLeaderMarker(bool pPreserveRepublic,
+            bool pActorMarkedRepublicLeader)
+        {
+            return !pPreserveRepublic && pActorMarkedRepublicLeader;
+        }
+
         public static bool ShouldClearRepublic(bool pHasKing, bool pIsRepublic)
         {
             return pHasKing && pIsRepublic;

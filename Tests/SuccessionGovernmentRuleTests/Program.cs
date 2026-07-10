@@ -52,8 +52,13 @@ namespace SuccessionGovernmentRuleTests
                     isAgnaticDescendantOfKing: false, generationDelta: 0,
                     birthTime: 5, isAdult: true)
             };
-            Expect(HeirGenerationRules.SelectBestCandidateId(familyCandidates) == 103,
+            long selectedFamilyHeir = HeirGenerationRules.SelectBestCandidateId(familyCandidates);
+            Expect(selectedFamilyHeir == 103,
                 "When the crown prince and his son are dead, the surviving brother must inherit.");
+            Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: false, pHasMonarchyHeir: selectedFamilyHeir >= 0,
+                    pElectableCount: 5),
+                "A surviving brother must prevent an erroneous republic conversion.");
 
             Expect(SuccessionTransitionRules.IsOfficialRoleEligible(
                     pIsKing: false, pIsCityLeader: true, pIsGeneral: true,
@@ -120,6 +125,12 @@ namespace SuccessionGovernmentRuleTests
                     pWasRepublic: true, pWasRegisteredRepublicSuccessor: false,
                     pActorMarkedRepublicLeader: false),
                 "An unrelated restored king must end republic government.");
+            Expect(RepublicGovernmentRules.ShouldClearRepublicLeaderMarker(
+                    pPreserveRepublic: false, pActorMarkedRepublicLeader: true),
+                "A leader leaving republican government must lose the republic marker.");
+            Expect(!RepublicGovernmentRules.ShouldClearRepublicLeaderMarker(
+                    pPreserveRepublic: true, pActorMarkedRepublicLeader: true),
+                "A valid republican accession must retain the republic marker.");
 
             Expect(RepublicGovernmentRules.IsEligibleLeader(
                     pInLineageSystem: true, pIsMale: true, pIsAdult: true,
