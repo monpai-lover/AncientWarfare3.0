@@ -123,6 +123,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_GFX_DIRTY = "aw_royal_guard_gfx_dirty";
 
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
+        public const string REPUBLIC_LEADER = "aw_republic_leader";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";
         public const string POLICY_NAME_STATE = "aw_policy_name_state";
         public const string POLICY_ENFEOFFMENT_STATE = "aw_policy_enfeoffment_state";

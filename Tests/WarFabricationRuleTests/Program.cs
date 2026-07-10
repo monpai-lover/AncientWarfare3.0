@@ -2449,6 +2449,29 @@ namespace WarFabricationRuleTests
 
             if (RepublicGovernmentRules.SuffixForNameplate(pIsRepublic: true) != "\u5171\u548c\u56fd")
                 throw new Exception("Republic kingdoms should use the republic nameplate suffix.");
+
+            // \u5171\u548c\u56fd\u63a8\u4e3e\u5e73\u6c11\u9996\u9886:\u6210\u5e74\u5728\u4e16\u7537\u6027\u5e73\u6c11\u53ef\u9009;\u8d35\u65cf/\u5974\u96b6/\u5973\u6027/\u73b0\u4efb\u541b\u4e3b\u4e0d\u53ef\u3002
+            if (!RepublicGovernmentRules.IsEligibleCommonerLeader(
+                    pInLineageSystem: true, pIsMale: true, pIsAdult: true, pIsAlive: true,
+                    pIsSlave: false, pIsKing: false, pIsNoble: false))
+                throw new Exception("An adult living male commoner must be electable as republic leader.");
+            if (RepublicGovernmentRules.IsEligibleCommonerLeader(
+                    pInLineageSystem: true, pIsMale: true, pIsAdult: true, pIsAlive: true,
+                    pIsSlave: false, pIsKing: false, pIsNoble: true))
+                throw new Exception("A noble must not be elected as a commoner republic leader.");
+            if (RepublicGovernmentRules.IsEligibleCommonerLeader(
+                    pInLineageSystem: true, pIsMale: false, pIsAdult: true, pIsAlive: true,
+                    pIsSlave: false, pIsKing: false, pIsNoble: false))
+                throw new Exception("A non-male must not pass the republic leader gate (setKing gender gate).");
+            if (RepublicGovernmentRules.IsEligibleCommonerLeader(
+                    pInLineageSystem: true, pIsMale: true, pIsAdult: true, pIsAlive: true,
+                    pIsSlave: true, pIsKing: false, pIsNoble: false))
+                throw new Exception("A slave must not be elected as republic leader.");
+            // \u63a8\u4e3e\u7684\u5e73\u6c11\u9996\u9886\u88ab\u8bbe\u4e3a\u738b\u65f6\u4e0d\u7ed3\u675f\u5171\u548c;\u4e16\u88ad/\u57ce\u4e3b\u541b\u4e3b\u624d\u7ed3\u675f\u3002
+            if (RepublicGovernmentRules.ShouldClearRepublicOnNewKing(pNewKingIsRepublicLeader: true))
+                throw new Exception("An elected commoner leader must NOT end the republic.");
+            if (!RepublicGovernmentRules.ShouldClearRepublicOnNewKing(pNewKingIsRepublicLeader: false))
+                throw new Exception("A hereditary/city-leader monarch must end the republic.");
         }
 
         private static void ExpectMandateWarAiRules()

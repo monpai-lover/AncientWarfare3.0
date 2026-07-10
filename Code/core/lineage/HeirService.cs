@@ -81,6 +81,8 @@ namespace AncientWarfare3.core.lineage
         public static Actor GetHeir(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return null;
+            // 共和国是选举制、不世袭:无世系继承人,首领由随机平民推举(见 RepublicGovernmentService)。
+            if (RepublicGovernmentService.IsRepublic(pKingdom)) return null;
             Actor king = pKingdom.king;
             EnsureLegitimateLine(pKingdom, king);
             ClearOldHeirFlag(pKingdom);

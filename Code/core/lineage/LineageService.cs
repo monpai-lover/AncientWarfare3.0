@@ -698,6 +698,9 @@ namespace AncientWarfare3.core.lineage
             bool pWasRegisteredHeir, int pPreNobleDistance)
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
+            // 共和推举的平民首领不建氏支(非世袭君主,不开创宗族分支)。
+            if (RepublicGovernmentService.IsRepublicLeader(pKing) || RepublicGovernmentService.IsRepublic(pKingdom))
+                return;
             if (!IsXia(pKing) && !UsesAwLineageSystem(pKing)) return;
             pKing.data.get(LineageKeys.IS_HEIR, out bool wasHeir, false);
             bool registeredHeir = wasHeir || pWasRegisteredHeir;

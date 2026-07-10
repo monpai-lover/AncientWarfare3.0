@@ -197,9 +197,9 @@ namespace AncientWarfare3.content.policies
                 FallbackName = "\u5B98\u573A\u5236\u5EA6",
                 FallbackDesc = "\u5C06\u539F\u59CB\u671D\u4F1A\u5347\u7EA7\u4E3A\u767E\u5BB6\u5B98\u573A\uFF0C\u5141\u8BB8\u8D24\u4EBA\u5165\u4ED5\u5E76\u5F71\u54CD\u56FD\u5BB6\u8DEF\u7EBF\u3002",
                 IconPath = "ui/icons/iconDiplomacy",
-                Cost = 90f,
-                RequiredTechs = new[] { "aw_tech_writing", "aw_tech_rites_music" },
-                Column = 6,
+                Cost = 55f,
+                RequiredTechs = new[] { "aw_tech_writing" },
+                Column = 1,
                 Row = 2
             },
             new KingdomPolicyDef
@@ -211,9 +211,9 @@ namespace AncientWarfare3.content.policies
                 FallbackName = "三省六部制",
                 FallbackDesc = "将三公九卿升级为三省六部，中枢分职集权，官场更高效。",
                 IconPath = "ui/icons/iconDiplomacy",
-                Cost = 150f,
+                Cost = 95f,
                 RequiredTechs = new[] { "aw_tech_official_court" },
-                Column = 7,
+                Column = 2,
                 Row = 2
             },
             new KingdomPolicyDef

@@ -4,11 +4,66 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class RepublicGovernmentService
     {
+        private static readonly System.Random Rng = new System.Random();
+        private const int COMMONER_SCAN_LIMIT = 400;
+
         public static bool IsRepublic(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string classState, "");
             return RepublicGovernmentRules.IsRepublicClass(classState);
+        }
+
+        public static bool IsRepublicLeader(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.REPUBLIC_LEADER, out bool leader, false);
+            return leader;
+        }
+
+        /// <summary>
+        ///     共和国推举首领:无世系继承人时,从本国平民里随机推举一名成年男性作为首领(选举、不世袭)。
+        ///     由继承钩子在"无君主候选"时调用;标记 REPUBLIC_LEADER 使 setKing 不误清共和状态、死亡后重新推举。
+        ///     无合格平民 → 返回 null(真·无首领,极少见)。
+        /// </summary>
+        public static Actor ElectCommonerLeader(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return null;
+            SetRepublic(pKingdom);
+            Actor leader = PickRandomCommoner(pKingdom);
+            if (leader?.data == null) return null;
+            leader.data.set(LineageKeys.REPUBLIC_LEADER, true);
+            return leader;
+        }
+
+        /// <summary>本国平民中的均匀随机抽样(蓄水池抽样,单趟有界扫描)。</summary>
+        private static Actor PickRandomCommoner(Kingdom pKingdom)
+        {
+            Actor chosen = null;
+            int seen = 0;
+            int scanned = 0;
+            foreach (Actor unit in pKingdom.getUnits())
+            {
+                if (scanned++ >= COMMONER_SCAN_LIMIT) break;
+                if (!IsEligibleCommoner(unit, pKingdom)) continue;
+                seen++;
+                if (Rng.Next(seen) == 0) chosen = unit; // 蓄水池:以 1/seen 概率替换
+            }
+            return chosen;
+        }
+
+        private static bool IsEligibleCommoner(Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pActor.kingdom != pKingdom) return false;
+            bool inSystem = LineageService.IsXia(pActor) || LineageService.UsesAwLineageSystem(pActor);
+            return RepublicGovernmentRules.IsEligibleCommonerLeader(
+                pInLineageSystem: inSystem,
+                pIsMale: pActor.isSexMale(),
+                pIsAdult: pActor.isAdult(),
+                pIsAlive: !pActor.isRekt() && pActor.isAlive(),
+                pIsSlave: SlaveService.IsSlave(pActor),
+                pIsKing: pActor.isKing(),
+                pIsNoble: ChronicleGate.IsNobleActor(pActor));
         }
 
         public static void RefreshAfterKingCheck(Kingdom pKingdom)
@@ -17,7 +72,9 @@ namespace AncientWarfare3.core.lineage
 
             if (pKingdom.hasKing())
             {
-                ClearRepublic(pKingdom, "king_restored");
+                // 共和推举的首领本身是"王",但不结束共和政体;仅世袭/城主复位的君主才清共和。
+                if (!IsRepublicLeader(pKingdom.king))
+                    ClearRepublic(pKingdom, "king_restored");
                 return;
             }
 

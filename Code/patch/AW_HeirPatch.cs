@@ -28,15 +28,22 @@ namespace AncientWarfare3.patch
         {
             if (!LineageService.IsXiaKingdom(pKingdom)) return true;
             Actor heir = HeirService.GetHeir(pKingdom);
-            Actor leaderCandidate = heir == null ? HeirService.GetLeaderSuccessionCandidate(pKingdom) : null;
-            __result = HeirRecallRules.ShouldPreferRegisteredHeirBeforeLeaderFallback(heir != null)
-                ? heir
-                : (HeirRecallRules.ShouldUseLeaderFallbackForXiaizedSuccession(
-                    pHasRegisteredHeir: false,
-                    pHasLeaderCandidate: leaderCandidate != null)
-                    ? leaderCandidate
-                    : null);
-            if (heir == null) HeirService.MarkLeaderFallbackSuccession(pKingdom, __result);
+            if (heir != null) { __result = heir; return false; }   // 世袭君主
+
+            // 尚未共和时,先尝试城主继位(君主制延续);已是共和则跳过,直接推举平民。
+            if (!RepublicGovernmentService.IsRepublic(pKingdom))
+            {
+                Actor leaderCandidate = HeirService.GetLeaderSuccessionCandidate(pKingdom);
+                if (leaderCandidate != null)
+                {
+                    HeirService.MarkLeaderFallbackSuccession(pKingdom, leaderCandidate);
+                    __result = leaderCandidate;
+                    return false;
+                }
+            }
+
+            // 无世系继承人、无城主候选 → 共和国:从平民中随机推举首领(选举、不世袭)。
+            __result = RepublicGovernmentService.ElectCommonerLeader(pKingdom);
             return false;
         }
 
