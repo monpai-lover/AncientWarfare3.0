@@ -62,9 +62,10 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldEnterRepublic(bool pSuccessionPending, bool pHasMonarchyHeir,
-            int pElectableCount)
+            int pElectableCount, bool pMonarchyEstablished)
         {
-            return !pSuccessionPending && !pHasMonarchyHeir && pElectableCount > 0;
+            return pMonarchyEstablished && !pSuccessionPending &&
+                   !pHasMonarchyHeir && pElectableCount > 0;
         }
 
         public static bool ShouldPreserveRepublicOnSetKing(bool pWasRepublic,

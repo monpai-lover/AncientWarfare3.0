@@ -207,6 +207,7 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
         public const string KINGDOM_LEGITIMATE_SHI_ID = "aw_legitimate_shi_id";
         public const string KINGDOM_LEGITIMATE_LINEAGE_ID = "aw_legitimate_lineage_id";
+        public const string KINGDOM_MONARCHY_ESTABLISHED = "aw_monarchy_established";
         public const string KINGDOM_RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string KINGDOM_SUCCESSION_MODE = "aw_succession_mode";
         public const string RESTORED_SHI_ID = "aw_restored_shi_id";

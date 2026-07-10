@@ -25,6 +25,19 @@ namespace AncientWarfare3.core.lineage
             return leader;
         }
 
+        public static bool HasEstablishedMonarchy(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            pKingdom.data.get(LineageKeys.KINGDOM_MONARCHY_ESTABLISHED, out bool established, false);
+            return established;
+        }
+
+        public static void MarkMonarchyEstablished(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.set(LineageKeys.KINGDOM_MONARCHY_ESTABLISHED, true);
+        }
+
         public static bool IsRegisteredRepublicSuccessor(Kingdom pKingdom, Actor pActor)
         {
             if (!IsRepublic(pKingdom) || pActor?.data == null) return false;
@@ -54,7 +67,9 @@ namespace AncientWarfare3.core.lineage
             if (!wasRepublic)
             {
                 bool hasMonarchyHeir = HeirService.FindHeirReadOnly(pKingdom)?.data != null;
-                if (!RepublicGovernmentRules.ShouldEnterRepublic(pending, hasMonarchyHeir, ranked.Count))
+                bool monarchyEstablished = HasEstablishedMonarchy(pKingdom);
+                if (!RepublicGovernmentRules.ShouldEnterRepublic(
+                        pending, hasMonarchyHeir, ranked.Count, monarchyEstablished))
                     return null;
                 SetRepublic(pKingdom);
             }

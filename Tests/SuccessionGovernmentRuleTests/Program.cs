@@ -57,7 +57,7 @@ namespace SuccessionGovernmentRuleTests
                 "When the crown prince and his son are dead, the surviving brother must inherit.");
             Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
                     pSuccessionPending: false, pHasMonarchyHeir: selectedFamilyHeir >= 0,
-                    pElectableCount: 5),
+                    pElectableCount: 5, pMonarchyEstablished: true),
                 "A surviving brother must prevent an erroneous republic conversion.");
 
             Expect(SuccessionTransitionRules.IsOfficialRoleEligible(
@@ -81,6 +81,28 @@ namespace SuccessionGovernmentRuleTests
             Expect(!SuccessionTransitionRules.ShouldUseManagedSuccession(
                     pIsXiaKingdom: false, pUsesXiaizedInstitutions: false),
                 "Unmanaged vanilla kingdoms must retain vanilla succession.");
+
+            Expect(SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    pIsRepublic: false, pMonarchyEstablished: false),
+                "A new managed kingdom must select its first monarch from city leaders.");
+            Expect(!SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    pIsRepublic: false, pMonarchyEstablished: true),
+                "An extinct established monarchy must not reuse founder selection.");
+            Expect(!SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    pIsRepublic: true, pMonarchyEstablished: false),
+                "An existing republic must keep elective succession.");
+            Expect(SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: true, pIsRepublic: false,
+                    pIsRepublicLeader: false),
+                "A successful non-republic accession must establish the monarchy.");
+            Expect(!SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: false, pIsRepublic: false,
+                    pIsRepublicLeader: false),
+                "A rejected setKing call must not establish the monarchy.");
+            Expect(!SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: true, pIsRepublic: true,
+                    pIsRepublicLeader: true),
+                "A republican accession must not establish a monarchy.");
 
             Expect(SuccessionTransitionRules.ShouldUseCachedHeir(
                     pSuccessionPending: true, pCachedHeirEligible: true),
@@ -111,13 +133,20 @@ namespace SuccessionGovernmentRuleTests
                 "Actor ID must make exact election ties deterministic.");
 
             Expect(RepublicGovernmentRules.ShouldEnterRepublic(
-                    pSuccessionPending: false, pHasMonarchyHeir: false, pElectableCount: 2),
+                    pSuccessionPending: false, pHasMonarchyHeir: false,
+                    pElectableCount: 2, pMonarchyEstablished: true),
                 "True extinction with electable people must create a republic.");
             Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
-                    pSuccessionPending: true, pHasMonarchyHeir: false, pElectableCount: 2),
+                    pSuccessionPending: false, pHasMonarchyHeir: false,
+                    pElectableCount: 2, pMonarchyEstablished: false),
+                "A kingdom that has never had a king must not become a republic.");
+            Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: true, pHasMonarchyHeir: false,
+                    pElectableCount: 2, pMonarchyEstablished: true),
                 "A temporary vacancy must not create a republic.");
             Expect(!RepublicGovernmentRules.ShouldEnterRepublic(
-                    pSuccessionPending: false, pHasMonarchyHeir: false, pElectableCount: 0),
+                    pSuccessionPending: false, pHasMonarchyHeir: false,
+                    pElectableCount: 0, pMonarchyEstablished: true),
                 "Government state must not change before an electable leader exists.");
 
             Expect(RepublicGovernmentRules.ShouldPreserveRepublicOnSetKing(

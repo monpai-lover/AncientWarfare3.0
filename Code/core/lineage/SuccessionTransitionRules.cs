@@ -36,6 +36,18 @@ namespace AncientWarfare3.core.lineage
             return pIsXiaKingdom || pUsesXiaizedInstitutions;
         }
 
+        public static bool ShouldUseInitialFounderFallback(bool pIsRepublic,
+            bool pMonarchyEstablished)
+        {
+            return !pIsRepublic && !pMonarchyEstablished;
+        }
+
+        public static bool ShouldMarkMonarchyEstablished(bool pSetKingSucceeded,
+            bool pIsRepublic, bool pIsRepublicLeader)
+        {
+            return pSetKingSucceeded && !pIsRepublic && !pIsRepublicLeader;
+        }
+
         public static bool ShouldBlockShatteredCrownEvent(bool pUsesManagedLineage)
         {
             return false;

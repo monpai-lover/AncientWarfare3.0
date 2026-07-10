@@ -34,6 +34,16 @@ namespace AncientWarfare3.patch
                 return false;
             }
 
+            if (SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    RepublicGovernmentService.IsRepublic(pKingdom),
+                    RepublicGovernmentService.HasEstablishedMonarchy(pKingdom)))
+            {
+                Actor founder = HeirService.GetLeaderSuccessionCandidate(pKingdom);
+                HeirService.MarkLeaderFallbackSuccession(pKingdom, founder);
+                __result = founder;
+                return false;
+            }
+
             __result = RepublicGovernmentService.ElectLeaderForVacancy(pKingdom);
             return false;
         }
@@ -66,13 +76,17 @@ namespace AncientWarfare3.patch
             if (!UsesManagedSuccession(__instance)) return;
 
             Actor king = pActor ?? __instance.king;
-            if (pActor != null && __instance.king != pActor) return;
-            if (king != null)
-            {
-                LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing,
-                    __state.WasRegisteredHeir, __state.PreNobleDistance);
-                HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
-            }
+            bool setKingSucceeded = king?.data != null &&
+                                    (pActor == null || __instance.king == pActor);
+            if (!setKingSucceeded) return;
+            if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    setKingSucceeded,
+                    RepublicGovernmentService.IsRepublic(__instance),
+                    RepublicGovernmentService.IsRepublicLeader(king)))
+                RepublicGovernmentService.MarkMonarchyEstablished(__instance);
+            LineageService.OnKingFoundBranch(__instance, king, __state.PreviousKing,
+                __state.WasRegisteredHeir, __state.PreNobleDistance);
+            HeirService.RecallForSuccession(__instance, king, __state.WasRegisteredHeir);
 
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);

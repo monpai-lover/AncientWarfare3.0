@@ -2495,6 +2495,30 @@ namespace WarFabricationRuleTests
                     pIsRebelGovernment: true))
                 throw new Exception("Peasant rebel governments must keep the rebel state instead of becoming republics.");
 
+            if (!SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    pIsRepublic: false, pMonarchyEstablished: false))
+                throw new Exception("A new managed kingdom must use city leaders to establish its first monarch.");
+            if (SuccessionTransitionRules.ShouldUseInitialFounderFallback(
+                    pIsRepublic: false, pMonarchyEstablished: true))
+                throw new Exception("An established monarchy must not return to initial founder selection.");
+            if (!SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: true, pIsRepublic: false, pIsRepublicLeader: false))
+                throw new Exception("A successful non-republic accession must establish the monarchy.");
+            if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: false, pIsRepublic: false, pIsRepublicLeader: false))
+                throw new Exception("A rejected setKing call must not establish the monarchy.");
+            if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
+                    pSetKingSucceeded: true, pIsRepublic: true, pIsRepublicLeader: true))
+                throw new Exception("A republican accession must not establish a monarchy.");
+            if (RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: false, pHasMonarchyHeir: false,
+                    pElectableCount: 2, pMonarchyEstablished: false))
+                throw new Exception("A kingdom that has never established a monarch must not become a republic.");
+            if (!RepublicGovernmentRules.ShouldEnterRepublic(
+                    pSuccessionPending: false, pHasMonarchyHeir: false,
+                    pElectableCount: 2, pMonarchyEstablished: true))
+                throw new Exception("A truly extinct established monarchy should become a republic.");
+
             if (RepublicGovernmentRules.SuffixForNameplate(pIsRepublic: true) != "\u5171\u548c\u56fd")
                 throw new Exception("Republic kingdoms should use the republic nameplate suffix.");
 
