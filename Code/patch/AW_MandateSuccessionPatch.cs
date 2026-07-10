@@ -21,8 +21,9 @@ namespace AncientWarfare3.patch
         private static bool UsesManagedLineage(Kingdom pKingdom)
         {
             return pKingdom?.data != null &&
-                   (LineageService.IsXiaKingdom(pKingdom) ||
-                    XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
+                   SuccessionTransitionRules.ShouldUseManagedSuccession(
+                       LineageService.IsXiaKingdom(pKingdom),
+                       XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
         }
 
         [HarmonyPrefix]

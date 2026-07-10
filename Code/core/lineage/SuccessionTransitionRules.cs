@@ -30,6 +30,12 @@ namespace AncientWarfare3.core.lineage
             return pUsesManagedLineage;
         }
 
+        public static bool ShouldUseManagedSuccession(bool pIsXiaKingdom,
+            bool pUsesXiaizedInstitutions)
+        {
+            return pIsXiaKingdom || pUsesXiaizedInstitutions;
+        }
+
         public static bool ShouldBlockShatteredCrownEvent(bool pUsesManagedLineage)
         {
             return false;

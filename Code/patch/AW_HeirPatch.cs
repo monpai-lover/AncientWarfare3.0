@@ -17,7 +17,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(SuccessionTool), nameof(SuccessionTool.getKingFromRoyalClan))]
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
-            if (!LineageService.IsXiaKingdom(pKingdom)) return true;
+            if (!UsesManagedSuccession(pKingdom)) return true;
             __result = HeirService.GetHeir(pKingdom);
             return false;
         }
@@ -26,7 +26,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(SuccessionTool), nameof(SuccessionTool.getKingFromLeaders))]
         public static bool GetKingFromLeaders_Prefix(Kingdom pKingdom, ref Actor __result)
         {
-            if (!LineageService.IsXiaKingdom(pKingdom)) return true;
+            if (!UsesManagedSuccession(pKingdom)) return true;
             Actor heir = HeirService.GetHeir(pKingdom);
             if (heir != null)
             {
@@ -63,7 +63,7 @@ namespace AncientWarfare3.patch
             KingBranchContext __state)
         {
             if (pFromLoad || __instance?.data == null) return;
-            if (!LineageService.IsXiaKingdom(__instance)) return;
+            if (!UsesManagedSuccession(__instance)) return;
 
             Actor king = pActor ?? __instance.king;
             if (pActor != null && __instance.king != pActor) return;
@@ -77,6 +77,14 @@ namespace AncientWarfare3.patch
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             YearNameService.OnNewKing(__instance);
+        }
+
+        private static bool UsesManagedSuccession(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   SuccessionTransitionRules.ShouldUseManagedSuccession(
+                       LineageService.IsXiaKingdom(pKingdom),
+                       XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
         }
     }
 }

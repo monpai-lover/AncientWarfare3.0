@@ -52,6 +52,12 @@ namespace SuccessionGovernmentRuleTests
             Expect(SuccessionTransitionRules.ShouldBlockVanillaMassFragmentation(
                     pUsesManagedLineage: true),
                 "Managed lineage kingdoms must block vanilla all-city fragmentation.");
+            Expect(SuccessionTransitionRules.ShouldUseManagedSuccession(
+                    pIsXiaKingdom: false, pUsesXiaizedInstitutions: true),
+                "Xiaized AW-lineage kingdoms must use the same succession hook.");
+            Expect(!SuccessionTransitionRules.ShouldUseManagedSuccession(
+                    pIsXiaKingdom: false, pUsesXiaizedInstitutions: false),
+                "Unmanaged vanilla kingdoms must retain vanilla succession.");
 
             Expect(SuccessionTransitionRules.ShouldUseCachedHeir(
                     pSuccessionPending: true, pCachedHeirEligible: true),
