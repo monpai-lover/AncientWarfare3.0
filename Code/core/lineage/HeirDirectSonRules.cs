@@ -39,10 +39,19 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool NeedsRefresh(long cachedHeirId, bool cachedEligible,
-            long eldestEligibleDirectSonId)
+            bool cachedRelationshipValid, long eldestEligibleDirectSonId)
         {
             if (!cachedEligible) return true;
-            return eldestEligibleDirectSonId >= 0 && cachedHeirId != eldestEligibleDirectSonId;
+            if (eldestEligibleDirectSonId >= 0)
+                return cachedHeirId != eldestEligibleDirectSonId;
+            return !cachedRelationshipValid;
+        }
+
+        public static bool IsCachedRelationshipSignatureValid(long cachedHeirId, long currentKingId,
+            long signedHeirId, long signedKingId)
+        {
+            return cachedHeirId >= 0 && currentKingId >= 0 &&
+                   cachedHeirId == signedHeirId && currentKingId == signedKingId;
         }
 
         public static bool ShouldReconcile(int currentYear, int lastYear, bool successionPending)

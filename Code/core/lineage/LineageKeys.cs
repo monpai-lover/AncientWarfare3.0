@@ -213,6 +213,8 @@ namespace AncientWarfare3.core.lineage
 
         public const string KINGDOM_HEIR_ID = "aw_heir_id";
         public const string KINGDOM_HEIR_LAST_RECONCILE_YEAR = "aw_heir_last_reconcile_year";
+        public const string KINGDOM_HEIR_RELATION_ACTOR_ID = "aw_heir_relation_actor_id";
+        public const string KINGDOM_HEIR_RELATION_KING_ID = "aw_heir_relation_king_id";
         public const string IS_HEIR = "aw_is_heir";
         public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
         public const string KINGDOM_LEGITIMATE_SHI_ID = "aw_legitimate_shi_id";

@@ -106,8 +106,15 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_LAST_RECONCILE_YEAR, year);
 
             Actor eldest = PickEldestLivingSon(pKingdom.king);
+            long referenceKingId = ResolveReferenceKingId(pKingdom, pKingdom.king);
+            // Full selection validates ancestry; this signed pair keeps the yearly check O(1).
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, out long signedHeirId, -1L);
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID, out long signedKingId, -1L);
+            bool cachedRelationshipValid = cached?.data != null &&
+                HeirDirectSonRules.IsCachedRelationshipSignatureValid(
+                    cached.data.id, referenceKingId, signedHeirId, signedKingId);
             if (!pForce && !HeirDirectSonRules.NeedsRefresh(cached?.data?.id ?? -1L,
-                    cached?.data != null, eldest?.data?.id ?? -1L))
+                    cached?.data != null, cachedRelationshipValid, eldest?.data?.id ?? -1L))
                 return cached;
             return RefreshHeirAndReturn(pKingdom);
         }
@@ -254,6 +261,8 @@ namespace AncientWarfare3.core.lineage
             ClearOldHeirFlag(pKingdom);                       // 娓呮棫缁ф壙浜?IS_HEIR 鏍囪
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, -1L);
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID, -1L);
             RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 
@@ -327,6 +336,10 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);
+            long referenceKingId = ResolveReferenceKingId(pKingdom, pKingdom.king);
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, heir?.data?.id ?? -1L);
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
+                heir?.data == null ? -1L : referenceKingId);
             SetHeirFlag(heir, true);
             RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
