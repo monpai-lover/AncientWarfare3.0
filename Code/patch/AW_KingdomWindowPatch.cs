@@ -50,10 +50,22 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(StatsWindow), "tryToShowActor")]
         public static bool TryToShowActor_Prefix(ref string pTitle, long pID, Actor pObject)
         {
+            if (pTitle == "king")
+            {
+                Actor ruler = pObject;
+                if (ruler == null && pID >= 0)
+                {
+                    try { ruler = World.world?.units?.get(pID); }
+                    catch { ruler = null; }
+                }
+                if (ruler?.kingdom?.data != null && RepublicGovernmentService.IsRepublic(ruler.kingdom))
+                    pTitle = GovernmentTitleRules.RepublicHeadKey;
+                return true;
+            }
             if (!HeirTitleRules.ShouldRewriteOriginalHeirTitle(pTitle)) return true; // 只管继承人行
             Actor actor = pObject != null ? pObject : World.world.units.get(pID);
             if (actor == null || actor.isRekt()) return false; // 无继承人 → 不画空行
-            pTitle = HeirTitleRules.TitleKey(SelectedMetas.selected_kingdom);
+            pTitle = HeirTitleRules.TitleKey(actor.kingdom ?? SelectedMetas.selected_kingdom);
             return true;
         }
     }

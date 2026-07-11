@@ -727,7 +727,23 @@ namespace AncientWarfare3.ui.windows
             {
                 bool hasKing = kingdom.hasKing();
                 _kingCol.SetActive(hasKing);
-                if (hasKing) _kingAvatar.show(kingdom.king);
+                if (hasKing)
+                {
+                    _kingAvatar.show(kingdom.king);
+                    Transform kingLabel = _kingCol.transform.Find("Label");
+                    if (kingLabel != null)
+                    {
+                        string key = GovernmentTitleRules.RulerKey(
+                            RepublicGovernmentService.IsRepublic(kingdom));
+                        LocalizedText localized = kingLabel.GetComponent<LocalizedText>();
+                        if (localized != null) localized.setKeyAndUpdate(key);
+                        else
+                        {
+                            Text text = kingLabel.GetComponent<Text>();
+                            if (text != null) text.text = AW_L10n.Text(key, key);
+                        }
+                    }
+                }
             }
 
             // 继承人列(头像 + "继承人"标签):**列容器始终保留占位**(SetActive(true)),
