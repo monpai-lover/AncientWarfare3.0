@@ -11,5 +11,10 @@ namespace AncientWarfare3.content
         {
             return pUsesXiaNaming && pValidName;
         }
+
+        public static bool ShouldFinalizeCreation(bool usesXiaNaming, bool customName)
+        {
+            return usesXiaNaming && !customName;
+        }
     }
 }
