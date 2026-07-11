@@ -199,12 +199,23 @@ namespace AncientWarfare3.core.lineage
         private static string ResolveRoleSnapshot(Actor pActor)
         {
             if (pActor?.data == null) return "";
-            try { if (pActor.isKing()) return "king"; } catch { }
+            try
+            {
+                if (pActor.isKing())
+                    return GovernmentTitleRules.RoleSnapshot(
+                        RepublicGovernmentService.IsRepublic(pActor.kingdom),
+                        pIsRuler: true, pIsSuccessor: false,
+                        MandateService.IsMandateKingdom(pActor.kingdom));
+            }
+            catch { }
             try
             {
                 pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
                 if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
-                    return HeirTitleRules.RoleSnapshot(MandateService.IsMandateKingdom(pActor.kingdom));
+                    return GovernmentTitleRules.RoleSnapshot(
+                        RepublicGovernmentService.IsRepublic(pActor.kingdom),
+                        pIsRuler: false, pIsSuccessor: true,
+                        MandateService.IsMandateKingdom(pActor.kingdom));
             }
             catch { }
             try
@@ -248,6 +259,8 @@ namespace AncientWarfare3.core.lineage
                 case "king": return "\u541b\u4e3b";
                 case "heir_shizi": return "\u4e16\u5b50";
                 case "heir_taizi": return "\u592a\u5b50";
+                case "republic_head": return "\u5143\u9996";
+                case "republic_elder": return "\u5143\u8001";
                 case "city_leader": return "\u57ce\u4e3b";
                 case "clan_chief": return "\u6c0f\u65cf\u5bb6\u4e3b";
                 case "royal_guard_captain": return "\u7981\u536b\u519b\u7edf\u9886";

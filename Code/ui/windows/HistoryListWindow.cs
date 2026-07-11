@@ -471,6 +471,8 @@ namespace AncientWarfare3.ui.windows
             {
                 case "king": return AW_L10n.Text("aw_role_king", "\u541B\u4E3B");
                 case "heir_shizi": return AW_L10n.Text("aw_heir_shizi", "\u4E16\u5B50");
+                case "republic_head": return AW_L10n.Text("aw_republic_head", "\u5143\u9996");
+                case "republic_elder": return AW_L10n.Text("aw_republic_elder", "\u5143\u8001");
                 case "heir_taizi": return AW_L10n.Text("aw_heir_taizi", "\u592A\u5B50");
                 case "city_leader": return AW_L10n.Text("aw_role_city_leader", "\u57CE\u4E3B");
                 case "clan_chief": return AW_L10n.Text("aw_role_clan_chief", "\u6C0F\u65CF\u5BB6\u4E3B");
