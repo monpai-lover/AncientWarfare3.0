@@ -17,6 +17,11 @@ namespace AncientWarfare3.patch
             DeferredRuntimeWorkService.DrainFrame();
             Bench.benchEnd(CityMaintenanceBenchmarkRules.DeferredFlush,
                 CityMaintenanceBenchmarkRules.Group);
+            Bench.bench(CityMaintenanceBenchmarkRules.CaptureScanStep,
+                CityMaintenanceBenchmarkRules.Group);
+            SlaveCaptureScanService.DrainFrame();
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.CaptureScanStep,
+                CityMaintenanceBenchmarkRules.Group);
         }
     }
 }

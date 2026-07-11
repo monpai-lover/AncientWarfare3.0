@@ -63,6 +63,7 @@ namespace AncientWarfare3.patch
         private static void ResetHistoryWindowsAfterArchiveSwitch()
         {
             try { core.lineage.DeferredRuntimeWorkService.ClearRuntimeState(); } catch { }
+            try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }

@@ -238,48 +238,47 @@ namespace AncientWarfare3.core.lineage
             if (alreadyHasCatcher) return;
             if (!pForce && !ShouldRunCityMaintenance(pCity, LineageKeys.SLAVE_CATCHER_LAST_CHECK,
                     CITY_SLAVE_CATCHER_CHECK_INTERVAL)) return;
-            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatchersTargetScan, CityMaintenanceBenchmarkRules.Group);
-            bool hasTarget = HasCaptureTargetForCity(pCity);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatchersTargetScan, CityMaintenanceBenchmarkRules.Group);
-            if (!hasTarget) return;
-
-            pCity.jobs.addToJob(SlaveryContent.SlaveCatcherJob, 1);
+            Bench.bench(CityMaintenanceBenchmarkRules.CaptureScanSubmit, CityMaintenanceBenchmarkRules.Group);
+            CaptureTargetSearchState state = SlaveCaptureScanService.FindOrRequest(
+                kingdom, pCity.getTile(), out _, pCity.id);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.CaptureScanSubmit, CityMaintenanceBenchmarkRules.Group);
+            if (state == CaptureTargetSearchState.Hit)
+                AssignSlaveCatcherAfterScan(pCity.id, kingdom.id);
         }
 
         public static Actor FindSlaveCaptureTarget(Actor pCatcher, int pSearchRadius)
         {
-            if (!CanBeSlaveCatcher(pCatcher)) return null;
-            if (pCatcher.current_tile == null || pCatcher.kingdom == null) return null;
-            if (!ShouldScanCaptureTargetsFromCurrentPosition(pCatcher)) return null;
-            if (!ShouldRunCaptureSearch(pCatcher)) return null;
+            FindSlaveCaptureTarget(pCatcher, pSearchRadius, out Actor target);
+            return target;
+        }
 
-            Actor best = null;
-            int bestDist = int.MaxValue;
-            int radius = Math.Max(pSearchRadius, SLAVE_CATCHER_SEARCH_RADIUS);
-            int maxDist = radius * radius;
-            Bench.bench(CityMaintenanceBenchmarkRules.SlaveCatcherTargetScan,
-                CityMaintenanceBenchmarkRules.Group);
-            try
+        internal static CaptureTargetSearchState FindSlaveCaptureTarget(Actor pCatcher, int pSearchRadius,
+            out Actor pTarget)
+        {
+            pTarget = null;
+            if (!CanBeSlaveCatcher(pCatcher)) return CaptureTargetSearchState.Miss;
+            if (pCatcher.current_tile == null || pCatcher.kingdom == null) return CaptureTargetSearchState.Miss;
+            if (!ShouldScanCaptureTargetsFromCurrentPosition(pCatcher)) return CaptureTargetSearchState.Miss;
+            if (!ShouldRunCaptureSearch(pCatcher)) return CaptureTargetSearchState.Pending;
+
+            Bench.bench(CityMaintenanceBenchmarkRules.CaptureScanSubmit, CityMaintenanceBenchmarkRules.Group);
+            CaptureTargetSearchState state = SlaveCaptureScanService.FindOrRequest(
+                pCatcher.kingdom, pCatcher.current_tile, out pTarget);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.CaptureScanSubmit, CityMaintenanceBenchmarkRules.Group);
+            if (state == CaptureTargetSearchState.Hit)
             {
-                int chunkRadius = ActorAiSearchThrottleRules.ChunkRadiusForTileRadius(
-                    radius, MAP_CHUNK_SIZE);
-                foreach (Actor target in Finder.getUnitsFromChunk(
-                             pCatcher.current_tile, chunkRadius, radius))
-                {
-                    if (!CanCaptureTargetForKnownCatcher(pCatcher, target)) continue;
-                    int dist = Toolbox.SquaredDistTile(pCatcher.current_tile, target.current_tile);
-                    if (dist > maxDist || dist >= bestDist) continue;
-                    bestDist = dist;
-                    best = target;
-                }
+                MarkCaptureSearchResult(pCatcher, pTarget);
+                return state;
             }
-            finally
-            {
-                Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveCatcherTargetScan,
-                    CityMaintenanceBenchmarkRules.Group);
-            }
-            MarkCaptureSearchResult(pCatcher, best);
-            return best;
+            if (state == CaptureTargetSearchState.Miss)
+                MarkCaptureSearchResult(pCatcher, null);
+            return state;
+        }
+
+        internal static void WaitAfterSlaveCapturePending(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.makeWait(RandomWait(0.25f, 0.75f));
         }
 
         public static void WaitAfterSlaveCaptureNoTarget(Actor pActor)
@@ -1095,27 +1094,6 @@ namespace AncientWarfare3.core.lineage
             catch { return 1f; }
         }
 
-        private static bool HasCaptureTargetForCity(City pCity)
-        {
-            if (pCity?.data == null || pCity.kingdom == null) return false;
-            WorldTile origin = pCity.getTile();
-            if (origin == null) return false;
-
-            using ListPool<Kingdom> enemies = pCity.kingdom.getEnemiesKingdoms();
-            foreach (Kingdom enemy in enemies)
-            {
-                if (enemy?.data == null) continue;
-                foreach (Actor target in enemy.getUnits())
-                {
-                    if (!CanBeCapturedAsTarget(target, pAllowImportantCapture: true)) continue;
-                    if (target.current_tile == null || !origin.isSameIsland(target.current_tile)) continue;
-                    if (Toolbox.SquaredDistTile(origin, target.current_tile) <=
-                        SLAVE_CATCHER_SEARCH_RADIUS * SLAVE_CATCHER_SEARCH_RADIUS) return true;
-                }
-            }
-            return false;
-        }
-
         private static bool ShouldRunCityMaintenance(City pCity, string pKey, int pInterval)
         {
             if (pCity?.data == null) return false;
@@ -1144,16 +1122,35 @@ namespace AncientWarfare3.core.lineage
 
         private static bool CanCaptureTargetForKnownCatcher(Actor pCatcher, Actor pTarget)
         {
+            return pCatcher?.kingdom?.data != null && pCatcher.current_tile != null &&
+                   IsCaptureTargetForScan(pCatcher.kingdom, pCatcher.current_tile, pTarget, pRadius: 0);
+        }
+
+        internal static bool IsCaptureTargetForScan(Kingdom pKingdom, WorldTile pOrigin,
+            Actor pTarget, int pRadius)
+        {
             if (!CanBeCapturedAsTarget(pTarget, pAllowImportantCapture: true)) return false;
-            if (pCatcher.kingdom == null || pTarget.kingdom == null) return false;
-            if (pCatcher.kingdom == pTarget.kingdom) return false;
-            if (!pCatcher.kingdom.isEnemy(pTarget.kingdom)) return false;
-            if (pCatcher.current_tile == null || pTarget.current_tile == null) return false;
-            if (!pCatcher.current_tile.isSameIsland(pTarget.current_tile)) return false;
+            if (pKingdom?.data == null || pTarget.kingdom?.data == null) return false;
+            if (pKingdom == pTarget.kingdom || !pKingdom.isEnemy(pTarget.kingdom)) return false;
+            if (pOrigin == null || pTarget.current_tile == null) return false;
+            if (!pOrigin.isSameIsland(pTarget.current_tile)) return false;
+            if (pRadius > 0 && Toolbox.SquaredDistTile(pOrigin, pTarget.current_tile) > pRadius * pRadius)
+                return false;
             float threshold = IsImportantCaptureTarget(pTarget)
                 ? IMPORTANT_CAPTURE_HEALTH_RATIO
                 : DIRECT_CAPTURE_HEALTH_RATIO;
             return pTarget.getHealthRatio() <= threshold;
+        }
+
+        internal static void AssignSlaveCatcherAfterScan(long pCityId, long pKingdomId)
+        {
+            City city;
+            try { city = World.world?.cities?.get(pCityId); }
+            catch { return; }
+            if (city?.data == null || city.kingdom?.data == null || city.kingdom.id != pKingdomId) return;
+            if (!IsSlaveryEnabled(city.kingdom) || SlaveryContent.SlaveCatcherJob == null) return;
+            if (city.getUnitsTotal() < 15 || city.jobs.countCurrentJobs(SlaveryContent.SlaveCatcherJob) > 0) return;
+            city.jobs.addToJob(SlaveryContent.SlaveCatcherJob, 1);
         }
 
         private static bool ShouldRunCaptureSearch(Actor pCatcher)

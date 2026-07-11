@@ -9,8 +9,15 @@ namespace AncientWarfare3.ai.behaviours.actor
 
         public override BehResult execute(Actor pActor)
         {
-            Actor target = SlaveService.FindSlaveCaptureTarget(pActor, SEARCH_RADIUS_TILES);
-            if (target == null)
+            CaptureTargetSearchState state = SlaveService.FindSlaveCaptureTarget(
+                pActor, SEARCH_RADIUS_TILES, out Actor target);
+            if (state == CaptureTargetSearchState.Pending)
+            {
+                pActor.beh_actor_target = null;
+                SlaveService.WaitAfterSlaveCapturePending(pActor);
+                return BehResult.Stop;
+            }
+            if (state == CaptureTargetSearchState.Miss || target == null)
             {
                 pActor.beh_actor_target = null;
                 SlaveService.WaitAfterSlaveCaptureNoTarget(pActor);
