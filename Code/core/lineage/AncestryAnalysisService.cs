@@ -580,8 +580,22 @@ namespace AncientWarfare3.core.lineage
                     if (pActor.isKing())
                     {
                         string kingdomName = pActor.kingdom?.name ?? pRow?.kingdom_name ?? "";
+                        if (RepublicGovernmentService.IsRepublic(pActor.kingdom))
+                            return GovernmentTitleRules.BuildSocialTitle(
+                                kingdomName, pIsHead: true, pIsElder: false);
                         string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pActor.kingdom));
                         return string.IsNullOrEmpty(kingdomName) ? "\u541b\u4e3b" : kingdomName + titleChar;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    if (RepublicGovernmentService.IsRepublic(pActor.kingdom) &&
+                        HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    {
+                        string kingdomName = pActor.kingdom?.name ?? pRow?.kingdom_name ?? "";
+                        return HeirTitleRules.BuildSocialTitle(kingdomName, pActor.kingdom);
                     }
                 }
                 catch { }
@@ -615,7 +629,7 @@ namespace AncientWarfare3.core.lineage
                     if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
                     {
                         string kingdomName = pActor.kingdom?.name ?? pRow?.kingdom_name ?? "";
-                        return string.IsNullOrEmpty(kingdomName) ? "\u7ee7\u627f\u4eba" : kingdomName + " \u7ee7\u627f\u4eba";
+                        return HeirTitleRules.BuildSocialTitle(kingdomName, pActor.kingdom);
                     }
                 }
                 catch { }

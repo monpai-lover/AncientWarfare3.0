@@ -278,9 +278,20 @@ namespace AncientWarfare3.core.lineage
             {
                 if (pActor.isKing())
                 {
+                    if (RepublicGovernmentService.IsRepublic(pActor.kingdom))
+                        return (GovernmentTitleRules.BuildSocialTitle(
+                            pKingdomName, pIsHead: true, pIsElder: false), color);
                     string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pActor.kingdom));
                     return (string.IsNullOrEmpty(pKingdomName) ? "\u541B\u4E3B" : pKingdomName + titleChar, color);
                 }
+            }
+            catch { }
+
+            try
+            {
+                if (RepublicGovernmentService.IsRepublic(pActor.kingdom) &&
+                    HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    return (HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom), color);
             }
             catch { }
 

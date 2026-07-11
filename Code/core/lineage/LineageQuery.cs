@@ -1589,10 +1589,26 @@ namespace AncientWarfare3.core.lineage
             if (pLive.isKing())
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
+                if (RepublicGovernmentService.IsRepublic(pLive.kingdom))
+                {
+                    pNode.social_title = GovernmentTitleRules.BuildSocialTitle(
+                        kingdomName, pIsHead: true, pIsElder: false);
+                    pNode.social_title_color = color;
+                    return;
+                }
                 string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pLive.kingdom));
                 pNode.social_title = string.IsNullOrEmpty(kingdomName)
                     ? "\u541B\u4E3B"
                     : kingdomName + titleChar;
+                pNode.social_title_color = color;
+                return;
+            }
+
+            if (RepublicGovernmentService.IsRepublic(pLive.kingdom) &&
+                HeirService.IsCurrentHeir(pLive.kingdom, pLive))
+            {
+                string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
+                pNode.social_title = HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom);
                 pNode.social_title_color = color;
                 return;
             }
@@ -1641,6 +1657,13 @@ namespace AncientWarfare3.core.lineage
             {
                 pNode.social_title = title;
                 pNode.social_title_color = string.IsNullOrEmpty(titleColor) ? pNode.kingdom_color : titleColor;
+                return;
+            }
+
+            if (GovernmentTitleRules.IsRepublicSocialTitle(pNode.social_title))
+            {
+                if (string.IsNullOrEmpty(pNode.social_title_color))
+                    pNode.social_title_color = pNode.kingdom_color;
                 return;
             }
 
