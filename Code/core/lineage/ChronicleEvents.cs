@@ -695,6 +695,20 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pActor));
         }
 
+        internal static void OnSlaveEnlisted(ChronicleActorSnapshot pSnapshot)
+        {
+            if (pSnapshot == null || pSnapshot.actor_id < 0) return;
+            HistoryWriter.RecordDeferredPerson(pSnapshot.context, pSnapshot.person,
+                pSnapshot.actor_id, pSnapshot.actor_name, PersonEvent.SLAVE_ENLISTED,
+                pSnapshot.ActorText() + H("aw_hist_slave_enlisted"), ChronicleCategory.WAR,
+                HistoryTarget.Actor(pSnapshot.actor_id));
+            if (pSnapshot.city_id >= 0)
+                HistoryWriter.RecordDeferredCity(pSnapshot.context, pSnapshot.city_id,
+                    pSnapshot.city_name, CityEvent.SLAVE_ENLISTED,
+                    pSnapshot.ActorText() + H("aw_hist_in_city") + pSnapshot.CityText() +
+                    H("aw_hist_slave_army_joined"), HistoryTarget.Actor(pSnapshot.actor_id));
+        }
+
         public static void OnSlaveMerit(Actor pActor, int pPoints, int pTotal, Kingdom pKingdom, City pCity)
         {
             if (pActor?.data == null) return;
@@ -792,6 +806,24 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pActor));
         }
 
+        internal static void OnRoyalGuardAppointed(ChronicleActorSnapshot pSnapshot,
+            string pGuardName, bool pCaptain)
+        {
+            if (pSnapshot == null || pSnapshot.actor_id < 0) return;
+            string guardName = string.IsNullOrEmpty(pGuardName) ? T("aw_hist_royal_guard_default") : pGuardName;
+            HistoryText role = pCaptain ? H("aw_hist_royal_guard_captain") : H("aw_hist_royal_guard_member");
+            HistoryWriter.RecordDeferredPerson(pSnapshot.context, pSnapshot.person,
+                pSnapshot.actor_id, pSnapshot.actor_name, PersonEvent.ROYAL_GUARD_APPOINTED,
+                pSnapshot.ActorText() + HistoryText.PlainText(" ") + role + HistoryText.PlainText(guardName),
+                ChronicleCategory.WAR, HistoryTarget.Actor(pSnapshot.actor_id));
+            if (pSnapshot.city_id >= 0)
+                HistoryWriter.RecordDeferredCity(pSnapshot.context, pSnapshot.city_id,
+                    pSnapshot.city_name, CityEvent.ROYAL_GUARD_APPOINTED,
+                    pSnapshot.ActorText() + H("aw_hist_royal_guard_in_city_mid") + pSnapshot.CityText() +
+                    HistoryText.PlainText(" ") + role + HistoryText.PlainText(guardName),
+                    HistoryTarget.Actor(pSnapshot.actor_id));
+        }
+
         public static void OnRoyalGuardDismissed(Actor pActor, Kingdom pKingdom, City pCity, string pReason)
         {
             if (pActor?.data == null) return;
@@ -812,6 +844,23 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.Actor(pActor, name) + H("aw_hist_in_city") + HistoryText.City(city, kingdom) +
                     H("aw_hist_left_royal_guard") + HistoryText.PlainText(reason) + H("aw_hist_paren_close"),
                     HistoryTarget.Actor(pActor));
+        }
+
+        internal static void OnRoyalGuardDismissed(ChronicleActorSnapshot pSnapshot, string pReason)
+        {
+            if (pSnapshot == null || pSnapshot.actor_id < 0) return;
+            string reason = RoyalGuardReasonLabel(pReason);
+            HistoryWriter.RecordDeferredPerson(pSnapshot.context, pSnapshot.person,
+                pSnapshot.actor_id, pSnapshot.actor_name, PersonEvent.ROYAL_GUARD_DISMISSED,
+                pSnapshot.ActorText() + H("aw_hist_left_royal_guard") +
+                HistoryText.PlainText(reason) + H("aw_hist_paren_close"), ChronicleCategory.WAR,
+                HistoryTarget.Actor(pSnapshot.actor_id));
+            if (pSnapshot.city_id >= 0)
+                HistoryWriter.RecordDeferredCity(pSnapshot.context, pSnapshot.city_id,
+                    pSnapshot.city_name, CityEvent.ROYAL_GUARD_DISMISSED,
+                    pSnapshot.ActorText() + H("aw_hist_in_city") + pSnapshot.CityText() +
+                    H("aw_hist_left_royal_guard") + HistoryText.PlainText(reason) +
+                    H("aw_hist_paren_close"), HistoryTarget.Actor(pSnapshot.actor_id));
         }
 
         private static bool IsNationalSlaveEvent(Actor pActor)

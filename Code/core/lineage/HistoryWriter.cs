@@ -46,6 +46,85 @@ namespace AncientWarfare3.core.lineage
 
     public static class HistoryWriter
     {
+        internal readonly struct DeferredContext
+        {
+            public readonly double world_time;
+            public readonly string year_prefix;
+            public readonly string year_prefix_rich;
+            public readonly long kingdom_id;
+            public readonly string kingdom_name;
+            public readonly string kingdom_color;
+
+            public DeferredContext(double pWorldTime, string pYearPrefix, string pYearPrefixRich,
+                long pKingdomId, string pKingdomName, string pKingdomColor)
+            {
+                world_time = pWorldTime;
+                year_prefix = pYearPrefix ?? "";
+                year_prefix_rich = pYearPrefixRich ?? "";
+                kingdom_id = pKingdomId;
+                kingdom_name = pKingdomName ?? "";
+                kingdom_color = pKingdomColor ?? "";
+            }
+        }
+
+        internal readonly struct PersonSnapshot
+        {
+            public readonly int age;
+            public readonly int is_king;
+            public readonly string role;
+
+            public PersonSnapshot(int pAge, int pIsKing, string pRole)
+            {
+                age = pAge;
+                is_king = pIsKing;
+                role = pRole ?? "";
+            }
+        }
+
+        internal static DeferredContext CaptureDeferredContext(Kingdom pKingdom)
+        {
+            double time = World.world?.getCurWorldTime() ?? 0.0;
+            return new DeferredContext(time, BuildYearPrefix(time, pKingdom),
+                BuildYearPrefixRich(time, pKingdom), pKingdom?.data?.id ?? -1L,
+                pKingdom?.name ?? "", HistoryColors.FromKingdom(pKingdom));
+        }
+
+        internal static PersonSnapshot CapturePersonSnapshot(Actor pActor)
+        {
+            int age = -1;
+            int isKing = 0;
+            if (pActor?.data != null)
+            {
+                try { age = pActor.getAge(); } catch { }
+                try { isKing = pActor.isKing() ? 1 : 0; } catch { }
+            }
+            return new PersonSnapshot(age, isKing, ResolveRoleSnapshot(pActor));
+        }
+
+        internal static void RecordDeferredPerson(DeferredContext pContext, PersonSnapshot pPerson,
+            long pActorId, string pActorName, string pEventType, HistoryText pContent,
+            string pCategory, HistoryTarget pTarget)
+        {
+            InsertDeferred(PersonBiographyTableItem.GetTableName(), pContext, pEventType, pContent,
+                pActorName, pTarget.IsValid ? pTarget : HistoryTarget.Actor(pActorId),
+                ColumnVal.Create("ACTOR_ID", pActorId),
+                ColumnVal.Create("CATEGORY", pCategory ?? ""),
+                ColumnVal.Create("AGE_AT_EVENT", pPerson.age),
+                ColumnVal.Create("IS_KING_AT_EVENT", pPerson.is_king),
+                ColumnVal.Create("ROLE_SNAPSHOT", pPerson.role),
+                ColumnVal.Create("ROLE_LABEL", RoleLabel(pPerson.role)));
+        }
+
+        internal static void RecordDeferredCity(DeferredContext pContext, long pCityId,
+            string pCityName, string pEventType, HistoryText pContent, HistoryTarget pTarget)
+        {
+            if (pCityId < 0) return;
+            InsertDeferred(CityHistoryTableItem.GetTableName(), pContext, pEventType, pContent,
+                pCityName, pTarget.IsValid ? pTarget : HistoryTarget.From("city", pCityId),
+                ColumnVal.Create("CITY_ID", pCityId),
+                ColumnVal.Create("KINGDOM_NAME", pContext.kingdom_name),
+                ColumnVal.Create("KINGDOM_COLOR", pContext.kingdom_color));
+        }
         public static void RecordPerson(long pActorId, Kingdom pContextKingdom,
             string pSubjectName, string pEventType, string pContent)
         {
@@ -310,6 +389,36 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("HistoryWriter.Insert failed (" + pTable + "): " + e.Message);
             }
+        }
+
+        private static void InsertDeferred(string pTable, DeferredContext pContext,
+            string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget,
+            params ColumnVal[] pExtraCols)
+        {
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null) throw new InvalidOperationException("History archive is unavailable.");
+
+            long eventId = NextEventId(db, pTable);
+            HistoryTarget target = ResolveTarget(pTarget, pContent);
+            var cols = new System.Collections.Generic.List<ColumnVal>
+            {
+                ColumnVal.Create("EVENT_ID", eventId),
+                ColumnVal.Create("WORLD_TIME", pContext.world_time),
+                ColumnVal.Create("YEAR_PREFIX", pContext.year_prefix),
+                ColumnVal.Create("YEAR_PREFIX_RICH", pContext.year_prefix_rich),
+                ColumnVal.Create("SUBJECT_NAME", pSubjectName ?? ""),
+                ColumnVal.Create("SUBJECT_COLOR", pContext.kingdom_color),
+                ColumnVal.Create("CONTENT", pContent.Plain ?? ""),
+                ColumnVal.Create("CONTENT_RICH", pContent.Rich ?? ""),
+                ColumnVal.Create("EVENT_TYPE", pEventType ?? ""),
+                ColumnVal.Create("CONTEXT_KINGDOM_ID", pContext.kingdom_id),
+                ColumnVal.Create("CONTEXT_KINGDOM_NAME", pContext.kingdom_name),
+                ColumnVal.Create("CONTEXT_KINGDOM_COLOR", pContext.kingdom_color),
+                ColumnVal.Create("TARGET_TYPE", target.IsValid ? target.type : ""),
+                ColumnVal.Create("TARGET_ID", target.IsValid ? target.id : -1L)
+            };
+            if (pExtraCols != null) cols.AddRange(pExtraCols);
+            db.Insert(pTable, cols.ToArray());
         }
 
         private static long NextEventId(SQLiteConnection pDb, string pTable)

@@ -32,6 +32,12 @@ namespace AncientWarfare3.core.lineage
             return new HistoryText(plain, "<color=" + color + ">" + HistoryColors.EscapeRich(plain) + "</color>");
         }
 
+        public static HistoryText Reference(string pText, string pColor, string pTargetType, long pTargetId)
+        {
+            HistoryText colored = Colored(pText, pColor);
+            return new HistoryText(colored.Plain, colored.Rich, pTargetType, pTargetId);
+        }
+
         public static HistoryText Actor(Actor pActor, string pFallbackName = "")
         {
             string name = pActor?.getName() ?? pFallbackName ?? "";

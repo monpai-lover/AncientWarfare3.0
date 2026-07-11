@@ -45,6 +45,23 @@ namespace AncientWarfare3.core.lineage
             public bool noble;
         }
 
+        private sealed class GuardStateSnapshot
+        {
+            public long actorId;
+            public string actorName;
+            public long kingdomId;
+            public string kingdomName;
+            public long cityId;
+            public string cityName;
+            public string guardName;
+            public bool active;
+            public bool captain;
+            public bool noble;
+            public double appointedTime;
+            public double dismissedTime;
+            public string dismissReason;
+        }
+
         internal static void ClearRuntimeCaches()
         {
             ThreatSearchNextAllowed.Clear();
@@ -1107,13 +1124,18 @@ namespace AncientWarfare3.core.lineage
                 pMissingTrait: !hasTrait,
                 pKingdomChanged: guardKingdomId != pKingdom.id,
                 pNameChanged: (previousGuardName ?? "") != (pGuardName ?? ""));
-            UpsertGuardState(pActor, pActive: true, pCaptain, ChronicleGate.IsNobleActor(pActor), pGuardName, "");
+            GuardStateSnapshot stateSnapshot = CaptureGuardState(pActor, pActive: true, pCaptain,
+                ChronicleGate.IsNobleActor(pActor), pGuardName, "");
+            ChronicleActorSnapshot chronicleSnapshot = ChronicleActorSnapshot.Capture(
+                pActor, pKingdom, pActor.city);
+            EnqueueGuardState(stateSnapshot);
             if (expensiveRefresh)
                 // 极贵的头像重建(clearGraphicsFully)+ 归档改到有预算的 FlushGuardGraphics 里做,先标脏。
                 pActor.data.set(LineageKeys.ROYAL_GUARD_GFX_DIRTY, true);
 
             if (!wasGuard || wasCaptain != pCaptain)
-                ChronicleEvents.OnRoyalGuardAppointed(pActor, pKingdom, pActor.city, pGuardName, pCaptain);
+                DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent,
+                    () => ChronicleEvents.OnRoyalGuardAppointed(chronicleSnapshot, pGuardName, pCaptain));
 
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardRefreshPersist,
                 CityMaintenanceBenchmarkRules.Group);
@@ -1247,6 +1269,7 @@ namespace AncientWarfare3.core.lineage
             City city = pActor.city;
             pActor.data.get(LineageKeys.ROYAL_GUARD_NAME, out string guardName, BuildGuardName(kingdom));
             pActor.data.get(LineageKeys.ROYAL_GUARD_CAPTAIN, out bool wasCaptain, false);
+            ChronicleActorSnapshot chronicleSnapshot = ChronicleActorSnapshot.Capture(pActor, kingdom, city);
 
             pActor.data.set(LineageKeys.ROYAL_GUARD, false);
             pActor.data.set(LineageKeys.ROYAL_GUARD_CAPTAIN, false);
@@ -1259,14 +1282,22 @@ namespace AncientWarfare3.core.lineage
             ClearGuardCitizenJob(pActor);
             RemoveFromGuardArmy(pActor);
 
-            UpsertGuardState(pActor, pActive: false, wasCaptain, ChronicleGate.IsNobleActor(pActor), guardName, pReason);
+            GuardStateSnapshot stateSnapshot = CaptureGuardState(pActor, pActive: false, wasCaptain,
+                ChronicleGate.IsNobleActor(pActor), guardName, pReason);
+            EnqueueGuardState(stateSnapshot);
             if (pRecord)
-                ChronicleEvents.OnRoyalGuardDismissed(pActor, kingdom, city, pReason);
+                DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent,
+                    () => ChronicleEvents.OnRoyalGuardDismissed(chronicleSnapshot, pReason));
 
             if (!pActor.isRekt())
             {
-                pActor.clearGraphicsFully();
-                LineageService.ArchiveActor(pActor, pAlive: true);
+                long actorId = pActor.data.id;
+                DeferredRuntimeWorkService.EnqueueCoalesced(
+                    DeferredRuntimeWorkRules.CoalescingKey("guard_gfx", actorId),
+                    DeferredWorkClass.Runtime, () => RefreshActorGraphics(actorId));
+                DeferredRuntimeWorkService.EnqueueCoalesced(
+                    DeferredRuntimeWorkRules.CoalescingKey("guard_archive", actorId),
+                    DeferredWorkClass.Persistent, () => ArchiveLivingActor(actorId));
             }
         }
 
@@ -1582,48 +1613,93 @@ namespace AncientWarfare3.core.lineage
             return (float)(pMin + Rng.NextDouble() * (pMax - pMin));
         }
 
-        private static void UpsertGuardState(Actor pActor, bool pActive, bool pCaptain,
+        private static GuardStateSnapshot CaptureGuardState(Actor pActor, bool pActive, bool pCaptain,
             bool pNoble, string pGuardName, string pDismissReason)
         {
+            Kingdom kingdom = pActor?.kingdom;
+            City city = pActor?.city;
+            double now = LineageService.CurTime();
+            return new GuardStateSnapshot
+            {
+                actorId = pActor?.data?.id ?? -1L,
+                actorName = pActor?.getName() ?? "",
+                kingdomId = kingdom?.id ?? -1L,
+                kingdomName = kingdom?.name ?? "",
+                cityId = city?.id ?? -1L,
+                cityName = city?.data?.name ?? "",
+                guardName = pGuardName ?? "",
+                active = pActive,
+                captain = pCaptain,
+                noble = pNoble,
+                appointedTime = now,
+                dismissedTime = pActive ? -1.0 : now,
+                dismissReason = pDismissReason ?? ""
+            };
+        }
+
+        private static void EnqueueGuardState(GuardStateSnapshot pSnapshot)
+        {
+            if (pSnapshot == null || pSnapshot.actorId < 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey("guard_state", pSnapshot.actorId),
+                DeferredWorkClass.Persistent, () => UpsertGuardState(pSnapshot));
+        }
+
+        private static void RefreshActorGraphics(long pActorId)
+        {
+            Actor actor = GetActorById(pActorId);
+            if (actor?.data == null || actor.isRekt()) return;
+            actor.clearGraphicsFully();
+        }
+
+        private static void ArchiveLivingActor(long pActorId)
+        {
+            Actor actor = GetActorById(pActorId);
+            if (actor?.data == null || actor.isRekt()) return;
+            LineageService.ArchiveActor(actor, pAlive: true);
+        }
+
+        private static void UpsertGuardState(GuardStateSnapshot pSnapshot)
+        {
             var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null || pActor?.data == null) return;
+            if (db == null) throw new InvalidOperationException("Guard archive is unavailable.");
+            if (pSnapshot == null || pSnapshot.actorId < 0) return;
 
             string table = RoyalGuardStateTableItem.GetTableName();
-            Kingdom kingdom = pActor.kingdom;
-            City city = pActor.city;
             var values = new[]
             {
-                ColumnVal.Create("ACTOR_NAME", pActor.getName() ?? ""),
-                ColumnVal.Create("KINGDOM_ID", kingdom?.id ?? -1L),
-                ColumnVal.Create("KINGDOM_NAME", kingdom?.name ?? ""),
-                ColumnVal.Create("CITY_ID", city?.id ?? -1L),
-                ColumnVal.Create("CITY_NAME", city?.data?.name ?? ""),
-                ColumnVal.Create("GUARD_NAME", pGuardName ?? ""),
-                ColumnVal.Create("ACTIVE", pActive ? 1 : 0),
-                ColumnVal.Create("CAPTAIN", pCaptain ? 1 : 0),
-                ColumnVal.Create("NOBLE", pNoble ? 1 : 0),
-                ColumnVal.Create("APPOINTED_TIME", LineageService.CurTime()),
-                ColumnVal.Create("DISMISSED_TIME", pActive ? -1.0 : LineageService.CurTime()),
-                ColumnVal.Create("DISMISS_REASON", pDismissReason ?? "")
+                ColumnVal.Create("ACTOR_NAME", pSnapshot.actorName),
+                ColumnVal.Create("KINGDOM_ID", pSnapshot.kingdomId),
+                ColumnVal.Create("KINGDOM_NAME", pSnapshot.kingdomName),
+                ColumnVal.Create("CITY_ID", pSnapshot.cityId),
+                ColumnVal.Create("CITY_NAME", pSnapshot.cityName),
+                ColumnVal.Create("GUARD_NAME", pSnapshot.guardName),
+                ColumnVal.Create("ACTIVE", pSnapshot.active ? 1 : 0),
+                ColumnVal.Create("CAPTAIN", pSnapshot.captain ? 1 : 0),
+                ColumnVal.Create("NOBLE", pSnapshot.noble ? 1 : 0),
+                ColumnVal.Create("APPOINTED_TIME", pSnapshot.appointedTime),
+                ColumnVal.Create("DISMISSED_TIME", pSnapshot.dismissedTime),
+                ColumnVal.Create("DISMISS_REASON", pSnapshot.dismissReason)
             };
 
             try
             {
-                if (db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ACTOR_ID", pActor.data.id)))
+                if (db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ACTOR_ID", pSnapshot.actorId)))
                 {
                     db.UpdateValue(table,
-                        new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ACTOR_ID", pActor.data.id) },
+                        new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ACTOR_ID", pSnapshot.actorId) },
                         values);
                     return;
                 }
 
-                var insertValues = new List<ColumnVal> { ColumnVal.Create("ACTOR_ID", pActor.data.id) };
+                var insertValues = new List<ColumnVal> { ColumnVal.Create("ACTOR_ID", pSnapshot.actorId) };
                 insertValues.AddRange(values);
                 db.Insert(table, insertValues.ToArray());
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("RoyalGuardState upsert failed: " + e.Message);
+                throw;
             }
         }
     }
