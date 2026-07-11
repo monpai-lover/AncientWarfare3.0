@@ -7,6 +7,7 @@ namespace AncientWarfare3.content
         private const string SINO_ONOMASTICS = "016V4Cf|0:ch g h l m q sh w x y zh;1:ang ao ei en i ia in iu ou u uo;4:a e i o u;6:b ch d f g h k m n sh";
 
         internal const string DefaultSet = "Xia_default_set";
+        internal const string AllianceGenerator = "Xia_alliance";
         internal const string CityGenerator = "Xia_city";
         internal const string ClanGenerator = "Xia_clan";
         internal const string CultureGenerator = "Xia_culture";
@@ -83,6 +84,15 @@ namespace AncientWarfare3.content
                     "name", "\u590F,\u5546,\u5468,\u79E6,\u6C49,\u9B4F,\u664B,\u695A,\u9F50,\u9C81,\u71D5,\u8D75,\u5B8B,\u90D1,\u536B,\u9648,\u8521,\u5434,\u8D8A,\u5510,\u865E"
                 },
                 "name");
+
+            RegisterDictionaryGenerator(
+                AllianceGenerator,
+                new[]
+                {
+                    "root", "\u8bf8\u590f,\u534e\u590f,\u4e5d\u5dde,\u6cb3\u6d1b,\u738b\u757f,\u793c\u4e50,\u5c71\u6cb3,\u6d77\u5185",
+                    "suffix", "\u76df,\u4f1a\u76df,\u540c\u76df,\u76df\u8a93"
+                },
+                "root,suffix");
 
             RegisterDictionaryGenerator(
                 LanguageGenerator,
