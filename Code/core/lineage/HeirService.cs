@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using ai;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -253,6 +254,7 @@ namespace AncientWarfare3.core.lineage
             ClearOldHeirFlag(pKingdom);                       // 娓呮棫缁ф壙浜?IS_HEIR 鏍囪
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
+            RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 
         public static void StoreSelectedHeir(Kingdom pKingdom, Actor pHeir, string pMode)
@@ -326,6 +328,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);
             SetHeirFlag(heir, true);
+            RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 
         private static void RecallForeignSelectedHeir(Kingdom pKingdom, Actor pHeir)

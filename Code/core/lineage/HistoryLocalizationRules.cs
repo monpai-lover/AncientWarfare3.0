@@ -139,6 +139,8 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_court_school_merchant", "\u5546\u5bb6", "Merchant school", "\u5546\u5bb6"),
             new Entry("aw_court_school_craftsman", "\u5de5\u5bb6", "Craftsman school", "\u5de5\u5bb6"),
             new Entry("aw_court_school_historian", "\u53f2\u5bb6", "Historian school", "\u53f2\u5bb6"),
+            new Entry("aw_hist_royal_medical_cure_mid", "\u7ecf\u592a\u533b\u4ee4", " was cured by Imperial Physician ", "\u7d93\u592a\u91ab\u4ee4"),
+            new Entry("aw_hist_royal_medical_cure_suffix", "\u8bca\u6cbb\uff0c\u75c5\u75c7\u5f97\u6108", " and recovered from a curable illness", "\u8a3a\u6cbb\uff0c\u75c5\u75c7\u5f97\u7652"),
             new Entry("aw_hist_court_founded_official", " 建立百家官场", " established a Court of the Hundred Schools", " 建立百家官場"),
             new Entry("aw_hist_court_tier_mid", " 官制改革,升为", " reformed its court into ", " 官制改革,升為"),
             new Entry("aw_hist_court_founded_primitive", " 形成原始朝会", " formed a primitive council", " 形成原始朝會"),

@@ -46,6 +46,7 @@ namespace AncientWarfare3.core.lineage
         public const string COLLATERAL_RESTORE = "person_collateral_restore";
         public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
         public const string COURT_OFFICER_DISMISSED = "court_officer_dismissed";
+        public const string ROYAL_MEDICAL_CURE = "royal_medical_cure";
     }
 
     internal static class KingdomEvent

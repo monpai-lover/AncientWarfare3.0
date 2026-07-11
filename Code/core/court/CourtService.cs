@@ -342,6 +342,8 @@ namespace AncientWarfare3.core.court
             RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", pSchoolId ?? "", pCity);
             ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
             LineageService.ArchiveActor(pActor, pAlive: true);
+            if (pOfficeId == CourtOfficeId.ImperialPhysician)
+                RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 
         private static void ClearOfficer(Actor pActor, string pReason)
@@ -365,6 +367,8 @@ namespace AncientWarfare3.core.court
             if (courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
+            if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
+                RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }
 
         private static void CloseStaleOfficerRows(Kingdom pKingdom)

@@ -697,6 +697,19 @@ namespace AncientWarfare3.core.lineage
                     HistoryTarget.Actor(pActor));
         }
 
+        public static void OnRoyalMedicalCure(Actor pPhysician, Actor pPatient, Kingdom pKingdom)
+        {
+            if (pPhysician?.data == null || pPatient?.data == null || pKingdom?.data == null) return;
+            string patientName = pPatient.getName();
+            HistoryText text = HistoryText.Actor(pPatient, patientName) +
+                               H("aw_hist_royal_medical_cure_mid") +
+                               HistoryText.Actor(pPhysician, pPhysician.getName()) +
+                               H("aw_hist_royal_medical_cure_suffix");
+            HistoryWriter.RecordPerson(pPatient.data.id, pKingdom, patientName,
+                PersonEvent.ROYAL_MEDICAL_CURE, text, ChronicleCategory.SOCIAL,
+                HistoryTarget.Actor(pPhysician));
+        }
+
         internal static void OnSlaveEnlisted(ChronicleActorSnapshot pSnapshot)
         {
             if (pSnapshot == null || pSnapshot.actor_id < 0) return;
