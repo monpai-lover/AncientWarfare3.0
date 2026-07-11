@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 
 #if 一米_中文名
 using Chinese_Name;
@@ -33,7 +34,19 @@ namespace AncientWarfare3.content
             {
                 foreach (Kingdom kingdom in World.world.kingdoms)
                 {
-                    if (TryRenameKingdom(kingdom, null, pForce: false)) changed++;
+                    if (TryApplyFullyXiaizedKingdomName(kingdom))
+                    {
+                        changed++;
+                        continue;
+                    }
+
+                    bool applied = false;
+                    kingdom?.data?.get(LineageKeys.XIA_FULL_NAME_APPLIED, out applied, false);
+                    bool originalXia = kingdom?.data?.original_actor_asset == XiaRace.ID ||
+                                       kingdom?.asset?.id == XiaRace.ID;
+                    if (XiaizedKingdomNamingRules.ShouldRunOrdinaryRepair(originalXia,
+                            XiaizationService.GetLevel(kingdom), XiaizationService.LevelXiaizedDynasty, applied) &&
+                        TryRenameKingdom(kingdom, null, pForce: false)) changed++;
                 }
             }
 
@@ -81,6 +94,20 @@ namespace AncientWarfare3.content
             if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
 
             pKingdom.setName(name, pTrack: false);
+            return true;
+        }
+
+        internal static bool TryApplyFullyXiaizedKingdomName(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return false;
+            pKingdom.data.get(LineageKeys.XIA_FULL_NAME_APPLIED, out bool applied, false);
+            bool originalXia = pKingdom.data.original_actor_asset == XiaRace.ID ||
+                               pKingdom.asset?.id == XiaRace.ID;
+            if (!XiaizedKingdomNamingRules.ShouldApply(originalXia,
+                    XiaizationService.GetLevel(pKingdom), XiaizationService.LevelXiaizedDynasty, applied))
+                return false;
+            if (!TryRenameKingdom(pKingdom, pKingdom.king, pForce: true)) return false;
+            pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
             return true;
         }
 
@@ -138,7 +165,8 @@ namespace AncientWarfare3.content
         {
             if (pActor?.asset?.id == XiaRace.ID) return true;
             return pKingdom?.data?.original_actor_asset == XiaRace.ID ||
-                   pKingdom?.getActorAsset()?.id == XiaRace.ID;
+                   pKingdom?.getActorAsset()?.id == XiaRace.ID ||
+                   XiaizationService.GetLevel(pKingdom) >= XiaizationService.LevelXiaizedDynasty;
         }
 
         private static bool IsXiaReligion(Religion pReligion, Actor pActor)

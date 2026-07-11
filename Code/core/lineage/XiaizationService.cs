@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.content;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
@@ -284,6 +285,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, pLegitimacy ?? "");
             UpsertKingdomState(pKingdom, pLevel, pLegitimacy, HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom),
                 ReadStableYears(pKingdom));
+            if (pLevel >= LevelXiaizedDynasty)
+                XiaNamingRepair.TryApplyFullyXiaizedKingdomName(pKingdom);
 
             if (pRecord)
             {

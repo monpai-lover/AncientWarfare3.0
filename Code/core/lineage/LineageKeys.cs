@@ -60,6 +60,7 @@ namespace AncientWarfare3.core.lineage
         public const string FOREIGN_OCCUPATION_ID = "aw_foreign_occupation_id";
         public const string CITY_ORIGINAL_KINGDOM_ID = "aw_city_original_kingdom_id";
         public const string XIAIZATION_LEVEL = "aw_xiaization_level";
+        public const string XIA_FULL_NAME_APPLIED = "aw_xia_full_name_applied";
         public const string XIAIZATION_LEGITIMACY = "aw_xiaization_legitimacy";
         public const string XIAIZATION_LAST_YEAR = "aw_xiaization_last_year";
         public const string XIAIZATION_PSEUDO_DYNASTY = "aw_xiaization_pseudo_dynasty";
