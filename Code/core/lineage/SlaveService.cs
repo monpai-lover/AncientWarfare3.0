@@ -56,7 +56,11 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<string, FrontlineTargetCacheEntry>();
         private static readonly Dictionary<long, CityWarriorCountCacheEntry> CityWarriorCountCache =
             new Dictionary<long, CityWarriorCountCacheEntry>();
+        private static readonly Dictionary<long, PendingSlaveArmyPromotion> PendingSlaveArmyPromotions =
+            new Dictionary<long, PendingSlaveArmyPromotion>();
         private static bool _formingSlaveArmy;
+
+        internal static bool IsFillingSlaveArmy => _formingSlaveArmy;
 
         private sealed class FrontlineTargetCacheEntry
         {
@@ -79,12 +83,38 @@ namespace AncientWarfare3.core.lineage
             public int count;
         }
 
+        private sealed class SlaveStateSnapshot
+        {
+            public long actorId;
+            public string actorName;
+            public long kingdomId;
+            public string kingdomName;
+            public long cityId;
+            public string cityName;
+            public double enslavedTime;
+            public double freedTime;
+            public string reason;
+            public long capturedByActorId;
+            public int merit;
+            public bool active;
+            public bool soldier;
+            public double soldierStartTime;
+            public bool freedman;
+        }
+
+        private sealed class PendingSlaveArmyPromotion
+        {
+            public SlaveStateSnapshot state;
+            public ChronicleActorSnapshot chronicle;
+        }
+
         internal static void ClearRuntimeCaches()
         {
             CaptureSearchNextAllowed.Clear();
             FrontlineTargetCache.Clear();
             CityWarriorCountCache.Clear();
             PendingWarSlaveCaptures.Clear();
+            PendingSlaveArmyPromotions.Clear();
         }
 
         public static bool IsSlave(Actor pActor)
@@ -596,6 +626,11 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.set(LineageKeys.SLAVE_SOLDIER, true);
             EnableSlaveArmy(pActor.kingdom ?? pCity?.kingdom);
+            if (SlaveArmyFillSideEffectRules.ShouldDeferPerActorSideEffects(_formingSlaveArmy, pIsSlave: true))
+            {
+                QueueSlaveArmyPromotionForBatch(pActor, pCity);
+                return;
+            }
             UpsertSlaveState(pActor, pActive: true, pCity ?? pActor.city, pActor.kingdom ?? pCity?.kingdom);
             RecordSlaveArmyFormation(pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
             if (!_formingSlaveArmy)
@@ -877,6 +912,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
+            PendingSlaveArmyPromotions.Clear();
             _formingSlaveArmy = true;
             int addedThisPass = 0;
             bool fillScanComplete = true;
@@ -890,6 +926,7 @@ namespace AncientWarfare3.core.lineage
             {
                 _formingSlaveArmy = false;
             }
+            EnqueuePendingSlaveArmyPromotions();
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             EnsureNonSlaveCaptain(army);
             Actor finalCaptain = army.getCaptain();
@@ -2016,6 +2053,103 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("SlaveState upsert failed: " + e.Message);
             }
+        }
+
+        private static void QueueSlaveArmyPromotionForBatch(Actor pActor, City pCity)
+        {
+            if (pActor?.data == null) return;
+            Kingdom kingdom = pActor.kingdom ?? pCity?.kingdom;
+            City city = pCity ?? pActor.city;
+            PendingSlaveArmyPromotions[pActor.data.id] = new PendingSlaveArmyPromotion
+            {
+                state = CaptureSlaveState(pActor, pActive: true, city, kingdom),
+                chronicle = ChronicleActorSnapshot.Capture(pActor, kingdom, city)
+            };
+        }
+
+        private static void EnqueuePendingSlaveArmyPromotions()
+        {
+            foreach (KeyValuePair<long, PendingSlaveArmyPromotion> entry in PendingSlaveArmyPromotions)
+            {
+                PendingSlaveArmyPromotion pending = entry.Value;
+                if (pending?.state == null) continue;
+                SlaveStateSnapshot state = pending.state;
+                ChronicleActorSnapshot chronicle = pending.chronicle;
+                DeferredRuntimeWorkService.EnqueueCoalesced(
+                    DeferredRuntimeWorkRules.CoalescingKey("slave_state", state.actorId),
+                    DeferredWorkClass.Persistent, () => UpsertSlaveState(state));
+                DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent,
+                    () => ChronicleEvents.OnSlaveEnlisted(chronicle));
+            }
+            PendingSlaveArmyPromotions.Clear();
+        }
+
+        private static SlaveStateSnapshot CaptureSlaveState(Actor pActor, bool pActive,
+            City pContextCity, Kingdom pContextKingdom)
+        {
+            Kingdom kingdom = pContextKingdom ?? pActor?.kingdom ?? pContextCity?.kingdom;
+            City city = pContextCity ?? pActor?.city;
+            pActor.data.get(LineageKeys.SLAVE_SINCE, out long sinceRaw, (long)LineageService.CurTime());
+            pActor.data.get(LineageKeys.SLAVE_REASON, out string reason, "");
+            pActor.data.get(LineageKeys.SLAVE_CAPTURED_BY, out long capturedBy, -1L);
+            pActor.data.get(LineageKeys.SLAVE_MERIT, out int merit, 0);
+            pActor.data.get(LineageKeys.SLAVE_SOLDIER, out bool soldier, false);
+            pActor.data.get(LineageKeys.SOLDIER_SERVICE_START_TIME, out float soldierStart, -1f);
+            pActor.data.get(LineageKeys.FREEDMAN, out bool freedman, false);
+            return new SlaveStateSnapshot
+            {
+                actorId = pActor.data.id,
+                actorName = pActor.getName() ?? "",
+                kingdomId = kingdom?.id ?? -1L,
+                kingdomName = kingdom?.name ?? "",
+                cityId = city?.id ?? -1L,
+                cityName = city?.data?.name ?? "",
+                enslavedTime = sinceRaw,
+                freedTime = pActive ? -1.0 : LineageService.CurTime(),
+                reason = reason ?? "",
+                capturedByActorId = capturedBy,
+                merit = merit,
+                active = pActive,
+                soldier = soldier,
+                soldierStartTime = soldierStart,
+                freedman = freedman
+            };
+        }
+
+        private static void UpsertSlaveState(SlaveStateSnapshot pSnapshot)
+        {
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null) throw new InvalidOperationException("Slave archive is unavailable.");
+            if (pSnapshot == null || pSnapshot.actorId < 0) return;
+
+            string table = SlaveStateTableItem.GetTableName();
+            var values = new[]
+            {
+                ColumnVal.Create("ACTOR_NAME", pSnapshot.actorName),
+                ColumnVal.Create("KINGDOM_ID", pSnapshot.kingdomId),
+                ColumnVal.Create("KINGDOM_NAME", pSnapshot.kingdomName),
+                ColumnVal.Create("CITY_ID", pSnapshot.cityId),
+                ColumnVal.Create("CITY_NAME", pSnapshot.cityName),
+                ColumnVal.Create("ENSLAVED_TIME", pSnapshot.enslavedTime),
+                ColumnVal.Create("FREED_TIME", pSnapshot.freedTime),
+                ColumnVal.Create("REASON", pSnapshot.reason),
+                ColumnVal.Create("CAPTURED_BY_ACTOR_ID", pSnapshot.capturedByActorId),
+                ColumnVal.Create("MERIT", pSnapshot.merit),
+                ColumnVal.Create("ACTIVE", pSnapshot.active ? 1 : 0),
+                ColumnVal.Create("SOLDIER", pSnapshot.soldier ? 1 : 0),
+                ColumnVal.Create("SOLDIER_START_TIME", pSnapshot.soldierStartTime),
+                ColumnVal.Create("FREEDMAN", pSnapshot.freedman ? 1 : 0)
+            };
+            if (db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ACTOR_ID", pSnapshot.actorId)))
+            {
+                db.UpdateValue(table,
+                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ACTOR_ID", pSnapshot.actorId) },
+                    values);
+                return;
+            }
+            var insertValues = new List<ColumnVal> { ColumnVal.Create("ACTOR_ID", pSnapshot.actorId) };
+            insertValues.AddRange(values);
+            db.Insert(table, insertValues.ToArray());
         }
 
         public static string ReasonLabel(string pReason)

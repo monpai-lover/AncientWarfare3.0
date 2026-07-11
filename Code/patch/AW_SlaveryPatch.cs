@@ -13,6 +13,7 @@ namespace AncientWarfare3.patch
         {
             SlaveService.OnMadeWarrior(__instance, pActor);
             RoyalGuardService.StripActorFromNormalArmy(pActor);
+            if (SlaveService.IsFillingSlaveArmy) return;
             if (__instance != null && __instance.hasArmy())
             {
                 SlaveService.RenameArmyIfSlaveArmy(__instance.getArmy());
