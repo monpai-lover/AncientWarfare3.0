@@ -1,4 +1,5 @@
 using AncientWarfare3.content;
+using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -6,6 +7,22 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_XiaNamingPatch
     {
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Alliance), nameof(Alliance.addFounders))]
+        private static void Alliance_AddFounders_Postfix(Alliance __instance,
+            Kingdom pKingdom1, Kingdom pKingdom2)
+        {
+            bool usesXiaName = XiaAllianceNamingRules.ShouldUseXiaName(
+                LineageService.IsXiaKingdom(pKingdom1),
+                LineageService.IsXiaKingdom(pKingdom2));
+            if (!usesXiaName || __instance?.data == null) return;
+
+            string name = XiaNamingRepair.GenerateAllianceName(__instance);
+            bool valid = !XiaNameRepairRules.IsInvalidGeneratedMetaName(name);
+            if (!XiaAllianceNamingRules.ShouldRenameAfterCreation(usesXiaName, valid)) return;
+            __instance.setName(name, pTrack: false);
+        }
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]
         [HarmonyAfter(new[] { "set_kingdom_name" })]

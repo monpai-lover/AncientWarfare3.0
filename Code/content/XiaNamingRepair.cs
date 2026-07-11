@@ -365,6 +365,14 @@ namespace AncientWarfare3.content
         }
 #endif
 
+        internal static string GenerateAllianceName(Alliance pAlliance)
+        {
+            long id = pAlliance?.getID() ?? 0L;
+            string name = GenerateVanillaName(XiaNameSets.AllianceGenerator, id);
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
+            return XiaFallbackNameRules.LocalAllianceName(id);
+        }
+
         private static string GenerateVanillaName(string pGeneratorId, long pSeed)
         {
             if (!AssetManager.name_generator.has(pGeneratorId)) return null;
