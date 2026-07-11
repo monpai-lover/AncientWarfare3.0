@@ -9,21 +9,6 @@ namespace AncientWarfare3.core.policy
 {
     internal static class KingdomPolicyAI
     {
-        private static readonly string[] TechOrder =
-        {
-            "aw_tech_writing",
-            "aw_tech_pottery_casting",
-            "aw_tech_bronze_casting",
-            "aw_tech_well_field_survey",
-            "aw_tech_iron_plow",
-            "aw_tech_chariot_training",
-            "aw_tech_enfeoffment_study",
-            "aw_tech_granary_accounting",
-            "aw_tech_city_defense",
-            "aw_tech_rites_music",
-            "aw_tech_official_court"
-        };
-
         private static readonly string[] SocialOrder =
         {
             "aw_policy_household_registry",
@@ -78,7 +63,14 @@ namespace AncientWarfare3.core.policy
                 ? KingdomPolicyDefs.Techs
                 : KingdomPolicyDefs.SocialPolicies;
 
+            bool officialCourtCompleted = pKind != PolicyNodeKind.Tech ||
+                KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_official_court");
+            bool ritesMusicCompleted = pKind != PolicyNodeKind.Tech ||
+                KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_rites_music");
+
             return defs
+                .Where(def => pKind != PolicyNodeKind.Tech || KingdomPolicyTechOrderRules.CanConsider(
+                    def.Id, officialCourtCompleted, ritesMusicCompleted))
                 .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
                 .Where(def => IsAvailable(pKingdom, def))
                 .OrderByDescending(def => ScoreResearch(pKingdom, def))
@@ -236,9 +228,12 @@ namespace AncientWarfare3.core.policy
 
         private static int PreferredIndex(KingdomPolicyDef pDef)
         {
-            string[] order = pDef.Kind == PolicyNodeKind.Tech ? TechOrder : SocialOrder;
-            int index = Array.IndexOf(order, pDef.Id);
-            return index >= 0 ? index : order.Length + Math.Max(0, pDef.Column * 3 + pDef.Row);
+            int layoutFallback = Math.Max(0, pDef.Column * 3 + pDef.Row);
+            if (pDef.Kind == PolicyNodeKind.Tech)
+                return KingdomPolicyTechOrderRules.PreferredIndex(pDef.Id, layoutFallback);
+
+            int index = Array.IndexOf(SocialOrder, pDef.Id);
+            return index >= 0 ? index : SocialOrder.Length + layoutFallback;
         }
 
         private static int CountCities(Kingdom pKingdom)
