@@ -971,7 +971,7 @@ namespace AncientWarfare3.core.lineage
             pChild.data.get(LineageKeys.CLAN_NAME, out string oldClan, "");
             bool changed = childLineage != parentLineage || oldShi != parentShi || oldClan != clan;
 
-            EnsureGivenName(pChild);
+            string originalForeignName = IsXia(pChild) ? null : pChild.getName();
             pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
             pChild.data.set(LineageKeys.SHI_ID, parentShi);
             if (!string.IsNullOrEmpty(family))
@@ -980,6 +980,7 @@ namespace AncientWarfare3.core.lineage
                 pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
             }
             if (!string.IsNullOrEmpty(clan)) pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            EnsureGivenName(pChild, originalForeignName);
             pChild.data.set(LineageKeys.NOBLE_DISTANCE, parentDist + 1);
             pChild.data.set(LineageKeys.LINEAGE_STATUS,
                 parentDist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
