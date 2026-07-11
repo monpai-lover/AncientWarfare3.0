@@ -379,6 +379,11 @@ namespace AncientWarfare3.core.lineage
             long kingId = pReferenceKingId >= 0 ? pReferenceKingId : ResolveReferenceKingId(pKingdom, king);
             if (kingId < 0) return new HeirSelection(null, SuccessionMode.NONE);
 
+            Actor directSon = PickEldestLivingSon(king);
+            if (directSon?.data != null)
+                return new HeirSelection(directSon,
+                    directSon.isAdult() ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT);
+
             Actor best = null;
             int bestTier = HeirGenerationRules.TierIneligible, bestDelta = 0;
             double bestBirth = 0; bool bestAdult = false;
@@ -409,14 +414,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (best == null)
-            {
-                // 终极安全网:池循环因谱系记账异常未选出时,直接用国王在世男嗣兜底,杜绝"有子嗣却绝嗣"。
-                Actor directSon = PickEldestLivingSon(king);
-                if (directSon != null)
-                    return new HeirSelection(directSon,
-                        directSon.isAdult() ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT);
                 return new HeirSelection(null, SuccessionMode.NONE); // 真·绝嗣/亡国
-            }
 
             string mode = bestTier == HeirGenerationRules.TierDirectDescendant
                 ? (bestAdult ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT)
@@ -424,26 +422,29 @@ namespace AncientWarfare3.core.lineage
             return new HeirSelection(best, mode);
         }
 
-        /// <summary>取国王在世男嗣中的嫡长(出生最早),排除疯癫/奴隶;无则 null。仅作 FindHeir 兜底。</summary>
+        /// <summary>取国王在世男嗣中的嫡长(出生最早),排除疯癫/奴隶/已为国王者。</summary>
         private static Actor PickEldestLivingSon(Actor pKing)
         {
             if (pKing?.data == null) return null;
-            Actor best = null;
-            double bestBirth = double.MaxValue;
+            var actors = new Dictionary<long, Actor>();
+            var candidates = new List<HeirDirectSonCandidate>();
             try
             {
                 foreach (Actor child in pKing.getChildren(false))
                 {
                     if (child?.data == null || child == pKing) continue;
-                    if (!child.isSexMale() || child.isRekt() || !child.isAlive()) continue;
-                    if (child.isKing() || child.hasTrait("madness")) continue;
-                    if (SlaveService.IsSlave(child)) continue;
-                    double birth = SafeCreatedTime(child);
-                    if (best == null || birth < bestBirth) { best = child; bestBirth = birth; }
+                    bool eligible = child.isSexMale() && !child.isRekt() && child.isAlive() &&
+                                    !child.isKing() && !child.hasTrait("madness") &&
+                                    !SlaveService.IsSlave(child);
+                    actors[child.data.id] = child;
+                    candidates.Add(new HeirDirectSonCandidate(child.data.id, eligible,
+                        SafeCreatedTime(child), SafeIsAdult(child)));
                 }
             }
-            catch { return best; }
-            return best;
+            catch { }
+
+            long selectedId = HeirDirectSonRules.SelectEldestEligibleId(candidates);
+            return selectedId >= 0 && actors.TryGetValue(selectedId, out Actor selected) ? selected : null;
         }
 
         private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)
