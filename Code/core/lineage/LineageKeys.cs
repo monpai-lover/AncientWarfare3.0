@@ -186,6 +186,7 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_SCHOOL = "aw_court_school";
         public const string COURT_KINGDOM_ID = "aw_court_kingdom_id";
         public const string COURT_CITY_ID = "aw_court_city_id";
+        public const string COURT_IMPERIAL_PHYSICIAN_ID = "aw_court_imperial_physician_id";
         public const string COURT_MEDICAL_KING_ID = "aw_court_medical_king_id";
         public const string COURT_MEDICAL_HEIR_ID = "aw_court_medical_heir_id";
         public const string COURT_MEDICAL_LAST_YEAR = "aw_court_medical_last_year";

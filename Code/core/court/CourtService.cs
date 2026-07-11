@@ -343,11 +343,24 @@ namespace AncientWarfare3.core.court
 
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long previousKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string previousOffice, "");
+            Kingdom previousKingdom = previousKingdomId >= 0
+                ? World.world?.kingdoms?.get(previousKingdomId)
+                : null;
+            bool clearedPreviousPhysician = false;
             if (!string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId)
             {
-                Kingdom previousKingdom = previousKingdomId >= 0
-                    ? World.world?.kingdoms?.get(previousKingdomId)
-                    : pKingdom;
+                previousKingdom ??= pKingdom;
+                if (previousKingdom?.data != null)
+                {
+                    previousKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
+                        out long cachedPhysicianId, -1L);
+                    if (RoyalMedicalCareRules.ShouldClearCachedPhysician(
+                            cachedPhysicianId, pActor.data.id, previousOffice))
+                    {
+                        previousKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
+                        clearedPreviousPhysician = true;
+                    }
+                }
                 if (previousKingdom?.data != null)
                     ChronicleEvents.OnCourtOfficerDismissed(pActor, previousKingdom,
                         previousOffice, "reassigned");
@@ -358,11 +371,15 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
             pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
+            if (pOfficeId == CourtOfficeId.ImperialPhysician)
+                pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             SyncSchoolTrait(pActor, active: true);
             RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", pSchoolId ?? "", pCity);
             ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
+            if (clearedPreviousPhysician && previousKingdom?.data != null)
+                RoyalMedicalCareService.ReconcileTargets(previousKingdom);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
@@ -376,6 +393,15 @@ namespace AncientWarfare3.core.court
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
             bool alive = pActor.isAlive() && !pActor.isRekt();
             if (!alive) LineageService.ArchiveActor(pActor, pAlive: false);
+
+            if (courtKingdom?.data != null)
+            {
+                courtKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
+                    out long cachedPhysicianId, -1L);
+                if (RoyalMedicalCareRules.ShouldClearCachedPhysician(
+                        cachedPhysicianId, pActor.data.id, office))
+                    courtKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
+            }
 
             SyncSchoolTrait(pActor, active: false);
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, -1L);

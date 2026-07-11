@@ -53,20 +53,29 @@ namespace AncientWarfare3.core.court
         private static Actor FindActivePhysician(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return null;
+            pKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
+                out long cachedActorId, -1L);
+            if (cachedActorId < 0) return null;
+
+            Actor actor = null;
             try
             {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (actor?.data == null) continue;
-                    actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
-                    actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-                    bool active = courtKingdomId == pKingdom.id && office == CourtOfficeId.ImperialPhysician;
-                    if (RoyalMedicalCareRules.ShouldTreat(actor.isAlive() && !actor.isRekt(), active,
-                            actor.kingdom == pKingdom, patientAlive: true))
-                        return actor;
-                }
+                actor = World.world?.units?.get(cachedActorId);
             }
             catch { }
+
+            if (actor?.data != null)
+            {
+                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+                actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+                if (RoyalMedicalCareRules.IsCachedPhysicianValid(
+                        cachedActorId, actor.data.id,
+                        actor.isAlive() && !actor.isRekt(), actor.kingdom == pKingdom,
+                        courtKingdomId, pKingdom.id, office))
+                    return actor;
+            }
+
+            pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
             return null;
         }
 

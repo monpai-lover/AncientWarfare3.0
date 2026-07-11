@@ -15,7 +15,6 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null || __instance.isRekt() || __instance.isNeutral()) return;
 
             HeirService.OnKingdomYear(__instance);
-            RoyalMedicalCareService.OnKingdomYear(__instance);
 
             long benchmark = UpdateAgeBenchmark.Begin();
             try
@@ -29,6 +28,7 @@ namespace AncientWarfare3.patch
             try { KingdomPolicyService.OnKingdomYear(__instance); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyIndex, benchmark); }
 
+            RoyalMedicalCareService.OnKingdomYear(__instance);
             CourtDirectionService.RecalculateIfDirty(__instance);
             CourtPeaceService.OnKingdomYear(__instance);
 
