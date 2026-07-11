@@ -87,6 +87,7 @@ namespace AncientWarfare3.content
 
         internal static bool TryRenameKingdom(Kingdom pKingdom, Actor pActor, bool pForce)
         {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             if (!IsXiaKingdom(pKingdom, pActor)) return false;
             if (!pForce && !XiaNameRepairRules.IsInvalidGeneratedMetaName(pKingdom?.data?.name)) return false;
 
@@ -164,8 +165,9 @@ namespace AncientWarfare3.content
         private static bool IsXiaKingdom(Kingdom pKingdom, Actor pActor)
         {
             if (pActor?.asset?.id == XiaRace.ID) return true;
-            return pKingdom?.data?.original_actor_asset == XiaRace.ID ||
-                   pKingdom?.getActorAsset()?.id == XiaRace.ID ||
+            if (pKingdom?.data == null) return false;
+            return pKingdom.data.original_actor_asset == XiaRace.ID ||
+                   LineageService.IsXiaKingdom(pKingdom) ||
                    XiaizationService.GetLevel(pKingdom) >= XiaizationService.LevelXiaizedDynasty;
         }
 

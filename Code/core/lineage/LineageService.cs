@@ -32,13 +32,16 @@ namespace AncientWarfare3.core.lineage
 
         public static bool IsXiaKingdom(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return false;
-            if (pKingdom.asset?.id == XIA_ASSET_ID) return true;
-
-            ActorAsset actorAsset = null;
-            try { actorAsset = pKingdom.getActorAsset(); }
-            catch { actorAsset = null; }
-            return actorAsset?.id == XIA_ASSET_ID || actorAsset?.banner_id == XIA_ASSET_ID;
+            if (pKingdom == null) return false;
+            try
+            {
+                if (pKingdom.data == null) return false;
+                if (pKingdom.data.original_actor_asset == XIA_ASSET_ID) return true;
+                if (pKingdom.asset?.id == XIA_ASSET_ID) return true;
+                ActorAsset actorAsset = pKingdom.getActorAsset();
+                return actorAsset?.id == XIA_ASSET_ID || actorAsset?.banner_id == XIA_ASSET_ID;
+            }
+            catch { return false; }
         }
 
         public static bool IsHuman(Actor pActor)

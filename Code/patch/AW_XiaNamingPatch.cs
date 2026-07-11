@@ -7,23 +7,32 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_XiaNamingPatch
     {
-#if !一米_中文名
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(Alliance), nameof(Alliance.addFounders))]
-        private static void Alliance_AddFounders_Postfix(Alliance __instance,
-            Kingdom pKingdom1, Kingdom pKingdom2)
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyAfter(new[] { "set_alliance_name" })]
+        [HarmonyPatch(typeof(WorldLog), nameof(WorldLog.logAllianceCreated))]
+        private static void WorldLog_LogAllianceCreated_Prefix(Alliance pAlliance)
         {
-            bool usesXiaName = XiaAllianceNamingRules.ShouldUseXiaName(
-                LineageService.IsXiaKingdom(pKingdom1),
-                LineageService.IsXiaKingdom(pKingdom2));
-            if (!usesXiaName || __instance?.data == null) return;
+            if (pAlliance?.data == null) return;
+            bool usesXiaName = false;
+            try
+            {
+                foreach (Kingdom founder in pAlliance.kingdoms_list)
+                {
+                    if (!LineageService.IsXiaKingdom(founder)) continue;
+                    usesXiaName = true;
+                    break;
+                }
+            }
+            catch { return; }
+            if (!XiaAllianceNamingRules.ShouldFinalizeCreation(
+                    usesXiaName, pAlliance.data.custom_name)) return;
 
-            string name = XiaNamingRepair.GenerateAllianceName(__instance);
+            string name = XiaNamingRepair.GenerateAllianceName(pAlliance);
             bool valid = !XiaNameRepairRules.IsInvalidGeneratedMetaName(name);
             if (!XiaAllianceNamingRules.ShouldRenameAfterCreation(usesXiaName, valid)) return;
-            __instance.setName(name, pTrack: false);
+            pAlliance.setName(name, pTrack: false);
         }
-#endif
 
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]
@@ -32,14 +41,6 @@ namespace AncientWarfare3.patch
         private static void Kingdom_NewCivKingdom_Postfix(Kingdom __instance, Actor pActor)
         {
             XiaNamingRepair.TryRenameKingdom(__instance, pActor, pForce: false);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.Last)]
-        [HarmonyPatch(typeof(WindowMetaGeneric<Kingdom, KingdomData>), "loadNameInput")]
-        private static void Kingdom_LoadNameInput_Prefix(WindowMetaGeneric<Kingdom, KingdomData> __instance)
-        {
-            XiaNamingRepair.TryRenameKingdom(__instance?.getMetaObject(), null, pForce: false);
         }
 
         [HarmonyPostfix]
