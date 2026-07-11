@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 
 namespace AW3FocusedRuleTests
@@ -8,10 +9,35 @@ namespace AW3FocusedRuleTests
         private static int Main()
         {
             ExpectDeferredWorkRules();
+            ExpectDeferredWorkQueue();
             ExpectCaptureScanRules();
             ExpectFillSideEffectRules();
             Console.WriteLine("AW3 focused rule tests passed.");
             return 0;
+        }
+
+        private static void ExpectDeferredWorkQueue()
+        {
+            DeferredRuntimeWorkService.ClearRuntimeState();
+            var values = new List<int>();
+            DeferredRuntimeWorkService.EnqueueCoalesced("actor:1", DeferredWorkClass.Persistent,
+                () => values.Add(1));
+            DeferredRuntimeWorkService.EnqueueCoalesced("actor:1", DeferredWorkClass.Persistent,
+                () => values.Add(2));
+            DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent, () => values.Add(3));
+            DeferredRuntimeWorkService.DrainFrame(1000, 2);
+            if (values.Count != 2 || values[0] != 2 || values[1] != 3)
+                throw new Exception("Coalesced work must keep the latest action without reordering ordered work.");
+
+            DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Runtime, () => values.Add(4));
+            DeferredRuntimeWorkService.EnqueueOrdered(DeferredWorkClass.Persistent, () => values.Add(5));
+            DeferredRuntimeWorkService.FlushPersistent();
+            if (values.Count != 3 || values[2] != 5 || DeferredRuntimeWorkService.PendingCount != 1)
+                throw new Exception("Save flushing must execute persistent work and retain runtime-only work.");
+
+            DeferredRuntimeWorkService.DrainFrame(1000, 1);
+            if (values.Count != 4 || values[3] != 4 || DeferredRuntimeWorkService.PendingCount != 0)
+                throw new Exception("The retained runtime item must execute on a later frame.");
         }
 
         private static void ExpectDeferredWorkRules()
