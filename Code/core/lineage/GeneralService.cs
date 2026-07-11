@@ -159,12 +159,14 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
-        public static List<GeneralReadModelEntry> GetActiveGeneralsForReadModel(Kingdom pKingdom)
+        public static List<GeneralReadModelEntry> GetActiveGeneralsForReadModel(Kingdom pKingdom,
+            bool pAllowUnitFallback = true)
         {
             var result = new List<GeneralReadModelEntry>();
             if (pKingdom?.data == null) return result;
             if (!Ready)
             {
+                if (!pAllowUnitFallback) return result;
                 foreach (Actor unit in pKingdom.getUnits())
                 {
                     if (unit?.data == null || unit.kingdom != pKingdom || unit.isRekt() || !unit.isAlive()) continue;

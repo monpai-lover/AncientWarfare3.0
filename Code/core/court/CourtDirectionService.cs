@@ -47,24 +47,24 @@ namespace AncientWarfare3.core.court
                 result.Add(new CourtInfluenceContribution(king.data.id, school, 8f, 0, isKing: true));
             }
 
-            try
+            foreach (CourtOfficerView officer in CourtService.GetActiveOfficers(pKingdom, 96))
             {
-                foreach (Actor actor in pKingdom.getUnits())
-                {
-                    if (!IsValid(actor, pKingdom) || actor == king) continue;
-                    actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
-                    actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-                    if (courtKingdomId != pKingdom.id || string.IsNullOrEmpty(office)) continue;
-                    result.Add(new CourtInfluenceContribution(actor.data.id, ResolveSchool(actor, office),
-                        OfficeWeight(office), OfficeRank(office), isKing: false));
-                }
+                Actor actor = World.world?.units?.get(officer.actor_id);
+                if (!IsValid(actor, pKingdom) || actor == king) continue;
+                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+                actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+                if (courtKingdomId != pKingdom.id || string.IsNullOrEmpty(office) ||
+                    office != officer.office_id) continue;
+                result.Add(new CourtInfluenceContribution(actor.data.id, ResolveSchool(actor, office),
+                    OfficeWeight(office), OfficeRank(office), isKing: false));
             }
-            catch { }
 
-            foreach (Actor general in GeneralService.GetActiveGenerals(pKingdom))
+            foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(
+                         pKingdom, pAllowUnitFallback: false))
             {
+                Actor general = entry.Actor;
                 if (!IsValid(general, pKingdom)) continue;
-                float weight = 3.5f + Math.Min(2f, GeneralService.GetMerit(general) / 25f);
+                float weight = 3.5f + Math.Min(2f, entry.Merit / 25f);
                 result.Add(new CourtInfluenceContribution(general.data.id, CourtSchoolId.Military,
                     weight, 40, isKing: false));
             }
