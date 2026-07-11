@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.utils;
 using UnityEngine;
@@ -229,6 +230,7 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordKingdom(pActor.kingdom, KingdomEvent.GENERAL_APPOINTED,
                 HistoryText.Kingdom(pActor.kingdom) + " \u4EFB" + HistoryText.Actor(pActor) + " \u4E3A\u5927\u5C06",
                 HistoryTarget.Actor(pActor));
+            CourtDirectionService.MarkDirty(pActor.kingdom);
             return true;
         }
 
@@ -397,8 +399,10 @@ namespace AncientWarfare3.core.lineage
         private static void EndGeneral(Actor pActor, string pReason)
         {
             if (pActor?.data == null) return;
+            Kingdom kingdom = pActor.kingdom;
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, false);
             ClearGeneralTrait(pActor);
+            CourtDirectionService.MarkDirty(kingdom);
             if (!Ready) return;
             try
             {

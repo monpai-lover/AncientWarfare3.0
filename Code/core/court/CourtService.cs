@@ -18,6 +18,9 @@ namespace AncientWarfare3.core.court
         public string faction_cache = "";
         public float efficiency;
         public float concentration;
+        public float livelihood;
+        public float aggression;
+        public float peace;
     }
 
     internal sealed class CourtOfficerView
@@ -77,6 +80,9 @@ namespace AncientWarfare3.core.court
             pKingdom.data.get(LineageKeys.COURT_FACTION_CACHE, out snapshot.faction_cache, "");
             pKingdom.data.get(LineageKeys.COURT_EFFICIENCY, out snapshot.efficiency, 0f);
             pKingdom.data.get(LineageKeys.COURT_CONCENTRATION, out snapshot.concentration, 0f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_LIVELIHOOD, out snapshot.livelihood, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_AGGRESSION, out snapshot.aggression, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_PEACE, out snapshot.peace, 0.5f);
             return snapshot;
         }
 
@@ -244,8 +250,20 @@ namespace AncientWarfare3.core.court
             Actor king = pKingdom.king;
             if (king?.data == null || king.isRekt()) return;
             king.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            if (!string.IsNullOrEmpty(office)) return;
-            SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive, "king_council", CourtSchoolId.PrimitiveMinister, null);
+            if (!string.IsNullOrEmpty(office))
+            {
+                if (office == "king_council" && HasOfficialCourt(pKingdom))
+                {
+                    string school = CourtSchoolAssignmentRules.ResolveSchool(office, CandidateProfile(king));
+                    king.data.set(LineageKeys.COURT_SCHOOL, school);
+                    SyncSchoolTrait(king, active: true);
+                }
+                return;
+            }
+            string initialSchool = HasOfficialCourt(pKingdom)
+                ? CourtSchoolAssignmentRules.ResolveSchool("king_council", CandidateProfile(king))
+                : CourtSchoolId.PrimitiveMinister;
+            SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive, "king_council", initialSchool, null);
             pOccupiedOffices?.Add("king_council");
         }
 
@@ -342,6 +360,7 @@ namespace AncientWarfare3.core.court
             RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", pSchoolId ?? "", pCity);
             ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
             LineageService.ArchiveActor(pActor, pAlive: true);
+            CourtDirectionService.MarkDirty(pKingdom);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
@@ -367,6 +386,7 @@ namespace AncientWarfare3.core.court
             if (courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
+            if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }
@@ -486,6 +506,9 @@ namespace AncientWarfare3.core.court
                 ColumnVal.Create("COURT_EFFICIENCY", (double)s.efficiency),
                 ColumnVal.Create("FACTION_CONCENTRATION", (double)s.concentration),
                 ColumnVal.Create("FACTION_CACHE", s.faction_cache ?? ""),
+                ColumnVal.Create("DIRECTION_LIVELIHOOD", (double)s.livelihood),
+                ColumnVal.Create("DIRECTION_AGGRESSION", (double)s.aggression),
+                ColumnVal.Create("DIRECTION_PEACE", (double)s.peace),
                 ColumnVal.Create("LAST_REFRESH_YEAR", lastRefresh),
                 ColumnVal.Create("LAST_CANDIDATE_REFRESH_YEAR", lastCandidate),
                 ColumnVal.Create("LAST_STRONG_EVENT_YEAR", lastStrong),

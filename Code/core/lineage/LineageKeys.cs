@@ -189,6 +189,11 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_MEDICAL_KING_ID = "aw_court_medical_king_id";
         public const string COURT_MEDICAL_HEIR_ID = "aw_court_medical_heir_id";
         public const string COURT_MEDICAL_LAST_YEAR = "aw_court_medical_last_year";
+        public const string COURT_DIRECTION_LIVELIHOOD = "aw_court_direction_livelihood";
+        public const string COURT_DIRECTION_AGGRESSION = "aw_court_direction_aggression";
+        public const string COURT_DIRECTION_PEACE = "aw_court_direction_peace";
+        public const string COURT_DIRECTION_LAST_YEAR = "aw_court_direction_last_year";
+        public const string COURT_DIRECTION_DIRTY = "aw_court_direction_dirty";
         public const string GENERAL_LAST_REFRESH_YEAR = "aw_general_last_refresh_year";
         public const string GENERAL_LAST_FIEF_YEAR = "aw_general_last_fief_year";
         public const string GENERAL_LAST_RISK_YEAR = "aw_general_last_risk_year";

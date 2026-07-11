@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.court;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -90,6 +91,7 @@ namespace AncientWarfare3.patch
 
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
+            CourtDirectionService.MarkDirty(__instance);
             YearNameService.OnNewKing(__instance);
         }
 
