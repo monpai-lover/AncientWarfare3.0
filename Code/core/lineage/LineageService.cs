@@ -121,7 +121,6 @@ namespace AncientWarfare3.core.lineage
             RecordFamilyEdges(pBaby, pParent1, pParent2);
             ApplyDisplayName(pBaby);
             ArchiveActor(pBaby, pAlive: true);
-            HeirService.RefreshForNewRoyalChild(pBaby, pParent1, pParent2);
 
             // 编年史:仅入谱贵族(有 lineage_id)记出生事件。
             RecordBirthEvent(pBaby);

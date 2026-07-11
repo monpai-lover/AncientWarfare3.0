@@ -81,9 +81,33 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return null;
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 return RepublicGovernmentService.GetRegisteredSuccessor(pKingdom);
+            return ReconcileHeir(pKingdom, pForce: false);
+        }
+
+        public static void OnKingdomYear(Kingdom pKingdom)
+        {
+            ReconcileHeir(pKingdom, pForce: false);
+        }
+
+        public static Actor ReconcileHeir(Kingdom pKingdom, bool pForce)
+        {
+            if (pKingdom?.data == null) return null;
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return RepublicGovernmentService.GetRegisteredSuccessor(pKingdom);
+
             Actor cached = PeekRegisteredHeir(pKingdom);
             bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
-            if (SuccessionTransitionRules.ShouldUseCachedHeir(pending, cached?.data != null)) return cached;
+            if (pending) return cached;
+
+            int year = Date.getCurrentYear();
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_LAST_RECONCILE_YEAR, out int lastYear, -1);
+            if (!pForce && !HeirDirectSonRules.ShouldReconcile(year, lastYear, pending)) return cached;
+            pKingdom.data.set(LineageKeys.KINGDOM_HEIR_LAST_RECONCILE_YEAR, year);
+
+            Actor eldest = PickEldestLivingSon(pKingdom.king);
+            if (!pForce && !HeirDirectSonRules.NeedsRefresh(cached?.data?.id ?? -1L,
+                    cached?.data != null, eldest?.data?.id ?? -1L))
+                return cached;
             return RefreshHeirAndReturn(pKingdom);
         }
 

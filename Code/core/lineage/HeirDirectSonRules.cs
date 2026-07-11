@@ -44,5 +44,10 @@ namespace AncientWarfare3.core.lineage
             if (!cachedEligible) return true;
             return eldestEligibleDirectSonId >= 0 && cachedHeirId != eldestEligibleDirectSonId;
         }
+
+        public static bool ShouldReconcile(int currentYear, int lastYear, bool successionPending)
+        {
+            return !successionPending && currentYear != lastYear;
+        }
     }
 }
