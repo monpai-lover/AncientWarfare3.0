@@ -25,6 +25,11 @@ aw_court_school_zongheng,纵横家,Diplomat School,縱橫家
 aw_court_school_nong,农家,Agrarian School,農家
 aw_court_school_yinyang,阴阳家,Yin-Yang School,陰陽家
 aw_court_school_ming,名家,Logician School,名家
+aw_court_school_medical,医家,Medical School,醫家
+aw_court_school_syncretist,杂家,Syncretist School,雜家
+aw_court_school_merchant,商家,Merchant School,商家
+aw_court_school_craftsman,工家,Craftsman School,工家
+aw_court_school_historian,史家,Historian School,史家
 aw_court_office_chancellor,丞相,Chancellor,丞相
 aw_court_office_censor,御史,Censor,御史
 aw_court_office_marshal,司马,Marshal,司馬
@@ -44,6 +49,8 @@ aw_court_office_ribu,礼部,Ministry of Rites,禮部
 aw_court_office_bingbu,兵部,Ministry of War,兵部
 aw_court_office_xingbu,刑部,Ministry of Justice,刑部
 aw_court_office_gongbu,工部,Ministry of Works,工部
+aw_court_office_imperial_physician,太医令,Imperial Physician,太醫令
+aw_court_office_imperial_astrologer,太史令,Imperial Astrologer,太史令
 aw_court_tier_sangongjiuqing,三公九卿,Three Excellencies & Nine Ministers,三公九卿
 aw_court_tier_sanshengliubu,三省六部,Three Departments & Six Ministries,三省六部
 aw_tech_three_departments,三省六部制,Three Departments,三省六部制

@@ -121,12 +121,26 @@ namespace AncientWarfare3.content
                 stewardship: 0f, diplomacy: 0f, warfare: 3f, intelligence: 1f);
             RegisterCourtSchoolTrait(CourtTraitId.Diplomat, "ui/Icons/traits/iconzonheng",
                 stewardship: 0f, diplomacy: 3f, warfare: 0f, intelligence: 1f);
-            RegisterCourtSchoolTrait(CourtTraitId.Agrarian, "ui/icons/iconFood",
+            RegisterCourtSchoolTrait(CourtTraitId.Agrarian, "ui/Icons/traits/iconnong",
                 stewardship: 2f, diplomacy: 0f, warfare: 0f, intelligence: 1f);
-            RegisterCourtSchoolTrait(CourtTraitId.YinYang, "ui/icons/iconCulture",
+            RegisterCourtSchoolTrait(CourtTraitId.YinYang, "ui/Icons/traits/iconyingyang",
                 stewardship: 1f, diplomacy: 1f, warfare: 0f, intelligence: 2f);
-            RegisterCourtSchoolTrait(CourtTraitId.Logician, "ui/icons/iconKnowledge",
+            RegisterCourtSchoolTrait(CourtTraitId.Logician, "ui/Icons/traits/iconmingjia",
                 stewardship: 0f, diplomacy: 2f, warfare: 0f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Medical, "ui/Icons/traits/iconoisha",
+                stewardship: 2f, diplomacy: 0f, warfare: 0f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Syncretist, "ui/Icons/traits/iconzajia",
+                stewardship: 1f, diplomacy: 1f, warfare: 1f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Merchant, "ui/Icons/traits/iconshangjia",
+                stewardship: 2f, diplomacy: 2f, warfare: 0f, intelligence: 1f);
+            RegisterCourtSchoolTrait(CourtTraitId.Craftsman, "ui/Icons/traits/icongongjia",
+                stewardship: 2f, diplomacy: 0f, warfare: 1f, intelligence: 2f);
+            RegisterCourtSchoolTrait(CourtTraitId.Historian, "ui/Icons/traits/iconshijia",
+                stewardship: 1f, diplomacy: 2f, warfare: 0f, intelligence: 2f);
+            ActorTrait royalMedicalCare = NewTrait(CourtTraitId.RoyalMedicalCare,
+                "ui/Icons/traits/icondanyao", XiaTraitGroups.AW2);
+            royalMedicalCare.base_stats["multiplier_health"] = 0.5f;
+            royalMedicalCare.base_stats["lifespan"] = 15f;
             // TODO[批I-奴隶]: action_special_effect = 周期性强制 setProfession(Slave)
         }
 

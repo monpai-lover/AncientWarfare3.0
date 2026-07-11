@@ -256,7 +256,8 @@ namespace AncientWarfare3.core.court
 
             Actor candidate = FindBestCandidate(pKingdom, pRoster, pOfficeId, pPreferredSchool);
             if (candidate == null) return;
-            SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central, pOfficeId, pPreferredSchool, null);
+            string school = CourtSchoolAssignmentRules.ResolveSchool(pOfficeId, CandidateProfile(candidate));
+            SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central, pOfficeId, school, null);
             pOccupiedOffices?.Add(pOfficeId);
         }
 
@@ -296,11 +297,23 @@ namespace AncientWarfare3.core.court
 
             if (pOfficeId == CourtOfficeId.Marshal) score += warfare * 2f;
             if (pOfficeId == CourtOfficeId.Chancellor || pOfficeId == CourtOfficeId.Censor) score += diplomacy;
+            if (pOfficeId == CourtOfficeId.ImperialPhysician)
+                score += intelligence * 2f + stewardship * 1.5f;
+            if (pOfficeId == CourtOfficeId.ImperialAstrologer)
+                score += intelligence * 2f + diplomacy * 1.5f;
             if (ChronicleGate.IsNobleActor(pActor)) score += 4f;
 
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string naturalSchool, "");
             if (naturalSchool == pPreferredSchool) score += 6f;
             return score;
+        }
+
+        private static CourtCandidateProfile CandidateProfile(Actor pActor)
+        {
+            pActor.data.get(LineageKeys.COURT_SCHOOL, out string existingSchool, "");
+            return new CourtCandidateProfile(pActor.data.id,
+                SafeStat(pActor, "stewardship"), SafeStat(pActor, "diplomacy"),
+                SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"), existingSchool);
         }
 
         private static void SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
@@ -694,6 +707,11 @@ namespace AncientWarfare3.core.court
             yield return CourtTraitId.Agrarian;
             yield return CourtTraitId.YinYang;
             yield return CourtTraitId.Logician;
+            yield return CourtTraitId.Medical;
+            yield return CourtTraitId.Syncretist;
+            yield return CourtTraitId.Merchant;
+            yield return CourtTraitId.Craftsman;
+            yield return CourtTraitId.Historian;
         }
 
         private static float SafeStat(Actor pActor, string pStat)

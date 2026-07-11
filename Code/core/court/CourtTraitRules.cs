@@ -20,6 +20,11 @@ namespace AncientWarfare3.core.court
                 CourtSchoolId.Agrarian => CourtTraitId.Agrarian,
                 CourtSchoolId.YinYang => CourtTraitId.YinYang,
                 CourtSchoolId.Logician => CourtTraitId.Logician,
+                CourtSchoolId.Medical => CourtTraitId.Medical,
+                CourtSchoolId.Syncretist => CourtTraitId.Syncretist,
+                CourtSchoolId.Merchant => CourtTraitId.Merchant,
+                CourtSchoolId.Craftsman => CourtTraitId.Craftsman,
+                CourtSchoolId.Historian => CourtTraitId.Historian,
                 _ => ""
             };
         }

@@ -2,7 +2,7 @@ namespace AncientWarfare3.core.court
 {
     public static class CourtRules
     {
-        public const int CentralOfficeCount = 6;
+        public const int CentralOfficeCount = 11;
         public const int DefaultRefreshIntervalYears = 5;
         public const int CandidateRefreshIntervalYears = 8;
         public const int StrongEventCooldownYears = 12;

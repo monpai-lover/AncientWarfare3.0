@@ -64,6 +64,11 @@ namespace AncientWarfare3.core.lineage
                 case CourtSchoolId.Agrarian: return HistoryLocalizationRules.Text("aw_court_school_nong");
                 case CourtSchoolId.YinYang: return HistoryLocalizationRules.Text("aw_court_school_yinyang");
                 case CourtSchoolId.Logician: return HistoryLocalizationRules.Text("aw_court_school_ming");
+                case CourtSchoolId.Medical: return HistoryLocalizationRules.Text("aw_court_school_medical");
+                case CourtSchoolId.Syncretist: return HistoryLocalizationRules.Text("aw_court_school_syncretist");
+                case CourtSchoolId.Merchant: return HistoryLocalizationRules.Text("aw_court_school_merchant");
+                case CourtSchoolId.Craftsman: return HistoryLocalizationRules.Text("aw_court_school_craftsman");
+                case CourtSchoolId.Historian: return HistoryLocalizationRules.Text("aw_court_school_historian");
                 case CourtSchoolId.PrimitiveMinister: return HistoryLocalizationRules.Text("aw_court_school_primitive");
                 default: return HistoryLocalizationRules.Text("aw_court_school_none");
             }

@@ -680,6 +680,11 @@ namespace AncientWarfare3.ui.windows
                 case CourtSchoolId.Agrarian: return AW_L10n.Text("aw_court_school_nong", "\u519C\u5BB6");
                 case CourtSchoolId.YinYang: return AW_L10n.Text("aw_court_school_yinyang", "\u9634\u9633\u5BB6");
                 case CourtSchoolId.Logician: return AW_L10n.Text("aw_court_school_ming", "\u540D\u5BB6");
+                case CourtSchoolId.Medical: return AW_L10n.Text("aw_court_school_medical", "\u533B\u5BB6");
+                case CourtSchoolId.Syncretist: return AW_L10n.Text("aw_court_school_syncretist", "\u6742\u5BB6");
+                case CourtSchoolId.Merchant: return AW_L10n.Text("aw_court_school_merchant", "\u5546\u5BB6");
+                case CourtSchoolId.Craftsman: return AW_L10n.Text("aw_court_school_craftsman", "\u5DE5\u5BB6");
+                case CourtSchoolId.Historian: return AW_L10n.Text("aw_court_school_historian", "\u53F2\u5BB6");
                 case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "\u539F\u59CB\u671D\u4F1A");
                 default: return AW_L10n.Text("aw_policy_idle", "\u5F85\u5B9A");
             }

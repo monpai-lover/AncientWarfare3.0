@@ -37,13 +37,15 @@ namespace AncientWarfare3.core.court
                     {
                         CourtOfficeId.Zhongshu, CourtOfficeId.Menxia, CourtOfficeId.Shangshu,
                         CourtOfficeId.Libu, CourtOfficeId.Hubu, CourtOfficeId.Ribu,
-                        CourtOfficeId.Bingbu, CourtOfficeId.Xingbu, CourtOfficeId.Gongbu
+                        CourtOfficeId.Bingbu, CourtOfficeId.Xingbu, CourtOfficeId.Gongbu,
+                        CourtOfficeId.ImperialPhysician, CourtOfficeId.ImperialAstrologer
                     };
                 case CourtTier.SanGongJiuQing:
                     return new[]
                     {
                         CourtOfficeId.Chancellor, CourtOfficeId.Marshal, CourtOfficeId.Censor,
-                        CourtOfficeId.Justice, CourtOfficeId.Steward, CourtOfficeId.Erudite
+                        CourtOfficeId.Justice, CourtOfficeId.Steward, CourtOfficeId.Erudite,
+                        CourtOfficeId.ImperialPhysician, CourtOfficeId.ImperialAstrologer
                     };
                 default:
                     return Array.Empty<string>();
@@ -69,6 +71,8 @@ namespace AncientWarfare3.core.court
                 case CourtOfficeId.Bingbu: return CourtSchoolId.Military;
                 case CourtOfficeId.Xingbu: return CourtSchoolId.Legalist;
                 case CourtOfficeId.Gongbu: return CourtSchoolId.Mohist;
+                case CourtOfficeId.ImperialPhysician: return CourtSchoolId.Medical;
+                case CourtOfficeId.ImperialAstrologer: return CourtSchoolId.YinYang;
                 default: return CourtSchoolId.None;
             }
         }

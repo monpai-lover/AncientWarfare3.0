@@ -31,6 +31,8 @@ namespace AncientWarfare3.core.court
         public const string Bingbu = "bingbu";     // 兵部
         public const string Xingbu = "xingbu";     // 刑部
         public const string Gongbu = "gongbu";     // 工部
+        public const string ImperialPhysician = "imperial_physician";
+        public const string ImperialAstrologer = "imperial_astrologer";
     }
 
     // 官场按科技分历史层级:原始朝会 → 三公九卿 → 三省六部。
@@ -58,6 +60,11 @@ namespace AncientWarfare3.core.court
         public const string Agrarian = "nong";
         public const string YinYang = "yinyang";
         public const string Logician = "ming";
+        public const string Medical = "medical";
+        public const string Syncretist = "syncretist";
+        public const string Merchant = "merchant";
+        public const string Craftsman = "craftsman";
+        public const string Historian = "historian";
     }
 
     public static class CourtTraitId
@@ -71,6 +78,12 @@ namespace AncientWarfare3.core.court
         public const string Agrarian = "aw_school_nong";
         public const string YinYang = "aw_school_yinyang";
         public const string Logician = "aw_school_ming";
+        public const string Medical = "aw_school_medical";
+        public const string Syncretist = "aw_school_syncretist";
+        public const string Merchant = "aw_school_merchant";
+        public const string Craftsman = "aw_school_craftsman";
+        public const string Historian = "aw_school_historian";
+        public const string RoyalMedicalCare = "aw_royal_medical_care";
     }
 
     public static class CourtEvents

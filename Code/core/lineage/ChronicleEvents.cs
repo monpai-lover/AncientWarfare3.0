@@ -227,6 +227,11 @@ namespace AncientWarfare3.core.lineage
                 case CourtSchoolId.Agrarian: return AW_L10n.Text("aw_court_school_nong", "Agrarian");
                 case CourtSchoolId.YinYang: return AW_L10n.Text("aw_court_school_yinyang", "Yin-Yang");
                 case CourtSchoolId.Logician: return AW_L10n.Text("aw_court_school_ming", "Logician");
+                case CourtSchoolId.Medical: return AW_L10n.Text("aw_court_school_medical", "Medical");
+                case CourtSchoolId.Syncretist: return AW_L10n.Text("aw_court_school_syncretist", "Syncretist");
+                case CourtSchoolId.Merchant: return AW_L10n.Text("aw_court_school_merchant", "Merchant");
+                case CourtSchoolId.Craftsman: return AW_L10n.Text("aw_court_school_craftsman", "Craftsman");
+                case CourtSchoolId.Historian: return AW_L10n.Text("aw_court_school_historian", "Historian");
                 case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
                 default: return string.IsNullOrEmpty(pSchoolId) ? T("aw_hist_none") : pSchoolId;
             }
