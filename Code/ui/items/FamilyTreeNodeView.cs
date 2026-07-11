@@ -817,7 +817,7 @@ namespace AncientWarfare3.ui.items
         ///     懒取 UiUnitAvatarElement prefab。原版 unit meta 用 `Resources.Load&lt;UiUnitAvatarElement&gt;("ui/UnitAvatarElement")`
         ///     (MetaCustomizationLibrary.cs:405-408)→ 直接 Resources 取 prefab,Instantiate 即用,比克隆窗口稳。
         /// </summary>
-        private static UiUnitAvatarElement GetAvatarPrefab()
+        internal static UiUnitAvatarElement GetAvatarPrefab()
         {
             if (_avatarPrefab != null) return _avatarPrefab;
             try

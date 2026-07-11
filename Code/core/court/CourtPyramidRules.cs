@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.court
     public static class CourtPyramidRoleId
     {
         public const string King = "king";
+        public const string Heir = "heir";
         public const string General = "general";
         public const string Governor = "governor";
     }

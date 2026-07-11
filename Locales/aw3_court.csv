@@ -1,4 +1,12 @@
 key,cz,en,ch
+aw_government_republic,共和国,Republic,共和國
+aw_government_monarchy,君主制,Monarchy,君主制
+aw_court_roles,官职,Roles,官職
+aw_court_school,学派,School,學派
+aw_court_appointed_year,就任年份,Appointed,就任年份
+aw_court_direction_livelihood,民生,Livelihood,民生
+aw_court_direction_aggression,尚武,Aggression,尚武
+aw_court_direction_peace,求和,Peace,求和
 aw_court Title,百家官场,Court of the Hundred Schools,百家官場
 aw_tech_official_court,官场制度,Official Court,官場制度
 aw_tech_official_court_desc,将原始朝会升级为百家官场，允许贤人入仕并影响国家路线,Upgrade primitive council into a court of schools that steers state policy,將原始朝會升級為百家官場，允許賢人入仕並影響國家路線

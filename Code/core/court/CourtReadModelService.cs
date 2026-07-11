@@ -20,7 +20,10 @@ namespace AncientWarfare3.core.court
             AddOfficersAndVacancies(seeds, pKingdom, officers);
             AddGenerals(seeds, pKingdom);
             AddCityLeaders(seeds, pKingdom);
-            return CourtPyramidRules.BuildLayout(seeds, HorizontalSpacing, VerticalSpacing);
+            List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
+                seeds, HorizontalSpacing, VerticalSpacing);
+            AddCachedHeirRole(result, pKingdom);
+            return result;
         }
 
         private static void AddKing(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
@@ -139,6 +142,15 @@ namespace AncientWarfare3.core.court
         {
             return pActor?.data != null && pActor.kingdom == pKingdom &&
                    pActor.isAlive() && !pActor.isRekt();
+        }
+
+        private static void AddCachedHeirRole(List<CourtPyramidNodeModel> pNodes, Kingdom pKingdom)
+        {
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            if (heirId < 0) return;
+            CourtPyramidNodeModel node = pNodes.FirstOrDefault(p => p.ActorId == heirId);
+            if (node != null && !node.Roles.Contains(CourtPyramidRoleId.Heir))
+                node.Roles.Insert(0, CourtPyramidRoleId.Heir);
         }
 
         private static IEnumerable<Actor> ReadActiveGenerals(Kingdom pKingdom)

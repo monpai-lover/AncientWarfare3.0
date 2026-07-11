@@ -1,22 +1,43 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
+using AncientWarfare3.ui.items;
 using NeoModLoader.api;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace AncientWarfare3.ui.windows
 {
     internal class CourtWindow : AbstractWindow<CourtWindow>
     {
-        private const float ROW_X = 8f;
-        private const float ROW_H = 18f;
-        private const float HEADER_H = 22f;
-        private const float CONTENT_BOTTOM = 18f;
+        private const float DefaultWidth = 560f;
+        private const float DefaultHeight = 360f;
+        private const float MinWidth = 420f;
+        private const float MinHeight = 280f;
+        private const float MaxWidth = 900f;
+        private const float MaxHeight = 650f;
+        private const float ScrollMarginX = 42f;
+        private const float ScrollMarginY = 58f;
+        private const float SummaryHeight = 62f;
+        private const float CanvasTopGap = 10f;
 
-        private static long _kingdomId = -1;
+        private static long _kingdomId = -1L;
+        private static Sprite _whiteSprite;
+        private readonly List<CourtActorNodeView> _nodePool = new List<CourtActorNodeView>();
+        private readonly List<GameObject> _links = new List<GameObject>();
+        private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
+        private RectTransform _canvasRect;
+        private GameObject _dragSurface;
+        private RectTransform _summaryRect;
+        private Text _summaryPrimary;
+        private Text _summarySecondary;
+        private RectTransform _resizeHandle;
+        private long _displayedKingdomId = -1L;
 
         public static void Open(long pKingdomId)
         {
@@ -28,20 +49,7 @@ namespace AncientWarfare3.ui.windows
 
         protected override void Init()
         {
-            ScrollWindow sw = GetComponent<ScrollWindow>();
-            if (sw?.titleText != null)
-                sw.titleText.text = AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
-
-            EnsureContentMask();
-        }
-
-        // 给内容视口挂遮罩，把正文裁剪在窗体框内，避免文字溢出到左侧游戏工具栏上。
-        private void EnsureContentMask()
-        {
-            Transform viewport = ContentTransform != null ? ContentTransform.parent : null;
-            if (viewport == null) return;
-            if (viewport.GetComponent<RectMask2D>() == null)
-                viewport.gameObject.AddComponent<RectMask2D>();
+            ConfigureWindow();
         }
 
         public override void OnNormalEnable()
@@ -49,91 +57,219 @@ namespace AncientWarfare3.ui.windows
             Refresh();
         }
 
+        private void ConfigureWindow()
+        {
+            ApplyWindowLayout();
+            EnsureUi();
+            InstallWindowHandlers();
+        }
+
+        private void ApplyWindowLayout()
+        {
+            float contentWidth = Mathf.Max(1f, _windowSize.x - ScrollMarginX);
+            float viewportHeight = Mathf.Max(1f, _windowSize.y - ScrollMarginY);
+            RectTransform background = BackgroundTransform?.GetComponent<RectTransform>();
+            if (background != null) background.sizeDelta = _windowSize;
+
+            Transform close = BackgroundTransform?.parent?.Find("CloseBackground");
+            if (close != null)
+                close.localPosition = new Vector3(_windowSize.x * 0.5f - 20f, _windowSize.y * 0.5f - 12f);
+
+            Transform titleBackground = BackgroundTransform?.Find("TitleBackground");
+            RectTransform titleRect = titleBackground?.GetComponent<RectTransform>();
+            if (titleRect != null)
+            {
+                titleRect.sizeDelta = new Vector2(_windowSize.x * 0.52f, 30f);
+                titleRect.localPosition = new Vector3(0f, _windowSize.y * 0.5f - 16f, 0f);
+            }
+
+            ScrollWindow scrollWindow = GetComponent<ScrollWindow>();
+            if (scrollWindow?.titleText != null)
+            {
+                scrollWindow.titleText.text = AW_L10n.Text("aw_court_title", "Court of the Hundred Schools");
+                scrollWindow.titleText.transform.localPosition =
+                    new Vector3(0f, _windowSize.y * 0.5f - 16f, 0f);
+                scrollWindow.titleText.raycastTarget = false;
+            }
+
+            Transform scroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform scrollRect = scroll?.GetComponent<RectTransform>();
+            if (scrollRect != null)
+            {
+                scrollRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
+                scrollRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect scrollComponent = scroll?.GetComponent<ScrollRect>();
+            if (scrollComponent != null)
+            {
+                scrollComponent.horizontal = false;
+                scrollComponent.vertical = false;
+            }
+            Transform scrollbar = BackgroundTransform?.Find("Scroll View/Scrollbar Vertical");
+            if (scrollbar != null)
+            {
+                foreach (Graphic graphic in scrollbar.GetComponentsInChildren<Graphic>(true))
+                {
+                    graphic.enabled = false;
+                    graphic.raycastTarget = false;
+                }
+                RectTransform scrollbarRect = scrollbar.GetComponent<RectTransform>();
+                if (scrollbarRect != null) scrollbarRect.anchoredPosition = new Vector2(9999f, 0f);
+            }
+
+            Transform viewport = ContentTransform?.parent;
+            RectTransform viewportRect = viewport?.GetComponent<RectTransform>();
+            if (viewportRect != null) viewportRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
+            if (viewport != null && viewport.GetComponent<RectMask2D>() == null)
+                viewport.gameObject.AddComponent<RectMask2D>();
+
+            RectTransform contentRect = ContentTransform?.GetComponent<RectTransform>();
+            if (contentRect != null) contentRect.sizeDelta = new Vector2(contentWidth, viewportHeight);
+            LayoutFixedUi(contentWidth, viewportHeight);
+        }
+
+        private void EnsureUi()
+        {
+            if (ContentTransform == null) return;
+            Transform existingSummary = ContentTransform.Find("CourtSummary");
+            GameObject summary = existingSummary != null
+                ? existingSummary.gameObject
+                : new GameObject("CourtSummary", typeof(RectTransform), typeof(Image));
+            if (existingSummary == null) summary.transform.SetParent(ContentTransform, false);
+            _summaryRect = summary.GetComponent<RectTransform>();
+            summary.GetComponent<Image>().color = new Color(0.08f, 0.07f, 0.055f, 0.96f);
+            _summaryPrimary = EnsureText(summary.transform, "Primary", 11, TextAnchor.UpperLeft);
+            _summarySecondary = EnsureText(summary.transform, "Secondary", 9, TextAnchor.UpperLeft);
+
+            Transform existingSurface = ContentTransform.Find("CourtDragSurface");
+            _dragSurface = existingSurface != null
+                ? existingSurface.gameObject
+                : new GameObject("CourtDragSurface", typeof(RectTransform), typeof(Image), typeof(TreeDragPanHandler));
+            if (existingSurface == null) _dragSurface.transform.SetParent(ContentTransform, false);
+            Image surfaceImage = _dragSurface.GetComponent<Image>();
+            surfaceImage.sprite = WhiteSprite();
+            surfaceImage.color = new Color(0f, 0f, 0f, 0.001f);
+            surfaceImage.raycastTarget = true;
+
+            Transform existingCanvas = ContentTransform.Find("CourtCanvas");
+            GameObject canvas = existingCanvas != null
+                ? existingCanvas.gameObject
+                : new GameObject("CourtCanvas", typeof(RectTransform), typeof(TreeDragPanHandler));
+            if (existingCanvas == null) canvas.transform.SetParent(ContentTransform, false);
+            _canvasRect = canvas.GetComponent<RectTransform>();
+            _canvasRect.anchorMin = new Vector2(0.5f, 1f);
+            _canvasRect.anchorMax = new Vector2(0.5f, 1f);
+            _canvasRect.pivot = new Vector2(0.5f, 1f);
+            _canvasRect.sizeDelta = Vector2.one;
+
+            _dragSurface.transform.SetAsFirstSibling();
+            _canvasRect.transform.SetSiblingIndex(1);
+            _summaryRect.transform.SetAsLastSibling();
+            TreeDragPanHandler canvasPan = canvas.GetComponent<TreeDragPanHandler>();
+            canvasPan.Setup(_canvasRect, ContentTransform.parent as RectTransform);
+            TreeDragPanHandler surfacePan = _dragSurface.GetComponent<TreeDragPanHandler>();
+            surfacePan.Setup(_canvasRect, ContentTransform.parent as RectTransform);
+            ApplyWindowLayout();
+        }
+
+        private void LayoutFixedUi(float pContentWidth, float pViewportHeight)
+        {
+            if (_summaryRect != null)
+            {
+                _summaryRect.anchorMin = new Vector2(0f, 1f);
+                _summaryRect.anchorMax = new Vector2(0f, 1f);
+                _summaryRect.pivot = new Vector2(0f, 1f);
+                _summaryRect.anchoredPosition = Vector2.zero;
+                _summaryRect.sizeDelta = new Vector2(pContentWidth, SummaryHeight);
+                LayoutSummaryText(_summaryPrimary, 8f, 4f, pContentWidth - 16f, 25f);
+                LayoutSummaryText(_summarySecondary, 8f, 29f, pContentWidth - 16f, 29f);
+            }
+            RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
+            if (surface != null)
+            {
+                surface.anchorMin = new Vector2(0f, 1f);
+                surface.anchorMax = new Vector2(0f, 1f);
+                surface.pivot = new Vector2(0f, 1f);
+                surface.anchoredPosition = new Vector2(0f, -SummaryHeight);
+                surface.sizeDelta = new Vector2(pContentWidth,
+                    Mathf.Max(1f, pViewportHeight - SummaryHeight));
+            }
+            if (_resizeHandle != null)
+                _resizeHandle.anchoredPosition = new Vector2(-2f, 2f);
+        }
+
+        private void InstallWindowHandlers()
+        {
+            RectTransform root = BackgroundTransform?.parent?.GetComponent<RectTransform>() ??
+                                 GetComponent<RectTransform>();
+            Transform title = BackgroundTransform?.Find("TitleBackground");
+            if (title != null && root != null)
+            {
+                Image titleImage = title.GetComponent<Image>();
+                if (titleImage != null) titleImage.raycastTarget = true;
+                CourtWindowDragHandler drag = title.GetComponent<CourtWindowDragHandler>() ??
+                                              title.gameObject.AddComponent<CourtWindowDragHandler>();
+                drag.Setup(root);
+            }
+
+            Transform existing = BackgroundTransform?.Find("CourtResizeHandle");
+            GameObject handle = existing != null
+                ? existing.gameObject
+                : new GameObject("CourtResizeHandle", typeof(RectTransform), typeof(Image),
+                    typeof(CourtWindowResizeHandler));
+            if (existing == null) handle.transform.SetParent(BackgroundTransform, false);
+            _resizeHandle = handle.GetComponent<RectTransform>();
+            _resizeHandle.anchorMin = new Vector2(1f, 0f);
+            _resizeHandle.anchorMax = new Vector2(1f, 0f);
+            _resizeHandle.pivot = new Vector2(1f, 0f);
+            _resizeHandle.sizeDelta = new Vector2(18f, 18f);
+            _resizeHandle.anchoredPosition = new Vector2(-2f, 2f);
+            Image image = handle.GetComponent<Image>();
+            image.sprite = WhiteSprite();
+            image.color = new Color(0.84f, 0.68f, 0.34f, 0.72f);
+            CourtWindowResizeHandler resize = handle.GetComponent<CourtWindowResizeHandler>();
+            resize.Setup(() => _windowSize, size =>
+            {
+                _windowSize = new Vector2(
+                    Mathf.Clamp(size.x, MinWidth, MaxWidth),
+                    Mathf.Clamp(size.y, MinHeight, MaxHeight));
+                ApplyWindowLayout();
+            });
+        }
+
         private void Refresh()
         {
             long benchmark = UpdateAgeBenchmark.Begin();
             try
             {
-                ClearContent();
+                ApplyWindowLayout();
+                EnsureUi();
                 Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+                bool switched = _displayedKingdomId != _kingdomId;
+                _displayedKingdomId = _kingdomId;
+                if (switched) ResetCanvas();
+                HideNodesAndLinks();
+
                 if (kingdom?.data == null || kingdom.isRekt())
                 {
-                    AddText("Missing", AW_L10n.Text("aw_policy_no_kingdom", "Kingdom missing"),
-                        0f, HEADER_H, 12, Color.white);
-                    SetContentHeight(HEADER_H + CONTENT_BOTTOM);
+                    _summaryPrimary.text = AW_L10n.Text("aw_policy_no_kingdom", "Kingdom missing");
+                    _summarySecondary.text = "";
                     return;
                 }
 
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
-                bool policyEnabled = KingdomPolicyService.IsPolicyEnabledForKingdom(kingdom);
-                bool official = policyEnabled && CourtService.HasOfficialCourt(kingdom);
-                string tier = CourtService.ResolveTier(kingdom);
-                string title = !policyEnabled
-                    ? AW_L10n.Text("aw_court_button_locked", "Court Locked")
-                    : official
-                    ? TierName(tier)
-                    : AW_L10n.Text("aw_court_button_primitive", "Primitive Council");
-
-                Color kColor = KingdomColor(kingdom);
-                float y = 0f;
-                AddText("Header", kingdom.name + " - " + title, y, HEADER_H, 12, kColor);
-                y += HEADER_H + 4f;
-
-                AddText("Mode", AW_L10n.Text("aw_policy_status", "Status") + ": " + title,
-                    y, ROW_H, 10, Color.white);
-                y += ROW_H;
-
-                if (!policyEnabled)
+                UpdateSummary(kingdom, snapshot);
+                List<CourtPyramidNodeModel> nodes = CourtReadModelService.Build(kingdom);
+                BuildLinks(nodes, KingdomColor(kingdom));
+                for (int i = 0; i < nodes.Count; i++)
                 {
-                    AddText("LockedDesc", AW_L10n.Text("aw_policy_disabled", "Policy system disabled") + "\n" +
-                                          AW_L10n.Text("aw_court_tooltip_cached",
-                                              "Court data uses cached refresh and does not scan every actor when opened."),
-                        y, ROW_H * 3f, 10, new Color(0.78f, 0.82f, 0.88f, 1f));
-                    SetContentHeight(y + ROW_H * 3f + CONTENT_BOTTOM);
-                    return;
+                    CourtActorNodeView view = GetNode(i);
+                    RectTransform rect = view.GetComponent<RectTransform>();
+                    rect.anchoredPosition = new Vector2(nodes[i].X, nodes[i].Y);
+                    view.Bind(nodes[i], kingdom);
+                    view.gameObject.SetActive(true);
                 }
-
-                AddText("Dominant", AW_L10n.Text("aw_court_dominant_school", "Dominant School") + ": " +
-                                    SchoolName(snapshot.dominant_school),
-                    y, ROW_H, 10, Color.white);
-                y += ROW_H;
-                AddText("Efficiency", AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + ": " +
-                                     Mathf.FloorToInt(snapshot.efficiency),
-                    y, ROW_H, 10, Color.white);
-                y += ROW_H + 6f;
-
-                AddText("FactionHeader", AW_L10n.Text("aw_court_faction_composition", "Faction Composition"),
-                    y, HEADER_H, 11, new Color(1f, 0.88f, 0.55f, 1f));
-                y += HEADER_H;
-
-                List<string> factionRows = BuildFactionRows(snapshot.faction_cache);
-                if (factionRows.Count == 0)
-                {
-                    AddText("NoFaction", AW_L10n.Text("aw_court_no_officer", "Vacant"),
-                        y, ROW_H, 10, new Color(0.78f, 0.78f, 0.78f, 1f));
-                    y += ROW_H;
-                }
-                else
-                {
-                    for (int i = 0; i < factionRows.Count; i++)
-                    {
-                        AddText("Faction" + i, factionRows[i], y, ROW_H, 10, Color.white);
-                        y += ROW_H;
-                    }
-                }
-
-                if (official)
-                {
-                    y += 6f;
-                    y = AddOfficerSection(kingdom, y);
-                    y = AddBureauSection(kingdom, y);
-                }
-
-                y += 6f;
-                AddText("CacheNote", AW_L10n.Text("aw_court_tooltip_cached",
-                        "Court data uses cached refresh and does not scan every actor when opened."),
-                    y, ROW_H * 2f, 9, new Color(0.78f, 0.82f, 0.88f, 1f));
-                SetContentHeight(y + ROW_H * 2f + CONTENT_BOTTOM);
+                _summaryRect.transform.SetAsLastSibling();
             }
             finally
             {
@@ -141,103 +277,130 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
-        private void ClearContent()
+        private void UpdateSummary(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {
-            if (ContentTransform == null) return;
-            for (int i = ContentTransform.childCount - 1; i >= 0; i--)
+            string government = RepublicGovernmentService.IsRepublic(pKingdom)
+                ? AW_L10n.Text("aw_government_republic", "Republic")
+                : AW_L10n.Text("aw_government_monarchy", "Monarchy");
+            string tier = TierName(CourtService.ResolveTier(pKingdom));
+            _summaryPrimary.color = KingdomColor(pKingdom);
+            _summaryPrimary.text = pKingdom.name + "  |  " + government + "  |  " + tier + "  |  " +
+                                   AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + " " +
+                                   Mathf.FloorToInt(pSnapshot.efficiency);
+            string schools = SchoolName(pSnapshot.dominant_school);
+            if (!string.IsNullOrEmpty(pSnapshot.secondary_school))
+                schools += " / " + SchoolName(pSnapshot.secondary_school);
+            _summarySecondary.text = AW_L10n.Text("aw_court_dominant_school", "Dominant Schools") + ": " +
+                                     schools + "    " +
+                                     AW_L10n.Text("aw_court_direction_livelihood", "Livelihood") + " " +
+                                     Percent(pSnapshot.livelihood) + "  " +
+                                     AW_L10n.Text("aw_court_direction_aggression", "Aggression") + " " +
+                                     Percent(pSnapshot.aggression) + "  " +
+                                     AW_L10n.Text("aw_court_direction_peace", "Peace") + " " +
+                                     Percent(pSnapshot.peace);
+        }
+
+        private CourtActorNodeView GetNode(int pIndex)
+        {
+            while (_nodePool.Count <= pIndex)
+                _nodePool.Add(CourtActorNodeView.Create(_canvasRect));
+            return _nodePool[pIndex];
+        }
+
+        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor)
+        {
+            if (pNodes == null || pNodes.Count <= 1) return;
+            List<IGrouping<int, CourtPyramidNodeModel>> rows = pNodes
+                .GroupBy(p => p.Rank)
+                .OrderBy(p => p.Key)
+                .ToList();
+            for (int row = 1; row < rows.Count; row++)
             {
-                Transform child = ContentTransform.GetChild(i);
-                if (child != null) Destroy(child.gameObject);
+                CourtPyramidNodeModel[] parents = rows[row - 1].ToArray();
+                foreach (CourtPyramidNodeModel child in rows[row])
+                {
+                    CourtPyramidNodeModel parent = parents
+                        .OrderBy(p => Mathf.Abs(p.X - child.X))
+                        .First();
+                    CreateLink(new Vector2(parent.X, parent.Y - CourtActorNodeView.Height),
+                        new Vector2(child.X, child.Y), pColor);
+                }
             }
         }
 
-        private void AddText(string pName, string pText, float pY, float pHeight, int pSize, Color pColor)
+        private void CreateLink(Vector2 pFrom, Vector2 pTo, Color pColor)
         {
-            if (ContentTransform == null) return;
-            GameObject obj = new GameObject(pName, typeof(RectTransform), typeof(Text));
-            obj.transform.SetParent(ContentTransform, false);
+            var obj = new GameObject("CourtRankLink", typeof(RectTransform), typeof(Image));
+            obj.transform.SetParent(_canvasRect, false);
+            obj.transform.SetAsFirstSibling();
             RectTransform rect = obj.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(0.5f, 1f);
-            rect.offsetMin = new Vector2(ROW_X, -pY - pHeight);
-            rect.offsetMax = new Vector2(-ROW_X, -pY);
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            Vector2 delta = pTo - pFrom;
+            rect.anchoredPosition = (pFrom + pTo) * 0.5f;
+            rect.sizeDelta = new Vector2(delta.magnitude, 2f);
+            rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+            Image image = obj.GetComponent<Image>();
+            image.sprite = WhiteSprite();
+            image.color = new Color(pColor.r, pColor.g, pColor.b, 0.48f);
+            image.raycastTarget = false;
+            _links.Add(obj);
+        }
 
+        private void HideNodesAndLinks()
+        {
+            foreach (CourtActorNodeView node in _nodePool)
+                if (node != null) node.gameObject.SetActive(false);
+            foreach (GameObject link in _links)
+                if (link != null) Destroy(link);
+            _links.Clear();
+        }
+
+        private void ResetCanvas()
+        {
+            if (_canvasRect == null) return;
+            _canvasRect.anchoredPosition = new Vector2(0f, -SummaryHeight - CanvasTopGap);
+            _canvasRect.localScale = Vector3.one;
+        }
+
+        private static Text EnsureText(Transform pParent, string pName, int pSize, TextAnchor pAnchor)
+        {
+            Transform existing = pParent.Find(pName);
+            GameObject obj = existing != null
+                ? existing.gameObject
+                : new GameObject(pName, typeof(RectTransform), typeof(Text));
+            if (existing == null) obj.transform.SetParent(pParent, false);
             Text text = obj.GetComponent<Text>();
             text.font = LocalizedTextManager.current_font;
             text.fontSize = pSize;
-            text.alignment = TextAnchor.UpperLeft;
-            text.color = pColor;
-            text.supportRichText = true;
+            text.alignment = pAnchor;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
             text.raycastTarget = false;
-            text.text = pText ?? "";
+            text.color = Color.white;
+            return text;
         }
 
-        private void SetContentHeight(float pHeight)
+        private static void LayoutSummaryText(Text pText, float pX, float pY, float pWidth, float pHeight)
         {
-            RectTransform rect = ContentTransform != null ? ContentTransform.GetComponent<RectTransform>() : null;
-            if (rect == null) return;
-            rect.sizeDelta = new Vector2(rect.sizeDelta.x, Mathf.Max(pHeight, 80f));
+            if (pText == null) return;
+            RectTransform rect = pText.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(pX, -pY);
+            rect.sizeDelta = new Vector2(pWidth, pHeight);
         }
 
-        private float AddOfficerSection(Kingdom pKingdom, float pY)
+        private static string Percent(float pValue)
         {
-            AddText("OfficerHeader", AW_L10n.Text("aw_court_central_officers", "Central Officers"),
-                pY, HEADER_H, 11, new Color(1f, 0.88f, 0.55f, 1f));
-            pY += HEADER_H;
-
-            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 16);
-            if (officers.Count == 0)
-            {
-                AddText("NoOfficer", AW_L10n.Text("aw_court_no_officer", "Vacant"),
-                    pY, ROW_H, 10, new Color(0.78f, 0.78f, 0.78f, 1f));
-                return pY + ROW_H;
-            }
-
-            for (int i = 0; i < officers.Count; i++)
-            {
-                CourtOfficerView o = officers[i];
-                string line = OfficeName(o.office_id) + " - " + o.actor_name +
-                              " (" + SchoolName(o.school_id) + ")";
-                AddClickableText("Officer" + i, line, pY, ROW_H, 10, Color.white, o.actor_id);
-                pY += ROW_H;
-            }
-            return pY;
-        }
-
-        private float AddBureauSection(Kingdom pKingdom, float pY)
-        {
-            List<CityBureauView> bureaus = CourtService.GetCityBureaus(pKingdom, 12);
-            if (bureaus.Count == 0) return pY;
-
-            pY += 6f;
-            AddText("BureauHeader", AW_L10n.Text("aw_court_local_bureaus", "Local Bureaus"),
-                pY, HEADER_H, 11, new Color(1f, 0.88f, 0.55f, 1f));
-            pY += HEADER_H;
-
-            for (int i = 0; i < bureaus.Count; i++)
-            {
-                CityBureauView b = bureaus[i];
-                string line = b.city_name + " - " +
-                              AW_L10n.Text("aw_court_office_slots", "Slots") + " " + b.office_slots + ", " +
-                              SchoolName(b.local_school) + ", " +
-                              AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + " " + Mathf.FloorToInt(b.efficiency);
-                AddText("Bureau" + i, line, pY, ROW_H, 10, Color.white);
-                pY += ROW_H;
-            }
-            return pY;
-        }
-
-        private static string OfficeName(string pOfficeId)
-        {
-            return AW_L10n.Text("aw_court_office_" + (pOfficeId ?? ""), pOfficeId ?? "");
+            return Mathf.RoundToInt(Mathf.Clamp01(pValue) * 100f) + "%";
         }
 
         private static string TierName(string pTier)
         {
-            switch (pTier)
+            switch (pTier ?? "")
             {
                 case CourtTier.SanShengLiuBu:
                     return AW_L10n.Text("aw_court_tier_sanshengliubu", "Three Departments and Six Ministries");
@@ -248,47 +411,9 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
-        private static Color KingdomColor(Kingdom pKingdom)
+        private static string SchoolName(string pSchoolId)
         {
-            string hex = HistoryColors.FromKingdom(pKingdom);
-            if (!string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out Color c))
-                return new Color(c.r, c.g, c.b, 1f);
-            return Color.white;
-        }
-
-        // 与 AddText 相同,但让该行可点击打开对应人物窗口(仿 EmpireCraft 的可点官员)。
-        private void AddClickableText(string pName, string pText, float pY, float pHeight, int pSize,
-            Color pColor, long pActorId)
-        {
-            AddText(pName, pText, pY, pHeight, pSize, pColor);
-            if (pActorId < 0 || ContentTransform == null) return;
-            Transform t = ContentTransform.Find(pName);
-            if (t == null) return;
-            Text txt = t.GetComponent<Text>();
-            if (txt != null) txt.raycastTarget = true;
-            Button btn = t.gameObject.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-            btn.onClick.RemoveAllListeners();
-            long id = pActorId;
-            btn.onClick.AddListener(() =>
-            {
-                Actor actor = World.world?.units?.get(id);
-                if (actor != null && !actor.isRekt()) ActionLibrary.openUnitWindow(actor);
-            });
-        }
-
-        private static List<string> BuildFactionRows(string pEncoded)
-        {
-            Dictionary<string, float> values = CourtStateCodec.DecodeFactionCache(pEncoded);
-            var rows = new List<string>();
-            foreach (KeyValuePair<string, float> pair in values)
-                rows.Add(SchoolName(pair.Key) + ": " + pair.Value.ToString("0.0"));
-            rows.Sort();
-            return rows;
-        }
-
-        private static string SchoolName(string pSchool)
-        {
-            switch (pSchool)
+            switch (pSchoolId ?? "")
             {
                 case CourtSchoolId.Ru: return AW_L10n.Text("aw_court_school_ru", "Ru School");
                 case CourtSchoolId.Legalist: return AW_L10n.Text("aw_court_school_fa", "Legalist School");
@@ -304,8 +429,71 @@ namespace AncientWarfare3.ui.windows
                 case CourtSchoolId.Merchant: return AW_L10n.Text("aw_court_school_merchant", "Merchant School");
                 case CourtSchoolId.Craftsman: return AW_L10n.Text("aw_court_school_craftsman", "Craftsman School");
                 case CourtSchoolId.Historian: return AW_L10n.Text("aw_court_school_historian", "Historian School");
-                case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
                 default: return AW_L10n.Text("aw_policy_idle", "Idle");
+            }
+        }
+
+        private static Color KingdomColor(Kingdom pKingdom)
+        {
+            string hex = HistoryColors.FromKingdom(pKingdom);
+            if (!string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out Color color))
+                return new Color(color.r, color.g, color.b, 1f);
+            return Color.white;
+        }
+
+        private static Sprite WhiteSprite()
+        {
+            if (_whiteSprite != null) return _whiteSprite;
+            _whiteSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0f, 0f, 1f, 1f),
+                new Vector2(0.5f, 0.5f), 1f);
+            return _whiteSprite;
+        }
+
+        private sealed class CourtWindowDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
+        {
+            private RectTransform _target;
+            private Vector2 _startPointer;
+            private Vector2 _startPosition;
+
+            public void Setup(RectTransform pTarget) { _target = pTarget; }
+
+            public void OnBeginDrag(PointerEventData pEventData)
+            {
+                if (_target == null) return;
+                _startPointer = pEventData.position;
+                _startPosition = _target.anchoredPosition;
+            }
+
+            public void OnDrag(PointerEventData pEventData)
+            {
+                if (_target == null) return;
+                _target.anchoredPosition = _startPosition + pEventData.position - _startPointer;
+            }
+        }
+
+        private sealed class CourtWindowResizeHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
+        {
+            private Func<Vector2> _getSize;
+            private Action<Vector2> _setSize;
+            private Vector2 _startPointer;
+            private Vector2 _startSize;
+
+            public void Setup(Func<Vector2> pGetSize, Action<Vector2> pSetSize)
+            {
+                _getSize = pGetSize;
+                _setSize = pSetSize;
+            }
+
+            public void OnBeginDrag(PointerEventData pEventData)
+            {
+                _startPointer = pEventData.position;
+                _startSize = _getSize?.Invoke() ?? new Vector2(DefaultWidth, DefaultHeight);
+            }
+
+            public void OnDrag(PointerEventData pEventData)
+            {
+                Vector2 delta = pEventData.position - _startPointer;
+                _setSize?.Invoke(new Vector2(_startSize.x + delta.x, _startSize.y - delta.y));
             }
         }
     }
