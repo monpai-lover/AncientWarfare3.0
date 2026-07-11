@@ -156,10 +156,9 @@ namespace AncientWarfare3.core.lineage
                                H("aw_hist_court_school_mid") +
                                HistoryText.PlainText(CourtSchoolName(pSchoolId));
 
-            if (ChronicleGate.IsImportant(pActor) || ChronicleGate.IsNobleActor(pActor))
-                HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
-                    PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.HONOR,
-                    HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
+                PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.HONOR,
+                HistoryTarget.Kingdom(pKingdom));
 
             if (ChronicleGate.IsImportant(pActor))
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_OFFICER_APPOINTED, text,
@@ -178,8 +177,6 @@ namespace AncientWarfare3.core.lineage
         public static void OnCourtOfficerDismissed(Actor pActor, Kingdom pKingdom, string pOfficeId, string pReason)
         {
             if (pActor?.data == null || pKingdom?.data == null) return;
-            if (!ChronicleGate.IsImportant(pActor) && !ChronicleGate.IsNobleActor(pActor)) return;
-
             string name = pActor.getName();
             HistoryText text = HistoryText.Actor(pActor, name) +
                                H("aw_hist_court_dismissed_mid") +

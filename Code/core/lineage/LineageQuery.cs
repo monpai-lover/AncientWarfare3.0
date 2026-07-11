@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -1604,48 +1606,42 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (RepublicGovernmentService.IsRepublic(pLive.kingdom) &&
-                HeirService.IsCurrentHeir(pLive.kingdom, pLive))
+            var roles = new List<string>();
+            pLive.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+            if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
-                pNode.social_title = HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom);
-                pNode.social_title_color = color;
-                return;
+                roles.Add(HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom));
             }
-
             if (GeneralService.IsFiefHolder(pLive))
             {
                 City fief = FiefService.GetFiefCity(pLive);
                 string cityName = fief?.data?.name ?? pLive.city?.data?.name ?? pNode.city_name ?? "";
-                pNode.social_title = string.IsNullOrEmpty(cityName)
+                roles.Add(string.IsNullOrEmpty(cityName)
                     ? "\u5C01\u5730\u5927\u5C06"
-                    : cityName + " \u5C01\u5730\u5927\u5C06";
-                pNode.social_title_color = color;
-                return;
+                    : cityName + " \u5C01\u5730\u5927\u5C06");
             }
-
-            if (GeneralService.IsGeneral(pLive))
+            else if (GeneralService.IsGeneral(pLive))
             {
-                pNode.social_title = "\u5927\u5C06";
-                pNode.social_title_color = color;
-                return;
+                roles.Add("\u5927\u5C06");
             }
 
             if (pLive.isCityLeader())
             {
                 string cityName = pLive.city?.data?.name ?? pNode.city_name ?? "";
-                pNode.social_title = string.IsNullOrEmpty(cityName)
+                roles.Add(string.IsNullOrEmpty(cityName)
                     ? "\u592A\u5B88"
-                    : cityName + " \u592A\u5B88";
-                pNode.social_title_color = color;
-                return;
+                    : cityName + " \u592A\u5B88");
             }
 
-            pLive.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
-            if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
+            pLive.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            if (!string.IsNullOrEmpty(office))
+                roles.Add(AW_L10n.Text("aw_court_office_" + office, office));
+
+            string combined = CourtTitleRules.Combine(roles.ToArray());
+            if (!string.IsNullOrEmpty(combined))
             {
-                string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
-                pNode.social_title = HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom);
+                pNode.social_title = combined;
                 pNode.social_title_color = color;
             }
         }

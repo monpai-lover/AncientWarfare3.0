@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -287,32 +289,40 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            var roles = new List<string>();
             try
             {
-                if (RepublicGovernmentService.IsRepublic(pActor.kingdom) &&
-                    HeirService.IsCurrentHeir(pActor.kingdom, pActor))
-                    return (HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom), color);
+                pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
+                if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                    roles.Add(HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom));
+            }
+            catch { }
+
+            try
+            {
+                if (GeneralService.IsFiefHolder(pActor))
+                {
+                    City fief = FiefService.GetFiefCity(pActor);
+                    string fiefName = fief?.data?.name ?? pCityName;
+                    roles.Add(string.IsNullOrEmpty(fiefName) ? "\u5C01\u5730\u5927\u5C06" : fiefName + " \u5C01\u5730\u5927\u5C06");
+                }
+                else if (GeneralService.IsGeneral(pActor)) roles.Add("\u5927\u5C06");
             }
             catch { }
 
             try
             {
                 if (pActor.isCityLeader())
-                {
-                    return (string.IsNullOrEmpty(pCityName) ? "\u592A\u5B88" : pCityName + " \u592A\u5B88", color);
-                }
+                    roles.Add(string.IsNullOrEmpty(pCityName) ? "\u592A\u5B88" : pCityName + " \u592A\u5B88");
             }
             catch { }
 
-            try
-            {
-                pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
-                if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
-                    return (HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom), color);
-            }
-            catch { }
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            if (!string.IsNullOrEmpty(office))
+                roles.Add(AW_L10n.Text("aw_court_office_" + office, office));
 
-            return ("", "");
+            string combined = CourtTitleRules.Combine(roles.ToArray());
+            return (combined, string.IsNullOrEmpty(combined) ? "" : color);
         }
     }
 }

@@ -199,6 +199,7 @@ namespace AncientWarfare3.core.court
 
         private static void ValidateOfficers(Kingdom pKingdom, List<Actor> pRoster, string pTier)
         {
+            CloseStaleOfficerRows(pKingdom);
             var tierOffices = new HashSet<string>(CourtTierRules.CentralOfficesForTier(pTier), StringComparer.Ordinal);
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
@@ -320,6 +321,18 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pKingdom?.data == null) return;
 
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long previousKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string previousOffice, "");
+            if (!string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId)
+            {
+                Kingdom previousKingdom = previousKingdomId >= 0
+                    ? World.world?.kingdoms?.get(previousKingdomId)
+                    : pKingdom;
+                if (previousKingdom?.data != null)
+                    ChronicleEvents.OnCourtOfficerDismissed(pActor, previousKingdom,
+                        previousOffice, "reassigned");
+            }
+
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
@@ -328,6 +341,7 @@ namespace AncientWarfare3.core.court
             SyncSchoolTrait(pActor, active: true);
             RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", pSchoolId ?? "", pCity);
             ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
+            LineageService.ArchiveActor(pActor, pAlive: true);
         }
 
         private static void ClearOfficer(Actor pActor, string pReason)
@@ -337,6 +351,8 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
+            bool alive = pActor.isAlive() && !pActor.isRekt();
+            if (!alive) LineageService.ArchiveActor(pActor, pAlive: false);
 
             SyncSchoolTrait(pActor, active: false);
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, -1L);
@@ -348,6 +364,46 @@ namespace AncientWarfare3.core.court
             CloseOfficerRecord(pActor.data.id, pReason ?? "");
             if (courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
+            if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
+        }
+
+        private static void CloseStaleOfficerRows(Kingdom pKingdom)
+        {
+            var db = CourtDB;
+            if (db == null || pKingdom?.data == null) return;
+            var actorIds = new List<long>();
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText = "SELECT ACTOR_ID FROM " + CourtOfficerTableItem.GetTableName() +
+                                  " WHERE KINGDOM_ID = @kid AND ACTIVE = 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdom.id);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    if (!reader.IsDBNull(0)) actorIds.Add(Convert.ToInt64(reader.GetValue(0)));
+            }
+            catch (Exception e)
+            {
+                AncientWarfare3.ModClass.LogWarning("CourtOfficer stale-row read failed: " + e.Message);
+                return;
+            }
+
+            foreach (long actorId in actorIds)
+            {
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data == null)
+                {
+                    CloseActiveOfficerRows(db, CourtOfficerTableItem.GetTableName(), actorId, "missing");
+                    continue;
+                }
+
+                bool alive = actor.isAlive() && !actor.isRekt();
+                if (alive && actor.kingdom == pKingdom) continue;
+                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+                string reason = alive ? "defected" : "dead";
+                if (courtKingdomId == pKingdom.id) ClearOfficer(actor, reason);
+                else CloseActiveOfficerRows(db, CourtOfficerTableItem.GetTableName(), actorId, reason);
+            }
         }
 
         private static void SyncSchoolTrait(Actor pActor, bool active)
