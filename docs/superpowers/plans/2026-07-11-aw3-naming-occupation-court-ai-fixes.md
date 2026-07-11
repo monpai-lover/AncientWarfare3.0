@@ -436,13 +436,34 @@ Expected: exit 0 and `AW3 focused rule regressions passed.`
 
 - [ ] **Step 2: Build the normal configuration with Chinese Name integration**
 
-Run: `dotnet build AncientWarfare3.csproj --no-restore -p:BaseOutputPath=F:\tmp\AW3Build\with-cn\`
+The machine has the net48 reference assemblies in the NuGet cache rather than a
+machine-wide targeting pack. Restore and build with that root explicitly:
+
+```powershell
+dotnet restore AncientWarfare3.csproj --ignore-failed-sources `
+  '-p:TargetFrameworkRootPath=C:\Users\24908\.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\'
+dotnet build AncientWarfare3.csproj --no-restore `
+  '-p:TargetFrameworkRootPath=C:\Users\24908\.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\' `
+  '-p:BaseOutputPath=F:\tmp\AW3Build\with-cn\'
+```
 
 Expected: build succeeds with 0 errors; the `一米_中文名` symbol excludes AW3's alliance Postfix.
 
 - [ ] **Step 3: Build the fallback configuration without the optional symbol**
 
-Run: `dotnet build AncientWarfare3.csproj --no-restore -p:DefineConstants=DEBUG%3BTRACE -p:BaseOutputPath=F:\tmp\AW3Build\without-cn\`
+Use a separate intermediate directory so this build cannot reuse the binary from
+the previous symbol configuration:
+
+```powershell
+dotnet restore AncientWarfare3.csproj --ignore-failed-sources `
+  '-p:TargetFrameworkRootPath=C:\Users\24908\.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\' `
+  '-p:BaseIntermediateOutputPath=F:\tmp\AW3Build\without-cn-obj\'
+dotnet build AncientWarfare3.csproj --no-restore `
+  '-p:TargetFrameworkRootPath=C:\Users\24908\.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\' `
+  '-p:DefineConstants=DEBUG%3BTRACE' `
+  '-p:BaseIntermediateOutputPath=F:\tmp\AW3Build\without-cn-obj\' `
+  '-p:BaseOutputPath=F:\tmp\AW3Build\without-cn\'
+```
 
 Expected: build succeeds with 0 errors; AW3's alliance Postfix compiles and uses English fallback names.
 
