@@ -161,9 +161,8 @@ namespace AncientWarfare3.core.lineage
 
             bool ownerXia = LineageService.IsXiaKingdom(pOwner);
             bool legalCore = MandateService.IsLegalCoreCity(pCity);
-            bool cityXia = IsXiaOriginCity(pCity) || HasXiaCultureOrLanguage(pCity) || HasXiaResidents(pCity);
+            bool cityXia = IsXiaOriginCity(pCity) || HasXiaCultureOrLanguage(pCity);
             bool differentCultureOrLanguage = HasDifferentCultureOrLanguage(pCity, pOwner);
-            bool sameOwnerOriginCity = IsSameOwnerOriginCity(pCity, pOwner);
 
             return ForeignOccupationDetectionRules.TryDetectOccupation(
                 ownerXia,
@@ -171,7 +170,7 @@ namespace AncientWarfare3.core.lineage
                 MandateService.GetCoreControlRatioFor(pOwner),
                 cityXia,
                 differentCultureOrLanguage,
-                sameOwnerOriginCity,
+                false,
                 out pType);
         }
 
@@ -510,63 +509,12 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        private static bool HasXiaResidents(City pCity)
-        {
-            if (pCity?.data == null) return false;
-            foreach (Actor unit in pCity.getUnits())
-                if (LineageService.IsXia(unit)) return true;
-            return false;
-        }
-
         private static bool HasDifferentCultureOrLanguage(City pCity, Kingdom pOwner)
         {
             if (pCity?.data == null || pOwner?.data == null) return false;
             bool cultureDiff = pCity.culture != null && pOwner.culture != null && pCity.culture != pOwner.culture;
             bool languageDiff = pCity.language != null && pOwner.language != null && pCity.language != pOwner.language;
             return cultureDiff || languageDiff;
-        }
-
-        private static bool IsSameOwnerOriginCity(City pCity, Kingdom pOwner)
-        {
-            if (pCity?.data == null || pOwner?.data == null) return false;
-            HashSet<string> ownerSpecies = OwnerSpeciesIds(pOwner);
-            if (ownerSpecies.Count == 0) return false;
-
-            if (ContainsId(ownerSpecies, pCity.data.original_actor_asset)) return true;
-            try
-            {
-                if (ContainsId(ownerSpecies, pCity.culture?.data?.original_actor_asset)) return true;
-                if (ContainsId(ownerSpecies, pCity.culture?.data?.creator_species_id)) return true;
-                if (ContainsId(ownerSpecies, pCity.language?.data?.creator_species_id)) return true;
-            }
-            catch { }
-            return false;
-        }
-
-        private static HashSet<string> OwnerSpeciesIds(Kingdom pOwner)
-        {
-            var result = new HashSet<string>(StringComparer.Ordinal);
-            if (pOwner?.data == null) return result;
-            AddId(result, pOwner.data.original_actor_asset);
-            AddId(result, pOwner.asset?.id);
-            try
-            {
-                ActorAsset asset = pOwner.getActorAsset();
-                AddId(result, asset?.id);
-                AddId(result, asset?.banner_id);
-            }
-            catch { }
-            return result;
-        }
-
-        private static void AddId(HashSet<string> pSet, string pId)
-        {
-            if (!string.IsNullOrEmpty(pId)) pSet.Add(pId);
-        }
-
-        private static bool ContainsId(HashSet<string> pSet, string pId)
-        {
-            return !string.IsNullOrEmpty(pId) && pSet != null && pSet.Contains(pId);
         }
 
         private static double InitialResentment(string pType)

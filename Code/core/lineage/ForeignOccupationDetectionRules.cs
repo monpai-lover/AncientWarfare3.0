@@ -16,19 +16,17 @@ namespace AncientWarfare3.core.lineage
             out string type)
         {
             type = "";
+            _ = sameOwnerOriginCity;
             if (ownerIsXia) return false;
 
-            if (sameOwnerOriginCity && !cityHasXiaIdentity && !differentCultureOrLanguage)
-                return false;
-
-            if (legalCore && mandateCoreControlRatio >= 0.65f)
+            if (cityHasXiaIdentity)
             {
-                type = TypePseudoDynasty;
-                return true;
-            }
+                if (legalCore && mandateCoreControlRatio >= 0.65f)
+                {
+                    type = TypePseudoDynasty;
+                    return true;
+                }
 
-            if (legalCore || cityHasXiaIdentity)
-            {
                 type = TypeForeignEntry;
                 return true;
             }
