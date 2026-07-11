@@ -133,6 +133,7 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom other in CandidateKingdoms(pKingdom))
             {
                 if (other == pKingdom || other == pThreat) continue;
+                if (!KingdomAdjacency.AreDirectNeighbors(pKingdom, other)) continue;
                 if (!VassalService.CanSetVassal(pKingdom, other)) continue;
                 if (other.isEnemy(pKingdom) || pKingdom.isEnemy(other)) continue;
 
@@ -142,8 +143,7 @@ namespace AncientWarfare3.core.lineage
                 int opinion = Opinion(pKingdom, other);
                 if (opinion < -25) continue;
 
-                float distanceScore = AreNeighbors(pKingdom, other) ? 60f : 0f;
-                float score = power + opinion * 2f + distanceScore;
+                float score = power + opinion * 2f;
                 if (score <= bestScore) continue;
                 bestScore = score;
                 best = other;
@@ -210,18 +210,7 @@ namespace AncientWarfare3.core.lineage
 
         private static bool AreNeighbors(Kingdom pA, Kingdom pB)
         {
-            try
-            {
-                foreach (City city in pA.getCities())
-                {
-                    if (city?.data == null || city.isRekt()) continue;
-                    foreach (Kingdom neighbor in city.neighbours_kingdoms)
-                        if (neighbor == pB) return true;
-                }
-            }
-            catch { }
-
-            return false;
+            return KingdomAdjacency.AreDirectNeighbors(pA, pB);
         }
 
         private static bool CanRunFor(Kingdom pKingdom)

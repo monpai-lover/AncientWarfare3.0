@@ -3,7 +3,7 @@ namespace AncientWarfare3.core.lineage
     public static class VassalRelationRules
     {
         public static bool CanSetVassal(bool pBasicValid, bool pVassalIsRebel, bool pSuzerainIsRebel,
-            bool pSuzerainTitleAboveVassal, bool pCycleDetected, out string pReason)
+            bool pSuzerainTitleAboveVassal, bool pCycleDetected, bool pDirectlyAdjacent, out string pReason)
         {
             if (!pBasicValid)
             {
@@ -32,6 +32,12 @@ namespace AncientWarfare3.core.lineage
             if (pCycleDetected)
             {
                 pReason = "cycle";
+                return false;
+            }
+
+            if (!pDirectlyAdjacent)
+            {
+                pReason = "not_adjacent";
                 return false;
             }
 

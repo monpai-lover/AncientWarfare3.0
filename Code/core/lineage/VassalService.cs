@@ -262,12 +262,14 @@ namespace AncientWarfare3.core.lineage
 
             bool titleAbove = KingdomTitleService.GetTitle(pSuzerain) > KingdomTitleService.GetTitle(pVassal);
             bool cycleDetected = WouldCreateCycle(pVassal, pSuzerain);
+            bool directlyAdjacent = KingdomAdjacency.AreDirectNeighbors(pVassal, pSuzerain);
             return VassalRelationRules.CanSetVassal(
                 basicValid,
                 MandateRebelService.IsRebelKingdom(pVassal),
                 MandateRebelService.IsRebelKingdom(pSuzerain),
                 titleAbove,
                 cycleDetected,
+                directlyAdjacent,
                 out _);
         }
 
