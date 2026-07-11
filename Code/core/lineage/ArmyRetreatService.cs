@@ -36,6 +36,7 @@ namespace AncientWarfare3.core.lineage
 
             Actor captain = SafeCaptain(army);
             bool captainAlive = captain?.data != null && !captain.isRekt();
+            if (ShouldProtectOccupation(targetCity, pActor.kingdom)) return false;
             bool shouldRetreat = ArmyRetreatRules.ShouldRetreat(
                 role,
                 baselineUnits,
@@ -47,6 +48,22 @@ namespace AncientWarfare3.core.lineage
 
             BeginRetreat(army, pActor.kingdom, sourceCity, targetCity, year);
             return true;
+        }
+
+        private static bool ShouldProtectOccupation(City pTargetCity, Kingdom pAttacker)
+        {
+            if (pTargetCity?.data == null || pAttacker?.data == null) return false;
+            try
+            {
+                bool sameCapturer = pTargetCity.being_captured_by == pAttacker;
+                bool activeUnits = pTargetCity.isGettingCapturedBy(pAttacker);
+                bool noDefenders = pTargetCity.countWarriors() <= 0;
+                bool ownershipChanged = pTargetCity.kingdom == pAttacker ||
+                                        !pAttacker.isEnemy(pTargetCity.kingdom);
+                return ArmyRetreatRules.ProtectUncontestedOccupation(
+                    sameCapturer, activeUnits, noDefenders, ownershipChanged);
+            }
+            catch { return false; }
         }
 
         private static void BeginRetreat(Army pArmy, Kingdom pKingdom, City pSourceCity, City pTargetCity, int pYear)

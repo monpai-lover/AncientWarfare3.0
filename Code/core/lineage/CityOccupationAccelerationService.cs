@@ -12,11 +12,16 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<string, GoalCache> GoalCacheByCityAndAttacker =
             new Dictionary<string, GoalCache>();
 
-        public static void AfterUpdateCapture(City pCity, float pElapsed)
+        public static void BeforeUpdateCapture(City pCity, float pElapsed)
         {
             if (pCity?.data == null || pCity.kingdom?.data == null) return;
             Kingdom capturer = pCity.being_captured_by;
             if (capturer?.data == null || capturer == pCity.kingdom) return;
+
+            bool hasActiveCaptureUnits;
+            try { hasActiveCaptureUnits = pCity.isGettingCapturedBy(capturer); }
+            catch { hasActiveCaptureUnits = false; }
+            if (!hasActiveCaptureUnits) return;
 
             bool enemyCapture;
             try { enemyCapture = capturer.isEnemy(pCity.kingdom); }
@@ -28,6 +33,7 @@ namespace AncientWarfare3.core.lineage
             int towers = SafeCountWatchTowers(pCity);
             float extra = CityOccupationAccelerationRules.ExtraCapturePoints(
                 enemyCapture,
+                hasActiveCaptureUnits,
                 hasDefenders,
                 hasGoal,
                 towers);
