@@ -60,8 +60,12 @@ this tail order:
 
 This makes the AI establish the official court before starting rites when both
 are available and guarantees that the advanced court technology has an explicit
-priority. Current in-progress research is not cancelled; the corrected order is
-used when the next slot becomes empty.
+priority. Because court-school context bonuses can outweigh adjacent order
+scores, AI selection also defers `rites_music` until `official_court` is complete
+and defers `three_departments` until `rites_music` is complete. This gate affects
+only AI choice, not player research or hard prerequisites. Current in-progress
+research is not cancelled; the corrected order is used when the next slot becomes
+empty.
 
 ## Verification
 
@@ -75,6 +79,7 @@ temporary focused executable under `F:\tmp` and links only pure rule files.
 - A non-Xia legal-core city without Xia identity never becomes `foreign_entry` or
   `pseudo_dynasty`; a real Xia legal-core city still can.
 - The AI order contains every defined technology exactly once and orders official
-  court before rites and three departments.
+  court before rites and three departments; its AI-only gate enforces that chain
+  even when court-school context bonuses favor a later technology.
 - Build AW3 with and without the optional-dependency symbol.
 - Build the normal mod with zero errors and keep all user deletions unstaged.

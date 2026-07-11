@@ -295,6 +295,18 @@ for (int index = 0; index < expectedTechs.Length; index++)
 }
 if (KingdomPolicyTechOrderRules.PreferredIndex("aw_unknown", 7) != expectedTechs.Length + 7)
     throw new Exception("Unknown technologies must retain their layout fallback priority.");
+if (KingdomPolicyTechOrderRules.CanConsider(
+        "aw_tech_rites_music", pOfficialCourtCompleted: false, pRitesMusicCompleted: false))
+    throw new Exception("AI must not skip official court for rites and music.");
+if (KingdomPolicyTechOrderRules.CanConsider(
+        "aw_tech_three_departments", pOfficialCourtCompleted: true, pRitesMusicCompleted: false))
+    throw new Exception("AI must not skip rites and music for three departments.");
+if (!KingdomPolicyTechOrderRules.CanConsider(
+        "aw_tech_rites_music", pOfficialCourtCompleted: true, pRitesMusicCompleted: false))
+    throw new Exception("AI must allow rites and music after official court.");
+if (!KingdomPolicyTechOrderRules.CanConsider(
+        "aw_tech_three_departments", pOfficialCourtCompleted: true, pRitesMusicCompleted: true))
+    throw new Exception("AI must allow three departments after the court chain is complete.");
 ```
 
 - [ ] **Step 2: Run RED and confirm the pure order rule is missing**
@@ -337,6 +349,15 @@ namespace AncientWarfare3.core.policy
             return Array.IndexOf(Order, pId) >= 0;
         }
 
+        public static bool CanConsider(string pId, bool pOfficialCourtCompleted,
+            bool pRitesMusicCompleted)
+        {
+            if (pId == "aw_tech_rites_music") return pOfficialCourtCompleted;
+            if (pId == "aw_tech_three_departments")
+                return pOfficialCourtCompleted && pRitesMusicCompleted;
+            return true;
+        }
+
         public static int PreferredIndex(string pId, int pLayoutFallback)
         {
             int index = Array.IndexOf(Order, pId);
@@ -365,6 +386,28 @@ private static int PreferredIndex(KingdomPolicyDef pDef)
     return index >= 0 ? index : SocialOrder.Length + layoutFallback;
 }
 ```
+
+In `PickResearch`, read both completed states once and insert the AI-only gate
+before availability filtering:
+
+```csharp
+bool officialCourtCompleted = pKind != PolicyNodeKind.Tech ||
+    KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_official_court");
+bool ritesMusicCompleted = pKind != PolicyNodeKind.Tech ||
+    KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_rites_music");
+
+return defs
+    .Where(def => pKind != PolicyNodeKind.Tech || KingdomPolicyTechOrderRules.CanConsider(
+        def.Id, officialCourtCompleted, ritesMusicCompleted))
+    .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
+    .Where(def => IsAvailable(pKingdom, def))
+    .OrderByDescending(def => ScoreResearch(pKingdom, def))
+    .FirstOrDefault();
+```
+
+This filter is necessary because the Confucian court bonus gives `rites_music`
+90 points while adjacent order positions differ by only 20 points. It affects AI
+choice only and deliberately does not cancel an in-progress project.
 
 - [ ] **Step 4: Run GREEN**
 
