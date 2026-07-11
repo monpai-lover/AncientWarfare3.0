@@ -100,6 +100,18 @@ namespace AncientWarfare3.core.lineage
             return pIsKing || pIsCityLeader || pIsArmyLeader;
         }
 
+        public static bool ShouldUseLineageBirth(bool isXia, bool isCivilizedSpecies,
+            bool parentHasLineage)
+        {
+            return isXia || (isCivilizedSpecies && parentHasLineage);
+        }
+
+        public static bool ShouldRenameInstitutionalClan(bool leaderIsXia,
+            bool kingdomUsesXiaizedInstitutions, bool hasClan, bool hasBranch, bool hasPlace)
+        {
+            return (leaderIsXia || kingdomUsesXiaizedInstitutions) && hasClan && hasBranch && hasPlace;
+        }
+
         private static int LastDelimiterIndex(string pRaw)
         {
             if (string.IsNullOrEmpty(pRaw)) return -1;

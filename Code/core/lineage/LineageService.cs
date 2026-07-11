@@ -114,8 +114,10 @@ namespace AncientWarfare3.core.lineage
         {
             if (!ShouldUseLineageBirth(pBaby, pParent1, pParent2)) return;
 
-            EnsureGivenName(pBaby);
+            string originalForeignName = IsXia(pBaby) ? null : pBaby.getName();
+            if (IsXia(pBaby)) EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
+            if (!IsXia(pBaby)) EnsureGivenName(pBaby, originalForeignName);
             SlaveService.EnsureSlaveChild(pBaby, pParent1, pParent2);
             PropagateNobleBloodFromParents(pBaby, pParent1, pParent2);
             RecordFamilyEdges(pBaby, pParent1, pParent2);
@@ -158,10 +160,10 @@ namespace AncientWarfare3.core.lineage
         private static bool ShouldUseLineageBirth(Actor pBaby, Actor pParent1, Actor pParent2)
         {
             if (pBaby?.data == null) return false;
-            if (IsXia(pBaby)) return true;
-            if (!IsHuman(pBaby)) return false;
-            return HasLineageData(pParent1) || HasLineageData(pParent2) ||
-                   UsesAwLineageSystem(pParent1) || UsesAwLineageSystem(pParent2);
+            bool parentHasLineage = HasLineageData(pParent1) || HasLineageData(pParent2) ||
+                                    UsesAwLineageSystem(pParent1) || UsesAwLineageSystem(pParent2);
+            return ForeignPseudoLineageRules.ShouldUseLineageBirth(
+                IsXia(pBaby), pBaby.asset?.civ == true, parentHasLineage);
         }
 
         /// <summary>入谱贵族出生 → PersonBiography 记一条 birth 事件(无谱系者不记)。</summary>
@@ -177,14 +179,25 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>
-        ///     确保有单名 aw_given_name(取当前游戏名首字作单名)。
-        ///     合流前个人名一律单字(任务书:姓氏合流之前所有人只取一个字符),
-        ///     故无论游戏名是单/双/三字,这里都收窄为**首字**。已写过的不覆盖(幂等)。
+        ///     确保 aw_given_name。Xia 仍取首字单名；外族使用结构化姓氏剥离后的原个人名。
+        ///     已写过的数据不覆盖，避免重复晋升或出生流程堆叠姓名前缀。
         /// </summary>
-        private static void EnsureGivenName(Actor pActor)
+        private static void EnsureGivenName(Actor pActor, string pOriginalName = null)
         {
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             if (!string.IsNullOrEmpty(given)) return;
+
+            if (!IsXia(pActor))
+            {
+                pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+                pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
+                pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+                ForeignPseudoNameParts parts = ForeignPseudoLineageRules.ResolveNameParts(
+                    pOriginalName ?? pActor.getName(), pActor.clan?.data?.name, "", family, chineseFamily,
+                    clan, pActor.kingdom?.name);
+                pActor.data.set(LineageKeys.GIVEN_NAME, parts.GivenName);
+                return;
+            }
 
             // 用游戏已生成的名字取首字作单名(中文 BMP 单字,Substring(0,1) 安全)。
             string raw = pActor.getName();
@@ -596,10 +609,13 @@ namespace AncientWarfare3.core.lineage
             if (pSeen != null && !pSeen.Add(pActor.data.id)) return;
 
             string rawName = pActor.getName() ?? "";
-            string givenName = ForeignPseudoLineageRules.ExtractGivenName(rawName);
-            string clanName = ForeignPseudoLineageRules.ExtractClanName(rawName, pActor.clan?.data?.name ?? "");
-            if (string.IsNullOrEmpty(givenName)) givenName = rawName;
-            if (string.IsNullOrEmpty(clanName)) clanName = FirstChar(pActor.kingdom?.name) ?? "X";
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string existingGiven, "");
+            pActor.data.get(LineageKeys.FAMILY_NAME, out string existingFamily, "");
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
+            pActor.data.get(LineageKeys.CLAN_NAME, out string existingClan, "");
+            ForeignPseudoNameParts parts = ForeignPseudoLineageRules.ResolveNameParts(
+                rawName, pActor.clan?.data?.name, existingGiven, existingFamily,
+                chineseFamily, existingClan, pActor.kingdom?.name);
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
@@ -613,28 +629,40 @@ namespace AncientWarfare3.core.lineage
                     long shiId = LineageIdAllocator.NextShiId();
                     if (lineageId < 0 || shiId < 0) return;
 
-                    InsertLineageGroup(lineageId, clanName, pActor);
-                    InsertShiBranch(shiId, lineageId, clanName, pActor, "pseudo_foreign");
+                    InsertLineageGroup(lineageId, parts.FamilyName, pActor);
+                    InsertShiBranch(shiId, lineageId, parts.ClanName, pActor, "pseudo_foreign");
                     pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
                     pActor.data.set(LineageKeys.SHI_ID, shiId);
                 }
+                else
+                {
+                    pActor.data.get(LineageKeys.FAMILY_NAME, out existingFamily, "");
+                    pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out chineseFamily, "");
+                    pActor.data.get(LineageKeys.CLAN_NAME, out existingClan, "");
+                    parts = ForeignPseudoLineageRules.ResolveNameParts(
+                        rawName, pActor.clan?.data?.name, existingGiven, existingFamily,
+                        chineseFamily, existingClan, pActor.kingdom?.name);
+                }
             }
 
-            pActor.data.set(LineageKeys.GIVEN_NAME, givenName);
-            pActor.data.get(LineageKeys.FAMILY_NAME, out string existingFamily, "");
-            pActor.data.get(LineageKeys.CLAN_NAME, out string existingClan, "");
+            if (string.IsNullOrEmpty(existingGiven))
+                pActor.data.set(LineageKeys.GIVEN_NAME, parts.GivenName);
+            pActor.data.get(LineageKeys.FAMILY_NAME, out existingFamily, "");
             if (string.IsNullOrEmpty(existingFamily))
-            {
-                pActor.data.set(LineageKeys.FAMILY_NAME, clanName);
-                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, clanName);
-            }
-            if (string.IsNullOrEmpty(existingClan)) pActor.data.set(LineageKeys.CLAN_NAME, clanName);
+                pActor.data.set(LineageKeys.FAMILY_NAME, parts.FamilyName);
+            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out chineseFamily, "");
+            if (string.IsNullOrEmpty(chineseFamily))
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, parts.FamilyName);
+            pActor.data.get(LineageKeys.CLAN_NAME, out existingClan, "");
+            if (string.IsNullOrEmpty(existingClan))
+                pActor.data.set(LineageKeys.CLAN_NAME, parts.ClanName);
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) pActor.addTrait(LineageKeys.TRAIT_GUIZU);
 
             ApplyDisplayName(pActor);
+            RenameClanByLeader(pActor.clan, pActor);
             ArchiveActor(pActor, pAlive: true);
             try { pActor.clearGraphicsFully(); } catch { }
         }
@@ -1244,20 +1272,21 @@ namespace AncientWarfare3.core.lineage
         ///     - 领袖是国王 → 国名(全名) + 氏 + "氏"(如"周幸氏")。
         ///     - 领袖非国王 → 城市名(全名) + 氏 + "氏"(如"某城幸氏")。
         ///     氏取领袖的 CLAN_NAME 字段;地名取领袖当前 kingdom/city 全名。
-        ///     领袖非 Xia、或氏/地名任一取不到 → 不改名(保留原版名,避免拼出残缺名)。
+        ///     领袖不属于 Xia 制度、或氏/地名任一取不到 → 不改名(保留原版名,避免拼出残缺名)。
         ///     幂等:同名不重复 setName。
         /// </summary>
         public static void RenameClanByLeader(Clan pClan, Actor pLeader)
         {
             if (pClan?.data == null || pLeader?.data == null) return;
-            if (!IsXia(pLeader)) return;
 
             pLeader.data.get(LineageKeys.CLAN_NAME, out string shi, "");
-            if (string.IsNullOrEmpty(shi)) return; // 氏未就绪(如称王分封 newClan 早于 set),等后续显式重命名
-
             bool isKing = pLeader.isKing();
             string place = isKing ? pLeader.kingdom?.name : pLeader.city?.data?.name;
-            if (string.IsNullOrEmpty(place)) return; // 地名取不到,保留原版名
+            bool institutional = XiaizationService.UsesXiaizedInstitutionSystem(pLeader.kingdom);
+            if (!ForeignPseudoLineageRules.ShouldRenameInstitutionalClan(
+                    leaderIsXia: IsXia(pLeader), kingdomUsesXiaizedInstitutions: institutional,
+                    hasClan: true, hasBranch: !string.IsNullOrEmpty(shi),
+                    hasPlace: !string.IsNullOrEmpty(place))) return;
 
             string newName = place + shi + "氏";
             if (pClan.data.name == newName) return;   // 幂等
