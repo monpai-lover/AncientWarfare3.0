@@ -31,7 +31,7 @@ namespace AncientWarfare3.content
             // 包自带同名 Xia_city/clan/culture/kingdom/name 生成器。AW3 后注册同名会触发游戏基类
             // AssetLibrary.add 的 overwriting 日志(AssetLibrary.cs:69)。提交前先**静默移除**已存在的同名条目
             // (直接清 dict/list,不走 add),这样 AW3 注册时 dict 无同名 → 不再打警告。AW3 模板与 ChineseName
-            // 不同(用中文城名上/下、中文国名前缀),是有意覆盖,故必须用 AW3 版本而非复用。
+            // 不同(用 Xia 真实城名、先秦诸侯国词库),是有意覆盖,故必须用 AW3 版本而非复用。
             RemoveExistingGenerators("Xia_city", "Xia_clan", "Xia_culture", "Xia_kingdom", "Xia_name",
                 "Xia_language", "Xia_religion", "Xia_subspecies");
 
