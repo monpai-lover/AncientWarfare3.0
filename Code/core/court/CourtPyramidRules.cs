@@ -4,6 +4,22 @@ using System.Linq;
 
 namespace AncientWarfare3.core.court
 {
+    public readonly struct CourtPyramidCanvasBounds
+    {
+        public readonly float Width;
+        public readonly float Height;
+        public readonly float OffsetX;
+        public readonly float OffsetY;
+
+        public CourtPyramidCanvasBounds(float width, float height, float offsetX, float offsetY)
+        {
+            Width = width;
+            Height = height;
+            OffsetX = offsetX;
+            OffsetY = offsetY;
+        }
+    }
+
     public static class CourtPyramidRoleId
     {
         public const string King = "king";
@@ -151,6 +167,36 @@ namespace AncientWarfare3.core.court
                 rowIndex++;
             }
             return result;
+        }
+
+        public static CourtPyramidCanvasBounds CalculateCanvasBounds(
+            IEnumerable<CourtPyramidNodeModel> pNodes, float nodeWidth, float nodeHeight, float padding)
+        {
+            List<CourtPyramidNodeModel> nodes = (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                .Where(p => p != null)
+                .ToList();
+            float safeWidth = Math.Max(1f, nodeWidth);
+            float safeHeight = Math.Max(1f, nodeHeight);
+            float safePadding = Math.Max(0f, padding);
+            if (nodes.Count == 0)
+                return new CourtPyramidCanvasBounds(safePadding * 2f, safePadding * 2f, 0f, -safePadding);
+
+            float minX = nodes.Min(p => p.X - safeWidth * 0.5f);
+            float maxX = nodes.Max(p => p.X + safeWidth * 0.5f);
+            float topY = nodes.Max(p => p.Y);
+            float bottomY = nodes.Min(p => p.Y - safeHeight);
+            return new CourtPyramidCanvasBounds(
+                maxX - minX + safePadding * 2f,
+                topY - bottomY + safePadding * 2f,
+                -(minX + maxX) * 0.5f,
+                -safePadding - topY);
+        }
+
+        public static int NextBatchEnd(int startIndex, int totalCount, int batchSize)
+        {
+            int total = Math.Max(0, totalCount);
+            int start = Math.Max(0, Math.Min(total, startIndex));
+            return Math.Min(total, start + Math.Max(1, batchSize));
         }
 
         public static int RankForOffice(string pOfficeId)

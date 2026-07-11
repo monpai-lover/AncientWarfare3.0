@@ -62,6 +62,7 @@ namespace AncientWarfare3.ui.items
             Sprite schoolSprite = string.IsNullOrEmpty(pNode.SchoolIconPath)
                 ? null
                 : SpriteTextureLoader.getSprite(pNode.SchoolIconPath);
+            schoolSprite ??= SpriteTextureLoader.getSprite("ui/icons/iconKnowledge");
             _schoolIcon.sprite = schoolSprite;
             _schoolIcon.enabled = schoolSprite != null;
             _schoolIcon.preserveAspect = true;

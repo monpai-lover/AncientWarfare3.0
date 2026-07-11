@@ -10,6 +10,13 @@ using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal sealed class GeneralReadModelEntry
+    {
+        public Actor Actor;
+        public int Merit;
+        public int AppointmentYear = -1;
+    }
+
     internal static class GeneralService
     {
         private const int REFRESH_INTERVAL_YEARS = 3;
@@ -152,9 +159,9 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
-        public static List<Actor> GetActiveGeneralsForReadModel(Kingdom pKingdom)
+        public static List<GeneralReadModelEntry> GetActiveGeneralsForReadModel(Kingdom pKingdom)
         {
-            var result = new List<Actor>();
+            var result = new List<GeneralReadModelEntry>();
             if (pKingdom?.data == null) return result;
             if (!Ready)
             {
@@ -162,7 +169,8 @@ namespace AncientWarfare3.core.lineage
                 {
                     if (unit?.data == null || unit.kingdom != pKingdom || unit.isRekt() || !unit.isAlive()) continue;
                     unit.data.get(LineageKeys.GENERAL_ACTIVE, out bool active, false);
-                    if (active) result.Add(unit);
+                    unit.data.get(LineageKeys.GENERAL_MERIT, out int merit, 0);
+                    if (active) result.Add(new GeneralReadModelEntry { Actor = unit, Merit = merit });
                 }
                 return result;
             }
@@ -170,7 +178,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ACTOR_ID FROM " + GeneralStateTableItem.GetTableName() +
+                cmd.CommandText = "SELECT ACTOR_ID, MERIT_SCORE, APPOINTED_TIME FROM " +
+                                  GeneralStateTableItem.GetTableName() +
                                   " WHERE KINGDOM_ID=@k AND ACTIVE=1 ORDER BY MERIT_SCORE DESC, ACTOR_ID";
                 cmd.Parameters.AddWithValue("@k", pKingdom.id);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -179,7 +188,13 @@ namespace AncientWarfare3.core.lineage
                     long actorId = reader.GetInt64(0);
                     Actor actor = World.world?.units?.get(actorId);
                     if (actor?.data == null || actor.kingdom != pKingdom || actor.isRekt() || !actor.isAlive()) continue;
-                    result.Add(actor);
+                    double appointedTime = reader.IsDBNull(2) ? -1d : Convert.ToDouble(reader.GetValue(2));
+                    result.Add(new GeneralReadModelEntry
+                    {
+                        Actor = actor,
+                        Merit = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1)),
+                        AppointmentYear = appointedTime > 0d ? Date.getYear(appointedTime) : -1
+                    });
                 }
             }
             catch { }

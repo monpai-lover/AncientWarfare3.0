@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.court;
@@ -25,6 +26,8 @@ namespace AncientWarfare3.ui.windows
         private const float ScrollMarginY = 58f;
         private const float SummaryHeight = 62f;
         private const float CanvasTopGap = 10f;
+        private const float CanvasPadding = 24f;
+        private const int PortraitsPerFrame = 8;
 
         private static long _kingdomId = -1L;
         private static Sprite _whiteSprite;
@@ -36,8 +39,12 @@ namespace AncientWarfare3.ui.windows
         private RectTransform _summaryRect;
         private Text _summaryPrimary;
         private Text _summarySecondary;
+        private Image _summaryFlagBackground;
+        private Image _summaryFlagIcon;
         private RectTransform _resizeHandle;
         private long _displayedKingdomId = -1L;
+        private Coroutine _renderCoroutine;
+        private int _renderVersion;
 
         public static void Open(long pKingdomId)
         {
@@ -138,6 +145,7 @@ namespace AncientWarfare3.ui.windows
             if (existingSummary == null) summary.transform.SetParent(ContentTransform, false);
             _summaryRect = summary.GetComponent<RectTransform>();
             summary.GetComponent<Image>().color = new Color(0.08f, 0.07f, 0.055f, 0.96f);
+            EnsureSummaryFlag(summary.transform);
             _summaryPrimary = EnsureText(summary.transform, "Primary", 11, TextAnchor.UpperLeft);
             _summarySecondary = EnsureText(summary.transform, "Secondary", 9, TextAnchor.UpperLeft);
 
@@ -181,8 +189,8 @@ namespace AncientWarfare3.ui.windows
                 _summaryRect.pivot = new Vector2(0f, 1f);
                 _summaryRect.anchoredPosition = Vector2.zero;
                 _summaryRect.sizeDelta = new Vector2(pContentWidth, SummaryHeight);
-                LayoutSummaryText(_summaryPrimary, 8f, 4f, pContentWidth - 16f, 25f);
-                LayoutSummaryText(_summarySecondary, 8f, 29f, pContentWidth - 16f, 29f);
+                LayoutSummaryText(_summaryPrimary, 44f, 4f, pContentWidth - 52f, 25f);
+                LayoutSummaryText(_summarySecondary, 44f, 29f, pContentWidth - 52f, 29f);
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -248,27 +256,29 @@ namespace AncientWarfare3.ui.windows
                 bool switched = _displayedKingdomId != _kingdomId;
                 _displayedKingdomId = _kingdomId;
                 if (switched) ResetCanvas();
+                CancelPendingRender();
                 HideNodesAndLinks();
 
                 if (kingdom?.data == null || kingdom.isRekt())
                 {
                     _summaryPrimary.text = AW_L10n.Text("aw_policy_no_kingdom", "Kingdom missing");
                     _summarySecondary.text = "";
+                    if (_summaryFlagBackground != null) _summaryFlagBackground.enabled = false;
+                    if (_summaryFlagIcon != null) _summaryFlagIcon.enabled = false;
                     return;
                 }
 
                 CourtSnapshot snapshot = CourtService.GetSnapshot(kingdom);
                 UpdateSummary(kingdom, snapshot);
                 List<CourtPyramidNodeModel> nodes = CourtReadModelService.Build(kingdom);
-                BuildLinks(nodes, KingdomColor(kingdom));
-                for (int i = 0; i < nodes.Count; i++)
-                {
-                    CourtActorNodeView view = GetNode(i);
-                    RectTransform rect = view.GetComponent<RectTransform>();
-                    rect.anchoredPosition = new Vector2(nodes[i].X, nodes[i].Y);
-                    view.Bind(nodes[i], kingdom);
-                    view.gameObject.SetActive(true);
-                }
+                CourtPyramidCanvasBounds bounds = CourtPyramidRules.CalculateCanvasBounds(nodes,
+                    CourtActorNodeView.Width, CourtActorNodeView.Height, CanvasPadding);
+                _canvasRect.sizeDelta = new Vector2(bounds.Width, bounds.Height);
+                Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
+                BuildLinks(nodes, KingdomColor(kingdom), nodeOffset);
+                int renderVersion = _renderVersion;
+                _renderCoroutine = StartCoroutine(RenderNodesBatched(
+                    nodes, kingdom, nodeOffset, renderVersion));
                 _summaryRect.transform.SetAsLastSibling();
             }
             finally
@@ -279,6 +289,12 @@ namespace AncientWarfare3.ui.windows
 
         private void UpdateSummary(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {
+            string bannerId = "";
+            try { bannerId = pKingdom.getActorAsset()?.banner_id ?? ""; }
+            catch { }
+            KingdomFlagBuilder.Build(bannerId, pKingdom.data.banner_icon_id,
+                pKingdom.data.banner_background_id, HistoryColors.FromKingdom(pKingdom),
+                pKingdom.data.color_id, _summaryFlagBackground, _summaryFlagIcon);
             string government = RepublicGovernmentService.IsRepublic(pKingdom)
                 ? AW_L10n.Text("aw_government_republic", "Republic")
                 : AW_L10n.Text("aw_government_monarchy", "Monarchy");
@@ -307,7 +323,38 @@ namespace AncientWarfare3.ui.windows
             return _nodePool[pIndex];
         }
 
-        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor)
+        private IEnumerator RenderNodesBatched(List<CourtPyramidNodeModel> pNodes, Kingdom pKingdom,
+            Vector2 pOffset, int pVersion)
+        {
+            int index = 0;
+            while (index < pNodes.Count)
+            {
+                if (pVersion != _renderVersion || pKingdom?.data == null || pKingdom.id != _displayedKingdomId)
+                    yield break;
+                int end = CourtPyramidRules.NextBatchEnd(index, pNodes.Count, PortraitsPerFrame);
+                long benchmark = UpdateAgeBenchmark.Begin();
+                try
+                {
+                    for (; index < end; index++)
+                    {
+                        CourtActorNodeView view = GetNode(index);
+                        RectTransform rect = view.GetComponent<RectTransform>();
+                        rect.anchoredPosition = new Vector2(
+                            pNodes[index].X + pOffset.x, pNodes[index].Y + pOffset.y);
+                        view.Bind(pNodes[index], pKingdom);
+                        view.gameObject.SetActive(true);
+                    }
+                }
+                finally
+                {
+                    UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtUiBuildIndex, benchmark);
+                }
+                if (index < pNodes.Count) yield return null;
+            }
+            if (pVersion == _renderVersion) _renderCoroutine = null;
+        }
+
+        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor, Vector2 pOffset)
         {
             if (pNodes == null || pNodes.Count <= 1) return;
             List<IGrouping<int, CourtPyramidNodeModel>> rows = pNodes
@@ -322,8 +369,8 @@ namespace AncientWarfare3.ui.windows
                     CourtPyramidNodeModel parent = parents
                         .OrderBy(p => Mathf.Abs(p.X - child.X))
                         .First();
-                    CreateLink(new Vector2(parent.X, parent.Y - CourtActorNodeView.Height),
-                        new Vector2(child.X, child.Y), pColor);
+                    CreateLink(new Vector2(parent.X, parent.Y - CourtActorNodeView.Height) + pOffset,
+                        new Vector2(child.X, child.Y) + pOffset, pColor);
                 }
             }
         }
@@ -357,6 +404,14 @@ namespace AncientWarfare3.ui.windows
             _links.Clear();
         }
 
+        private void CancelPendingRender()
+        {
+            _renderVersion++;
+            if (_renderCoroutine == null) return;
+            StopCoroutine(_renderCoroutine);
+            _renderCoroutine = null;
+        }
+
         private void ResetCanvas()
         {
             if (_canvasRect == null) return;
@@ -380,6 +435,38 @@ namespace AncientWarfare3.ui.windows
             text.raycastTarget = false;
             text.color = Color.white;
             return text;
+        }
+
+        private void EnsureSummaryFlag(Transform pParent)
+        {
+            Transform existing = pParent.Find("KingdomFlag");
+            GameObject flag = existing != null
+                ? existing.gameObject
+                : new GameObject("KingdomFlag", typeof(RectTransform), typeof(Image));
+            if (existing == null) flag.transform.SetParent(pParent, false);
+            RectTransform rect = flag.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(8f, -8f);
+            rect.sizeDelta = new Vector2(28f, 28f);
+            _summaryFlagBackground = flag.GetComponent<Image>();
+            _summaryFlagBackground.preserveAspect = true;
+            _summaryFlagBackground.raycastTarget = false;
+
+            Transform existingIcon = flag.transform.Find("Icon");
+            GameObject icon = existingIcon != null
+                ? existingIcon.gameObject
+                : new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            if (existingIcon == null) icon.transform.SetParent(flag.transform, false);
+            RectTransform iconRect = icon.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.offsetMin = Vector2.zero;
+            iconRect.offsetMax = Vector2.zero;
+            _summaryFlagIcon = icon.GetComponent<Image>();
+            _summaryFlagIcon.preserveAspect = true;
+            _summaryFlagIcon.raycastTarget = false;
         }
 
         private static void LayoutSummaryText(Text pText, float pX, float pY, float pWidth, float pHeight)

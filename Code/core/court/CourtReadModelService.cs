@@ -36,7 +36,7 @@ namespace AncientWarfare3.core.court
             {
                 ActorName = SafeActorName(king),
                 SchoolId = school,
-                SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                SchoolIconPath = RegisteredSchoolIconPath(school),
                 Influence = 100f
             });
         }
@@ -69,7 +69,7 @@ namespace AncientWarfare3.core.court
                 {
                     ActorName = SafeActorName(actor),
                     SchoolId = school,
-                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                    SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = officer.city_id,
                     CityName = FindCityName(pKingdom, officer.city_id),
                     AppointmentYear = officer.appointed_year,
@@ -86,7 +86,7 @@ namespace AncientWarfare3.core.court
                     CourtPyramidRules.RankForOffice(office), i, true)
                 {
                     SchoolId = CourtTierRules.PreferredSchoolForOffice(office),
-                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(
+                    SchoolIconPath = RegisteredSchoolIconPath(
                         CourtTierRules.PreferredSchoolForOffice(office))
                 });
             }
@@ -95,19 +95,21 @@ namespace AncientWarfare3.core.court
         private static void AddGenerals(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
             int order = 0;
-            foreach (Actor general in GeneralService.GetActiveGeneralsForReadModel(pKingdom)
-                         .OrderByDescending(GeneralService.GetMerit)
-                         .ThenBy(p => p.data.id))
+            foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(pKingdom)
+                         .OrderByDescending(p => p.Merit)
+                         .ThenBy(p => p.Actor.data.id))
             {
-                int merit = GeneralService.GetMerit(general);
+                Actor general = entry.Actor;
+                int merit = entry.Merit;
                 pSeeds.Add(new CourtPyramidNodeModel(general.data.id, CourtPyramidRoleId.General,
                     CourtPyramidRoleId.General, CourtPyramidRules.GeneralRank, order++, false)
                 {
                     ActorName = SafeActorName(general),
                     SchoolId = CourtSchoolId.Military,
-                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(CourtSchoolId.Military),
+                    SchoolIconPath = RegisteredSchoolIconPath(CourtSchoolId.Military),
                     CityId = general.city?.data?.id ?? -1L,
                     CityName = general.city?.data?.name ?? "",
+                    AppointmentYear = entry.AppointmentYear,
                     Influence = merit,
                     Merit = merit
                 });
@@ -130,7 +132,7 @@ namespace AncientWarfare3.core.court
                 {
                     ActorName = SafeActorName(leader),
                     SchoolId = school,
-                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                    SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = city.data.id,
                     CityName = city.data.name ?? "",
                     Influence = SafeStat(leader, "stewardship")
@@ -158,6 +160,18 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null) return pFallback ?? "";
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
             return string.IsNullOrEmpty(school) ? pFallback ?? "" : school;
+        }
+
+        private static string RegisteredSchoolIconPath(string pSchool)
+        {
+            try
+            {
+                string traitId = CourtTraitRules.TraitForSchool(pSchool);
+                string path = string.IsNullOrEmpty(traitId) ? "" : AssetManager.traits.get(traitId)?.path_icon;
+                if (!string.IsNullOrEmpty(path)) return path;
+            }
+            catch { }
+            return CourtPyramidRules.SchoolIconPath(pSchool);
         }
 
         private static string FindCityName(Kingdom pKingdom, long pCityId)
