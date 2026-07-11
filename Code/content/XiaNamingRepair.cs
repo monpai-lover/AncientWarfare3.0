@@ -396,6 +396,15 @@ namespace AncientWarfare3.content
         internal static string GenerateAllianceName(Alliance pAlliance)
         {
             long id = pAlliance?.getID() ?? 0L;
+#if 一米_中文名
+            string chineseName = GenerateChineseName(XiaNameSets.AllianceGenerator, p =>
+            {
+                var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
+                ParameterGetters.GetAllianceParameterGetter(generator.parameter_getter)(pAlliance, p);
+            });
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
+#endif
+
             string name = GenerateVanillaName(XiaNameSets.AllianceGenerator, id);
             if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
             return XiaFallbackNameRules.LocalAllianceName(id);

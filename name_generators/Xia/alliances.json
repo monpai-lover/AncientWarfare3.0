@@ -1,0 +1,19 @@
+[
+    {
+        "id": "Xia_alliance",
+        "parameter_getter": "default",
+        "default_template": {
+            "format": "{Xia会盟雅称}"
+        },
+        "templates": [
+            {
+                "format": "{Xia会盟雅称}",
+                "weight": 8
+            },
+            {
+                "format": "$k1_short$$k2_short$#之盟#",
+                "weight": 3
+            }
+        ]
+    }
+]
