@@ -435,6 +435,17 @@ namespace AncientWarfare3.core.lineage
             return _coreCityIds.Contains(pCity.id);
         }
 
+        public static void OnCityTransferred(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return;
+            if (_cacheDirty || _cachedReport == null) return;
+            if (!MandateCoreTransferRules.ShouldInvalidate(
+                    _cachedReport.period_id >= 0, _coreCityIds.Contains(pCity.id))) return;
+
+            MarkDirty();
+            MandateCoreMapModeService.DirtyMapIfActive();
+        }
+
         public static void OnKingdomCoreCreated(Kingdom pKingdom, City pCity, string pSourceType)
         {
             if (!Ready || pKingdom?.data == null || pCity?.data == null) return;
