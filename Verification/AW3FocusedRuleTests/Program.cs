@@ -13,6 +13,7 @@ namespace AW3FocusedRuleTests
             ExpectDeferredWorkQueue();
             ExpectCaptureScanRules();
             ExpectFillSideEffectRules();
+            ExpectMandateCoreTransferInvalidation();
             ExpectRepublicTerminology();
             ExpectXiaAllianceNaming();
             Console.WriteLine("AW3 focused rule tests passed.");
@@ -83,6 +84,14 @@ namespace AW3FocusedRuleTests
             if (!SlaveArmyFillSideEffectRules.ShouldRefreshArmyOnce(2) ||
                 SlaveArmyFillSideEffectRules.ShouldRefreshArmyOnce(0))
                 throw new Exception("A changed fill batch refreshes its army exactly once.");
+        }
+
+        private static void ExpectMandateCoreTransferInvalidation()
+        {
+            if (!MandateCoreTransferRules.ShouldInvalidate(true, true) ||
+                MandateCoreTransferRules.ShouldInvalidate(false, true) ||
+                MandateCoreTransferRules.ShouldInvalidate(true, false))
+                throw new Exception("Only a current legal-core transfer may invalidate Mandate control totals.");
         }
 
         private static void ExpectRepublicTerminology()
