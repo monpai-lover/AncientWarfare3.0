@@ -33,11 +33,15 @@ namespace AncientWarfare3.core.lineage
 
         internal static string TitleKey(Kingdom pKingdom)
         {
-            return TitleKey(MandateService.IsMandateKingdom(pKingdom));
+            return GovernmentTitleRules.SuccessorKey(
+                RepublicGovernmentService.IsRepublic(pKingdom),
+                MandateService.IsMandateKingdom(pKingdom));
         }
 
         internal static string BuildSocialTitle(string pKingdomName, Kingdom pKingdom)
         {
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return GovernmentTitleRules.BuildSocialTitle(pKingdomName, pIsHead: false, pIsElder: true);
             return BuildSocialTitle(pKingdomName, MandateService.IsMandateKingdom(pKingdom));
         }
 
