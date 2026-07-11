@@ -12,6 +12,7 @@ namespace AW3FocusedRuleTests
             ExpectDeferredWorkQueue();
             ExpectCaptureScanRules();
             ExpectFillSideEffectRules();
+            ExpectRepublicTerminology();
             Console.WriteLine("AW3 focused rule tests passed.");
             return 0;
         }
@@ -80,6 +81,24 @@ namespace AW3FocusedRuleTests
             if (!SlaveArmyFillSideEffectRules.ShouldRefreshArmyOnce(2) ||
                 SlaveArmyFillSideEffectRules.ShouldRefreshArmyOnce(0))
                 throw new Exception("A changed fill batch refreshes its army exactly once.");
+        }
+
+        private static void ExpectRepublicTerminology()
+        {
+            if (GovernmentTitleRules.RulerKey(true) != "aw_republic_head" ||
+                GovernmentTitleRules.RulerKey(false) != "aw_label_king")
+                throw new Exception("Republic ruler labels must override monarchy labels.");
+            if (GovernmentTitleRules.SuccessorKey(true, true) != "aw_republic_elder" ||
+                GovernmentTitleRules.SuccessorKey(false, true) != HeirTitleRules.TaiziKey ||
+                GovernmentTitleRules.SuccessorKey(false, false) != HeirTitleRules.ShiziKey)
+                throw new Exception("Republic must take precedence over Mandate succession titles.");
+            if (GovernmentTitleRules.RoleSnapshot(true, true, false, false) != "republic_head" ||
+                GovernmentTitleRules.RoleSnapshot(true, false, true, false) != "republic_elder" ||
+                GovernmentTitleRules.RoleSnapshot(false, true, false, false) != "king")
+                throw new Exception("History role snapshots must freeze event-time government.");
+            if (GovernmentTitleRules.BuildSocialTitle("\u9f50", true, false) != "\u9f50 \u5143\u9996" ||
+                GovernmentTitleRules.BuildSocialTitle("\u9f50", false, true) != "\u9f50 \u5143\u8001")
+                throw new Exception("Republic social titles are incorrect.");
         }
     }
 }
