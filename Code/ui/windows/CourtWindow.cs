@@ -26,6 +26,7 @@ namespace AncientWarfare3.ui.windows
         private const float ScrollMarginY = 58f;
         private const float SummaryHeight = 62f;
         private const float CanvasTopGap = 10f;
+        private const float CanvasLeftInset = 8f;
         private const float CanvasPadding = 24f;
         private const int PortraitsPerFrame = 8;
 
@@ -45,11 +46,13 @@ namespace AncientWarfare3.ui.windows
         private long _displayedKingdomId = -1L;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
+        private bool _resetCanvasOnRefresh;
 
         public static void Open(long pKingdomId)
         {
             _kingdomId = pKingdomId;
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.COURT);
+            if (Instance != null) Instance._resetCanvasOnRefresh = true;
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.COURT,
                 () => { if (Instance != null) Instance.Refresh(); });
         }
@@ -165,9 +168,9 @@ namespace AncientWarfare3.ui.windows
                 : new GameObject("CourtCanvas", typeof(RectTransform), typeof(TreeDragPanHandler));
             if (existingCanvas == null) canvas.transform.SetParent(ContentTransform, false);
             _canvasRect = canvas.GetComponent<RectTransform>();
-            _canvasRect.anchorMin = new Vector2(0.5f, 1f);
-            _canvasRect.anchorMax = new Vector2(0.5f, 1f);
-            _canvasRect.pivot = new Vector2(0.5f, 1f);
+            _canvasRect.anchorMin = new Vector2(0f, 1f);
+            _canvasRect.anchorMax = new Vector2(0f, 1f);
+            _canvasRect.pivot = new Vector2(0f, 1f);
             _canvasRect.sizeDelta = Vector2.one;
 
             _dragSurface.transform.SetAsFirstSibling();
@@ -255,7 +258,8 @@ namespace AncientWarfare3.ui.windows
                 Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
                 bool switched = _displayedKingdomId != _kingdomId;
                 _displayedKingdomId = _kingdomId;
-                if (switched) ResetCanvas();
+                if (switched || _resetCanvasOnRefresh) ResetCanvas();
+                _resetCanvasOnRefresh = false;
                 CancelPendingRender();
                 HideNodesAndLinks();
 
@@ -357,37 +361,27 @@ namespace AncientWarfare3.ui.windows
         private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor, Vector2 pOffset)
         {
             if (pNodes == null || pNodes.Count <= 1) return;
-            List<IGrouping<int, CourtPyramidNodeModel>> rows = pNodes
-                .GroupBy(p => p.Rank)
-                .OrderBy(p => p.Key)
-                .ToList();
-            for (int row = 1; row < rows.Count; row++)
-            {
-                CourtPyramidNodeModel[] parents = rows[row - 1].ToArray();
-                foreach (CourtPyramidNodeModel child in rows[row])
-                {
-                    CourtPyramidNodeModel parent = parents
-                        .OrderBy(p => Mathf.Abs(p.X - child.X))
-                        .First();
-                    CreateLink(new Vector2(parent.X, parent.Y - CourtActorNodeView.Height) + pOffset,
-                        new Vector2(child.X, child.Y) + pOffset, pColor);
-                }
-            }
+            foreach (CourtPyramidLinkSegment segment in CourtPyramidRules.BuildOrthogonalLinks(
+                         pNodes, CourtActorNodeView.Height))
+                CreateLink(segment, pOffset, pColor);
         }
 
-        private void CreateLink(Vector2 pFrom, Vector2 pTo, Color pColor)
+        private void CreateLink(CourtPyramidLinkSegment pSegment, Vector2 pOffset, Color pColor)
         {
             var obj = new GameObject("CourtRankLink", typeof(RectTransform), typeof(Image));
             obj.transform.SetParent(_canvasRect, false);
             obj.transform.SetAsFirstSibling();
             RectTransform rect = obj.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 1f);
-            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0.5f, 0.5f);
+            Vector2 pFrom = new Vector2(pSegment.FromX, pSegment.FromY) + pOffset;
+            Vector2 pTo = new Vector2(pSegment.ToX, pSegment.ToY) + pOffset;
             Vector2 delta = pTo - pFrom;
             rect.anchoredPosition = (pFrom + pTo) * 0.5f;
-            rect.sizeDelta = new Vector2(delta.magnitude, 2f);
-            rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+            rect.sizeDelta = pSegment.IsHorizontal
+                ? new Vector2(Mathf.Abs(delta.x), 2f)
+                : new Vector2(2f, Mathf.Abs(delta.y));
             Image image = obj.GetComponent<Image>();
             image.sprite = WhiteSprite();
             image.color = new Color(pColor.r, pColor.g, pColor.b, 0.48f);
@@ -415,7 +409,7 @@ namespace AncientWarfare3.ui.windows
         private void ResetCanvas()
         {
             if (_canvasRect == null) return;
-            _canvasRect.anchoredPosition = new Vector2(0f, -SummaryHeight - CanvasTopGap);
+            _canvasRect.anchoredPosition = new Vector2(CanvasLeftInset, -SummaryHeight - CanvasTopGap);
             _canvasRect.localScale = Vector3.one;
         }
 

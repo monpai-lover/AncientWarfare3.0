@@ -20,6 +20,27 @@ namespace AncientWarfare3.core.court
         }
     }
 
+    public readonly struct CourtPyramidLinkSegment
+    {
+        public readonly float FromX;
+        public readonly float FromY;
+        public readonly float ToX;
+        public readonly float ToY;
+
+        public CourtPyramidLinkSegment(float fromX, float fromY, float toX, float toY)
+        {
+            FromX = fromX;
+            FromY = fromY;
+            ToX = toX;
+            ToY = toY;
+        }
+
+        public bool IsHorizontal => Math.Abs(FromY - ToY) < 0.001f;
+        public bool IsVertical => Math.Abs(FromX - ToX) < 0.001f;
+        public float MinX => Math.Min(FromX, ToX);
+        public float MaxX => Math.Max(FromX, ToX);
+    }
+
     public static class CourtPyramidRoleId
     {
         public const string King = "king";
@@ -194,8 +215,57 @@ namespace AncientWarfare3.core.court
             return new CourtPyramidCanvasBounds(
                 maxX - minX + safePadding * 2f,
                 topY - bottomY + safePadding * 2f,
-                -(minX + maxX) * 0.5f,
+                safePadding - minX,
                 -safePadding - topY);
+        }
+
+        public static List<CourtPyramidLinkSegment> BuildOrthogonalLinks(
+            IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
+            var segments = new List<CourtPyramidLinkSegment>();
+            List<IGrouping<int, CourtPyramidNodeModel>> rows =
+                (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                .Where(p => p != null)
+                .GroupBy(p => p.Rank)
+                .OrderBy(p => p.Key)
+                .ToList();
+            float safeHeight = Math.Max(1f, nodeHeight);
+
+            for (int rowIndex = 1; rowIndex < rows.Count; rowIndex++)
+            {
+                CourtPyramidNodeModel[] parents = rows[rowIndex - 1].ToArray();
+                CourtPyramidNodeModel[] children = rows[rowIndex].ToArray();
+                if (parents.Length == 0 || children.Length == 0) continue;
+
+                foreach (IGrouping<CourtPyramidNodeModel, CourtPyramidNodeModel> group in children
+                             .GroupBy(child => parents
+                                 .OrderBy(parent => Math.Abs(parent.X - child.X))
+                                 .ThenBy(parent => parent.StableOrder)
+                                 .First()))
+                {
+                    CourtPyramidNodeModel parent = group.Key;
+                    CourtPyramidNodeModel[] assigned = group.OrderBy(p => p.X).ToArray();
+                    float parentBottomY = parent.Y - safeHeight;
+                    float childTopY = assigned[0].Y;
+                    float busY = (parentBottomY + childTopY) * 0.5f;
+                    AddSegment(segments, parent.X, parentBottomY, parent.X, busY);
+
+                    float minChildX = assigned.Min(p => p.X);
+                    float maxChildX = assigned.Max(p => p.X);
+                    AddSegment(segments, minChildX, busY, maxChildX, busY);
+                    foreach (CourtPyramidNodeModel child in assigned)
+                        AddSegment(segments, child.X, busY, child.X, child.Y);
+                }
+            }
+
+            return segments;
+        }
+
+        private static void AddSegment(List<CourtPyramidLinkSegment> pSegments,
+            float pFromX, float pFromY, float pToX, float pToY)
+        {
+            if (Math.Abs(pFromX - pToX) < 0.001f && Math.Abs(pFromY - pToY) < 0.001f) return;
+            pSegments.Add(new CourtPyramidLinkSegment(pFromX, pFromY, pToX, pToY));
         }
 
         public static int NextBatchEnd(int startIndex, int totalCount, int batchSize)
