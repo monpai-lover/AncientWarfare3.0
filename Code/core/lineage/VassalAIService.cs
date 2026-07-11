@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
@@ -25,17 +26,18 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.get(LAST_ACTION_YEAR, out int lastAction, -99999);
             if (year - lastAction < ACTION_COOLDOWN) return;
+            CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
 
-            if (TryActiveVassal(pKingdom) ||
+            if (TryActiveVassal(pKingdom, court) ||
                 TryIndependenceWar(pKingdom) ||
-                TryAbsorbVassal(pKingdom) ||
-                TryVassalWar(pKingdom))
+                TryAbsorbVassal(pKingdom, court) ||
+                TryVassalWar(pKingdom, court))
             {
                 pKingdom.data.set(LAST_ACTION_YEAR, year);
             }
         }
 
-        private static bool TryActiveVassal(Kingdom pKingdom)
+        private static bool TryActiveVassal(Kingdom pKingdom, CourtSnapshot pCourt)
         {
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
             Kingdom threat = FindThreat(pKingdom);
@@ -43,29 +45,32 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom suzerain = FindBestSuzerain(pKingdom, threat);
             if (suzerain == null) return false;
-            if (!Chance(0.45f)) return false;
+            if (!Chance(0.45f * CourtDirectionRules.VoluntaryDiplomacyMultiplier(
+                    pCourt?.peace ?? 0.5f))) return false;
 
             return string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)) &&
                    KingdomPolicyService.StartDecisionWithTarget(pKingdom, "aw_decision_seek_suzerain", suzerain);
         }
 
-        private static bool TryVassalWar(Kingdom pKingdom)
+        private static bool TryVassalWar(Kingdom pKingdom, CourtSnapshot pCourt)
         {
             if (VassalService.IsVassalKingdom(pKingdom)) return false;
             if (VassalService.GetVassals(pKingdom, pRecursive: true).Count >= 6) return false;
             if (CountCities(pKingdom) < 2) return false;
-            if (!Chance(0.22f)) return false;
+            if (!Chance(0.22f * CourtDirectionRules.ForcedVassalMultiplier(
+                    pCourt?.aggression ?? 0.5f))) return false;
 
             Kingdom target = FindVassalWarTarget(pKingdom);
             if (target == null) return false;
             return StartWar(pKingdom, target, "vassal_war");
         }
 
-        private static bool TryAbsorbVassal(Kingdom pKingdom)
+        private static bool TryAbsorbVassal(Kingdom pKingdom, CourtSnapshot pCourt)
         {
             List<Kingdom> vassals = VassalService.GetVassals(pKingdom);
             if (vassals.Count == 0) return false;
-            if (!Chance(0.16f)) return false;
+            if (!Chance(0.16f * CourtDirectionRules.ForcedVassalMultiplier(
+                    pCourt?.aggression ?? 0.5f))) return false;
 
             foreach (Kingdom vassal in vassals.OrderBy(v => VassalService.GetPowerScore(v, pIncludeVassals: false)))
             {
@@ -183,6 +188,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pAttacker?.data == null || pDefender?.data == null) return false;
             if (pAttacker == pDefender || pAttacker.hasEnemies() || pDefender.hasEnemies()) return false;
+            if (pWarType != "independence_war" &&
+                !KingdomAdjacency.AreDirectNeighbors(pAttacker, pDefender)) return false;
             if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pAttacker, PolicyNodeKind.Decision)))
                 return false;
 

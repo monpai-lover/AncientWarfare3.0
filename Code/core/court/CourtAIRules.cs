@@ -2,7 +2,8 @@ namespace AncientWarfare3.core.court
 {
     public static class CourtAIRules
     {
-        public static int ScoreResearch(string dominantSchool, string nodeId, bool atWar, bool mandateExists)
+        public static int ScoreResearch(string dominantSchool, string nodeId, bool atWar, bool mandateExists,
+            float livelihood = 0.5f)
         {
             int score = 0;
             switch (dominantSchool ?? "")
@@ -36,10 +37,12 @@ namespace AncientWarfare3.core.court
                     if (nodeId == "aw_decision_fabricate_weak_claim" || nodeId == "aw_decision_fabricate_strong_claim") score += 60;
                     break;
             }
-            return score;
+            return score + CourtDirectionRules.LivelihoodResearchBonus(
+                livelihood, IsLivelihoodResearch(nodeId));
         }
 
-        public static int ScoreDecision(string dominantSchool, string decisionId, int cities, bool atWar, bool unstable)
+        public static int ScoreDecision(string dominantSchool, string decisionId, int cities, bool atWar, bool unstable,
+            float livelihood = 0.5f, float aggression = 0.5f, float peace = 0.5f)
         {
             int score = 0;
             switch (dominantSchool ?? "")
@@ -65,7 +68,43 @@ namespace AncientWarfare3.core.court
                     if (decisionId == "aw_decision_declare_war") score -= 60;
                     break;
             }
+            if (decisionId == "aw_decision_declare_war" ||
+                decisionId == "aw_decision_fabricate_core" ||
+                decisionId == "aw_decision_fabricate_weak_claim" ||
+                decisionId == "aw_decision_fabricate_strong_claim")
+            {
+                float multiplier = CourtDirectionRules.OffensiveWarMultiplier(
+                    aggression, peace, livelihood, protectedWar: false);
+                score += (int)((multiplier - 1f) * 120f);
+            }
+            else if (decisionId == "aw_decision_seek_suzerain")
+            {
+                score += (int)((CourtDirectionRules.VoluntaryDiplomacyMultiplier(peace) - 1f) * 100f);
+            }
+            else if (decisionId == "aw_decision_absorb_vassal")
+            {
+                score += (int)((CourtDirectionRules.ForcedVassalMultiplier(aggression) - 1f) * 80f);
+            }
             return score;
+        }
+
+        public static bool IsLivelihoodResearch(string nodeId)
+        {
+            switch (nodeId ?? "")
+            {
+                case "aw_tech_iron_plow":
+                case "aw_tech_granary_accounting":
+                case "aw_tech_well_field_survey":
+                case "aw_tech_pottery_casting":
+                case "aw_tech_bronze_casting":
+                case "aw_tech_city_defense":
+                case "aw_policy_household_registry":
+                case "aw_policy_corvee_labor":
+                case "aw_policy_abolish_slavery":
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 }

@@ -30,6 +30,7 @@ namespace AncientWarfare3.patch
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyIndex, benchmark); }
 
             CourtDirectionService.RecalculateIfDirty(__instance);
+            CourtPeaceService.OnKingdomYear(__instance);
 
             benchmark = UpdateAgeBenchmark.Begin();
             try { CityTechService.OnKingdomYear(__instance); }

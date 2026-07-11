@@ -524,6 +524,17 @@ namespace AncientWarfare3.core.lineage
             return CountSql(WarGoalTableItem.GetTableName(), "WAR_ID=@w", ("@w", pWarId)) > 0;
         }
 
+        public static bool HasOpenGoalType(long pWarId, params string[] pGoalTypes)
+        {
+            if (pWarId < 0 || pGoalTypes == null || pGoalTypes.Length == 0) return false;
+            foreach (GoalRow row in ReadOpenGoals(pWarId))
+            {
+                foreach (string goalType in pGoalTypes)
+                    if (row.goal_type == goalType) return true;
+            }
+            return false;
+        }
+
         public static TerritoryStatus GetCoreStatus(Kingdom pFocus, City pCity)
         {
             var result = BaseStatus(pCity);

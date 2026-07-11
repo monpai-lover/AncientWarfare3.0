@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
@@ -23,8 +24,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LAST_CHECK_YEAR, out int lastCheck, -99999);
             if (year - lastCheck < CHECK_INTERVAL) return;
             pKingdom.data.set(LAST_CHECK_YEAR, year);
+            CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
 
-            if (TryDeclarePreparedWar(pKingdom))
+            if (TryDeclarePreparedWar(pKingdom, court))
             {
                 pKingdom.data.set(LAST_ACTION_YEAR, year);
                 return;
@@ -32,10 +34,10 @@ namespace AncientWarfare3.core.lineage
 
             pKingdom.data.get(LAST_ACTION_YEAR, out int lastAction, -99999);
             if (year - lastAction < ACTION_COOLDOWN) return;
-            if (!Chance(0.28f)) return;
 
-            Kingdom target = PickNormalWarTarget(pKingdom);
+            Kingdom target = PickNormalWarTarget(pKingdom, court);
             if (target?.data == null) return;
+            if (!Chance(0.28f * WarMultiplier(pKingdom, target, court))) return;
             WarTerritoryService.WarTargetOption option = PickBestImmediateOption(pKingdom, target);
             if (option != null && KingdomPolicyService.StartWarDecision(pKingdom, option))
             {
@@ -64,9 +66,10 @@ namespace AncientWarfare3.core.lineage
             if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(kingdom, PolicyNodeKind.Decision)))
                 return true;
 
+            CourtSnapshot court = CourtService.GetSnapshot(kingdom);
             Kingdom target = IsUsableRedirectTarget(kingdom, pPreferredTarget)
                 ? pPreferredTarget
-                : PickNormalWarTarget(kingdom);
+                : PickNormalWarTarget(kingdom, court);
             if (target?.data == null) return false;
 
             WarTerritoryService.WarTargetOption option = PickBestImmediateOption(kingdom, target);
@@ -85,7 +88,7 @@ namespace AncientWarfare3.core.lineage
             return started;
         }
 
-        private static bool TryDeclarePreparedWar(Kingdom pKingdom)
+        private static bool TryDeclarePreparedWar(Kingdom pKingdom, CourtSnapshot pCourt)
         {
             pKingdom.data.get(CLAIM_TARGET_ID, out long targetId, -1L);
             Kingdom target = FindKingdom(targetId);
@@ -112,7 +115,7 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            if (!StillWantsWar(pKingdom, target)) return false;
+            if (!StillWantsWar(pKingdom, target, pCourt)) return false;
             if (!string.IsNullOrEmpty(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)))
                 return false;
 
@@ -122,7 +125,7 @@ namespace AncientWarfare3.core.lineage
             return started;
         }
 
-        private static Kingdom PickNormalWarTarget(Kingdom pKingdom)
+        private static Kingdom PickNormalWarTarget(Kingdom pKingdom, CourtSnapshot pCourt)
         {
             float own = Math.Max(1f, VassalService.GetPowerScore(pKingdom, pIncludeVassals: true));
             Kingdom best = null;
@@ -177,6 +180,7 @@ namespace AncientWarfare3.core.lineage
                 if (AreNeighbors(pKingdom, other)) score += 90f;
                 score += Math.Max(0, -Opinion(pKingdom, other));
                 score += Math.Min(160f, target);
+                score *= WarMultiplier(pKingdom, other, pCourt);
                 if (score <= bestScore) continue;
                 bestScore = score;
                 best = other;
@@ -207,13 +211,27 @@ namespace AncientWarfare3.core.lineage
             return !WarTerritoryService.IsVassalDecisionOnlyTarget(pKingdom, pTarget);
         }
 
-        private static bool StillWantsWar(Kingdom pKingdom, Kingdom pTarget)
+        private static bool StillWantsWar(Kingdom pKingdom, Kingdom pTarget, CourtSnapshot pCourt)
         {
             if (pKingdom?.data == null || pTarget?.data == null) return false;
             float own = VassalService.GetPowerScore(pKingdom, pIncludeVassals: true);
             float target = Math.Max(1f, VassalService.GetPowerScore(pTarget, pIncludeVassals: true));
             if (WarTerritoryService.CanUseMandateConquest(pKingdom, pTarget)) return true;
-            return own >= target * 1.15f && (AreNeighbors(pKingdom, pTarget) || Opinion(pKingdom, pTarget) <= -55);
+            float multiplier = WarMultiplier(pKingdom, pTarget, pCourt);
+            return own >= target * (1.15f / multiplier) &&
+                   (AreNeighbors(pKingdom, pTarget) || Opinion(pKingdom, pTarget) <= -55);
+        }
+
+        private static float WarMultiplier(Kingdom pKingdom, Kingdom pTarget, CourtSnapshot pCourt)
+        {
+            bool protectedWar = pTarget?.data != null &&
+                (WarTerritoryService.CanUseMandateConquest(pKingdom, pTarget) ||
+                 MandateService.GetCurrentMandateKingdom() == pTarget);
+            return CourtDirectionRules.OffensiveWarMultiplier(
+                pCourt?.aggression ?? 0.5f,
+                pCourt?.peace ?? 0.5f,
+                pCourt?.livelihood ?? 0.5f,
+                protectedWar);
         }
 
         private static IEnumerable<Kingdom> CandidateKingdoms(Kingdom pKingdom)

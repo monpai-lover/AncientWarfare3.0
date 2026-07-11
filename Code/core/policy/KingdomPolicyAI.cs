@@ -130,7 +130,8 @@ namespace AncientWarfare3.core.policy
             try
             {
                 return baseScore + CourtAIRules.ScoreDecision(court.dominant_school, pDef.Id,
-                    cities, IsAtWar(pKingdom), court.efficiency < 35f);
+                    cities, IsAtWar(pKingdom), court.efficiency < 35f,
+                    court.livelihood, court.aggression, court.peace);
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtAiBiasIndex, benchmark); }
         }
@@ -220,7 +221,11 @@ namespace AncientWarfare3.core.policy
 
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
             long benchmark = UpdateAgeBenchmark.Begin();
-            try { context += CourtAIRules.ScoreResearch(court.dominant_school, pDef.Id, atWar, MandateService.Exists); }
+            try
+            {
+                context += CourtAIRules.ScoreResearch(court.dominant_school, pDef.Id,
+                    atWar, MandateService.Exists, court.livelihood);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCourtAiBiasIndex, benchmark); }
 
             return orderScore + context;

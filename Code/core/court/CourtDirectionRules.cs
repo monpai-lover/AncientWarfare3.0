@@ -94,6 +94,41 @@ namespace AncientWarfare3.core.court
             };
         }
 
+        public static float OffensiveWarMultiplier(float aggression, float peace, float livelihood,
+            bool protectedWar)
+        {
+            if (protectedWar) return 1f;
+            return Clamp(1f + (aggression - 0.5f) * 0.45f - (peace - 0.5f) * 0.35f -
+                         (livelihood - 0.5f) * 0.15f, 0.5f, 1.5f);
+        }
+
+        public static float VoluntaryDiplomacyMultiplier(float peace)
+        {
+            return Clamp(1f + (peace - 0.5f) * 0.7f, 0.5f, 1.5f);
+        }
+
+        public static float ForcedVassalMultiplier(float aggression)
+        {
+            return Clamp(1f + (aggression - 0.5f) * 0.7f, 0.5f, 1.5f);
+        }
+
+        public static int LivelihoodResearchBonus(float livelihood, bool livelihoodNode)
+        {
+            return livelihoodNode ? (int)Math.Round(Clamp01(livelihood) * 70f) : 0;
+        }
+
+        public static float WhitePeaceChance(int warYears, float attackerToDefenderPower,
+            float averagePeace, float averageAggression)
+        {
+            if (warYears < 10) return 0f;
+            float duration = Math.Min(0.20f, (warYears - 10) * 0.01f);
+            float stalemate = attackerToDefenderPower >= 0.8f && attackerToDefenderPower <= 1.25f ? 0.10f : 0f;
+            float losing = attackerToDefenderPower < 0.8f ? 0.15f : 0f;
+            float chance = Clamp01(averagePeace) * 0.25f + duration + stalemate + losing -
+                           Clamp01(averageAggression) * 0.20f;
+            return Clamp(chance, 0f, 0.45f);
+        }
+
         private static List<CourtInfluenceContribution> Deduplicate(
             IEnumerable<CourtInfluenceContribution> pContributions)
         {
@@ -137,5 +172,6 @@ namespace AncientWarfare3.core.court
 
         private static CourtDirectionVector Neutral() => new CourtDirectionVector(0.5f, 0.5f, 0.5f);
         private static float Clamp01(float pValue) => Math.Max(0f, Math.Min(1f, pValue));
+        private static float Clamp(float pValue, float pMin, float pMax) => Math.Max(pMin, Math.Min(pMax, pValue));
     }
 }
