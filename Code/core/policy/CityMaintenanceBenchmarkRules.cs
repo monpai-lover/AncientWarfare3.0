@@ -48,6 +48,13 @@ namespace AncientWarfare3.core.policy
         public const string SlaveCatcherTargetScan = "aw3_ai_slave_catcher_target_scan";
         public const string SlaveArmyFrontlineScan = "aw3_ai_slave_army_frontline_scan";
         public const string SlaveMeritPersist = "aw3_slave_merit_persist";
+        public const string DeferredEnqueue = "aw3_deferred_enqueue";
+        public const string DeferredFlush = "aw3_deferred_flush";
+        public const string GuardImmediate = "aw3_guard_immediate";
+        public const string SlaveFillImmediate = "aw3_slave_fill_immediate";
+        public const string CaptureScanSubmit = "aw3_capture_scan_submit";
+        public const string CaptureScanStep = "aw3_capture_scan_step";
+        public const string CaptureCacheHit = "aw3_capture_cache_hit";
         public const string ArmyCleanupGuardStrip = "aw3_city_army_cleanup_guard_strip";
         public const string ArmyCleanupSlaveCaptain = "aw3_city_army_cleanup_slave_captain";
         public const string ArmyCleanupSlaveName = "aw3_city_army_cleanup_slave_name";
@@ -109,6 +116,13 @@ namespace AncientWarfare3.core.policy
             SlaveCatcherTargetScan,
             SlaveArmyFrontlineScan,
             SlaveMeritPersist,
+            DeferredEnqueue,
+            DeferredFlush,
+            GuardImmediate,
+            SlaveFillImmediate,
+            CaptureScanSubmit,
+            CaptureScanStep,
+            CaptureCacheHit,
             ArmyCleanupGuardStrip,
             ArmyCleanupSlaveCaptain,
             ArmyCleanupSlaveName,

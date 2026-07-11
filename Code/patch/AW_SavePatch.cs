@@ -17,6 +17,13 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_SavePatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
+        public static void SaveWorldToDirectory_Prefix()
+        {
+            core.lineage.DeferredRuntimeWorkService.FlushPersistent();
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
         public static void SaveWorldToDirectory_Postfix(string pFolder)
@@ -55,6 +62,7 @@ namespace AncientWarfare3.patch
 
         private static void ResetHistoryWindowsAfterArchiveSwitch()
         {
+            try { core.lineage.DeferredRuntimeWorkService.ClearRuntimeState(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
