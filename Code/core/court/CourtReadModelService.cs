@@ -95,7 +95,8 @@ namespace AncientWarfare3.core.court
         private static void AddGenerals(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
             int order = 0;
-            foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(pKingdom)
+            foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(
+                         pKingdom, pAllowUnitFallback: false)
                          .OrderByDescending(p => p.Merit)
                          .ThenBy(p => p.Actor.data.id))
             {
