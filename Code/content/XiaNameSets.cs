@@ -81,7 +81,7 @@ namespace AncientWarfare3.content
                 KingdomGenerator,
                 new[]
                 {
-                    "name", "\u590F,\u5546,\u5468,\u79E6,\u6C49,\u9B4F,\u664B,\u695A,\u9F50,\u9C81,\u71D5,\u8D75,\u5B8B,\u90D1,\u536B,\u9648,\u8521,\u5434,\u8D8A,\u5510,\u865E"
+                    "name", XiaPreQinKingdomNameRules.Csv
                 },
                 "name");
 

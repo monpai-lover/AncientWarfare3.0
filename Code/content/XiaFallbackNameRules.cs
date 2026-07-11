@@ -2,12 +2,6 @@ namespace AncientWarfare3.content
 {
     public static class XiaFallbackNameRules
     {
-        private static readonly string[] KingdomNames =
-        {
-            "夏", "商", "周", "秦", "汉", "魏", "晋", "楚", "齐", "鲁", "燕", "赵",
-            "宋", "郑", "卫", "陈", "蔡", "吴", "越", "唐", "虞"
-        };
-
         private static readonly string[] LanguageNames =
         {
             "夏语", "雅言", "华言", "诸夏雅言", "九州雅言", "河洛雅言", "王畿雅言", "邦国雅言"
@@ -68,7 +62,7 @@ namespace AncientWarfare3.content
 
         public static string LocalKingdomName(long pSeed)
         {
-            return Pick(KingdomNames, pSeed);
+            return XiaPreQinKingdomNameRules.Pick(pSeed);
         }
 
         public static string LocalLanguageName(long pSeed)
