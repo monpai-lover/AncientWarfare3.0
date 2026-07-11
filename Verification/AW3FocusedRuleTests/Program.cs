@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.content;
 using AncientWarfare3.core.lineage;
 
 namespace AW3FocusedRuleTests
@@ -13,6 +14,7 @@ namespace AW3FocusedRuleTests
             ExpectCaptureScanRules();
             ExpectFillSideEffectRules();
             ExpectRepublicTerminology();
+            ExpectXiaAllianceNaming();
             Console.WriteLine("AW3 focused rule tests passed.");
             return 0;
         }
@@ -99,6 +101,18 @@ namespace AW3FocusedRuleTests
             if (GovernmentTitleRules.BuildSocialTitle("\u9f50", true, false) != "\u9f50 \u5143\u9996" ||
                 GovernmentTitleRules.BuildSocialTitle("\u9f50", false, true) != "\u9f50 \u5143\u8001")
                 throw new Exception("Republic social titles are incorrect.");
+        }
+
+        private static void ExpectXiaAllianceNaming()
+        {
+            if (!XiaAllianceNamingRules.ShouldUseXiaName(true, false) ||
+                !XiaAllianceNamingRules.ShouldUseXiaName(false, true) ||
+                !XiaAllianceNamingRules.ShouldUseXiaName(true, true) ||
+                XiaAllianceNamingRules.ShouldUseXiaName(false, false))
+                throw new Exception("Either Xia founder must activate Xia alliance naming.");
+            if (XiaAllianceNamingRules.ShouldRenameAfterCreation(false, true) ||
+                !XiaAllianceNamingRules.ShouldRenameAfterCreation(true, true))
+                throw new Exception("Naming runs once and only with a valid generated name.");
         }
     }
 }
