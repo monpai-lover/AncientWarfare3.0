@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.court
         public string layer = "";
         public long city_id = -1L;
         public float influence;
+        public int appointed_year = -1;
     }
 
     internal sealed class CityBureauView
@@ -95,7 +96,7 @@ namespace AncientWarfare3.core.court
             try
             {
                 using var cmd = new SQLiteCommand(db);
-                cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, INFLUENCE, ACTOR_ID FROM " +
+                cmd.CommandText = "SELECT ACTOR_NAME, OFFICE_ID, SCHOOL_ID, LAYER, CITY_ID, INFLUENCE, ACTOR_ID, APPOINTED_YEAR FROM " +
                     CourtOfficerTableItem.GetTableName() +
                     " WHERE KINGDOM_ID = @kid AND ACTIVE = 1 ORDER BY INFLUENCE DESC LIMIT @lim";
                 cmd.Parameters.AddWithValue("@kid", pKingdom.id);
@@ -111,7 +112,8 @@ namespace AncientWarfare3.core.court
                         layer = reader.IsDBNull(3) ? "" : reader.GetValue(3)?.ToString() ?? "",
                         city_id = reader.IsDBNull(4) ? -1L : Convert.ToInt64(reader.GetValue(4)),
                         influence = reader.IsDBNull(5) ? 0f : (float)Convert.ToDouble(reader.GetValue(5)),
-                        actor_id = reader.IsDBNull(6) ? -1L : Convert.ToInt64(reader.GetValue(6))
+                        actor_id = reader.IsDBNull(6) ? -1L : Convert.ToInt64(reader.GetValue(6)),
+                        appointed_year = reader.IsDBNull(7) ? -1 : Convert.ToInt32(reader.GetValue(7))
                     });
                 }
             }

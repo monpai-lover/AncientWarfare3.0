@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.lineage;
+
+namespace AncientWarfare3.core.court
+{
+    internal static class CourtReadModelService
+    {
+        private const float HorizontalSpacing = 142f;
+        private const float VerticalSpacing = 116f;
+
+        public static List<CourtPyramidNodeModel> Build(Kingdom pKingdom)
+        {
+            var seeds = new List<CourtPyramidNodeModel>();
+            if (pKingdom?.data == null || pKingdom.isRekt()) return seeds;
+
+            AddKing(seeds, pKingdom);
+            List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 96);
+            AddOfficersAndVacancies(seeds, pKingdom, officers);
+            AddGenerals(seeds, pKingdom);
+            AddCityLeaders(seeds, pKingdom);
+            return CourtPyramidRules.BuildLayout(seeds, HorizontalSpacing, VerticalSpacing);
+        }
+
+        private static void AddKing(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            Actor king = pKingdom.king;
+            if (!IsValid(king, pKingdom)) return;
+            string school = ActorSchool(king, CourtService.GetSnapshot(pKingdom).dominant_school);
+            pSeeds.Add(new CourtPyramidNodeModel(king.data.id, CourtPyramidRoleId.King,
+                CourtPyramidRoleId.King, CourtPyramidRules.KingRank, 0, false)
+            {
+                ActorName = SafeActorName(king),
+                SchoolId = school,
+                SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                Influence = 100f
+            });
+        }
+
+        private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
+            Kingdom pKingdom, List<CourtOfficerView> pOfficers)
+        {
+            string[] expected = CourtTierRules.CentralOfficesForTier(CourtService.ResolveTier(pKingdom));
+            var expectedOrder = new Dictionary<string, int>();
+            for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
+
+            var filled = new HashSet<string>();
+            foreach (CourtOfficerView officer in pOfficers ?? new List<CourtOfficerView>())
+            {
+                Actor actor = World.world?.units?.get(officer.actor_id);
+                if (!IsValid(actor, pKingdom)) continue;
+                int order = expectedOrder.TryGetValue(officer.office_id, out int officeOrder)
+                    ? officeOrder
+                    : expected.Length + StableStringOrder(officer.office_id);
+                int rank = officer.layer == CourtOfficeLayer.City
+                    ? CourtPyramidRules.GovernorRank
+                    : officer.layer == CourtOfficeLayer.Military
+                        ? CourtPyramidRules.GeneralRank
+                        : CourtPyramidRules.RankForOffice(officer.office_id);
+                string school = string.IsNullOrEmpty(officer.school_id)
+                    ? ActorSchool(actor, CourtTierRules.PreferredSchoolForOffice(officer.office_id))
+                    : officer.school_id;
+                pSeeds.Add(new CourtPyramidNodeModel(actor.data.id, officer.office_id,
+                    officer.office_id, rank, order, false)
+                {
+                    ActorName = SafeActorName(actor),
+                    SchoolId = school,
+                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                    CityId = officer.city_id,
+                    CityName = FindCityName(pKingdom, officer.city_id),
+                    AppointmentYear = officer.appointed_year,
+                    Influence = officer.influence
+                });
+                filled.Add(officer.office_id);
+            }
+
+            for (int i = 0; i < expected.Length; i++)
+            {
+                string office = expected[i];
+                if (filled.Contains(office)) continue;
+                pSeeds.Add(new CourtPyramidNodeModel(-1L, office, office,
+                    CourtPyramidRules.RankForOffice(office), i, true)
+                {
+                    SchoolId = CourtTierRules.PreferredSchoolForOffice(office),
+                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(
+                        CourtTierRules.PreferredSchoolForOffice(office))
+                });
+            }
+        }
+
+        private static void AddGenerals(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            int order = 0;
+            foreach (Actor general in ReadActiveGenerals(pKingdom)
+                         .OrderByDescending(GeneralService.GetMerit)
+                         .ThenBy(p => p.data.id))
+            {
+                int merit = GeneralService.GetMerit(general);
+                pSeeds.Add(new CourtPyramidNodeModel(general.data.id, CourtPyramidRoleId.General,
+                    CourtPyramidRoleId.General, CourtPyramidRules.GeneralRank, order++, false)
+                {
+                    ActorName = SafeActorName(general),
+                    SchoolId = CourtSchoolId.Military,
+                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(CourtSchoolId.Military),
+                    CityId = general.city?.data?.id ?? -1L,
+                    CityName = general.city?.data?.name ?? "",
+                    Influence = merit,
+                    Merit = merit
+                });
+            }
+        }
+
+        private static void AddCityLeaders(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            int order = 0;
+            IEnumerable<City> cities;
+            try { cities = pKingdom.getCities().Where(p => p?.data != null && !p.isRekt()).ToList(); }
+            catch { return; }
+            foreach (City city in cities.OrderBy(p => p.data.id))
+            {
+                Actor leader = city.leader;
+                if (!IsValid(leader, pKingdom)) continue;
+                string school = ActorSchool(leader, CourtSchoolId.Ru);
+                pSeeds.Add(new CourtPyramidNodeModel(leader.data.id, CourtOfficeId.Governor,
+                    CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank, order++, false)
+                {
+                    ActorName = SafeActorName(leader),
+                    SchoolId = school,
+                    SchoolIconPath = CourtPyramidRules.SchoolIconPath(school),
+                    CityId = city.data.id,
+                    CityName = city.data.name ?? "",
+                    Influence = SafeStat(leader, "stewardship")
+                });
+            }
+        }
+
+        private static bool IsValid(Actor pActor, Kingdom pKingdom)
+        {
+            return pActor?.data != null && pActor.kingdom == pKingdom &&
+                   pActor.isAlive() && !pActor.isRekt();
+        }
+
+        private static IEnumerable<Actor> ReadActiveGenerals(Kingdom pKingdom)
+        {
+            try
+            {
+                return pKingdom.getUnits()
+                    .Where(p => IsValid(p, pKingdom) && GeneralService.IsGeneral(p))
+                    .ToList();
+            }
+            catch { return Array.Empty<Actor>(); }
+        }
+
+        private static string ActorSchool(Actor pActor, string pFallback)
+        {
+            if (pActor?.data == null) return pFallback ?? "";
+            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            return string.IsNullOrEmpty(school) ? pFallback ?? "" : school;
+        }
+
+        private static string FindCityName(Kingdom pKingdom, long pCityId)
+        {
+            if (pCityId < 0) return "";
+            try
+            {
+                foreach (City city in pKingdom.getCities())
+                    if (city?.data != null && city.data.id == pCityId) return city.data.name ?? "";
+            }
+            catch { }
+            return "";
+        }
+
+        private static int StableStringOrder(string pValue)
+        {
+            unchecked
+            {
+                int hash = 17;
+                foreach (char c in pValue ?? "") hash = hash * 31 + c;
+                return hash & 0x7fffffff;
+            }
+        }
+
+        private static string SafeActorName(Actor pActor)
+        {
+            try { return pActor?.getName() ?? ""; }
+            catch { return pActor?.data?.name ?? ""; }
+        }
+
+        private static float SafeStat(Actor pActor, string pStat)
+        {
+            try { return pActor?.stats?[pStat] ?? 0f; }
+            catch { return 0f; }
+        }
+    }
+}
