@@ -35,7 +35,6 @@ namespace AncientWarfare3.core.lineage
         private const int CITY_SLAVE_CATCHER_CHECK_INTERVAL = 10;
         private const int CITY_SLAVE_ARMY_CHECK_INTERVAL = 20;
         private const int SLAVE_ARMY_FAILED_MAINTENANCE_COOLDOWN = 60;
-        private const int MAP_CHUNK_SIZE = 16;
         private const int SEARCH_COOLDOWN_PRUNE_THRESHOLD = 256;
         private const int FRONTLINE_CACHE_LIMIT = 128;
         private const int CITY_WARRIOR_COUNT_CACHE_LIMIT = 512;
@@ -924,9 +923,16 @@ namespace AncientWarfare3.core.lineage
             finally
             {
                 _formingSlaveArmy = false;
+                try
+                {
+                    EnqueuePendingSlaveArmyPromotions();
+                }
+                finally
+                {
+                    Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFill,
+                        CityMaintenanceBenchmarkRules.Group);
+                }
             }
-            EnqueuePendingSlaveArmyPromotions();
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmyFill, CityMaintenanceBenchmarkRules.Group);
             EnsureNonSlaveCaptain(army);
             Actor finalCaptain = army.getCaptain();
             bool finalCaptainValid = CanBeSlaveArmyCaptainCandidate(finalCaptain, kingdom, pCity,

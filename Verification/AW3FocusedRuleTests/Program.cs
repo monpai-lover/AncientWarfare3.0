@@ -101,6 +101,11 @@ namespace AW3FocusedRuleTests
             if (GovernmentTitleRules.BuildSocialTitle("\u9f50", true, false) != "\u9f50 \u5143\u9996" ||
                 GovernmentTitleRules.BuildSocialTitle("\u9f50", false, true) != "\u9f50 \u5143\u8001")
                 throw new Exception("Republic social titles are incorrect.");
+            if (!GovernmentTitleRules.IsRepublicSocialTitle("\u9f50 \u5143\u9996") ||
+                !GovernmentTitleRules.IsRepublicSocialTitle("\u5143\u8001") ||
+                GovernmentTitleRules.IsRepublicSocialTitle("\u9f50 \u56fd\u738b") ||
+                GovernmentTitleRules.IsRepublicSocialTitle("\u5143\u8001\u9662"))
+                throw new Exception("Republic social-title detection must match exact role suffixes.");
         }
 
         private static void ExpectXiaAllianceNaming()

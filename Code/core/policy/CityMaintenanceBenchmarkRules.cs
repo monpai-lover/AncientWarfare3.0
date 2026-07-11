@@ -16,7 +16,6 @@ namespace AncientWarfare3.core.policy
         public const string RetirementsScan = "aw3_city_retirements_scan";
         public const string SlaveLaborCount = "aw3_city_slave_labor_count";
         public const string SlaveCatchersJobGate = "aw3_city_slave_catchers_job_gate";
-        public const string SlaveCatchersTargetScan = "aw3_city_slave_catchers_target_scan";
         public const string SlaveArmyNameScan = "aw3_city_slave_army_name_scan";
         public const string SlaveArmyExisting = "aw3_city_slave_army_existing";
         public const string SlaveArmySlaveCount = "aw3_city_slave_army_slave_count";
@@ -45,13 +44,9 @@ namespace AncientWarfare3.core.policy
         public const string RoyalGuardRefreshRuntime = "aw3_city_royal_guard_refresh_runtime";
         public const string RoyalGuardDismiss = "aw3_city_royal_guard_dismiss";
         public const string RoyalGuardThreatScan = "aw3_ai_royal_guard_threat_scan";
-        public const string SlaveCatcherTargetScan = "aw3_ai_slave_catcher_target_scan";
         public const string SlaveArmyFrontlineScan = "aw3_ai_slave_army_frontline_scan";
         public const string SlaveMeritPersist = "aw3_slave_merit_persist";
-        public const string DeferredEnqueue = "aw3_deferred_enqueue";
         public const string DeferredFlush = "aw3_deferred_flush";
-        public const string GuardImmediate = "aw3_guard_immediate";
-        public const string SlaveFillImmediate = "aw3_slave_fill_immediate";
         public const string CaptureScanSubmit = "aw3_capture_scan_submit";
         public const string CaptureScanStep = "aw3_capture_scan_step";
         public const string CaptureCacheHit = "aw3_capture_cache_hit";
@@ -84,7 +79,6 @@ namespace AncientWarfare3.core.policy
             RetirementsScan,
             SlaveLaborCount,
             SlaveCatchersJobGate,
-            SlaveCatchersTargetScan,
             SlaveArmyNameScan,
             SlaveArmyExisting,
             SlaveArmySlaveCount,
@@ -113,13 +107,9 @@ namespace AncientWarfare3.core.policy
             RoyalGuardRefreshRuntime,
             RoyalGuardDismiss,
             RoyalGuardThreatScan,
-            SlaveCatcherTargetScan,
             SlaveArmyFrontlineScan,
             SlaveMeritPersist,
-            DeferredEnqueue,
             DeferredFlush,
-            GuardImmediate,
-            SlaveFillImmediate,
             CaptureScanSubmit,
             CaptureScanStep,
             CaptureCacheHit,
