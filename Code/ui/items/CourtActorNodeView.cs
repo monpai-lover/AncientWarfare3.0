@@ -170,16 +170,20 @@ namespace AncientWarfare3.ui.items
             if (pNode.AppointmentYear >= 0)
                 lines.Add(AW_L10n.Text("aw_court_appointed_year", "Appointed") + ": " + pNode.AppointmentYear);
             if (!string.IsNullOrEmpty(pNode.CityName))
-                lines.Add(AW_L10n.Text("aw_history_city", "City") + ": " + pNode.CityName);
+                lines.Add(AW_L10n.Text("aw_court_city", "City") + ": " + pNode.CityName);
             if (pNode.Merit > 0)
                 lines.Add(AW_L10n.Text("aw_general_merit", "Merit") + ": " + pNode.Merit);
             if (pActor?.data != null)
             {
-                lines.Add(AW_L10n.Text("aw_age", "Age") + ": " + SafeAge(pActor));
-                lines.Add("Stewardship " + SafeStat(pActor, "stewardship").ToString("0") +
-                          "  Diplomacy " + SafeStat(pActor, "diplomacy").ToString("0"));
-                lines.Add("Warfare " + SafeStat(pActor, "warfare").ToString("0") +
-                          "  Intelligence " + SafeStat(pActor, "intelligence").ToString("0"));
+                lines.Add(AW_L10n.Text("aw_court_age", "Age") + ": " + SafeAge(pActor));
+                lines.Add(AW_L10n.Text("aw_court_stat_stewardship", "Stewardship") + " " +
+                          SafeStat(pActor, "stewardship").ToString("0") + "  " +
+                          AW_L10n.Text("aw_court_stat_diplomacy", "Diplomacy") + " " +
+                          SafeStat(pActor, "diplomacy").ToString("0"));
+                lines.Add(AW_L10n.Text("aw_court_stat_warfare", "Warfare") + " " +
+                          SafeStat(pActor, "warfare").ToString("0") + "  " +
+                          AW_L10n.Text("aw_court_stat_intelligence", "Intelligence") + " " +
+                          SafeStat(pActor, "intelligence").ToString("0"));
             }
             return string.Join("\n", lines.ToArray());
         }
@@ -208,7 +212,7 @@ namespace AncientWarfare3.ui.items
                     return AW_L10n.Text(GovernmentTitleRules.SuccessorKey(
                         RepublicGovernmentService.IsRepublic(pKingdom),
                         MandateService.GetCurrentMandateKingdom() == pKingdom), "Heir");
-                case CourtPyramidRoleId.General: return AW_L10n.Text("aw_general_title", "General");
+                case CourtPyramidRoleId.General: return AW_L10n.Text("aw_court_general", "General");
                 case CourtPyramidRoleId.Governor:
                     return string.IsNullOrEmpty(pCityName)
                         ? OfficeName(CourtOfficeId.Governor)

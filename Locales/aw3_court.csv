@@ -7,6 +7,13 @@ aw_court_appointed_year,就任年份,Appointed,就任年份
 aw_court_direction_livelihood,民生,Livelihood,民生
 aw_court_direction_aggression,尚武,Aggression,尚武
 aw_court_direction_peace,求和,Peace,求和
+aw_court_general,大将,General,大將
+aw_court_city,城市,City,城市
+aw_court_age,年龄,Age,年齡
+aw_court_stat_stewardship,治理,Stewardship,治理
+aw_court_stat_diplomacy,外交,Diplomacy,外交
+aw_court_stat_warfare,军事,Warfare,軍事
+aw_court_stat_intelligence,学识,Intelligence,學識
 aw_court Title,百家官场,Court of the Hundred Schools,百家官場
 aw_tech_official_court,官场制度,Official Court,官場制度
 aw_tech_official_court_desc,将原始朝会升级为百家官场，允许贤人入仕并影响国家路线,Upgrade primitive council into a court of schools that steers state policy,將原始朝會升級為百家官場，允許賢人入仕並影響國家路線

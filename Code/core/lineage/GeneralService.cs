@@ -152,6 +152,40 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        public static List<Actor> GetActiveGeneralsForReadModel(Kingdom pKingdom)
+        {
+            var result = new List<Actor>();
+            if (pKingdom?.data == null) return result;
+            if (!Ready)
+            {
+                foreach (Actor unit in pKingdom.getUnits())
+                {
+                    if (unit?.data == null || unit.kingdom != pKingdom || unit.isRekt() || !unit.isAlive()) continue;
+                    unit.data.get(LineageKeys.GENERAL_ACTIVE, out bool active, false);
+                    if (active) result.Add(unit);
+                }
+                return result;
+            }
+
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT ACTOR_ID FROM " + GeneralStateTableItem.GetTableName() +
+                                  " WHERE KINGDOM_ID=@k AND ACTIVE=1 ORDER BY MERIT_SCORE DESC, ACTOR_ID";
+                cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long actorId = reader.GetInt64(0);
+                    Actor actor = World.world?.units?.get(actorId);
+                    if (actor?.data == null || actor.kingdom != pKingdom || actor.isRekt() || !actor.isAlive()) continue;
+                    result.Add(actor);
+                }
+            }
+            catch { }
+            return result;
+        }
+
         public static void AwardMerit(Actor pActor, int pPoints, string pReason)
         {
             if (pActor?.data == null || pPoints <= 0) return;

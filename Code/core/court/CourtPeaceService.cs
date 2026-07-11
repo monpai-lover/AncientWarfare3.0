@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 
 namespace AncientWarfare3.core.court
@@ -59,6 +60,8 @@ namespace AncientWarfare3.core.court
 
         private static bool IsProtectedWar(War pWar)
         {
+            if (LineageArchiveManager.Instance == null ||
+                !LineageArchiveManager.Instance.InitializeSuccessful) return true;
             string type = "";
             try { type = pWar.getAsset()?.id ?? pWar.data.war_type ?? ""; }
             catch { type = pWar.data.war_type ?? ""; }
@@ -67,6 +70,12 @@ namespace AncientWarfare3.core.court
                 type == "independence_war" ||
                 type == "fief_independence_war" ||
                 type == "general_rebellion_war") return true;
+
+            Kingdom attacker = pWar.main_attacker;
+            Kingdom defender = pWar.main_defender;
+            if (attacker?.data != null && defender?.data != null &&
+                MandateService.GetCurrentMandateKingdom() == attacker &&
+                WarTerritoryService.CanUseMandateConquest(attacker, defender)) return true;
 
             return WarTerritoryService.HasOpenGoalType(pWar.data.id,
                 WarTerritoryService.GOAL_TAKE_MANDATE,

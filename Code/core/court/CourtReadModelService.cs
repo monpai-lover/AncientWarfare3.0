@@ -95,7 +95,7 @@ namespace AncientWarfare3.core.court
         private static void AddGenerals(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
             int order = 0;
-            foreach (Actor general in ReadActiveGenerals(pKingdom)
+            foreach (Actor general in GeneralService.GetActiveGeneralsForReadModel(pKingdom)
                          .OrderByDescending(GeneralService.GetMerit)
                          .ThenBy(p => p.data.id))
             {
@@ -151,17 +151,6 @@ namespace AncientWarfare3.core.court
             CourtPyramidNodeModel node = pNodes.FirstOrDefault(p => p.ActorId == heirId);
             if (node != null && !node.Roles.Contains(CourtPyramidRoleId.Heir))
                 node.Roles.Insert(0, CourtPyramidRoleId.Heir);
-        }
-
-        private static IEnumerable<Actor> ReadActiveGenerals(Kingdom pKingdom)
-        {
-            try
-            {
-                return pKingdom.getUnits()
-                    .Where(p => IsValid(p, pKingdom) && GeneralService.IsGeneral(p))
-                    .ToList();
-            }
-            catch { return Array.Empty<Actor>(); }
         }
 
         private static string ActorSchool(Actor pActor, string pFallback)
