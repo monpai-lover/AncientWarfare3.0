@@ -89,10 +89,9 @@ namespace AncientWarfare3.content
                 AllianceGenerator,
                 new[]
                 {
-                    "root", "\u8bf8\u590f,\u534e\u590f,\u4e5d\u5dde,\u6cb3\u6d1b,\u738b\u757f,\u793c\u4e50,\u5c71\u6cb3,\u6d77\u5185",
-                    "suffix", "\u76df,\u4f1a\u76df,\u540c\u76df,\u76df\u8a93"
+                    "fixed_alliance", "Nine Provinces League,Four Seas Pact,Jade Concord,Xia Covenant"
                 },
-                "root,suffix");
+                "fixed_alliance");
 
             RegisterDictionaryGenerator(
                 LanguageGenerator,

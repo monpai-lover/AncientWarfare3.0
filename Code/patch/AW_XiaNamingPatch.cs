@@ -7,6 +7,7 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_XiaNamingPatch
     {
+#if !一米_中文名
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Alliance), nameof(Alliance.addFounders))]
         private static void Alliance_AddFounders_Postfix(Alliance __instance,
@@ -22,6 +23,7 @@ namespace AncientWarfare3.patch
             if (!XiaAllianceNamingRules.ShouldRenameAfterCreation(usesXiaName, valid)) return;
             __instance.setName(name, pTrack: false);
         }
+#endif
 
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Last)]

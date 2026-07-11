@@ -36,15 +36,12 @@ namespace AncientWarfare3.content
             "河洛", "中原", "九州", "王畿", "礼乐", "玄鸟", "青铜", "邦国", "洛邑", "镐京"
         };
 
-        private static readonly string[] AllianceRoots =
+        private static readonly string[] AllianceNames =
         {
-            "\u8bf8\u590f", "\u534e\u590f", "\u4e5d\u5dde", "\u6cb3\u6d1b",
-            "\u738b\u757f", "\u793c\u4e50", "\u5c71\u6cb3", "\u6d77\u5185"
-        };
-
-        private static readonly string[] AllianceSuffixes =
-        {
-            "\u76df", "\u4f1a\u76df", "\u540c\u76df", "\u76df\u8a93"
+            "Nine Provinces League",
+            "Four Seas Pact",
+            "Jade Concord",
+            "Xia Covenant"
         };
 
         public static string FirstUsefulMetaName(params string[] pCandidates)
@@ -99,9 +96,7 @@ namespace AncientWarfare3.content
 
         public static string LocalAllianceName(long pSeed)
         {
-            var random = CreateRandom(pSeed);
-            return AllianceRoots[random.Next(AllianceRoots.Length)] +
-                   AllianceSuffixes[random.Next(AllianceSuffixes.Length)];
+            return Pick(AllianceNames, pSeed);
         }
 
         private static string Pick(string[] pNames, long pSeed)
