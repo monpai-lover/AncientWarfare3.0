@@ -81,11 +81,17 @@ namespace AncientWarfare3.core.court
     public static class CourtPyramidRules
     {
         public const int KingRank = 0;
+        public const int HeirRank = 10;
         public const int HighOfficeRank = 10;
         public const int MinistryRank = 20;
         public const int SpecialistRank = 30;
         public const int GeneralRank = 40;
         public const int GovernorRank = 50;
+
+        public static bool ShouldAddStandaloneHeir(string pTier, bool hasValidHeir)
+        {
+            return hasValidHeir && pTier == CourtTier.Primitive;
+        }
 
         public static List<CourtPyramidNodeModel> BuildLayout(
             IEnumerable<CourtPyramidNodeModel> pSeeds, float horizontalSpacing, float verticalSpacing)

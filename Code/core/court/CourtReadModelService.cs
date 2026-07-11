@@ -15,9 +15,11 @@ namespace AncientWarfare3.core.court
             var seeds = new List<CourtPyramidNodeModel>();
             if (pKingdom?.data == null || pKingdom.isRekt()) return seeds;
 
+            string tier = CourtService.ResolveTier(pKingdom);
             AddKing(seeds, pKingdom);
+            AddPrimitiveHeir(seeds, pKingdom, tier);
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 96);
-            AddOfficersAndVacancies(seeds, pKingdom, officers);
+            AddOfficersAndVacancies(seeds, pKingdom, officers, tier);
             AddGenerals(seeds, pKingdom);
             AddCityLeaders(seeds, pKingdom);
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
@@ -41,10 +43,26 @@ namespace AncientWarfare3.core.court
             });
         }
 
-        private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
-            Kingdom pKingdom, List<CourtOfficerView> pOfficers)
+        private static void AddPrimitiveHeir(List<CourtPyramidNodeModel> pSeeds,
+            Kingdom pKingdom, string pTier)
         {
-            string[] expected = CourtTierRules.CentralOfficesForTier(CourtService.ResolveTier(pKingdom));
+            Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
+            if (!CourtPyramidRules.ShouldAddStandaloneHeir(pTier, heir?.data != null)) return;
+            string school = ActorSchool(heir, CourtSchoolId.Ru);
+            pSeeds.Add(new CourtPyramidNodeModel(heir.data.id, CourtPyramidRoleId.Heir,
+                CourtPyramidRoleId.Heir, CourtPyramidRules.HeirRank, 0, false)
+            {
+                ActorName = SafeActorName(heir),
+                SchoolId = school,
+                SchoolIconPath = RegisteredSchoolIconPath(school),
+                Influence = SafeStat(heir, "stewardship")
+            });
+        }
+
+        private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
+            Kingdom pKingdom, List<CourtOfficerView> pOfficers, string pTier)
+        {
+            string[] expected = CourtTierRules.CentralOfficesForTier(pTier);
             var expectedOrder = new Dictionary<string, int>();
             for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
 
