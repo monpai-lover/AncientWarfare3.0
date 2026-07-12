@@ -48,6 +48,7 @@ namespace AncientWarfare3.core.policy
 
         public static void ProcessFrame()
         {
+            SchoolMapBottomBarController.ProcessFrame();
             if (!IsActive()) return;
             CitySchoolSnapshotService.ProcessDirty(4);
         }
@@ -118,6 +119,7 @@ namespace AncientWarfare3.core.policy
             SelectedMetas.selected_city = city;
             SelectedObjects.setNanoObject(city);
             PowerTabController.showTabSelectedMeta(MetaTypeLibrary.city);
+            SchoolMapBottomBarController.Show(city);
             return true;
         }
 
