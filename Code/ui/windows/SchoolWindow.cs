@@ -36,7 +36,7 @@ namespace AncientWarfare3.ui.windows
         private static long _requestedCity = -1L;
         private readonly List<SchoolListItem> _listItems = new List<SchoolListItem>();
         private readonly List<SchoolInfluenceBar> _bars = new List<SchoolInfluenceBar>();
-        private readonly List<Button> _actorButtons = new List<Button>();
+        private readonly List<SchoolActorCardView> _actorCards = new List<SchoolActorCardView>();
         private RectTransform _listContent;
         private RectTransform _detailPanel;
         private RectTransform _detailContent;
@@ -193,10 +193,9 @@ namespace AncientWarfare3.ui.windows
             }
             for (int i = 0; i < 5; i++)
             {
-                Button button = ButtonWithText("Actor" + i, _detailContent, new Vector2(0f, 1f),
-                    Vector2.zero, new Vector2(right.sizeDelta.x - 24f, 24f), out _);
-                button.gameObject.SetActive(false);
-                _actorButtons.Add(button);
+                SchoolActorCardView card = SchoolActorCardView.Create(_detailContent);
+                card.gameObject.SetActive(false);
+                _actorCards.Add(card);
             }
         }
 
@@ -299,8 +298,9 @@ namespace AncientWarfare3.ui.windows
                                TopCities(pDefinition.Id) + "\n" +
                                AW_L10n.Text("aw_school_top_kingdoms", "Leading kingdoms") + ": " +
                                TopKingdoms(pDefinition.Id);
-            ShowRepresentatives(pDefinition.Id, 205f);
-            SetDetailContentHeight(360f);
+            int representatives = ShowRepresentatives(pDefinition.Id, 205f);
+            SetDetailContentHeight(205f + ActorCardRows(representatives) *
+                (SchoolActorCardView.Height + 6f) + 18f);
             ResetDetailScroll();
         }
 
@@ -384,13 +384,15 @@ namespace AncientWarfare3.ui.windows
                 RectTransform rect = bar.GetComponent<RectTransform>();
                 rect.anchoredPosition = new Vector2(12f, -198f - index * (SchoolInfluenceBar.Height + 4f));
                 rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, SchoolInfluenceBar.Height);
-                bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value / snapshot.TotalScore, SelectSchool);
+                bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value,
+                    item.Value / snapshot.TotalScore, SelectSchool);
                 bar.gameObject.SetActive(true);
                 index++;
             }
             float contributorTop = 198f + index * (SchoolInfluenceBar.Height + 4f) + 10f;
             int contributors = ShowContributors(snapshot.Contributors, contributorTop);
-            SetDetailContentHeight(contributorTop + contributors * 28f + 18f);
+            SetDetailContentHeight(contributorTop + ActorCardRows(contributors) *
+                (SchoolActorCardView.Height + 6f) + 18f);
             ResetDetailScroll();
         }
 
@@ -400,51 +402,70 @@ namespace AncientWarfare3.ui.windows
             foreach (CitySchoolInfluenceContribution contribution in pContributions ??
                      Array.Empty<CitySchoolInfluenceContribution>())
             {
-                if (index >= _actorButtons.Count) break;
+                if (index >= _actorCards.Count) break;
                 Actor actor = World.world?.units?.get(contribution.ActorId);
                 if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
-                Button button = _actorButtons[index];
-                RectTransform rect = button.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f, -pTop - index * 28f);
-                Text label = button.GetComponentInChildren<Text>();
-                if (label != null)
-                    label.text = contribution.ActorName + "  " + ContributionRole(contribution.Role) +
-                                 "  " + Mathf.RoundToInt(contribution.Score);
-                button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
-                button.gameObject.SetActive(true);
+                SchoolActorCardView card = _actorCards[index];
+                LayoutActorCard(card, index, pTop);
+                card.Bind(actor, StandingText(index), ContributionRole(contribution.Role) + "  " +
+                    Mathf.RoundToInt(contribution.Score));
                 index++;
             }
             return index;
         }
 
-        private void ShowRepresentatives(string pSchoolId, float pTop)
+        private int ShowRepresentatives(string pSchoolId, float pTop)
         {
             Actor[] actors = SchoolMembershipService.Members(pSchoolId)
                 .Select(id => World.world?.units?.get(id))
                 .Where(p => p?.data != null && p.isAlive() && !p.isRekt())
                 .OrderByDescending(Ability)
                 .ThenBy(p => p.data.id)
-                .Take(_actorButtons.Count)
+                .Take(_actorCards.Count)
                 .ToArray();
             for (int i = 0; i < actors.Length; i++)
             {
                 Actor actor = actors[i];
-                Button button = _actorButtons[i];
-                RectTransform rect = button.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f, -pTop - i * 28f);
-                Text label = button.GetComponentInChildren<Text>();
-                if (label != null) label.text = actor.getName();
-                button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
-                button.gameObject.SetActive(true);
+                SchoolActorCardView card = _actorCards[i];
+                LayoutActorCard(card, i, pTop);
+                card.Bind(actor, StandingText(i),
+                    AW_L10n.Text("aw_school_ability", "Ability") + "  " + Mathf.RoundToInt(Ability(actor)));
             }
+            return actors.Length;
         }
 
         private void HideDetailRows()
         {
             foreach (SchoolInfluenceBar bar in _bars) bar.gameObject.SetActive(false);
-            foreach (Button button in _actorButtons) button.gameObject.SetActive(false);
+            foreach (SchoolActorCardView card in _actorCards) card.gameObject.SetActive(false);
+        }
+
+        private void LayoutActorCard(SchoolActorCardView pCard, int pIndex, float pTop)
+        {
+            if (pCard == null || _detailPanel == null) return;
+            const float gap = 6f;
+            float width = (_detailPanel.sizeDelta.x - 24f - gap) * .5f;
+            int row = pIndex / 2;
+            int column = pIndex % 2;
+            RectTransform rect = pCard.GetComponent<RectTransform>();
+            rect.anchoredPosition = new Vector2(12f + column * (width + gap),
+                -pTop - row * (SchoolActorCardView.Height + gap));
+            rect.sizeDelta = new Vector2(width, SchoolActorCardView.Height);
+        }
+
+        private static int ActorCardRows(int pCount) => (Math.Max(0, pCount) + 1) / 2;
+
+        private static string StandingText(int pIndex)
+        {
+            switch (SchoolActorStandingRules.Resolve(pIndex))
+            {
+                case SchoolActorStandingRules.Leader:
+                    return AW_L10n.Text("aw_school_standing_leader", "School Leader");
+                case SchoolActorStandingRules.Core:
+                    return AW_L10n.Text("aw_school_standing_core", "Core Figure");
+                default:
+                    return AW_L10n.Text("aw_school_standing_representative", "Representative");
+            }
         }
 
         private void SetDetailContentHeight(float pHeight)
