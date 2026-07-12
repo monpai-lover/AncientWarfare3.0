@@ -42,9 +42,13 @@ namespace AncientWarfare3.ui.items
         public void Bind(HistoricalSchoolMasterDefinition pDefinition,
             HistoricalSchoolMasterStoreRecord pRecord, Actor pActor)
         {
-            Unbind();
-            if (pDefinition == null) return;
-            gameObject.SetActive(true);
+            if (pDefinition == null)
+            {
+                ClearInteractions();
+                ReleaseActorBinding();
+                gameObject.SetActive(false);
+                return;
+            }
             Color schoolColor = Parse(CourtSchoolRegistry.Find(pDefinition.SchoolId)?.ColorHex,
                 new Color(.35f, .32f, .25f, 1f));
             _background.color = Color.Lerp(schoolColor, Color.black, .72f);
@@ -65,11 +69,19 @@ namespace AncientWarfare3.ui.items
                             pRecord?.Spawned == true ? "active residence" :
                             "awaiting Xia descent");
 
+            long actorId = live ? pActor.data.id : -1L;
+            bool reusePortrait = live && _boundActorId == actorId;
+            ClearInteractions();
+            if (!reusePortrait)
+            {
+                ReleaseActorBinding();
+                if (live) _boundActorId = actorId;
+            }
+            gameObject.SetActive(true);
             _portraitHolder.SetActive(true);
             _archivePortrait.enabled = !live;
             if (live)
             {
-                _boundActorId = pActor.data.id;
                 EnsurePortrait(pActor);
             }
             else
@@ -84,10 +96,8 @@ namespace AncientWarfare3.ui.items
                 _archivePortrait.color = dead ? new Color(.55f, .55f, .55f, 1f) : schoolColor;
             }
 
-            _button.onClick.RemoveAllListeners();
             if (live)
             {
-                long actorId = _boundActorId;
                 _button.onClick.AddListener(() => OpenActor(actorId));
             }
             _tip.enabled = true;
@@ -101,17 +111,25 @@ namespace AncientWarfare3.ui.items
 
         public void Unbind()
         {
+            ClearInteractions();
+            ReleaseActorBinding();
+            gameObject.SetActive(false);
+        }
+
+        private void ClearInteractions()
+        {
             _button?.onClick.RemoveAllListeners();
-            if (_tip != null)
-            {
-                _tip.hoverAction = null;
-                _tip.clickAction = null;
-                _tip.enabled = false;
-            }
+            if (_tip == null) return;
+            _tip.hoverAction = null;
+            _tip.clickAction = null;
+            _tip.enabled = false;
+        }
+
+        private void ReleaseActorBinding()
+        {
             _boundActorId = -1L;
             _portraitAttemptedForBind = false;
             ReleasePortrait();
-            gameObject.SetActive(false);
         }
 
         private void Build()
@@ -119,6 +137,7 @@ namespace AncientWarfare3.ui.items
             _background = GetComponent<Image>();
             _button = GetComponent<Button>();
             _tip = GetComponent<TipButton>();
+            _tip.showOnClick = false;
             _portraitHolder = new GameObject("PortraitSlot", typeof(RectTransform), typeof(Image));
             _portraitHolder.transform.SetParent(transform, false);
             RectTransform portraitRect = _portraitHolder.GetComponent<RectTransform>();

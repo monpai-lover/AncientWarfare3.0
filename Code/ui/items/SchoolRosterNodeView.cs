@@ -131,6 +131,7 @@ namespace AncientWarfare3.ui.items
             AW_UIStyle.ApplyButton(_background, .96f);
             _button = GetComponent<Button>();
             _tip = GetComponent<TipButton>();
+            _tip.showOnClick = false;
 
             _portraitHolder = new GameObject("PortraitSlot", typeof(RectTransform));
             _portraitHolder.transform.SetParent(transform, false);

@@ -101,7 +101,7 @@ namespace AncientWarfare3.ui.windows
         public override void OnNormalDisable()
         {
             SchoolMapModeService.EndWindowMode();
-            UnbindActorCards();
+            HideDetailRows(pReleaseActorReferences: true);
         }
 
         private void Update()
@@ -290,8 +290,16 @@ namespace AncientWarfare3.ui.windows
                 item.gameObject.SetActive(true);
             }
 
-            if (_selectedCity >= 0) ShowCityDetail(World.world?.cities?.get(_selectedCity));
-            else ShowSchoolDetail(CourtSchoolRegistry.Find(_selectedSchool), metrics);
+            HideDetailRows(pReleaseActorReferences: false);
+            try
+            {
+                if (_selectedCity >= 0) ShowCityDetail(World.world?.cities?.get(_selectedCity));
+                else ShowSchoolDetail(CourtSchoolRegistry.Find(_selectedSchool), metrics);
+            }
+            finally
+            {
+                ReleaseUnusedActorCards();
+            }
             _displayedSnapshotGeneration = CitySchoolSnapshotService.Generation;
             _displayedMembershipVersion = SchoolMembershipService.Version;
         }
@@ -331,7 +339,6 @@ namespace AncientWarfare3.ui.windows
         private void ShowSchoolDetail(CourtSchoolDefinition pDefinition,
             Dictionary<string, SchoolMetrics> pMetrics)
         {
-            HideDetailRows();
             if (pDefinition == null) return;
             _detailTitle.color = Parse(pDefinition.ColorHex, Color.white);
             _detailTitle.text = AW_L10n.Text(pDefinition.NameKey, pDefinition.Id);
@@ -409,7 +416,6 @@ namespace AncientWarfare3.ui.windows
 
         private void ShowCityDetail(City pCity)
         {
-            HideDetailRows();
             if (pCity?.data == null)
             {
                 _detailTitle.text = AW_L10n.Text("aw_school_city_missing", "City missing");
@@ -670,13 +676,29 @@ namespace AncientWarfare3.ui.windows
             catch { return pActor?.data?.name ?? ""; }
         }
 
-        private void HideDetailRows()
+        private void HideDetailRows(bool pReleaseActorReferences)
         {
             foreach (SchoolInfluenceBar bar in _bars) bar.gameObject.SetActive(false);
-            UnbindActorCards();
+            if (pReleaseActorReferences)
+                UnbindActorCards();
+            else
+            {
+                foreach (SchoolActorCardView card in _actorCards)
+                    card.gameObject.SetActive(false);
+                foreach (SchoolMasterCardView card in _masterCards)
+                    card.gameObject.SetActive(false);
+            }
             foreach (SchoolInstitutionRowView row in _institutionRows) row.gameObject.SetActive(false);
             foreach (SchoolLineageRowView row in _lineageRows) row.gameObject.SetActive(false);
             if (_breakdown != null) _breakdown.gameObject.SetActive(false);
+        }
+
+        private void ReleaseUnusedActorCards()
+        {
+            foreach (SchoolActorCardView card in _actorCards)
+                if (!card.gameObject.activeSelf) card.Unbind();
+            foreach (SchoolMasterCardView card in _masterCards)
+                if (!card.gameObject.activeSelf) card.Unbind();
         }
 
         private void UnbindActorCards()
@@ -688,7 +710,7 @@ namespace AncientWarfare3.ui.windows
         private void ResetWorldState()
         {
             SchoolMapModeService.EndWindowMode();
-            HideDetailRows();
+            HideDetailRows(pReleaseActorReferences: true);
             _selectedSchool = CourtSchoolId.Ru;
             _selectedCity = -1L;
             _displayedSnapshotGeneration = -1;

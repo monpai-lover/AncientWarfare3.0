@@ -39,13 +39,25 @@ namespace AncientWarfare3.ui.items
 
         public void Bind(Actor pActor, string pStanding, string pDetail)
         {
-            Unbind();
             bool live = pActor?.data != null && pActor.isAlive() && !pActor.isRekt();
-            if (!live) return;
+            if (!live)
+            {
+                ClearInteractions();
+                ReleaseActorBinding();
+                gameObject.SetActive(false);
+                return;
+            }
 
-            _boundActorId = pActor.data.id;
+            long actorId = pActor.data.id;
+            bool reusePortrait = _boundActorId == actorId;
+            ClearInteractions();
+            if (!reusePortrait)
+            {
+                ReleaseActorBinding();
+                _boundActorId = actorId;
+            }
             gameObject.SetActive(true);
-            gameObject.name = "SchoolActor_" + pActor.data.id;
+            gameObject.name = "SchoolActor_" + actorId;
             Kingdom displayKingdom = HistoricalAffiliationService.ServiceKingdom(pActor) ??
                                      pActor.kingdom;
             Color kingdomColor = KingdomColor(displayKingdom);
@@ -64,8 +76,6 @@ namespace AncientWarfare3.ui.items
             _standing.text = standing;
             _detail.text = detail;
 
-            _button.onClick.RemoveAllListeners();
-            long actorId = _boundActorId;
             _button.onClick.AddListener(() => OpenActor(actorId));
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
@@ -80,17 +90,25 @@ namespace AncientWarfare3.ui.items
 
         public void Unbind()
         {
+            ClearInteractions();
+            ReleaseActorBinding();
+            gameObject.SetActive(false);
+        }
+
+        private void ClearInteractions()
+        {
             _button?.onClick.RemoveAllListeners();
-            if (_tip != null)
-            {
-                _tip.hoverAction = null;
-                _tip.clickAction = null;
-                _tip.enabled = false;
-            }
+            if (_tip == null) return;
+            _tip.hoverAction = null;
+            _tip.clickAction = null;
+            _tip.enabled = false;
+        }
+
+        private void ReleaseActorBinding()
+        {
             _boundActorId = -1L;
             _portraitAttemptedForBind = false;
             ReleasePortrait();
-            gameObject.SetActive(false);
         }
 
         private void Build()
@@ -99,6 +117,7 @@ namespace AncientWarfare3.ui.items
             AW_UIStyle.ApplyButton(_background, .96f);
             _button = GetComponent<Button>();
             _tip = GetComponent<TipButton>();
+            _tip.showOnClick = false;
 
             _avatarHolder = new GameObject("PortraitSlot", typeof(RectTransform));
             _avatarHolder.transform.SetParent(transform, false);
