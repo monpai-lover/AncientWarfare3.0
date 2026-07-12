@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Select real cities from School MapMode, show their complete school composition in the vanilla city bottom tab, make influence labels reliably visible, localize the heir-seeking trait, and reject foreign-border capital candidates without changing the rest of AW3's capital algorithm.
+**Goal:** Select real cities from School MapMode, show their complete school composition in a dedicated bottom tab, make influence labels reliably visible, localize the heir-seeking trait, and reject foreign-border capital candidates without changing the rest of AW3's capital algorithm.
 
-**Architecture:** Keep the fixed school system separate from vanilla Religion. School MapMode routes clicks to a real `City`, while a focused composition element augments `selected_city` only while the mode is active. Capital eligibility is centralized in one runtime service backed by a pure rule predicate so policy execution and AI cannot disagree.
+**Architecture:** Keep the fixed school system separate from vanilla Religion. School MapMode routes zone and nameplate clicks to a real `City`, while a dedicated `selected_aw_school_city` tab owns the composition element and leaves vanilla `selected_city` untouched. Capital eligibility is centralized in one runtime service backed by a pure rule predicate so policy execution and AI cannot disagree.
 
 **Tech Stack:** C# 11, .NET Framework 4.8, Unity UI, WorldBox publicized API, Harmony, NeoModLoader, PowerShell, temporary .NET 9 rule harnesses.
 
@@ -107,7 +107,6 @@ public static bool SelectCity(WorldTile pTile, string pPowerId = null)
     SelectedUnit.clear();
     SelectedMetas.selected_city = city;
     SelectedObjects.setNanoObject(city);
-    PowerTabController.showTabSelectedMeta(MetaTypeLibrary.city);
     SchoolMapBottomBarController.Show(city);
     return true;
 }
@@ -115,7 +114,7 @@ public static bool SelectCity(WorldTile pTile, string pPowerId = null)
 
 - [ ] **Step 4: Configure the school meta for city selection**
 
-After creating `SchoolAsset`, set its list/get/selected/history delegates to cities, set `power_tab_id = "selected_city"`, and route both `click_action_zone` and fallback `selected_tab_action_meta` through `SelectCity`. Preserve the school tile identity getters used for coloring.
+After creating `SchoolAsset`, set its list/get/selected/history delegates to cities, set `power_tab_id = SchoolMapBottomBarController.TabId`, and route both `click_action_zone` and `selected_tab_action_meta` through the same `SelectCity(City)` overload. Preserve the school tile identity getters used for coloring.
 
 - [ ] **Step 5: Make school nameplates click real cities**
 
@@ -125,7 +124,7 @@ In `DrawSchoolNameplates`, call `prepareNext(pAsset, city)` while continuing to 
 
 Expected: the School MapMode source assertions pass and existing nameplate assertions remain green.
 
-### Task 3: Add the city school-composition bottom element
+### Task 3: Add the dedicated school-city bottom tab
 
 **Files:**
 - Create: `Code/ui/items/SchoolCompositionElement.cs`
@@ -136,15 +135,15 @@ Expected: the School MapMode source assertions pass and existing nameplate asser
 
 - [ ] **Step 1: Write a failing source-integration test**
 
-Require an `element_school_composition` object, school icon loading through `definition.IconPath`, raw score and percentage text through `SchoolInfluenceLabelRules.Build`, and a details action calling `SchoolWindow.OpenCity`.
+Require the `selected_aw_school_city` tab asset, an `element_school_composition` object, school icon loading through `definition.IconPath`, raw score and percentage text through `SchoolInfluenceLabelRules.Build`, and a details action calling `SchoolWindow.OpenCity`. Reject references that attach the element to `tab_selected_city` or call `showTabSelectedMeta(MetaTypeLibrary.city)`.
 
 - [ ] **Step 2: Run the test and verify RED**
 
-Expected: failure because `SchoolCompositionElement.cs` does not exist.
+Expected: failure because the composition element is still attached to vanilla `selected_city` and the dedicated tab is not registered.
 
-- [ ] **Step 3: Build the composition element**
+- [ ] **Step 3: Build the dedicated tab and composition element**
 
-Create one pooled element under `PowerTabController.instance.tab_selected_city.transform`. Its root name starts with `element_` so vanilla `PowersTab.sortButtons()` lays it out correctly. Render:
+Register a `PowerTabAsset` named `selected_aw_school_city`, create a sibling `PowersTab` beside `tab_selected_city`, and make one pooled composition element its only content child. Wait until `PowersTab.Start()` has resolved its asset before showing it. Render in the first viewport:
 
 ```text
 [dominant icon] City / Dominant School | [icon School score percent]... | [Details]
@@ -154,7 +153,7 @@ Order non-zero schools by score descending and registry order. Reuse up to fourt
 
 - [ ] **Step 4: Add lifecycle control**
 
-`SchoolMapBottomBarController.Show(city)` creates/binds the element lazily. `ProcessFrame` hides it whenever School MapMode is inactive, the selected object is not the same city, or the city is destroyed. Refresh only when the city snapshot generation changes.
+`SchoolMapBottomBarController.Show(city)` creates/binds the dedicated tab lazily and requests it after initialization. `ProcessFrame` hides it whenever School MapMode is inactive, the selected object is not the same city, or the city is destroyed. Refresh only when the city snapshot generation changes. If the custom tab is current when School MapMode exits, restore the main toolbar.
 
 - [ ] **Step 5: Add localization**
 

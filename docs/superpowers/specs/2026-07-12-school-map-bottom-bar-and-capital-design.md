@@ -7,12 +7,13 @@ This change fixes the school MapMode selection UI, school influence labels, the 
 ## School MapMode Selection
 
 - School MapMode no longer treats a school identity object as a kingdom or unit.
-- Clicking a city zone selects the real `City` and opens the vanilla `selected_city` power tab.
+- Clicking a city zone selects the real `City` and opens the dedicated `selected_aw_school_city` power tab.
 - School nameplates remain visually school-based, but their clickable object is the real city.
-- The city tab receives an `element_school_composition` section while School MapMode is active.
-- The section displays the city name, dominant school icon, and every non-zero school ordered by influence.
+- The dedicated tab contains only `element_school_composition`; the vanilla `selected_city` tab is not modified.
+- The first visible screen displays the city name, dominant school icon, and every non-zero school ordered by influence.
 - Each school entry shows its icon, localized name, raw influence, and percentage. A details action opens the existing school city window.
-- When School MapMode is inactive, the added section hides and the vanilla city tab behaves normally.
+- Both zone clicks and school-nameplate clicks route through the same real-city selection method, preventing a transient vanilla city tab or second-click city-window fallback.
+- When School MapMode is inactive, the dedicated tab closes and the main toolbar is restored.
 
 ## Influence Label Rendering
 
@@ -38,7 +39,7 @@ This change fixes the school MapMode selection UI, school influence labels, the 
 ## Validation
 
 - A rule test covers domestic-only neighbors, foreign neighbors, neutral/ownerless neighbors, and existing candidate requirements.
-- Source integration tests verify School MapMode uses real city selection and no longer configures the school asset as `selected_kingdom`.
+- Source integration tests verify School MapMode uses real city selection, registers `selected_aw_school_city`, never attaches school composition to `tab_selected_city`, and no longer routes through `showTabSelectedMeta(MetaTypeLibrary.city)`.
 - UI integration tests verify the composition element includes school icons, localized names, scores, percentages, and the details action.
 - Locale checks verify all new keys are unique and complete.
 - Debug and Release builds, existing focused rule suites, startup compilation, Harmony patching, and the live Player log must be clean before handoff.
