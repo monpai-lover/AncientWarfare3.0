@@ -188,6 +188,19 @@ namespace AncientWarfare3.core.schools
                 .FirstOrDefault();
         }
 
+        public static TResult[] BuildStableTravelCandidateWindow<TSource, TResult>(
+            long pActorId, IEnumerable<TSource> pCandidates,
+            Func<TSource, long> pCityId, Func<TSource, TResult> pProfileFactory, int pLimit)
+        {
+            if (pCandidates == null || pCityId == null || pProfileFactory == null ||
+                pLimit <= 0) return Array.Empty<TResult>();
+            return pCandidates
+                .OrderBy(candidate => StableCandidateOrder(pActorId, pCityId(candidate)))
+                .Take(pLimit)
+                .Select(pProfileFactory)
+                .ToArray();
+        }
+
         public static bool CanStartTimedVoyage(bool pTravelEligible,
             int pTransportFailures, int pWaitingYears, bool pServing)
         {

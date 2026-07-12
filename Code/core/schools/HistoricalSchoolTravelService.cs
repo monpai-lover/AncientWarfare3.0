@@ -23,45 +23,16 @@ namespace AncientWarfare3.core.schools
         public static void ProcessQuarter(int pQuarterKey)
         {
             int year = Date.getCurrentYear();
-            CompleteDueVoyages(year);
             int bucket = ((pQuarterKey % 4) + 4) % 4;
-            List<City> indexedCities = BuildIndexedCities();
-            HistoricalSchoolAffiliationSnapshot[] bucketStates =
-                HistoricalAffiliationService.ActiveSnapshots(pTravelEligibleOnly: true,
-                    pTravelBucket: bucket);
-            if (bucketStates.Length == 0) return;
-            int start = BucketOffsets[bucket] % bucketStates.Length;
-            int count = Math.Min(MaxMastersPerQuarter, bucketStates.Length);
-            for (int index = 0; index < count; index++)
-            {
-                HistoricalSchoolAffiliationSnapshot state =
-                    bucketStates[(start + index) % bucketStates.Length];
-                Actor actor = FindActor(state.ActorId);
-                HistoricalAffiliationService.RepairEnginePointers(actor);
-                if (!IsUsable(actor) || IsServingOrBound(actor, state) ||
-                    state.LifecycleState == HistoricalSchoolLifecycleState.Dead) continue;
-                if (state.LifecycleState == HistoricalSchoolLifecycleState.Voyage) continue;
-                if (state.LifecycleState == HistoricalSchoolLifecycleState.ChoosingDestination)
-                {
-                    if (HistoricalAffiliationService.TryStartChosenTravel(actor))
-                        EnsureTravelTask(actor);
-                    continue;
-                }
-                if (state.LifecycleState == HistoricalSchoolLifecycleState.Travelling)
-                {
-                    if (!TryStartTimedVoyage(actor, state, year)) EnsureTravelTask(actor);
-                    continue;
-                }
-                if (state.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
-                    state.LifecycleState != HistoricalSchoolLifecycleState.Resident) continue;
-                if (state.LifecycleState == HistoricalSchoolLifecycleState.Resident)
-                    actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
-                        pColorEffect: false);
-                if (state.LastTravelYear >= 0 && year - state.LastTravelYear < MinResidenceYears)
-                    continue;
-                TryChooseDestination(actor, state, indexedCities, year);
-            }
-            BucketOffsets[bucket] = (start + count) % bucketStates.Length;
+            BucketOffsets[bucket] = HistoricalSchoolTravelQuarterScheduler.Process(
+                () => CompleteDueVoyages(year),
+                () => HistoricalAffiliationService.ActiveSnapshots(
+                    pTravelEligibleOnly: true, pTravelBucket: bucket),
+                BucketOffsets[bucket], MaxMastersPerQuarter,
+                state => PrepareDestination(state, year),
+                () => BuildIndexedCities(),
+                (prepared, cities) => TryChooseDestination(prepared.Actor,
+                    prepared.State, cities, year));
         }
 
         public static bool TryPreparePhysicalTravel(Actor pActor, out WorldTile pTarget)
@@ -142,32 +113,19 @@ namespace AncientWarfare3.core.schools
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
             HistoricalSchoolMasterDefinition master =
                 HistoricalSchoolDescentService.DefinitionFor(pActor);
-            var candidates = new List<HistoricalSchoolTravelCandidate>(pCities.Count);
+            var cheapCandidates = new List<TravelCityTarget>(pCities.Count);
             foreach (City city in pCities)
             {
                 if (!IsLivingCity(city) || city.data.id == pState.ResidenceCityId) continue;
                 WorldTile target = DestinationTile(city);
                 if (target == null) continue;
-                CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
-                float underrepresented = 1f - (snapshot?.Share(school) ?? 0f);
-                int rivals = snapshot?.Contributors
-                    .Select(p => p.SchoolId)
-                    .Where(p => !string.Equals(p, school, StringComparison.Ordinal))
-                    .Distinct(StringComparer.Ordinal).Count() ?? 0;
-                int population = SafePopulation(city);
-                bool atWar = SafeAtWar(city.kingdom);
-                bool occupied = ForeignOccupationService.GetResentment(city) > 0f;
-                bool disaster = HasActiveDisaster(city, population);
-                candidates.Add(new HistoricalSchoolTravelCandidate(city.data.id,
-                    city.kingdom.id, population, SafeDevelopment(city),
-                    city.kingdom.capital == city, underrepresented, rivals,
-                    Math.Min(20, population / 10), ReceptiveRuler(city.kingdom),
-                    pOpenOffice: HasOpenCentralOffice(city.kingdom),
-                    pProblemMatch: ProblemMatch(master, city, population, atWar),
-                    pTransportAvailable: TransportAvailable(residence, city),
-                    pAtWar: atWar, pOccupied: occupied, pDisaster: disaster,
-                    Toolbox.SquaredDistTile(origin, target)));
+                cheapCandidates.Add(new TravelCityTarget(city, target));
             }
+            HistoricalSchoolTravelCandidate[] candidates =
+                HistoricalSchoolRules.BuildStableTravelCandidateWindow(
+                    pActor.data.id, cheapCandidates, candidate => candidate.City.data.id,
+                    candidate => BuildTravelCandidate(candidate, school, master,
+                        residence, origin), MaxDestinationCandidates);
             var context = new HistoricalSchoolTravelContext(pActor.data.id,
                 pState.ResidenceCityId, pState.PreviousResidenceCityId,
                 pState.LastTravelYear, pYear, pState.ServiceKingdomId >= 0);
@@ -183,6 +141,64 @@ namespace AncientWarfare3.core.schools
             }
             pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId);
             EnsureTravelTask(pActor);
+        }
+
+        private static DestinationPreparation PrepareDestination(
+            HistoricalSchoolAffiliationSnapshot pState, int pYear)
+        {
+            Actor actor = FindActor(pState.ActorId);
+            HistoricalAffiliationService.RepairEnginePointers(actor);
+            if (!IsUsable(actor) || IsServingOrBound(actor, pState) ||
+                pState.LifecycleState == HistoricalSchoolLifecycleState.Dead) return null;
+            if (pState.LifecycleState == HistoricalSchoolLifecycleState.Voyage) return null;
+            if (pState.LifecycleState == HistoricalSchoolLifecycleState.ChoosingDestination)
+            {
+                if (HistoricalAffiliationService.TryStartChosenTravel(actor))
+                    EnsureTravelTask(actor);
+                return null;
+            }
+            if (pState.LifecycleState == HistoricalSchoolLifecycleState.Travelling)
+            {
+                if (!TryStartTimedVoyage(actor, pState, pYear)) EnsureTravelTask(actor);
+                return null;
+            }
+            if (pState.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
+                pState.LifecycleState != HistoricalSchoolLifecycleState.Resident) return null;
+            if (pState.LifecycleState == HistoricalSchoolLifecycleState.Resident)
+                actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
+                    pColorEffect: false);
+            if (pState.LastTravelYear >= 0 && pYear - pState.LastTravelYear < MinResidenceYears)
+                return null;
+            City residence = FindCity(pState.ResidenceCityId) ?? actor.city;
+            WorldTile origin = residence?.getTile() ?? actor.current_tile;
+            if (origin == null) return null;
+            return new DestinationPreparation(actor, pState);
+        }
+
+        private static HistoricalSchoolTravelCandidate BuildTravelCandidate(
+            TravelCityTarget pCandidate, string pSchool,
+            HistoricalSchoolMasterDefinition pMaster, City pResidence, WorldTile pOrigin)
+        {
+            City city = pCandidate.City;
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+            float underrepresented = 1f - (snapshot?.Share(pSchool) ?? 0f);
+            int rivals = snapshot?.Contributors
+                .Select(p => p.SchoolId)
+                .Where(p => !string.Equals(p, pSchool, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal).Count() ?? 0;
+            int population = SafePopulation(city);
+            bool atWar = SafeAtWar(city.kingdom);
+            bool occupied = ForeignOccupationService.GetResentment(city) > 0f;
+            bool disaster = HasActiveDisaster(city, population);
+            return new HistoricalSchoolTravelCandidate(city.data.id,
+                city.kingdom.id, population, SafeDevelopment(city),
+                city.kingdom.capital == city, underrepresented, rivals,
+                Math.Min(20, population / 10), ReceptiveRuler(city.kingdom),
+                pOpenOffice: HasOpenCentralOffice(city.kingdom),
+                pProblemMatch: ProblemMatch(pMaster, city, population, atWar),
+                pTransportAvailable: TransportAvailable(pResidence, city),
+                pAtWar: atWar, pOccupied: occupied, pDisaster: disaster,
+                Toolbox.SquaredDistTile(pOrigin, pCandidate.Target));
         }
 
         private static bool TryStartTimedVoyage(Actor pActor,
@@ -436,6 +452,31 @@ namespace AncientWarfare3.core.schools
                 return occupied < expected.Length;
             }
             catch { return false; }
+        }
+
+        private sealed class DestinationPreparation
+        {
+            public DestinationPreparation(Actor pActor,
+                HistoricalSchoolAffiliationSnapshot pState)
+            {
+                Actor = pActor;
+                State = pState;
+            }
+
+            public Actor Actor { get; }
+            public HistoricalSchoolAffiliationSnapshot State { get; }
+        }
+
+        private sealed class TravelCityTarget
+        {
+            public TravelCityTarget(City pCity, WorldTile pTarget)
+            {
+                City = pCity;
+                Target = pTarget;
+            }
+
+            public City City { get; }
+            public WorldTile Target { get; }
         }
 
         private static bool HasActiveDisaster(City pCity, int pPopulation)
