@@ -285,7 +285,7 @@ namespace AncientWarfare3.ui.windows
                     CourtActorNodeView.Width, CourtActorNodeView.Height, CanvasPadding);
                 _canvasRect.sizeDelta = new Vector2(bounds.Width, bounds.Height);
                 Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
-                BuildLinks(nodes, KingdomColor(kingdom), nodeOffset);
+                BuildLinks(nodes, KingdomColor(kingdom), nodeOffset, bounds);
                 LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
@@ -373,24 +373,28 @@ namespace AncientWarfare3.ui.windows
             if (pVersion == _renderVersion) _renderCoroutine = null;
         }
 
-        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor, Vector2 pOffset)
+        private void BuildLinks(List<CourtPyramidNodeModel> pNodes, Color pColor, Vector2 pOffset,
+            CourtPyramidCanvasBounds pBounds)
         {
             if (pNodes == null || pNodes.Count <= 1) return;
             foreach (CourtPyramidLinkSegment segment in CourtPyramidRules.BuildOrthogonalLinks(
                          pNodes, CourtActorNodeView.Height))
-                CreateLink(segment, pOffset, pColor);
+                CreateLink(segment, pOffset, pColor, pBounds);
         }
 
-        private void CreateLink(CourtPyramidLinkSegment pSegment, Vector2 pOffset, Color pColor)
+        private void CreateLink(CourtPyramidLinkSegment pSegment, Vector2 pOffset, Color pColor,
+            CourtPyramidCanvasBounds pBounds)
         {
+            CourtPyramidRenderedLink placement = CourtPyramidRules.PlaceLink(
+                pSegment, pOffset.x, pOffset.y, 2f);
+            if (!CourtPyramidRules.IsRenderedLinkInsideCanvas(placement, pBounds.Width, pBounds.Height)) return;
+
             GameObject obj = AcquireLink();
             obj.transform.SetAsFirstSibling();
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            CourtPyramidRenderedLink placement = CourtPyramidRules.PlaceLink(
-                pSegment, pOffset.x, pOffset.y, 2f);
             rect.anchoredPosition = new Vector2(placement.CenterX, placement.CenterY);
             rect.sizeDelta = new Vector2(placement.Width, placement.Height);
             obj.transform.localRotation = Quaternion.identity;

@@ -335,6 +335,25 @@ namespace AncientWarfare3.core.court
                 pSegment.IsHorizontal ? safeThickness : Math.Abs(toY - fromY));
         }
 
+        public static bool IsRenderedLinkInsideCanvas(CourtPyramidRenderedLink pLink,
+            float pCanvasWidth, float pCanvasHeight)
+        {
+            if (float.IsNaN(pLink.CenterX) || float.IsNaN(pLink.CenterY) ||
+                float.IsNaN(pLink.Width) || float.IsNaN(pLink.Height) ||
+                float.IsInfinity(pLink.CenterX) || float.IsInfinity(pLink.CenterY) ||
+                float.IsInfinity(pLink.Width) || float.IsInfinity(pLink.Height)) return false;
+
+            float width = Math.Max(0f, pCanvasWidth);
+            float height = Math.Max(0f, pCanvasHeight);
+            float halfWidth = Math.Max(0f, pLink.Width) * 0.5f;
+            float halfHeight = Math.Max(0f, pLink.Height) * 0.5f;
+            const float epsilon = 0.01f;
+            return pLink.CenterX - halfWidth >= -epsilon &&
+                   pLink.CenterX + halfWidth <= width + epsilon &&
+                   pLink.CenterY + halfHeight <= epsilon &&
+                   pLink.CenterY - halfHeight >= -height - epsilon;
+        }
+
         private static void AddSegment(List<CourtPyramidLinkSegment> pSegments,
             float pFromX, float pFromY, float pToX, float pToY)
         {
