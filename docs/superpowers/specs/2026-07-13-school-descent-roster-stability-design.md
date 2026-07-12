@@ -31,18 +31,34 @@ actually belongs to a school or show the school's teacher-disciple hierarchy.
 1. Create a real adult Xia actor on a valid home-city tile.
 2. Join the home city and verify the actor has live data, a tile, the expected city, and
    the expected kingdom.
-3. Apply canonical identity and open the authoritative membership.
-4. Record master state and affiliation in one SQLite transaction.
-5. Register runtime affiliation and mark the in-memory descent ledger only after durable
-   writes succeed.
+3. Apply canonical identity and prepare an immutable historical membership record. Preparing
+   allocates its ID but does not write SQLite, mutate the membership book, or project traits.
+4. Insert the membership, master, and affiliation rows in one SQLite transaction. Every insert
+   must affect exactly one row.
+5. Adopt the membership into the runtime book, register runtime affiliation, and reserve the
+   in-memory descent ledger only after the durable outcome is `Committed`.
 6. Announcements, chronicles, and archive projection remain best-effort side effects
    after the committed core state.
 
-Every failure before completion rolls back durable rows and membership, marks the actor
-dead, skips further actor updates, then calls `World.world.units.scheduleDestroyOnPlay`.
-This preserves the original `ActorManager.destroyObject` path, including job-batch,
-asset-unit, avatar, container, and deferred-disposal cleanup. Direct `removeObject` and
-direct `Actor.Dispose()` are both forbidden in this path.
+There is no compensating `RollbackDescent` delete. If an exception occurs while committing,
+the store rolls back the transaction and then executes dedicated strict reads for all three
+expected rows. The pure persistence rule returns exactly one of:
+
+- `Committed`: all three queries succeeded and every row is an exact match;
+- `CleanFailure`: all three queries succeeded and every row is missing;
+- `Unknown`: a query failed, any row conflicts, or the three rows are mixed.
+
+Only a pre-persistence failure or `CleanFailure` may mark the actor dead, skip updates, and
+call `World.world.units.scheduleDestroyOnPlay`. This preserves the original
+`ActorManager.destroyObject` path, including job-batch, asset-unit, avatar, container, and
+deferred-disposal cleanup. Direct `removeObject` and direct `Actor.Dispose()` are forbidden.
+
+An `Unknown` result, or any runtime adopt failure after `Committed`, preserves the complete
+actor and suppresses announcements. The master is reserved in the session ledger, actor map,
+home count, and affiliation cache so another copy cannot descend. On load, living actors with
+a valid `SCHOOL_MASTER_ID` are scanned and re-reserved even when no durable master ledger row
+exists. This recovery does not invent a membership row or announcement, and membership index
+projection preserves the valid master key until the ambiguity can be diagnosed.
 
 ## School Member Read Model
 
@@ -124,9 +140,15 @@ and index reloads increment the version.
 
 The historical-school harness must prove:
 
-- the descent affiliation SQL binds `@year`;
-- failed descent schedules the complete actor-manager destruction pipeline and contains
-  no direct low-level removal or actor disposal;
+- the three persistence-row truth table and the rule that only `CleanFailure` is destroyable;
+- membership, master, and affiliation insert in one guarded SQLite transaction with exact
+  row-count checks and a bound affiliation `@year`;
+- ambiguous commit failures use strict readback, reserve the actor, and never announce or
+  enter the destruction pipeline;
+- pre-persistence and clean failures schedule the complete actor-manager destruction pipeline
+  and contain no direct low-level removal or actor disposal;
+- committed membership adoption reloads and strictly verifies an in-memory conflict;
+- load-time recovery scans living master-tagged actors without inventing membership rows;
 - standing tier and stable ordering rules;
 - every authenticated living member is retained by the roster rules;
 - teacher links never connect missing or mismatched actors;

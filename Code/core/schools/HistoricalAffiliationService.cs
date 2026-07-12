@@ -62,11 +62,6 @@ namespace AncientWarfare3.core.schools
                 }
         }
 
-        internal static void RollbackDescent(long pActorId)
-        {
-            ByActor.Remove(pActorId);
-        }
-
         public static HistoricalSchoolAffiliationSnapshot Get(long pActorId)
         {
             return ByActor.TryGetValue(pActorId, out HistoricalSchoolAffiliationSnapshot state)

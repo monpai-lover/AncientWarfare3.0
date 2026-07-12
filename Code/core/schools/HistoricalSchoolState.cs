@@ -34,6 +34,44 @@ namespace AncientWarfare3.core.schools
         AuthoredEvent
     }
 
+    public enum SchoolPersistenceOutcome
+    {
+        Committed,
+        CleanFailure,
+        Unknown
+    }
+
+    public enum SchoolPersistenceRowState
+    {
+        Missing,
+        Exact,
+        Conflict
+    }
+
+    public static class HistoricalSchoolPersistenceRules
+    {
+        public static SchoolPersistenceOutcome Resolve(bool pQuerySucceeded,
+            SchoolPersistenceRowState pMembership, SchoolPersistenceRowState pMaster,
+            SchoolPersistenceRowState pAffiliation)
+        {
+            if (!pQuerySucceeded) return SchoolPersistenceOutcome.Unknown;
+            if (pMembership == SchoolPersistenceRowState.Exact &&
+                pMaster == SchoolPersistenceRowState.Exact &&
+                pAffiliation == SchoolPersistenceRowState.Exact)
+                return SchoolPersistenceOutcome.Committed;
+            if (pMembership == SchoolPersistenceRowState.Missing &&
+                pMaster == SchoolPersistenceRowState.Missing &&
+                pAffiliation == SchoolPersistenceRowState.Missing)
+                return SchoolPersistenceOutcome.CleanFailure;
+            return SchoolPersistenceOutcome.Unknown;
+        }
+
+        public static bool CanDestroy(SchoolPersistenceOutcome pOutcome)
+        {
+            return pOutcome == SchoolPersistenceOutcome.CleanFailure;
+        }
+    }
+
     public enum HistoricalSchoolActionType
     {
         None,

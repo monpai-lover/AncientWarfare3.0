@@ -18,8 +18,8 @@ namespace AncientWarfare3.core.schools
         public static void LoadState()
         {
             HistoricalSchoolStore.LoadRuntimeState(out _eligibleYear, out _lastWorldYear);
-            HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.LoadState();
+            HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();
             HistoricalSchoolActionService.ClearRuntime();

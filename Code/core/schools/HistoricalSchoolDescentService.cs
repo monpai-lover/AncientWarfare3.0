@@ -32,6 +32,28 @@ namespace AncientWarfare3.core.schools
                 if (row.HomeKingdomId >= 0)
                     HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
             }
+            try
+            {
+                if (World.world?.units == null) return;
+                foreach (Actor actor in World.world.units)
+                {
+                    if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
+                    actor.data.get(LineageKeys.SCHOOL_MASTER_ID, out string masterId, "");
+                    HistoricalSchoolMasterDefinition master =
+                        HistoricalSchoolMasterRegistry.Find(masterId);
+                    if (master == null) continue;
+                    bool missingFromLedger = !_ledger.IsSpawned(master.Id);
+                    ReservePreservedActor(master, actor, actor.city, Date.getCurrentYear());
+                    if (missingFromLedger)
+                        ModClass.LogWarning("Preserved unknown historical school actor reserved: " +
+                                            master.Id + " actor=" + actor.data.id);
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school preserved actor scan failed: " +
+                                    error.Message);
+            }
         }
 
         public static bool IsCanonicalMaster(Actor pActor)
@@ -129,8 +151,8 @@ namespace AncientWarfare3.core.schools
             WorldTile tile = pHome?.getTile();
             if (tile == null || pHome.kingdom?.data == null || pHome.kingdom.isRekt()) return false;
             Actor actor = null;
-            bool membershipOpened = false;
-            bool descentRecorded = false;
+            bool persistenceAttempted = false;
+            SchoolPersistenceOutcome persistenceOutcome = SchoolPersistenceOutcome.Unknown;
             try
             {
                 actor = World.world?.units?.createNewUnit(pMaster.ActorAssetId, tile,
@@ -144,22 +166,22 @@ namespace AncientWarfare3.core.schools
                     actor.current_tile == null)
                     throw new InvalidOperationException("actor home assignment failed");
                 ApplyCanonicalIdentity(actor, pMaster);
-                membershipOpened = SchoolMembershipService.TryJoin(actor, pMaster.SchoolId,
-                    SchoolMembershipSource.HistoricalDescent, pMaster.Id, -1,
-                    pHome.data.id, 0);
-                if (!membershipOpened) throw new InvalidOperationException("membership rejected");
-                if (!HistoricalSchoolStore.TryRecordDescent(pMaster, actor.data.id,
-                        pHome.kingdom.id, pHome.kingdom.name, pHome.data.id,
-                        Date.getCurrentYear(), WorldTime()))
-                    throw new InvalidOperationException("TryRecordDescent failed");
-                descentRecorded = true;
-                HistoricalAffiliationService.RegisterDescent(actor.data.id, pHome.kingdom.id,
-                    pHome.kingdom.name, pHome.data.id, Date.getCurrentYear());
-                if (!_ledger.MarkSpawned(pMaster, pEligibleYear))
+                SchoolMembershipRecord membership =
+                    SchoolMembershipService.PrepareHistoricalDescent(actor, pMaster.SchoolId,
+                        pMaster.Id, pHome.data.id, 0);
+                if (membership == null)
+                    throw new InvalidOperationException("membership prepare rejected");
+                persistenceAttempted = true;
+                persistenceOutcome = HistoricalSchoolStore.CommitHistoricalDescent(pMaster,
+                    membership, pHome.kingdom.id, pHome.kingdom.name, pHome.data.id,
+                    Date.getCurrentYear(), WorldTime());
+                if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
+                    throw new InvalidOperationException("historical descent persistence " +
+                                                        persistenceOutcome);
+                if (!SchoolMembershipService.AdoptCommittedHistoricalDescent(actor, membership))
+                    throw new InvalidOperationException("committed membership adopt failed");
+                if (!ReservePreservedActor(pMaster, actor, pHome, pEligibleYear))
                     throw new InvalidOperationException("duplicate descent ledger state");
-
-                MasterByActor[actor.data.id] = pMaster.Id;
-                HomeCounts[pHome.kingdom.id] = HomeCount(pHome.kingdom.id) + 1;
                 try
                 {
                     LineageService.ArchiveActor(actor, pAlive: true);
@@ -182,18 +204,44 @@ namespace AncientWarfare3.core.schools
             }
             catch (Exception error)
             {
-                if (descentRecorded && actor?.data != null)
-                {
-                    HistoricalSchoolStore.RollbackDescent(pMaster.Id, actor.data.id);
-                    HistoricalAffiliationService.RollbackDescent(actor.data.id);
-                }
-                if (membershipOpened && actor?.data != null)
-                {
-                    if (!SchoolMembershipService.RollbackJoin(actor, pMaster.Id))
-                        ModClass.LogWarning("Historical school descent membership rollback failed");
-                }
-                RemoveFailedActor(actor);
+                bool canDestroy = !persistenceAttempted ||
+                    HistoricalSchoolPersistenceRules.CanDestroy(persistenceOutcome);
+                if (canDestroy)
+                    RemoveFailedActor(actor);
+                else
+                    ReservePreservedActor(pMaster, actor, pHome, pEligibleYear);
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
+                                    error.Message + " persistence=" + persistenceOutcome);
+                return false;
+            }
+        }
+
+        private static bool ReservePreservedActor(HistoricalSchoolMasterDefinition pMaster,
+            Actor pActor, City pHome, int pEligibleYear)
+        {
+            if (pMaster == null || pActor?.data == null) return false;
+            try
+            {
+                bool newlyReserved = !_ledger.IsSpawned(pMaster.Id);
+                if (newlyReserved && !_ledger.MarkSpawned(pMaster, pEligibleYear)) return false;
+                MasterByActor[pActor.data.id] = pMaster.Id;
+
+                City home = pHome?.data != null && !pHome.isRekt() ? pHome : pActor.city;
+                Kingdom kingdom = home?.kingdom?.data != null && !home.kingdom.isRekt()
+                    ? home.kingdom
+                    : pActor.kingdom;
+                if (newlyReserved && kingdom?.data != null && !kingdom.isRekt())
+                    HomeCounts[kingdom.id] = HomeCount(kingdom.id) + 1;
+                if (HistoricalAffiliationService.Get(pActor.data.id) == null &&
+                    home?.data != null && !home.isRekt() && kingdom?.data != null &&
+                    !kingdom.isRekt())
+                    HistoricalAffiliationService.RegisterDescent(pActor.data.id, kingdom.id,
+                        kingdom.name, home.data.id, Date.getCurrentYear());
+                return newlyReserved;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school preserved actor reservation failed: " +
                                     error.Message);
                 return false;
             }

@@ -4,26 +4,27 @@
 
 **Goal:** Make school masters descend atomically, eliminate invalid actors that freeze simulation, and add a complete living-member hierarchy window for every fixed school.
 
-**Architecture:** Keep `HistoricalSchoolDescentService` as the spawn transaction owner and use the original `ActorManager.removeObject` lifecycle for rollback. Add pure standing/layout rules plus a runtime read model over `SchoolMembershipService`, then render a separate pooled, draggable school roster window without changing the existing school/city browser.
+**Architecture:** Keep `HistoricalSchoolDescentService` as the spawn owner, but commit the membership, master, and affiliation rows in one SQLite transaction before adopting runtime state. Resolve ambiguous commit exceptions through strict three-row readback into `Committed`, `CleanFailure`, or `Unknown`; only clean or pre-persistence failures enter the original scheduled ActorManager destruction lifecycle. Preserve and reserve unknown actors without announcements. Add pure standing/layout rules plus a runtime read model over `SchoolMembershipService`, then render a separate pooled, draggable school roster window without changing the existing school/city browser.
 
 **Tech Stack:** C#/.NET Framework 4.8, Harmony, Unity UI, NeoModLoader, System.Data.SQLite, existing AW3 rule harnesses.
 
 ---
 
-### Task 1: Descent SQL and actor lifecycle regression
+### Task 1: Atomic descent persistence and actor lifecycle regression
 
 **Files:**
 - Modify: `F:/tmp/AW3HistoricalSchoolRuleTests/Program.cs`
 - Modify: `Code/core/schools/HistoricalSchoolStore.cs`
 - Modify: `Code/core/schools/HistoricalSchoolDescentService.cs`
 
-- [ ] **Step 1: Add failing source-contract assertions**
+- [ ] **Step 1: Add failing pure-rule and source-contract assertions**
 
-Add assertions that isolate the affiliation insert and require
-`affiliation.Parameters.AddWithValue("@year", pYear)`, require
-`World.world.units.scheduleDestroyOnPlay(actor)`, require the actor to be marked dead and
-skipped first, and reject both direct `removeObject` and `actor?.Dispose()` in the descent
-rollback block.
+Exhaust the `Missing`/`Exact`/`Conflict` truth table for all three rows with successful and
+failed queries. Require only `CleanFailure` to pass `CanDestroy`. Require a dedicated commit
+API whose transaction starts inside `try`, inserts membership/master/affiliation with exact
+row-count checks, binds affiliation `@year`, and uses three dedicated strict readback queries.
+Reject boolean `TryRecordDescent`, compensating `RollbackDescent`, ordinary historical
+`TryJoin`/`RollbackJoin`, direct `removeObject`, and direct `Actor.Dispose()`.
 
 - [ ] **Step 2: Run the historical-school harness and confirm RED**
 
@@ -33,20 +34,21 @@ Run:
 dotnet run --project F:/tmp/AW3HistoricalSchoolRuleTests/AW3HistoricalSchoolRuleTests.csproj --no-restore
 ```
 
-Expected: failure reporting the missing `@year` binding or manager-owned actor removal.
+Expected: failure reporting missing persistence types, prepare/adopt APIs, or atomic commit
+contracts.
 
-- [ ] **Step 3: Bind the missing SQL parameter**
+- [ ] **Step 3: Implement prepare, atomic commit, and committed adopt**
 
-In the affiliation command inside `TryRecordDescent`, add:
+Prepare an immutable historical membership without persistence or runtime mutation. Insert all
+three rows in one transaction and return `SchoolPersistenceOutcome`. After an ambiguous exception,
+strictly compare the expected membership, master, and affiliation rows; all exact means committed,
+all missing means clean failure, and every other state means unknown. Adopt only committed
+membership state, reloading indexes and strictly verifying the same record on conflict.
 
-```csharp
-affiliation.Parameters.AddWithValue("@year", pYear);
-```
+- [ ] **Step 4: Preserve unknown actors and schedule only proven failures**
 
-- [ ] **Step 4: Replace direct disposal with manager-owned removal**
-
-Add one focused rollback helper in `HistoricalSchoolDescentService` that checks the
-manager still owns the actor by ID and calls:
+Guard the removal helper with pre-persistence state or the pure `CanDestroy` rule. The helper
+checks that the manager still owns the actor by ID and calls:
 
 ```csharp
 pActor.setAlive(pValue: false);
@@ -55,8 +57,10 @@ World.world.units.scheduleDestroyOnPlay(pActor);
 ```
 
 Do not call low-level `removeObject` or `Actor.Dispose()` directly because both bypass
-`ActorManager.destroyObject` job-batch cleanup. Validate the actor's city, kingdom, and
-tile after `joinCity` before opening membership.
+`ActorManager.destroyObject` job-batch cleanup. For `Unknown` and post-commit adopt errors,
+keep the actor alive, suppress announcements, and reserve its master/actor/home/affiliation
+runtime state. On load, scan living valid `SCHOOL_MASTER_ID` actors and re-reserve unknown
+survivors without fabricating memberships.
 
 - [ ] **Step 5: Run the historical-school harness and confirm GREEN**
 
