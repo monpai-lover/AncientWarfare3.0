@@ -244,17 +244,17 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolAffiliationSnapshot pCommittedState)
         {
             if (pCommittedState == null ||
-                pCommittedState.LifecycleState == HistoricalSchoolLifecycleState.Dead ||
-                !ByActor.TryGetValue(pCommittedState.ActorId,
-                    out HistoricalSchoolAffiliationSnapshot current) ||
-                !ReferenceEquals(current, pCommittedState)) return false;
-            var dead = new HistoricalSchoolAffiliationSnapshot(current.ActorId,
-                current.HomeKingdomId, current.HomeKingdomName, current.HometownCityId,
-                current.ResidenceCityId, current.PreviousResidenceCityId, -1, -1,
-                HistoricalSchoolLifecycleState.Dead, -1, -1, current.LastTravelYear,
-                -1, -1, -1, current.TransportFailures);
-            ByActor[current.ActorId] = dead;
-            CitySchoolSnapshotService.MarkDirty(FindCity(current.ResidenceCityId));
+                pCommittedState.LifecycleState == HistoricalSchoolLifecycleState.Dead)
+                return false;
+            var dead = new HistoricalSchoolAffiliationSnapshot(pCommittedState.ActorId,
+                pCommittedState.HomeKingdomId, pCommittedState.HomeKingdomName,
+                pCommittedState.HometownCityId, pCommittedState.ResidenceCityId,
+                pCommittedState.PreviousResidenceCityId, -1, -1,
+                HistoricalSchoolLifecycleState.Dead, -1, -1,
+                pCommittedState.LastTravelYear, -1, -1, -1,
+                pCommittedState.TransportFailures);
+            ByActor[pCommittedState.ActorId] = dead;
+            CitySchoolSnapshotService.MarkDirty(FindCity(pCommittedState.ResidenceCityId));
             return true;
         }
 

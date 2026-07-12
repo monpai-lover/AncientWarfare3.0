@@ -1423,18 +1423,18 @@ namespace AncientWarfare3.core.schools
         }
 
         public static bool CommitSchoolDeath(SchoolMembershipRecord pMembership,
-            HistoricalSchoolAffiliationSnapshot pAffiliation,
+            HistoricalSchoolAffiliationSnapshot pCachedAffiliation,
             HistoricalSchoolMasterDefinition pMaster, int pYear, long pCityId,
-            string pCause, double pTime)
+            string pCause, double pTime,
+            out HistoricalSchoolAffiliationSnapshot pCommittedAffiliation)
         {
+            pCommittedAffiliation = null;
             bool historicalMaster = pMembership?.Source ==
                                     SchoolMembershipSource.HistoricalDescent;
             if (DB == null || pMembership == null || !pMembership.Active ||
                 !pMembership.IsValid || pYear < pMembership.StartYear ||
-                (pAffiliation != null &&
-                 (pAffiliation.ActorId != pMembership.ActorId ||
-                  pAffiliation.LifecycleState == HistoricalSchoolLifecycleState.Dead)) ||
-                (historicalMaster && pMaster == null) ||
+                (pCachedAffiliation != null &&
+                 pCachedAffiliation.ActorId != pMembership.ActorId) ||
                 (!historicalMaster && pMaster != null) ||
                 (pMaster != null &&
                  (pMembership.Source != SchoolMembershipSource.HistoricalDescent ||
@@ -1446,9 +1446,19 @@ namespace AncientWarfare3.core.schools
             try
             {
                 transaction = DB.BeginTransaction();
+                HistoricalSchoolAffiliationSnapshot authoritativeAffiliation =
+                    LoadAffiliationForDeath(pMembership.ActorId, transaction);
+                if (pCachedAffiliation != null && authoritativeAffiliation == null)
+                    throw new InvalidOperationException("cached affiliation row not found");
+                if (authoritativeAffiliation?.LifecycleState ==
+                    HistoricalSchoolLifecycleState.Dead)
+                    throw new InvalidOperationException("affiliation already dead");
+                long deathCityId = authoritativeAffiliation?.ResidenceCityId >= 0
+                    ? authoritativeAffiliation.ResidenceCityId
+                    : pCityId;
                 CloseSchoolDeathMembershipCommand(pMembership, pYear, "death", time,
                     transaction);
-                if (pAffiliation != null)
+                if (authoritativeAffiliation != null)
                 {
                     using var affiliation = new SQLiteCommand(DB) { Transaction = transaction };
                     affiliation.CommandText = "UPDATE " + AffiliationTable +
@@ -1461,13 +1471,13 @@ namespace AncientWarfare3.core.schools
                     affiliation.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.Dead.ToString());
                     affiliation.Parameters.AddWithValue("@previousState",
-                        pAffiliation.LifecycleState.ToString());
+                        authoritativeAffiliation.LifecycleState.ToString());
                     affiliation.Parameters.AddWithValue("@time", time);
                     affiliation.Parameters.AddWithValue("@actor", pMembership.ActorId);
                     if (affiliation.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("active affiliation row not found");
                 }
-                if (pMaster != null)
+                if (historicalMaster)
                 {
                     using var master = new SQLiteCommand(DB) { Transaction = transaction };
                     master.CommandText = "UPDATE " + MasterTable +
@@ -1475,18 +1485,19 @@ namespace AncientWarfare3.core.schools
                         "LIFECYCLE_STATE=@state,UPDATED_TIME=@time WHERE MASTER_ID=@master" +
                         " AND ACTOR_ID=@actor AND SCHOOL_ID=@school AND SPAWNED=1 AND DEAD=0";
                     master.Parameters.AddWithValue("@year", pYear);
-                    master.Parameters.AddWithValue("@city", pCityId);
+                    master.Parameters.AddWithValue("@city", deathCityId);
                     master.Parameters.AddWithValue("@cause", pCause ?? "death");
                     master.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.Dead.ToString());
                     master.Parameters.AddWithValue("@time", time);
-                    master.Parameters.AddWithValue("@master", pMaster.Id);
+                    master.Parameters.AddWithValue("@master", pMembership.SourceId);
                     master.Parameters.AddWithValue("@actor", pMembership.ActorId);
-                    master.Parameters.AddWithValue("@school", pMaster.SchoolId);
+                    master.Parameters.AddWithValue("@school", pMembership.SchoolId);
                     if (master.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("living master row not found");
                 }
                 transaction.Commit();
+                pCommittedAffiliation = authoritativeAffiliation;
                 return true;
             }
             catch (Exception error)
@@ -1500,6 +1511,36 @@ namespace AncientWarfare3.core.schools
             {
                 try { transaction?.Dispose(); } catch { }
             }
+        }
+
+        private static HistoricalSchoolAffiliationSnapshot LoadAffiliationForDeath(
+            long pActorId, SQLiteTransaction pTransaction)
+        {
+            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
+                "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
+                "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
+                "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
+                "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
+                "TRANSPORT_FAILURES FROM " + AffiliationTable + " WHERE ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@actor", pActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read()) return null;
+            if (!Enum.TryParse(ValueString(reader, 8), out
+                    HistoricalSchoolLifecycleState lifecycleState))
+                throw new InvalidOperationException("invalid affiliation lifecycle state");
+            var result = new HistoricalSchoolAffiliationSnapshot(
+                ValueLong(reader, 0, -1L), ValueLong(reader, 1, -1L),
+                ValueString(reader, 2), ValueLong(reader, 3, -1L),
+                ValueLong(reader, 4, -1L), ValueLong(reader, 5, -1L),
+                ValueLong(reader, 6, -1L), ValueLong(reader, 7, -1L), lifecycleState,
+                ValueInt(reader, 9, -1), ValueInt(reader, 10, -1),
+                ValueInt(reader, 11, -1), ValueInt(reader, 12, -1),
+                ValueInt(reader, 13, -1), ValueInt(reader, 14, -1),
+                ValueInt(reader, 15));
+            if (result.ActorId != pActorId || reader.Read())
+                throw new InvalidOperationException("conflicting affiliation rows");
+            return result;
         }
 
         private static void CloseSchoolDeathMembershipCommand(

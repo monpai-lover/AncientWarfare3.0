@@ -176,26 +176,41 @@ namespace AncientWarfare3.core.schools
 
             HistoricalSchoolAffiliationSnapshot affiliation =
                 HistoricalAffiliationService.Get(pActor.data.id);
-            HistoricalSchoolMasterDefinition master = current.Source ==
-                SchoolMembershipSource.HistoricalDescent
+            bool historicalMaster = current.Source ==
+                                    SchoolMembershipSource.HistoricalDescent;
+            HistoricalSchoolMasterDefinition master = historicalMaster
                 ? HistoricalSchoolMasterRegistry.Find(current.SourceId)
                 : null;
-            bool wasQualifiedTeacher = master != null ||
+            bool wasQualifiedTeacher = historicalMaster ||
                                        SchoolLineageService.IsQualifiedTeacher(pActor);
             City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
             int year = Date.getCurrentYear();
             if (!HistoricalSchoolStore.CommitSchoolDeath(current, affiliation, master, year,
-                    city?.data?.id ?? -1L, cause, WorldTime()))
+                    city?.data?.id ?? -1L, cause, WorldTime(),
+                    out HistoricalSchoolAffiliationSnapshot committedAffiliation))
                 return SchoolDeathOutcome.Failed;
 
-            if (affiliation != null &&
-                !HistoricalAffiliationService.AdoptCommittedDeath(affiliation))
+            if (committedAffiliation != null)
             {
-                ModClass.LogWarning("Committed school death affiliation adopt failed: actor=" +
-                                    pActor.data.id);
-                HistoricalAffiliationService.LoadState();
+                try
+                {
+                    if (!HistoricalAffiliationService.AdoptCommittedDeath(committedAffiliation))
+                    {
+                        ModClass.LogWarning(
+                            "Committed school death affiliation adopt rejected: actor=" +
+                            pActor.data.id);
+                        HistoricalAffiliationService.LoadState();
+                    }
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed school death affiliation adopt failed: " +
+                                        error.Message);
+                    HistoricalAffiliationService.LoadState();
+                }
             }
+            City committedCity = HistoricalAffiliationService.ResidenceCity(pActor) ?? city;
             if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId, year,
                     "death", out _))
             {
@@ -218,7 +233,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Committed school death travel cleanup failed: " +
                                     error.Message);
             }
-            try { CourtService.ClearGuestOfficerAfterDeath(pActor, affiliation); }
+            try { CourtService.ClearGuestOfficerAfterDeath(pActor, committedAffiliation); }
             catch (Exception error)
             {
                 ModClass.LogWarning("Committed school death guest cleanup failed: " +
@@ -235,7 +250,11 @@ namespace AncientWarfare3.core.schools
             }
             if (master != null)
             {
-                try { HistoricalSchoolDescentService.OnCommittedDeath(pActor, master, city); }
+                try
+                {
+                    HistoricalSchoolDescentService.OnCommittedDeath(pActor, master,
+                        committedCity);
+                }
                 catch (Exception error)
                 {
                     ModClass.LogWarning("Committed historical school master death history failed: " +
