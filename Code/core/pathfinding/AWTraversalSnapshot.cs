@@ -19,7 +19,7 @@ namespace AncientWarfare3.core.pathfinding
             bool block = false, bool liquid = false, bool ocean = false, bool lava = false,
             bool fire = false, bool damageUnits = false, float terrainDamage = 0f,
             float walkMultiplier = 1f, bool goodForBoat = false, int oceanComponent = -1,
-            int regionId = -1, int[] pNeighbors = null)
+            int regionId = -1, int islandId = -1, int[] pNeighbors = null)
         {
             Exists = pId >= 0;
             Id = pId;
@@ -37,6 +37,7 @@ namespace AncientWarfare3.core.pathfinding
             GoodForBoat = goodForBoat;
             OceanComponent = oceanComponent;
             RegionId = regionId;
+            IslandId = islandId;
             NeighborCount = Math.Min(8, pNeighbors?.Length ?? 0);
             _neighbor0 = Neighbor(pNeighbors, 0);
             _neighbor1 = Neighbor(pNeighbors, 1);
@@ -64,6 +65,7 @@ namespace AncientWarfare3.core.pathfinding
         public bool GoodForBoat { get; }
         public int OceanComponent { get; }
         public int RegionId { get; }
+        public int IslandId { get; }
         public int NeighborCount { get; }
 
         public int GetNeighbor(int pIndex)

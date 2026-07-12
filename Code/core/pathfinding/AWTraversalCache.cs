@@ -169,6 +169,7 @@ namespace AncientWarfare3.core.pathfinding
                 goodForBoat: goodForBoat,
                 oceanComponent: -1,
                 regionId: pTile.region?.id ?? -1,
+                islandId: pTile.region?.island?.id ?? -1,
                 pNeighbors: pNeighbors);
         }
 
@@ -190,6 +191,7 @@ namespace AncientWarfare3.core.pathfinding
                 pLeft.WalkMultiplier != pRight.WalkMultiplier ||
                 pLeft.GoodForBoat != pRight.GoodForBoat ||
                 pLeft.RegionId != pRight.RegionId ||
+                pLeft.IslandId != pRight.IslandId ||
                 pLeft.NeighborCount != pRight.NeighborCount) return false;
             for (int i = 0; i < pLeft.NeighborCount; i++)
                 if (pLeft.GetNeighbor(i) != pRight.GetNeighbor(i)) return false;

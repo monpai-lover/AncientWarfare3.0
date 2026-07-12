@@ -69,7 +69,8 @@ namespace AncientWarfare3.core.pathfinding
                 if (_active.TryGetValue(pRequest.ActorId, out PathfindingTask existing))
                 {
                     if (existing.Request.Matches(pRequest.TargetTileId, pRequest.Options) &&
-                        !IsTerminal(existing.Request.Stream.State))
+                        (!IsTerminal(existing.Request.Stream.State) ||
+                         existing.Request.Stream.Count > 0))
                     {
                         pRequest.Dispose();
                         pReused = true;

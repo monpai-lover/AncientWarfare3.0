@@ -58,6 +58,15 @@ namespace AncientWarfare3.core.pathfinding
 
                 if (!result.Success)
                 {
+                    if (CanUseVanillaTransport(start, target, pRequest.Profile))
+                    {
+                        var transportEstimate = new AWTraversalEstimate(0f, 0f, 0f, 0f,
+                            AWHazardFlags.Transport);
+                        pRequest.Stream.AddStep(new AWPathStep(target.Id,
+                            AWMovementMethod.Transport, transportEstimate));
+                        pRequest.Stream.Complete();
+                        return;
+                    }
                     pRequest.Stream.Fail(result.HitNodeLimit
                         ? AWPathFailureReason.SearchLimitExceeded
                         : AWPathFailureReason.Unreachable, null);
@@ -79,6 +88,14 @@ namespace AncientWarfare3.core.pathfinding
             {
                 pRequest.Stream.Fail(AWPathFailureReason.GeneratorException, error);
             }
+        }
+
+        private static bool CanUseVanillaTransport(AWTileTraversalSnapshot pStart,
+            AWTileTraversalSnapshot pTarget, AWActorTraversalProfile pProfile)
+        {
+            return !pProfile.CanFly && !pProfile.IsBoat && !pProfile.IsWaterCreature &&
+                   pStart.IslandId >= 0 && pTarget.IslandId >= 0 &&
+                   pStart.IslandId != pTarget.IslandId;
         }
 
         private SearchResult Search(AWPathRequest pRequest, AWTileTraversalSnapshot pStart,

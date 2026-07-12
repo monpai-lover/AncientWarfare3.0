@@ -45,6 +45,7 @@ namespace AncientWarfare3.core.pathfinding
             if (!_running) return;
             TraversalCache.ProcessDirty(2);
             TraversalCache.ConsistencySweep(64);
+            AWPathMovementBridge.ProcessTransports(64);
         }
 
         public static void ClearWorld()
@@ -68,6 +69,7 @@ namespace AncientWarfare3.core.pathfinding
 
         private static void StopOwnedPathfinder()
         {
+            AWPathMovementBridge.Clear();
             if (_finder != null)
             {
                 _finder.Clear(AWPathFailureReason.WorldCleared);
