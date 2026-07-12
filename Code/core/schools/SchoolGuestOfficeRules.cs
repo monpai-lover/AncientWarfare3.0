@@ -1,7 +1,20 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.schools
 {
+    public readonly struct SchoolGuestOfficeRankCandidate
+    {
+        public SchoolGuestOfficeRankCandidate(long pActorId, float pScore)
+        {
+            ActorId = pActorId;
+            Score = pScore;
+        }
+
+        public long ActorId { get; }
+        public float Score { get; }
+    }
+
     public static class SchoolGuestOfficeRules
     {
         public const int MinTermYears = 8;
@@ -36,6 +49,30 @@ namespace AncientWarfare3.core.schools
             float reputation = Bound01(pReputation / 100f);
             float receptiveness = Bound01(pHostReceptiveness);
             return reputation * 0.65f + receptiveness * 0.35f >= 0.6f;
+        }
+
+        public static SchoolGuestOfficeRankCandidate? SelectBestCandidate(
+            IEnumerable<SchoolGuestOfficeRankCandidate> pCandidates)
+        {
+            if (pCandidates == null) return null;
+            SchoolGuestOfficeRankCandidate best = default;
+            bool found = false;
+            foreach (SchoolGuestOfficeRankCandidate candidate in pCandidates)
+            {
+                if (found && !IsPreferred(candidate, best)) continue;
+                best = candidate;
+                found = true;
+            }
+            return found ? best : (SchoolGuestOfficeRankCandidate?)null;
+        }
+
+        public static bool IsPreferred(SchoolGuestOfficeRankCandidate pCandidate,
+            SchoolGuestOfficeRankCandidate pCurrent)
+        {
+            int scoreOrder = Comparer<float>.Default.Compare(pCandidate.Score,
+                pCurrent.Score);
+            return scoreOrder > 0 || scoreOrder == 0 &&
+                   pCandidate.ActorId < pCurrent.ActorId;
         }
 
         private static float Bound01(float pValue)
