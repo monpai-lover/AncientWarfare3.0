@@ -1,3 +1,4 @@
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
@@ -78,6 +79,53 @@ namespace AncientWarfare3.patch
                 pCandidateIsMale: pActor.isSexMale(),
                 pCandidateIsXia: LineageService.IsXia(pActor),
                 pKingdomIsXia: LineageService.IsXiaKingdom(__instance));
+        }
+    }
+
+    [HarmonyPatch]
+    internal static class AW_CityLeaderCareerPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), nameof(City.setLeader))]
+        public static void SetLeader_Prefix(City __instance, out Actor __state)
+        {
+            __state = __instance?.leader;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.setLeader))]
+        public static void SetLeader_Postfix(City __instance, Actor pActor, bool pNew, Actor __state)
+        {
+            if (__state?.data != null && __state != __instance?.leader)
+                EndLeaderCareer(__state, "replaced");
+            if (!pNew || pActor?.data == null || __instance?.leader != pActor || pActor.kingdom?.data == null)
+                return;
+
+            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            OfficialCareerService.Appoint(pActor, pActor.kingdom, CourtOfficeLayer.City,
+                CourtOfficeId.Governor, school, __instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), nameof(City.removeLeader))]
+        public static void RemoveLeader_Prefix(City __instance, out Actor __state)
+        {
+            __state = __instance?.leader;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.removeLeader))]
+        public static void RemoveLeader_Postfix(Actor __state)
+        {
+            if (__state?.data != null) EndLeaderCareer(__state, "removed");
+        }
+
+        private static void EndLeaderCareer(Actor pActor, string pReason)
+        {
+            Kingdom kingdom = pActor?.kingdom;
+            if (!OfficialCareerService.End(pActor, CourtOfficeLayer.City,
+                    CourtOfficeId.Governor, pReason) || kingdom?.data == null) return;
+            ChronicleEvents.OnCourtOfficerDismissed(pActor, kingdom, CourtOfficeId.Governor, pReason);
         }
     }
 }

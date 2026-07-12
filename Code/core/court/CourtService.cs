@@ -405,8 +405,10 @@ namespace AncientWarfare3.core.court
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             LineageService.EnsureOfficialShiAndClan(pActor);
             SyncSchoolTrait(pActor, active: true);
-            RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
-            ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
+            bool careerStarted = OfficialCareerService.Appoint(pActor, pKingdom, pLayer ?? "",
+                pOfficeId ?? "", personalSchool, pCity);
+            if (careerStarted)
+                ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
             if (clearedPreviousPhysician && previousKingdom?.data != null)
@@ -420,6 +422,7 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null) return;
 
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
             bool alive = pActor.isAlive() && !pActor.isRekt();
@@ -440,7 +443,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
 
-            CloseOfficerRecord(pActor.data.id, pReason ?? "");
+            OfficialCareerService.End(pActor, layer, office, pReason ?? "");
             if (courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
@@ -475,7 +478,7 @@ namespace AncientWarfare3.core.court
                 Actor actor = World.world?.units?.get(actorId);
                 if (actor?.data == null)
                 {
-                    CloseActiveOfficerRows(db, CourtOfficerTableItem.GetTableName(), actorId, "missing");
+                    OfficialCareerService.EndForKingdom(actorId, pKingdom.id, "missing");
                     continue;
                 }
 
@@ -484,7 +487,7 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
                 string reason = alive ? "defected" : "dead";
                 if (courtKingdomId == pKingdom.id) ClearOfficer(actor, reason);
-                else CloseActiveOfficerRows(db, CourtOfficerTableItem.GetTableName(), actorId, reason);
+                else OfficialCareerService.EndForKingdom(actorId, pKingdom.id, reason);
             }
         }
 
