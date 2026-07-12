@@ -14,8 +14,17 @@ namespace AncientWarfare3.core.lineage
         public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasActiveCaptureUnits,
             bool pHasDefenders, bool pHasCityControlGoal, int pWatchTowerCount)
         {
+            return ExtraCapturePoints(pIsBeingCapturedByEnemy, pHasActiveCaptureUnits,
+                pCanAdvanceCurrentCapture: true, pHasDefenders, pHasCityControlGoal, pWatchTowerCount);
+        }
+
+        public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasActiveCaptureUnits,
+            bool pCanAdvanceCurrentCapture, bool pHasDefenders, bool pHasCityControlGoal,
+            int pWatchTowerCount)
+        {
             if (!pIsBeingCapturedByEnemy) return 0f;
             if (!pHasActiveCaptureUnits) return 0f;
+            if (!pCanAdvanceCurrentCapture) return 0f;
             if (pHasDefenders) return 0f;
 
             float bonus = pHasCityControlGoal ? 1.55f : 0.45f;

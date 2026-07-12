@@ -57,7 +57,7 @@ namespace AncientWarfare3.core.lineage
             {
                 bool sameCapturer = pTargetCity.being_captured_by == pAttacker;
                 bool activeUnits = pTargetCity.isGettingCapturedBy(pAttacker);
-                bool noDefenders = pTargetCity.countWarriors() <= 0;
+                bool noDefenders = !CityOccupationAccelerationService.HasActiveDefenders(pTargetCity);
                 bool ownershipChanged = pTargetCity.kingdom == pAttacker ||
                                         !pAttacker.isEnemy(pTargetCity.kingdom);
                 return ArmyRetreatRules.ProtectUncontestedOccupation(
