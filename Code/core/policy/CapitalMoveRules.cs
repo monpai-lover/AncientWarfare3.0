@@ -5,9 +5,10 @@ namespace AncientWarfare3.core.policy
     public static class CapitalMoveRules
     {
         public static bool CanConsiderCandidate(bool pCandidateAlive, bool pIsCurrentCapital, bool pIsCoreCity,
-            bool pHasOwnNeighbor)
+            bool pHasOwnNeighbor, bool pTouchesForeignBorder)
         {
-            return pCandidateAlive && !pIsCurrentCapital && pIsCoreCity && pHasOwnNeighbor;
+            return pCandidateAlive && !pIsCurrentCapital && pIsCoreCity && pHasOwnNeighbor &&
+                   !pTouchesForeignBorder;
         }
 
         public static float ScoreCity(float pCityAge, float pCurrentCapitalAge, int pPopulation,

@@ -1868,12 +1868,7 @@ namespace AncientWarfare3.core.policy
             float bestScore = currentScore;
             foreach (City city in pKingdom.getCities())
             {
-                if (!CapitalMoveRules.CanConsiderCandidate(
-                        pCandidateAlive: city?.data != null && city.isAlive(),
-                        pIsCurrentCapital: city == current,
-                        pIsCoreCity: WarTerritoryService.HasCore(pKingdom, city),
-                        pHasOwnNeighbor: CountOwnNeighbors(city, pKingdom) > 0))
-                    continue;
+                if (!CapitalMoveCandidateService.CanConsider(city, pKingdom, current)) continue;
                 float score = CapitalScore(city, current, pKingdom);
                 if (score <= bestScore) continue;
                 best = city;
