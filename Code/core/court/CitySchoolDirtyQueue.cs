@@ -46,25 +46,6 @@ namespace AncientWarfare3.core.court
             return result.ToArray();
         }
 
-        public int RequeueFront(IEnumerable<long> pCityIds)
-        {
-            if (pCityIds == null) return 0;
-            var retryIds = new List<long>();
-            var seen = new HashSet<long>();
-            foreach (long cityId in pCityIds)
-                if (cityId >= 0 && seen.Add(cityId)) retryIds.Add(cityId);
-
-            foreach (long cityId in retryIds)
-            {
-                if (!_nodes.TryGetValue(cityId, out LinkedListNode<long> node)) continue;
-                _nodes.Remove(cityId);
-                _queue.Remove(node);
-            }
-            for (int i = retryIds.Count - 1; i >= 0; i--)
-                _nodes[retryIds[i]] = _queue.AddFirst(retryIds[i]);
-            return retryIds.Count;
-        }
-
         public void Clear()
         {
             _queue.Clear();

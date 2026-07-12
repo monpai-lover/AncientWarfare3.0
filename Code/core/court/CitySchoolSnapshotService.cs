@@ -14,6 +14,8 @@ namespace AncientWarfare3.core.court
         private static readonly Dictionary<long, CitySchoolSnapshot> Snapshots =
             new Dictionary<long, CitySchoolSnapshot>();
         private static readonly CitySchoolDirtyQueue Dirty = new CitySchoolDirtyQueue();
+        private static readonly CitySchoolRetryScheduler Retry =
+            new CitySchoolRetryScheduler();
         private static int _generation;
 
         private sealed class CitySchoolSnapshotBatchContext
@@ -50,18 +52,22 @@ namespace AncientWarfare3.core.court
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
             if (Snapshots.TryGetValue(pCity.data.id, out CitySchoolSnapshot snapshot)) return snapshot;
-            Dirty.Mark(pCity.data.id);
+            if (!Retry.Contains(pCity.data.id)) Dirty.Mark(pCity.data.id);
             return null;
         }
 
         public static void MarkDirty(City pCity)
         {
-            if (pCity?.data != null && !pCity.isRekt()) Dirty.Mark(pCity.data.id);
+            if (pCity?.data == null || pCity.isRekt()) return;
+            Retry.Forget(pCity.data.id);
+            Dirty.Mark(pCity.data.id);
         }
 
         public static void MarkDirtyById(long pCityId)
         {
-            if (pCityId >= 0) Dirty.Mark(pCityId);
+            if (pCityId < 0) return;
+            Retry.Forget(pCityId);
+            Dirty.Mark(pCityId);
         }
 
         public static void MarkActorDirty(Actor pActor)
@@ -80,6 +86,7 @@ namespace AncientWarfare3.core.court
                 {
                     if (city?.data == null || city.isRekt()) continue;
                     if (pOnlyMissing && Snapshots.ContainsKey(city.data.id)) continue;
+                    Retry.Forget(city.data.id);
                     Dirty.Mark(city.data.id);
                 }
             }
@@ -88,6 +95,8 @@ namespace AncientWarfare3.core.court
 
         public static int ProcessDirty(int pBudget)
         {
+            foreach (long retryCityId in Retry.AdvanceAndTakeDue())
+                Dirty.Mark(retryCityId);
             long[] cityIds = Dirty.TakeBatch(pBudget).ToArray();
             if (cityIds.Length == 0) return 0;
 
@@ -97,6 +106,7 @@ namespace AncientWarfare3.core.court
                 City city = World.world?.cities?.get(cityId);
                 if (city?.data == null || city.isRekt())
                 {
+                    Retry.Forget(cityId);
                     Snapshots.Remove(cityId);
                     continue;
                 }
@@ -108,30 +118,30 @@ namespace AncientWarfare3.core.court
             if (!TryBuildBatchContext(validCities, out CitySchoolSnapshotBatchContext context,
                     out string contextFailure))
             {
-                int requeued = Dirty.RequeueFront(validCityIds);
+                string retryDetails = ScheduleFailures(validCityIds);
                 ModClass.LogWarning("City school snapshot batch context failed for cities [" +
-                                    string.Join(",", validCityIds) + "]; requeued " + requeued +
-                                    ": " + contextFailure);
+                                    string.Join(",", validCityIds) + "]; scheduled retries [" +
+                                    retryDetails + "]: " + contextFailure);
                 return 0;
             }
 
             int rebuilt = 0;
-            var failedCityIds = new List<long>();
             foreach (City city in validCities)
             {
                 try
                 {
                     Rebuild(city, context);
+                    Retry.Forget(city.data.id);
                     rebuilt++;
                 }
                 catch (Exception error)
                 {
-                    failedCityIds.Add(city.data.id);
+                    int retryDelay = Retry.ScheduleFailure(city.data.id);
                     ModClass.LogWarning("City school snapshot rebuild failed for city " +
-                                        city.data.id + ": " + error.Message);
+                                        city.data.id + "; retry in " + retryDelay +
+                                        " ticks: " + error.Message);
                 }
             }
-            if (failedCityIds.Count > 0) Dirty.RequeueFront(failedCityIds);
             if (rebuilt > 0) SchoolMapModeService.DirtyMapIfActive();
             return rebuilt;
         }
@@ -166,7 +176,20 @@ namespace AncientWarfare3.core.court
         {
             Snapshots.Clear();
             Dirty.Clear();
+            Retry.Clear();
             _generation = 0;
+        }
+
+        private static string ScheduleFailures(IReadOnlyList<long> pCityIds)
+        {
+            var details = new List<string>(pCityIds?.Count ?? 0);
+            if (pCityIds == null) return "";
+            foreach (long cityId in pCityIds)
+            {
+                int delay = Retry.ScheduleFailure(cityId);
+                if (delay > 0) details.Add(cityId + ":" + delay + "t");
+            }
+            return string.Join(",", details.ToArray());
         }
 
         private static bool TryBuildBatchContext(IReadOnlyList<City> pCities,
