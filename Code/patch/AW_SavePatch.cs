@@ -72,6 +72,7 @@ namespace AncientWarfare3.patch
             try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
+            try { SchoolMapBottomBarController.Hide(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
             try { SchoolMembershipService.ClearRuntime(); } catch { }
             try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }

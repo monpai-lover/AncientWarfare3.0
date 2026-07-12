@@ -28,11 +28,10 @@ namespace AncientWarfare3.core.policy
             _cityId = pCity.data.id;
             _generation = -1;
             _showRequested = true;
-            if (!EnsureTab()) return;
             CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             if (snapshot == null) return;
             _generation = snapshot.Generation;
-            TryPresent(snapshot);
+            if (EnsureTab()) TryPresent(snapshot);
         }
 
         public static void ProcessFrame()
@@ -76,6 +75,7 @@ namespace AncientWarfare3.core.policy
 
         public static void Hide()
         {
+            CancelPendingInitialization();
             _showRequested = false;
             _pendingCity = null;
             _cityId = -1L;
@@ -87,7 +87,15 @@ namespace AncientWarfare3.core.policy
 
         private static bool EnsureTab()
         {
-            if (_tab != null) return true;
+            if (_tab != null)
+            {
+                if (_tab.getAsset() == null && !_tab.gameObject.activeSelf)
+                {
+                    CaptureTabBeforeInitialization();
+                    _tab.gameObject.SetActive(true);
+                }
+                return true;
+            }
             PowersTab template = PowerTabController.instance?.tab_selected_city;
             if (template == null || template.transform.parent == null) return false;
 
@@ -101,7 +109,7 @@ namespace AncientWarfare3.core.policy
             }
             ConfigureAsset(asset);
 
-            _tabBeforeInitialization = PowersTab.getActiveTab();
+            CaptureTabBeforeInitialization();
             var tabObject = new GameObject(TabId, typeof(RectTransform));
             tabObject.SetActive(false);
             tabObject.layer = template.gameObject.layer;
@@ -145,6 +153,34 @@ namespace AncientWarfare3.core.policy
                 _tab.showTab(null);
             }
             _showRequested = false;
+        }
+
+        private static void CaptureTabBeforeInitialization()
+        {
+            PowersTab active = PowersTab.getActiveTab();
+            _tabBeforeInitialization = active != _tab ? active : null;
+        }
+
+        private static void CancelPendingInitialization()
+        {
+            if (_tabBeforeInitialization == null) return;
+            if (_tab != null && _tab.getAsset() == null && _tab.gameObject.activeSelf)
+                _tab.gameObject.SetActive(false);
+            RestoreTabBeforeInitialization();
+            _tabBeforeInitialization = null;
+        }
+
+        private static void RestoreTabBeforeInitialization()
+        {
+            PowersTab previous = _tabBeforeInitialization;
+            if (previous == null || previous == _tab || previous.isCurrentPowerTabSelected())
+                return;
+            if (PowerTabController.instance?.tab_main == previous)
+            {
+                PowersTab.unselect();
+                return;
+            }
+            previous.showTab(null);
         }
 
         private static bool HasSelectedCity()
