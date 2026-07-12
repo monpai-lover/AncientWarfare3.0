@@ -164,6 +164,17 @@ namespace AncientWarfare3.core.schools
             return !ReferenceEquals(next, current) && Save(next);
         }
 
+        internal static bool RollbackArrival(Actor pActor,
+            HistoricalSchoolAffiliationSnapshot pPrevious)
+        {
+            if (pActor?.data == null || pPrevious == null ||
+                pPrevious.ActorId != pActor.data.id ||
+                (pPrevious.LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
+                 pPrevious.LifecycleState != HistoricalSchoolLifecycleState.Voyage))
+                return false;
+            return Save(pPrevious);
+        }
+
         public static bool TryStartChosenTravel(Actor pActor)
         {
             HistoricalSchoolAffiliationSnapshot current = Get(pActor?.data?.id ?? -1L);
@@ -208,6 +219,29 @@ namespace AncientWarfare3.core.schools
                 return false;
             HistoricalSchoolAffiliationSnapshot next = current.BeginService(pKingdom.id,
                 pStartYear, pEndYear);
+            return !ReferenceEquals(next, current) && Save(next);
+        }
+
+        public static bool EndService(Actor pActor, int pYear)
+        {
+            HistoricalSchoolAffiliationSnapshot current = Get(pActor?.data?.id ?? -1L);
+            // A dead guest still needs its service row closed.  Death hooks can run
+            // before the annual cleanup and IsUsable intentionally rejects dead actors.
+            if (pActor?.data == null || current == null ||
+                current.LifecycleState == HistoricalSchoolLifecycleState.Dead) return false;
+            HistoricalSchoolAffiliationSnapshot next = current.EndService(pYear);
+            return !ReferenceEquals(next, current) && Save(next);
+        }
+
+        internal static bool EndService(long pActorId, int pYear)
+        {
+            if (pActorId < 0) return false;
+            Actor actor = FindActor(pActorId);
+            if (actor?.data != null) return EndService(actor, pYear);
+            HistoricalSchoolAffiliationSnapshot current = Get(pActorId);
+            if (current == null || current.LifecycleState == HistoricalSchoolLifecycleState.Dead)
+                return false;
+            HistoricalSchoolAffiliationSnapshot next = current.EndService(pYear);
             return !ReferenceEquals(next, current) && Save(next);
         }
 
@@ -264,6 +298,7 @@ namespace AncientWarfare3.core.schools
         {
             if (!HistoricalSchoolStore.SaveAffiliation(pState, WorldTime())) return false;
             ByActor[pState.ActorId] = pState;
+            CitySchoolSnapshotService.MarkDirty(FindCity(pState.ResidenceCityId));
             return true;
         }
 

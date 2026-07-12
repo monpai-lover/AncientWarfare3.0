@@ -10,6 +10,16 @@ namespace AncientWarfare3.core.court
 
         public int Count => _queued.Count;
 
+        public bool Contains(long pCityId)
+        {
+            return pCityId >= 0 && _queued.Contains(pCityId);
+        }
+
+        public bool Remove(long pCityId)
+        {
+            return pCityId >= 0 && _queued.Remove(pCityId);
+        }
+
         public bool Mark(long pCityId)
         {
             if (pCityId < 0 || !_queued.Add(pCityId)) return false;
@@ -19,15 +29,14 @@ namespace AncientWarfare3.core.court
 
         public long[] TakeBatch(int pBudget)
         {
-            int count = Math.Min(Math.Max(0, pBudget), _queue.Count);
-            var result = new long[count];
-            for (int i = 0; i < count; i++)
+            int budget = Math.Max(0, pBudget);
+            var result = new List<long>(Math.Min(budget, _queue.Count));
+            while (result.Count < budget && _queue.Count > 0)
             {
                 long cityId = _queue.Dequeue();
-                _queued.Remove(cityId);
-                result[i] = cityId;
+                if (_queued.Remove(cityId)) result.Add(cityId);
             }
-            return result;
+            return result.ToArray();
         }
 
         public void Clear()

@@ -52,6 +52,14 @@ namespace AncientWarfare3.content.schools
             Announce(LectureLogId, pActor, pCity, LogKingdom(pActor));
         }
 
+        public static void AnnounceDebate(Actor pFirst, Actor pSecond, City pCity,
+            SchoolDebateOutcome pOutcome)
+        {
+            // The world-log asset currently has one actor and one city replacement slot.
+            // The complete pair/result remains in the persisted school event and history.
+            Announce(DebateLogId, pFirst, pCity, LogKingdom(pFirst));
+        }
+
         private static Kingdom LogKingdom(Actor pActor)
         {
             if (pActor?.data == null) return null;

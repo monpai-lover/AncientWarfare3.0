@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.schools
         private const int MaxTeachersPerYear = 192;
         private const int MaxExplicitActionsPerYear = 8;
         private const int MaxRediscoveriesPerYear = 4;
+        private const int MaxInstitutionFoundingsPerYear = 4;
 
         public static void ProcessYear(int pYear)
         {
@@ -35,6 +36,31 @@ namespace AncientWarfare3.core.schools
             foreach (Actor teacher in historical.Concat(later))
                 TeachInResidence(teacher, pYear, directCounts);
             ProcessExplicitActions(pYear);
+            ProcessInstitutionFounding(pYear, historical);
+        }
+
+        private static void ProcessInstitutionFounding(int pYear,
+            IEnumerable<Actor> pHistoricalTeachers)
+        {
+            int budget = MaxInstitutionFoundingsPerYear;
+            if (pHistoricalTeachers == null) return;
+            foreach (Actor teacher in pHistoricalTeachers.OrderBy(p => p.data.id))
+            {
+                if (budget <= 0) break;
+                if (teacher?.data == null || !teacher.isAlive() || teacher.isRekt() ||
+                    !HistoricalSchoolDescentService.IsCanonicalMaster(teacher)) continue;
+                HistoricalSchoolMasterDefinition definition =
+                    HistoricalSchoolDescentService.DefinitionFor(teacher);
+                City city = HistoricalAffiliationService.ResidenceCity(teacher);
+                if (definition == null || city?.data == null || city.isRekt() ||
+                    !HistoricalAffiliationService.IsPresentForInfluence(teacher)) continue;
+
+                // This is the same durable hook used by debates.  A lecture emitted by
+                // TeachInResidence above is the minimum evidence for the first foundation.
+                if (!HistoricalSchoolStore.TryFoundInstitution(definition, teacher.data.id,
+                        city.data.id, pYear, World.world?.getCurWorldTime() ?? 0d)) continue;
+                budget--;
+            }
         }
 
         private static void ProcessExplicitActions(int pYear)
@@ -66,7 +92,7 @@ namespace AncientWarfare3.core.schools
                 string actionId = "ai_rival_conversion:" + pYear + ":" + actor.data.id +
                     ":" + targetSchool;
                 if (TryExplicitConversion(actor, targetSchool, yearsWithoutTeacher,
-                        rivalExposure, actionId)) actions++;
+                        rivalExposure, actionId, pYear)) actions++;
             }
             ProcessRediscoveries(pYear);
         }
@@ -92,7 +118,7 @@ namespace AncientWarfare3.core.schools
                     {
                         string actionId = "ai_rediscovery:" + pYear + ":" + school.Id +
                             ":" + actor.data.id;
-                        if (!TryRediscover(actor, school.Id, work, actionId)) continue;
+                        if (!TryRediscover(actor, school.Id, work, actionId, pYear)) continue;
                         rediscoveries++;
                         break;
                     }
@@ -208,7 +234,11 @@ namespace AncientWarfare3.core.schools
             if (residence?.data == null || residence.isRekt()) return;
             if (!HistoricalAffiliationService.IsPresentForInfluence(pTeacher)) return;
 
-            RecordLecture(pTeacher, teacherMembership.SchoolId, residence, pYear);
+            if (!RecordLecture(pTeacher, teacherMembership.SchoolId, residence, pYear))
+                return;
+            // Lectures make the teaching public; the separate persuasion event records
+            // the master's attempt to influence the resident state's policy circle.
+            RecordPersuasion(pTeacher, teacherMembership.SchoolId, residence, pYear);
             if (HistoricalSchoolDescentService.IsCanonicalMaster(pTeacher))
                 RecordHistoricalWork(pTeacher, pYear);
             int directCount = 0;
@@ -236,12 +266,19 @@ namespace AncientWarfare3.core.schools
                         source, sourceId, pTeacher.data.id, residence.data.id, generation,
                         pInitialReputation: Math.Max(10f, CandidateScore(candidate) * 0.1f)))
                     continue;
-                CitySchoolSnapshotService.MarkDirty(residence);
-                recruited++;
-                HistoricalSchoolStore.RecordSchoolEvent("disciple_joined", candidate.data.id,
+                if (!HistoricalSchoolStore.RecordSchoolEvent("disciple_joined",
+                    candidate.data.id,
                     pTeacher.data.id, teacherMembership.SchoolId, residence.data.id,
                     residence.kingdom?.data?.id ?? -1L, pYear, sourceId, 2,
-                    World.world?.getCurWorldTime() ?? 0d);
+                    World.world?.getCurWorldTime() ?? 0d))
+                {
+                    if (!SchoolMembershipService.RollbackJoin(candidate, sourceId))
+                        ModClass.LogWarning("Historical school disciple rollback failed");
+                    CitySchoolSnapshotService.MarkDirty(residence);
+                    continue;
+                }
+                CitySchoolSnapshotService.MarkDirty(residence);
+                recruited++;
                 HistoryWriter.RecordPerson(candidate.data.id, candidate.kingdom,
                     candidate.getName(), "school_disciple", candidate.getName() +
                     " studied under " + pTeacher.getName(), ChronicleCategory.LIFE);
@@ -284,7 +321,8 @@ namespace AncientWarfare3.core.schools
         }
 
         public static bool TryExplicitConversion(Actor pActor, string pTargetSchoolId,
-            int pYearsWithoutOwnTeacher, float pRivalExposure, string pActionId)
+            int pYearsWithoutOwnTeacher, float pRivalExposure, string pActionId,
+            int pYear = -1)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
                 HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
@@ -300,11 +338,17 @@ namespace AncientWarfare3.core.schools
             if (!SchoolMembershipService.TryConvert(pActor, pTargetSchoolId,
                     "conversion:" + pActionId + ":actor:" + pActor.data.id,
                     city.data.id)) return false;
-            CitySchoolSnapshotService.MarkDirty(city);
-
-            HistoricalSchoolStore.RecordSchoolEvent("school_conversion", pActor.data.id, -1,
+            int eventYear = pYear >= 0 ? pYear : Date.getCurrentYear();
+            if (!HistoricalSchoolStore.RecordSchoolEvent("school_conversion", pActor.data.id,
+                -1,
                 pTargetSchoolId, city.data.id, city.kingdom?.data?.id ?? -1L,
-                Date.getCurrentYear(), pActionId, 2, World.world?.getCurWorldTime() ?? 0d);
+                eventYear, pActionId, 2, World.world?.getCurWorldTime() ?? 0d))
+            {
+                if (!SchoolMembershipService.RollbackConversion(pActor, current))
+                    ModClass.LogWarning("Historical school conversion rollback failed");
+                return false;
+            }
+            CitySchoolSnapshotService.MarkDirty(city);
             HistoryWriter.RecordPerson(pActor.data.id,
                 HistoricalAffiliationService.HomeKingdom(pActor) ?? pActor.kingdom,
                 pActor.getName(), "school_conversion",
@@ -314,7 +358,7 @@ namespace AncientWarfare3.core.schools
         }
 
         public static bool TryRediscover(Actor pReader, string pSchoolId, string pWorkKey,
-            string pActionId)
+            string pActionId, int pYear = -1)
         {
             if (pReader?.data == null || !pReader.isAlive() || pReader.isRekt() ||
                 HistoricalSchoolDescentService.IsCanonicalMaster(pReader) ||
@@ -333,11 +377,18 @@ namespace AncientWarfare3.core.schools
             if (!SchoolMembershipService.TryJoin(pReader, pSchoolId,
                     SchoolMembershipSource.PreservedWork, sourceId, -1, city.data.id, 0,
                     pInitialReputation: 20f)) return false;
-            CitySchoolSnapshotService.MarkDirty(city);
-
-            HistoricalSchoolStore.RecordSchoolEvent("school_rediscovery", pReader.data.id, -1,
+            int eventYear = pYear >= 0 ? pYear : Date.getCurrentYear();
+            if (!HistoricalSchoolStore.RecordSchoolEvent("school_rediscovery", pReader.data.id,
+                -1,
                 pSchoolId, city.data.id, city.kingdom?.data?.id ?? -1L,
-                Date.getCurrentYear(), pWorkKey, 3, World.world?.getCurWorldTime() ?? 0d);
+                eventYear, pWorkKey, 3, World.world?.getCurWorldTime() ?? 0d))
+            {
+                if (!SchoolMembershipService.RollbackJoin(pReader, sourceId))
+                    ModClass.LogWarning("Historical school rediscovery rollback failed");
+                CitySchoolSnapshotService.MarkDirty(city);
+                return false;
+            }
+            CitySchoolSnapshotService.MarkDirty(city);
             HistoryWriter.RecordPerson(pReader.data.id,
                 HistoricalAffiliationService.HomeKingdom(pReader) ?? pReader.kingdom,
                 pReader.getName(), "school_rediscovery",
@@ -367,13 +418,28 @@ namespace AncientWarfare3.core.schools
             return result.OrderByDescending(CandidateScore).ThenBy(p => p.data.id);
         }
 
-        private static void RecordLecture(Actor pTeacher, string pSchoolId, City pCity,
+        private static bool RecordLecture(Actor pTeacher, string pSchoolId, City pCity,
             int pYear)
         {
-            HistoricalSchoolStore.RecordSchoolEvent("lecture", pTeacher.data.id, -1,
+            if (!HistoricalSchoolStore.RecordSchoolEvent("lecture", pTeacher.data.id, -1,
                 pSchoolId, pCity.data.id, pCity.kingdom?.data?.id ?? -1L, pYear,
-                pTeacher.data.name ?? "", 1, World.world?.getCurWorldTime() ?? 0d);
+                pTeacher.data.name ?? "", 1, World.world?.getCurWorldTime() ?? 0d))
+                return false;
             HistoricalSchoolContent.AnnounceLecture(pTeacher, pCity);
+            return true;
+        }
+
+        private static bool RecordPersuasion(Actor pTeacher, string pSchoolId, City pCity,
+            int pYear)
+        {
+            if (pTeacher?.data == null || pCity?.data == null) return false;
+            long targetActorId = pCity.kingdom?.king?.data?.id ?? -1L;
+            string targetName = pCity.kingdom?.king?.getName() ?? "";
+            string payload = (pTeacher.getName() ?? "") + "|" + targetName;
+            return HistoricalSchoolStore.RecordSchoolEvent("persuasion", pTeacher.data.id,
+                targetActorId, pSchoolId, pCity.data.id,
+                pCity.kingdom?.data?.id ?? -1L, pYear, payload, 1,
+                World.world?.getCurWorldTime() ?? 0d);
         }
 
         private static float CandidateScore(Actor pActor)

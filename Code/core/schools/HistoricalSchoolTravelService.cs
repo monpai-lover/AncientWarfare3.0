@@ -89,6 +89,7 @@ namespace AncientWarfare3.core.schools
             if (!IsUsable(pActor) || state == null ||
                 state.LifecycleState != HistoricalSchoolLifecycleState.Travelling) return false;
             City destination = FindCity(state.DestinationCityId);
+            City previousResidence = FindCity(state.ResidenceCityId);
             WorldTile tile = DestinationTile(destination);
             if (tile == null || pActor.current_tile == null ||
                 Toolbox.SquaredDistTile(pActor.current_tile, tile) > 4)
@@ -99,10 +100,18 @@ namespace AncientWarfare3.core.schools
             }
             if (!HistoricalAffiliationService.TryArrive(pActor, destination.data.id,
                     Date.getCurrentYear())) return false;
+            if (!RecordJourney(pActor, destination, Date.getCurrentYear()))
+            {
+                if (!HistoricalAffiliationService.RollbackArrival(pActor, state))
+                    ModClass.LogWarning("Historical school physical arrival rollback failed");
+                else
+                    RestorePhysicalArrival(pActor, state);
+                return false;
+            }
             SchoolLineageService.ReleaseItinerant(pActor);
             pActor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                 pColorEffect: false);
-            RecordJourney(pActor, destination);
+            CitySchoolSnapshotService.MarkDirty(previousResidence);
             CitySchoolSnapshotService.MarkDirty(destination);
             return true;
         }
@@ -211,6 +220,7 @@ namespace AncientWarfare3.core.schools
                 if (state.LifecycleState != HistoricalSchoolLifecycleState.Voyage) continue;
                 Actor actor = FindActor(state.ActorId);
                 City destination = FindCity(state.DestinationCityId);
+                City previousResidence = FindCity(state.ResidenceCityId);
                 if (!IsUsable(actor)) continue;
                 RefreshVoyageIsolation(actor);
                 if (!IsLivingCity(destination))
@@ -227,12 +237,20 @@ namespace AncientWarfare3.core.schools
                 actor.spawnOn(tile);
                 if (!HistoricalAffiliationService.TryArrive(actor, destination.data.id, pYear))
                     continue;
+                if (!RecordJourney(actor, destination, pYear))
+                {
+                    if (!HistoricalAffiliationService.RollbackArrival(actor, state))
+                        ModClass.LogWarning("Historical school voyage arrival rollback failed");
+                    else
+                        RestoreCancelledVoyage(actor, state);
+                    continue;
+                }
                 SchoolLineageService.ReleaseItinerant(actor);
                 actor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
                 RestoreScholarJob(actor);
                 actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                     pColorEffect: false);
-                RecordJourney(actor, destination);
+                CitySchoolSnapshotService.MarkDirty(previousResidence);
                 CitySchoolSnapshotService.MarkDirty(destination);
             }
         }
@@ -258,6 +276,15 @@ namespace AncientWarfare3.core.schools
             SchoolLineageService.ReleaseItinerant(pActor);
             pActor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
             RestoreScholarJob(pActor);
+        }
+
+        private static void RestorePhysicalArrival(Actor pActor,
+            HistoricalSchoolAffiliationSnapshot pState)
+        {
+            City residence = FindCity(pState == null ? -1L : pState.ResidenceCityId);
+            WorldTile tile = residence?.getTile();
+            if (tile != null) pActor.spawnOn(tile);
+            EnsureTravelTask(pActor);
         }
 
         private static void RestoreScholarJob(Actor pActor)
@@ -442,16 +469,16 @@ namespace AncientWarfare3.core.schools
             return match;
         }
 
-        private static void RecordJourney(Actor pActor, City pDestination)
+        private static bool RecordJourney(Actor pActor, City pDestination, int pYear)
         {
             HistoricalSchoolMasterDefinition definition =
                 HistoricalSchoolDescentService.DefinitionFor(pActor);
             string name = definition?.CanonicalName ?? pActor?.data?.name ?? "";
-            HistoricalSchoolStore.RecordSchoolEvent("journey_arrival", pActor.data.id, -1,
+            if (!HistoricalSchoolStore.RecordSchoolEvent("journey_arrival", pActor.data.id, -1,
                 SchoolMembershipService.GetSchool(pActor.data.id), pDestination.data.id,
-                pDestination.kingdom?.data?.id ?? -1L, Date.getCurrentYear(),
+                pDestination.kingdom?.data?.id ?? -1L, pYear,
                 name + "|" + pDestination.data.name, 2,
-                World.world?.getCurWorldTime() ?? 0d);
+                World.world?.getCurWorldTime() ?? 0d)) return false;
             try
             {
                 HistoryWriter.RecordPerson(pActor.data.id,
@@ -466,6 +493,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Historical school journey history failed: " +
                                     error.Message);
             }
+            return true;
         }
     }
 }

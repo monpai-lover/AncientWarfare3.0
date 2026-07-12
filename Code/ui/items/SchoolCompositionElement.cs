@@ -13,9 +13,10 @@ namespace AncientWarfare3.ui.items
     {
         private const float Height = 72f;
         private const float HeaderWidth = 152f;
-        private const float CellWidth = 104f;
-        private const float DetailsWidth = 58f;
+        private const float CellWidth = 96f;
+        private const float DetailsWidth = 64f;
         private const float Gap = 4f;
+        private const int MaxVisibleCells = 4;
 
         private sealed class Cell
         {
@@ -62,7 +63,7 @@ namespace AncientWarfare3.ui.items
                 : SpriteTextureLoader.getSprite(dominant.IconPath);
             _dominantIcon.enabled = _dominantIcon.sprite != null;
             _cityName.text = AW_L10n.Text("aw_school_composition", "School Composition") +
-                             " · " + (pCity.data.name ?? "");
+                             " - " + (pCity.data.name ?? "");
             _dominantName.text = AW_L10n.Text("aw_school_dominant_short", "Dominant") + ": " +
                                  SchoolName(dominant);
 
@@ -71,17 +72,18 @@ namespace AncientWarfare3.ui.items
                 .OrderByDescending(p => p.Value)
                 .ThenBy(p => RegistryOrder(p.Key))
                 .ToArray();
-            EnsureCells(scores.Length);
+            KeyValuePair<string, float>[] visibleScores = scores.Take(MaxVisibleCells).ToArray();
+            EnsureCells(visibleScores.Length);
             for (int i = 0; i < _cells.Count; i++)
             {
                 Cell cell = _cells[i];
-                if (i >= scores.Length)
+                if (i >= visibleScores.Length)
                 {
                     cell.Root.SetActive(false);
                     continue;
                 }
 
-                KeyValuePair<string, float> score = scores[i];
+                KeyValuePair<string, float> score = visibleScores[i];
                 CourtSchoolDefinition definition = CourtSchoolRegistry.Find(score.Key);
                 float share = pSnapshot.TotalScore <= 0f ? 0f : score.Value / pSnapshot.TotalScore;
                 cell.Icon.sprite = SpriteTextureLoader.getSprite(definition.IconPath);
@@ -97,8 +99,10 @@ namespace AncientWarfare3.ui.items
             long cityId = pCity.data.id;
             _detailsButton.onClick.RemoveAllListeners();
             _detailsButton.onClick.AddListener(() => SchoolWindow.OpenCity(cityId));
-            _detailsText.text = AW_L10n.Text("aw_school_details", "Details");
-            Layout(scores.Length);
+            int hidden = Math.Max(0, scores.Length - visibleScores.Length);
+            _detailsText.text = AW_L10n.Text("aw_school_details", "Details") +
+                                (hidden > 0 ? " +" + hidden : "");
+            Layout(visibleScores.Length);
             gameObject.SetActive(true);
         }
 

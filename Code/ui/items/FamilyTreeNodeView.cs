@@ -830,5 +830,31 @@ namespace AncientWarfare3.ui.items
             }
             return _avatarPrefab;
         }
+
+        internal static Sprite BuildArchivedPortrait(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try
+            {
+                var row = LineageArchiveReader.ReadRow(pActorId);
+                if (row == null) return null;
+                var node = new FamilyTreeNode
+                {
+                    id = row.id,
+                    sex = row.sex,
+                    head = row.head,
+                    phenotype_index = row.phenotype_index,
+                    phenotype_shade = row.phenotype_shade,
+                    kingdom_color = row.kingdom_color,
+                    kingdom_color_id = -1,
+                    birth_time = row.birth_time,
+                    death_time = row.death_time,
+                    is_alive = row.is_alive != 0,
+                    age_overgrowth = row.age_overgrowth
+                };
+                return BuildDeadSprite(node);
+            }
+            catch { return null; }
+        }
     }
 }

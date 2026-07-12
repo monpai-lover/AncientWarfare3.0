@@ -10,6 +10,8 @@ namespace AncientWarfare3.core.court
     internal static class CitySchoolSnapshotService
     {
         private const int AnnualRefreshBudget = 4;
+        private const float MembershipInfluencePerLivingActor = 0.03f;
+        private const float ActivePresencePerLivingActor = 0.05f;
         private static readonly Dictionary<long, CitySchoolSnapshot> Snapshots =
             new Dictionary<long, CitySchoolSnapshot>();
         private static readonly CitySchoolDirtyQueue Dirty = new CitySchoolDirtyQueue();
@@ -27,6 +29,17 @@ namespace AncientWarfare3.core.court
         public static void MarkDirty(City pCity)
         {
             if (pCity?.data != null && !pCity.isRekt()) Dirty.Mark(pCity.data.id);
+        }
+
+        public static void MarkDirtyById(long pCityId)
+        {
+            if (pCityId >= 0) Dirty.Mark(pCityId);
+        }
+
+        public static CitySchoolSnapshot GetFreshSnapshotIfDirty(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return null;
+            return Dirty.Contains(pCity.data.id) ? Rebuild(pCity) : GetSnapshot(pCity);
         }
 
         public static void MarkActorDirty(Actor pActor)
@@ -123,7 +136,9 @@ namespace AncientWarfare3.core.court
                     if (officer.layer != CourtOfficeLayer.Central &&
                         officer.layer != CourtOfficeLayer.Censor) continue;
                     Actor actor = World.world?.units?.get(officer.actor_id);
-                    if (actor?.city != pCity) continue;
+                    City officerResidence = HistoricalAffiliationService.ResidenceCity(actor) ??
+                                            actor?.city;
+                    if (officerResidence != pCity) continue;
                     Add(contributions, actor, CitySchoolRole.CentralOfficer, 20);
                 }
 
@@ -135,11 +150,102 @@ namespace AncientWarfare3.core.court
                 }
             }
 
+            AddResidentScholars(contributions, pCity);
+
             CitySchoolSnapshot snapshot = CitySchoolInfluenceRules.BuildSnapshot(++_generation, contributions);
             snapshot.CityId = pCity.data.id;
             snapshot.KingdomId = kingdom?.data?.id ?? -1L;
+            ApplyLedgerInfluence(snapshot, pCity);
             Snapshots[pCity.data.id] = snapshot;
+            Dirty.Remove(pCity.data.id);
             return snapshot;
+        }
+
+        private static void ApplyLedgerInfluence(CitySchoolSnapshot pSnapshot, City pCity)
+        {
+            if (pSnapshot == null || pCity?.data == null) return;
+            Dictionary<string, HistoricalSchoolLedgerSnapshot> ledgers =
+                HistoricalSchoolStore.LoadLedgersForCity(pCity.data.id);
+            if (ledgers == null)
+                ledgers = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
+                    StringComparer.Ordinal);
+
+            var scores = pSnapshot.Scores?.ToDictionary(p => p.Key, p => p.Value,
+                StringComparer.Ordinal) ?? new Dictionary<string, float>(StringComparer.Ordinal);
+            var ledgerScores = new Dictionary<string, float>(StringComparer.Ordinal);
+            Dictionary<string, int> livingMemberships = LivingMemberships(pCity);
+            var schoolIds = new HashSet<string>(ledgers.Keys, StringComparer.Ordinal);
+            foreach (string schoolId in livingMemberships.Keys) schoolIds.Add(schoolId);
+            // Durable ledger history is blended with the current resident membership
+            // so departed or dead scholars cannot retain full local presence forever.
+            foreach (string schoolId in schoolIds)
+            {
+                if (CourtSchoolRegistry.Find(schoolId) == null) continue;
+                livingMemberships.TryGetValue(schoolId, out int livingMembers);
+                HistoricalSchoolLedgerSnapshot ledger = ledgers.TryGetValue(schoolId,
+                    out HistoricalSchoolLedgerSnapshot persisted)
+                    ? persisted
+                    : new HistoricalSchoolLedgerSnapshot(schoolId, 0f, 0f, 0f, -1);
+                float bonus = LedgerInfluenceScore(ledger, livingMembers);
+                if (bonus <= 0f) continue;
+                ledgerScores[schoolId] = bonus;
+                scores.TryGetValue(schoolId, out float current);
+                scores[schoolId] = current + bonus;
+            }
+            if (scores.Count == 0) return;
+            pSnapshot.Scores = scores;
+            pSnapshot.LedgerScores = ledgerScores;
+            pSnapshot.TotalScore = scores.Values.Sum();
+            pSnapshot.DominantSchool = scores
+                .OrderByDescending(p => p.Value)
+                .ThenBy(p => RegistryOrder(p.Key))
+                .First().Key;
+        }
+
+        private static float LedgerInfluenceScore(HistoricalSchoolLedgerSnapshot pLedger,
+            int pLivingMembers)
+        {
+            if (pLedger == null) return 0f;
+            float membership = Math.Max(0f, Math.Min(1f,
+                Math.Max(0, pLivingMembers) * MembershipInfluencePerLivingActor));
+            float livePresence = Math.Max(0f, Math.Min(1f,
+                Math.Max(0, pLivingMembers) * ActivePresencePerLivingActor));
+            float activePresence = pLedger.ActivePresence * livePresence;
+            float score = pLedger.Tradition * 4f + activePresence * 8f +
+                          pLedger.Momentum * 6f + membership * 4f +
+                          Math.Min(4f, pLedger.Institutions * 0.25f);
+            return Math.Max(0f, Math.Min(26f, score));
+        }
+
+        private static Dictionary<string, int> LivingMemberships(City pCity)
+        {
+            var result = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (pCity?.data == null) return result;
+            try
+            {
+                foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
+                {
+                    int count = 0;
+                    foreach (Actor actor in SchoolMembershipService.LivingMembers(school.Id))
+                    {
+                        if (actor?.data == null ||
+                            !HistoricalAffiliationService.IsPresentForInfluence(actor)) continue;
+                        City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
+                                         actor.city;
+                        if (residence?.data?.id == pCity.data.id) count++;
+                    }
+                    if (count > 0) result[school.Id] = count;
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private static int RegistryOrder(string pSchoolId)
+        {
+            for (int i = 0; i < CourtSchoolRegistry.All.Count; i++)
+                if (CourtSchoolRegistry.All[i].Id == pSchoolId) return i;
+            return int.MaxValue;
         }
 
         private static void Add(List<CitySchoolInfluenceContribution> pItems, Actor pActor,
@@ -152,6 +258,32 @@ namespace AncientWarfare3.core.court
             pItems.Add(new CitySchoolInfluenceContribution(pActor.data.id, school, pRole,
                 CitySchoolInfluenceRules.RoleBaseWeight(pRole), AbilityScore(pActor), pRoleRank,
                 SafeName(pActor)));
+        }
+
+        private static void AddResidentScholars(List<CitySchoolInfluenceContribution> pItems,
+            City pCity)
+        {
+            if (pItems == null || pCity?.data == null) return;
+            int added = 0;
+            try
+            {
+                foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
+                {
+                    foreach (Actor actor in SchoolMembershipService.LivingMembers(school.Id))
+                    {
+                        if (added >= 24) return;
+                        if (actor?.data == null || !HistoricalAffiliationService.IsPresentForInfluence(actor))
+                            continue;
+                        City residence = HistoricalAffiliationService.ResidenceCity(actor) ?? actor.city;
+                        if (residence?.data?.id != pCity.data.id) continue;
+                        if (!HistoricalSchoolDescentService.IsCanonicalMaster(actor) &&
+                            !SchoolLineageService.IsQualifiedTeacher(actor)) continue;
+                        Add(pItems, actor, CitySchoolRole.Scholar, 60);
+                        added++;
+                    }
+                }
+            }
+            catch { }
         }
 
         private static float AbilityScore(Actor pActor)

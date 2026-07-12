@@ -111,8 +111,9 @@ namespace AncientWarfare3.core.court
 
         private static bool IsValid(Actor pActor, Kingdom pKingdom)
         {
-            return pActor?.data != null && pActor.kingdom == pKingdom &&
-                   pActor.isAlive() && !pActor.isRekt();
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            return CourtAffiliationResolver.CanServe(pActor, pKingdom, layer);
         }
 
         private static string ResolveSchool(Actor pActor)

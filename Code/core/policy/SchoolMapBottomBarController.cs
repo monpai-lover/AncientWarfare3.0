@@ -54,7 +54,7 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
-            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetFreshSnapshotIfDirty(city);
             if (snapshot == null)
             {
                 Hide();

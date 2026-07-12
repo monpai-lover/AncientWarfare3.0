@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
@@ -38,12 +39,19 @@ namespace AncientWarfare3.ui.windows
         private readonly List<SchoolListItem> _listItems = new List<SchoolListItem>();
         private readonly List<SchoolInfluenceBar> _bars = new List<SchoolInfluenceBar>();
         private readonly List<SchoolActorCardView> _actorCards = new List<SchoolActorCardView>();
+        private readonly List<SchoolMasterCardView> _masterCards =
+            new List<SchoolMasterCardView>();
+        private readonly List<SchoolInstitutionRowView> _institutionRows =
+            new List<SchoolInstitutionRowView>();
+        private readonly List<SchoolLineageRowView> _lineageRows =
+            new List<SchoolLineageRowView>();
         private RectTransform _listContent;
         private RectTransform _detailPanel;
         private RectTransform _detailContent;
         private ScrollRect _detailScroll;
         private Text _detailTitle;
         private Text _detailBody;
+        private SchoolInfluenceBreakdownView _breakdown;
         private Text _sortText;
         private SortMode _sortMode;
         private string _selectedSchool = CourtSchoolId.Ru;
@@ -198,6 +206,23 @@ namespace AncientWarfare3.ui.windows
                 card.gameObject.SetActive(false);
                 _actorCards.Add(card);
             }
+            for (int i = 0; i < 6; i++)
+            {
+                SchoolMasterCardView card = SchoolMasterCardView.Create(_detailContent);
+                card.gameObject.SetActive(false);
+                _masterCards.Add(card);
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                SchoolInstitutionRowView row = SchoolInstitutionRowView.Create(_detailContent);
+                row.gameObject.SetActive(false);
+                _institutionRows.Add(row);
+                SchoolLineageRowView lineage = SchoolLineageRowView.Create(_detailContent);
+                lineage.gameObject.SetActive(false);
+                _lineageRows.Add(lineage);
+            }
+            _breakdown = SchoolInfluenceBreakdownView.Create(_detailContent);
+            _breakdown.gameObject.SetActive(false);
         }
 
         private void ApplyRequestAndRefresh()
@@ -298,10 +323,20 @@ namespace AncientWarfare3.ui.windows
                                AW_L10n.Text("aw_school_top_cities", "Leading cities") + ": " +
                                TopCities(pDefinition.Id) + "\n" +
                                AW_L10n.Text("aw_school_top_kingdoms", "Leading kingdoms") + ": " +
-                               TopKingdoms(pDefinition.Id);
+                               TopKingdoms(pDefinition.Id) + "\n" +
+                               AW_L10n.Text("aw_school_master_gallery", "Historical Masters") +
+                               " / " + AW_L10n.Text("aw_school_institution_list",
+                                   "School Institutions") + " / " +
+                               AW_L10n.Text("aw_school_lineage_list", "Teacher Lineage") + "\n" +
+                               RecentHistory(pDefinition.Id);
             int representatives = ShowRepresentatives(pDefinition.Id, 205f);
-            SetDetailContentHeight(205f + ActorCardRows(representatives) *
-                (SchoolActorCardView.Height + 6f) + 18f);
+            float top = 205f + ActorCardRows(representatives) *
+                (SchoolActorCardView.Height + 6f) + 12f;
+            int masters = ShowMasterGallery(pDefinition.Id, top);
+            top += MasterCardRows(masters) * (SchoolMasterCardView.Height + 6f) + 12f;
+            top = ShowInstitutions(pDefinition.Id, top);
+            top = ShowLineage(pDefinition.Id, top);
+            SetDetailContentHeight(top + 18f);
             ResetDetailScroll();
         }
 
@@ -369,7 +404,15 @@ namespace AncientWarfare3.ui.windows
                   AW_L10n.Text(dominant?.NameKey ?? "aw_court_school_none", "No school") + "\n" +
                   AW_L10n.Text("aw_school_contributors", "Contributors") + ": " +
                   string.Join(" / ", snapshot.Contributors.Take(5)
-                      .Select(p => p.ActorName + " " + Mathf.RoundToInt(p.Score)).ToArray());
+                      .Select(p => p.ActorName + " " + Mathf.RoundToInt(p.Score)).ToArray()) +
+                  LedgerSummary(snapshot) + "\n" + SchoolLandmarkService.Describe(pCity);
+            if (snapshot != null && snapshot.TotalScore > 0f)
+            {
+                _breakdown.Bind(pCity);
+                RectTransform breakdownRect = _breakdown.GetComponent<RectTransform>();
+                breakdownRect.anchoredPosition = new Vector2(12f, -198f);
+                breakdownRect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 92f);
+            }
             if (snapshot == null || snapshot.TotalScore <= 0f)
             {
                 SetDetailContentHeight(180f);
@@ -383,18 +426,33 @@ namespace AncientWarfare3.ui.windows
                 if (index >= _bars.Count) break;
                 SchoolInfluenceBar bar = _bars[index];
                 RectTransform rect = bar.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f, -198f - index * (SchoolInfluenceBar.Height + 4f));
+                rect.anchoredPosition = new Vector2(12f, -296f - index * (SchoolInfluenceBar.Height + 4f));
                 rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, SchoolInfluenceBar.Height);
                 bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value,
                     item.Value / snapshot.TotalScore, SelectSchool);
                 bar.gameObject.SetActive(true);
                 index++;
             }
-            float contributorTop = 198f + index * (SchoolInfluenceBar.Height + 4f) + 10f;
+            float contributorTop = 296f + index * (SchoolInfluenceBar.Height + 4f) + 10f;
             int contributors = ShowContributors(snapshot.Contributors, contributorTop);
             SetDetailContentHeight(contributorTop + ActorCardRows(contributors) *
                 (SchoolActorCardView.Height + 6f) + 18f);
             ResetDetailScroll();
+        }
+
+        private static string LedgerSummary(CitySchoolSnapshot pSnapshot)
+        {
+            if (pSnapshot?.LedgerScores == null || pSnapshot.LedgerScores.Count == 0)
+                return "";
+            string label = AW_L10n.Text("aw_school_ledger_influence", "Ledger influence");
+            string values = string.Join(" / ", pSnapshot.LedgerScores
+                .OrderByDescending(p => p.Value)
+                .ThenBy(p => p.Key, StringComparer.Ordinal)
+                .Take(5)
+                .Select(p => AW_L10n.Text(CourtSchoolRegistry.Find(p.Key)?.NameKey ??
+                    "aw_court_school_none", p.Key) + " " + Mathf.RoundToInt(p.Value))
+                .ToArray());
+            return "\n" + label + ": " + values;
         }
 
         private int ShowContributors(IEnumerable<CitySchoolInfluenceContribution> pContributions, float pTop)
@@ -435,10 +493,167 @@ namespace AncientWarfare3.ui.windows
             return actors.Length;
         }
 
+        private int ShowMasterGallery(string pSchoolId, float pTop)
+        {
+            Dictionary<string, HistoricalSchoolMasterStoreRecord> byId =
+                HistoricalSchoolStore.LoadMasterStates()
+                    .Where(p => p != null && !string.IsNullOrEmpty(p.MasterId))
+                    .GroupBy(p => p.MasterId, StringComparer.Ordinal)
+                    .ToDictionary(p => p.Key, p => p.OrderByDescending(v => v.SpawnYear).First(),
+                        StringComparer.Ordinal);
+            HistoricalSchoolMasterDefinition[] definitions = HistoricalSchoolMasterRegistry.All
+                .Where(p => p.SchoolId == pSchoolId)
+                .OrderBy(p => p.Order)
+                .ToArray();
+            int index = 0;
+            foreach (HistoricalSchoolMasterDefinition definition in definitions)
+            {
+                if (index >= _masterCards.Count) break;
+                byId.TryGetValue(definition.Id, out HistoricalSchoolMasterStoreRecord record);
+                Actor actor = record?.ActorId >= 0 ? World.world?.units?.get(record.ActorId) : null;
+                SchoolMasterCardView card = _masterCards[index];
+                LayoutMasterCard(card, index, pTop);
+                card.Bind(definition, record, actor);
+                index++;
+            }
+            return index;
+        }
+
+        private float ShowInstitutions(string pSchoolId, float pTop)
+        {
+            List<SchoolInstitutionReadModel> institutions =
+                HistoricalSchoolStore.LoadInstitutions(pSchoolId, pLimit: _institutionRows.Count);
+            for (int i = 0; i < _institutionRows.Count; i++)
+            {
+                SchoolInstitutionRowView row = _institutionRows[i];
+                if (i >= institutions.Count)
+                {
+                    row.gameObject.SetActive(false);
+                    continue;
+                }
+                SchoolInstitutionReadModel institution = institutions[i];
+                RectTransform rect = row.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(12f,
+                    -pTop - i * (rect.sizeDelta.y + 4f));
+                rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 26f);
+                row.Bind(institution, FindCityName(institution.CityId));
+            }
+            return institutions.Count == 0 ? pTop : pTop + institutions.Count * 30f + 8f;
+        }
+
+        private float ShowLineage(string pSchoolId, float pTop)
+        {
+            var members = SchoolMembershipService.Members(pSchoolId)
+                .Select(p => SchoolMembershipService.GetActive(p))
+                .Where(p => p != null)
+                .OrderByDescending(p => p.Reputation)
+                .ThenBy(p => p.ActorId)
+                .Take(_lineageRows.Count)
+                .ToArray();
+            for (int i = 0; i < _lineageRows.Count; i++)
+            {
+                SchoolLineageRowView row = _lineageRows[i];
+                if (i >= members.Length)
+                {
+                    row.gameObject.SetActive(false);
+                    continue;
+                }
+                SchoolMembershipRecord membership = members[i];
+                Actor student = World.world?.units?.get(membership.ActorId);
+                Actor teacher = membership.TeacherActorId >= 0
+                    ? World.world?.units?.get(membership.TeacherActorId)
+                    : null;
+                string studentName = student?.data != null
+                    ? SafeActorName(student)
+                    : HistoricalSchoolMasterRegistry.Find(membership.SourceId)?.CanonicalName ??
+                      ("actor " + membership.ActorId);
+                string teacherName = teacher?.data != null ? SafeActorName(teacher) : "";
+                RectTransform rect = row.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(12f,
+                    -pTop - i * (rect.sizeDelta.y + 4f));
+                rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 26f);
+                row.Bind(studentName, teacherName, membership.Generation,
+                    membership.Reputation, student?.data != null && student.isAlive() &&
+                    !student.isRekt());
+            }
+            return members.Length == 0 ? pTop : pTop + members.Length * 30f;
+        }
+
+        private static string RecentHistory(string pSchoolId)
+        {
+            List<SchoolEventReadModel> events = HistoricalSchoolStore.LoadRecentSchoolEvents(
+                pSchoolId, pLimit: 3);
+            List<SchoolWorkReadModel> works = HistoricalSchoolStore.LoadWorks(pSchoolId, 2);
+            List<SchoolDebateReadModel> debates = HistoricalSchoolStore.LoadDebates(pSchoolId,
+                pLimit: 2);
+            var lines = new List<string>();
+            foreach (SchoolEventReadModel item in events)
+                lines.Add((item.EventYear >= 0 ? item.EventYear + " " : "") +
+                          EventLabel(item.EventType));
+            foreach (SchoolDebateReadModel item in debates)
+                lines.Add((item.DebateYear >= 0 ? item.DebateYear + " " : "") +
+                          "debate " + (item.TopicId ?? ""));
+            foreach (SchoolWorkReadModel item in works)
+                lines.Add((item.WrittenYear >= 0 ? item.WrittenYear + " " : "") +
+                          "work " + (item.DisplayName ?? item.WorkKey));
+            return lines.Count == 0 ? "Recent history: none" :
+                "Recent history: " + string.Join(" / ", lines.Take(5).ToArray());
+        }
+
+        private static string EventLabel(string pEventType)
+        {
+            string type = pEventType ?? "event";
+            string key = "aw_school_event_" + type;
+            switch (type)
+            {
+                case "lecture": return AW_L10n.Text(key, "Lecture");
+                case "persuasion": return AW_L10n.Text(key, "Persuasion");
+                case "disciple_joined": return AW_L10n.Text(key, "Disciple joined");
+                case "school_conversion": return AW_L10n.Text(key, "School conversion");
+                case "school_rediscovery": return AW_L10n.Text(key, "School rediscovered");
+                case "journey_arrival": return AW_L10n.Text(key, "Journey arrival");
+                case "guest_service_started": return AW_L10n.Text(key, "Guest service");
+                case "guest_service_renewed": return AW_L10n.Text(key, "Guest service renewed");
+                default: return type;
+            }
+        }
+
+        private void LayoutMasterCard(SchoolMasterCardView pCard, int pIndex, float pTop)
+        {
+            if (pCard == null || _detailPanel == null) return;
+            const float gap = 6f;
+            float width = (_detailPanel.sizeDelta.x - 24f - gap) * .5f;
+            int row = pIndex / 2;
+            int column = pIndex % 2;
+            RectTransform rect = pCard.GetComponent<RectTransform>();
+            rect.anchoredPosition = new Vector2(12f + column * (width + gap),
+                -pTop - row * (SchoolMasterCardView.Height + gap));
+            rect.sizeDelta = new Vector2(width, SchoolMasterCardView.Height);
+        }
+
+        private static int MasterCardRows(int pCount) => (Math.Max(0, pCount) + 1) / 2;
+
+        private static string FindCityName(long pCityId)
+        {
+            if (pCityId < 0) return "";
+            try { return World.world?.cities?.get(pCityId)?.data?.name ?? ""; }
+            catch { return ""; }
+        }
+
+        private static string SafeActorName(Actor pActor)
+        {
+            try { return pActor?.getName() ?? pActor?.data?.name ?? ""; }
+            catch { return pActor?.data?.name ?? ""; }
+        }
+
         private void HideDetailRows()
         {
             foreach (SchoolInfluenceBar bar in _bars) bar.gameObject.SetActive(false);
             foreach (SchoolActorCardView card in _actorCards) card.gameObject.SetActive(false);
+            foreach (SchoolMasterCardView card in _masterCards) card.gameObject.SetActive(false);
+            foreach (SchoolInstitutionRowView row in _institutionRows) row.gameObject.SetActive(false);
+            foreach (SchoolLineageRowView row in _lineageRows) row.gameObject.SetActive(false);
+            if (_breakdown != null) _breakdown.gameObject.SetActive(false);
         }
 
         private void LayoutActorCard(SchoolActorCardView pCard, int pIndex, float pTop)
@@ -538,6 +753,7 @@ namespace AncientWarfare3.ui.windows
                 case CitySchoolRole.CentralOfficer:
                     return AW_L10n.Text("aw_court_central_officers", "Central Official");
                 case CitySchoolRole.General: return AW_L10n.Text("aw_court_general", "General");
+                case CitySchoolRole.Scholar: return AW_L10n.Text("aw_school_role_scholar", "Resident Scholar");
                 default: return AW_L10n.Text("aw_court_roles", "Official");
             }
         }

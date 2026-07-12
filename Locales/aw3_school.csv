@@ -38,3 +38,27 @@ aw_school_direction_peace,求和,Peace,求和
 aw_school_direction_order,秩序,Order,秩序
 aw_school_direction_commerce,商业,Commerce,商業
 aw_school_direction_technology,技术,Technology,技術
+aw_school_influence_components,影响力构成,Influence Components,影響力構成
+aw_school_tradition,传统,Tradition,傳統
+aw_school_membership,成员,Membership,成員
+aw_school_institutions,机构,Institutions,機構
+aw_school_active_presence,现时驻留,Active Presence,現時駐留
+aw_school_momentum,声势,Momentum,聲勢
+aw_school_recent_history,近期学派史,Recent School History,近期學派史
+aw_school_master_gallery,先师谱,Historical Masters,先師譜
+aw_school_master_living,在世,Living,在世
+aw_school_master_dead,已逝,Dead,已逝
+aw_school_master_queued,待降临,Queued,待降臨
+aw_school_institution_list,学派机构,School Institutions,學派機構
+aw_school_lineage_list,师承谱系,Teacher Lineage,師承譜系
+aw_school_guest_service,客卿任官,Guest Court Service,客卿任官
+aw_school_role_scholar,游学先师/传承教师,Resident Scholar,遊學先師/傳承教師
+aw_school_event_lecture,讲学,Lecture,講學
+aw_school_event_persuasion,游说,Persuasion,遊說
+aw_school_event_disciple_joined,收徒,Disciple joined,收徒
+aw_school_event_school_conversion,转入学派,School conversion,轉入學派
+aw_school_event_school_rediscovery,学派复兴,School rediscovered,學派復興
+aw_school_event_journey_arrival,游学抵达,Journey arrival,遊學抵達
+aw_school_event_guest_service,客卿任官,Guest service,客卿任官
+aw_school_event_guest_service_started,客卿任官,Guest service,客卿任官
+aw_school_event_guest_service_renewed,续聘客卿,Guest service renewed,續聘客卿

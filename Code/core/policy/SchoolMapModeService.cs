@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 using UnityEngine;
@@ -83,7 +84,9 @@ namespace AncientWarfare3.core.policy
         public static string BuildTooltip(City pCity)
         {
             if (pCity?.data == null) return "";
-            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity, pEnsureFresh: true);
+            CitySchoolSnapshot snapshot =
+                CitySchoolSnapshotService.GetFreshSnapshotIfDirty(pCity);
+            if (snapshot == null) snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             if (snapshot == null || snapshot.TotalScore <= 0f)
                 return AW_L10n.Text("aw_school_map_no_influence", "No school influence");
 
@@ -100,6 +103,7 @@ namespace AncientWarfare3.core.policy
                 lines.Add(GetSchoolDisplayName(item.Key) + "  " +
                           Mathf.RoundToInt(item.Value / snapshot.TotalScore * 100f) + "%");
             }
+            lines.Add(SchoolLandmarkService.Describe(pCity));
             return string.Join("\n", lines.ToArray());
         }
 

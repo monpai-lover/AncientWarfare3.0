@@ -19,6 +19,12 @@ namespace AncientWarfare3.core.schools
             return Memberships.GetActive(pActorId);
         }
 
+        public static bool ApplyReputationDelta(long pActorId, float pDelta)
+        {
+            if (pActorId < 0 || float.IsNaN(pDelta) || float.IsInfinity(pDelta)) return false;
+            return Memberships.UpdateReputation(pActorId, pDelta);
+        }
+
         public static bool TryJoin(Actor pActor, string pSchoolId,
             SchoolMembershipSource pSource, string pSourceId, long pTeacherActorId,
             long pCityId, int pGeneration, float pInitialReputation = 0f)
@@ -50,7 +56,8 @@ namespace AncientWarfare3.core.schools
             if (needsTravelAffiliation &&
                 !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
             {
-                RollbackJoin(pActor, pSourceId);
+                if (!RollbackJoin(pActor, pSourceId))
+                    ModClass.LogWarning("School membership affiliation rollback failed");
                 return false;
             }
             Project(pActor, pSchoolId);
@@ -87,6 +94,29 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        internal static bool RollbackConversion(Actor pActor,
+            SchoolMembershipRecord pOriginal)
+        {
+            if (pActor?.data == null || pOriginal == null ||
+                pOriginal.ActorId != pActor.data.id) return false;
+            SchoolMembershipRecord replacement = Memberships.GetActive(pActor.data.id);
+            if (replacement == null || replacement.Source !=
+                SchoolMembershipSource.ExplicitConversion) return false;
+            if (!HistoricalSchoolStore.RollbackConversion(pOriginal, replacement,
+                    WorldTime()))
+            {
+                LoadIndexes();
+                return false;
+            }
+            if (!Memberships.RollbackConvert(pActor.data.id, pOriginal, replacement))
+            {
+                LoadIndexes();
+                return false;
+            }
+            Project(pActor, pOriginal.SchoolId);
+            return true;
+        }
+
         public static void OnDeath(Actor pActor)
         {
             if (pActor?.data == null) return;
@@ -105,14 +135,23 @@ namespace AncientWarfare3.core.schools
             Project(pActor, CourtSchoolId.None);
         }
 
-        internal static void RollbackJoin(Actor pActor, string pSourceId)
+        internal static bool RollbackJoin(Actor pActor, string pSourceId)
         {
-            if (pActor?.data == null) return;
+            if (pActor?.data == null) return false;
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
-            if (current == null || current.SourceId != (pSourceId ?? "")) return;
-            if (!HistoricalSchoolStore.DeleteMembership(current)) return;
-            Memberships.RollbackJoin(pActor.data.id);
+            if (current == null || current.SourceId != (pSourceId ?? "")) return false;
+            if (!HistoricalSchoolStore.DeleteMembership(current))
+            {
+                LoadIndexes();
+                return false;
+            }
+            if (!Memberships.RollbackJoin(pActor.data.id))
+            {
+                LoadIndexes();
+                return false;
+            }
             Project(pActor, CourtSchoolId.None);
+            return true;
         }
 
         public static Actor[] LivingMembers(string pSchoolId)
@@ -199,6 +238,7 @@ namespace AncientWarfare3.core.schools
                     pActor.removeTrait(traitId);
             }
             CitySchoolSnapshotService.MarkActorDirty(pActor);
+            CitySchoolSnapshotService.MarkDirty(HistoricalAffiliationService.ResidenceCity(pActor));
         }
 
         private static double WorldTime()

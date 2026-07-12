@@ -11,6 +11,7 @@ namespace AncientWarfare3.core.court
         public const string Leader = "leader";
         public const string CentralOfficer = "central_officer";
         public const string General = "general";
+        public const string Scholar = "scholar";
         public const string LocalOfficer = "local_officer";
     }
 
@@ -47,6 +48,8 @@ namespace AncientWarfare3.core.court
         public float TotalScore { get; internal set; }
         public IReadOnlyDictionary<string, float> Scores { get; internal set; } =
             new Dictionary<string, float>();
+        public IReadOnlyDictionary<string, float> LedgerScores { get; internal set; } =
+            new Dictionary<string, float>();
         public IReadOnlyList<CitySchoolInfluenceContribution> Contributors { get; internal set; } =
             Array.Empty<CitySchoolInfluenceContribution>();
 
@@ -69,6 +72,9 @@ namespace AncientWarfare3.core.court
                 case CitySchoolRole.Leader: return 5f;
                 case CitySchoolRole.CentralOfficer: return 4f;
                 case CitySchoolRole.General: return 3f;
+                // A resident historical master or qualified lineage teacher is a
+                // direct source of local school influence even without office.
+                case CitySchoolRole.Scholar: return 6f;
                 case CitySchoolRole.LocalOfficer: return 2f;
                 default: return 0f;
             }

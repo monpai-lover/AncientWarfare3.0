@@ -221,6 +221,18 @@ namespace AncientWarfare3.core.schools
                 TravelWaitStartYear, TransportFailures, pStartYear, pEndYear);
         }
 
+        public HistoricalSchoolAffiliationSnapshot EndService(int pYear)
+        {
+            if (ServiceKingdomId < 0 || LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                return this;
+            HistoricalSchoolLifecycleState state = ResidenceCityId == HometownCityId
+                ? HistoricalSchoolLifecycleState.AtHome
+                : HistoricalSchoolLifecycleState.Resident;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, -1, -1, state,
+                LastTravelYear, TravelWaitStartYear, TransportFailures,
+                pServiceStartYear: -1, pServiceEndYear: Math.Max(ServiceStartYear, pYear));
+        }
+
         public HistoricalSchoolAffiliationSnapshot CancelTravel()
         {
             if (LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
@@ -436,6 +448,13 @@ namespace AncientWarfare3.core.schools
                 Math.Max(StartYear, pEndYear), pActive: false, pReason);
         }
 
+        public SchoolMembershipRecord WithReputation(float pReputation)
+        {
+            return new SchoolMembershipRecord(MembershipId, ActorId, SchoolId, Source, SourceId,
+                TeacherActorId, CityId, Generation, Math.Max(0f, Math.Min(100f, pReputation)),
+                StartYear, EndYear, Active, EndReason);
+        }
+
         private static bool RequiresTeacher(SchoolMembershipSource pSource)
         {
             return pSource == SchoolMembershipSource.DirectDiscipleship ||
@@ -477,6 +496,27 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        public bool RollbackConvert(long pActorId, SchoolMembershipRecord pOriginal,
+            SchoolMembershipRecord pReplacement)
+        {
+            if (pOriginal == null || pReplacement == null ||
+                !_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current) ||
+                current.MembershipId != pReplacement.MembershipId)
+                return false;
+            RemoveActive(current);
+            for (int i = _closed.Count - 1; i >= 0; i--)
+            {
+                SchoolMembershipRecord closed = _closed[i];
+                if (closed.MembershipId != pOriginal.MembershipId ||
+                    closed.ActorId != pActorId) continue;
+                _closed.RemoveAt(i);
+                AddActive(pOriginal);
+                return true;
+            }
+            AddActive(current);
+            return false;
+        }
+
         public bool Close(long pActorId, int pYear, string pReason,
             out SchoolMembershipRecord pClosed)
         {
@@ -494,6 +534,14 @@ namespace AncientWarfare3.core.schools
             if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
                 return false;
             RemoveActive(current);
+            return true;
+        }
+
+        public bool UpdateReputation(long pActorId, float pDelta)
+        {
+            if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
+                return false;
+            _activeByActor[pActorId] = current.WithReputation(current.Reputation + pDelta);
             return true;
         }
 

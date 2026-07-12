@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -20,7 +22,10 @@ namespace AncientWarfare3.core.schools
             HistoricalAffiliationService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();
+            SchoolGuestOfficeService.LoadState();
+            SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
+            HistoricalSchoolDebateService.LoadState();
             _lastQuarterKey = -1;
             _loaded = true;
         }
@@ -32,7 +37,10 @@ namespace AncientWarfare3.core.schools
             _lastQuarterKey = -1;
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
+            SchoolGuestOfficeService.ClearRuntime();
+            SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
+            HistoricalSchoolDebateService.ClearRuntime();
             _loaded = false;
         }
 
@@ -60,7 +68,16 @@ namespace AncientWarfare3.core.schools
                 World.world?.getCurWorldTime() ?? 0d);
             if (cities.Count > 0)
                 HistoricalSchoolDescentService.ProcessDue(_eligibleYear, cities);
+            SchoolGuestOfficeService.ProcessYear(worldYear);
+            int decayedLedgers = HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
+                World.world?.getCurWorldTime() ?? 0d);
+            if (decayedLedgers > 0)
+            {
+                CitySchoolSnapshotService.Clear();
+                SchoolMapModeService.DirtyMapIfActive();
+            }
             HistoricalSchoolActionService.ProcessYear(worldYear);
+            HistoricalSchoolDebateService.ProcessYear(worldYear);
         }
 
         private static List<City> LivingXiaCities()

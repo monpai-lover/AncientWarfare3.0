@@ -74,6 +74,15 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null || !pActor.isAlive()) return;
             HistoricalSchoolMasterDefinition master = DefinitionFor(pActor);
             if (master == null) return;
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id);
+            if (affiliation?.LifecycleState == HistoricalSchoolLifecycleState.Serving)
+            {
+                Kingdom serviceKingdom = World.world?.kingdoms?.get(
+                    affiliation.ServiceKingdomId);
+                CourtService.EndGuestOfficer(pActor, serviceKingdom, "death",
+                    Date.getCurrentYear());
+            }
             City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
             HistoricalSchoolStore.MarkMasterDead(master.Id, pActor.data.id,
@@ -175,7 +184,10 @@ namespace AncientWarfare3.core.schools
                     HistoricalAffiliationService.RollbackDescent(actor.data.id);
                 }
                 if (membershipOpened && actor?.data != null)
-                    SchoolMembershipService.RollbackJoin(actor, pMaster.Id);
+                {
+                    if (!SchoolMembershipService.RollbackJoin(actor, pMaster.Id))
+                        ModClass.LogWarning("Historical school descent membership rollback failed");
+                }
                 try { actor?.Dispose(); } catch { }
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
                                     error.Message);

@@ -1,4 +1,5 @@
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -41,7 +42,9 @@ namespace AncientWarfare3.ui.items
             if (!live) return;
 
             gameObject.name = "SchoolActor_" + pActor.data.id;
-            Color kingdomColor = KingdomColor(pActor.kingdom);
+            Kingdom displayKingdom = HistoricalAffiliationService.ServiceKingdom(pActor) ??
+                                     pActor.kingdom;
+            Color kingdomColor = KingdomColor(displayKingdom);
             _background.color = Color.Lerp(kingdomColor, Color.black, .64f);
             Outline outline = GetComponent<Outline>();
             outline.effectColor = Color.Lerp(kingdomColor, Color.black, .78f);

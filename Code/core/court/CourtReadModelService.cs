@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.court
 {
@@ -83,10 +84,18 @@ namespace AncientWarfare3.core.court
                 string school = string.IsNullOrEmpty(officer.school_id)
                     ? ActorSchool(actor, "")
                     : officer.school_id;
+                HistoricalSchoolAffiliationSnapshot affiliation =
+                    HistoricalAffiliationService.Get(actor.data.id);
+                bool guest = affiliation?.LifecycleState ==
+                             HistoricalSchoolLifecycleState.Serving &&
+                             affiliation.ServiceKingdomId == pKingdom.id &&
+                             affiliation.HomeKingdomId != pKingdom.id;
                 pSeeds.Add(new CourtPyramidNodeModel(actor.data.id, officer.office_id,
                     officer.office_id, rank, order, false)
                 {
-                    ActorName = SafeActorName(actor),
+                    ActorName = SafeActorName(actor) + (guest
+                        ? " (" + AW_L10n.Text("aw_school_guest_service", "Guest") + ")"
+                        : ""),
                     SchoolId = school,
                     SchoolIconPath = RegisteredSchoolIconPath(school),
                     CityId = officer.city_id,
@@ -161,8 +170,9 @@ namespace AncientWarfare3.core.court
 
         private static bool IsValid(Actor pActor, Kingdom pKingdom)
         {
-            return pActor?.data != null && pActor.kingdom == pKingdom &&
-                   pActor.isAlive() && !pActor.isRekt();
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            return CourtAffiliationResolver.CanServe(pActor, pKingdom, layer);
         }
 
         private static void AddCachedHeirRole(List<CourtPyramidNodeModel> pNodes, Kingdom pKingdom)

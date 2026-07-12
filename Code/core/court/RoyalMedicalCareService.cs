@@ -71,7 +71,9 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
                 if (RoyalMedicalCareRules.IsCachedPhysicianValid(
                         cachedActorId, actor.data.id,
-                        actor.isAlive() && !actor.isRekt(), actor.kingdom == pKingdom,
+                        actor.isAlive() && !actor.isRekt(),
+                        CourtAffiliationResolver.CanServe(actor, pKingdom,
+                            CourtOfficeLayer.Central),
                         courtKingdomId, pKingdom.id, office))
                     return actor;
             }

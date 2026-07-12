@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -226,7 +227,7 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
                 bool baseValid = CourtRules.CanHoldOffice(
                     alive: actor.isAlive() && !actor.isRekt(),
-                    sameKingdom: actor.kingdom == pKingdom,
+                    sameKingdom: CourtAffiliationResolver.CanServe(actor, pKingdom, layer),
                     slave: actor.hasTrait(LineageKeys.TRAIT_SLAVE),
                     madness: actor.hasTrait("madness"));
                 bool valid = CourtRules.CanHoldLayerOffice(layer, actor.isSexMale(), baseValid);
@@ -357,9 +358,67 @@ namespace AncientWarfare3.core.court
                 !string.IsNullOrEmpty(existingSchool));
         }
 
-        private static void SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
+        internal static bool TryAppointGuestOfficer(Actor pActor, Kingdom pKingdom,
+            string pOfficeId, City pCity, int pStartYear, int pEndYear)
         {
-            if (pActor?.data == null || pKingdom?.data == null) return;
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor?.data?.id ?? -1L);
+            if (pActor?.data == null || pKingdom?.data == null || pCity?.data == null ||
+                pCity.kingdom != pKingdom || affiliation == null ||
+                affiliation.HomeKingdomId == pKingdom.id ||
+                !pActor.isAlive() || pActor.isRekt() || pActor.isKing() ||
+                pActor.isCityLeader() || GeneralService.IsGeneral(pActor) ||
+                pActor.hasTrait(LineageKeys.TRAIT_SLAVE) || pActor.hasTrait("madness") ||
+                !HistoricalAffiliationService.IsPresentForInfluence(pActor) ||
+                HistoricalAffiliationService.ResidenceCity(pActor)?.data?.id != pCity.data.id ||
+                HasActiveOffice(pKingdom, pOfficeId)) return false;
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string currentOffice, "");
+            if (!string.IsNullOrEmpty(currentOffice)) return false;
+            if (!CourtRules.CanHoldLayerOffice(CourtOfficeLayer.Central,
+                    pActor.isSexMale(), otherwiseEligible: true)) return false;
+            string school = EnsurePersonalSchool(pActor);
+            if (string.IsNullOrEmpty(school) || CourtSchoolRegistry.Find(school) == null)
+                return false;
+            if (!HistoricalAffiliationService.TryBeginService(pActor, pKingdom,
+                    pStartYear, pEndYear)) return false;
+            if (SetOfficer(pActor, pKingdom, CourtOfficeLayer.Central, pOfficeId, school, pCity))
+                return true;
+            HistoricalAffiliationService.EndService(pActor, pStartYear);
+            return false;
+        }
+
+        internal static bool EndGuestOfficer(Actor pActor, Kingdom pHost, string pReason,
+            int pYear)
+        {
+            if (pActor?.data == null) return false;
+            HistoricalSchoolAffiliationSnapshot state = HistoricalAffiliationService.Get(
+                pActor.data.id);
+            if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                state.ServiceKingdomId < 0 ||
+                (pHost?.data != null && state.ServiceKingdomId != pHost.id)) return false;
+
+            // The host can be destroyed or the actor can die between yearly ticks.  In
+            // either case the persisted service row is still closed, while ClearOfficer
+            // removes the stale court projection/career when the actor is available.
+            Kingdom resolvedHost = pHost?.data != null
+                ? pHost
+                : World.world?.kingdoms?.get(state.ServiceKingdomId);
+            ClearOfficer(pActor, pReason ?? "guest_term");
+            try { pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId); }
+            catch { }
+            bool ended = HistoricalAffiliationService.EndService(pActor, pYear);
+            if (!ended)
+                ended = HistoricalAffiliationService.EndService(pActor.data.id, pYear);
+            if (!ended && !pActor.isAlive())
+                OfficialCareerService.EndForKingdom(pActor.data.id, state.ServiceKingdomId,
+                    pReason ?? "guest_term");
+            if (resolvedHost?.data != null) CourtDirectionService.MarkDirty(resolvedHost);
+            return ended;
+        }
+
+        private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
 
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long previousKingdomId, -1L);
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string previousOffice, "");
@@ -406,6 +465,7 @@ namespace AncientWarfare3.core.court
                 RoyalMedicalCareService.ReconcileTargets(previousKingdom);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
+            return true;
         }
 
         private static void ClearOfficer(Actor pActor, string pReason)
@@ -475,7 +535,8 @@ namespace AncientWarfare3.core.court
                 }
 
                 bool alive = actor.isAlive() && !actor.isRekt();
-                if (alive && actor.kingdom == pKingdom) continue;
+                actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+                if (alive && CourtAffiliationResolver.CanServe(actor, pKingdom, layer)) continue;
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
                 string reason = alive ? "defected" : "dead";
                 if (courtKingdomId == pKingdom.id) ClearOfficer(actor, reason);
@@ -505,19 +566,20 @@ namespace AncientWarfare3.core.court
         private static void RecalculateFactionCache(Kingdom pKingdom, List<Actor> pRoster)
         {
             var values = new Dictionary<string, float>();
+            var seenActors = new HashSet<long>();
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
-                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
-                if (courtKingdomId != pKingdom.id) continue;
-
-                actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
-                string school = SchoolMembershipService.GetSchool(actor.data.id);
-                if (string.IsNullOrEmpty(school)) continue;
-
-                float influence = CourtInfluenceRules.InfluenceWeight(layer,
-                    ChronicleGate.IsImportant(actor), GeneralService.GetMerit(actor));
-                values.TryGetValue(school, out float old);
-                values[school] = old + influence;
+                if (actor?.data == null || !seenActors.Add(actor.data.id)) continue;
+                AccumulateFactionValue(values, actor, pKingdom);
+            }
+            // A foreign guest is intentionally absent from pKingdom.getUnits().  Read the
+            // durable officer index as well so guest appointments influence court direction
+            // and faction concentration just like local ministers.
+            foreach (CourtOfficerView officer in GetActiveOfficers(pKingdom, 96))
+            {
+                Actor actor = World.world?.units?.get(officer.actor_id);
+                if (actor?.data == null || !seenActors.Add(actor.data.id)) continue;
+                AccumulateFactionValue(values, actor, pKingdom);
             }
 
             string[] schools = values.Keys.ToArray();
@@ -539,6 +601,22 @@ namespace AncientWarfare3.core.court
                 CourtEventRules.NextDominantSinceYear(factionYear, previousDominant, dominant, prevSinceYear));
             if (!string.IsNullOrEmpty(dominant) && previousDominant != dominant)
                 ChronicleEvents.OnCourtFactionDominant(pKingdom, dominant);
+        }
+
+        private static void AccumulateFactionValue(Dictionary<string, float> pValues,
+            Actor pActor, Kingdom pKingdom)
+        {
+            if (pValues == null || pActor?.data == null || pKingdom?.data == null) return;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+            if (courtKingdomId != pKingdom.id) return;
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            if (!CourtAffiliationResolver.CanServe(pActor, pKingdom, layer)) return;
+            string school = SchoolMembershipService.GetSchool(pActor.data.id);
+            if (string.IsNullOrEmpty(school)) return;
+            float influence = CourtInfluenceRules.InfluenceWeight(layer,
+                ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor));
+            pValues.TryGetValue(school, out float old);
+            pValues[school] = old + influence;
         }
 
         private static void UpsertCourtSnapshot(Kingdom pKingdom)
@@ -743,6 +821,11 @@ namespace AncientWarfare3.core.court
         private static HashSet<string> BuildActiveOfficeSet(Kingdom pKingdom, List<Actor> pRoster)
         {
             var result = new HashSet<string>(StringComparer.Ordinal);
+            // Guest officers are not part of the host kingdom's unit roster.  Include
+            // their durable rows before filling vacancies so a local candidate cannot
+            // overwrite a still-valid foreign appointment in the same year.
+            foreach (CourtOfficerView officer in GetActiveOfficers(pKingdom, 96))
+                if (!string.IsNullOrEmpty(officer.office_id)) result.Add(officer.office_id);
             foreach (Actor actor in RosterOrSafeUnits(pKingdom, pRoster))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
@@ -760,6 +843,8 @@ namespace AncientWarfare3.core.court
 
         private static bool HasActiveOffice(Kingdom pKingdom, string pOfficeId)
         {
+            foreach (CourtOfficerView officer in GetActiveOfficers(pKingdom, 96))
+                if (officer.office_id == pOfficeId) return true;
             foreach (Actor actor in SafeUnits(pKingdom))
             {
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
