@@ -4,8 +4,7 @@ namespace AncientWarfare3.core.lineage
     {
         public static bool ShouldAllowSetLeader(bool pIsXiaActor, bool pIsMale, bool pIsNewAppointment)
         {
-            if (!pIsXiaActor) return true;
-            return pIsMale;
+            return true;
         }
 
         public static bool ShouldAllowSetKing(bool pFromLoad, bool pCandidateIsMale, bool pCandidateIsXia,

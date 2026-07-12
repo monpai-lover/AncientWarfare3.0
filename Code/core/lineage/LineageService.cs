@@ -300,6 +300,8 @@ namespace AncientWarfare3.core.lineage
                 pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, fam);
             }
             if (!string.IsNullOrEmpty(clan)) pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            if (pSource.clan?.data != null && pChild.clan != pSource.clan)
+                pChild.setClan(pSource.clan);
             pChild.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
             pChild.data.set(LineageKeys.LINEAGE_STATUS,
                 dist + 1 >= LineageKeys.NOBLE_DECAY_DISTANCE ? LineageStatus.COMMON : LineageStatus.NOBLE);
@@ -335,6 +337,8 @@ namespace AncientWarfare3.core.lineage
                 pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, fam);
             }
             pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            if (source.clan?.data != null && pChild.clan != source.clan)
+                pChild.setClan(source.clan);
             if (lid >= 0)
             {
                 pChild.data.set(LineageKeys.NOBLE_DISTANCE, dist + 1);
@@ -566,6 +570,7 @@ namespace AncientWarfare3.core.lineage
             // 2) 氏支:合流前 50% 随机氏 / 50% 城名首字(见 GenerateShiName)
             (string clanName, string sourceType) = GenerateShiName(pActor);
             if (pTrigger == NobleTrigger.Figure) sourceType = ShiSourceType.SPECIAL_FIGURE;
+            if (pTrigger == NobleTrigger.Official) sourceType = ShiSourceType.OFFICIAL_GRANT;
 
             long shiId = LineageIdAllocator.NextShiId();
             InsertShiBranch(shiId, lineageId, clanName, pActor, sourceType);
@@ -576,6 +581,37 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.FAMILY_NAME, familyName);
             pActor.data.set(LineageKeys.CLAN_NAME, clanName);
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, familyName);
+        }
+
+        public static void EnsureOfficialShiAndClan(Actor pActor)
+        {
+            if (pActor?.data == null || pActor.isRekt() || !CanUseXiaizedLineageGovernment(pActor)) return;
+            OnActorPromoted(pActor, NobleTrigger.Official);
+
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0) return;
+            Actor father = FindFatherOfChild(pActor);
+            bool parentSameShi = false;
+            if (father?.data != null)
+            {
+                father.data.get(LineageKeys.SHI_ID, out long fatherShi, -1L);
+                parentSameShi = fatherShi == shiId;
+            }
+
+            if (OfficialShiRules.ShouldReuseParentVisibleClan(
+                    hasValidShi: true, parentSameShi, father?.clan?.data != null))
+            {
+                if (pActor.clan != father.clan) pActor.setClan(father.clan);
+            }
+            else if (pActor.clan?.data == null)
+            {
+                try { World.world?.clans?.newClan(pActor, pAddDefaultTraits: true); }
+                catch { }
+            }
+
+            RenameClanByLeader(pActor.clan, pActor);
+            SyncExistingChildrenAfterLineageChange(pActor);
+            ArchiveActor(pActor, pAlive: true);
         }
 
         public static void EnsureForeignPseudoDynastyLineage(Kingdom pKingdom)
@@ -633,7 +669,10 @@ namespace AncientWarfare3.core.lineage
                     if (lineageId < 0 || shiId < 0) return;
 
                     InsertLineageGroup(lineageId, parts.FamilyName, pActor);
-                    InsertShiBranch(shiId, lineageId, parts.ClanName, pActor, "pseudo_foreign");
+                    string source = pTrigger == NobleTrigger.Official
+                        ? ShiSourceType.OFFICIAL_GRANT
+                        : "pseudo_foreign";
+                    InsertShiBranch(shiId, lineageId, parts.ClanName, pActor, source);
                     pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
                     pActor.data.set(LineageKeys.SHI_ID, shiId);
                 }
@@ -972,7 +1011,11 @@ namespace AncientWarfare3.core.lineage
 
             pChild.data.get(LineageKeys.SHI_ID, out long oldShi, -1L);
             pChild.data.get(LineageKeys.CLAN_NAME, out string oldClan, "");
-            bool changed = childLineage != parentLineage || oldShi != parentShi || oldClan != clan;
+            if (!OfficialShiRules.ShouldSyncDescendant(
+                    parentLineage, parentShi, childLineage, oldShi)) return false;
+            bool visibleClanChanged = pParent.clan?.data != null && pChild.clan != pParent.clan;
+            bool changed = childLineage != parentLineage || oldShi != parentShi ||
+                           oldClan != clan || visibleClanChanged;
 
             string originalForeignName = IsXia(pChild) ? null : pChild.getName();
             pChild.data.set(LineageKeys.LINEAGE_ID, parentLineage);
@@ -983,6 +1026,7 @@ namespace AncientWarfare3.core.lineage
                 pChild.data.set(LineageKeys.CHINESE_FAMILY_NAME, family);
             }
             if (!string.IsNullOrEmpty(clan)) pChild.data.set(LineageKeys.CLAN_NAME, clan);
+            if (visibleClanChanged) pChild.setClan(pParent.clan);
             EnsureGivenName(pChild, originalForeignName);
             pChild.data.set(LineageKeys.NOBLE_DISTANCE, parentDist + 1);
             pChild.data.set(LineageKeys.LINEAGE_STATUS,

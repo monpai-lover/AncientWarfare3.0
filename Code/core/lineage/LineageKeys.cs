@@ -254,7 +254,8 @@ namespace AncientWarfare3.core.lineage
     {
         King,
         CityLeader,
-        Figure
+        Figure,
+        Official
     }
 
     internal static class ShiSourceType
@@ -265,5 +266,6 @@ namespace AncientWarfare3.core.lineage
         public const string INTEGRATION = "integration";
         public const string SPECIAL_FIGURE = "special_figure";
         public const string KING_FOUNDED = "king_founded";
+        public const string OFFICIAL_GRANT = "official_grant";
     }
 }

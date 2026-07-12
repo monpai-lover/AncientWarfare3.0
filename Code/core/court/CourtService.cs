@@ -403,6 +403,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
+            LineageService.EnsureOfficialShiAndClan(pActor);
             SyncSchoolTrait(pActor, active: true);
             RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
             ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);

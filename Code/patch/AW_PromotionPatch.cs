@@ -51,6 +51,7 @@ namespace AncientWarfare3.patch
                  !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
                 return;
             LineageService.OnCityLeaderAppointed(pActor);
+            LineageService.EnsureOfficialShiAndClan(pActor);
             if (pNew) ChronicleEvents.OnBecomeLeader(pActor); // 编年史:仅新任命记(pNew=false 是读档/复位,不重复记)
         }
 

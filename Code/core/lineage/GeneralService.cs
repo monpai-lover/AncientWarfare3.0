@@ -270,6 +270,7 @@ namespace AncientWarfare3.core.lineage
             bool already = IsGeneral(pActor);
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, true);
             ApplyGeneralTrait(pActor);
+            LineageService.EnsureOfficialShiAndClan(pActor);
             UpsertGeneral(pActor, pActor.kingdom, pActive: true, pInitialScore: pScore);
             if (already) return false;
 
