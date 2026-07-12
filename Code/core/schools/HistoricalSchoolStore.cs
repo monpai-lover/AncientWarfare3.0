@@ -487,8 +487,8 @@ namespace AncientWarfare3.core.schools
         public static Dictionary<string, HistoricalSchoolLedgerSnapshot> LoadLedgersForCity(
             long pCityId)
         {
-            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> batches =
-                LoadLedgersForCities(new[] { pCityId });
+            TryLoadLedgersForCities(new[] { pCityId },
+                out Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> batches);
             return batches.TryGetValue(pCityId,
                 out Dictionary<string, HistoricalSchoolLedgerSnapshot> result)
                 ? result
@@ -496,11 +496,13 @@ namespace AncientWarfare3.core.schools
                     StringComparer.Ordinal);
         }
 
-        public static Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> LoadLedgersForCities(IReadOnlyList<long> pCityIds)
+        public static bool TryLoadLedgersForCities(IReadOnlyList<long> pCityIds,
+            out Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult)
         {
-            var result =
+            pResult =
                 new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
-            if (pCityIds == null || pCityIds.Count == 0) return result;
+            if (DB == null) return false;
+            if (pCityIds == null || pCityIds.Count == 0) return true;
 
             var cityIds = new List<long>(pCityIds.Count);
             var seen = new HashSet<long>();
@@ -508,25 +510,30 @@ namespace AncientWarfare3.core.schools
             {
                 if (cityId < 0 || !seen.Add(cityId)) continue;
                 cityIds.Add(cityId);
-                result[cityId] = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
-                    StringComparer.Ordinal);
             }
-            if (DB == null || cityIds.Count == 0) return result;
+            if (cityIds.Count == 0) return true;
+
+            var loaded =
+                new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
+            foreach (long cityId in cityIds)
+                loaded[cityId] = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
+                    StringComparer.Ordinal);
 
             for (int offset = 0; offset < cityIds.Count;
                  offset += LedgerCityQueryChunkSize)
             {
                 int count = Math.Min(LedgerCityQueryChunkSize, cityIds.Count - offset);
-                LoadLedgerChunk(cityIds, offset, count, result);
+                if (!TryLoadLedgerChunk(cityIds, offset, count, loaded)) return false;
             }
-            return result;
+            pResult = loaded;
+            return true;
         }
 
-        private static void LoadLedgerChunk(IReadOnlyList<long> pCityIds, int pOffset,
+        private static bool TryLoadLedgerChunk(IReadOnlyList<long> pCityIds, int pOffset,
             int pCount,
             Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult)
         {
-            if (pCityIds == null || pResult == null || pCount <= 0) return;
+            if (pCityIds == null || pResult == null || pCount <= 0) return false;
             try
             {
                 using var command = new SQLiteCommand(DB);
@@ -557,11 +564,13 @@ namespace AncientWarfare3.core.schools
                         (float)ClampLedger01(ValueDouble(reader, 3)),
                         (float)ClampLedgerInstitutions(ValueDouble(reader, 4)));
                 }
+                return true;
             }
             catch (Exception error)
             {
-                ModClass.LogWarning("HistoricalSchoolStore load city ledger batch failed: " +
-                                    error.Message);
+                ModClass.LogWarning("HistoricalSchoolStore ledger batch chunk failed at offset " +
+                                    pOffset + ": " + error.Message);
+                return false;
             }
         }
 

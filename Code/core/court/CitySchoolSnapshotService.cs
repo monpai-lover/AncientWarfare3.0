@@ -104,13 +104,34 @@ namespace AncientWarfare3.core.court
             }
             if (validCities.Count == 0) return 0;
 
-            CitySchoolSnapshotBatchContext context = BuildBatchContext(validCities);
+            long[] validCityIds = validCities.Select(p => p.data.id).ToArray();
+            if (!TryBuildBatchContext(validCities, out CitySchoolSnapshotBatchContext context,
+                    out string contextFailure))
+            {
+                int requeued = Dirty.RequeueFront(validCityIds);
+                ModClass.LogWarning("City school snapshot batch context failed for cities [" +
+                                    string.Join(",", validCityIds) + "]; requeued " + requeued +
+                                    ": " + contextFailure);
+                return 0;
+            }
+
             int rebuilt = 0;
+            var failedCityIds = new List<long>();
             foreach (City city in validCities)
             {
-                Rebuild(city, context);
-                rebuilt++;
+                try
+                {
+                    Rebuild(city, context);
+                    rebuilt++;
+                }
+                catch (Exception error)
+                {
+                    failedCityIds.Add(city.data.id);
+                    ModClass.LogWarning("City school snapshot rebuild failed for city " +
+                                        city.data.id + ": " + error.Message);
+                }
             }
+            if (failedCityIds.Count > 0) Dirty.RequeueFront(failedCityIds);
             if (rebuilt > 0) SchoolMapModeService.DirtyMapIfActive();
             return rebuilt;
         }
@@ -148,16 +169,32 @@ namespace AncientWarfare3.core.court
             _generation = 0;
         }
 
-        private static CitySchoolSnapshotBatchContext BuildBatchContext(
-            IReadOnlyList<City> pCities)
+        private static bool TryBuildBatchContext(IReadOnlyList<City> pCities,
+            out CitySchoolSnapshotBatchContext pContext, out string pFailure)
         {
-            var cityIds = new long[pCities.Count];
-            for (int i = 0; i < pCities.Count; i++) cityIds[i] = pCities[i].data.id;
-            CitySchoolResidentIndex residents = BuildResidentIndex(
-                new HashSet<long>(cityIds));
-            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers =
-                HistoricalSchoolStore.LoadLedgersForCities(cityIds);
-            return new CitySchoolSnapshotBatchContext(residents, ledgers);
+            pContext = null;
+            pFailure = "";
+            try
+            {
+                var cityIds = new long[pCities.Count];
+                for (int i = 0; i < pCities.Count; i++) cityIds[i] = pCities[i].data.id;
+                if (!HistoricalSchoolStore.TryLoadLedgersForCities(cityIds,
+                        out Dictionary<long,
+                            Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers))
+                {
+                    pFailure = "ledger batch unavailable";
+                    return false;
+                }
+                CitySchoolResidentIndex residents = BuildResidentIndex(
+                    new HashSet<long>(cityIds));
+                pContext = new CitySchoolSnapshotBatchContext(residents, ledgers);
+                return true;
+            }
+            catch (Exception error)
+            {
+                pFailure = error.GetType().Name + ": " + error.Message;
+                return false;
+            }
         }
 
         private static CitySchoolResidentIndex BuildResidentIndex(
