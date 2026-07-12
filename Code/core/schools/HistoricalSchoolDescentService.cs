@@ -91,34 +91,17 @@ namespace AncientWarfare3.core.schools
             return spawned;
         }
 
-        public static void OnDeath(Actor pActor)
+        public static void OnCommittedDeath(Actor pActor,
+            HistoricalSchoolMasterDefinition pMaster, City pCity)
         {
-            if (pActor?.data == null || !pActor.isAlive()) return;
-            HistoricalSchoolMasterDefinition master = DefinitionFor(pActor);
-            if (master == null) return;
-            HistoricalSchoolAffiliationSnapshot affiliation =
-                HistoricalAffiliationService.Get(pActor.data.id);
-            if (affiliation?.LifecycleState == HistoricalSchoolLifecycleState.Serving)
-            {
-                Kingdom serviceKingdom = World.world?.kingdoms?.get(
-                    affiliation.ServiceKingdomId);
-                CourtService.EndGuestOfficer(pActor, serviceKingdom, "death",
-                    Date.getCurrentYear());
-            }
-            City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
-            pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
-            HistoricalSchoolStore.MarkMasterDead(master.Id, pActor.data.id,
-                Date.getCurrentYear(), city?.data?.id ?? -1L, cause, WorldTime());
-            HistoricalSchoolTravelService.OnDeath(pActor);
-            SchoolLineageService.OnTeacherDeath(pActor);
-            SchoolMembershipService.OnDeath(pActor);
-            HistoricalSchoolContent.AnnounceDeath(pActor, city);
+            if (pActor?.data == null || pMaster == null) return;
+            HistoricalSchoolContent.AnnounceDeath(pActor, pCity);
             HistoryWriter.RecordPerson(pActor.data.id,
-                HistoricalAffiliationService.HomeKingdom(pActor), master.CanonicalName,
-                "school_master_death", master.CanonicalName + "逝世", ChronicleCategory.LIFE);
-            if (city?.data != null)
-                HistoryWriter.RecordCity(city, city.kingdom, "school_master_death",
-                    master.CanonicalName + "逝世");
+                HistoricalAffiliationService.HomeKingdom(pActor), pMaster.CanonicalName,
+                "school_master_death", pMaster.CanonicalName + "逝世", ChronicleCategory.LIFE);
+            if (pCity?.data != null)
+                HistoryWriter.RecordCity(pCity, pCity.kingdom, "school_master_death",
+                    pMaster.CanonicalName + "逝世");
         }
 
         private static City SelectHome(HistoricalSchoolMasterDefinition pMaster,

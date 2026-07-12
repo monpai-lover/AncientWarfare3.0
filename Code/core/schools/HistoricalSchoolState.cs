@@ -48,6 +48,13 @@ namespace AncientWarfare3.core.schools
         Conflict
     }
 
+    public enum SchoolDeathOutcome
+    {
+        NotApplicable,
+        Committed,
+        Failed
+    }
+
     public static class HistoricalSchoolPersistenceRules
     {
         public static SchoolPersistenceOutcome Resolve(bool pQuerySucceeded,
@@ -555,6 +562,18 @@ namespace AncientWarfare3.core.schools
             pClosed = null;
             if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
                 return false;
+            pClosed = current.Close(pYear, pReason);
+            RemoveActive(current);
+            MarkChanged();
+            return true;
+        }
+
+        public bool CloseExpected(long pActorId, long pMembershipId, int pYear,
+            string pReason, out SchoolMembershipRecord pClosed)
+        {
+            pClosed = null;
+            if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current) ||
+                current.MembershipId != pMembershipId) return false;
             pClosed = current.Close(pYear, pReason);
             RemoveActive(current);
             MarkChanged();

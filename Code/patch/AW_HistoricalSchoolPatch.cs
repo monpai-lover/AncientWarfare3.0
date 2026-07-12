@@ -20,7 +20,7 @@ namespace AncientWarfare3.patch
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
         private static void ActorDie_Prefix(Actor __instance)
         {
-            HistoricalSchoolDescentService.OnDeath(__instance);
+            SchoolMembershipService.OnDeath(__instance);
         }
 
         [HarmonyPrefix]

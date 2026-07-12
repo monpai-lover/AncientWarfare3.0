@@ -166,22 +166,83 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        public static void OnDeath(Actor pActor)
+        public static SchoolDeathOutcome OnDeath(Actor pActor)
         {
-            if (pActor?.data == null) return;
-            SchoolLineageService.ReleaseItinerant(pActor);
-            HistoricalAffiliationService.MarkDead(pActor);
+            if (pActor?.data == null) return SchoolDeathOutcome.NotApplicable;
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
-            if (current == null)
-            {
-                Project(pActor, CourtSchoolId.None);
-                return;
-            }
+            if (current == null) return SchoolDeathOutcome.NotApplicable;
+            if (!current.Active || !current.IsValid || current.ActorId != pActor.data.id)
+                return SchoolDeathOutcome.Failed;
+
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id);
+            HistoricalSchoolMasterDefinition master = current.Source ==
+                SchoolMembershipSource.HistoricalDescent
+                ? HistoricalSchoolMasterRegistry.Find(current.SourceId)
+                : null;
+            bool wasQualifiedTeacher = master != null ||
+                                       SchoolLineageService.IsQualifiedTeacher(pActor);
+            City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
+            pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
             int year = Date.getCurrentYear();
-            if (!HistoricalSchoolStore.CloseMembership(current, year, "death", WorldTime()))
-                return;
-            Memberships.Close(pActor.data.id, year, "death", out _);
-            Project(pActor, CourtSchoolId.None);
+            if (!HistoricalSchoolStore.CommitSchoolDeath(current, affiliation, master, year,
+                    city?.data?.id ?? -1L, cause, WorldTime()))
+                return SchoolDeathOutcome.Failed;
+
+            if (affiliation != null &&
+                !HistoricalAffiliationService.AdoptCommittedDeath(affiliation))
+            {
+                ModClass.LogWarning("Committed school death affiliation adopt failed: actor=" +
+                                    pActor.data.id);
+                HistoricalAffiliationService.LoadState();
+            }
+            if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId, year,
+                    "death", out _))
+            {
+                ModClass.LogWarning("Committed school death membership adopt failed: actor=" +
+                                    pActor.data.id + " membership=" + current.MembershipId);
+                LoadIndexes();
+            }
+            else
+            {
+                try { Project(pActor, CourtSchoolId.None); }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed school death projection failed: " +
+                                        error.Message);
+                }
+            }
+            try { HistoricalSchoolTravelService.OnCommittedDeath(pActor); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death travel cleanup failed: " +
+                                    error.Message);
+            }
+            try { CourtService.ClearGuestOfficerAfterDeath(pActor, affiliation); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death guest cleanup failed: " +
+                                    error.Message);
+            }
+            if (wasQualifiedTeacher)
+            {
+                try { SchoolLineageService.OnTeacherDeath(pActor); }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed school teacher death history failed: " +
+                                        error.Message);
+                }
+            }
+            if (master != null)
+            {
+                try { HistoricalSchoolDescentService.OnCommittedDeath(pActor, master, city); }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed historical school master death history failed: " +
+                                        error.Message);
+                }
+            }
+            return SchoolDeathOutcome.Committed;
         }
 
         internal static bool RollbackJoin(Actor pActor, string pSourceId)

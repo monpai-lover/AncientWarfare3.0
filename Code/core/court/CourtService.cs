@@ -416,6 +416,18 @@ namespace AncientWarfare3.core.court
             return ended;
         }
 
+        internal static void ClearGuestOfficerAfterDeath(Actor pActor,
+            HistoricalSchoolAffiliationSnapshot pCommittedFromState)
+        {
+            if (pActor?.data == null || pCommittedFromState == null ||
+                pCommittedFromState.ActorId != pActor.data.id ||
+                pCommittedFromState.LifecycleState !=
+                HistoricalSchoolLifecycleState.Serving) return;
+            ClearOfficer(pActor, "death", pRecordHistory: false, pArchive: false);
+            try { pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId); }
+            catch { }
+        }
+
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
@@ -468,7 +480,8 @@ namespace AncientWarfare3.core.court
             return true;
         }
 
-        private static void ClearOfficer(Actor pActor, string pReason)
+        private static void ClearOfficer(Actor pActor, string pReason,
+            bool pRecordHistory = true, bool pArchive = true)
         {
             if (pActor?.data == null) return;
 
@@ -477,7 +490,7 @@ namespace AncientWarfare3.core.court
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             Kingdom courtKingdom = courtKingdomId >= 0 ? World.world?.kingdoms?.get(courtKingdomId) : null;
             bool alive = pActor.isAlive() && !pActor.isRekt();
-            if (!alive) LineageService.ArchiveActor(pActor, pAlive: false);
+            if (!alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: false);
 
             if (courtKingdom?.data != null)
             {
@@ -495,9 +508,9 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
 
             OfficialCareerService.End(pActor, layer, office, pReason ?? "");
-            if (courtKingdom != null && !string.IsNullOrEmpty(office))
+            if (pRecordHistory && courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
-            if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
+            if (alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: true);
             if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)

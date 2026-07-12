@@ -240,17 +240,22 @@ namespace AncientWarfare3.core.schools
             return !ReferenceEquals(next, current) && Save(next);
         }
 
-        public static void MarkDead(Actor pActor)
+        internal static bool AdoptCommittedDeath(
+            HistoricalSchoolAffiliationSnapshot pCommittedState)
         {
-            HistoricalSchoolAffiliationSnapshot current = Get(pActor?.data?.id ?? -1L);
-            if (current == null) return;
-            HistoricalSchoolStore.MarkAffiliationDead(current.ActorId, WorldTime());
+            if (pCommittedState == null ||
+                pCommittedState.LifecycleState == HistoricalSchoolLifecycleState.Dead ||
+                !ByActor.TryGetValue(pCommittedState.ActorId,
+                    out HistoricalSchoolAffiliationSnapshot current) ||
+                !ReferenceEquals(current, pCommittedState)) return false;
             var dead = new HistoricalSchoolAffiliationSnapshot(current.ActorId,
                 current.HomeKingdomId, current.HomeKingdomName, current.HometownCityId,
                 current.ResidenceCityId, current.PreviousResidenceCityId, -1, -1,
                 HistoricalSchoolLifecycleState.Dead, -1, -1, current.LastTravelYear,
-                current.TravelWaitStartYear, -1, -1, current.TransportFailures);
+                -1, -1, -1, current.TransportFailures);
             ByActor[current.ActorId] = dead;
+            CitySchoolSnapshotService.MarkDirty(FindCity(current.ResidenceCityId));
+            return true;
         }
 
         public static bool CanJoinCity(Actor pActor, City pTarget)

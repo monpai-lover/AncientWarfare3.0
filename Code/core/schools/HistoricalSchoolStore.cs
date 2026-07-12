@@ -153,29 +153,6 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        public static bool MarkAffiliationDead(long pActorId, double pTime)
-        {
-            if (DB == null || pActorId < 0) return false;
-            try
-            {
-                using var command = new SQLiteCommand(DB);
-                command.CommandText = "UPDATE " + AffiliationTable +
-                    " SET LIFECYCLE_STATE=@state,SERVICE_KINGDOM_ID=-1," +
-                    "DESTINATION_CITY_ID=-1,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
-                command.Parameters.AddWithValue("@state",
-                    HistoricalSchoolLifecycleState.Dead.ToString());
-                command.Parameters.AddWithValue("@time", pTime);
-                command.Parameters.AddWithValue("@actor", pActorId);
-                return command.ExecuteNonQuery() == 1;
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("HistoricalSchoolStore mark affiliation dead failed: " +
-                                    error.Message);
-                return false;
-            }
-        }
-
         public static bool HasPreservedWork(string pWorkKey, string pSchoolId)
         {
             if (DB == null || string.IsNullOrWhiteSpace(pWorkKey) || string.IsNullOrWhiteSpace(pSchoolId))
@@ -1445,46 +1422,105 @@ namespace AncientWarfare3.core.schools
                 : SchoolPersistenceRowState.Conflict;
         }
 
-        public static void MarkMasterDead(string pMasterId, long pActorId, int pYear,
-            long pCityId, string pCause, double pTime)
+        public static bool CommitSchoolDeath(SchoolMembershipRecord pMembership,
+            HistoricalSchoolAffiliationSnapshot pAffiliation,
+            HistoricalSchoolMasterDefinition pMaster, int pYear, long pCityId,
+            string pCause, double pTime)
         {
-            if (DB == null || string.IsNullOrEmpty(pMasterId)) return;
+            bool historicalMaster = pMembership?.Source ==
+                                    SchoolMembershipSource.HistoricalDescent;
+            if (DB == null || pMembership == null || !pMembership.Active ||
+                !pMembership.IsValid || pYear < pMembership.StartYear ||
+                (pAffiliation != null &&
+                 (pAffiliation.ActorId != pMembership.ActorId ||
+                  pAffiliation.LifecycleState == HistoricalSchoolLifecycleState.Dead)) ||
+                (historicalMaster && pMaster == null) ||
+                (!historicalMaster && pMaster != null) ||
+                (pMaster != null &&
+                 (pMembership.Source != SchoolMembershipSource.HistoricalDescent ||
+                  pMembership.SourceId != pMaster.Id ||
+                  pMembership.SchoolId != pMaster.SchoolId))) return false;
+
+            double time = FiniteNonNegative(pTime);
+            SQLiteTransaction transaction = null;
             try
             {
-                using var transaction = DB.BeginTransaction();
-                using (var master = new SQLiteCommand(DB) { Transaction = transaction })
+                transaction = DB.BeginTransaction();
+                CloseSchoolDeathMembershipCommand(pMembership, pYear, "death", time,
+                    transaction);
+                if (pAffiliation != null)
                 {
+                    using var affiliation = new SQLiteCommand(DB) { Transaction = transaction };
+                    affiliation.CommandText = "UPDATE " + AffiliationTable +
+                        " SET LIFECYCLE_STATE=@state,SERVICE_KINGDOM_ID=-1," +
+                        "SERVICE_START_YEAR=-1,SERVICE_END_YEAR=-1," +
+                        "DESTINATION_CITY_ID=-1,TRAVEL_WAIT_START_YEAR=-1," +
+                        "VOYAGE_START_YEAR=-1,VOYAGE_ARRIVAL_YEAR=-1,UPDATED_TIME=@time" +
+                        " WHERE ACTOR_ID=@actor AND LIFECYCLE_STATE=@previousState" +
+                        " AND LIFECYCLE_STATE<>@state";
+                    affiliation.Parameters.AddWithValue("@state",
+                        HistoricalSchoolLifecycleState.Dead.ToString());
+                    affiliation.Parameters.AddWithValue("@previousState",
+                        pAffiliation.LifecycleState.ToString());
+                    affiliation.Parameters.AddWithValue("@time", time);
+                    affiliation.Parameters.AddWithValue("@actor", pMembership.ActorId);
+                    if (affiliation.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("active affiliation row not found");
+                }
+                if (pMaster != null)
+                {
+                    using var master = new SQLiteCommand(DB) { Transaction = transaction };
                     master.CommandText = "UPDATE " + MasterTable +
                         " SET DEAD=1,DEATH_YEAR=@year,DEATH_CITY_ID=@city,DEATH_CAUSE=@cause," +
                         "LIFECYCLE_STATE=@state,UPDATED_TIME=@time WHERE MASTER_ID=@master" +
-                        " AND ACTOR_ID=@actor AND SPAWNED=1";
+                        " AND ACTOR_ID=@actor AND SCHOOL_ID=@school AND SPAWNED=1 AND DEAD=0";
                     master.Parameters.AddWithValue("@year", pYear);
                     master.Parameters.AddWithValue("@city", pCityId);
                     master.Parameters.AddWithValue("@cause", pCause ?? "death");
                     master.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.Dead.ToString());
-                    master.Parameters.AddWithValue("@time", pTime);
-                    master.Parameters.AddWithValue("@master", pMasterId);
-                    master.Parameters.AddWithValue("@actor", pActorId);
-                    master.ExecuteNonQuery();
-                }
-                using (var affiliation = new SQLiteCommand(DB) { Transaction = transaction })
-                {
-                    affiliation.CommandText = "UPDATE " + AffiliationTable +
-                        " SET LIFECYCLE_STATE=@state,SERVICE_KINGDOM_ID=-1," +
-                        "DESTINATION_CITY_ID=-1,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
-                    affiliation.Parameters.AddWithValue("@state",
-                        HistoricalSchoolLifecycleState.Dead.ToString());
-                    affiliation.Parameters.AddWithValue("@time", pTime);
-                    affiliation.Parameters.AddWithValue("@actor", pActorId);
-                    affiliation.ExecuteNonQuery();
+                    master.Parameters.AddWithValue("@time", time);
+                    master.Parameters.AddWithValue("@master", pMaster.Id);
+                    master.Parameters.AddWithValue("@actor", pMembership.ActorId);
+                    master.Parameters.AddWithValue("@school", pMaster.SchoolId);
+                    if (master.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("living master row not found");
                 }
                 transaction.Commit();
+                return true;
             }
             catch (Exception error)
             {
-                ModClass.LogWarning("HistoricalSchoolStore mark death failed: " + error.Message);
+                try { transaction?.Rollback(); } catch { }
+                ModClass.LogWarning("HistoricalSchoolStore commit school death failed: " +
+                                    error.Message);
+                return false;
             }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
+            }
+        }
+
+        private static void CloseSchoolDeathMembershipCommand(
+            SchoolMembershipRecord pMembership, int pYear, string pReason, double pTime,
+            SQLiteTransaction pTransaction)
+        {
+            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            command.CommandText = "UPDATE " + MembershipTable +
+                " SET ACTIVE=0,END_YEAR=@year,END_REASON=@reason,UPDATED_TIME=@time" +
+                " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor AND SCHOOL_ID=@school" +
+                " AND SOURCE_TYPE=@source AND SOURCE_ID=@sourceId AND ACTIVE=1";
+            command.Parameters.AddWithValue("@year", pYear);
+            command.Parameters.AddWithValue("@reason", pReason ?? "");
+            command.Parameters.AddWithValue("@time", pTime);
+            command.Parameters.AddWithValue("@id", pMembership.MembershipId);
+            command.Parameters.AddWithValue("@actor", pMembership.ActorId);
+            command.Parameters.AddWithValue("@school", pMembership.SchoolId);
+            command.Parameters.AddWithValue("@source", pMembership.Source.ToString());
+            command.Parameters.AddWithValue("@sourceId", pMembership.SourceId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("active membership row not found");
         }
 
         private static void InsertMembershipCommand(SchoolMembershipRecord pRecord, double pTime,

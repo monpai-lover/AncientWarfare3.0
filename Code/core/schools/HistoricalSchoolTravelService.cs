@@ -116,13 +116,12 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        public static void OnDeath(Actor pActor)
+        public static void OnCommittedDeath(Actor pActor)
         {
             if (pActor?.data == null) return;
             try { pActor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId); }
             catch { }
             SchoolLineageService.ReleaseItinerant(pActor);
-            HistoricalAffiliationService.MarkDead(pActor);
         }
 
         public static void ReportImmediatePathFailure(Actor pActor)
