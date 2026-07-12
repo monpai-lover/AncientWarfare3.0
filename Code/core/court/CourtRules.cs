@@ -45,5 +45,10 @@ namespace AncientWarfare3.core.court
         {
             return alive && sameKingdom && !slave && !madness;
         }
+
+        public static bool CanHoldLayerOffice(string pLayer, bool isMale, bool otherwiseEligible)
+        {
+            return otherwiseEligible && (pLayer != CourtOfficeLayer.Central || isMale);
+        }
     }
 }

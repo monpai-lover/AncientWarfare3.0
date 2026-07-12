@@ -32,7 +32,7 @@ namespace AncientWarfare3.core.court
         {
             Actor king = pKingdom.king;
             if (!IsValid(king, pKingdom)) return;
-            string school = ActorSchool(king, CourtService.GetSnapshot(pKingdom).dominant_school);
+            string school = ActorSchool(king, "");
             pSeeds.Add(new CourtPyramidNodeModel(king.data.id, CourtPyramidRoleId.King,
                 CourtPyramidRoleId.King, CourtPyramidRules.KingRank, 0, false)
             {
@@ -48,7 +48,7 @@ namespace AncientWarfare3.core.court
         {
             Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
             if (!CourtPyramidRules.ShouldAddStandaloneHeir(pTier, heir?.data != null)) return;
-            string school = ActorSchool(heir, CourtSchoolId.Ru);
+            string school = ActorSchool(heir, "");
             pSeeds.Add(new CourtPyramidNodeModel(heir.data.id, CourtPyramidRoleId.Heir,
                 CourtPyramidRoleId.Heir, CourtPyramidRules.HeirRank, 0, false)
             {
@@ -80,7 +80,7 @@ namespace AncientWarfare3.core.court
                         ? CourtPyramidRules.GeneralRank
                         : CourtPyramidRules.RankForOffice(officer.office_id);
                 string school = string.IsNullOrEmpty(officer.school_id)
-                    ? ActorSchool(actor, CourtTierRules.PreferredSchoolForOffice(officer.office_id))
+                    ? ActorSchool(actor, "")
                     : officer.school_id;
                 pSeeds.Add(new CourtPyramidNodeModel(actor.data.id, officer.office_id,
                     officer.office_id, rank, order, false)
@@ -103,9 +103,8 @@ namespace AncientWarfare3.core.court
                 pSeeds.Add(new CourtPyramidNodeModel(-1L, office, office,
                     CourtPyramidRules.RankForOffice(office), i, true)
                 {
-                    SchoolId = CourtTierRules.PreferredSchoolForOffice(office),
-                    SchoolIconPath = RegisteredSchoolIconPath(
-                        CourtTierRules.PreferredSchoolForOffice(office))
+                    SchoolId = CourtSchoolId.None,
+                    SchoolIconPath = ""
                 });
             }
         }
@@ -124,8 +123,8 @@ namespace AncientWarfare3.core.court
                     CourtPyramidRoleId.General, CourtPyramidRules.GeneralRank, order++, false)
                 {
                     ActorName = SafeActorName(general),
-                    SchoolId = CourtSchoolId.Military,
-                    SchoolIconPath = RegisteredSchoolIconPath(CourtSchoolId.Military),
+                    SchoolId = ActorSchool(general, ""),
+                    SchoolIconPath = RegisteredSchoolIconPath(ActorSchool(general, "")),
                     CityId = general.city?.data?.id ?? -1L,
                     CityName = general.city?.data?.name ?? "",
                     AppointmentYear = entry.AppointmentYear,
@@ -145,7 +144,7 @@ namespace AncientWarfare3.core.court
             {
                 Actor leader = city.leader;
                 if (!IsValid(leader, pKingdom)) continue;
-                string school = ActorSchool(leader, CourtSchoolId.Ru);
+                string school = ActorSchool(leader, "");
                 pSeeds.Add(new CourtPyramidNodeModel(leader.data.id, CourtOfficeId.Governor,
                     CourtPyramidRoleId.Governor, CourtPyramidRules.GovernorRank, order++, false)
                 {

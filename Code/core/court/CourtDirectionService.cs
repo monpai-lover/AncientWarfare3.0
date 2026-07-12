@@ -43,7 +43,7 @@ namespace AncientWarfare3.core.court
             Actor king = pKingdom.king;
             if (IsValid(king, pKingdom))
             {
-                string school = ResolveSchool(king, "king_council");
+                string school = ResolveSchool(king);
                 result.Add(new CourtInfluenceContribution(king.data.id, school, 8f, 0, isKing: true));
             }
 
@@ -55,7 +55,7 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
                 if (courtKingdomId != pKingdom.id || string.IsNullOrEmpty(office) ||
                     office != officer.office_id) continue;
-                result.Add(new CourtInfluenceContribution(actor.data.id, ResolveSchool(actor, office),
+                result.Add(new CourtInfluenceContribution(actor.data.id, ResolveSchool(actor),
                     OfficeWeight(office), OfficeRank(office), isKing: false));
             }
 
@@ -65,7 +65,7 @@ namespace AncientWarfare3.core.court
                 Actor general = entry.Actor;
                 if (!IsValid(general, pKingdom)) continue;
                 float weight = 3.5f + Math.Min(2f, entry.Merit / 25f);
-                result.Add(new CourtInfluenceContribution(general.data.id, CourtSchoolId.Military,
+                result.Add(new CourtInfluenceContribution(general.data.id, ResolveSchool(general),
                     weight, 40, isKing: false));
             }
 
@@ -76,7 +76,7 @@ namespace AncientWarfare3.core.court
                     Actor leader = city?.leader;
                     if (!IsValid(leader, pKingdom)) continue;
                     result.Add(new CourtInfluenceContribution(leader.data.id,
-                        ResolveSchool(leader, CourtOfficeId.Governor), 2f, 50, isKing: false));
+                        ResolveSchool(leader), 2f, 50, isKing: false));
                 }
             }
             catch { }
@@ -89,13 +89,12 @@ namespace AncientWarfare3.core.court
                    pActor.isAlive() && !pActor.isRekt();
         }
 
-        private static string ResolveSchool(Actor pActor, string pOffice)
+        private static string ResolveSchool(Actor pActor)
         {
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
-            if (!string.IsNullOrEmpty(CourtTraitRules.TraitForSchool(school))) return school;
-            return CourtSchoolAssignmentRules.ResolveSchool(pOffice, new CourtCandidateProfile(
-                pActor.data.id, Stat(pActor, "stewardship"), Stat(pActor, "diplomacy"),
-                Stat(pActor, "warfare"), Stat(pActor, "intelligence"), school));
+            return string.IsNullOrEmpty(CourtTraitRules.TraitForSchool(school))
+                ? CourtSchoolId.None
+                : school;
         }
 
         private static int OfficeRank(string pOffice)
@@ -115,10 +114,5 @@ namespace AncientWarfare3.core.court
             return rank == 10 ? 6f : rank == 20 ? 4.5f : 3.5f;
         }
 
-        private static float Stat(Actor pActor, string pStat)
-        {
-            try { return pActor?.stats?[pStat] ?? 0f; }
-            catch { return 0f; }
-        }
     }
 }

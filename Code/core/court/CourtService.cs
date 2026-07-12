@@ -214,15 +214,16 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
                 if (courtKingdomId != pKingdom.id) continue;
 
-                bool valid = CourtRules.CanHoldOffice(
+                actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+                bool baseValid = CourtRules.CanHoldOffice(
                     alive: actor.isAlive() && !actor.isRekt(),
                     sameKingdom: actor.kingdom == pKingdom,
                     slave: actor.hasTrait(LineageKeys.TRAIT_SLAVE),
                     madness: actor.hasTrait("madness"));
+                bool valid = CourtRules.CanHoldLayerOffice(layer, actor.isSexMale(), baseValid);
                 if (!valid) { ClearOfficer(actor, "invalid"); continue; }
 
                 // 改制后清退不属于当前层级的中央官(旧三公九卿官在升三省六部后退场)。
-                actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
                 if (layer == CourtOfficeLayer.Central && tierOffices.Count > 0 &&
                     !string.IsNullOrEmpty(office) && !tierOffices.Contains(office))
@@ -256,15 +257,12 @@ namespace AncientWarfare3.core.court
             {
                 if (office == "king_council" && HasOfficialCourt(pKingdom))
                 {
-                    string school = CourtSchoolAssignmentRules.ResolveSchool(office, CandidateProfile(king));
-                    king.data.set(LineageKeys.COURT_SCHOOL, school);
+                    EnsurePersonalSchool(king);
                     SyncSchoolTrait(king, active: true);
                 }
                 return;
             }
-            string initialSchool = HasOfficialCourt(pKingdom)
-                ? CourtSchoolAssignmentRules.ResolveSchool("king_council", CandidateProfile(king))
-                : CourtSchoolId.PrimitiveMinister;
+            string initialSchool = EnsurePersonalSchool(king);
             SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive, "king_council", initialSchool, null);
             pOccupiedOffices?.Add("king_council");
         }
@@ -277,7 +275,7 @@ namespace AncientWarfare3.core.court
 
             Actor candidate = FindBestCandidate(pKingdom, pRoster, pOfficeId, pPreferredSchool);
             if (candidate == null) return;
-            string school = CourtSchoolAssignmentRules.ResolveSchool(pOfficeId, CandidateProfile(candidate));
+            string school = EnsurePersonalSchool(candidate);
             SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central, pOfficeId, school, null);
             pOccupiedOffices?.Add(pOfficeId);
         }
@@ -293,8 +291,10 @@ namespace AncientWarfare3.core.court
             {
                 if (++seen > CandidateLimit * 8) break;
                 if (actor?.data == null || actor.isRekt()) continue;
-                if (!CourtRules.CanHoldOffice(actor.isAlive(), actor.kingdom == pKingdom,
-                        actor.hasTrait(LineageKeys.TRAIT_SLAVE), actor.hasTrait("madness"))) continue;
+                bool baseEligible = CourtRules.CanHoldOffice(actor.isAlive(), actor.kingdom == pKingdom,
+                    actor.hasTrait(LineageKeys.TRAIT_SLAVE), actor.hasTrait("madness"));
+                if (!CourtRules.CanHoldLayerOffice(
+                        CourtOfficeLayer.Central, actor.isSexMale(), baseEligible)) continue;
 
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string currentOffice, "");
                 if (!string.IsNullOrEmpty(currentOffice)) continue;
@@ -325,8 +325,38 @@ namespace AncientWarfare3.core.court
             if (ChronicleGate.IsNobleActor(pActor)) score += 4f;
 
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string naturalSchool, "");
-            if (naturalSchool == pPreferredSchool) score += 6f;
+            score += CourtSchoolAssignmentRules.CompatibilityBonus(pOfficeId, naturalSchool);
             return score;
+        }
+
+        private static string EnsurePersonalSchool(Actor pActor)
+        {
+            if (pActor?.data == null) return CourtSchoolId.None;
+            pActor.data.get(LineageKeys.COURT_SCHOOL, out string existingSchool, "");
+            string parentSchool = ResolveParentSchool(pActor);
+            string citySchool = GetSnapshot(pActor.kingdom).dominant_school;
+            string school = CourtSchoolIdentityRules.Resolve(new CourtSchoolIdentityProfile(
+                pActor.data.id, SafeStat(pActor, "stewardship"), SafeStat(pActor, "diplomacy"),
+                SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"),
+                existingSchool, parentSchool, citySchool));
+            pActor.data.set(LineageKeys.COURT_SCHOOL, school ?? "");
+            return school ?? CourtSchoolId.None;
+        }
+
+        private static string ResolveParentSchool(Actor pActor)
+        {
+            string fallback = "";
+            foreach (long parentId in new[] { pActor.data.parent_id_1, pActor.data.parent_id_2 })
+            {
+                if (parentId < 0) continue;
+                Actor parent = World.world?.units?.get(parentId);
+                if (parent?.data == null) continue;
+                parent.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+                if (string.IsNullOrEmpty(school)) continue;
+                if (parent.isSexMale()) return school;
+                fallback = school;
+            }
+            return fallback;
         }
 
         private static CourtCandidateProfile CandidateProfile(Actor pActor)
@@ -369,13 +399,13 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
-            pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
+            string personalSchool = EnsurePersonalSchool(pActor);
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             SyncSchoolTrait(pActor, active: true);
-            RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", pSchoolId ?? "", pCity);
-            ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", pSchoolId ?? "");
+            RecordOfficerAppointment(pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
+            ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
             if (clearedPreviousPhysician && previousKingdom?.data != null)
@@ -407,7 +437,6 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, -1L);
             pActor.data.set(LineageKeys.COURT_LAYER, "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, "");
-            pActor.data.set(LineageKeys.COURT_SCHOOL, "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
 
             CloseOfficerRecord(pActor.data.id, pReason ?? "");
@@ -466,7 +495,7 @@ namespace AncientWarfare3.core.court
             foreach (string traitId in AllSchoolTraits())
             {
                 if (string.IsNullOrEmpty(traitId)) continue;
-                if (active && traitId == CourtTraitRules.TraitForSchool(school))
+                if (traitId == CourtTraitRules.TraitForSchool(school))
                 {
                     if (!pActor.hasTrait(traitId)) pActor.addTrait(traitId);
                 }
