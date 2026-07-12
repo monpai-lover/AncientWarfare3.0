@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
 {
-    public sealed class AWStreamingPathGenerator
+    public sealed class AWStreamingPathGenerator : IAWPathGenerator
     {
         private const float Epsilon = 0.001f;
         private readonly AWPathfindingConfig _config;
