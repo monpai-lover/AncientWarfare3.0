@@ -231,6 +231,7 @@ namespace AncientWarfare3.core.lineage
                 pCourt?.aggression ?? 0.5f,
                 pCourt?.peace ?? 0.5f,
                 pCourt?.livelihood ?? 0.5f,
+                pCourt?.war ?? 0.5f,
                 protectedWar);
         }
 

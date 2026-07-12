@@ -19,8 +19,12 @@ namespace AncientWarfare3.core.court
         public float efficiency;
         public float concentration;
         public float livelihood;
+        public float war;
         public float aggression;
         public float peace;
+        public float order;
+        public float commerce;
+        public float technology;
     }
 
     internal sealed class CourtOfficerView
@@ -82,8 +86,12 @@ namespace AncientWarfare3.core.court
             pKingdom.data.get(LineageKeys.COURT_EFFICIENCY, out snapshot.efficiency, 0f);
             pKingdom.data.get(LineageKeys.COURT_CONCENTRATION, out snapshot.concentration, 0f);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_LIVELIHOOD, out snapshot.livelihood, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_WAR, out snapshot.war, 0.5f);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_AGGRESSION, out snapshot.aggression, 0.5f);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_PEACE, out snapshot.peace, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_ORDER, out snapshot.order, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_COMMERCE, out snapshot.commerce, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_TECHNOLOGY, out snapshot.technology, 0.5f);
             return snapshot;
         }
 
@@ -572,8 +580,12 @@ namespace AncientWarfare3.core.court
                 ColumnVal.Create("FACTION_CONCENTRATION", (double)s.concentration),
                 ColumnVal.Create("FACTION_CACHE", s.faction_cache ?? ""),
                 ColumnVal.Create("DIRECTION_LIVELIHOOD", (double)s.livelihood),
+                ColumnVal.Create("DIRECTION_WAR", (double)s.war),
                 ColumnVal.Create("DIRECTION_AGGRESSION", (double)s.aggression),
                 ColumnVal.Create("DIRECTION_PEACE", (double)s.peace),
+                ColumnVal.Create("DIRECTION_ORDER", (double)s.order),
+                ColumnVal.Create("DIRECTION_COMMERCE", (double)s.commerce),
+                ColumnVal.Create("DIRECTION_TECHNOLOGY", (double)s.technology),
                 ColumnVal.Create("LAST_REFRESH_YEAR", lastRefresh),
                 ColumnVal.Create("LAST_CANDIDATE_REFRESH_YEAR", lastCandidate),
                 ColumnVal.Create("LAST_STRONG_EVENT_YEAR", lastStrong),

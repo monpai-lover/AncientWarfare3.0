@@ -19,10 +19,17 @@ namespace AncientWarfare3.core.court
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_DIRTY, out bool dirty, true);
             if (!dirty && lastYear == year) return Read(pKingdom);
 
-            CourtDirectionSnapshot snapshot = CourtDirectionRules.Aggregate(BuildContributions(pKingdom));
+            CourtDirectionSnapshot target = CourtDirectionRules.Aggregate(BuildContributions(pKingdom));
+            CourtDirectionSnapshot snapshot = lastYear < 0
+                ? target
+                : CourtDirectionRules.Smooth(Read(pKingdom), target, alpha: 0.25f, deadband: 0.03f);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_LIVELIHOOD, snapshot.Livelihood);
+            pKingdom.data.set(LineageKeys.COURT_DIRECTION_WAR, snapshot.War);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_AGGRESSION, snapshot.Aggression);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_PEACE, snapshot.Peace);
+            pKingdom.data.set(LineageKeys.COURT_DIRECTION_ORDER, snapshot.Order);
+            pKingdom.data.set(LineageKeys.COURT_DIRECTION_COMMERCE, snapshot.Commerce);
+            pKingdom.data.set(LineageKeys.COURT_DIRECTION_TECHNOLOGY, snapshot.Technology);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_LAST_YEAR, year);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_DIRTY, false);
             return snapshot;
@@ -32,8 +39,12 @@ namespace AncientWarfare3.core.court
         {
             var result = new CourtDirectionSnapshot();
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_LIVELIHOOD, out result.Livelihood, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_WAR, out result.War, 0.5f);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_AGGRESSION, out result.Aggression, 0.5f);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_PEACE, out result.Peace, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_ORDER, out result.Order, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_COMMERCE, out result.Commerce, 0.5f);
+            pKingdom.data.get(LineageKeys.COURT_DIRECTION_TECHNOLOGY, out result.Technology, 0.5f);
             return result;
         }
 
@@ -44,7 +55,16 @@ namespace AncientWarfare3.core.court
             if (IsValid(king, pKingdom))
             {
                 string school = ResolveSchool(king);
-                result.Add(new CourtInfluenceContribution(king.data.id, school, 8f, 0, isKing: true));
+                if (!string.IsNullOrEmpty(school))
+                    result.Add(new CourtInfluenceContribution(king.data.id, school, 8f, 0, isKing: true));
+            }
+
+            Actor heir = HeirService.PeekRegisteredHeir(pKingdom);
+            if (IsValid(heir, pKingdom) && heir != king)
+            {
+                string school = ResolveSchool(heir);
+                if (!string.IsNullOrEmpty(school))
+                    result.Add(new CourtInfluenceContribution(heir.data.id, school, 5f, 5, isKing: false));
             }
 
             foreach (CourtOfficerView officer in CourtService.GetActiveOfficers(pKingdom, 96))
@@ -55,8 +75,10 @@ namespace AncientWarfare3.core.court
                 actor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
                 if (courtKingdomId != pKingdom.id || string.IsNullOrEmpty(office) ||
                     office != officer.office_id) continue;
-                result.Add(new CourtInfluenceContribution(actor.data.id, ResolveSchool(actor),
-                    OfficeWeight(office), OfficeRank(office), isKing: false));
+                string school = ResolveSchool(actor);
+                if (!string.IsNullOrEmpty(school))
+                    result.Add(new CourtInfluenceContribution(actor.data.id, school,
+                        4f, OfficeRank(office), isKing: false));
             }
 
             foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(
@@ -64,9 +86,10 @@ namespace AncientWarfare3.core.court
             {
                 Actor general = entry.Actor;
                 if (!IsValid(general, pKingdom)) continue;
-                float weight = 3.5f + Math.Min(2f, entry.Merit / 25f);
-                result.Add(new CourtInfluenceContribution(general.data.id, ResolveSchool(general),
-                    weight, 40, isKing: false));
+                string school = ResolveSchool(general);
+                if (!string.IsNullOrEmpty(school))
+                    result.Add(new CourtInfluenceContribution(general.data.id, school,
+                        3f, 40, isKing: false));
             }
 
             try
@@ -75,8 +98,10 @@ namespace AncientWarfare3.core.court
                 {
                     Actor leader = city?.leader;
                     if (!IsValid(leader, pKingdom)) continue;
-                    result.Add(new CourtInfluenceContribution(leader.data.id,
-                        ResolveSchool(leader), 2f, 50, isKing: false));
+                    string school = ResolveSchool(leader);
+                    if (!string.IsNullOrEmpty(school))
+                        result.Add(new CourtInfluenceContribution(leader.data.id,
+                            school, 5f, 50, isKing: false));
                 }
             }
             catch { }
@@ -92,9 +117,7 @@ namespace AncientWarfare3.core.court
         private static string ResolveSchool(Actor pActor)
         {
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
-            return string.IsNullOrEmpty(CourtTraitRules.TraitForSchool(school))
-                ? CourtSchoolId.None
-                : school;
+            return CourtSchoolRegistry.Find(school) == null ? CourtSchoolId.None : school;
         }
 
         private static int OfficeRank(string pOffice)
@@ -106,12 +129,6 @@ namespace AncientWarfare3.core.court
                 pOffice == CourtOfficeId.Bingbu || pOffice == CourtOfficeId.Xingbu ||
                 pOffice == CourtOfficeId.Gongbu) return 20;
             return 10;
-        }
-
-        private static float OfficeWeight(string pOffice)
-        {
-            int rank = OfficeRank(pOffice);
-            return rank == 10 ? 6f : rank == 20 ? 4.5f : 3.5f;
         }
 
     }

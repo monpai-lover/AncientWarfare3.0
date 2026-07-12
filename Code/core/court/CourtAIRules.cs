@@ -3,7 +3,8 @@ namespace AncientWarfare3.core.court
     public static class CourtAIRules
     {
         public static int ScoreResearch(string dominantSchool, string nodeId, bool atWar, bool mandateExists,
-            float livelihood = 0.5f)
+            float livelihood = 0.5f, float commerce = 0.5f, float technology = 0.5f,
+            float order = 0.5f)
         {
             int score = 0;
             switch (dominantSchool ?? "")
@@ -37,12 +38,17 @@ namespace AncientWarfare3.core.court
                     if (nodeId == "aw_decision_fabricate_weak_claim" || nodeId == "aw_decision_fabricate_strong_claim") score += 60;
                     break;
             }
-            return score + CourtDirectionRules.LivelihoodResearchBonus(
+            score += CourtDirectionRules.LivelihoodResearchBonus(
                 livelihood, IsLivelihoodResearch(nodeId));
+            if (IsCommerceResearch(nodeId)) score += AxisPreferenceBonus(commerce);
+            if (IsTechnologyResearch(nodeId)) score += AxisPreferenceBonus(technology);
+            if (IsOrderResearch(nodeId)) score += AxisPreferenceBonus(order);
+            return score;
         }
 
         public static int ScoreDecision(string dominantSchool, string decisionId, int cities, bool atWar, bool unstable,
-            float livelihood = 0.5f, float aggression = 0.5f, float peace = 0.5f)
+            float livelihood = 0.5f, float aggression = 0.5f, float peace = 0.5f,
+            float war = 0.5f, float order = 0.5f)
         {
             int score = 0;
             switch (dominantSchool ?? "")
@@ -74,7 +80,7 @@ namespace AncientWarfare3.core.court
                 decisionId == "aw_decision_fabricate_strong_claim")
             {
                 float multiplier = CourtDirectionRules.OffensiveWarMultiplier(
-                    aggression, peace, livelihood, protectedWar: false);
+                    aggression, peace, livelihood, war, protectedWar: false);
                 score += (int)((multiplier - 1f) * 120f);
             }
             else if (decisionId == "aw_decision_seek_suzerain")
@@ -83,7 +89,7 @@ namespace AncientWarfare3.core.court
             }
             else if (decisionId == "aw_decision_absorb_vassal")
             {
-                score += (int)((CourtDirectionRules.ForcedVassalMultiplier(aggression) - 1f) * 80f);
+                score += (int)((CourtDirectionRules.ForcedVassalMultiplier(aggression, order) - 1f) * 80f);
             }
             return score;
         }
@@ -105,6 +111,57 @@ namespace AncientWarfare3.core.court
                 default:
                     return false;
             }
+        }
+
+        public static bool IsCommerceResearch(string nodeId)
+        {
+            switch (nodeId ?? "")
+            {
+                case "aw_tech_granary_accounting":
+                case "aw_policy_household_registry":
+                case "aw_policy_imperial_court":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsTechnologyResearch(string nodeId)
+        {
+            switch (nodeId ?? "")
+            {
+                case "aw_tech_writing":
+                case "aw_tech_bronze_casting":
+                case "aw_tech_pottery_casting":
+                case "aw_tech_chariot_training":
+                case "aw_tech_city_defense":
+                case "aw_tech_official_court":
+                case "aw_tech_three_departments":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsOrderResearch(string nodeId)
+        {
+            switch (nodeId ?? "")
+            {
+                case "aw_policy_early_law":
+                case "aw_policy_household_registry":
+                case "aw_policy_favor_order":
+                case "aw_policy_xia_law_institutions":
+                case "aw_tech_official_court":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static int AxisPreferenceBonus(float pValue)
+        {
+            float value = pValue < 0f ? 0f : pValue > 1f ? 1f : pValue;
+            return (int)System.Math.Round((value - 0.5f) * 60f);
         }
     }
 }

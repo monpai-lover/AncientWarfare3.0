@@ -24,7 +24,7 @@ namespace AncientWarfare3.ui.windows
         private const float MaxHeight = 650f;
         private const float ScrollMarginX = 42f;
         private const float ScrollMarginY = 58f;
-        private const float SummaryHeight = 62f;
+        private const float SummaryHeight = 78f;
         private const float CanvasTopGap = 10f;
         private const float CanvasLeftInset = 8f;
         private const float CanvasPadding = 24f;
@@ -193,7 +193,7 @@ namespace AncientWarfare3.ui.windows
                 _summaryRect.anchoredPosition = Vector2.zero;
                 _summaryRect.sizeDelta = new Vector2(pContentWidth, SummaryHeight);
                 LayoutSummaryText(_summaryPrimary, 44f, 4f, pContentWidth - 52f, 25f);
-                LayoutSummaryText(_summarySecondary, 44f, 29f, pContentWidth - 52f, 29f);
+                LayoutSummaryText(_summarySecondary, 44f, 29f, pContentWidth - 52f, 45f);
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -311,13 +311,21 @@ namespace AncientWarfare3.ui.windows
             if (!string.IsNullOrEmpty(pSnapshot.secondary_school))
                 schools += " / " + SchoolName(pSnapshot.secondary_school);
             _summarySecondary.text = AW_L10n.Text("aw_court_dominant_school", "Dominant Schools") + ": " +
-                                     schools + "    " +
+                                     schools + "\n" +
                                      AW_L10n.Text("aw_court_direction_livelihood", "Livelihood") + " " +
                                      Percent(pSnapshot.livelihood) + "  " +
+                                     AW_L10n.Text("aw_school_direction_war", "War") + " " +
+                                     Percent(pSnapshot.war) + "  " +
                                      AW_L10n.Text("aw_court_direction_aggression", "Aggression") + " " +
                                      Percent(pSnapshot.aggression) + "  " +
                                      AW_L10n.Text("aw_court_direction_peace", "Peace") + " " +
-                                     Percent(pSnapshot.peace);
+                                     Percent(pSnapshot.peace) + "  " +
+                                     AW_L10n.Text("aw_school_direction_order", "Order") + " " +
+                                     Percent(pSnapshot.order) + "  " +
+                                     AW_L10n.Text("aw_school_direction_commerce", "Commerce") + " " +
+                                     Percent(pSnapshot.commerce) + "  " +
+                                     AW_L10n.Text("aw_school_direction_technology", "Technology") + " " +
+                                     Percent(pSnapshot.technology);
         }
 
         private CourtActorNodeView GetNode(int pIndex)
