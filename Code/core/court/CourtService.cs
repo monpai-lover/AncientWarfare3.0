@@ -6,6 +6,7 @@ using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.court
@@ -332,7 +333,7 @@ namespace AncientWarfare3.core.court
                 score += intelligence * 2f + diplomacy * 1.5f;
             if (ChronicleGate.IsNobleActor(pActor)) score += 4f;
 
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string naturalSchool, "");
+            string naturalSchool = SchoolMembershipService.GetSchool(pActor.data.id);
             score += CourtSchoolAssignmentRules.CompatibilityBonus(pOfficeId, naturalSchool);
             return score;
         }
@@ -340,41 +341,19 @@ namespace AncientWarfare3.core.court
         internal static string EnsurePersonalSchool(Actor pActor)
         {
             if (pActor?.data == null) return CourtSchoolId.None;
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string existingSchool, "");
-            string parentSchool = ResolveParentSchool(pActor);
-            string citySchool = CitySchoolSnapshotService.GetSnapshot(pActor.city)?.DominantSchool ??
-                                CourtSchoolId.None;
-            string school = CourtSchoolIdentityRules.Resolve(new CourtSchoolIdentityProfile(
-                pActor.data.id, SafeStat(pActor, "stewardship"), SafeStat(pActor, "diplomacy"),
-                SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"),
-                existingSchool, parentSchool, citySchool));
-            pActor.data.set(LineageKeys.COURT_SCHOOL, school ?? "");
-            SchoolMembershipService.Update(pActor, school);
-            return school ?? CourtSchoolId.None;
-        }
-
-        private static string ResolveParentSchool(Actor pActor)
-        {
-            string fallback = "";
-            foreach (long parentId in new[] { pActor.data.parent_id_1, pActor.data.parent_id_2 })
-            {
-                if (parentId < 0) continue;
-                Actor parent = World.world?.units?.get(parentId);
-                if (parent?.data == null) continue;
-                parent.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
-                if (string.IsNullOrEmpty(school)) continue;
-                if (parent.isSexMale()) return school;
-                fallback = school;
-            }
-            return fallback;
+            string school = SchoolMembershipService.GetSchool(pActor.data.id);
+            pActor.data.set(LineageKeys.COURT_SCHOOL, school);
+            SyncSchoolTrait(pActor, active: true);
+            return school;
         }
 
         private static CourtCandidateProfile CandidateProfile(Actor pActor)
         {
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string existingSchool, "");
+            string existingSchool = SchoolMembershipService.GetSchool(pActor.data.id);
             return new CourtCandidateProfile(pActor.data.id,
                 SafeStat(pActor, "stewardship"), SafeStat(pActor, "diplomacy"),
-                SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"), existingSchool);
+                SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"), existingSchool,
+                !string.IsNullOrEmpty(existingSchool));
         }
 
         private static void SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
@@ -507,7 +486,7 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null) return;
 
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            string school = SchoolMembershipService.GetSchool(pActor.data.id);
             foreach (string traitId in AllSchoolTraits())
             {
                 if (string.IsNullOrEmpty(traitId)) continue;
@@ -531,7 +510,7 @@ namespace AncientWarfare3.core.court
                 if (courtKingdomId != pKingdom.id) continue;
 
                 actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
-                actor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+                string school = SchoolMembershipService.GetSchool(actor.data.id);
                 if (string.IsNullOrEmpty(school)) continue;
 
                 float influence = CourtInfluenceRules.InfluenceWeight(layer,

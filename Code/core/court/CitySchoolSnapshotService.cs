@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
@@ -145,9 +146,8 @@ namespace AncientWarfare3.core.court
             string pRole, int pRoleRank)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            string school = SchoolMembershipService.GetSchool(pActor.data.id);
             if (CourtSchoolRegistry.Find(school) == null) return;
-            SchoolMembershipService.IndexLoaded(pActor, school);
             pItems.Add(new CitySchoolInfluenceContribution(pActor.data.id, school, pRole,
                 CitySchoolInfluenceRules.RoleBaseWeight(pRole), AbilityScore(pActor), pRoleRank,
                 SafeName(pActor)));
@@ -173,38 +173,4 @@ namespace AncientWarfare3.core.court
         }
     }
 
-    internal static class SchoolMembershipService
-    {
-        private static readonly SchoolMembershipIndex Index = new SchoolMembershipIndex();
-
-        public static void Update(Actor pActor, string pSchoolId)
-        {
-            if (pActor?.data == null) return;
-            bool alive = pActor.isAlive() && !pActor.isRekt();
-            Index.Update(pActor.data.id, pSchoolId, alive);
-            CitySchoolSnapshotService.MarkActorDirty(pActor);
-        }
-
-        public static void Remove(Actor pActor)
-        {
-            if (pActor?.data == null) return;
-            Index.Remove(pActor.data.id);
-            CitySchoolSnapshotService.MarkActorDirty(pActor);
-        }
-
-        public static int Count(string pSchoolId) => Index.Count(pSchoolId);
-        public static long[] Members(string pSchoolId) => Index.Members(pSchoolId);
-
-        public static void IndexLoaded(Actor pActor, string pSchoolId)
-        {
-            if (pActor?.data == null) return;
-            Index.Update(pActor.data.id, pSchoolId, pActor.isAlive() && !pActor.isRekt());
-        }
-
-        public static void Clear()
-        {
-            Index.Clear();
-            CitySchoolSnapshotService.Clear();
-        }
-    }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
@@ -175,9 +176,9 @@ namespace AncientWarfare3.core.court
 
         private static string ActorSchool(Actor pActor, string pFallback)
         {
-            if (pActor?.data == null) return pFallback ?? "";
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
-            return string.IsNullOrEmpty(school) ? pFallback ?? "" : school;
+            return pActor?.data == null
+                ? CourtSchoolId.None
+                : SchoolMembershipService.GetSchool(pActor.data.id);
         }
 
         private static string RegisteredSchoolIconPath(string pSchool)

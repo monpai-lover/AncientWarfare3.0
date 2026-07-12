@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.court
 {
@@ -116,8 +117,9 @@ namespace AncientWarfare3.core.court
 
         private static string ResolveSchool(Actor pActor)
         {
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
-            return CourtSchoolRegistry.Find(school) == null ? CourtSchoolId.None : school;
+            return pActor?.data == null
+                ? CourtSchoolId.None
+                : SchoolMembershipService.GetSchool(pActor.data.id);
         }
 
         private static int OfficeRank(string pOffice)

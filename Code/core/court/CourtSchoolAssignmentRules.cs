@@ -11,9 +11,11 @@ namespace AncientWarfare3.core.court
         public readonly float Warfare;
         public readonly float Intelligence;
         public readonly string ExistingSchool;
+        public readonly bool HasAuthoritativeMembership;
 
         public CourtCandidateProfile(long actorId, float stewardship, float diplomacy,
-            float warfare, float intelligence, string existingSchool)
+            float warfare, float intelligence, string existingSchool,
+            bool hasAuthoritativeMembership = false)
         {
             ActorId = actorId;
             Stewardship = stewardship;
@@ -21,6 +23,7 @@ namespace AncientWarfare3.core.court
             Warfare = warfare;
             Intelligence = intelligence;
             ExistingSchool = existingSchool ?? "";
+            HasAuthoritativeMembership = hasAuthoritativeMembership;
         }
     }
 
@@ -31,9 +34,9 @@ namespace AncientWarfare3.core.court
 
         public static string ResolveSchool(string pOfficeId, CourtCandidateProfile pProfile)
         {
-            return CourtSchoolIdentityRules.Resolve(new CourtSchoolIdentityProfile(
-                pProfile.ActorId, pProfile.Stewardship, pProfile.Diplomacy,
-                pProfile.Warfare, pProfile.Intelligence, pProfile.ExistingSchool, "", ""));
+            return CourtSchoolIdentityRules.Resolve(
+                new CourtSchoolIdentityProfile(pProfile.ExistingSchool,
+                    pProfile.HasAuthoritativeMembership));
         }
 
         public static float CompatibilityBonus(string pOfficeId, string pSchoolId)

@@ -8,10 +8,12 @@ namespace AncientWarfare3.core.db
         public string table;
         public string columns;
         public string where;
+        public bool unique;
 
         public string BuildSql()
         {
-            string sql = "CREATE INDEX IF NOT EXISTS " + name + " ON " + table + " (" + columns + ")";
+            string sql = "CREATE " + (unique ? "UNIQUE " : "") + "INDEX IF NOT EXISTS " +
+                         name + " ON " + table + " (" + columns + ")";
             return string.IsNullOrEmpty(where) ? sql : sql + " WHERE " + where;
         }
     }
@@ -109,7 +111,33 @@ namespace AncientWarfare3.core.db
                 Index("idx_CourtOfficer_actor_active", CourtOfficerTableItem.GetTableName(),
                     "ACTOR_ID, ACTIVE, KINGDOM_ID"),
                 Index("idx_CityBureauState_kingdom_city", CityBureauStateTableItem.GetTableName(),
-                    "KINGDOM_ID, CITY_ID")
+                    "KINGDOM_ID, CITY_ID"),
+
+                Index("idx_SchoolMembership_actor_active_unique",
+                    SchoolMembershipTableItem.GetTableName(), "ACTOR_ID", "ACTIVE=1",
+                    pUnique: true),
+                Index("idx_SchoolMembership_school_active",
+                    SchoolMembershipTableItem.GetTableName(),
+                    "SCHOOL_ID, ACTIVE, REPUTATION, ACTOR_ID"),
+                Index("idx_CitySchoolLedger_city_school",
+                    CitySchoolLedgerTableItem.GetTableName(), "CITY_ID, SCHOOL_ID"),
+                Index("idx_HistoricalSchoolMaster_actor",
+                    HistoricalSchoolMasterTableItem.GetTableName(), "ACTOR_ID, DEAD"),
+                Index("idx_SchoolAffiliation_residence",
+                    SchoolAffiliationTableItem.GetTableName(),
+                    "RESIDENCE_CITY_ID, LIFECYCLE_STATE, ACTOR_ID"),
+                Index("idx_SchoolAffiliation_service",
+                    SchoolAffiliationTableItem.GetTableName(),
+                    "SERVICE_KINGDOM_ID, SERVICE_END_YEAR, ACTOR_ID"),
+                Index("idx_SchoolInstitution_city_active",
+                    SchoolInstitutionTableItem.GetTableName(),
+                    "CITY_ID, ACTIVE, SCHOOL_ID, CONDITION"),
+                Index("idx_SchoolWork_school_preserved", SchoolWorkTableItem.GetTableName(),
+                    "SCHOOL_ID, PRESERVED, CITY_ID"),
+                Index("idx_SchoolDebate_city_year", SchoolDebateTableItem.GetTableName(),
+                    "CITY_ID, DEBATE_YEAR, DEBATE_ID"),
+                Index("idx_SchoolEvent_school_year", SchoolEventTableItem.GetTableName(),
+                    "SCHOOL_ID, EVENT_YEAR, EVENT_ID")
             };
         }
 
@@ -122,14 +150,15 @@ namespace AncientWarfare3.core.db
         }
 
         private static LineageArchiveIndexSpec Index(string pName, string pTable, string pColumns,
-            string pWhere = "")
+            string pWhere = "", bool pUnique = false)
         {
             return new LineageArchiveIndexSpec
             {
                 name = pName,
                 table = pTable,
                 columns = pColumns,
-                where = pWhere
+                where = pWhere,
+                unique = pUnique
             };
         }
     }

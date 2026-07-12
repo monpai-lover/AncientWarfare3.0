@@ -2,9 +2,10 @@ namespace AncientWarfare3.core.court
 {
     public static class CourtTraitRules
     {
-        public static bool ShouldHoldSchoolTrait(bool isOfficer, bool alive, bool defected)
+        public static bool ShouldHoldSchoolTrait(bool pHasActiveMembership, bool pAlive,
+            bool pMembershipClosed)
         {
-            return isOfficer && alive && !defected;
+            return pHasActiveMembership && pAlive && !pMembershipClosed;
         }
 
         public static string TraitForSchool(string schoolId)

@@ -1,0 +1,183 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
+
+namespace AncientWarfare3.core.schools
+{
+    internal static class SchoolMembershipService
+    {
+        private static readonly SchoolMembershipBook Memberships = new SchoolMembershipBook();
+
+        public static string GetSchool(long pActorId)
+        {
+            return Memberships.GetSchool(pActorId);
+        }
+
+        public static SchoolMembershipRecord GetActive(long pActorId)
+        {
+            return Memberships.GetActive(pActorId);
+        }
+
+        public static bool TryJoin(Actor pActor, string pSchoolId,
+            SchoolMembershipSource pSource, string pSourceId, long pTeacherActorId,
+            long pCityId, int pGeneration)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                CourtSchoolRegistry.Find(pSchoolId) == null || string.IsNullOrWhiteSpace(pSourceId))
+                return false;
+            SchoolMembershipRecord existing = Memberships.GetActive(pActor.data.id);
+            if (existing != null)
+                return existing.SchoolId == pSchoolId && existing.Source == pSource &&
+                       existing.SourceId == pSourceId;
+
+            long membershipId = HistoricalSchoolStore.NextMembershipId();
+            if (membershipId < 0) return false;
+            int year = Date.getCurrentYear();
+            var record = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
+                pSource, pSourceId, pTeacherActorId, pCityId, pGeneration, 0f, year);
+            if (!record.IsValid || !HistoricalSchoolStore.InsertMembership(record, WorldTime()))
+                return false;
+            if (!Memberships.TryJoin(record))
+            {
+                LoadIndexes();
+                return false;
+            }
+            Project(pActor, pSchoolId);
+            return true;
+        }
+
+        public static bool TryConvert(Actor pActor, string pSchoolId, string pSourceId,
+            long pCityId)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                CourtSchoolRegistry.Find(pSchoolId) == null || string.IsNullOrWhiteSpace(pSourceId))
+                return false;
+            SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
+            if (current == null || current.Source == SchoolMembershipSource.HistoricalDescent ||
+                current.SchoolId == pSchoolId) return false;
+            long membershipId = HistoricalSchoolStore.NextMembershipId();
+            if (membershipId < 0) return false;
+            int year = Date.getCurrentYear();
+            var replacement = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
+                SchoolMembershipSource.ExplicitConversion, pSourceId, -1, pCityId, 0,
+                current.Reputation, year);
+            if (!HistoricalSchoolStore.ConvertMembership(current, replacement, year, WorldTime()))
+                return false;
+            if (!Memberships.TryConvert(pActor.data.id, replacement, year, out _))
+            {
+                LoadIndexes();
+                return false;
+            }
+            Project(pActor, pSchoolId);
+            return true;
+        }
+
+        public static void OnDeath(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
+            if (current == null)
+            {
+                Project(pActor, CourtSchoolId.None);
+                return;
+            }
+            int year = Date.getCurrentYear();
+            if (!HistoricalSchoolStore.CloseMembership(current, year, "death", WorldTime()))
+                return;
+            Memberships.Close(pActor.data.id, year, "death", out _);
+            Project(pActor, CourtSchoolId.None);
+        }
+
+        public static Actor[] LivingMembers(string pSchoolId)
+        {
+            IReadOnlyList<long> members = Memberships.Members(pSchoolId);
+            var result = new List<Actor>(members.Count);
+            foreach (long actorId in members)
+            {
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && actor.isAlive() && !actor.isRekt()) result.Add(actor);
+            }
+            return result.ToArray();
+        }
+
+        public static int Count(string pSchoolId)
+        {
+            return Memberships.Members(pSchoolId).Count;
+        }
+
+        public static long[] Members(string pSchoolId)
+        {
+            IReadOnlyList<long> members = Memberships.Members(pSchoolId);
+            var result = new long[members.Count];
+            for (int i = 0; i < members.Count; i++) result[i] = members[i];
+            return result;
+        }
+
+        public static void LoadIndexes()
+        {
+            Memberships.Clear();
+            var duplicates = new List<SchoolMembershipRecord>();
+            foreach (SchoolMembershipRecord record in HistoricalSchoolStore.LoadActiveMemberships())
+            {
+                if (!Memberships.TryJoin(record)) duplicates.Add(record);
+            }
+            foreach (SchoolMembershipRecord duplicate in duplicates)
+                HistoricalSchoolStore.CloseMembership(duplicate, Date.getCurrentYear(),
+                    "duplicate_active_repair", WorldTime());
+
+            try
+            {
+                if (World.world?.units != null)
+                    foreach (Actor actor in World.world.units)
+                        if (actor?.data != null) Project(actor, GetSchool(actor.data.id));
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("SchoolMembershipService projection repair failed: " +
+                                    error.Message);
+            }
+            CitySchoolSnapshotService.Clear();
+        }
+
+        public static void ClearRuntime()
+        {
+            Memberships.Clear();
+            CitySchoolSnapshotService.Clear();
+        }
+
+        private static void Project(Actor pActor, string pSchoolId)
+        {
+            if (pActor?.data == null) return;
+            string school = CourtSchoolRegistry.Find(pSchoolId) == null
+                ? CourtSchoolId.None
+                : pSchoolId;
+            SchoolMembershipRecord record = Memberships.GetActive(pActor.data.id);
+            pActor.data.set(LineageKeys.COURT_SCHOOL, school);
+            pActor.data.set(LineageKeys.SCHOOL_MEMBERSHIP_ID, record?.MembershipId ?? -1L);
+            pActor.data.set(LineageKeys.SCHOOL_MEMBERSHIP_SOURCE,
+                record?.Source.ToString() ?? "");
+            pActor.data.set(LineageKeys.SCHOOL_MASTER_ID,
+                record?.Source == SchoolMembershipSource.HistoricalDescent
+                    ? record.SourceId
+                    : "");
+            foreach (CourtSchoolDefinition definition in CourtSchoolRegistry.All)
+            {
+                string traitId = definition.TraitId;
+                if (string.IsNullOrEmpty(traitId)) continue;
+                if (definition.Id == school)
+                {
+                    if (!pActor.hasTrait(traitId)) pActor.addTrait(traitId);
+                }
+                else if (pActor.hasTrait(traitId))
+                    pActor.removeTrait(traitId);
+            }
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
+        }
+
+        private static double WorldTime()
+        {
+            return World.world?.getCurWorldTime() ?? 0d;
+        }
+    }
+}
