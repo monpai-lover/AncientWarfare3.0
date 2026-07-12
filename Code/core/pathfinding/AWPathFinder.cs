@@ -35,6 +35,7 @@ namespace AncientWarfare3.core.pathfinding
         }
 
         public int ActiveCount => _active.Count;
+        public int QueueDepth => _queue?.Count ?? 0;
 
         public void Start(int pWorkers)
         {
@@ -182,7 +183,14 @@ namespace AncientWarfare3.core.pathfinding
                         if (task.Request.Stream.State == AWPathRequestState.Completed)
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
+                        {
                             _diagnostics?.OnFailed();
+                            Exception error = task.Request.Stream.Error;
+                            if (error != null)
+                                _diagnostics?.Enqueue(new AWPathDiagnosticEvent(
+                                    task.Request.ActorId, task.Request.Stream.FailureReason,
+                                    error.GetType().Name + ": " + error.Message));
+                        }
                     }
                     finally
                     {

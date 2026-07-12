@@ -63,5 +63,54 @@ namespace AncientWarfare3.patch
             AWPathMovementBridge.Clear();
             AWPathfindingBootstrap.ClearWorld();
         }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setTileTypes),
+            new[] { typeof(TileType), typeof(TopTileType), typeof(bool) })]
+        private static void SetTileTypes_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setTileType),
+            new[] { typeof(TileType), typeof(bool) })]
+        private static void SetTileType_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.setTopTileType),
+            new[] { typeof(TopTileType), typeof(bool) })]
+        private static void SetTopTileType_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.startFire),
+            new[] { typeof(bool) })]
+        private static void StartFire_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WorldTile), nameof(WorldTile.stopFire))]
+        private static void StopFire_Postfix(WorldTile __instance)
+        {
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Building), "setState", new[] { typeof(BuildingState) })]
+        private static void SetBuildingState_Postfix(Building __instance)
+        {
+            if (__instance == null) return;
+            AWPathfindingBootstrap.Cache.MarkDirty(__instance.current_tile);
+            foreach (WorldTile tile in __instance.tiles)
+                AWPathfindingBootstrap.Cache.MarkDirty(tile);
+        }
     }
 }

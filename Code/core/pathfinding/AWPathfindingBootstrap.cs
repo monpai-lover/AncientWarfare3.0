@@ -46,6 +46,8 @@ namespace AncientWarfare3.core.pathfinding
             TraversalCache.ProcessDirty(2);
             TraversalCache.ConsistencySweep(64);
             AWPathMovementBridge.ProcessTransports(64);
+            Diagnostics.DrainAndMaybeLog(32, _finder.QueueDepth,
+                AncientWarfare3.ModClass.LogWarning);
         }
 
         public static void ClearWorld()
