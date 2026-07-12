@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.court;
 using UnityEngine;
 
 namespace AncientWarfare3.content
@@ -29,6 +30,19 @@ namespace AncientWarfare3.content
             qing.sprite_list = sprites ?? Array.Empty<Sprite>();
             qing.get_sprites_count = (_, effect) => effect?.sprite_list?.Length ?? 0;
             AssetManager.status.add(qing);
+
+            var royalMedicalCare = new StatusAsset
+            {
+                id = CourtStatusId.RoyalMedicalCare,
+                duration = 120f,
+                allow_timer_reset = true,
+                path_icon = "ui/Icons/traits/icondanyao",
+                locale_id = "status_title_aw_royal_medical_care",
+                locale_description = "status_description_aw_royal_medical_care"
+            };
+            royalMedicalCare.base_stats["multiplier_health"] = 0.5f;
+            royalMedicalCare.base_stats["lifespan"] = 15f;
+            AssetManager.status.add(royalMedicalCare);
         }
     }
 }

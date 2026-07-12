@@ -83,6 +83,10 @@ namespace AncientWarfare3.core.court
         public const string Merchant = "aw_school_merchant";
         public const string Craftsman = "aw_school_craftsman";
         public const string Historian = "aw_school_historian";
+    }
+
+    public static class CourtStatusId
+    {
         public const string RoyalMedicalCare = "aw_royal_medical_care";
     }
 

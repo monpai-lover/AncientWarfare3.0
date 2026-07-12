@@ -2,6 +2,25 @@ namespace AncientWarfare3.core.court
 {
     public static class RoyalMedicalCareRules
     {
+        public static long[] BuildTargetIds(long kingId, long heirId, bool physicianValid)
+        {
+            if (!physicianValid) return System.Array.Empty<long>();
+            if (kingId < 0 && heirId < 0) return System.Array.Empty<long>();
+            if (kingId >= 0 && heirId >= 0 && kingId != heirId) return new[] { kingId, heirId };
+            return new[] { kingId >= 0 ? kingId : heirId };
+        }
+
+        public static long[] RemovedTargetIds(long oldKingId, long oldHeirId, long[] currentIds)
+        {
+            var current = new System.Collections.Generic.HashSet<long>(currentIds ??
+                System.Array.Empty<long>());
+            var removed = new System.Collections.Generic.List<long>(2);
+            if (oldKingId >= 0 && !current.Contains(oldKingId)) removed.Add(oldKingId);
+            if (oldHeirId >= 0 && oldHeirId != oldKingId && !current.Contains(oldHeirId))
+                removed.Add(oldHeirId);
+            return removed.ToArray();
+        }
+
         public static bool ShouldTreat(bool physicianAlive, bool physicianActive,
             bool sameKingdom, bool patientAlive)
         {

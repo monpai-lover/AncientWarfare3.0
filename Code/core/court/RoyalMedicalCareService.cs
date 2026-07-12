@@ -31,13 +31,14 @@ namespace AncientWarfare3.core.court
 
             pKingdom.data.get(LineageKeys.COURT_MEDICAL_KING_ID, out long oldKingId, -1L);
             pKingdom.data.get(LineageKeys.COURT_MEDICAL_HEIR_ID, out long oldHeirId, -1L);
-            RemoveStaleCare(oldKingId, targets);
-            RemoveStaleCare(oldHeirId, targets);
+            long[] currentIds = targets.Keys.ToArray();
+            foreach (long removedId in RoyalMedicalCareRules.RemovedTargetIds(
+                         oldKingId, oldHeirId, currentIds))
+                FinishCare(removedId);
 
             foreach (Actor target in targets.Values)
             {
-                if (!target.hasTrait(CourtTraitId.RoyalMedicalCare))
-                    target.addTrait(CourtTraitId.RoyalMedicalCare);
+                target.addStatusEffect(CourtStatusId.RoyalMedicalCare, 120f, pColorEffect: false);
                 if (pApplyTreatment) Treat(physician, target, pKingdom);
             }
 
@@ -90,12 +91,11 @@ namespace AncientWarfare3.core.court
             pTargets[pTarget.data.id] = pTarget;
         }
 
-        private static void RemoveStaleCare(long pActorId, Dictionary<long, Actor> pTargets)
+        private static void FinishCare(long pActorId)
         {
-            if (pActorId < 0 || pTargets.ContainsKey(pActorId)) return;
+            if (pActorId < 0) return;
             Actor actor = World.world?.units?.get(pActorId);
-            if (actor?.data != null && actor.hasTrait(CourtTraitId.RoyalMedicalCare))
-                actor.removeTrait(CourtTraitId.RoyalMedicalCare);
+            if (actor?.data != null) actor.finishStatusEffect(CourtStatusId.RoyalMedicalCare);
         }
 
         private static void Treat(Actor pPhysician, Actor pTarget, Kingdom pKingdom)
@@ -104,7 +104,7 @@ namespace AncientWarfare3.core.court
             int removed = 0;
             foreach (ActorTrait trait in pTarget.getTraits().ToList())
             {
-                if (!trait.can_be_cured || trait.id == CourtTraitId.RoyalMedicalCare) continue;
+                if (!trait.can_be_cured) continue;
                 pTarget.removeTrait(trait.id);
                 removed++;
             }

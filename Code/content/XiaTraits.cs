@@ -140,10 +140,6 @@ namespace AncientWarfare3.content
                 stewardship: 2f, diplomacy: 0f, warfare: 1f, intelligence: 2f);
             RegisterCourtSchoolTrait(CourtTraitId.Historian, "ui/Icons/traits/iconshijia",
                 stewardship: 1f, diplomacy: 2f, warfare: 0f, intelligence: 2f);
-            ActorTrait royalMedicalCare = NewTrait(CourtTraitId.RoyalMedicalCare,
-                "ui/Icons/traits/icondanyao", XiaTraitGroups.AW2);
-            royalMedicalCare.base_stats["multiplier_health"] = 0.5f;
-            royalMedicalCare.base_stats["lifespan"] = 15f;
             // TODO[批I-奴隶]: action_special_effect = 周期性强制 setProfession(Slave)
         }
 

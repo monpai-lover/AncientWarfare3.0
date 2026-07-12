@@ -62,6 +62,7 @@ namespace AncientWarfare3.patch
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
+            RoyalMedicalCareService.ReconcileTargets(__instance);
             if (pActor == null ||
                 (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance) &&
                  !XiaizationService.IsForeignPseudoDynasty(__instance)))

@@ -202,3 +202,5 @@ aw_confirm,确定,OK,OK
 aw_war_goal_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate_desc,对当前天命国发动天命战争，胜利后转移天命,Start a Mandate war against the current Mandate realm and transfer the Mandate on victory,對當前天命國發動天命戰爭，勝利後轉移天命
+status_title_aw_royal_medical_care,太医照护,Imperial Medical Care,太醫照護
+status_description_aw_royal_medical_care,由在任太医为当前君主或世子提供的临时调养,Temporary care provided to the current ruler or heir by the serving Imperial Physician,由在任太醫為當前君主或世子提供的臨時調養
