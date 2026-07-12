@@ -94,8 +94,9 @@ Check(segments.All(s => s.From.X == s.To.X || s.From.Y == s.To.Y),
 ### Task 8: Verification
 
 - [ ] Run court and correctness harnesses plus both net48 builds.
+- [ ] Compare the tracked source in the work repository with the actual NML-loaded mod directory. Deploy only after preserving `.runtime`, `.git`, and user-owned untracked data; verify `CourtWindow.cs`, `SchoolWindow.cs`, and the built assembly come from the same revision.
 - [ ] Open/reopen/switch kingdoms/resize/drag/zoom the court; verify cards stay left-aligned and every line stays attached with no right-side ghost lines.
+- [ ] Assert no active `CourtRankLink` child survives refresh outside the current link pool and no deployed source contains the legacy center-anchor/rotated-line implementation.
 - [ ] Verify overview and focused school map colors, current-city tooltip refresh, and neutral gray cities.
 - [ ] Verify list sorting, school detail, city detail, representative actor navigation, and no-school presentation.
 - [ ] Profile map/window open and confirm no world population scan or all-portrait rebuild.
-

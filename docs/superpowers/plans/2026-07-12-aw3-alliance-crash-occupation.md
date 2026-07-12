@@ -86,7 +86,7 @@ Check(ArmyRetreatRules.ProtectUncontestedOccupation(true, true, true, false),
 - [ ] Run the correctness and court-expansion harnesses.
 - [ ] Run `dotnet build AncientWarfare3.csproj` and the explicit `DEBUG;TRACE` build.
 - [ ] Inspect Harmony source order and resource registration with `rg`.
+- [ ] Compare the work repository with the actual NML-loaded mod directory and deploy the tracked delta while preserving `.runtime` and untracked user data. Confirm the deployed tree contains `name_generators/Xia/alliances.json` and the unconditional `WorldLog.logAllianceCreated` prefix.
 - [ ] In game, create Xia+Xia, Xia+foreign, and foreign+foreign alliances with Chinese Name loaded; verify only the first two use AW3 meeting names and the creation world log matches.
 - [ ] Open kingdom windows during king death and kingdom creation; verify no exception.
 - [ ] Observe an undefended active occupation reach 100 continuously; remove attackers and verify vanilla decay resumes.
-
