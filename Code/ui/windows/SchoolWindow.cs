@@ -12,11 +12,11 @@ namespace AncientWarfare3.ui.windows
 {
     internal sealed class SchoolWindow : AbstractWindow<SchoolWindow>
     {
-        private const float Width = 700f;
-        private const float Height = 420f;
-        private const float LeftWidth = 224f;
-        private const float Gap = 8f;
-        private const float ContentMargin = 18f;
+        private const float Width = 560f;
+        private const float Height = 340f;
+        private const float LeftWidth = 180f;
+        private const float Gap = 6f;
+        private const float ContentMargin = 14f;
 
         private enum SortMode
         {

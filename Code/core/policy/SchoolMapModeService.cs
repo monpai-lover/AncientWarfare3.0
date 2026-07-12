@@ -89,14 +89,14 @@ namespace AncientWarfare3.core.policy
             var lines = new List<string>
             {
                 AW_L10n.Text("aw_school_map_dominant", "Dominant") + ": " +
-                SchoolName(snapshot.DominantSchool)
+                GetSchoolDisplayName(snapshot.DominantSchool)
             };
             foreach (KeyValuePair<string, float> item in snapshot.Scores
                          .OrderByDescending(p => p.Value)
                          .ThenBy(p => RegistryOrder(p.Key))
                          .Take(3))
             {
-                lines.Add(SchoolName(item.Key) + "  " +
+                lines.Add(GetSchoolDisplayName(item.Key) + "  " +
                           Mathf.RoundToInt(item.Value / snapshot.TotalScore * 100f) + "%");
             }
             return string.Join("\n", lines.ToArray());
@@ -142,7 +142,7 @@ namespace AncientWarfare3.core.policy
             DirtyMap();
         }
 
-        private static string SchoolName(string pSchoolId)
+        internal static string GetSchoolDisplayName(string pSchoolId)
         {
             CourtSchoolDefinition definition = CourtSchoolRegistry.Find(pSchoolId);
             return definition == null

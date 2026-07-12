@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui.windows;
@@ -49,7 +50,7 @@ namespace AncientWarfare3.content
             GodPower existing = AssetManager.powers.get(SchoolMapModeService.POWER_ID);
             if (existing != null)
             {
-                ConfigureMapModePower(existing, SchoolMapModeService.POWER_ID, OpenSchoolBrowser);
+                ConfigureMapModePower(existing, SchoolMapModeService.POWER_ID, RefreshSchoolMapMode);
                 existing.click_special_action = new PowerActionWithID(SchoolMapClick);
                 return;
             }
@@ -66,12 +67,12 @@ namespace AncientWarfare3.content
                 unselect_when_window = true,
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
-                toggle_action = BuildMapModeToggleAction(OpenSchoolBrowser),
+                toggle_action = BuildMapModeToggleAction(RefreshSchoolMapMode),
                 click_special_action = new PowerActionWithID(SchoolMapClick)
             });
         }
 
-        private static void OpenSchoolBrowser()
+        private static void RefreshSchoolMapMode()
         {
             string optionId = AWMapModeMetaRules.ResolveOptionId(SchoolMapModeService.POWER_ID);
             if (!PlayerConfig.dict.TryGetValue(optionId, out PlayerOptionData data) || !data.boolVal)
@@ -80,7 +81,6 @@ namespace AncientWarfare3.content
                 return;
             }
             SchoolMapModeService.Prepare();
-            SchoolWindow.OpenSchool();
         }
 
         private static bool SchoolMapClick(WorldTile pTile, string pPowerId)
@@ -327,8 +327,58 @@ namespace AncientWarfare3.content
             NameplateAsset kingdomPlate = library.get("plate_kingdom");
             if (kingdomPlate == null) return;
 
+            NameplateAsset schoolPlate = library.get("plate_aw_school");
+            if (schoolPlate == null)
+            {
+                schoolPlate = library.add(new NameplateAsset
+                {
+                    id = "plate_aw_school",
+                    path_sprite = "ui/nameplates/nameplate_religion",
+                    padding_left = 11,
+                    padding_right = 13,
+                    map_mode = AWMapModeMetaTypes.School,
+                    max_nameplate_count = 100,
+                    action_main = DrawSchoolNameplates
+                });
+            }
+            else
+            {
+                schoolPlate.map_mode = AWMapModeMetaTypes.School;
+                schoolPlate.action_main = DrawSchoolNameplates;
+            }
+
             foreach (MetaType metaType in AWMapModeNameplateRules.GetRequiredNameplateMetaTypes())
+            {
+                if (metaType == AWMapModeMetaTypes.School) continue;
                 library.map_modes_nameplates[metaType] = kingdomPlate;
+            }
+            library.map_modes_nameplates[AWMapModeMetaTypes.School] = schoolPlate;
+        }
+
+        private static void DrawSchoolNameplates(NameplateManager pManager, NameplateAsset pAsset)
+        {
+            if (pManager == null || pAsset == null || World.world?.cities == null) return;
+
+            int count = 0;
+            foreach (City city in World.world.cities)
+            {
+                if (count >= pAsset.max_nameplate_count) break;
+                if (city?.data == null || city.isRekt() || !city.isAlive() ||
+                    !World.world.move_camera.isWithinCameraViewNotPowerBar(city.city_center)) continue;
+
+                AWMapModeMetaObject meta = AWMapModeMetaLibrary.GetSchoolIdentityMetaForCity(city);
+                if (meta == null) continue;
+
+                NameplateText text = pManager.prepareNext(pAsset, meta);
+                text.setupMeta(meta.data, meta.getColor());
+                text.setText(meta.data.name, city.city_center);
+                text.setPriority(city.getPopulationPeople());
+
+                CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+                CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot?.DominantSchool);
+                if (definition != null) text.showSpecial(definition.IconPath);
+                count++;
+            }
         }
 
         private static void ConfigureMapModePower(GodPower pPower, string pPowerId, Action pDirtyAction)

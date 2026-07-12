@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using UnityEngine;
 
@@ -79,6 +80,7 @@ namespace AncientWarfare3.core.policy
                 DevelopmentMapModeService.POWER_ID, GetDevelopmentMetaForZone);
             SchoolAsset = AddOrGet(AWMapModeMetaTypes.SchoolId, AWMapModeMetaTypes.School,
                 SchoolMapModeService.POWER_ID, GetSchoolMetaForZone);
+            SchoolAsset.tile_get_metaobject = (pZone, _) => GetSchoolIdentityMetaForZone(pZone);
             SchoolAsset.click_action_zone = SchoolMapModeService.InspectCity;
         }
 
@@ -297,8 +299,29 @@ namespace AncientWarfare3.core.policy
             City city = GetCityForZone(pZone);
             if (city?.data == null || city.kingdom?.data == null) return null;
             string colorKey = SchoolMapModeService.GetCityColorHex(city);
-            return GetMeta(AWMapModeMetaTypes.School, "city:" + city.id + ":" + colorKey,
-                city.data.name ?? "", SchoolMapModeService.GetColorAsset(city));
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+            string schoolId = snapshot?.DominantSchool ?? CourtSchoolId.None;
+            return GetMeta(AWMapModeMetaTypes.School, "render:" + schoolId + ":" + colorKey,
+                SchoolMapModeService.GetSchoolDisplayName(schoolId), SchoolMapModeService.GetColorAsset(city));
+        }
+
+        private static IMetaObject GetSchoolIdentityMetaForZone(TileZone pZone)
+        {
+            return GetSchoolIdentityMetaForCity(GetCityForZone(pZone));
+        }
+
+        internal static AWMapModeMetaObject GetSchoolIdentityMetaForCity(City pCity)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null) return null;
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
+            CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot?.DominantSchool);
+            if (definition == null || snapshot.TotalScore <= 0f) return null;
+
+            string displayName = SchoolMapModeService.GetSchoolDisplayName(definition.Id);
+            AWMapModeMetaObject meta = GetMeta(AWMapModeMetaTypes.School, "school:" + definition.Id,
+                displayName, MakeColor(definition.ColorHex));
+            if (meta.data.name != displayName) meta.data.name = displayName;
+            return meta;
         }
 
         private static AWMapModeMetaObject GetMeta(MetaType pType, string pKey, string pName, ColorAsset pColor)
