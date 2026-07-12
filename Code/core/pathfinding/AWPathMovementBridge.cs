@@ -311,7 +311,7 @@ namespace AncientWarfare3.core.pathfinding
             bool pCancelTaxi)
         {
             if (pCancelTaxi && !pActor.is_inside_boat)
-                TaxiManager.cancelTaxiRequestForActor(pActor);
+                CancelTaxiForActor(pActor);
             RemoveTransportContext(pActor.data.id);
             AWPathfindingBootstrap.Finder?.Cancel(pActor.data.id, pReason);
             HandleFailure(pActor, pReason);
@@ -320,8 +320,18 @@ namespace AncientWarfare3.core.pathfinding
         private static void CancelTransport(Actor pActor)
         {
             if (pActor?.data == null || !TransportContexts.ContainsKey(pActor.data.id)) return;
-            if (!pActor.is_inside_boat) TaxiManager.cancelTaxiRequestForActor(pActor);
+            if (!pActor.is_inside_boat) CancelTaxiForActor(pActor);
             RemoveTransportContext(pActor.data.id);
+        }
+
+        private static void CancelTaxiForActor(Actor pActor)
+        {
+            TaxiRequest request = TaxiManager.getRequestForActor(pActor);
+            if (request == null) return;
+            if (request.countActors() > 1)
+                request.embarkToBoat(pActor);
+            else
+                TaxiManager.cancelRequest(request);
         }
 
         private static void RemoveTransportContext(long pActorId)

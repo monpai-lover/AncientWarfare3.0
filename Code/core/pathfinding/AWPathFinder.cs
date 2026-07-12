@@ -178,8 +178,21 @@ namespace AncientWarfare3.core.pathfinding
                 {
                     try
                     {
-                        if (!IsTerminal(task.Request.Stream.State))
-                            _generator.Generate(task.Request, task.Request.Cancellation.Token);
+                        try
+                        {
+                            if (!IsTerminal(task.Request.Stream.State))
+                                _generator.Generate(task.Request, task.Request.Cancellation.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            task.Request.Stream.Cancel(
+                                AWPathFailureReason.CancelledByNewRequest);
+                        }
+                        catch (Exception error)
+                        {
+                            task.Request.Stream.Fail(AWPathFailureReason.GeneratorException,
+                                error);
+                        }
                         if (task.Request.Stream.State == AWPathRequestState.Completed)
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
