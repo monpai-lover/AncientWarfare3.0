@@ -25,3 +25,31 @@ trait_rebel,反抗者,Rebel,反抗者
 trait_rebel_info,反抗万岁,VIVE LA Rebel,反抗万岁
 trait_guizu,贵族,Aristocrat,貴族
 trait_guizu_info,贵不可言,Noble,貴不可言
+trait_aw_school_ru,儒家,Ru School,儒家
+trait_aw_school_ru_info,崇尚仁礼与德治并重视教化秩序,Values benevolent rule ritual education and social order,崇尚仁禮與德治並重視教化秩序
+trait_aw_school_mo,墨家,Mohist School,墨家
+trait_aw_school_mo_info,主张兼爱非攻尚贤与实用技艺,Advocates impartial care defensive peace merit and practical craft,主張兼愛非攻尚賢與實用技藝
+trait_aw_school_dao,道家,Dao School,道家
+trait_aw_school_dao_info,崇尚自然无为并反对过度征伐,Seeks natural balance restrained government and fewer wars,崇尚自然無為並反對過度征伐
+trait_aw_school_fa,法家,Legalist School,法家
+trait_aw_school_fa_info,依靠法术势建立严明高效的国家秩序,Builds a disciplined state through law administration and authority,依靠法術勢建立嚴明高效的國家秩序
+trait_aw_school_bing,兵家,Military School,兵家
+trait_aw_school_bing_info,研究军政谋略训练与战争制胜之道,Studies strategy organization training and victory in war,研究軍政謀略訓練與戰爭制勝之道
+trait_aw_school_zongheng,纵横家,Diplomat School,縱橫家
+trait_aw_school_zongheng_info,擅长合纵连横游说结盟与外交权衡,Masters persuasion alliances diplomacy and balance of power,擅長合縱連橫遊說結盟與外交權衡
+trait_aw_school_nong,农家,Agrarian School,農家
+trait_aw_school_nong_info,重视农时粮储土地与百姓生计,Prioritizes farming granaries land and common livelihoods,重視農時糧儲土地與百姓生計
+trait_aw_school_yinyang,阴阳家,Yin-Yang School,陰陽家
+trait_aw_school_yinyang_info,以阴阳五行历法观测解释天人变化,Interprets change through yin yang cycles calendars and observation,以陰陽五行曆法觀測解釋天人變化
+trait_aw_school_ming,名家,Logician School,名家
+trait_aw_school_ming_info,辨析名实概念与论辩规则,Examines names realities concepts and the rules of argument,辨析名實概念與論辯規則
+trait_aw_school_medical,医家,Medical School,醫家
+trait_aw_school_medical_info,研究诊疗药石养生并守护民众健康,Studies diagnosis medicine longevity and public health,研究診療藥石養生並守護民眾健康
+trait_aw_school_syncretist,杂家,Syncretist School,雜家
+trait_aw_school_syncretist_info,博采诸家之长并因时整合治国方法,Combines useful teachings from many schools for practical rule,博採諸家之長並因時整合治國方法
+trait_aw_school_merchant,商家,Merchant School,商家
+trait_aw_school_merchant_info,重视贸易货殖市场与国家财用,Values trade markets enterprise and state finance,重視貿易貨殖市場與國家財用
+trait_aw_school_craftsman,工家,Craftsman School,工家
+trait_aw_school_craftsman_info,专研营造器械水利与生产技术,Develops construction machinery irrigation and productive technology,專研營造器械水利與生產技術
+trait_aw_school_historian,史家,Historian School,史家
+trait_aw_school_historian_info,记录史事典章并以往鉴今,Records events and institutions so the past can guide the present,記錄史事典章並以往鑒今

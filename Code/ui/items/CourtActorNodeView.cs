@@ -62,9 +62,8 @@ namespace AncientWarfare3.ui.items
             Sprite schoolSprite = string.IsNullOrEmpty(pNode.SchoolIconPath)
                 ? null
                 : SpriteTextureLoader.getSprite(pNode.SchoolIconPath);
-            schoolSprite ??= SpriteTextureLoader.getSprite("ui/icons/iconKnowledge");
             _schoolIcon.sprite = schoolSprite;
-            _schoolIcon.enabled = schoolSprite != null;
+            _schoolIcon.enabled = schoolSprite != null && !string.IsNullOrEmpty(pNode.SchoolId);
             _schoolIcon.preserveAspect = true;
 
             _name.text = pNode.IsVacancy
@@ -229,22 +228,10 @@ namespace AncientWarfare3.ui.items
 
         private static string SchoolName(string pSchoolId)
         {
-            return AW_L10n.Text("aw_court_school_" + SchoolLocaleSuffix(pSchoolId), pSchoolId ?? "");
-        }
-
-        private static string SchoolLocaleSuffix(string pSchoolId)
-        {
-            switch (pSchoolId ?? "")
-            {
-                case CourtSchoolId.Legalist: return "fa";
-                case CourtSchoolId.Mohist: return "mo";
-                case CourtSchoolId.Military: return "bing";
-                case CourtSchoolId.Diplomat: return "zongheng";
-                case CourtSchoolId.Agrarian: return "nong";
-                case CourtSchoolId.YinYang: return "yinyang";
-                case CourtSchoolId.Logician: return "ming";
-                default: return pSchoolId ?? "";
-            }
+            CourtSchoolDefinition definition = CourtSchoolRegistry.Find(pSchoolId);
+            return definition == null
+                ? AW_L10n.Text("aw_court_school_none", "No school")
+                : AW_L10n.Text(definition.NameKey, definition.Id);
         }
 
         private static Color KingdomColor(Kingdom pKingdom)

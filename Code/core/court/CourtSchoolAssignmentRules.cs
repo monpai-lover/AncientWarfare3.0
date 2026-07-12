@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace AncientWarfare3.core.court
 {
@@ -25,16 +26,8 @@ namespace AncientWarfare3.core.court
 
     public static class CourtSchoolAssignmentRules
     {
-        private static readonly string[] Schools =
-        {
-            CourtSchoolId.Ru, CourtSchoolId.Legalist, CourtSchoolId.Dao, CourtSchoolId.Mohist,
-            CourtSchoolId.Military, CourtSchoolId.Diplomat, CourtSchoolId.Agrarian,
-            CourtSchoolId.YinYang, CourtSchoolId.Logician, CourtSchoolId.Medical,
-            CourtSchoolId.Syncretist, CourtSchoolId.Merchant, CourtSchoolId.Craftsman,
-            CourtSchoolId.Historian
-        };
-
-        public static string[] AllSchools() => (string[])Schools.Clone();
+        public static string[] AllSchools() =>
+            Array.ConvertAll(CourtSchoolRegistry.All.ToArray(), p => p.Id);
 
         public static string ResolveSchool(string pOfficeId, CourtCandidateProfile pProfile)
         {

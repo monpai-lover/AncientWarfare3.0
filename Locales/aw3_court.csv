@@ -81,3 +81,18 @@ aw_court_layer_censor,监察,Inspection,監察
 aw_court_event_founded,建立官场,Founded the court,建立官場
 aw_court_event_primitive,形成原始朝会,Formed a primitive council,形成原始朝會
 aw_court_event_dominant,学派主导官场,A school dominates the court,學派主導官場
+aw_court_school_none,无学派,No school,無學派
+aw_court_school_ru_description,以仁礼教化维系社会秩序,Orders society through benevolence ritual and education,以仁禮教化維繫社會秩序
+aw_court_school_mo_description,兼爱非攻并以尚贤和实用技艺济世,Impartial care defensive peace merit and useful craft,兼愛非攻並以尚賢和實用技藝濟世
+aw_court_school_dao_description,顺应自然并以克制的治理休养生息,Follows nature and favors restrained restorative rule,順應自然並以克制的治理休養生息
+aw_court_school_fa_description,以法术势强化秩序和国家执行力,Uses law administration and authority to strengthen the state,以法術勢強化秩序和國家執行力
+aw_court_school_bing_description,以军政谋略和训练争取战争主动,Seeks military initiative through strategy and organization,以軍政謀略和訓練爭取戰爭主動
+aw_court_school_zongheng_description,以游说结盟和权衡塑造天下格局,Shapes interstate order through persuasion and alliances,以遊說結盟和權衡塑造天下格局
+aw_court_school_nong_description,以农业粮储和土地政策保障民生,Secures livelihoods through farming granaries and land policy,以農業糧儲和土地政策保障民生
+aw_court_school_yinyang_description,以阴阳五行和历法观测把握时势,Reads change through yin yang cycles and calendrical observation,以陰陽五行和曆法觀測把握時勢
+aw_court_school_ming_description,辨析名实并以严谨论辩校正政令,Clarifies names and realities through rigorous argument,辨析名實並以嚴謹論辯校正政令
+aw_court_school_medical_description,以医药养生和诊疗守护生命健康,Protects life through medicine diagnosis and preventive care,以醫藥養生和診療守護生命健康
+aw_court_school_syncretist_description,汇通诸家并依现实选择治国方法,Synthesizes many teachings into practical government,匯通諸家並依現實選擇治國方法
+aw_court_school_merchant_description,以贸易市场和财用推动国家繁荣,Builds prosperity through trade markets and finance,以貿易市場和財用推動國家繁榮
+aw_court_school_craftsman_description,以营造器械和水利改进生产能力,Improves production through engineering tools and irrigation,以營造器械和水利改進生產能力
+aw_court_school_historian_description,记录制度得失并以历史经验辅政,Advises government through records and historical precedent,記錄制度得失並以歷史經驗輔政

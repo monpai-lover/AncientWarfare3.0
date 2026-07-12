@@ -23,6 +23,9 @@ namespace AncientWarfare3.content
 
         public static void Init()
         {
+            foreach (string error in CourtSchoolRegistry.Validate())
+                ModClass.LogWarning("Court school registry: " + error);
+
             // ===== aw2 组:属性/身份特质 =====
 
             // figure 特殊人物:血+15、政务+10

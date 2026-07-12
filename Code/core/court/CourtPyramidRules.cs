@@ -301,24 +301,7 @@ namespace AncientWarfare3.core.court
 
         public static string SchoolIconPath(string pSchoolId)
         {
-            switch (pSchoolId ?? "")
-            {
-                case CourtSchoolId.Ru: return "ui/Icons/traits/iconRujia";
-                case CourtSchoolId.Legalist: return "ui/Icons/traits/iconfajia";
-                case CourtSchoolId.Dao: return "ui/Icons/traits/icontao";
-                case CourtSchoolId.Mohist: return "ui/Icons/traits/iconmo";
-                case CourtSchoolId.Military: return "ui/Icons/traits/iconbinfa";
-                case CourtSchoolId.Diplomat: return "ui/Icons/traits/iconzonheng";
-                case CourtSchoolId.Agrarian: return "ui/Icons/traits/iconnong";
-                case CourtSchoolId.YinYang: return "ui/Icons/traits/iconyingyang";
-                case CourtSchoolId.Logician: return "ui/Icons/traits/iconmingjia";
-                case CourtSchoolId.Medical: return "ui/Icons/traits/iconoisha";
-                case CourtSchoolId.Syncretist: return "ui/Icons/traits/iconzajia";
-                case CourtSchoolId.Merchant: return "ui/Icons/traits/iconshangjia";
-                case CourtSchoolId.Craftsman: return "ui/Icons/traits/icongongjia";
-                case CourtSchoolId.Historian: return "ui/Icons/traits/iconshijia";
-                default: return "";
-            }
+            return CourtSchoolRegistry.Find(pSchoolId)?.IconPath ?? "";
         }
     }
 }
