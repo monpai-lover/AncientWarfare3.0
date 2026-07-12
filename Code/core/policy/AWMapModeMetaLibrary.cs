@@ -91,7 +91,7 @@ namespace AncientWarfare3.core.policy
             pAsset.icon_single_path = "ui/Icons/traits/iconRujia";
             pAsset.icon_list = "iconCityList";
             pAsset.window_name = "city";
-            pAsset.power_tab_id = "selected_city";
+            pAsset.power_tab_id = SchoolMapBottomBarController.TabId;
             pAsset.get_list = () => World.world?.cities;
             pAsset.has_any = () => World.world?.cities != null && World.world.cities.hasAny();
             pAsset.get_selected = () => SelectedMetas.selected_city;
@@ -111,8 +111,8 @@ namespace AncientWarfare3.core.policy
             };
             pAsset.selected_tab_action_meta = _ =>
             {
-                WorldTile tile = World.world?.getMouseTilePos();
-                if (!SchoolMapModeService.SelectCity(tile)) PowerTabController.showMainTab();
+                if (!SchoolMapModeService.SelectCity(SelectedMetas.selected_city))
+                    PowerTabController.showMainTab();
             };
             pAsset.check_unit_has_meta = pActor => pActor?.city?.data != null;
             pAsset.set_unit_set_meta_for_meta_for_window = pActor => SelectedMetas.selected_city = pActor?.city;

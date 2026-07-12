@@ -113,13 +113,16 @@ namespace AncientWarfare3.core.policy
 
         public static bool SelectCity(WorldTile pTile, string pPowerId = null)
         {
-            City city = pTile?.zone?.city;
-            if (city?.data == null || city.isRekt() || !city.isAlive()) return false;
+            return SelectCity(pTile?.zone?.city);
+        }
+
+        public static bool SelectCity(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt() || !pCity.isAlive()) return false;
             SelectedUnit.clear();
-            SelectedMetas.selected_city = city;
-            SelectedObjects.setNanoObject(city);
-            PowerTabController.showTabSelectedMeta(MetaTypeLibrary.city);
-            SchoolMapBottomBarController.Show(city);
+            SelectedMetas.selected_city = pCity;
+            SelectedObjects.setNanoObject(pCity);
+            SchoolMapBottomBarController.Show(pCity);
             return true;
         }
 

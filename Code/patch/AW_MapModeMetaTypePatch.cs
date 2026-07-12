@@ -18,6 +18,18 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(MetaTypeAsset), nameof(MetaTypeAsset.selectAndInspect))]
+        public static bool SelectAndInspect_Prefix(MetaTypeAsset __instance, NanoObject pNewNanoObject)
+        {
+            if (!SchoolMapModeService.IsActive() || pNewNanoObject is not City city ||
+                __instance != AWMapModeMetaLibrary.SchoolAsset && __instance != MetaTypeLibrary.city)
+                return true;
+            SchoolMapModeService.SelectCity(city);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(MetaTypeAsset), nameof(MetaTypeAsset.getZoneOptionState))]
         public static bool GetZoneOptionState_Prefix(MetaTypeAsset __instance, ref int __result)
         {
