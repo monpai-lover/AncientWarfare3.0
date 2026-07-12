@@ -203,10 +203,29 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            // 用游戏已生成的名字取首字作单名(中文 BMP 单字,Substring(0,1) 安全)。
+            // Clan members use one-character given names; people without a clan retain both generated characters.
             string raw = pActor.getName();
-            string single = FirstChar(raw) ?? "";
-            pActor.data.set(LineageKeys.GIVEN_NAME, single);
+            pActor.data.set(LineageKeys.GIVEN_NAME,
+                XiaGivenNameRules.NormalizeGenerated(raw, HasXiaClanIdentity(pActor)));
+        }
+
+        private static bool HasXiaClanIdentity(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            pActor.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
+            if (shiId >= 0 || !string.IsNullOrEmpty(clanName)) return true;
+            try { return pActor.hasClan(); }
+            catch { return false; }
+        }
+
+        private static void NormalizeXiaGivenNameForClan(Actor pActor)
+        {
+            if (!IsXia(pActor) || pActor?.data == null) return;
+            pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+            string normalized = XiaGivenNameRules.NormalizeGenerated(given, HasXiaClanIdentity(pActor));
+            if (!string.IsNullOrEmpty(normalized) && normalized != given)
+                pActor.data.set(LineageKeys.GIVEN_NAME, normalized);
         }
 
         /// <summary>
@@ -1436,6 +1455,7 @@ namespace AncientWarfare3.core.lineage
             if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&
                 !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
 
+            NormalizeXiaGivenNameForClan(pActor);
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
             pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");

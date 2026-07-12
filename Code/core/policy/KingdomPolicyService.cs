@@ -279,6 +279,10 @@ namespace AncientWarfare3.core.policy
             if (GetStatus(pKingdom, def) != PolicyNodeStatus.Available) return false;
 
             if (def.Kind == PolicyNodeKind.Decision &&
+                TitleUpgradeDecisionRules.ShouldCompleteImmediately(def.Id, HasValidSuzerain(pKingdom)))
+                return CompleteImmediateDecision(pKingdom, def);
+
+            if (def.Kind == PolicyNodeKind.Decision &&
                 DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
             {
                 EnqueueDecisionBack(pKingdom, CreateSimpleDecisionItem(def.Id, 0f));
@@ -313,6 +317,10 @@ namespace AncientWarfare3.core.policy
                 return false;
             EnsureInitialized(pKingdom);
             if (GetCurrent(pKingdom, def.Kind) == def.Id) return false;
+
+            if (def.Kind == PolicyNodeKind.Decision &&
+                TitleUpgradeDecisionRules.ShouldCompleteImmediately(def.Id, HasValidSuzerain(pKingdom)))
+                return CompleteImmediateDecision(pKingdom, def);
 
             pKingdom.data.set(CurrentKey(def.Kind), def.Id);
             pKingdom.data.set(ProgressKey(def.Kind), 0f);
@@ -1087,6 +1095,23 @@ namespace AncientWarfare3.core.policy
                 StartNextQueuedDecisionIfEmpty(pKingdom);
             }
             UpsertSnapshot(pKingdom);
+        }
+
+        private static bool CompleteImmediateDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
+        {
+            if (pKingdom?.data == null || pDef?.Kind != PolicyNodeKind.Decision) return false;
+            if (!ApplyEffect(pKingdom, pDef)) return false;
+
+            AddCompleted(pKingdom, pDef.Kind, pDef.Id);
+            if (ShouldRecordGenericCompletion(pDef)) RecordCompletion(pKingdom, pDef);
+            UpsertSnapshot(pKingdom);
+            return true;
+        }
+
+        private static bool HasValidSuzerain(Kingdom pKingdom)
+        {
+            Kingdom suzerain = VassalService.GetSuzerain(pKingdom);
+            return suzerain?.data != null && !suzerain.isRekt();
         }
 
         private static int GetWorldMaxTechLevelForYear()

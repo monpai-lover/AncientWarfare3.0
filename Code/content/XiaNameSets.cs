@@ -46,10 +46,11 @@ namespace AncientWarfare3.content
                 new[]
                 {
                     "given", "\u53D1,\u653F,\u90A6,\u4E15,\u708E,\u660C,\u8D77,\u4FE1,\u826F,\u6BC5,\u5E73,\u5EF6,\u6B66,\u6587,\u5FB7,\u660E,\u5B89,\u6210,\u662D,\u5BA3,\u7A46,\u6853,\u666F,\u5143,\u4F2F,\u4EF2,\u53D4,\u5B63",
-                    "given2", "\u4E4B,\u5143,\u5B50,\u5FB7,\u660E,\u6587,\u6B66,\u5B89,\u5E73,\u6210"
+                    "given2", "\u4E4B,\u5143,\u5B50,\u5FB7,\u660E,\u6587,\u6B66,\u5B89,\u5E73,\u6210",
+                    "han", XiaGivenNameLibraryRules.HanGivenNamesCsv
                 },
-                "given",
-                "given,given2");
+                "given,given2",
+                "han,given2");
 
             RegisterDictionaryGenerator(
                 CityGenerator,

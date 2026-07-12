@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using Chinese_Name;
 using NeoModLoader.General;
-using Random = UnityEngine.Random;
 
 namespace AncientWarfare3.content
 {
@@ -206,12 +205,11 @@ namespace AncientWarfare3.content
 
         private static void InitActorNameGenerator()
         {
-            // 阶段2 起:Xia_name 只生成"单名/双名"素材(不带姓),姓/氏拼接交给 LineageService。
-            // 这样游戏内真名 = 单名,符合任务书"平民只单名、贵族才有姓氏"的基线。
+            // Xia_name always emits two-character material. LineageService shortens it only for Clan members.
             var generator = new XiaActorNameGenerator("Xia_name", "default");
-            generator.AddTemplate("{中文名字}{千字文}", 1);
-            generator.AddTemplate("{千字文}", 1);
-            generator.AddTemplate("{中文名字}", 1);
+            generator.AddTemplate("{千字文}{千字文}", 4);
+            generator.AddTemplate("{中文名字}{千字文}", 3);
+            generator.AddTemplate("{千字文}{中文名字}", 2);
             CN_NameGeneratorLibrary.Submit(generator);
 
             // 不再追加写 family_name/clan_name 的 ParameterGetter ——
@@ -235,7 +233,7 @@ namespace AncientWarfare3.content
 
             public override string GenerateName(Dictionary<string, string> pParameters)
             {
-                return templates[Random.Range(0, templates.Count)].GenerateName(pParameters);
+                return base.GenerateName(pParameters);
             }
         }
     }
