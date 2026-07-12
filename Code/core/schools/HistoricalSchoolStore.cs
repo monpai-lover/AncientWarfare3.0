@@ -15,11 +15,43 @@ namespace AncientWarfare3.core.schools
         private static string MasterTable => HistoricalSchoolMasterTableItem.GetTableName();
         private static string AffiliationTable => SchoolAffiliationTableItem.GetTableName();
         private static string RuntimeTable => HistoricalSchoolRuntimeStateTableItem.GetTableName();
+        private static string EventTable => SchoolEventTableItem.GetTableName();
 
         public static long NextMembershipId()
         {
             return DB == null ? -1L : TableIdAllocator.Next(DB, MembershipTable,
                 "MEMBERSHIP_ID");
+        }
+
+        public static bool RecordSchoolEvent(string pEventType, long pActorId,
+            long pTargetActorId, string pSchoolId, long pCityId, long pKingdomId, int pYear,
+            string pPayload, int pImportance, double pWorldTime)
+        {
+            if (DB == null || string.IsNullOrWhiteSpace(pEventType) || pActorId < 0) return false;
+            long eventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
+            if (eventId < 0) return false;
+            try
+            {
+                DB.Insert(EventTable,
+                    ColumnVal.Create("EVENT_ID", eventId),
+                    ColumnVal.Create("EVENT_TYPE", pEventType),
+                    ColumnVal.Create("ACTOR_ID", pActorId),
+                    ColumnVal.Create("TARGET_ACTOR_ID", pTargetActorId),
+                    ColumnVal.Create("SCHOOL_ID", pSchoolId ?? ""),
+                    ColumnVal.Create("CITY_ID", pCityId),
+                    ColumnVal.Create("KINGDOM_ID", pKingdomId),
+                    ColumnVal.Create("EVENT_YEAR", pYear),
+                    ColumnVal.Create("PAYLOAD", pPayload ?? ""),
+                    ColumnVal.Create("IMPORTANCE", Math.Max(0, pImportance)),
+                    ColumnVal.Create("WORLD_TIME", pWorldTime));
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore insert event failed: " +
+                                    error.Message);
+                return false;
+            }
         }
 
         public static List<SchoolMembershipRecord> LoadActiveMemberships()
@@ -167,6 +199,83 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
+        public static List<HistoricalSchoolAffiliationSnapshot> LoadAffiliations()
+        {
+            var result = new List<HistoricalSchoolAffiliationSnapshot>();
+            if (DB == null) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
+                    "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
+                    "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
+                    "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
+                    "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
+                    "TRANSPORT_FAILURES FROM " + AffiliationTable;
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (!Enum.TryParse(ValueString(reader, 8), out
+                            HistoricalSchoolLifecycleState state))
+                        state = HistoricalSchoolLifecycleState.AtHome;
+                    result.Add(new HistoricalSchoolAffiliationSnapshot(
+                        ValueLong(reader, 0, -1), ValueLong(reader, 1, -1),
+                        ValueString(reader, 2), ValueLong(reader, 3, -1),
+                        ValueLong(reader, 4, -1), ValueLong(reader, 5, -1),
+                        ValueLong(reader, 6, -1), ValueLong(reader, 7, -1), state,
+                        ValueInt(reader, 9, -1), ValueInt(reader, 10, -1),
+                        ValueInt(reader, 11, -1), ValueInt(reader, 12, -1),
+                        ValueInt(reader, 13, -1), ValueInt(reader, 14, -1),
+                        ValueInt(reader, 15)));
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load affiliations failed: " +
+                                    error.Message);
+            }
+            return result;
+        }
+
+        public static bool SaveAffiliation(HistoricalSchoolAffiliationSnapshot pState,
+            double pTime)
+        {
+            if (DB == null || pState == null || pState.ActorId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + AffiliationTable +
+                    " SET RESIDENCE_CITY_ID=@residence," +
+                    "PREVIOUS_RESIDENCE_CITY_ID=@previous,DESTINATION_CITY_ID=@destination," +
+                    "SERVICE_KINGDOM_ID=@service,LIFECYCLE_STATE=@state," +
+                    "SERVICE_START_YEAR=@serviceStart,SERVICE_END_YEAR=@serviceEnd," +
+                    "LAST_TRAVEL_YEAR=@lastTravel,TRAVEL_WAIT_START_YEAR=@waitStart," +
+                    "VOYAGE_START_YEAR=@voyageStart,VOYAGE_ARRIVAL_YEAR=@voyageArrival," +
+                    "TRANSPORT_FAILURES=@failures,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
+                command.Parameters.AddWithValue("@residence", pState.ResidenceCityId);
+                command.Parameters.AddWithValue("@previous", pState.PreviousResidenceCityId);
+                command.Parameters.AddWithValue("@destination", pState.DestinationCityId);
+                command.Parameters.AddWithValue("@service", pState.ServiceKingdomId);
+                command.Parameters.AddWithValue("@state", pState.LifecycleState.ToString());
+                command.Parameters.AddWithValue("@serviceStart", pState.ServiceStartYear);
+                command.Parameters.AddWithValue("@serviceEnd", pState.ServiceEndYear);
+                command.Parameters.AddWithValue("@lastTravel", pState.LastTravelYear);
+                command.Parameters.AddWithValue("@waitStart", pState.TravelWaitStartYear);
+                command.Parameters.AddWithValue("@voyageStart", pState.VoyageStartYear);
+                command.Parameters.AddWithValue("@voyageArrival", pState.VoyageArrivalYear);
+                command.Parameters.AddWithValue("@failures", pState.TransportFailures);
+                command.Parameters.AddWithValue("@time", pTime);
+                command.Parameters.AddWithValue("@actor", pState.ActorId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore save affiliation failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
         public static void LoadRuntimeState(out int pEligibleYear, out int pLastWorldYear)
         {
             pEligibleYear = 0;
@@ -245,10 +354,12 @@ namespace AncientWarfare3.core.schools
                 {
                     affiliation.CommandText = "INSERT INTO " + AffiliationTable +
                         " (ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID," +
-                        "RESIDENCE_CITY_ID,DESTINATION_CITY_ID,SERVICE_KINGDOM_ID," +
-                        "LIFECYCLE_STATE,SERVICE_START_YEAR,SERVICE_END_YEAR,VOYAGE_START_YEAR," +
+                        "RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID,DESTINATION_CITY_ID," +
+                        "SERVICE_KINGDOM_ID,LIFECYCLE_STATE,SERVICE_START_YEAR,SERVICE_END_YEAR," +
+                        "LAST_TRAVEL_YEAR,TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR," +
                         "VOYAGE_ARRIVAL_YEAR,TRANSPORT_FAILURES,UPDATED_TIME) VALUES " +
-                        "(@actor,@kingdom,@kingdomName,@city,@city,-1,-1,@state,-1,-1,-1,-1,0,@time)";
+                        "(@actor,@kingdom,@kingdomName,@city,@city,-1,-1,-1,@state,-1,-1," +
+                        "@year,-1,-1,-1,0,@time)";
                     affiliation.Parameters.AddWithValue("@actor", pActorId);
                     affiliation.Parameters.AddWithValue("@kingdom", pHomeKingdomId);
                     affiliation.Parameters.AddWithValue("@kingdomName", pHomeKingdomName ?? "");

@@ -146,6 +146,7 @@ namespace AncientWarfare3.core.court
             string pRole, int pRoleRank)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
+            if (!HistoricalAffiliationService.IsPresentForInfluence(pActor)) return;
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
             if (CourtSchoolRegistry.Find(school) == null) return;
             pItems.Add(new CitySchoolInfluenceContribution(pActor.data.id, school, pRole,

@@ -300,6 +300,7 @@ namespace AncientWarfare3.core.court
             {
                 if (++seen > CandidateLimit * 8) break;
                 if (actor?.data == null || actor.isRekt()) continue;
+                if (!HistoricalAffiliationService.IsAvailableForOffice(actor)) continue;
                 bool baseEligible = CourtRules.CanHoldOffice(actor.isAlive(), actor.kingdom == pKingdom,
                     actor.hasTrait(LineageKeys.TRAIT_SLAVE), actor.hasTrait("madness"));
                 if (!CourtRules.CanHoldLayerOffice(

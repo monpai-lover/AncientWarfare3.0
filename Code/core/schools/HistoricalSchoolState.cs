@@ -122,6 +122,232 @@ namespace AncientWarfare3.core.schools
         public int Population { get; }
     }
 
+    public sealed class HistoricalSchoolAffiliationSnapshot
+    {
+        public HistoricalSchoolAffiliationSnapshot(long pActorId, long pHomeKingdomId,
+            string pHomeKingdomName, long pHometownCityId, long pResidenceCityId,
+            long pPreviousResidenceCityId, long pDestinationCityId, long pServiceKingdomId,
+            HistoricalSchoolLifecycleState pLifecycleState, int pServiceStartYear,
+            int pServiceEndYear, int pLastTravelYear, int pTravelWaitStartYear,
+            int pVoyageStartYear, int pVoyageArrivalYear, int pTransportFailures)
+        {
+            ActorId = pActorId;
+            HomeKingdomId = pHomeKingdomId;
+            HomeKingdomName = pHomeKingdomName ?? "";
+            HometownCityId = pHometownCityId;
+            ResidenceCityId = pResidenceCityId;
+            PreviousResidenceCityId = pPreviousResidenceCityId;
+            DestinationCityId = pDestinationCityId;
+            ServiceKingdomId = pServiceKingdomId;
+            LifecycleState = pLifecycleState;
+            ServiceStartYear = pServiceStartYear;
+            ServiceEndYear = pServiceEndYear;
+            LastTravelYear = pLastTravelYear;
+            TravelWaitStartYear = pTravelWaitStartYear;
+            VoyageStartYear = pVoyageStartYear;
+            VoyageArrivalYear = pVoyageArrivalYear;
+            TransportFailures = Math.Max(0, pTransportFailures);
+        }
+
+        public long ActorId { get; }
+        public long HomeKingdomId { get; }
+        public string HomeKingdomName { get; }
+        public long HometownCityId { get; }
+        public long ResidenceCityId { get; }
+        public long PreviousResidenceCityId { get; }
+        public long DestinationCityId { get; }
+        public long ServiceKingdomId { get; }
+        public HistoricalSchoolLifecycleState LifecycleState { get; }
+        public int ServiceStartYear { get; }
+        public int ServiceEndYear { get; }
+        public int LastTravelYear { get; }
+        public int TravelWaitStartYear { get; }
+        public int VoyageStartYear { get; }
+        public int VoyageArrivalYear { get; }
+        public int TransportFailures { get; }
+
+        public static HistoricalSchoolAffiliationSnapshot CreateHome(long pActorId,
+            long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId, int pYear)
+        {
+            return new HistoricalSchoolAffiliationSnapshot(pActorId, pHomeKingdomId,
+                pHomeKingdomName, pHometownCityId, pHometownCityId, -1, -1, -1,
+                HistoricalSchoolLifecycleState.AtHome, -1, -1, pYear, -1, -1, -1, 0);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot ChooseDestination(long pDestinationCityId,
+            int pYear)
+        {
+            if (!HistoricalSchoolRules.CanTravelTransition(LifecycleState,
+                    HistoricalSchoolLifecycleState.ChoosingDestination) ||
+                pDestinationCityId < 0 || pDestinationCityId == ResidenceCityId)
+                return this;
+            return Copy(pResidenceCityId: ResidenceCityId,
+                pPreviousResidenceCityId: PreviousResidenceCityId,
+                pDestinationCityId: pDestinationCityId, pServiceKingdomId: ServiceKingdomId,
+                pState: HistoricalSchoolLifecycleState.ChoosingDestination,
+                pLastTravelYear: pYear, pTravelWaitStartYear: pYear,
+                pTransportFailures: 0);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot StartTravel()
+        {
+            if (!HistoricalSchoolRules.CanTravelTransition(LifecycleState,
+                    HistoricalSchoolLifecycleState.Travelling) || DestinationCityId < 0)
+                return this;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, DestinationCityId,
+                ServiceKingdomId, HistoricalSchoolLifecycleState.Travelling,
+                LastTravelYear, TravelWaitStartYear, TransportFailures);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot Arrive(long pResidenceCityId, int pYear)
+        {
+            if ((LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
+                 LifecycleState != HistoricalSchoolLifecycleState.Voyage) ||
+                pResidenceCityId < 0 || pResidenceCityId != DestinationCityId) return this;
+            return Copy(pResidenceCityId, ResidenceCityId, -1, -1,
+                HistoricalSchoolLifecycleState.Resident, pYear, -1, 0,
+                pVoyageStartYear: -1, pVoyageArrivalYear: -1);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot BeginService(long pKingdomId,
+            int pStartYear, int pEndYear)
+        {
+            if (pKingdomId < 0 || pEndYear <= pStartYear ||
+                LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
+                LifecycleState == HistoricalSchoolLifecycleState.Voyage ||
+                LifecycleState == HistoricalSchoolLifecycleState.Dead) return this;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, -1, pKingdomId,
+                HistoricalSchoolLifecycleState.Serving, LastTravelYear,
+                TravelWaitStartYear, TransportFailures, pStartYear, pEndYear);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot CancelTravel()
+        {
+            if (LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
+                LifecycleState != HistoricalSchoolLifecycleState.Voyage) return this;
+            HistoricalSchoolLifecycleState state = ResidenceCityId == HometownCityId
+                ? HistoricalSchoolLifecycleState.AtHome
+                : HistoricalSchoolLifecycleState.Resident;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, -1, -1, state,
+                LastTravelYear, -1, 0, -1, -1, -1, -1);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot RegisterTransportFailure(int pYear)
+        {
+            int waitStart = TravelWaitStartYear >= 0 ? TravelWaitStartYear : pYear;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, DestinationCityId,
+                ServiceKingdomId, LifecycleState, LastTravelYear, waitStart,
+                TransportFailures + 1, ServiceStartYear, ServiceEndYear,
+                VoyageStartYear, VoyageArrivalYear);
+        }
+
+        public HistoricalSchoolAffiliationSnapshot BeginVoyage(int pStartYear,
+            int pArrivalYear)
+        {
+            if (LifecycleState != HistoricalSchoolLifecycleState.Travelling ||
+                pArrivalYear <= pStartYear) return this;
+            return Copy(ResidenceCityId, PreviousResidenceCityId, DestinationCityId, -1,
+                HistoricalSchoolLifecycleState.Voyage, LastTravelYear, TravelWaitStartYear,
+                TransportFailures, -1, -1, pStartYear, pArrivalYear);
+        }
+
+        private HistoricalSchoolAffiliationSnapshot Copy(long pResidenceCityId,
+            long pPreviousResidenceCityId, long pDestinationCityId, long pServiceKingdomId,
+            HistoricalSchoolLifecycleState pState, int pLastTravelYear,
+            int pTravelWaitStartYear, int pTransportFailures, int? pServiceStartYear = null,
+            int? pServiceEndYear = null, int? pVoyageStartYear = null,
+            int? pVoyageArrivalYear = null)
+        {
+            return new HistoricalSchoolAffiliationSnapshot(ActorId, HomeKingdomId,
+                HomeKingdomName, HometownCityId, pResidenceCityId,
+                pPreviousResidenceCityId, pDestinationCityId, pServiceKingdomId, pState,
+                pServiceStartYear ?? ServiceStartYear, pServiceEndYear ?? ServiceEndYear,
+                pLastTravelYear, pTravelWaitStartYear,
+                pVoyageStartYear ?? VoyageStartYear,
+                pVoyageArrivalYear ?? VoyageArrivalYear, pTransportFailures);
+        }
+    }
+
+    public sealed class HistoricalSchoolTravelContext
+    {
+        public HistoricalSchoolTravelContext(long pActorId, long pResidenceCityId,
+            long pPreviousResidenceCityId, int pLastTravelYear, int pCurrentYear,
+            bool pServing)
+        {
+            ActorId = pActorId;
+            ResidenceCityId = pResidenceCityId;
+            PreviousResidenceCityId = pPreviousResidenceCityId;
+            LastTravelYear = pLastTravelYear;
+            CurrentYear = pCurrentYear;
+            Serving = pServing;
+        }
+
+        public long ActorId { get; }
+        public long ResidenceCityId { get; }
+        public long PreviousResidenceCityId { get; }
+        public int LastTravelYear { get; }
+        public int CurrentYear { get; }
+        public bool Serving { get; }
+    }
+
+    public sealed class HistoricalSchoolTravelCandidate
+    {
+        public HistoricalSchoolTravelCandidate(long pCityId, long pKingdomId, int pPopulation,
+            float pDevelopment, bool pCapital, float pSchoolUnderrepresentation,
+            int pDebateRivals, int pDiscipleCandidates, bool pReceptiveRuler,
+            bool pOpenOffice, float pProblemMatch, bool pTransportAvailable, bool pAtWar,
+            bool pOccupied, bool pDisaster, int pSquaredDistance)
+        {
+            CityId = pCityId;
+            KingdomId = pKingdomId;
+            Population = Math.Max(0, pPopulation);
+            Development = Math.Max(0f, pDevelopment);
+            Capital = pCapital;
+            SchoolUnderrepresentation = Bound01(pSchoolUnderrepresentation);
+            DebateRivals = Math.Max(0, pDebateRivals);
+            DiscipleCandidates = Math.Max(0, pDiscipleCandidates);
+            ReceptiveRuler = pReceptiveRuler;
+            OpenOffice = pOpenOffice;
+            ProblemMatch = Bound01(pProblemMatch);
+            TransportAvailable = pTransportAvailable;
+            AtWar = pAtWar;
+            Occupied = pOccupied;
+            Disaster = pDisaster;
+            SquaredDistance = Math.Max(0, pSquaredDistance);
+        }
+
+        public long CityId { get; }
+        public long KingdomId { get; }
+        public int Population { get; }
+        public float Development { get; }
+        public bool Capital { get; }
+        public float SchoolUnderrepresentation { get; }
+        public int DebateRivals { get; }
+        public int DiscipleCandidates { get; }
+        public bool ReceptiveRuler { get; }
+        public bool OpenOffice { get; }
+        public float ProblemMatch { get; }
+        public bool TransportAvailable { get; }
+        public bool AtWar { get; }
+        public bool Occupied { get; }
+        public bool Disaster { get; }
+        public int SquaredDistance { get; }
+
+        public HistoricalSchoolTravelCandidate WithCity(long pCityId)
+        {
+            return new HistoricalSchoolTravelCandidate(pCityId, KingdomId, Population,
+                Development, Capital, SchoolUnderrepresentation, DebateRivals,
+                DiscipleCandidates, ReceptiveRuler, OpenOffice, ProblemMatch,
+                TransportAvailable, AtWar, Occupied, Disaster, SquaredDistance);
+        }
+
+        private static float Bound01(float pValue)
+        {
+            if (float.IsNaN(pValue) || float.IsInfinity(pValue)) return 0f;
+            return Math.Max(0f, Math.Min(1f, pValue));
+        }
+    }
+
     public static class HistoricalDebateTopicId
     {
         public const string Livelihood = "livelihood";

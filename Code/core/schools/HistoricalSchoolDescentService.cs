@@ -74,13 +74,15 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null || !pActor.isAlive()) return;
             HistoricalSchoolMasterDefinition master = DefinitionFor(pActor);
             if (master == null) return;
-            City city = pActor.city;
+            City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
             HistoricalSchoolStore.MarkMasterDead(master.Id, pActor.data.id,
                 Date.getCurrentYear(), city?.data?.id ?? -1L, cause, WorldTime());
+            HistoricalSchoolTravelService.OnDeath(pActor);
             SchoolMembershipService.OnDeath(pActor);
             HistoricalSchoolContent.AnnounceDeath(pActor, city);
-            HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, master.CanonicalName,
+            HistoryWriter.RecordPerson(pActor.data.id,
+                HistoricalAffiliationService.HomeKingdom(pActor), master.CanonicalName,
                 "school_master_death", master.CanonicalName + "逝世", ChronicleCategory.LIFE);
             if (city?.data != null)
                 HistoryWriter.RecordCity(city, city.kingdom, "school_master_death",
@@ -137,6 +139,8 @@ namespace AncientWarfare3.core.schools
                         Date.getCurrentYear(), WorldTime()))
                     throw new InvalidOperationException("TryRecordDescent failed");
                 descentRecorded = true;
+                HistoricalAffiliationService.RegisterDescent(actor.data.id, pHome.kingdom.id,
+                    pHome.kingdom.name, pHome.data.id, Date.getCurrentYear());
                 if (!_ledger.MarkSpawned(pMaster, pEligibleYear))
                     throw new InvalidOperationException("duplicate descent ledger state");
 
@@ -165,7 +169,10 @@ namespace AncientWarfare3.core.schools
             catch (Exception error)
             {
                 if (descentRecorded && actor?.data != null)
+                {
                     HistoricalSchoolStore.RollbackDescent(pMaster.Id, actor.data.id);
+                    HistoricalAffiliationService.RollbackDescent(actor.data.id);
+                }
                 if (membershipOpened && actor?.data != null)
                     SchoolMembershipService.RollbackJoin(actor, pMaster.Id);
                 try { actor?.Dispose(); } catch { }

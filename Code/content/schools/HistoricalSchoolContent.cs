@@ -1,6 +1,8 @@
 using System;
+using AncientWarfare3.ai.behaviours.actor;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
+using ai.behaviours;
 using UnityEngine;
 
 namespace AncientWarfare3.content.schools
@@ -13,6 +15,7 @@ namespace AncientWarfare3.content.schools
         public const string VoyageStatusId = "aw_school_voyage";
         public const string CitizenJobId = "aw_historical_school_scholar";
         public const string ActorJobId = "aw_historical_school_job";
+        public const string TravelTaskId = "aw_historical_school_travel";
         public const string DescentLogId = "aw_school_master_descended";
         public const string DeathLogId = "aw_school_master_died";
         public const string LectureLogId = "aw_school_lecture";
@@ -29,18 +32,27 @@ namespace AncientWarfare3.content.schools
             RegisterTrait();
             RegisterStatuses();
             RegisterJobs();
+            RegisterTasks();
             RegisterWorldLogs();
             HistoricalSchoolRuntime.LoadState();
         }
 
         public static void AnnounceDescent(Actor pActor, City pCity)
         {
-            Announce(DescentLogId, pActor, pCity, pActor?.kingdom);
+            Announce(DescentLogId, pActor, pCity, LogKingdom(pActor));
         }
 
         public static void AnnounceDeath(Actor pActor, City pCity)
         {
-            Announce(DeathLogId, pActor, pCity, pActor?.kingdom);
+            Announce(DeathLogId, pActor, pCity, LogKingdom(pActor));
+        }
+
+        private static Kingdom LogKingdom(Actor pActor)
+        {
+            if (pActor?.data == null) return null;
+            return HistoricalAffiliationService.Get(pActor.data.id) != null
+                ? HistoricalAffiliationService.HomeKingdom(pActor)
+                : pActor.kingdom;
         }
 
         private static void RegisterTrait()
@@ -107,8 +119,26 @@ namespace AncientWarfare3.content.schools
             }
             if (AssetManager.job_actor.has(ActorJobId)) return;
             ActorJob job = AssetManager.job_actor.add(new ActorJob { id = ActorJobId });
+            job.addTask(TravelTaskId);
             job.addTask("wait");
             job.addTask("check_if_stuck_on_small_land");
+        }
+
+        private static void RegisterTasks()
+        {
+            if (AssetManager.tasks_actor.has(TravelTaskId)) return;
+            var travel = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            {
+                id = TravelTaskId,
+                cancellable_by_reproduction = false,
+                cancellable_by_socialize = false,
+                speed_multiplier = 1f,
+                locale_key = "task_unit_move"
+            });
+            travel.setIcon("ui/Icons/iconBoat");
+            travel.addBeh(new BehHistoricalSchoolTravel());
+            travel.addBeh(new BehGoToTileTarget());
+            travel.addBeh(new BehHistoricalSchoolArrive());
         }
 
         private static void RegisterWorldLogs()

@@ -1,6 +1,7 @@
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.schools;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -14,6 +15,7 @@ namespace AncientWarfare3.patch
         {
             if (!Config.game_loaded || SmoothLoader.isLoading()) return;
             AWPathfindingBootstrap.ProcessFrame();
+            HistoricalSchoolRuntime.ProcessFrame();
             Bench.bench(CityMaintenanceBenchmarkRules.DeferredFlush,
                 CityMaintenanceBenchmarkRules.Group);
             DeferredRuntimeWorkService.DrainFrame();

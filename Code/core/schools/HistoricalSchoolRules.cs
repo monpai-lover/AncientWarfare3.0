@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.schools
     public static class HistoricalSchoolRules
     {
         public const int MaxDescentsPerEligibleYear = 2;
+        public const int TravelReturnCooldownYears = 12;
 
         public static int WaveForOrder(int pOrder)
         {
@@ -118,6 +119,96 @@ namespace AncientWarfare3.core.schools
                         StringComparison.Ordinal))
                     return value.Substring(0, value.Length - suffix.Length);
             return value;
+        }
+
+        public static bool CanTravelTransition(HistoricalSchoolLifecycleState pFrom,
+            HistoricalSchoolLifecycleState pTo)
+        {
+            if (pFrom == HistoricalSchoolLifecycleState.AtHome ||
+                pFrom == HistoricalSchoolLifecycleState.Resident)
+                return pTo == HistoricalSchoolLifecycleState.ChoosingDestination;
+            if (pFrom == HistoricalSchoolLifecycleState.ChoosingDestination)
+                return pTo == HistoricalSchoolLifecycleState.Travelling;
+            if (pFrom == HistoricalSchoolLifecycleState.Travelling)
+                return pTo == HistoricalSchoolLifecycleState.Resident ||
+                       pTo == HistoricalSchoolLifecycleState.Voyage;
+            return pFrom == HistoricalSchoolLifecycleState.Voyage &&
+                   pTo == HistoricalSchoolLifecycleState.Resident;
+        }
+
+        public static int TravelBucket(long pActorId)
+        {
+            long positive = pActorId == long.MinValue ? long.MaxValue : Math.Abs(pActorId);
+            return (int)(positive % 4L);
+        }
+
+        public static float ScoreTravelDestination(HistoricalSchoolTravelContext pContext,
+            HistoricalSchoolTravelCandidate pCandidate)
+        {
+            if (pContext == null || pCandidate == null || pContext.Serving ||
+                pCandidate.CityId < 0 || pCandidate.CityId == pContext.ResidenceCityId)
+                return float.NegativeInfinity;
+            if (pCandidate.CityId == pContext.PreviousResidenceCityId &&
+                pContext.LastTravelYear >= 0 &&
+                pContext.CurrentYear - pContext.LastTravelYear < TravelReturnCooldownYears)
+                return float.NegativeInfinity;
+
+            float score = Math.Min(20f, (float)Math.Sqrt(pCandidate.Population));
+            score += Math.Min(20f, pCandidate.Development * 0.2f);
+            if (pCandidate.Capital) score += 10f;
+            score += pCandidate.SchoolUnderrepresentation * 25f;
+            score += Math.Min(12f, pCandidate.DebateRivals * 3f);
+            score += Math.Min(10f, pCandidate.DiscipleCandidates * 0.5f);
+            if (pCandidate.ReceptiveRuler) score += 8f;
+            if (pCandidate.OpenOffice) score += 5f;
+            score += pCandidate.ProblemMatch * 12f;
+            score += pCandidate.TransportAvailable ? 4f : -8f;
+            if (pCandidate.AtWar) score -= 25f;
+            if (pCandidate.Occupied) score -= 35f;
+            if (pCandidate.Disaster) score -= 30f;
+            score -= Math.Min(15f, (float)Math.Sqrt(pCandidate.SquaredDistance) * 0.05f);
+            return score;
+        }
+
+        public static HistoricalSchoolTravelCandidate SelectTravelDestination(
+            HistoricalSchoolTravelContext pContext,
+            IEnumerable<HistoricalSchoolTravelCandidate> pCandidates, int pLimit)
+        {
+            if (pContext == null || pCandidates == null || pContext.Serving || pLimit <= 0)
+                return null;
+            return pCandidates.Where(p => p != null)
+                .OrderBy(p => StableCandidateOrder(pContext.ActorId, p.CityId))
+                .Take(pLimit)
+                .Select(p => new { Candidate = p, Score = ScoreTravelDestination(pContext, p) })
+                .Where(p => !float.IsNegativeInfinity(p.Score) && p.Score > 0f)
+                .OrderByDescending(p => p.Score)
+                .ThenBy(p => p.Candidate.CityId)
+                .Select(p => p.Candidate)
+                .FirstOrDefault();
+        }
+
+        public static bool CanStartTimedVoyage(bool pHistoricalMaster,
+            int pTransportFailures, int pWaitingYears, bool pServing)
+        {
+            return pHistoricalMaster && !pServing && pTransportFailures >= 2 &&
+                   pWaitingYears >= 5;
+        }
+
+        public static int VoyageArrivalYear(int pCurrentYear, int pSquaredDistance)
+        {
+            int years = 2 + (int)Math.Ceiling(Math.Sqrt(Math.Max(0, pSquaredDistance)) / 40d);
+            years = Math.Max(2, Math.Min(12, years));
+            return pCurrentYear + years;
+        }
+
+        private static long StableCandidateOrder(long pActorId, long pCityId)
+        {
+            unchecked
+            {
+                long value = pActorId * 6364136223846793005L +
+                             pCityId * 1442695040888963407L;
+                return value ^ value >> 33;
+            }
         }
     }
 }

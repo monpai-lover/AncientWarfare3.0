@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.schools
     {
         private static int _eligibleYear;
         private static int _lastWorldYear = -1;
+        private static int _lastQuarterKey = -1;
         private static bool _loaded;
 
         public static int EligibleYear => _eligibleYear;
@@ -16,6 +17,9 @@ namespace AncientWarfare3.core.schools
         {
             HistoricalSchoolStore.LoadRuntimeState(out _eligibleYear, out _lastWorldYear);
             HistoricalSchoolDescentService.LoadState();
+            HistoricalAffiliationService.LoadState();
+            HistoricalSchoolTravelService.ClearRuntime();
+            _lastQuarterKey = -1;
             _loaded = true;
         }
 
@@ -23,7 +27,20 @@ namespace AncientWarfare3.core.schools
         {
             _eligibleYear = 0;
             _lastWorldYear = -1;
+            _lastQuarterKey = -1;
+            HistoricalAffiliationService.ClearRuntime();
+            HistoricalSchoolTravelService.ClearRuntime();
             _loaded = false;
+        }
+
+        public static void ProcessFrame()
+        {
+            if (!_loaded || World.world == null) return;
+            int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
+            int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
+            if (quarterKey == _lastQuarterKey) return;
+            _lastQuarterKey = quarterKey;
+            HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
         }
 
         public static void OnWorldYear()
