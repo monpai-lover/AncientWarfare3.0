@@ -139,6 +139,10 @@ namespace AncientWarfare3.core.schools
                 if (actor?.data == null || actor.isRekt())
                     throw new InvalidOperationException("actor creation failed");
                 actor.joinCity(pHome);
+                if (actor.data == null || !actor.isAlive() || actor.isRekt() ||
+                    actor.city != pHome || actor.kingdom != pHome.kingdom ||
+                    actor.current_tile == null)
+                    throw new InvalidOperationException("actor home assignment failed");
                 ApplyCanonicalIdentity(actor, pMaster);
                 membershipOpened = SchoolMembershipService.TryJoin(actor, pMaster.SchoolId,
                     SchoolMembershipSource.HistoricalDescent, pMaster.Id, -1,
@@ -188,10 +192,27 @@ namespace AncientWarfare3.core.schools
                     if (!SchoolMembershipService.RollbackJoin(actor, pMaster.Id))
                         ModClass.LogWarning("Historical school descent membership rollback failed");
                 }
-                try { actor?.Dispose(); } catch { }
+                RemoveFailedActor(actor);
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
                                     error.Message);
                 return false;
+            }
+        }
+
+        private static void RemoveFailedActor(Actor pActor)
+        {
+            if (pActor == null) return;
+            try
+            {
+                ActorManager units = World.world?.units;
+                if (units == null || pActor.data == null) return;
+                if (units.get(pActor.data.id) != pActor) return;
+                World.world.units.removeObject(pActor);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school failed actor removal failed: " +
+                                    error.Message);
             }
         }
 

@@ -1160,6 +1160,7 @@ namespace AncientWarfare3.core.schools
                     affiliation.Parameters.AddWithValue("@city", pHometownCityId);
                     affiliation.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.AtHome.ToString());
+                    affiliation.Parameters.AddWithValue("@year", pYear);
                     affiliation.Parameters.AddWithValue("@time", pTime);
                     if (affiliation.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("master affiliation insert failed");
