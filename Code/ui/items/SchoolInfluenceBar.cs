@@ -92,6 +92,9 @@ namespace AncientWarfare3.ui.items
             var outline = labelObject.AddComponent<Outline>();
             outline.effectColor = new Color(0f, 0f, 0f, .9f);
             outline.effectDistance = new Vector2(1f, -1f);
+            Canvas labelCanvas = labelObject.AddComponent<Canvas>();
+            labelCanvas.overrideSorting = true;
+            labelCanvas.sortingOrder = 100;
             labelObject.transform.SetAsLastSibling();
         }
     }
