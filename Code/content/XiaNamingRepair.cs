@@ -404,12 +404,25 @@ namespace AncientWarfare3.content
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
                 ParameterGetters.GetAllianceParameterGetter(generator.parameter_getter)(pAlliance, p);
             });
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName)) return chineseName;
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName))
+            {
+                ModClass.LogInfo("[Xia alliance naming] route=ChineseName alliance=" + id +
+                                 " name=" + chineseName);
+                return chineseName;
+            }
 #endif
 
             string name = GenerateVanillaName(XiaNameSets.AllianceGenerator, id);
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return name;
-            return XiaFallbackNameRules.LocalAllianceName(id);
+            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name))
+            {
+                ModClass.LogInfo("[Xia alliance naming] route=vanilla-fallback alliance=" + id +
+                                 " name=" + name);
+                return name;
+            }
+            string fallback = XiaFallbackNameRules.LocalAllianceName(id);
+            ModClass.LogInfo("[Xia alliance naming] route=local-fallback alliance=" + id +
+                             " name=" + fallback);
+            return fallback;
         }
 
         private static string GenerateVanillaName(string pGeneratorId, long pSeed)

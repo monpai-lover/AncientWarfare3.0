@@ -41,6 +41,13 @@ namespace AncientWarfare3.content
             InitActorNameGenerator();
             OverrideClanParameterGetter();
 
+            CN_NameGeneratorAsset allianceGenerator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
+            if (allianceGenerator == null)
+                ModClass.LogWarning("[Xia alliance naming] Chinese Name route unavailable: Xia_alliance missing");
+            else
+                ModClass.LogInfo("[Xia alliance naming] Chinese Name route ready: generator=" +
+                                 allianceGenerator.id + " templates=" + allianceGenerator.templates.Count);
+
             LM.AddToCurrentLocale("familyname", "姓");
             LM.AddToCurrentLocale("clanname", "氏");
             LM.ApplyLocale();
