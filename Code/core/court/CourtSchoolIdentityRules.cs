@@ -85,8 +85,15 @@ namespace AncientWarfare3.core.court
             {
                 long hash = pActorId * 397L;
                 foreach (char c in pSchool ?? "") hash = hash * 31L + c;
-                return (Math.Abs(hash) % 100L) / 100f;
+                return PositiveModulo(hash, 100L) / 100f;
             }
+        }
+
+        public static long PositiveModulo(long pValue, long pModulo)
+        {
+            if (pModulo <= 0L) return 0L;
+            long remainder = pValue % pModulo;
+            return remainder < 0L ? remainder + pModulo : remainder;
         }
     }
 }

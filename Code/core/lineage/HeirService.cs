@@ -342,6 +342,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
                 heir?.data == null ? -1L : referenceKingId);
             SetHeirFlag(heir, true);
+            if (heir?.data != null) CourtService.EnsurePersonalSchool(heir);
             CitySchoolSnapshotService.MarkKingdomDirty(pKingdom);
             RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }

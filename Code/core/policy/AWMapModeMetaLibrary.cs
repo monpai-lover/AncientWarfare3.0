@@ -324,7 +324,7 @@ namespace AncientWarfare3.core.policy
                     hash ^= raw[i];
                     hash *= 1099511628211L;
                 }
-                return hash < 0 ? -hash : hash;
+                return hash & long.MaxValue;
             }
         }
 

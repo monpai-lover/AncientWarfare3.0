@@ -276,8 +276,55 @@ namespace AncientWarfare3.ui.windows
                                AW_L10n.Text("aw_school_total_influence", "Total influence") + ": " +
                                Mathf.RoundToInt(metrics.Influence) + "    " +
                                AW_L10n.Text("aw_school_dominant_cities", "Dominant cities") + ": " +
-                               metrics.Cities;
+                               metrics.Cities + "\n" +
+                               AW_L10n.Text("aw_school_top_cities", "Leading cities") + ": " +
+                               TopCities(pDefinition.Id) + "\n" +
+                               AW_L10n.Text("aw_school_top_kingdoms", "Leading kingdoms") + ": " +
+                               TopKingdoms(pDefinition.Id);
             ShowRepresentatives(pDefinition.Id, 205f);
+        }
+
+        private static string TopCities(string pSchoolId)
+        {
+            var values = new List<KeyValuePair<string, float>>();
+            try
+            {
+                if (World.world?.cities != null)
+                    foreach (City city in World.world.cities)
+                    {
+                        CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+                        if (snapshot == null || !snapshot.Scores.TryGetValue(pSchoolId, out float score) ||
+                            score <= 0f) continue;
+                        values.Add(new KeyValuePair<string, float>(city.data.name ?? "", score));
+                    }
+            }
+            catch { }
+            string text = string.Join(" / ", values.OrderByDescending(p => p.Value)
+                .ThenBy(p => p.Key, StringComparer.Ordinal).Take(5).Select(p => p.Key).ToArray());
+            return string.IsNullOrEmpty(text) ? AW_L10n.Text("aw_school_none", "None") : text;
+        }
+
+        private static string TopKingdoms(string pSchoolId)
+        {
+            var values = new Dictionary<long, KeyValuePair<string, float>>();
+            try
+            {
+                if (World.world?.cities != null)
+                    foreach (City city in World.world.cities)
+                    {
+                        CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+                        Kingdom kingdom = city?.kingdom;
+                        if (snapshot == null || kingdom?.data == null ||
+                            !snapshot.Scores.TryGetValue(pSchoolId, out float score) || score <= 0f) continue;
+                        values.TryGetValue(kingdom.id, out KeyValuePair<string, float> previous);
+                        values[kingdom.id] = new KeyValuePair<string, float>(kingdom.name ?? "",
+                            previous.Value + score);
+                    }
+            }
+            catch { }
+            string text = string.Join(" / ", values.Values.OrderByDescending(p => p.Value)
+                .ThenBy(p => p.Key, StringComparer.Ordinal).Take(3).Select(p => p.Key).ToArray());
+            return string.IsNullOrEmpty(text) ? AW_L10n.Text("aw_school_none", "None") : text;
         }
 
         private void ShowCityDetail(City pCity)

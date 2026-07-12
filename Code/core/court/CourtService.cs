@@ -616,60 +616,6 @@ namespace AncientWarfare3.core.court
 
         private static SQLiteConnection CourtDB => LineageArchiveManager.Instance?.OperatingDB;
 
-        private static void RecordOfficerAppointment(Actor pActor, Kingdom pKingdom, string pLayer,
-            string pOfficeId, string pSchoolId, City pCity)
-        {
-            var db = CourtDB;
-            if (db == null || pActor?.data == null || pKingdom?.data == null) return;
-            try
-            {
-                string table = CourtOfficerTableItem.GetTableName();
-                // 每人至多保留一条 active 履历：新任命前关闭旧的。
-                if (CourtOfficerRecordRules.ShouldCloseActiveRecord(true))
-                    CloseActiveOfficerRows(db, table, pActor.data.id, "reassigned");
-
-                long id = TableIdAllocator.Next(db, table, "OFFICER_ID");
-                float influence = CourtInfluenceRules.InfluenceWeight(pLayer,
-                    ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor));
-                db.Insert(table,
-                    ColumnVal.Create("OFFICER_ID", id),
-                    ColumnVal.Create("KINGDOM_ID", pKingdom.id),
-                    ColumnVal.Create("ACTOR_ID", pActor.data.id),
-                    ColumnVal.Create("ACTOR_NAME", pActor.getName() ?? ""),
-                    ColumnVal.Create("CITY_ID", pCity?.data?.id ?? -1L),
-                    ColumnVal.Create("LAYER", pLayer ?? ""),
-                    ColumnVal.Create("OFFICE_ID", pOfficeId ?? ""),
-                    ColumnVal.Create("SCHOOL_ID", pSchoolId ?? ""),
-                    ColumnVal.Create("INFLUENCE", (double)influence),
-                    ColumnVal.Create("APPOINTED_YEAR", Date.getCurrentYear()),
-                    ColumnVal.Create("ACTIVE", CourtOfficerRecordRules.ActiveFlag(true)),
-                    ColumnVal.Create("END_REASON", ""),
-                    ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
-            }
-            catch (Exception e) { AncientWarfare3.ModClass.LogWarning("CourtOfficer insert failed: " + e.Message); }
-        }
-
-        private static void CloseOfficerRecord(long pActorId, string pReason)
-        {
-            var db = CourtDB;
-            if (db == null) return;
-            try { CloseActiveOfficerRows(db, CourtOfficerTableItem.GetTableName(), pActorId, pReason ?? ""); }
-            catch (Exception e) { AncientWarfare3.ModClass.LogWarning("CourtOfficer close failed: " + e.Message); }
-        }
-
-        private static void CloseActiveOfficerRows(SQLiteConnection pDb, string pTable, long pActorId, string pReason)
-        {
-            pDb.UpdateValue(pTable,
-                new List<SimpleColumnConstraint>
-                {
-                    SimpleColumnConstraint.CreateEq("ACTOR_ID", pActorId),
-                    SimpleColumnConstraint.CreateEq("ACTIVE", CourtOfficerRecordRules.ActiveFlag(true))
-                },
-                ColumnVal.Create("ACTIVE", CourtOfficerRecordRules.ActiveFlag(false)),
-                ColumnVal.Create("END_REASON", pReason ?? ""),
-                ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
-        }
-
         private static void RefreshCityBureaus(Kingdom pKingdom, CourtSnapshot pSnapshot)
         {
             var db = CourtDB;
