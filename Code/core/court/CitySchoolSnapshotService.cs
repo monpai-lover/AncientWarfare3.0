@@ -9,7 +9,6 @@ namespace AncientWarfare3.core.court
 {
     internal static class CitySchoolSnapshotService
     {
-        private const int AnnualRefreshBudget = 4;
         private const float MembershipInfluencePerLivingActor = 0.03f;
         private const float ActivePresencePerLivingActor = 0.05f;
         private static readonly Dictionary<long, CitySchoolSnapshot> Snapshots =
@@ -17,10 +16,11 @@ namespace AncientWarfare3.core.court
         private static readonly CitySchoolDirtyQueue Dirty = new CitySchoolDirtyQueue();
         private static int _generation;
 
-        public static CitySchoolSnapshot GetSnapshot(City pCity, bool pEnsureFresh = false)
+        public static int Generation => _generation;
+
+        public static CitySchoolSnapshot GetSnapshot(City pCity)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
-            if (pEnsureFresh) return Rebuild(pCity);
             if (Snapshots.TryGetValue(pCity.data.id, out CitySchoolSnapshot snapshot)) return snapshot;
             Dirty.Mark(pCity.data.id);
             return null;
@@ -34,12 +34,6 @@ namespace AncientWarfare3.core.court
         public static void MarkDirtyById(long pCityId)
         {
             if (pCityId >= 0) Dirty.Mark(pCityId);
-        }
-
-        public static CitySchoolSnapshot GetFreshSnapshotIfDirty(City pCity)
-        {
-            if (pCity?.data == null || pCity.isRekt()) return null;
-            return Dirty.Contains(pCity.data.id) ? Rebuild(pCity) : GetSnapshot(pCity);
         }
 
         public static void MarkActorDirty(Actor pActor)
@@ -85,7 +79,6 @@ namespace AncientWarfare3.core.court
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             MarkKingdomDirty(pKingdom, pOnlyMissing: true);
-            ProcessDirty(AnnualRefreshBudget);
         }
 
         public static Dictionary<string, float> GetKingdomTotals(Kingdom pKingdom)

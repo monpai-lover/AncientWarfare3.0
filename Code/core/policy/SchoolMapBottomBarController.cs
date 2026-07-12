@@ -24,18 +24,14 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
-            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity, pEnsureFresh: true);
-            if (snapshot == null)
-            {
-                Hide();
-                return;
-            }
-
-            if (!EnsureTab()) return;
             _pendingCity = pCity;
             _cityId = pCity.data.id;
-            _generation = snapshot.Generation;
+            _generation = -1;
             _showRequested = true;
+            if (!EnsureTab()) return;
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
+            if (snapshot == null) return;
+            _generation = snapshot.Generation;
             TryPresent(snapshot);
         }
 
@@ -54,20 +50,28 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
-            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetFreshSnapshotIfDirty(city);
-            if (snapshot == null)
-            {
-                Hide();
-                return;
-            }
-
-            if (_cityId != city.data.id || _generation != snapshot.Generation)
+            if (_cityId != city.data.id)
             {
                 Show(city);
                 return;
             }
 
-            if (_showRequested) TryPresent(snapshot);
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+            if (snapshot == null)
+            {
+                _pendingCity = city;
+                _showRequested = true;
+                return;
+            }
+
+            if (_generation != snapshot.Generation)
+            {
+                _pendingCity = city;
+                _generation = snapshot.Generation;
+                _showRequested = true;
+            }
+
+            if (_showRequested && EnsureTab()) TryPresent(snapshot);
         }
 
         public static void Hide()

@@ -517,34 +517,65 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
-        public static int ApplyLedgerDecay(int pYear, double pWorldTime)
+        public static int ApplyLedgerDecay(int pYear, double pWorldTime,
+            out long[] pAffectedCityIds)
         {
+            pAffectedCityIds = Array.Empty<long>();
             if (DB == null || pYear < 0) return 0;
+            SQLiteTransaction transaction = null;
             try
             {
-                using var command = new SQLiteCommand(DB);
-                command.CommandText = "UPDATE " + LedgerTable +
-                    " SET TRADITION=CASE WHEN COALESCE(LAST_ACTIVE_YEAR,-1)<=@traditionCutoff " +
-                    "THEN MAX(0,MIN(1,TRADITION*@traditionDecay)) ELSE TRADITION END," +
-                    "ACTIVE_PRESENCE=MAX(0,MIN(1,ACTIVE_PRESENCE*@presenceDecay))," +
-                    "MOMENTUM=MAX(0,MIN(1,MOMENTUM*@momentumDecay))," +
-                    "LAST_DECAY_YEAR=@year,UPDATED_TIME=@time" +
+                transaction = DB.BeginTransaction();
+                const string decayWhere =
                     " WHERE COALESCE(LAST_DECAY_YEAR,-1)<@year AND " +
                     "(TRADITION>0 OR ACTIVE_PRESENCE>0 OR MOMENTUM>0)";
-                command.Parameters.AddWithValue("@traditionDecay", LedgerTraditionDecay);
-                command.Parameters.AddWithValue("@traditionCutoff",
-                    pYear - TraditionDecayGraceYears);
-                command.Parameters.AddWithValue("@presenceDecay", LedgerPresenceDecay);
-                command.Parameters.AddWithValue("@momentumDecay", LedgerMomentumDecay);
-                command.Parameters.AddWithValue("@year", pYear);
-                command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
-                return command.ExecuteNonQuery();
+                var affected = new HashSet<long>();
+                using (var select = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    select.CommandText = "SELECT DISTINCT CITY_ID FROM " + LedgerTable +
+                                         decayWhere;
+                    select.Parameters.AddWithValue("@year", pYear);
+                    using SQLiteDataReader reader = select.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        long cityId = ValueLong(reader, 0, -1L);
+                        if (cityId >= 0) affected.Add(cityId);
+                    }
+                }
+
+                int updated;
+                using (var command = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    command.CommandText = "UPDATE " + LedgerTable +
+                        " SET TRADITION=CASE WHEN COALESCE(LAST_ACTIVE_YEAR,-1)<=@traditionCutoff " +
+                        "THEN MAX(0,MIN(1,TRADITION*@traditionDecay)) ELSE TRADITION END," +
+                        "ACTIVE_PRESENCE=MAX(0,MIN(1,ACTIVE_PRESENCE*@presenceDecay))," +
+                        "MOMENTUM=MAX(0,MIN(1,MOMENTUM*@momentumDecay))," +
+                        "LAST_DECAY_YEAR=@year,UPDATED_TIME=@time" + decayWhere;
+                    command.Parameters.AddWithValue("@traditionDecay", LedgerTraditionDecay);
+                    command.Parameters.AddWithValue("@traditionCutoff",
+                        pYear - TraditionDecayGraceYears);
+                    command.Parameters.AddWithValue("@presenceDecay", LedgerPresenceDecay);
+                    command.Parameters.AddWithValue("@momentumDecay", LedgerMomentumDecay);
+                    command.Parameters.AddWithValue("@year", pYear);
+                    command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
+                    updated = command.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                pAffectedCityIds = new List<long>(affected).ToArray();
+                return updated;
             }
             catch (Exception error)
             {
+                try { transaction?.Rollback(); } catch { }
+                pAffectedCityIds = Array.Empty<long>();
                 ModClass.LogWarning("HistoricalSchoolStore decay ledgers failed: " +
                                     error.Message);
                 return 0;
+            }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
             }
         }
 

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
-using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -75,13 +74,10 @@ namespace AncientWarfare3.core.schools
                 if (cities.Count > 0)
                     HistoricalSchoolDescentService.ProcessDue(nextEligibleYear, cities);
                 SchoolGuestOfficeService.ProcessYear(worldYear);
-                int decayedLedgers = HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
-                    World.world?.getCurWorldTime() ?? 0d);
-                if (decayedLedgers > 0)
-                {
-                    CitySchoolSnapshotService.Clear();
-                    SchoolMapModeService.DirtyMapIfActive();
-                }
+                HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
+                    World.world?.getCurWorldTime() ?? 0d, out long[] affectedCityIds);
+                foreach (long cityId in affectedCityIds)
+                    CitySchoolSnapshotService.MarkDirtyById(cityId);
                 HistoricalSchoolActionService.ProcessYear(worldYear);
                 HistoricalSchoolDebateService.ProcessYear(worldYear);
                 HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,

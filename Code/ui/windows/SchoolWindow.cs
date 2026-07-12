@@ -19,6 +19,7 @@ namespace AncientWarfare3.ui.windows
         private const float LeftWidth = 180f;
         private const float Gap = 6f;
         private const float ContentMargin = 14f;
+        private const float RefreshCheckInterval = 0.25f;
 
         private enum SortMode
         {
@@ -56,6 +57,9 @@ namespace AncientWarfare3.ui.windows
         private SortMode _sortMode;
         private string _selectedSchool = CourtSchoolId.Ru;
         private long _selectedCity = -1L;
+        private int _displayedSnapshotGeneration = -1;
+        private long _displayedMembershipVersion = -1L;
+        private float _nextRefreshCheckTime;
 
         public static void OpenSchool(string pSchoolId = CourtSchoolId.Ru)
         {
@@ -83,12 +87,23 @@ namespace AncientWarfare3.ui.windows
         public override void OnNormalEnable()
         {
             SchoolMapModeService.BeginWindowMode();
+            _nextRefreshCheckTime = 0f;
             ApplyRequestAndRefresh();
         }
 
         public override void OnNormalDisable()
         {
             SchoolMapModeService.EndWindowMode();
+        }
+
+        private void Update()
+        {
+            if (!isActiveAndEnabled || World.world == null ||
+                Time.unscaledTime < _nextRefreshCheckTime) return;
+            _nextRefreshCheckTime = Time.unscaledTime + RefreshCheckInterval;
+            if (_displayedSnapshotGeneration == CitySchoolSnapshotService.Generation &&
+                _displayedMembershipVersion == SchoolMembershipService.Version) return;
+            Refresh();
         }
 
         private void ConfigureWindow()
@@ -245,7 +260,6 @@ namespace AncientWarfare3.ui.windows
         private void Refresh()
         {
             if (_listContent == null) return;
-            CitySchoolSnapshotService.ProcessDirty(8);
             Dictionary<string, SchoolMetrics> metrics = BuildMetrics();
             List<CourtSchoolDefinition> ordered = CourtSchoolRegistry.All.ToList();
             if (_sortMode == SortMode.Influence)
@@ -270,6 +284,8 @@ namespace AncientWarfare3.ui.windows
 
             if (_selectedCity >= 0) ShowCityDetail(World.world?.cities?.get(_selectedCity));
             else ShowSchoolDetail(CourtSchoolRegistry.Find(_selectedSchool), metrics);
+            _displayedSnapshotGeneration = CitySchoolSnapshotService.Generation;
+            _displayedMembershipVersion = SchoolMembershipService.Version;
         }
 
         private Dictionary<string, SchoolMetrics> BuildMetrics()
@@ -394,7 +410,7 @@ namespace AncientWarfare3.ui.windows
                 ResetDetailScroll();
                 return;
             }
-            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity, pEnsureFresh: true);
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             CourtSchoolDefinition dominant = CourtSchoolRegistry.Find(snapshot?.DominantSchool);
             _detailTitle.color = dominant == null ? Color.gray : Parse(dominant.ColorHex, Color.white);
             _detailTitle.text = pCity.data.name + " - " + (pCity.kingdom?.name ?? "");

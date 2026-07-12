@@ -146,7 +146,7 @@ namespace AncientWarfare3.core.schools
             if (pCity?.data == null || pSnapshots == null) return false;
             if (!pSnapshots.TryGetValue(pCity.data.id, out CitySchoolSnapshot snapshot))
             {
-                snapshot = CitySchoolSnapshotService.GetSnapshot(pCity, pEnsureFresh: true);
+                snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
                 pSnapshots[pCity.data.id] = snapshot;
             }
             if (snapshot == null || snapshot.TotalScore <= 0f || snapshot.Scores == null)

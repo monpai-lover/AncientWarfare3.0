@@ -49,9 +49,8 @@ namespace AncientWarfare3.core.policy
 
         public static void ProcessFrame()
         {
+            CitySchoolSnapshotService.ProcessDirty(IsActive() ? 4 : 1);
             SchoolMapBottomBarController.ProcessFrame();
-            if (!IsActive()) return;
-            CitySchoolSnapshotService.ProcessDirty(4);
         }
 
         public static void SetFocus(string pSchoolId)
@@ -84,9 +83,7 @@ namespace AncientWarfare3.core.policy
         public static string BuildTooltip(City pCity)
         {
             if (pCity?.data == null) return "";
-            CitySchoolSnapshot snapshot =
-                CitySchoolSnapshotService.GetFreshSnapshotIfDirty(pCity);
-            if (snapshot == null) snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
+            CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             if (snapshot == null || snapshot.TotalScore <= 0f)
                 return AW_L10n.Text("aw_school_map_no_influence", "No school influence");
 
@@ -139,7 +136,6 @@ namespace AncientWarfare3.core.policy
                         CitySchoolSnapshotService.MarkKingdomDirty(kingdom, pOnlyMissing: true);
             }
             catch { }
-            CitySchoolSnapshotService.ProcessDirty(32);
             DirtyMap();
         }
 
