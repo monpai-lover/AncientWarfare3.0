@@ -14,9 +14,18 @@ namespace AncientWarfare3.core.schools
         private const int MaxExplicitActionsPerYear = 8;
         private const int MaxRediscoveriesPerYear = 4;
         private const int MaxInstitutionFoundingsPerYear = 4;
+        private static int _lastProcessedYear = -1;
+
+        public static void ClearRuntime()
+        {
+            _lastProcessedYear = -1;
+        }
 
         public static void ProcessYear(int pYear)
         {
+            if (pYear < 0 || pYear == _lastProcessedYear) return;
+            _lastProcessedYear = pYear;
+
             var teachers = new Dictionary<long, Actor>();
             Dictionary<long, int> directCounts = SchoolLineageService.BuildDirectDiscipleCounts();
             foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)

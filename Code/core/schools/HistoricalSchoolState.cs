@@ -468,8 +468,6 @@ namespace AncientWarfare3.core.schools
             new Dictionary<long, SchoolMembershipRecord>();
         private readonly Dictionary<string, HashSet<long>> _actorsBySchool =
             new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
-        private readonly List<SchoolMembershipRecord> _closed =
-            new List<SchoolMembershipRecord>();
 
         public long Version { get; private set; }
 
@@ -494,7 +492,6 @@ namespace AncientWarfare3.core.schools
                 current.SchoolId == pReplacement.SchoolId) return false;
             pClosed = current.Close(pYear, "converted");
             RemoveActive(current);
-            _closed.Add(pClosed);
             AddActive(pReplacement);
             MarkChanged();
             return true;
@@ -504,22 +501,14 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord pReplacement)
         {
             if (pOriginal == null || pReplacement == null ||
+                !pOriginal.Active || pOriginal.ActorId != pActorId ||
                 !_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current) ||
                 current.MembershipId != pReplacement.MembershipId)
                 return false;
             RemoveActive(current);
-            for (int i = _closed.Count - 1; i >= 0; i--)
-            {
-                SchoolMembershipRecord closed = _closed[i];
-                if (closed.MembershipId != pOriginal.MembershipId ||
-                    closed.ActorId != pActorId) continue;
-                _closed.RemoveAt(i);
-                AddActive(pOriginal);
-                MarkChanged();
-                return true;
-            }
-            AddActive(current);
-            return false;
+            AddActive(pOriginal);
+            MarkChanged();
+            return true;
         }
 
         public bool Close(long pActorId, int pYear, string pReason,
@@ -530,7 +519,6 @@ namespace AncientWarfare3.core.schools
                 return false;
             pClosed = current.Close(pYear, pReason);
             RemoveActive(current);
-            _closed.Add(pClosed);
             MarkChanged();
             return true;
         }
@@ -578,7 +566,6 @@ namespace AncientWarfare3.core.schools
         {
             _activeByActor.Clear();
             _actorsBySchool.Clear();
-            _closed.Clear();
             MarkChanged();
         }
 

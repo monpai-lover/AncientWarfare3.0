@@ -5,25 +5,30 @@ namespace AncientWarfare3.core.court
 {
     public sealed class CitySchoolDirtyQueue
     {
-        private readonly Queue<long> _queue = new Queue<long>();
-        private readonly HashSet<long> _queued = new HashSet<long>();
+        private readonly LinkedList<long> _queue = new LinkedList<long>();
+        private readonly Dictionary<long, LinkedListNode<long>> _nodes =
+            new Dictionary<long, LinkedListNode<long>>();
 
-        public int Count => _queued.Count;
+        public int Count => _nodes.Count;
 
         public bool Contains(long pCityId)
         {
-            return pCityId >= 0 && _queued.Contains(pCityId);
+            return pCityId >= 0 && _nodes.ContainsKey(pCityId);
         }
 
         public bool Remove(long pCityId)
         {
-            return pCityId >= 0 && _queued.Remove(pCityId);
+            if (pCityId < 0 || !_nodes.TryGetValue(pCityId,
+                    out LinkedListNode<long> node)) return false;
+            _nodes.Remove(pCityId);
+            _queue.Remove(node);
+            return true;
         }
 
         public bool Mark(long pCityId)
         {
-            if (pCityId < 0 || !_queued.Add(pCityId)) return false;
-            _queue.Enqueue(pCityId);
+            if (pCityId < 0 || _nodes.ContainsKey(pCityId)) return false;
+            _nodes[pCityId] = _queue.AddLast(pCityId);
             return true;
         }
 
@@ -31,10 +36,12 @@ namespace AncientWarfare3.core.court
         {
             int budget = Math.Max(0, pBudget);
             var result = new List<long>(Math.Min(budget, _queue.Count));
-            while (result.Count < budget && _queue.Count > 0)
+            while (result.Count < budget && _queue.First != null)
             {
-                long cityId = _queue.Dequeue();
-                if (_queued.Remove(cityId)) result.Add(cityId);
+                long cityId = _queue.First.Value;
+                _queue.RemoveFirst();
+                _nodes.Remove(cityId);
+                result.Add(cityId);
             }
             return result.ToArray();
         }
@@ -42,7 +49,7 @@ namespace AncientWarfare3.core.court
         public void Clear()
         {
             _queue.Clear();
-            _queued.Clear();
+            _nodes.Clear();
         }
     }
 }

@@ -193,7 +193,7 @@ namespace AncientWarfare3.core.schools
                 ? 0
                 : Math.Max(0, pYear - pState.TravelWaitStartYear);
             if (!HistoricalSchoolRules.CanStartTimedVoyage(
-                    HistoricalSchoolDescentService.IsCanonicalMaster(pActor),
+                    SchoolLineageService.IsQualifiedTeacher(pActor),
                     pState.TransportFailures, waitingYears,
                     IsServingOrBound(pActor, pState)))
                 return false;

@@ -10,6 +10,7 @@ namespace AncientWarfare3.core.schools
     {
         private static int _eligibleYear;
         private static int _lastWorldYear = -1;
+        private static int _attemptedWorldYear = -1;
         private static int _lastQuarterKey = -1;
         private static bool _loaded;
 
@@ -22,10 +23,12 @@ namespace AncientWarfare3.core.schools
             HistoricalAffiliationService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();
+            HistoricalSchoolActionService.ClearRuntime();
             SchoolGuestOfficeService.LoadState();
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.LoadState();
+            _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
             _loaded = true;
         }
@@ -34,9 +37,11 @@ namespace AncientWarfare3.core.schools
         {
             _eligibleYear = 0;
             _lastWorldYear = -1;
+            _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
+            HistoricalSchoolActionService.ClearRuntime();
             SchoolGuestOfficeService.ClearRuntime();
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
@@ -58,26 +63,36 @@ namespace AncientWarfare3.core.schools
         {
             if (!_loaded) LoadState();
             int worldYear = Date.getCurrentYear();
-            if (worldYear == _lastWorldYear) return;
-            _lastWorldYear = worldYear;
+            if (worldYear == _lastWorldYear || worldYear == _attemptedWorldYear) return;
+            _attemptedWorldYear = worldYear;
 
-            List<City> cities = LivingXiaCities();
-            _eligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
-                cities.Count > 0);
-            HistoricalSchoolStore.SaveRuntimeState(_eligibleYear, _lastWorldYear,
-                World.world?.getCurWorldTime() ?? 0d);
-            if (cities.Count > 0)
-                HistoricalSchoolDescentService.ProcessDue(_eligibleYear, cities);
-            SchoolGuestOfficeService.ProcessYear(worldYear);
-            int decayedLedgers = HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
-                World.world?.getCurWorldTime() ?? 0d);
-            if (decayedLedgers > 0)
+            try
             {
-                CitySchoolSnapshotService.Clear();
-                SchoolMapModeService.DirtyMapIfActive();
+                List<City> cities = LivingXiaCities();
+                int nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
+                    cities.Count > 0);
+                if (cities.Count > 0)
+                    HistoricalSchoolDescentService.ProcessDue(nextEligibleYear, cities);
+                SchoolGuestOfficeService.ProcessYear(worldYear);
+                int decayedLedgers = HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
+                    World.world?.getCurWorldTime() ?? 0d);
+                if (decayedLedgers > 0)
+                {
+                    CitySchoolSnapshotService.Clear();
+                    SchoolMapModeService.DirtyMapIfActive();
+                }
+                HistoricalSchoolActionService.ProcessYear(worldYear);
+                HistoricalSchoolDebateService.ProcessYear(worldYear);
+                HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
+                    World.world?.getCurWorldTime() ?? 0d);
+                _eligibleYear = nextEligibleYear;
+                _lastWorldYear = worldYear;
             }
-            HistoricalSchoolActionService.ProcessYear(worldYear);
-            HistoricalSchoolDebateService.ProcessYear(worldYear);
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school annual tick failed: " +
+                                    error.ToString());
+            }
         }
 
         private static List<City> LivingXiaCities()

@@ -188,10 +188,10 @@ namespace AncientWarfare3.core.schools
                 .FirstOrDefault();
         }
 
-        public static bool CanStartTimedVoyage(bool pHistoricalMaster,
+        public static bool CanStartTimedVoyage(bool pTravelEligible,
             int pTransportFailures, int pWaitingYears, bool pServing)
         {
-            return pHistoricalMaster && !pServing && pTransportFailures >= 2 &&
+            return pTravelEligible && !pServing && pTransportFailures >= 2 &&
                    pWaitingYears >= 5;
         }
 
