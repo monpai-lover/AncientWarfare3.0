@@ -404,8 +404,9 @@ namespace AncientWarfare3.content
                 var generator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
                 ParameterGetters.GetAllianceParameterGetter(generator.parameter_getter)(pAlliance, p);
             });
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(chineseName))
+            if (IsUsefulAllianceName(chineseName))
             {
+                chineseName = ResolveUniqueAllianceName(pAlliance, chineseName);
                 ModClass.LogInfo("[Xia alliance naming] route=ChineseName alliance=" + id +
                                  " name=" + chineseName);
                 return chineseName;
@@ -413,16 +414,38 @@ namespace AncientWarfare3.content
 #endif
 
             string name = GenerateVanillaName(XiaNameSets.AllianceGenerator, id);
-            if (!XiaNameRepairRules.IsInvalidGeneratedMetaName(name))
+            if (IsUsefulAllianceName(name))
             {
+                name = ResolveUniqueAllianceName(pAlliance, name);
                 ModClass.LogInfo("[Xia alliance naming] route=vanilla-fallback alliance=" + id +
                                  " name=" + name);
                 return name;
             }
-            string fallback = XiaFallbackNameRules.LocalAllianceName(id);
+            string fallback = ResolveUniqueAllianceName(pAlliance, XiaFallbackNameRules.LocalAllianceName(id));
             ModClass.LogInfo("[Xia alliance naming] route=local-fallback alliance=" + id +
                              " name=" + fallback);
             return fallback;
+        }
+
+        private static bool IsUsefulAllianceName(string pName)
+        {
+            return !XiaNameRepairRules.IsInvalidGeneratedMetaName(pName) &&
+                   !string.Equals(pName?.Trim(), "之盟", StringComparison.Ordinal);
+        }
+
+        private static string ResolveUniqueAllianceName(Alliance pAlliance, string pCandidate)
+        {
+            var used = new List<string>();
+            if (World.world?.alliances != null)
+            {
+                foreach (Alliance alliance in World.world.alliances)
+                {
+                    if (alliance?.data == null || alliance == pAlliance || alliance.isRekt()) continue;
+                    if (!string.IsNullOrEmpty(alliance.data.name)) used.Add(alliance.data.name);
+                }
+            }
+            return XiaAllianceNamingRules.ResolveUniqueName(
+                pCandidate, pAlliance?.getID() ?? 0L, used);
         }
 
         private static string GenerateVanillaName(string pGeneratorId, long pSeed)

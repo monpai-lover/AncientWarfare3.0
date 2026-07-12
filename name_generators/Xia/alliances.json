@@ -1,18 +1,22 @@
 [
     {
         "id": "Xia_alliance",
-        "parameter_getter": "default",
+        "parameter_getter": "aw_xia_alliance",
         "default_template": {
-            "format": "{Xia会盟雅称}"
+            "format": "$meeting_city$#之盟#"
         },
         "templates": [
             {
-                "format": "{Xia会盟雅称}",
-                "weight": 8
+                "format": "$meeting_city$#之盟#",
+                "weight": 6
             },
             {
                 "format": "$k1_short$$k2_short$#之盟#",
                 "weight": 3
+            },
+            {
+                "format": "{Xia会盟雅称}",
+                "weight": 2
             }
         ]
     }

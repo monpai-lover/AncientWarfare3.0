@@ -40,6 +40,7 @@ namespace AncientWarfare3.content
 
             InitActorNameGenerator();
             OverrideClanParameterGetter();
+            OverrideAllianceParameterGetter();
 
             CN_NameGeneratorAsset allianceGenerator = CN_NameGeneratorLibrary.Get(XiaNameSets.AllianceGenerator);
             if (allianceGenerator == null)
@@ -80,6 +81,49 @@ namespace AncientWarfare3.content
             {
                 ModClass.LogWarning("覆盖 Clan 命名参数 getter 失败(氏族名可能仍用姓): " + e.Message);
             }
+        }
+
+        private static void OverrideAllianceParameterGetter()
+        {
+            try
+            {
+                ParameterGetters.PutAllianceParameterGetter("aw_xia_alliance", (pAlliance, pParameters) =>
+                {
+                    ParameterGetters.GetAllianceParameterGetter("default")(pAlliance, pParameters);
+                    pParameters["meeting_city"] = ResolveAllianceMeetingCity(pAlliance);
+                });
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("注册 Xia 会盟城市参数失败: " + e.Message);
+            }
+        }
+
+        private static string ResolveAllianceMeetingCity(Alliance pAlliance)
+        {
+            if (pAlliance?.data == null) return "";
+            Kingdom founder = null;
+            foreach (Kingdom kingdom in pAlliance.kingdoms_list)
+            {
+                if (kingdom?.data == null) continue;
+                if (kingdom.getID() == pAlliance.data.founder_kingdom_id)
+                {
+                    founder = kingdom;
+                    break;
+                }
+                if (founder == null) founder = kingdom;
+            }
+            if (founder?.data == null) return "";
+
+            string capital = founder.capital?.data?.name;
+            string firstCity = "";
+            foreach (City city in founder.cities)
+            {
+                if (city?.data == null || city.isRekt() || string.IsNullOrWhiteSpace(city.data.name)) continue;
+                firstCity = city.data.name;
+                break;
+            }
+            return XiaAllianceNamingRules.ResolveMeetingCity(capital, firstCity);
         }
 
         /// <summary>取氏族命名用的"氏":pActor 优先;motto 路径 pActor==null 时遍历 clan 成员找第一个有氏者。</summary>
