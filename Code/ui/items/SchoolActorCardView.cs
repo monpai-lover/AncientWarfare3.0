@@ -19,6 +19,8 @@ namespace AncientWarfare3.ui.items
         private Text _name;
         private Text _standing;
         private Text _detail;
+        private long _boundActorId = -1L;
+        private bool _portraitAttemptedForBind;
 
         public static SchoolActorCardView Create(Transform pParent)
         {
@@ -37,10 +39,12 @@ namespace AncientWarfare3.ui.items
 
         public void Bind(Actor pActor, string pStanding, string pDetail)
         {
+            Unbind();
             bool live = pActor?.data != null && pActor.isAlive() && !pActor.isRekt();
-            gameObject.SetActive(live);
             if (!live) return;
 
+            _boundActorId = pActor.data.id;
+            gameObject.SetActive(true);
             gameObject.name = "SchoolActor_" + pActor.data.id;
             Kingdom displayKingdom = HistoricalAffiliationService.ServiceKingdom(pActor) ??
                                      pActor.kingdom;
@@ -50,28 +54,43 @@ namespace AncientWarfare3.ui.items
             outline.effectColor = Color.Lerp(kingdomColor, Color.black, .78f);
             outline.effectDistance = new Vector2(1f, -1f);
 
-            _avatarHolder.SetActive(_avatar != null);
-            if (_avatar != null)
-            {
-                _avatar.enabled = true;
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
-                _avatar.show(pActor);
-            }
+            EnsurePortrait(pActor);
 
-            _name.text = SafeName(pActor);
+            string actorName = SafeName(pActor);
+            string standing = pStanding ?? "";
+            string detail = pDetail ?? "";
+            _name.text = actorName;
             _name.color = kingdomColor;
-            _standing.text = pStanding ?? "";
-            _detail.text = pDetail ?? "";
+            _standing.text = standing;
+            _detail.text = detail;
 
             _button.onClick.RemoveAllListeners();
-            _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(pActor));
+            long actorId = _boundActorId;
+            _button.onClick.AddListener(() => OpenActor(actorId));
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
+            _tip.clickAction = null;
+            string tooltipDescription = standing + "\n" + detail;
             _tip.hoverAction = () => Tooltip.show(gameObject, AW_RawTooltip.TYPE, new TooltipData
             {
-                tip_name = SafeName(pActor),
-                tip_description = (pStanding ?? "") + "\n" + (pDetail ?? "")
+                tip_name = actorName,
+                tip_description = tooltipDescription
             });
+        }
+
+        public void Unbind()
+        {
+            _button?.onClick.RemoveAllListeners();
+            if (_tip != null)
+            {
+                _tip.hoverAction = null;
+                _tip.clickAction = null;
+                _tip.enabled = false;
+            }
+            _boundActorId = -1L;
+            _portraitAttemptedForBind = false;
+            ReleasePortrait();
+            gameObject.SetActive(false);
         }
 
         private void Build()
@@ -89,22 +108,7 @@ namespace AncientWarfare3.ui.items
             portraitRect.pivot = new Vector2(0f, 1f);
             portraitRect.anchoredPosition = new Vector2(6f, -6f);
             portraitRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-
-            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
-            if (prefab != null)
-            {
-                _avatar = Instantiate(prefab, _avatarHolder.transform);
-                RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
-                if (avatarRect != null)
-                {
-                    avatarRect.anchorMin = new Vector2(.5f, .5f);
-                    avatarRect.anchorMax = new Vector2(.5f, .5f);
-                    avatarRect.pivot = new Vector2(.5f, .5f);
-                    avatarRect.anchoredPosition = Vector2.zero;
-                    avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-                    avatarRect.localScale = Vector3.one;
-                }
-            }
+            _avatarHolder.SetActive(false);
 
             _name = Text("Name", new Vector2(59f, -7f), new Vector2(70f, 17f), 9,
                 TextAnchor.UpperLeft);
@@ -114,6 +118,54 @@ namespace AncientWarfare3.ui.items
             _detail = Text("Detail", new Vector2(59f, -44f), new Vector2(70f, 25f), 7,
                 TextAnchor.UpperLeft);
             _detail.color = new Color(.84f, .82f, .76f, 1f);
+        }
+
+        private bool EnsurePortrait(Actor pActor)
+        {
+            if (_avatar != null)
+            {
+                ShowPortrait(pActor);
+                return true;
+            }
+            if (_portraitAttemptedForBind) return false;
+            _portraitAttemptedForBind = true;
+            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
+            if (prefab == null) return false;
+
+            _avatar = Instantiate(prefab, _avatarHolder.transform);
+            RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
+            if (avatarRect != null)
+            {
+                avatarRect.anchorMin = new Vector2(.5f, .5f);
+                avatarRect.anchorMax = new Vector2(.5f, .5f);
+                avatarRect.pivot = new Vector2(.5f, .5f);
+                avatarRect.anchoredPosition = Vector2.zero;
+                avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
+                avatarRect.localScale = Vector3.one;
+            }
+            _portraitAttemptedForBind = false;
+            ShowPortrait(pActor);
+            return true;
+        }
+
+        private void ShowPortrait(Actor pActor)
+        {
+            _avatarHolder.SetActive(true);
+            _avatar.gameObject.SetActive(true);
+            _avatar.enabled = true;
+            if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
+            _avatar.show(pActor);
+        }
+
+        private void ReleasePortrait()
+        {
+            if (_avatar != null)
+            {
+                _avatar.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(_avatar.gameObject);
+                _avatar = null;
+            }
+            _avatarHolder?.SetActive(false);
         }
 
         private Text Text(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize,
@@ -155,6 +207,20 @@ namespace AncientWarfare3.ui.items
         {
             try { return pActor?.getName() ?? ""; }
             catch { return pActor?.data?.name ?? ""; }
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private static void OpenActor(long pActorId)
+        {
+            Actor resolved = FindActor(pActorId);
+            if (resolved?.data == null || !resolved.isAlive() || resolved.isRekt()) return;
+            ActionLibrary.openUnitWindow(resolved);
         }
     }
 }

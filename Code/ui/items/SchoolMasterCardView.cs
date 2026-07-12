@@ -13,17 +13,21 @@ namespace AncientWarfare3.ui.items
         public const float Height = 82f;
         private const float PortraitSize = 50f;
         private Image _background;
+        private GameObject _portraitHolder;
         private Image _archivePortrait;
         private UiUnitAvatarElement _avatar;
         private Text _name;
         private Text _status;
         private Text _detail;
         private Button _button;
+        private TipButton _tip;
+        private long _boundActorId = -1L;
+        private bool _portraitAttemptedForBind;
 
         public static SchoolMasterCardView Create(Transform pParent)
         {
             var obj = new GameObject("SchoolMasterCard", typeof(RectTransform), typeof(Image),
-                typeof(Button));
+                typeof(Button), typeof(TipButton));
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
@@ -38,11 +42,8 @@ namespace AncientWarfare3.ui.items
         public void Bind(HistoricalSchoolMasterDefinition pDefinition,
             HistoricalSchoolMasterStoreRecord pRecord, Actor pActor)
         {
-            if (pDefinition == null)
-            {
-                gameObject.SetActive(false);
-                return;
-            }
+            Unbind();
+            if (pDefinition == null) return;
             gameObject.SetActive(true);
             Color schoolColor = Parse(CourtSchoolRegistry.Find(pDefinition.SchoolId)?.ColorHex,
                 new Color(.35f, .32f, .25f, 1f));
@@ -64,15 +65,14 @@ namespace AncientWarfare3.ui.items
                             pRecord?.Spawned == true ? "active residence" :
                             "awaiting Xia descent");
 
-            _avatar?.gameObject.SetActive(live);
-            _archivePortrait.gameObject.SetActive(!live);
-            if (live && _avatar != null)
+            _portraitHolder.SetActive(true);
+            _archivePortrait.enabled = !live;
+            if (live)
             {
-                _avatar.enabled = true;
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
-                _avatar.show(pActor);
+                _boundActorId = pActor.data.id;
+                EnsurePortrait(pActor);
             }
-            if (!live)
+            else
             {
                 Sprite icon = pRecord?.ActorId >= 0
                     ? FamilyTreeNodeView.BuildArchivedPortrait(pRecord.ActorId)
@@ -85,46 +85,106 @@ namespace AncientWarfare3.ui.items
             }
 
             _button.onClick.RemoveAllListeners();
-            if (live) _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(pActor));
+            if (live)
+            {
+                long actorId = _boundActorId;
+                _button.onClick.AddListener(() => OpenActor(actorId));
+            }
+            _tip.enabled = true;
+            _tip.type = AW_RawTooltip.TYPE;
+            _tip.clickAction = null;
+            string title = _name.text;
+            string description = _status.text + "\n" + _detail.text;
+            _tip.hoverAction = () => Tooltip.show(gameObject, AW_RawTooltip.TYPE,
+                new TooltipData { tip_name = title, tip_description = description });
+        }
+
+        public void Unbind()
+        {
+            _button?.onClick.RemoveAllListeners();
+            if (_tip != null)
+            {
+                _tip.hoverAction = null;
+                _tip.clickAction = null;
+                _tip.enabled = false;
+            }
+            _boundActorId = -1L;
+            _portraitAttemptedForBind = false;
+            ReleasePortrait();
+            gameObject.SetActive(false);
         }
 
         private void Build()
         {
             _background = GetComponent<Image>();
             _button = GetComponent<Button>();
-            var portrait = new GameObject("Portrait", typeof(RectTransform), typeof(Image));
-            portrait.transform.SetParent(transform, false);
-            RectTransform portraitRect = portrait.GetComponent<RectTransform>();
+            _tip = GetComponent<TipButton>();
+            _portraitHolder = new GameObject("PortraitSlot", typeof(RectTransform), typeof(Image));
+            _portraitHolder.transform.SetParent(transform, false);
+            RectTransform portraitRect = _portraitHolder.GetComponent<RectTransform>();
             portraitRect.anchorMin = new Vector2(0f, 1f);
             portraitRect.anchorMax = new Vector2(0f, 1f);
             portraitRect.pivot = new Vector2(0f, 1f);
             portraitRect.anchoredPosition = new Vector2(6f, -6f);
             portraitRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-            _archivePortrait = portrait.GetComponent<Image>();
+            _archivePortrait = _portraitHolder.GetComponent<Image>();
             _archivePortrait.preserveAspect = true;
             _archivePortrait.raycastTarget = false;
-
-            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
-            if (prefab != null)
-            {
-                _avatar = Instantiate(prefab, portrait.transform);
-                RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
-                if (avatarRect != null)
-                {
-                    avatarRect.anchorMin = new Vector2(.5f, .5f);
-                    avatarRect.anchorMax = new Vector2(.5f, .5f);
-                    avatarRect.pivot = new Vector2(.5f, .5f);
-                    avatarRect.anchoredPosition = Vector2.zero;
-                    avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-                    avatarRect.localScale = Vector3.one;
-                }
-                _avatar.gameObject.SetActive(false);
-            }
+            _portraitHolder.SetActive(false);
 
             _name = Text("Name", new Vector2(62f, -7f), new Vector2(108f, 17f), 10);
             _status = Text("Status", new Vector2(62f, -27f), new Vector2(108f, 15f), 8);
             _detail = Text("Detail", new Vector2(62f, -45f), new Vector2(108f, 26f), 7);
             _detail.color = new Color(.82f, .80f, .74f, 1f);
+        }
+
+        private bool EnsurePortrait(Actor pActor)
+        {
+            if (_avatar != null)
+            {
+                ShowPortrait(pActor);
+                return true;
+            }
+            if (_portraitAttemptedForBind) return false;
+            _portraitAttemptedForBind = true;
+            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
+            if (prefab == null) return false;
+
+            _avatar = Instantiate(prefab, _portraitHolder.transform);
+            RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
+            if (avatarRect != null)
+            {
+                avatarRect.anchorMin = new Vector2(.5f, .5f);
+                avatarRect.anchorMax = new Vector2(.5f, .5f);
+                avatarRect.pivot = new Vector2(.5f, .5f);
+                avatarRect.anchoredPosition = Vector2.zero;
+                avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
+                avatarRect.localScale = Vector3.one;
+            }
+            _portraitAttemptedForBind = false;
+            ShowPortrait(pActor);
+            return true;
+        }
+
+        private void ShowPortrait(Actor pActor)
+        {
+            _portraitHolder.SetActive(true);
+            _archivePortrait.enabled = false;
+            _avatar.gameObject.SetActive(true);
+            _avatar.enabled = true;
+            if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
+            _avatar.show(pActor);
+        }
+
+        private void ReleasePortrait()
+        {
+            if (_avatar != null)
+            {
+                _avatar.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(_avatar.gameObject);
+                _avatar = null;
+            }
+            _portraitHolder?.SetActive(false);
         }
 
         private Text Text(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize)
@@ -153,6 +213,20 @@ namespace AncientWarfare3.ui.items
         private static Color Parse(string pHex, Color pFallback)
         {
             return ColorUtility.TryParseHtmlString(pHex, out Color color) ? color : pFallback;
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try { return World.world?.units?.get(pActorId); }
+            catch { return null; }
+        }
+
+        private static void OpenActor(long pActorId)
+        {
+            Actor resolved = FindActor(pActorId);
+            if (resolved?.data == null || !resolved.isAlive() || resolved.isRekt()) return;
+            ActionLibrary.openUnitWindow(resolved);
         }
     }
 }

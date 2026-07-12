@@ -74,11 +74,12 @@ namespace AncientWarfare3.patch
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { SchoolMapBottomBarController.Hide(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
+            try { SchoolWindow.ResetWorldCache(); } catch { }
+            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
             try { SchoolMembershipService.ClearRuntime(); } catch { }
             try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
-            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
         }
     }
 }

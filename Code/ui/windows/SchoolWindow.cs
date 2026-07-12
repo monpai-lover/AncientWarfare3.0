@@ -78,6 +78,13 @@ namespace AncientWarfare3.ui.windows
                 () => Instance?.ApplyRequestAndRefresh());
         }
 
+        public static void ResetWorldCache()
+        {
+            _requestedSchool = CourtSchoolId.Ru;
+            _requestedCity = -1L;
+            Instance?.ResetWorldState();
+        }
+
         protected override void Init()
         {
             ConfigureWindow();
@@ -94,6 +101,7 @@ namespace AncientWarfare3.ui.windows
         public override void OnNormalDisable()
         {
             SchoolMapModeService.EndWindowMode();
+            UnbindActorCards();
         }
 
         private void Update()
@@ -665,11 +673,29 @@ namespace AncientWarfare3.ui.windows
         private void HideDetailRows()
         {
             foreach (SchoolInfluenceBar bar in _bars) bar.gameObject.SetActive(false);
-            foreach (SchoolActorCardView card in _actorCards) card.gameObject.SetActive(false);
-            foreach (SchoolMasterCardView card in _masterCards) card.gameObject.SetActive(false);
+            UnbindActorCards();
             foreach (SchoolInstitutionRowView row in _institutionRows) row.gameObject.SetActive(false);
             foreach (SchoolLineageRowView row in _lineageRows) row.gameObject.SetActive(false);
             if (_breakdown != null) _breakdown.gameObject.SetActive(false);
+        }
+
+        private void UnbindActorCards()
+        {
+            foreach (SchoolActorCardView card in _actorCards) card.Unbind();
+            foreach (SchoolMasterCardView card in _masterCards) card.Unbind();
+        }
+
+        private void ResetWorldState()
+        {
+            SchoolMapModeService.EndWindowMode();
+            HideDetailRows();
+            _selectedSchool = CourtSchoolId.Ru;
+            _selectedCity = -1L;
+            _displayedSnapshotGeneration = -1;
+            _displayedMembershipVersion = -1L;
+            _nextRefreshCheckTime = 0f;
+            if (_detailTitle != null) _detailTitle.text = "";
+            if (_detailBody != null) _detailBody.text = "";
         }
 
         private void LayoutActorCard(SchoolActorCardView pCard, int pIndex, float pTop)

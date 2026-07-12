@@ -25,6 +25,11 @@ namespace AncientWarfare3.ui.items
         private Text _detail;
         private long _boundActorId = -1L;
         private bool _portraitVisible;
+        private bool _portraitAttemptedForBind;
+
+        public bool HasPortrait => _avatar != null;
+        public bool CanAttemptPortrait => _boundActorId >= 0 && _avatar == null &&
+                                          !_portraitAttemptedForBind;
 
         public static SchoolRosterNodeView Create(Transform pParent)
         {
@@ -85,31 +90,20 @@ namespace AncientWarfare3.ui.items
 
         public bool SetPortraitVisible(bool pVisible)
         {
-            if (_avatar == null || _boundActorId < 0)
-            {
-                _portraitHolder?.SetActive(false);
-                return _boundActorId >= 0;
-            }
+            if (_boundActorId < 0) return false;
             if (!pVisible)
             {
-                _portraitHolder.SetActive(false);
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = false;
-                _avatar.enabled = false;
-                _portraitVisible = false;
+                ReleasePortrait();
                 return true;
             }
-            if (_portraitVisible && _avatar.enabled) return true;
             Actor actor = FindActor(_boundActorId);
             if (actor?.data == null || !actor.isAlive() || actor.isRekt())
             {
                 Unbind();
                 return false;
             }
-            _portraitHolder.SetActive(true);
-            _avatar.enabled = true;
-            if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
-            _avatar.show(actor);
-            _portraitVisible = true;
+            if (_portraitVisible && _avatar != null && _avatar.enabled) return true;
+            EnsurePortrait(actor);
             return true;
         }
 
@@ -117,18 +111,17 @@ namespace AncientWarfare3.ui.items
         {
             _button?.onClick.RemoveAllListeners();
             _schoolButton?.onClick.RemoveAllListeners();
+            if (_schoolButton != null) _schoolButton.interactable = false;
             if (_tip != null)
             {
                 _tip.hoverAction = null;
+                _tip.clickAction = null;
                 _tip.enabled = false;
-            }
-            if (_avatar != null)
-            {
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = false;
-                _avatar.enabled = false;
             }
             _boundActorId = -1L;
             _portraitVisible = false;
+            _portraitAttemptedForBind = false;
+            ReleasePortrait();
             gameObject.SetActive(false);
         }
 
@@ -147,22 +140,7 @@ namespace AncientWarfare3.ui.items
             portraitRect.pivot = new Vector2(0f, 1f);
             portraitRect.anchoredPosition = new Vector2(9f, -6f);
             portraitRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-
-            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
-            if (prefab != null)
-            {
-                _avatar = Instantiate(prefab, _portraitHolder.transform);
-                RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
-                if (avatarRect != null)
-                {
-                    avatarRect.anchorMin = new Vector2(.5f, .5f);
-                    avatarRect.anchorMax = new Vector2(.5f, .5f);
-                    avatarRect.pivot = new Vector2(.5f, .5f);
-                    avatarRect.anchoredPosition = Vector2.zero;
-                    avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-                    avatarRect.localScale = Vector3.one;
-                }
-            }
+            _portraitHolder.SetActive(false);
 
             var iconObject = new GameObject("SchoolIcon", typeof(RectTransform), typeof(Image),
                 typeof(Button));
@@ -185,6 +163,56 @@ namespace AncientWarfare3.ui.items
             _detail = Text("Detail", new Vector2(4f, -92f),
                 new Vector2(Width - 8f, 14f), 7, TextAnchor.UpperCenter);
             _detail.color = new Color(.84f, .82f, .74f, 1f);
+        }
+
+        private bool EnsurePortrait(Actor pActor)
+        {
+            if (_avatar != null)
+            {
+                ShowPortrait(pActor);
+                return true;
+            }
+            if (_portraitAttemptedForBind) return false;
+            _portraitAttemptedForBind = true;
+            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
+            if (prefab == null) return false;
+
+            _avatar = Instantiate(prefab, _portraitHolder.transform);
+            RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
+            if (avatarRect != null)
+            {
+                avatarRect.anchorMin = new Vector2(.5f, .5f);
+                avatarRect.anchorMax = new Vector2(.5f, .5f);
+                avatarRect.pivot = new Vector2(.5f, .5f);
+                avatarRect.anchoredPosition = Vector2.zero;
+                avatarRect.sizeDelta = new Vector2(PortraitSize, PortraitSize);
+                avatarRect.localScale = Vector3.one;
+            }
+            _portraitAttemptedForBind = false;
+            ShowPortrait(pActor);
+            return true;
+        }
+
+        private void ShowPortrait(Actor pActor)
+        {
+            _portraitHolder.SetActive(true);
+            _avatar.gameObject.SetActive(true);
+            _avatar.enabled = true;
+            if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
+            _avatar.show(pActor);
+            _portraitVisible = true;
+        }
+
+        private void ReleasePortrait()
+        {
+            if (_avatar != null)
+            {
+                _avatar.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(_avatar.gameObject);
+                _avatar = null;
+            }
+            _portraitHolder?.SetActive(false);
+            _portraitVisible = false;
         }
 
         private Text Text(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize,

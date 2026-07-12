@@ -538,11 +538,24 @@ namespace AncientWarfare3.ui.windows
 
         private void RefreshPortraitVisibility()
         {
+            int portraitBudget = PortraitsPerFrame;
             foreach (SchoolRosterNodeView view in _nodePool)
             {
                 if (view == null || !view.gameObject.activeSelf) continue;
                 RectTransform rect = view.GetComponent<RectTransform>();
-                if (!view.SetPortraitVisible(IsNodeVisible(rect)))
+                bool visible = IsNodeVisible(rect);
+                if (!visible)
+                {
+                    if (!view.SetPortraitVisible(false))
+                        _displayedMembershipVersion = -1L;
+                    continue;
+                }
+                if (!view.HasPortrait && view.CanAttemptPortrait)
+                {
+                    if (portraitBudget <= 0) continue;
+                    portraitBudget--;
+                }
+                if (!view.SetPortraitVisible(true))
                     _displayedMembershipVersion = -1L;
             }
         }
