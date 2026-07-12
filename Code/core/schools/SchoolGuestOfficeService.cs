@@ -41,13 +41,13 @@ namespace AncientWarfare3.core.schools
 
             try
             {
-                CloseExpiredOrInvalidServices(pYear);
+                HistoricalSchoolAffiliationSnapshot[] annualStates =
+                    HistoricalAffiliationService.ActiveSnapshots();
+                CloseExpiredOrInvalidServices(pYear, annualStates);
                 int budget = MaxAppointmentsPerYear;
                 if (budget <= 0) return;
-                HistoricalSchoolAffiliationSnapshot[] candidateStates =
-                    HistoricalAffiliationService.ActiveSnapshots(pTravelEligibleOnly: true);
                 Dictionary<long, List<GuestCandidateProfile>> candidateIndex =
-                    BuildCandidateIndex(candidateStates);
+                    BuildCandidateIndex(annualStates);
 
                 foreach (Kingdom host in HostKingdoms())
                 {
@@ -89,10 +89,11 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void CloseExpiredOrInvalidServices(int pYear)
+        private static void CloseExpiredOrInvalidServices(int pYear,
+            IReadOnlyList<HistoricalSchoolAffiliationSnapshot> pAnnualStates)
         {
             HistoricalSchoolAffiliationSnapshot[] states =
-                HistoricalAffiliationService.ActiveSnapshots()
+                (pAnnualStates ?? Array.Empty<HistoricalSchoolAffiliationSnapshot>())
                     .Where(p => p != null && p.LifecycleState ==
                                 HistoricalSchoolLifecycleState.Serving)
                     .OrderBy(p => p.ActorId)
@@ -205,8 +206,11 @@ namespace AncientWarfare3.core.schools
         {
             var result = new Dictionary<long, List<GuestCandidateProfile>>();
             if (pStates == null) return result;
-            foreach (HistoricalSchoolAffiliationSnapshot state in pStates)
+            foreach (HistoricalSchoolAffiliationSnapshot annualState in pStates)
             {
+                if (annualState == null) continue;
+                HistoricalSchoolAffiliationSnapshot state =
+                    HistoricalAffiliationService.Get(annualState.ActorId);
                 if (state == null || state.LifecycleState == HistoricalSchoolLifecycleState.Serving ||
                     state.ServiceKingdomId >= 0 ||
                     (state.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
@@ -227,11 +231,13 @@ namespace AncientWarfare3.core.schools
                 SchoolMembershipRecord membership = SchoolMembershipService.GetActive(
                     actor.data.id);
                 if (membership == null) continue;
-                bool realScholar = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
-                                   SchoolLineageService.IsQualifiedTeacher(actor);
-                if (!realScholar) continue;
-                HistoricalSchoolMasterDefinition definition =
-                    HistoricalSchoolDescentService.DefinitionFor(actor);
+                bool canonicalMaster =
+                    HistoricalSchoolDescentService.IsCanonicalMaster(actor);
+                if (!SchoolGuestOfficeRules.IsQualifiedTeacher(canonicalMaster,
+                        membership.Source, membership.Reputation)) continue;
+                HistoricalSchoolMasterDefinition definition = canonicalMaster
+                    ? HistoricalSchoolDescentService.DefinitionFor(actor)
+                    : null;
                 float reputation = ScholarReputation(membership, definition);
                 if (reputation < 15f) continue;
 
