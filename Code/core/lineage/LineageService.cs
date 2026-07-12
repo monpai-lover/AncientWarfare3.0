@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.utils;
 using Random = UnityEngine.Random;
@@ -514,19 +515,19 @@ namespace AncientWarfare3.core.lineage
         ///       长子/继承人留原氏)。
         ///     国王(setKing)不走分流,直接 OnActorPromoted —— 国王是大宗,不"分封"。
         /// </summary>
-        public static void OnCityLeaderAppointed(Actor pActor)
+        public static void OnCityLeaderAppointed(Actor pActor, string pOfficeId = CourtOfficeId.Governor)
         {
             if (!IsXia(pActor) && !UsesAwLineageSystem(pActor))
             {
                 if (CanUseXiaizedLineageGovernment(pActor))
-                    OnActorPromoted(pActor, NobleTrigger.CityLeader);
+                    OnActorPromoted(pActor, NobleTrigger.Official, pOfficeId);
                 return;
             }
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             if (lineageId < 0)
             {
-                OnActorPromoted(pActor, NobleTrigger.CityLeader); // 无谱系:基线建姓族+氏支
+                OnActorPromoted(pActor, NobleTrigger.Official, pOfficeId);
                 return;
             }
 
@@ -535,16 +536,16 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>成为国王/城主/成名者时赋予或刷新贵族身份。由晋升 Hook 调用。</summary>
-        public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger)
+        public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger, string pOfficeId = null)
         {
             if (!CanUseXiaizedLineageGovernment(pActor)) return;
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
 
             if (IsXia(pActor))
-                EnsureLineageForNoble(pActor, pTrigger);
+                EnsureLineageForNoble(pActor, pTrigger, pOfficeId);
             else
-                EnsureForeignPseudoOfficialLineage(pActor, pTrigger);
+                EnsureForeignPseudoOfficialLineage(pActor, pTrigger, pOfficeId: pOfficeId);
 
             // 本人即贵族:距离归零、加 guizu、状态 noble。
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
@@ -557,10 +558,18 @@ namespace AncientWarfare3.core.lineage
         }
 
         /// <summary>无谱系贵族:随机古姓建姓族,按封地/城/国生成氏建氏支;已有谱系则沿用。</summary>
-        public static void EnsureLineageForNoble(Actor pActor, NobleTrigger pTrigger)
+        public static void EnsureLineageForNoble(Actor pActor, NobleTrigger pTrigger,
+            string pOfficeId = null)
         {
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existing, -1);
-            if (existing >= 0) return; // 已有谱系,沿用
+            pActor.data.get(LineageKeys.SHI_ID, out long existingShi, -1L);
+            if (existing >= 0)
+            {
+                if (pTrigger == NobleTrigger.Official &&
+                    OfficialShiRules.ShouldGrantOfficialShi(existingShi >= 0))
+                    GrantOfficialShiBranch(pActor, existing, pOfficeId);
+                return;
+            }
 
             // 1) 姓族:随机古姓
             string familyName = LineageNamePool.RandomSurname();
@@ -568,7 +577,9 @@ namespace AncientWarfare3.core.lineage
             InsertLineageGroup(lineageId, familyName, pActor);
 
             // 2) 氏支:合流前 50% 随机氏 / 50% 城名首字(见 GenerateShiName)
-            (string clanName, string sourceType) = GenerateShiName(pActor);
+            (string clanName, string sourceType) = pTrigger == NobleTrigger.Official
+                ? GenerateOfficialShiName(pActor, pOfficeId)
+                : GenerateShiName(pActor);
             if (pTrigger == NobleTrigger.Figure) sourceType = ShiSourceType.SPECIAL_FIGURE;
             if (pTrigger == NobleTrigger.Official) sourceType = ShiSourceType.OFFICIAL_GRANT;
 
@@ -583,10 +594,10 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, familyName);
         }
 
-        public static void EnsureOfficialShiAndClan(Actor pActor)
+        public static void EnsureOfficialShiAndClan(Actor pActor, string pOfficeId)
         {
             if (pActor?.data == null || pActor.isRekt() || !CanUseXiaizedLineageGovernment(pActor)) return;
-            OnActorPromoted(pActor, NobleTrigger.Official);
+            OnActorPromoted(pActor, NobleTrigger.Official, pOfficeId);
 
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             if (shiId < 0) return;
@@ -640,7 +651,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static void EnsureForeignPseudoOfficialLineage(Actor pActor, NobleTrigger pTrigger,
-            HashSet<long> pSeen = null)
+            HashSet<long> pSeen = null, string pOfficeId = null)
         {
             if (pActor?.data == null || pActor.isRekt()) return;
             if (IsXia(pActor)) return;
@@ -658,6 +669,14 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
+            if (existingLineageId >= 0 && existingShiId < 0 && pTrigger == NobleTrigger.Official)
+            {
+                GrantOfficialShiBranch(pActor, existingLineageId, pOfficeId);
+                pActor.data.get(LineageKeys.SHI_ID, out existingShiId, -1L);
+                pActor.data.get(LineageKeys.CLAN_NAME, out string grantedClan, "");
+                if (existingShiId < 0) return;
+                parts = new ForeignPseudoNameParts(parts.GivenName, parts.FamilyName, grantedClan);
+            }
             if (existingLineageId < 0 || existingShiId < 0)
             {
                 Actor father = FindFatherOfChild(pActor);
@@ -669,6 +688,11 @@ namespace AncientWarfare3.core.lineage
                     if (lineageId < 0 || shiId < 0) return;
 
                     InsertLineageGroup(lineageId, parts.FamilyName, pActor);
+                    if (pTrigger == NobleTrigger.Official)
+                    {
+                        string officialShi = GenerateOfficialShiName(pActor, pOfficeId).clanName;
+                        parts = new ForeignPseudoNameParts(parts.GivenName, parts.FamilyName, officialShi);
+                    }
                     string source = pTrigger == NobleTrigger.Official
                         ? ShiSourceType.OFFICIAL_GRANT
                         : "pseudo_foreign";
@@ -1302,10 +1326,43 @@ namespace AncientWarfare3.core.lineage
                 // 城名取不到或与姓同字 → 回退随机氏(下方保证≠姓;复氏原样保留)
             }
 
-            string shi = LineageNamePool.RandomShi(); // 随机氏原样(复氏如慕容/夏后整取,不收窄)
-            for (int i = 0; i < 8 && !string.IsNullOrEmpty(family) && shi == family; i++)
-                shi = LineageNamePool.RandomShi();
+            string shi = RandomShiDifferentFromFamily(family);
             return (shi, ShiSourceType.RANDOM);
+        }
+
+        private static (string clanName, string sourceType) GenerateOfficialShiName(
+            Actor pActor, string pOfficeId)
+        {
+            int roll = LineageNamePool.Rng.Next(100);
+            if (OfficialShiRules.ShouldUseHistoricalOfficeShi(roll, pOfficeId))
+                return (OfficialShiRules.HistoricalOfficeShi(pOfficeId), ShiSourceType.OFFICIAL_GRANT);
+
+            string family = "";
+            if (pActor?.data != null)
+                pActor.data.get(LineageKeys.FAMILY_NAME, out family, "");
+            return (RandomShiDifferentFromFamily(family), ShiSourceType.OFFICIAL_GRANT);
+        }
+
+        private static void GrantOfficialShiBranch(Actor pActor, long pLineageId, string pOfficeId)
+        {
+            if (pActor?.data == null || pLineageId < 0) return;
+            pActor.data.get(LineageKeys.SHI_ID, out long existingShi, -1L);
+            if (!OfficialShiRules.ShouldGrantOfficialShi(existingShi >= 0)) return;
+
+            (string clanName, _) = GenerateOfficialShiName(pActor, pOfficeId);
+            long shiId = LineageIdAllocator.NextShiId();
+            if (shiId < 0 || string.IsNullOrEmpty(clanName)) return;
+            InsertShiBranch(shiId, pLineageId, clanName, pActor, ShiSourceType.OFFICIAL_GRANT);
+            pActor.data.set(LineageKeys.SHI_ID, shiId);
+            pActor.data.set(LineageKeys.CLAN_NAME, clanName);
+        }
+
+        private static string RandomShiDifferentFromFamily(string pFamily)
+        {
+            string shi = LineageNamePool.RandomShi();
+            for (int i = 0; i < 8 && !string.IsNullOrEmpty(pFamily) && shi == pFamily; i++)
+                shi = LineageNamePool.RandomShi();
+            return shi;
         }
 
         private static string FirstChar(string pName)

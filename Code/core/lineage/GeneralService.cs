@@ -270,7 +270,7 @@ namespace AncientWarfare3.core.lineage
             bool already = IsGeneral(pActor);
             pActor.data.set(LineageKeys.GENERAL_ACTIVE, true);
             ApplyGeneralTrait(pActor);
-            LineageService.EnsureOfficialShiAndClan(pActor);
+            LineageService.EnsureOfficialShiAndClan(pActor, CourtPyramidRoleId.General);
             UpsertGeneral(pActor, pActor.kingdom, pActive: true, pInitialScore: pScore);
             string school = CourtService.EnsurePersonalSchool(pActor);
             OfficialCareerService.Appoint(pActor, pActor.kingdom, CourtOfficeLayer.Military,

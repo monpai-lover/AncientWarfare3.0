@@ -77,11 +77,12 @@ The operation follows these rules:
    Clan instead of founding a duplicate.
 3. If the person truly has no Shi, grant a new branch with source `official_grant`,
    create a vanilla Clan, and name the visible Clan after the completed Shi data.
-   Resolve the new Shi exactly once: a 0-99 private roll below 20 uses the canonical
-   title of the first office (`郡守` for a city leader and `大将` for a general),
-   while the other 80 percent use `LineageNamePool.RandomShi()`. An unknown office
-   also falls back to the word library. Official grants never use the city-name
-   branch rule.
+   Resolve the new Shi exactly once: a 0-99 private roll below 20 may use an attested
+   office- or occupation-derived surname from a strict whitelist (`相`, `史`, `司马`,
+   `司寇`, `司徒`, `仓`, `尉`, `医`, `太史`, or `将`). The other 80 percent use
+   `LineageNamePool.RandomShi()`. An office without a reliable historical mapping,
+   including governor, falls back to the word library. Official grants never use the
+   city-name branch rule and never replace the actor's inherited ancient Xing.
 4. Office changes, dismissal, school changes, and retirement do not change the Shi.
 
 When an official receives a Clan after children already exist, synchronize at most 512

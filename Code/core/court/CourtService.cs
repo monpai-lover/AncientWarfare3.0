@@ -413,7 +413,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
-            LineageService.EnsureOfficialShiAndClan(pActor);
+            LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
             bool careerStarted = OfficialCareerService.Appoint(pActor, pKingdom, pLayer ?? "",
                 pOfficeId ?? "", personalSchool, pCity);

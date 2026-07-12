@@ -49,7 +49,7 @@
 ### Task 4: Official Shi And Visible Clan
 
 - [ ] Add failing boundary tests for the official-title roll (`0` and `19` use the title; `20` and `99` use the word library), every known office ID, unknown-office fallback, and preservation of an existing Shi.
-- [ ] Implement pure decisions in `OfficialShiRules`: reuse inherited Shi+Clan, grant `official_grant` when absent, resolve canonical office-title Shi names, and synchronize only matching branch descendants.
+- [ ] Implement pure decisions in `OfficialShiRules`: reuse inherited Shi+Clan, grant `official_grant` when absent, resolve only historically attested office-derived surnames, and synchronize only matching branch descendants.
 - [ ] Add `LineageService.EnsureOfficialShiAndClan(Actor, string officeId)` using existing ID allocation, branch insertion, `ClanManager.newClan`, and `RenameClanByLeader` patterns. Only a Shi-less first appointment rolls: 20 percent office title and 80 percent `LineageNamePool.RandomShi()`.
 - [ ] Call it from successful central appointment, city-leader promotion, and general promotion.
 - [ ] After AW3 chooses the patrilineal birth source, join the child to the same visible Clan instead of retaining vanilla random parent Clan choice.
