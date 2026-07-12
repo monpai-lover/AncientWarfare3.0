@@ -21,7 +21,8 @@
 
 Add assertions that isolate the affiliation insert and require
 `affiliation.Parameters.AddWithValue("@year", pYear)`, require
-`World.world.units.removeObject(actor)`, and reject `actor?.Dispose()` in the descent
+`World.world.units.scheduleDestroyOnPlay(actor)`, require the actor to be marked dead and
+skipped first, and reject both direct `removeObject` and `actor?.Dispose()` in the descent
 rollback block.
 
 - [ ] **Step 2: Run the historical-school harness and confirm RED**
@@ -48,11 +49,14 @@ Add one focused rollback helper in `HistoricalSchoolDescentService` that checks 
 manager still owns the actor by ID and calls:
 
 ```csharp
-World.world.units.removeObject(pActor);
+pActor.setAlive(pValue: false);
+pActor.skipUpdates();
+World.world.units.scheduleDestroyOnPlay(pActor);
 ```
 
-Do not call `Actor.Dispose()` directly. Validate the actor's city, kingdom, and tile after
-`joinCity` before opening membership.
+Do not call low-level `removeObject` or `Actor.Dispose()` directly because both bypass
+`ActorManager.destroyObject` job-batch cleanup. Validate the actor's city, kingdom, and
+tile after `joinCity` before opening membership.
 
 - [ ] **Step 5: Run the historical-school harness and confirm GREEN**
 

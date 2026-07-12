@@ -207,7 +207,9 @@ namespace AncientWarfare3.core.schools
                 ActorManager units = World.world?.units;
                 if (units == null || pActor.data == null) return;
                 if (units.get(pActor.data.id) != pActor) return;
-                World.world.units.removeObject(pActor);
+                pActor.setAlive(pValue: false);
+                pActor.skipUpdates();
+                World.world.units.scheduleDestroyOnPlay(pActor);
             }
             catch (Exception error)
             {

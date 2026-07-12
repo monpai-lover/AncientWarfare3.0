@@ -38,9 +38,11 @@ actually belongs to a school or show the school's teacher-disciple hierarchy.
 6. Announcements, chronicles, and archive projection remain best-effort side effects
    after the committed core state.
 
-Every failure before completion rolls back durable rows and membership, then calls
-`World.world.units.removeObject(actor)`. Direct `Actor.Dispose()` is forbidden in this
-path because only the manager owns container removal and deferred disposal.
+Every failure before completion rolls back durable rows and membership, marks the actor
+dead, skips further actor updates, then calls `World.world.units.scheduleDestroyOnPlay`.
+This preserves the original `ActorManager.destroyObject` path, including job-batch,
+asset-unit, avatar, container, and deferred-disposal cleanup. Direct `removeObject` and
+direct `Actor.Dispose()` are both forbidden in this path.
 
 ## School Member Read Model
 
@@ -119,7 +121,8 @@ and index reloads increment the version.
 The historical-school harness must prove:
 
 - the descent affiliation SQL binds `@year`;
-- failed descent uses actor-manager removal and contains no direct actor disposal;
+- failed descent schedules the complete actor-manager destruction pipeline and contains
+  no direct low-level removal or actor disposal;
 - standing tier and stable ordering rules;
 - every authenticated living member is retained by the roster rules;
 - teacher links never connect missing or mismatched actors;
@@ -127,4 +130,3 @@ The historical-school harness must prove:
 
 The final gate also runs Debug and Release rebuilds against .NET Framework 4.8 reference
 assemblies, the pathfinding harness, `git diff --check`, and a fresh runtime-log review.
-
