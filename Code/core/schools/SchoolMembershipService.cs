@@ -9,6 +9,8 @@ namespace AncientWarfare3.core.schools
     {
         private static readonly SchoolMembershipBook Memberships = new SchoolMembershipBook();
 
+        public static long Version => Memberships.Version;
+
         public static string GetSchool(long pActorId)
         {
             return Memberships.GetSchool(pActorId);

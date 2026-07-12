@@ -471,11 +471,14 @@ namespace AncientWarfare3.core.schools
         private readonly List<SchoolMembershipRecord> _closed =
             new List<SchoolMembershipRecord>();
 
+        public long Version { get; private set; }
+
         public bool TryJoin(SchoolMembershipRecord pRecord)
         {
             if (pRecord == null || !pRecord.Active || !pRecord.IsValid ||
                 _activeByActor.ContainsKey(pRecord.ActorId)) return false;
             AddActive(pRecord);
+            MarkChanged();
             return true;
         }
 
@@ -493,6 +496,7 @@ namespace AncientWarfare3.core.schools
             RemoveActive(current);
             _closed.Add(pClosed);
             AddActive(pReplacement);
+            MarkChanged();
             return true;
         }
 
@@ -511,6 +515,7 @@ namespace AncientWarfare3.core.schools
                     closed.ActorId != pActorId) continue;
                 _closed.RemoveAt(i);
                 AddActive(pOriginal);
+                MarkChanged();
                 return true;
             }
             AddActive(current);
@@ -526,6 +531,7 @@ namespace AncientWarfare3.core.schools
             pClosed = current.Close(pYear, pReason);
             RemoveActive(current);
             _closed.Add(pClosed);
+            MarkChanged();
             return true;
         }
 
@@ -534,6 +540,7 @@ namespace AncientWarfare3.core.schools
             if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
                 return false;
             RemoveActive(current);
+            MarkChanged();
             return true;
         }
 
@@ -542,6 +549,7 @@ namespace AncientWarfare3.core.schools
             if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
                 return false;
             _activeByActor[pActorId] = current.WithReputation(current.Reputation + pDelta);
+            MarkChanged();
             return true;
         }
 
@@ -571,6 +579,7 @@ namespace AncientWarfare3.core.schools
             _activeByActor.Clear();
             _actorsBySchool.Clear();
             _closed.Clear();
+            MarkChanged();
         }
 
         private void AddActive(SchoolMembershipRecord pRecord)
@@ -590,6 +599,11 @@ namespace AncientWarfare3.core.schools
             if (!_actorsBySchool.TryGetValue(pRecord.SchoolId, out HashSet<long> actors)) return;
             actors.Remove(pRecord.ActorId);
             if (actors.Count == 0) _actorsBySchool.Remove(pRecord.SchoolId);
+        }
+
+        private void MarkChanged()
+        {
+            Version = Version == long.MaxValue ? 1L : Version + 1L;
         }
     }
 }
