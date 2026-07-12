@@ -1,6 +1,7 @@
 using System;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
+using AncientWarfare3.core.pathfinding;
 
 namespace AncientWarfare3.patch
 {
@@ -16,6 +17,7 @@ namespace AncientWarfare3.patch
             ref PathFinderResult __result,
             Exception __exception)
         {
+            if (PathfindingOwnershipService.IsAw3Owner) return __exception;
             if (!PathfindingSafetyRules.ShouldConvertGlobalPathExceptionToNotFound(
                     __exception,
                     pHasStartTile: pFrom != null,

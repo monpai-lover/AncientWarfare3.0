@@ -4,6 +4,7 @@ using NeoModLoader.api;
 using System;
 using System.Linq;
 using System.Reflection;
+using AncientWarfare3.core.pathfinding;
 
 namespace AncientWarfare3
 {
@@ -17,8 +18,10 @@ namespace AncientWarfare3
 
         protected override void OnModLoad()
         {
+            AWPathfindingBootstrap.PrepareOwnership();
             // 注册 Harmony 补丁(扫描本程序集所有 [HarmonyPatch])
             PatchHarmonyByClass();
+            AWPathfindingBootstrap.AfterPatchesRegistered();
 
             // 通用夺舍工具:扫描 [MethodReplace] 用 Transpiler 重定向目标方法体(保留 Prefix/Postfix 链)
             utils.HarmonyTools.ReplaceMethods();
