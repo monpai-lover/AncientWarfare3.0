@@ -147,6 +147,7 @@ namespace AncientWarfare3.core.court
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return;
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
             if (CourtSchoolRegistry.Find(school) == null) return;
+            SchoolMembershipService.IndexLoaded(pActor, school);
             pItems.Add(new CitySchoolInfluenceContribution(pActor.data.id, school, pRole,
                 CitySchoolInfluenceRules.RoleBaseWeight(pRole), AbilityScore(pActor), pRoleRank,
                 SafeName(pActor)));
@@ -193,6 +194,12 @@ namespace AncientWarfare3.core.court
 
         public static int Count(string pSchoolId) => Index.Count(pSchoolId);
         public static long[] Members(string pSchoolId) => Index.Members(pSchoolId);
+
+        public static void IndexLoaded(Actor pActor, string pSchoolId)
+        {
+            if (pActor?.data == null) return;
+            Index.Update(pActor.data.id, pSchoolId, pActor.isAlive() && !pActor.isRekt());
+        }
 
         public static void Clear()
         {

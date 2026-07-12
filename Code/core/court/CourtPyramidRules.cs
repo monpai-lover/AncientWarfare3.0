@@ -41,6 +41,22 @@ namespace AncientWarfare3.core.court
         public float MaxX => Math.Max(FromX, ToX);
     }
 
+    public readonly struct CourtPyramidRenderedLink
+    {
+        public readonly float CenterX;
+        public readonly float CenterY;
+        public readonly float Width;
+        public readonly float Height;
+
+        public CourtPyramidRenderedLink(float pCenterX, float pCenterY, float pWidth, float pHeight)
+        {
+            CenterX = pCenterX;
+            CenterY = pCenterY;
+            Width = pWidth;
+            Height = pHeight;
+        }
+    }
+
     public static class CourtPyramidRoleId
     {
         public const string King = "king";
@@ -264,6 +280,21 @@ namespace AncientWarfare3.core.court
             }
 
             return segments;
+        }
+
+        public static CourtPyramidRenderedLink PlaceLink(CourtPyramidLinkSegment pSegment,
+            float offsetX, float offsetY, float thickness)
+        {
+            float fromX = pSegment.FromX + offsetX;
+            float fromY = pSegment.FromY + offsetY;
+            float toX = pSegment.ToX + offsetX;
+            float toY = pSegment.ToY + offsetY;
+            float safeThickness = Math.Max(0.5f, thickness);
+            return new CourtPyramidRenderedLink(
+                (fromX + toX) * 0.5f,
+                (fromY + toY) * 0.5f,
+                pSegment.IsHorizontal ? Math.Abs(toX - fromX) : safeThickness,
+                pSegment.IsHorizontal ? safeThickness : Math.Abs(toY - fromY));
         }
 
         private static void AddSegment(List<CourtPyramidLinkSegment> pSegments,

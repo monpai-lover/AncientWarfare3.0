@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.court;
 using AncientWarfare3.ui;
 using UnityEngine;
@@ -11,10 +12,12 @@ namespace AncientWarfare3.ui.items
         private RectTransform _fillRect;
         private Image _fill;
         private Text _label;
+        private Button _button;
 
         public static SchoolInfluenceBar Create(Transform pParent)
         {
-            var obj = new GameObject("SchoolInfluenceBar", typeof(RectTransform), typeof(Image));
+            var obj = new GameObject("SchoolInfluenceBar", typeof(RectTransform), typeof(Image),
+                typeof(Button));
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
@@ -27,7 +30,7 @@ namespace AncientWarfare3.ui.items
             return bar;
         }
 
-        public void Bind(CourtSchoolDefinition pDefinition, float pShare)
+        public void Bind(CourtSchoolDefinition pDefinition, float pShare, Action<string> pOnClick)
         {
             if (pDefinition == null) return;
             float share = Mathf.Clamp01(pShare);
@@ -39,10 +42,13 @@ namespace AncientWarfare3.ui.items
                 : Color.gray;
             _label.text = AW_L10n.Text(pDefinition.NameKey, pDefinition.Id) + "  " +
                           Mathf.RoundToInt(share * 100f) + "%";
+            _button.onClick.RemoveAllListeners();
+            _button.onClick.AddListener(() => pOnClick?.Invoke(pDefinition.Id));
         }
 
         private void Build()
         {
+            _button = GetComponent<Button>();
             var fillObject = new GameObject("Fill", typeof(RectTransform), typeof(Image));
             fillObject.transform.SetParent(transform, false);
             _fillRect = fillObject.GetComponent<RectTransform>();

@@ -39,6 +39,8 @@ namespace AncientWarfare3.ui.windows
         private readonly List<Button> _actorButtons = new List<Button>();
         private RectTransform _listContent;
         private RectTransform _detailPanel;
+        private RectTransform _detailContent;
+        private ScrollRect _detailScroll;
         private Text _detailTitle;
         private Text _detailBody;
         private Text _sortText;
@@ -127,6 +129,22 @@ namespace AncientWarfare3.ui.windows
                     contentHeight - ContentMargin * 2f));
             _detailPanel = right;
 
+            if (right.GetComponent<RectMask2D>() == null) right.gameObject.AddComponent<RectMask2D>();
+            _detailScroll = right.GetComponent<ScrollRect>() ?? right.gameObject.AddComponent<ScrollRect>();
+            var detailContentObject = new GameObject("SchoolDetailContent", typeof(RectTransform));
+            detailContentObject.transform.SetParent(right, false);
+            _detailContent = detailContentObject.GetComponent<RectTransform>();
+            _detailContent.anchorMin = new Vector2(0f, 1f);
+            _detailContent.anchorMax = new Vector2(1f, 1f);
+            _detailContent.pivot = new Vector2(.5f, 1f);
+            _detailContent.anchoredPosition = Vector2.zero;
+            _detailContent.sizeDelta = new Vector2(0f, right.sizeDelta.y);
+            _detailScroll.viewport = right;
+            _detailScroll.content = _detailContent;
+            _detailScroll.horizontal = false;
+            _detailScroll.vertical = true;
+            _detailScroll.movementType = ScrollRect.MovementType.Clamped;
+
             Button sortButton = ButtonWithText("Sort", left, new Vector2(0f, 1f),
                 new Vector2(5f, -5f), new Vector2(LeftWidth - 10f, 28f), out _sortText);
             sortButton.onClick.AddListener(CycleSort);
@@ -158,9 +176,9 @@ namespace AncientWarfare3.ui.windows
             listScroll.vertical = true;
             listScroll.movementType = ScrollRect.MovementType.Clamped;
 
-            _detailTitle = Text("Title", right, new Vector2(0f, 1f), new Vector2(12f, -8f),
+            _detailTitle = Text("Title", _detailContent, new Vector2(0f, 1f), new Vector2(12f, -8f),
                 new Vector2(right.sizeDelta.x - 24f, 26f), 14, TextAnchor.UpperLeft);
-            _detailBody = Text("Body", right, new Vector2(0f, 1f), new Vector2(12f, -40f),
+            _detailBody = Text("Body", _detailContent, new Vector2(0f, 1f), new Vector2(12f, -40f),
                 new Vector2(right.sizeDelta.x - 24f, 152f), 10, TextAnchor.UpperLeft);
             _detailBody.horizontalOverflow = HorizontalWrapMode.Wrap;
             _detailBody.verticalOverflow = VerticalWrapMode.Truncate;
@@ -169,13 +187,13 @@ namespace AncientWarfare3.ui.windows
                 _listItems.Add(SchoolListItem.Create(_listContent));
             for (int i = 0; i < CourtSchoolRegistry.All.Count; i++)
             {
-                SchoolInfluenceBar bar = SchoolInfluenceBar.Create(right);
+                SchoolInfluenceBar bar = SchoolInfluenceBar.Create(_detailContent);
                 bar.gameObject.SetActive(false);
                 _bars.Add(bar);
             }
             for (int i = 0; i < 5; i++)
             {
-                Button button = ButtonWithText("Actor" + i, right, new Vector2(0f, 1f),
+                Button button = ButtonWithText("Actor" + i, _detailContent, new Vector2(0f, 1f),
                     Vector2.zero, new Vector2(right.sizeDelta.x - 24f, 24f), out _);
                 button.gameObject.SetActive(false);
                 _actorButtons.Add(button);
@@ -282,6 +300,8 @@ namespace AncientWarfare3.ui.windows
                                AW_L10n.Text("aw_school_top_kingdoms", "Leading kingdoms") + ": " +
                                TopKingdoms(pDefinition.Id);
             ShowRepresentatives(pDefinition.Id, 205f);
+            SetDetailContentHeight(360f);
+            ResetDetailScroll();
         }
 
         private static string TopCities(string pSchoolId)
@@ -334,6 +354,8 @@ namespace AncientWarfare3.ui.windows
             {
                 _detailTitle.text = AW_L10n.Text("aw_school_city_missing", "City missing");
                 _detailBody.text = "";
+                SetDetailContentHeight(180f);
+                ResetDetailScroll();
                 return;
             }
             CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity, pEnsureFresh: true);
@@ -347,7 +369,12 @@ namespace AncientWarfare3.ui.windows
                   AW_L10n.Text("aw_school_contributors", "Contributors") + ": " +
                   string.Join(" / ", snapshot.Contributors.Take(5)
                       .Select(p => p.ActorName + " " + Mathf.RoundToInt(p.Score)).ToArray());
-            if (snapshot == null || snapshot.TotalScore <= 0f) return;
+            if (snapshot == null || snapshot.TotalScore <= 0f)
+            {
+                SetDetailContentHeight(180f);
+                ResetDetailScroll();
+                return;
+            }
             int index = 0;
             foreach (KeyValuePair<string, float> item in snapshot.Scores
                          .OrderByDescending(p => p.Value).ThenBy(p => RegistryOrder(p.Key)))
@@ -357,10 +384,38 @@ namespace AncientWarfare3.ui.windows
                 RectTransform rect = bar.GetComponent<RectTransform>();
                 rect.anchoredPosition = new Vector2(12f, -198f - index * (SchoolInfluenceBar.Height + 4f));
                 rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, SchoolInfluenceBar.Height);
-                bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value / snapshot.TotalScore);
+                bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value / snapshot.TotalScore, SelectSchool);
                 bar.gameObject.SetActive(true);
                 index++;
             }
+            float contributorTop = 198f + index * (SchoolInfluenceBar.Height + 4f) + 10f;
+            int contributors = ShowContributors(snapshot.Contributors, contributorTop);
+            SetDetailContentHeight(contributorTop + contributors * 28f + 18f);
+            ResetDetailScroll();
+        }
+
+        private int ShowContributors(IEnumerable<CitySchoolInfluenceContribution> pContributions, float pTop)
+        {
+            int index = 0;
+            foreach (CitySchoolInfluenceContribution contribution in pContributions ??
+                     Array.Empty<CitySchoolInfluenceContribution>())
+            {
+                if (index >= _actorButtons.Count) break;
+                Actor actor = World.world?.units?.get(contribution.ActorId);
+                if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
+                Button button = _actorButtons[index];
+                RectTransform rect = button.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(12f, -pTop - index * 28f);
+                Text label = button.GetComponentInChildren<Text>();
+                if (label != null)
+                    label.text = contribution.ActorName + "  " + ContributionRole(contribution.Role) +
+                                 "  " + Mathf.RoundToInt(contribution.Score);
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
+                button.gameObject.SetActive(true);
+                index++;
+            }
+            return index;
         }
 
         private void ShowRepresentatives(string pSchoolId, float pTop)
@@ -390,6 +445,17 @@ namespace AncientWarfare3.ui.windows
         {
             foreach (SchoolInfluenceBar bar in _bars) bar.gameObject.SetActive(false);
             foreach (Button button in _actorButtons) button.gameObject.SetActive(false);
+        }
+
+        private void SetDetailContentHeight(float pHeight)
+        {
+            if (_detailContent == null || _detailPanel == null) return;
+            _detailContent.sizeDelta = new Vector2(0f, Mathf.Max(_detailPanel.sizeDelta.y, pHeight));
+        }
+
+        private void ResetDetailScroll()
+        {
+            if (_detailScroll != null) _detailScroll.verticalNormalizedPosition = 1f;
         }
 
         private void CycleSort()
@@ -438,6 +504,20 @@ namespace AncientWarfare3.ui.windows
         {
             if (pOffice == "general") return AW_L10n.Text("aw_court_general", "General");
             return AW_L10n.Text("aw_court_office_" + pOffice, pOffice);
+        }
+
+        private static string ContributionRole(string pRole)
+        {
+            switch (pRole ?? "")
+            {
+                case CitySchoolRole.King: return AW_L10n.Text("aw_label_king", "King");
+                case CitySchoolRole.Heir: return AW_L10n.Text("aw_label_heir", "Heir");
+                case CitySchoolRole.Leader: return OfficeName(CourtOfficeId.Governor);
+                case CitySchoolRole.CentralOfficer:
+                    return AW_L10n.Text("aw_court_central_officers", "Central Official");
+                case CitySchoolRole.General: return AW_L10n.Text("aw_court_general", "General");
+                default: return AW_L10n.Text("aw_court_roles", "Official");
+            }
         }
 
         private static int RegistryOrder(CourtSchoolDefinition pDefinition) =>

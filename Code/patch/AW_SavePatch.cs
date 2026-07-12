@@ -1,4 +1,5 @@
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.content;
 using AncientWarfare3.ui.windows;
@@ -67,6 +68,7 @@ namespace AncientWarfare3.patch
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
+            try { SchoolMembershipService.Clear(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
         }

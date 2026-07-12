@@ -33,7 +33,7 @@ namespace AncientWarfare3.ui.windows
         private static long _kingdomId = -1L;
         private static Sprite _whiteSprite;
         private readonly List<CourtActorNodeView> _nodePool = new List<CourtActorNodeView>();
-        private readonly List<GameObject> _links = new List<GameObject>();
+        private readonly List<GameObject> _linkPool = new List<GameObject>();
         private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
         private RectTransform _canvasRect;
         private GameObject _dragSurface;
@@ -47,6 +47,7 @@ namespace AncientWarfare3.ui.windows
         private Coroutine _renderCoroutine;
         private int _renderVersion;
         private bool _resetCanvasOnRefresh;
+        private int _activeLinkCount;
 
         public static void Open(long pKingdomId)
         {
@@ -172,6 +173,7 @@ namespace AncientWarfare3.ui.windows
             _canvasRect.anchorMax = new Vector2(0f, 1f);
             _canvasRect.pivot = new Vector2(0f, 1f);
             _canvasRect.sizeDelta = Vector2.one;
+            RemoveOrphanedLinkChildren();
 
             _dragSurface.transform.SetAsFirstSibling();
             _canvasRect.transform.SetSiblingIndex(1);
@@ -376,34 +378,61 @@ namespace AncientWarfare3.ui.windows
 
         private void CreateLink(CourtPyramidLinkSegment pSegment, Vector2 pOffset, Color pColor)
         {
-            var obj = new GameObject("CourtRankLink", typeof(RectTransform), typeof(Image));
-            obj.transform.SetParent(_canvasRect, false);
+            GameObject obj = AcquireLink();
             obj.transform.SetAsFirstSibling();
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            Vector2 pFrom = new Vector2(pSegment.FromX, pSegment.FromY) + pOffset;
-            Vector2 pTo = new Vector2(pSegment.ToX, pSegment.ToY) + pOffset;
-            Vector2 delta = pTo - pFrom;
-            rect.anchoredPosition = (pFrom + pTo) * 0.5f;
-            rect.sizeDelta = pSegment.IsHorizontal
-                ? new Vector2(Mathf.Abs(delta.x), 2f)
-                : new Vector2(2f, Mathf.Abs(delta.y));
+            CourtPyramidRenderedLink placement = CourtPyramidRules.PlaceLink(
+                pSegment, pOffset.x, pOffset.y, 2f);
+            rect.anchoredPosition = new Vector2(placement.CenterX, placement.CenterY);
+            rect.sizeDelta = new Vector2(placement.Width, placement.Height);
+            obj.transform.localRotation = Quaternion.identity;
+            obj.transform.localScale = Vector3.one;
             Image image = obj.GetComponent<Image>();
             image.sprite = WhiteSprite();
             image.color = new Color(pColor.r, pColor.g, pColor.b, 0.48f);
             image.raycastTarget = false;
-            _links.Add(obj);
+        }
+
+        private GameObject AcquireLink()
+        {
+            GameObject obj = null;
+            while (_activeLinkCount < _linkPool.Count && obj == null)
+                obj = _linkPool[_activeLinkCount++];
+            if (obj == null)
+            {
+                obj = new GameObject("CourtRankLink", typeof(RectTransform), typeof(Image));
+                _linkPool.Add(obj);
+                _activeLinkCount = _linkPool.Count;
+            }
+            obj.transform.SetParent(_canvasRect, false);
+            obj.SetActive(true);
+            return obj;
         }
 
         private void HideNodesAndLinks()
         {
             foreach (CourtActorNodeView node in _nodePool)
                 if (node != null) node.gameObject.SetActive(false);
-            foreach (GameObject link in _links)
-                if (link != null) Destroy(link);
-            _links.Clear();
+            foreach (GameObject link in _linkPool)
+                if (link != null) link.SetActive(false);
+            _activeLinkCount = 0;
+            RemoveOrphanedLinkChildren();
+        }
+
+        private void RemoveOrphanedLinkChildren()
+        {
+            if (_canvasRect == null) return;
+            for (int i = _canvasRect.childCount - 1; i >= 0; i--)
+            {
+                Transform child = _canvasRect.GetChild(i);
+                if (child == null || child.name != "CourtRankLink" ||
+                    _linkPool.Contains(child.gameObject)) continue;
+                child.gameObject.SetActive(false);
+                Destroy(child.gameObject);
+            }
         }
 
         private void CancelPendingRender()

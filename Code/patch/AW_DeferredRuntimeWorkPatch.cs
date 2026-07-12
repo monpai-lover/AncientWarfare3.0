@@ -22,6 +22,7 @@ namespace AncientWarfare3.patch
             SlaveCaptureScanService.DrainFrame();
             Bench.benchEnd(CityMaintenanceBenchmarkRules.CaptureScanStep,
                 CityMaintenanceBenchmarkRules.Group);
+            SchoolMapModeService.ProcessFrame();
         }
     }
 }

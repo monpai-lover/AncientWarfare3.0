@@ -17,6 +17,8 @@ namespace AncientWarfare3.core.policy
             new Dictionary<string, ColorAsset>(StringComparer.Ordinal);
         private static double _lastDirtyTime = -1d;
         private static int _windowDepth;
+        private static bool _wasEnabledBeforeWindow;
+        private static string _focusBeforeWindow = CourtSchoolId.None;
 
         public static string FocusSchoolId { get; private set; } = CourtSchoolId.None;
 
@@ -26,7 +28,9 @@ namespace AncientWarfare3.core.policy
         {
             _windowDepth++;
             if (_windowDepth > 1) return;
-            SetOption(true);
+            _wasEnabledBeforeWindow = IsOptionEnabled();
+            _focusBeforeWindow = FocusSchoolId;
+            if (!_wasEnabledBeforeWindow) SetOption(true);
             Prepare();
         }
 
@@ -35,9 +39,17 @@ namespace AncientWarfare3.core.policy
             if (_windowDepth <= 0) return;
             _windowDepth--;
             if (_windowDepth > 0) return;
-            SetOption(false);
-            FocusSchoolId = CourtSchoolId.None;
+            SetOption(_wasEnabledBeforeWindow);
+            FocusSchoolId = _wasEnabledBeforeWindow ? _focusBeforeWindow : CourtSchoolId.None;
+            _wasEnabledBeforeWindow = false;
+            _focusBeforeWindow = CourtSchoolId.None;
             DirtyMap();
+        }
+
+        public static void ProcessFrame()
+        {
+            if (!IsActive()) return;
+            CitySchoolSnapshotService.ProcessDirty(4);
         }
 
         public static void SetFocus(string pSchoolId)
@@ -154,6 +166,16 @@ namespace AncientWarfare3.core.policy
                     data.boolVal = pEnabled;
             }
             catch { }
+        }
+
+        private static bool IsOptionEnabled()
+        {
+            try
+            {
+                string optionId = AWMapModeMetaRules.ResolveOptionId(POWER_ID);
+                return PlayerConfig.dict.TryGetValue(optionId, out PlayerOptionData data) && data.boolVal;
+            }
+            catch { return false; }
         }
     }
 }
