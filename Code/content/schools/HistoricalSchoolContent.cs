@@ -81,6 +81,9 @@ namespace AncientWarfare3.content.schools
                 unlocked_with_achievement = false,
                 group_id = XiaTraitGroups.AW2
             };
+            // AssetManager initializes base_stats when the trait is registered.
+            AssetManager.traits.add(trait);
+            trait.unlock();
             trait.base_stats["health"] = 20f;
             trait.base_stats["lifespan"] = 25f;
             trait.base_stats["armor"] = 2f;
@@ -88,8 +91,6 @@ namespace AncientWarfare3.content.schools
             trait.base_stats["stewardship"] = 3f;
             trait.base_stats["diplomacy"] = 3f;
             trait.base_stats["intelligence"] = 4f;
-            AssetManager.traits.add(trait);
-            trait.unlock();
         }
 
         private static void RegisterStatuses()
