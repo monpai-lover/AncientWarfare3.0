@@ -308,6 +308,11 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
+        internal static IEnumerable<SchoolMembershipRecord> ActiveMemberships()
+        {
+            return Memberships.ActiveRecords();
+        }
+
         public static void LoadIndexes()
         {
             Memberships.Clear();

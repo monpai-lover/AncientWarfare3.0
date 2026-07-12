@@ -221,6 +221,16 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        public static long TeacherOrder(long pActorId, int pYear)
+        {
+            unchecked
+            {
+                long value = pActorId * 6364136223846793005L +
+                             pYear * 1442695040888963407L;
+                return value ^ value >> 33;
+            }
+        }
+
         public static bool CanRecruitDisciple(bool pRealActor, bool pAlive,
             bool pSameResidence, bool pAlreadyMember, int pDirectDiscipleCount,
             int pDirectDiscipleCap)

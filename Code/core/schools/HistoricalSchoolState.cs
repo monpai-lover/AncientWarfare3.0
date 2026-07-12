@@ -619,6 +619,12 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
+        public IEnumerable<SchoolMembershipRecord> ActiveRecords()
+        {
+            foreach (SchoolMembershipRecord record in _activeByActor.Values)
+                yield return record;
+        }
+
         public void Clear()
         {
             _activeByActor.Clear();

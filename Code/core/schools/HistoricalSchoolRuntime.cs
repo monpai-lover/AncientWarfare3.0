@@ -78,7 +78,9 @@ namespace AncientWarfare3.core.schools
                     World.world?.getCurWorldTime() ?? 0d, out long[] affectedCityIds);
                 foreach (long cityId in affectedCityIds)
                     CitySchoolSnapshotService.MarkDirtyById(cityId);
-                HistoricalSchoolActionService.ProcessYear(worldYear);
+                HistoricalSchoolAnnualMemberSnapshot<Actor> annualMembers =
+                    HistoricalSchoolAnnualMemberSnapshotBuilder.Build();
+                HistoricalSchoolActionService.ProcessYear(worldYear, annualMembers);
                 HistoricalSchoolDebateService.ProcessYear(worldYear);
                 HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
                     World.world?.getCurWorldTime() ?? 0d);
