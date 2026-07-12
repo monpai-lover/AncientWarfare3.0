@@ -329,17 +329,19 @@ namespace AncientWarfare3.core.court
             return score;
         }
 
-        private static string EnsurePersonalSchool(Actor pActor)
+        internal static string EnsurePersonalSchool(Actor pActor)
         {
             if (pActor?.data == null) return CourtSchoolId.None;
             pActor.data.get(LineageKeys.COURT_SCHOOL, out string existingSchool, "");
             string parentSchool = ResolveParentSchool(pActor);
-            string citySchool = GetSnapshot(pActor.kingdom).dominant_school;
+            string citySchool = CitySchoolSnapshotService.GetSnapshot(pActor.city)?.DominantSchool ??
+                                CourtSchoolId.None;
             string school = CourtSchoolIdentityRules.Resolve(new CourtSchoolIdentityProfile(
                 pActor.data.id, SafeStat(pActor, "stewardship"), SafeStat(pActor, "diplomacy"),
                 SafeStat(pActor, "warfare"), SafeStat(pActor, "intelligence"),
                 existingSchool, parentSchool, citySchool));
             pActor.data.set(LineageKeys.COURT_SCHOOL, school ?? "");
+            SchoolMembershipService.Update(pActor, school);
             return school ?? CourtSchoolId.None;
         }
 
@@ -411,6 +413,7 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
             if (clearedPreviousPhysician && previousKingdom?.data != null)
                 RoyalMedicalCareService.ReconcileTargets(previousKingdom);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
@@ -448,6 +451,7 @@ namespace AncientWarfare3.core.court
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive) LineageService.ArchiveActor(pActor, pAlive: true);
             if (courtKingdom?.data != null) CourtDirectionService.MarkDirty(courtKingdom);
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
             if (courtKingdom?.data != null && office == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(courtKingdom);
         }
@@ -661,7 +665,6 @@ namespace AncientWarfare3.core.court
             if (!HasOfficialCourt(pKingdom)) return;
 
             int year = Date.getCurrentYear();
-            string dominant = pSnapshot?.dominant_school ?? "";
             float courtEfficiency = pSnapshot?.efficiency ?? 0f;
 
             IEnumerable<City> cities;
@@ -679,9 +682,9 @@ namespace AncientWarfare3.core.court
                 bool isCapital = pKingdom.capital == city;
                 int slots = CourtRules.CityOfficeSlots(population, zoneCount, isCapital);
                 int filled = CourtBureauRules.FilledSlots(slots, courtEfficiency);
-                string localSchool = string.IsNullOrEmpty(dominant)
-                    ? CourtBureauRules.PreferredSchoolForCityOffice(CourtOfficeId.Governor)
-                    : dominant;
+                CitySchoolSnapshot schoolSnapshot = CitySchoolSnapshotService.GetSnapshot(city);
+                string localSchool = schoolSnapshot?.DominantSchool ?? CourtSchoolId.None;
+                if (schoolSnapshot == null) CitySchoolSnapshotService.MarkDirty(city);
                 float efficiency = CourtBureauRules.BureauEfficiency(slots, filled);
 
                 try { UpsertCityBureau(db, table, pKingdom, city, slots, localSchool, efficiency, year); }

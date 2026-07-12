@@ -101,9 +101,10 @@ namespace AncientWarfare3.patch
             if (!pNew || pActor?.data == null || __instance?.leader != pActor || pActor.kingdom?.data == null)
                 return;
 
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            string school = CourtService.EnsurePersonalSchool(pActor);
             OfficialCareerService.Appoint(pActor, pActor.kingdom, CourtOfficeLayer.City,
                 CourtOfficeId.Governor, school, __instance);
+            CitySchoolSnapshotService.MarkDirty(__instance);
         }
 
         [HarmonyPrefix]
@@ -126,6 +127,7 @@ namespace AncientWarfare3.patch
             if (!OfficialCareerService.End(pActor, CourtOfficeLayer.City,
                     CourtOfficeId.Governor, pReason) || kingdom?.data == null) return;
             ChronicleEvents.OnCourtOfficerDismissed(pActor, kingdom, CourtOfficeId.Governor, pReason);
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
         }
     }
 }

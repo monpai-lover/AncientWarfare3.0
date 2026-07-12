@@ -1,3 +1,4 @@
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
@@ -63,6 +64,7 @@ namespace AncientWarfare3.patch
             GeneralService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             WarTerritoryService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             MandateService.OnCityTransferred(__instance);
+            CitySchoolSnapshotService.MarkDirty(__instance);
         }
 
         [HarmonyPostfix]
@@ -72,6 +74,7 @@ namespace AncientWarfare3.patch
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
             ChronicleEvents.OnKingChanged(__instance, pActor);
+            CitySchoolSnapshotService.MarkKingdomDirty(__instance);
         }
 
         // 建城(newCityEvent 在 City 自身声明,typeof 正确;纯新建城,读档走 loadCity 不经此)。

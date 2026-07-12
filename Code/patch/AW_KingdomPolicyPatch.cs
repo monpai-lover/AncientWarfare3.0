@@ -30,6 +30,7 @@ namespace AncientWarfare3.patch
 
             RoyalMedicalCareService.OnKingdomYear(__instance);
             CourtDirectionService.RecalculateIfDirty(__instance);
+            CitySchoolSnapshotService.OnKingdomYear(__instance);
             CourtPeaceService.OnKingdomYear(__instance);
 
             benchmark = UpdateAgeBenchmark.Begin();

@@ -263,6 +263,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE, SuccessionMode.NONE);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_ACTOR_ID, -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID, -1L);
+            CitySchoolSnapshotService.MarkKingdomDirty(pKingdom);
             RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 
@@ -341,6 +342,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_RELATION_KING_ID,
                 heir?.data == null ? -1L : referenceKingId);
             SetHeirFlag(heir, true);
+            CitySchoolSnapshotService.MarkKingdomDirty(pKingdom);
             RoyalMedicalCareService.ReconcileTargets(pKingdom);
         }
 

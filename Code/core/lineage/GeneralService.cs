@@ -272,9 +272,10 @@ namespace AncientWarfare3.core.lineage
             ApplyGeneralTrait(pActor);
             LineageService.EnsureOfficialShiAndClan(pActor);
             UpsertGeneral(pActor, pActor.kingdom, pActive: true, pInitialScore: pScore);
-            pActor.data.get(LineageKeys.COURT_SCHOOL, out string school, "");
+            string school = CourtService.EnsurePersonalSchool(pActor);
             OfficialCareerService.Appoint(pActor, pActor.kingdom, CourtOfficeLayer.Military,
                 CourtPyramidRoleId.General, school, pActor.city);
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
             if (already) return false;
 
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, pActor.getName(),
@@ -462,6 +463,7 @@ namespace AncientWarfare3.core.lineage
             if (careerEnded && kingdom?.data != null)
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, kingdom,
                     CourtPyramidRoleId.General, pReason ?? "");
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
             CourtDirectionService.MarkDirty(kingdom);
             if (!Ready) return;
             try
