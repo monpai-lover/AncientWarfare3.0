@@ -42,6 +42,9 @@ namespace AncientWarfare3.ui.windows
         private Text _summarySecondary;
         private Image _summaryFlagBackground;
         private Image _summaryFlagIcon;
+        private Text _centralSectionLabel;
+        private Text _localSectionLabel;
+        private Image _localSectionDivider;
         private RectTransform _resizeHandle;
         private long _displayedKingdomId = -1L;
         private Coroutine _renderCoroutine;
@@ -174,6 +177,7 @@ namespace AncientWarfare3.ui.windows
             _canvasRect.pivot = new Vector2(0f, 1f);
             _canvasRect.sizeDelta = Vector2.one;
             RemoveOrphanedLinkChildren();
+            EnsureSectionMarkers(canvas.transform);
 
             _dragSurface.transform.SetAsFirstSibling();
             _canvasRect.transform.SetSiblingIndex(1);
@@ -282,6 +286,7 @@ namespace AncientWarfare3.ui.windows
                 _canvasRect.sizeDelta = new Vector2(bounds.Width, bounds.Height);
                 Vector2 nodeOffset = new Vector2(bounds.OffsetX, bounds.OffsetY);
                 BuildLinks(nodes, KingdomColor(kingdom), nodeOffset);
+                LayoutSectionMarkers(nodes, bounds, nodeOffset, KingdomColor(kingdom));
                 int renderVersion = _renderVersion;
                 _renderCoroutine = StartCoroutine(RenderNodesBatched(
                     nodes, kingdom, nodeOffset, renderVersion));
@@ -418,8 +423,67 @@ namespace AncientWarfare3.ui.windows
                 if (node != null) node.gameObject.SetActive(false);
             foreach (GameObject link in _linkPool)
                 if (link != null) link.SetActive(false);
+            if (_centralSectionLabel != null) _centralSectionLabel.gameObject.SetActive(false);
+            if (_localSectionLabel != null) _localSectionLabel.gameObject.SetActive(false);
+            if (_localSectionDivider != null) _localSectionDivider.gameObject.SetActive(false);
             _activeLinkCount = 0;
             RemoveOrphanedLinkChildren();
+        }
+
+        private void EnsureSectionMarkers(Transform pCanvas)
+        {
+            _centralSectionLabel = EnsureText(pCanvas, "CentralSectionLabel", 10, TextAnchor.UpperLeft);
+            _centralSectionLabel.fontStyle = FontStyle.Bold;
+            _localSectionLabel = EnsureText(pCanvas, "LocalSectionLabel", 10, TextAnchor.UpperLeft);
+            _localSectionLabel.fontStyle = FontStyle.Bold;
+
+            Transform existing = pCanvas.Find("LocalSectionDivider");
+            GameObject divider = existing != null
+                ? existing.gameObject
+                : new GameObject("LocalSectionDivider", typeof(RectTransform), typeof(Image));
+            if (existing == null) divider.transform.SetParent(pCanvas, false);
+            _localSectionDivider = divider.GetComponent<Image>();
+            _localSectionDivider.sprite = WhiteSprite();
+            _localSectionDivider.raycastTarget = false;
+        }
+
+        private void LayoutSectionMarkers(List<CourtPyramidNodeModel> pNodes,
+            CourtPyramidCanvasBounds pBounds, Vector2 pOffset, Color pColor)
+        {
+            bool hasCentral = pNodes.Any(p => !CourtPyramidRules.IsLocalNode(p));
+            bool hasLocal = pNodes.Any(CourtPyramidRules.IsLocalNode);
+            if (_centralSectionLabel != null)
+            {
+                _centralSectionLabel.gameObject.SetActive(hasCentral);
+                _centralSectionLabel.text = AW_L10n.Text("aw_court_layer_central", "Central Court");
+                _centralSectionLabel.color = new Color(pColor.r, pColor.g, pColor.b, 0.9f);
+                LayoutCanvasText(_centralSectionLabel, 8f, -4f, Mathf.Max(1f, pBounds.Width - 16f), 18f);
+                _centralSectionLabel.transform.SetAsLastSibling();
+            }
+
+            float dividerY = CourtPyramidRules.LocalSectionDividerY(
+                pNodes, CourtActorNodeView.Height) + pOffset.y;
+            bool showLocalMarker = hasCentral && hasLocal && !float.IsNaN(dividerY);
+            if (_localSectionLabel != null)
+            {
+                _localSectionLabel.gameObject.SetActive(showLocalMarker);
+                _localSectionLabel.text = AW_L10n.Text("aw_court_layer_city", "Local Bureaus");
+                _localSectionLabel.color = new Color(pColor.r, pColor.g, pColor.b, 0.9f);
+                LayoutCanvasText(_localSectionLabel, 8f, dividerY + 8f, 82f, 18f);
+                _localSectionLabel.transform.SetAsLastSibling();
+            }
+            if (_localSectionDivider != null)
+            {
+                _localSectionDivider.gameObject.SetActive(showLocalMarker);
+                RectTransform rect = _localSectionDivider.rectTransform;
+                rect.anchorMin = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0f, 0.5f);
+                rect.anchoredPosition = new Vector2(92f, dividerY);
+                rect.sizeDelta = new Vector2(Mathf.Max(1f, pBounds.Width - 104f), 2f);
+                _localSectionDivider.color = new Color(pColor.r, pColor.g, pColor.b, 0.52f);
+                _localSectionDivider.transform.SetAsLastSibling();
+            }
         }
 
         private void RemoveOrphanedLinkChildren()
@@ -508,6 +572,17 @@ namespace AncientWarfare3.ui.windows
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(pX, -pY);
+            rect.sizeDelta = new Vector2(pWidth, pHeight);
+        }
+
+        private static void LayoutCanvasText(Text pText, float pX, float pY, float pWidth, float pHeight)
+        {
+            if (pText == null) return;
+            RectTransform rect = pText.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(pX, pY);
             rect.sizeDelta = new Vector2(pWidth, pHeight);
         }
 

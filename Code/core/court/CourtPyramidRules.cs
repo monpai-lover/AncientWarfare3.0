@@ -124,6 +124,7 @@ namespace AncientWarfare3.core.court
         public const int SpecialistRank = 30;
         public const int GeneralRank = 40;
         public const int GovernorRank = 50;
+        public const int LocalColumnLimit = 6;
 
         public static bool ShouldAddStandaloneHeir(string pTier, bool hasValidHeir)
         {
@@ -202,8 +203,10 @@ namespace AncientWarfare3.core.court
                 .ToList();
             float xSpacing = Math.Max(1f, horizontalSpacing);
             float ySpacing = Math.Max(1f, verticalSpacing);
+            List<CourtPyramidNodeModel> central = result.Where(p => !IsLocalNode(p)).ToList();
+            List<CourtPyramidNodeModel> local = result.Where(IsLocalNode).ToList();
             int rowIndex = 0;
-            foreach (IGrouping<int, CourtPyramidNodeModel> row in result.GroupBy(p => p.Rank))
+            foreach (IGrouping<int, CourtPyramidNodeModel> row in central.GroupBy(p => p.Rank))
             {
                 CourtPyramidNodeModel[] items = row.ToArray();
                 float startX = -(items.Length - 1) * xSpacing * 0.5f;
@@ -214,7 +217,42 @@ namespace AncientWarfare3.core.court
                 }
                 rowIndex++;
             }
+            if (local.Count > 0)
+            {
+                if (central.Count > 0) rowIndex++;
+                for (int start = 0; start < local.Count; start += LocalColumnLimit)
+                {
+                    CourtPyramidNodeModel[] items = local.Skip(start).Take(LocalColumnLimit).ToArray();
+                    float startX = -(items.Length - 1) * xSpacing * 0.5f;
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        items[i].X = startX + i * xSpacing;
+                        items[i].Y = -rowIndex * ySpacing;
+                    }
+                    rowIndex++;
+                }
+            }
             return result;
+        }
+
+        public static bool IsLocalNode(CourtPyramidNodeModel pNode)
+        {
+            return pNode != null &&
+                   (pNode.Rank >= GovernorRank || pNode.RoleId == CourtPyramidRoleId.Governor);
+        }
+
+        public static float LocalSectionDividerY(
+            IEnumerable<CourtPyramidNodeModel> pNodes, float nodeHeight)
+        {
+            List<CourtPyramidNodeModel> nodes = (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
+                .Where(p => p != null)
+                .ToList();
+            CourtPyramidNodeModel[] central = nodes.Where(p => !IsLocalNode(p)).ToArray();
+            CourtPyramidNodeModel[] local = nodes.Where(IsLocalNode).ToArray();
+            if (central.Length == 0 || local.Length == 0) return float.NaN;
+            float centralBottom = central.Min(p => p.Y - Math.Max(1f, nodeHeight));
+            float localTop = local.Max(p => p.Y);
+            return (centralBottom + localTop) * 0.5f;
         }
 
         public static CourtPyramidCanvasBounds CalculateCanvasBounds(
@@ -246,7 +284,7 @@ namespace AncientWarfare3.core.court
             var segments = new List<CourtPyramidLinkSegment>();
             List<IGrouping<int, CourtPyramidNodeModel>> rows =
                 (pNodes ?? Array.Empty<CourtPyramidNodeModel>())
-                .Where(p => p != null)
+                .Where(p => p != null && !IsLocalNode(p))
                 .GroupBy(p => p.Rank)
                 .OrderBy(p => p.Key)
                 .ToList();
