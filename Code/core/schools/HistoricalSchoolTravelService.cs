@@ -27,9 +27,8 @@ namespace AncientWarfare3.core.schools
             int bucket = ((pQuarterKey % 4) + 4) % 4;
             List<City> indexedCities = BuildIndexedCities();
             HistoricalSchoolAffiliationSnapshot[] bucketStates =
-                HistoricalAffiliationService.ActiveSnapshots()
-                    .Where(p => HistoricalSchoolRules.TravelBucket(p.ActorId) == bucket)
-                    .ToArray();
+                HistoricalAffiliationService.ActiveSnapshots(pTravelEligibleOnly: true,
+                    pTravelBucket: bucket);
             if (bucketStates.Length == 0) return;
             int start = BucketOffsets[bucket] % bucketStates.Length;
             int count = Math.Min(MaxMastersPerQuarter, bucketStates.Length);
@@ -76,6 +75,7 @@ namespace AncientWarfare3.core.schools
             if (!IsLivingCity(destination))
             {
                 HistoricalAffiliationService.CancelTravel(pActor);
+                SchoolLineageService.ReleaseItinerant(pActor);
                 return false;
             }
             pTarget = DestinationTile(destination);
@@ -99,6 +99,7 @@ namespace AncientWarfare3.core.schools
             }
             if (!HistoricalAffiliationService.TryArrive(pActor, destination.data.id,
                     Date.getCurrentYear())) return false;
+            SchoolLineageService.ReleaseItinerant(pActor);
             pActor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                 pColorEffect: false);
             RecordJourney(pActor, destination);
@@ -111,6 +112,7 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null) return;
             try { pActor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId); }
             catch { }
+            SchoolLineageService.ReleaseItinerant(pActor);
             HistoricalAffiliationService.MarkDead(pActor);
         }
 
@@ -164,8 +166,13 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolTravelCandidate selected =
                 HistoricalSchoolRules.SelectTravelDestination(context, candidates,
                     MaxDestinationCandidates);
-            if (selected == null || !HistoricalAffiliationService.TryBeginTravel(pActor,
-                    selected.CityId, pYear)) return;
+            if (selected == null || !SchoolLineageService.TryReserveItinerant(pActor, school))
+                return;
+            if (!HistoricalAffiliationService.TryBeginTravel(pActor, selected.CityId, pYear))
+            {
+                SchoolLineageService.ReleaseItinerant(pActor);
+                return;
+            }
             pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId);
             EnsureTravelTask(pActor);
         }
@@ -198,7 +205,8 @@ namespace AncientWarfare3.core.schools
         private static void CompleteDueVoyages(int pYear)
         {
             foreach (HistoricalSchoolAffiliationSnapshot state in
-                     HistoricalAffiliationService.ActiveSnapshots())
+                     HistoricalAffiliationService.ActiveSnapshots(pTravelEligibleOnly: true,
+                         pTravelOnly: true))
             {
                 if (state.LifecycleState != HistoricalSchoolLifecycleState.Voyage) continue;
                 Actor actor = FindActor(state.ActorId);
@@ -219,6 +227,7 @@ namespace AncientWarfare3.core.schools
                 actor.spawnOn(tile);
                 if (!HistoricalAffiliationService.TryArrive(actor, destination.data.id, pYear))
                     continue;
+                SchoolLineageService.ReleaseItinerant(actor);
                 actor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
                 RestoreScholarJob(actor);
                 actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
@@ -246,6 +255,7 @@ namespace AncientWarfare3.core.schools
             pActor.is_visible = true;
             if (tile != null) pActor.spawnOn(tile);
             HistoricalAffiliationService.CancelTravel(pActor);
+            SchoolLineageService.ReleaseItinerant(pActor);
             pActor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
             RestoreScholarJob(pActor);
         }

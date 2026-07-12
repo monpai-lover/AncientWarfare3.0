@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.schools
 {
@@ -30,6 +31,37 @@ namespace AncientWarfare3.core.schools
                 pHomeKingdomId, pHomeKingdomName, pHometownCityId, pYear);
         }
 
+        internal static bool EnsureMemberAffiliation(Actor pActor, long pCityId)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
+            if (ByActor.TryGetValue(pActor.data.id,
+                    out HistoricalSchoolAffiliationSnapshot existing))
+                return existing.LifecycleState != HistoricalSchoolLifecycleState.Dead;
+            City city = FindCity(pCityId) ?? pActor.city;
+            Kingdom kingdom = city?.kingdom ?? pActor.kingdom;
+            if (city?.data == null || city.isRekt() || kingdom?.data == null || kingdom.isRekt())
+                return false;
+            int year = Date.getCurrentYear();
+            if (!HistoricalSchoolStore.EnsureMemberAffiliation(pActor.data.id, kingdom.id,
+                    kingdom.name, city.data.id, year, WorldTime())) return false;
+            ByActor[pActor.data.id] = HistoricalSchoolAffiliationSnapshot.CreateHome(
+                pActor.data.id, kingdom.id, kingdom.name, city.data.id, year);
+            return true;
+        }
+
+        internal static void EnsureMembershipAffiliations()
+        {
+            foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
+                foreach (long actorId in SchoolMembershipService.Members(school.Id))
+                {
+                    Actor actor = FindActor(actorId);
+                    if (actor?.data == null ||
+                        (!HistoricalSchoolDescentService.IsCanonicalMaster(actor) &&
+                         !SchoolLineageService.IsQualifiedTeacher(actor))) continue;
+                    EnsureMemberAffiliation(actor, actor.city?.data?.id ?? -1L);
+                }
+        }
+
         internal static void RollbackDescent(long pActorId)
         {
             ByActor.Remove(pActorId);
@@ -42,12 +74,28 @@ namespace AncientWarfare3.core.schools
                 : null;
         }
 
-        public static HistoricalSchoolAffiliationSnapshot[] ActiveSnapshots()
+        public static HistoricalSchoolAffiliationSnapshot[] ActiveSnapshots(
+            bool pTravelEligibleOnly = false, bool pTravelOnly = false,
+            int pTravelBucket = -1)
         {
-            return ByActor.Values
-                .Where(p => p.LifecycleState != HistoricalSchoolLifecycleState.Dead)
-                .OrderBy(p => p.ActorId)
-                .ToArray();
+            IEnumerable<HistoricalSchoolAffiliationSnapshot> query = ByActor.Values
+                .Where(p => p.LifecycleState != HistoricalSchoolLifecycleState.Dead);
+            if (pTravelEligibleOnly)
+                query = query.Where(p => IsTravelEligible(FindActor(p.ActorId)));
+            if (pTravelOnly)
+                query = query.Where(p => p.LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
+                    p.LifecycleState == HistoricalSchoolLifecycleState.Voyage);
+            if (pTravelBucket >= 0)
+                query = query.Where(p => HistoricalSchoolRules.TravelBucket(p.ActorId) ==
+                    pTravelBucket);
+            return query.ToArray();
+        }
+
+        public static bool IsTravelEligible(Actor pActor)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
+            return HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
+                   SchoolLineageService.IsQualifiedTeacher(pActor);
         }
 
         public static City ResidenceCity(Actor pActor)
@@ -167,6 +215,7 @@ namespace AncientWarfare3.core.schools
         {
             HistoricalSchoolAffiliationSnapshot current = Get(pActor?.data?.id ?? -1L);
             if (current == null) return;
+            HistoricalSchoolStore.MarkAffiliationDead(current.ActorId, WorldTime());
             var dead = new HistoricalSchoolAffiliationSnapshot(current.ActorId,
                 current.HomeKingdomId, current.HomeKingdomName, current.HometownCityId,
                 current.ResidenceCityId, current.PreviousResidenceCityId, -1, -1,
@@ -179,6 +228,7 @@ namespace AncientWarfare3.core.schools
         {
             HistoricalSchoolAffiliationSnapshot state = Get(pActor?.data?.id ?? -1L);
             if (state == null || pTarget == null || pTarget == pActor.city) return true;
+            if (!IsTravelEligible(pActor)) return true;
             Kingdom home = FindKingdom(state.HomeKingdomId);
             if (home?.data == null || home.isRekt()) return true;
             return pTarget.kingdom == home;
@@ -188,6 +238,7 @@ namespace AncientWarfare3.core.schools
         {
             HistoricalSchoolAffiliationSnapshot state = Get(pActor?.data?.id ?? -1L);
             if (state == null || pTarget == null || pTarget == pActor.kingdom) return true;
+            if (!IsTravelEligible(pActor)) return true;
             Kingdom home = FindKingdom(state.HomeKingdomId);
             if (home?.data == null || home.isRekt()) return true;
             return pTarget == home;
@@ -227,6 +278,13 @@ namespace AncientWarfare3.core.schools
         {
             if (pId < 0) return null;
             try { return World.world?.cities?.get(pId); }
+            catch { return null; }
+        }
+
+        private static Actor FindActor(long pId)
+        {
+            if (pId < 0) return null;
+            try { return World.world?.units?.get(pId); }
             catch { return null; }
         }
 

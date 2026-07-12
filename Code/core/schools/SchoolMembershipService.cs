@@ -21,7 +21,7 @@ namespace AncientWarfare3.core.schools
 
         public static bool TryJoin(Actor pActor, string pSchoolId,
             SchoolMembershipSource pSource, string pSourceId, long pTeacherActorId,
-            long pCityId, int pGeneration)
+            long pCityId, int pGeneration, float pInitialReputation = 0f)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
                 CourtSchoolRegistry.Find(pSchoolId) == null || string.IsNullOrWhiteSpace(pSourceId))
@@ -35,12 +35,22 @@ namespace AncientWarfare3.core.schools
             if (membershipId < 0) return false;
             int year = Date.getCurrentYear();
             var record = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
-                pSource, pSourceId, pTeacherActorId, pCityId, pGeneration, 0f, year);
+                pSource, pSourceId, pTeacherActorId, pCityId, pGeneration,
+                Math.Max(0f, pInitialReputation), year);
             if (!record.IsValid || !HistoricalSchoolStore.InsertMembership(record, WorldTime()))
                 return false;
             if (!Memberships.TryJoin(record))
             {
                 LoadIndexes();
+                return false;
+            }
+            bool needsTravelAffiliation = pSource != SchoolMembershipSource.HistoricalDescent &&
+                (HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
+                 SchoolLineageService.IsQualifiedTeacher(pActor));
+            if (needsTravelAffiliation &&
+                !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
+            {
+                RollbackJoin(pActor, pSourceId);
                 return false;
             }
             Project(pActor, pSchoolId);
@@ -56,6 +66,10 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
             if (current == null || current.Source == SchoolMembershipSource.HistoricalDescent ||
                 current.SchoolId == pSchoolId) return false;
+            if ((HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
+                 SchoolLineageService.IsQualifiedTeacher(pActor)) &&
+                !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
+                return false;
             long membershipId = HistoricalSchoolStore.NextMembershipId();
             if (membershipId < 0) return false;
             int year = Date.getCurrentYear();
@@ -76,6 +90,8 @@ namespace AncientWarfare3.core.schools
         public static void OnDeath(Actor pActor)
         {
             if (pActor?.data == null) return;
+            SchoolLineageService.ReleaseItinerant(pActor);
+            HistoricalAffiliationService.MarkDead(pActor);
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
             if (current == null)
             {

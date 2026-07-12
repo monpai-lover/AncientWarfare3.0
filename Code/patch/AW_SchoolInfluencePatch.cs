@@ -13,6 +13,10 @@ namespace AncientWarfare3.patch
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
         public static void Die_Prefix(Actor __instance)
         {
+            if (__instance?.data != null && __instance.isAlive() &&
+                !HistoricalSchoolDescentService.IsCanonicalMaster(__instance) &&
+                SchoolLineageService.IsQualifiedTeacher(__instance))
+                SchoolLineageService.OnTeacherDeath(__instance);
             SchoolMembershipService.OnDeath(__instance);
         }
     }

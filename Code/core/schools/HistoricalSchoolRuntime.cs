@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolStore.LoadRuntimeState(out _eligibleYear, out _lastWorldYear);
             HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.LoadState();
+            HistoricalAffiliationService.EnsureMembershipAffiliations();
+            SchoolLineageService.LoadState();
             HistoricalSchoolTravelService.ClearRuntime();
             _lastQuarterKey = -1;
             _loaded = true;
@@ -29,6 +31,7 @@ namespace AncientWarfare3.core.schools
             _lastWorldYear = -1;
             _lastQuarterKey = -1;
             HistoricalAffiliationService.ClearRuntime();
+            SchoolLineageService.ClearRuntime();
             HistoricalSchoolTravelService.ClearRuntime();
             _loaded = false;
         }
@@ -57,6 +60,7 @@ namespace AncientWarfare3.core.schools
                 World.world?.getCurWorldTime() ?? 0d);
             if (cities.Count > 0)
                 HistoricalSchoolDescentService.ProcessDue(_eligibleYear, cities);
+            HistoricalSchoolActionService.ProcessYear(worldYear);
         }
 
         private static List<City> LivingXiaCities()

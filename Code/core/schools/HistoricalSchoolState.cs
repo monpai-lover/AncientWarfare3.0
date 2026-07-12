@@ -348,6 +348,29 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public sealed class SchoolLineageCandidate
+    {
+        public SchoolLineageCandidate(long pActorId, bool pAlive, bool pDirectDisciple,
+            float pReputation, float pLearning, int pDebateWins, int pFollowerCount)
+        {
+            ActorId = pActorId;
+            Alive = pAlive;
+            DirectDisciple = pDirectDisciple;
+            Reputation = Math.Max(0f, pReputation);
+            Learning = Math.Max(0f, pLearning);
+            DebateWins = Math.Max(0, pDebateWins);
+            FollowerCount = Math.Max(0, pFollowerCount);
+        }
+
+        public long ActorId { get; }
+        public bool Alive { get; }
+        public bool DirectDisciple { get; }
+        public float Reputation { get; }
+        public float Learning { get; }
+        public int DebateWins { get; }
+        public int FollowerCount { get; }
+    }
+
     public static class HistoricalDebateTopicId
     {
         public const string Livelihood = "livelihood";

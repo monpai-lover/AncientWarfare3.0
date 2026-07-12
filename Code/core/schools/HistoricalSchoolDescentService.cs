@@ -79,6 +79,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolStore.MarkMasterDead(master.Id, pActor.data.id,
                 Date.getCurrentYear(), city?.data?.id ?? -1L, cause, WorldTime());
             HistoricalSchoolTravelService.OnDeath(pActor);
+            SchoolLineageService.OnTeacherDeath(pActor);
             SchoolMembershipService.OnDeath(pActor);
             HistoricalSchoolContent.AnnounceDeath(pActor, city);
             HistoryWriter.RecordPerson(pActor.data.id,

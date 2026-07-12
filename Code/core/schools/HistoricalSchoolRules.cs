@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.schools
     {
         public const int MaxDescentsPerEligibleYear = 2;
         public const int TravelReturnCooldownYears = 12;
+        public const int MaxNonHistoricalItinerantsPerSchool = 6;
 
         public static int WaveForOrder(int pOrder)
         {
@@ -209,6 +210,53 @@ namespace AncientWarfare3.core.schools
                              pCityId * 1442695040888963407L;
                 return value ^ value >> 33;
             }
+        }
+
+        public static int AnnualDirectDiscipleLimit(long pTeacherActorId, int pYear)
+        {
+            unchecked
+            {
+                long value = pTeacherActorId * 31L + pYear * 17L;
+                return (value & 1L) == 0L ? 1 : 2;
+            }
+        }
+
+        public static bool CanRecruitDisciple(bool pRealActor, bool pAlive,
+            bool pSameResidence, bool pAlreadyMember, int pDirectDiscipleCount,
+            int pDirectDiscipleCap)
+        {
+            return pRealActor && pAlive && pSameResidence && !pAlreadyMember &&
+                   pDirectDiscipleCap > 0 && pDirectDiscipleCount >= 0 &&
+                   pDirectDiscipleCount < pDirectDiscipleCap;
+        }
+
+        public static SchoolLineageCandidate SelectLineageSuccessor(
+            IEnumerable<SchoolLineageCandidate> pCandidates)
+        {
+            return (pCandidates ?? Array.Empty<SchoolLineageCandidate>())
+                .Where(p => p != null && p.Alive && p.DirectDisciple && p.ActorId >= 0)
+                .OrderByDescending(LineageSuccessorScore)
+                .ThenBy(p => p.ActorId)
+                .FirstOrDefault();
+        }
+
+        public static bool CanExplicitlyConvert(bool pHistoricalMaster,
+            int pYearsWithoutOwnTeacher, float pRivalExposure, bool pRecordedAction)
+        {
+            return !pHistoricalMaster && pRecordedAction && pYearsWithoutOwnTeacher >= 3 &&
+                   pRivalExposure >= 0.75f;
+        }
+
+        public static bool CanRediscover(int pLivingMemberCount, bool pHasPreservedSource,
+            bool pHasRealReader)
+        {
+            return pLivingMemberCount == 0 && pHasPreservedSource && pHasRealReader;
+        }
+
+        private static float LineageSuccessorScore(SchoolLineageCandidate pCandidate)
+        {
+            return pCandidate.Reputation * 2f + pCandidate.Learning +
+                   pCandidate.DebateWins * 10f + pCandidate.FollowerCount * 5f;
         }
     }
 }

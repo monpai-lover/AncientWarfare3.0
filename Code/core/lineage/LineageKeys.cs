@@ -187,6 +187,7 @@ namespace AncientWarfare3.core.lineage
         public const string SCHOOL_MASTER_ID = "aw_school_master_id";
         public const string SCHOOL_MEMBERSHIP_ID = "aw_school_membership_id";
         public const string SCHOOL_MEMBERSHIP_SOURCE = "aw_school_membership_source";
+        public const string SCHOOL_TEACHER_GONE_YEAR = "aw_school_teacher_gone_year";
         public const string COURT_KINGDOM_ID = "aw_court_kingdom_id";
         public const string COURT_CITY_ID = "aw_court_city_id";
         public const string COURT_IMPERIAL_PHYSICIAN_ID = "aw_court_imperial_physician_id";

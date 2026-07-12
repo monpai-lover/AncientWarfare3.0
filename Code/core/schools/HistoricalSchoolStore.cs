@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.schools
         private static string AffiliationTable => SchoolAffiliationTableItem.GetTableName();
         private static string RuntimeTable => HistoricalSchoolRuntimeStateTableItem.GetTableName();
         private static string EventTable => SchoolEventTableItem.GetTableName();
+        private static string WorkTable => SchoolWorkTableItem.GetTableName();
 
         public static long NextMembershipId()
         {
@@ -49,6 +50,193 @@ namespace AncientWarfare3.core.schools
             catch (Exception error)
             {
                 ModClass.LogWarning("HistoricalSchoolStore insert event failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static Dictionary<long, long> LoadLineageSuccessors()
+        {
+            var result = new Dictionary<long, long>();
+            if (DB == null) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT TARGET_ACTOR_ID,ACTOR_ID FROM " + EventTable +
+                    " WHERE EVENT_TYPE=@type AND TARGET_ACTOR_ID>=0 AND ACTOR_ID>=0" +
+                    " ORDER BY EVENT_YEAR,EVENT_ID";
+                command.Parameters.AddWithValue("@type", "lineage_successor");
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                    result[ValueLong(reader, 0, -1L)] = ValueLong(reader, 1, -1L);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load successors failed: " +
+                                    error.Message);
+            }
+            return result;
+        }
+
+        public static bool EnsureMemberAffiliation(long pActorId, long pHomeKingdomId,
+            string pHomeKingdomName, long pHometownCityId, int pYear, double pTime)
+        {
+            if (DB == null || pActorId < 0 || pHomeKingdomId < 0 || pHometownCityId < 0)
+                return false;
+            try
+            {
+                if (DB.CheckKeyExist(AffiliationTable,
+                        SimpleColumnConstraint.CreateEq("ACTOR_ID", pActorId))) return true;
+                DB.Insert(AffiliationTable,
+                    ColumnVal.Create("ACTOR_ID", pActorId),
+                    ColumnVal.Create("HOME_KINGDOM_ID", pHomeKingdomId),
+                    ColumnVal.Create("HOME_KINGDOM_NAME", pHomeKingdomName ?? ""),
+                    ColumnVal.Create("HOMETOWN_CITY_ID", pHometownCityId),
+                    ColumnVal.Create("RESIDENCE_CITY_ID", pHometownCityId),
+                    ColumnVal.Create("PREVIOUS_RESIDENCE_CITY_ID", -1L),
+                    ColumnVal.Create("DESTINATION_CITY_ID", -1L),
+                    ColumnVal.Create("SERVICE_KINGDOM_ID", -1L),
+                    ColumnVal.Create("LIFECYCLE_STATE",
+                        HistoricalSchoolLifecycleState.AtHome.ToString()),
+                    ColumnVal.Create("SERVICE_START_YEAR", -1),
+                    ColumnVal.Create("SERVICE_END_YEAR", -1),
+                    ColumnVal.Create("LAST_TRAVEL_YEAR", pYear),
+                    ColumnVal.Create("TRAVEL_WAIT_START_YEAR", -1),
+                    ColumnVal.Create("VOYAGE_START_YEAR", -1),
+                    ColumnVal.Create("VOYAGE_ARRIVAL_YEAR", -1),
+                    ColumnVal.Create("TRANSPORT_FAILURES", 0),
+                    ColumnVal.Create("UPDATED_TIME", pTime));
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore ensure affiliation failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static bool MarkAffiliationDead(long pActorId, double pTime)
+        {
+            if (DB == null || pActorId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + AffiliationTable +
+                    " SET LIFECYCLE_STATE=@state,SERVICE_KINGDOM_ID=-1," +
+                    "DESTINATION_CITY_ID=-1,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
+                command.Parameters.AddWithValue("@state",
+                    HistoricalSchoolLifecycleState.Dead.ToString());
+                command.Parameters.AddWithValue("@time", pTime);
+                command.Parameters.AddWithValue("@actor", pActorId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore mark affiliation dead failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static bool HasPreservedWork(string pWorkKey, string pSchoolId)
+        {
+            if (DB == null || string.IsNullOrWhiteSpace(pWorkKey) || string.IsNullOrWhiteSpace(pSchoolId))
+                return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT 1 FROM " + WorkTable +
+                    " WHERE WORK_KEY=@key AND SCHOOL_ID=@school AND PRESERVED=1 LIMIT 1";
+                command.Parameters.AddWithValue("@key", pWorkKey);
+                command.Parameters.AddWithValue("@school", pSchoolId);
+                return command.ExecuteScalar() != null;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore work lookup failed: " + error.Message);
+                return false;
+            }
+        }
+
+        public static long PreservedWorkCity(string pWorkKey, string pSchoolId)
+        {
+            if (DB == null || string.IsNullOrWhiteSpace(pWorkKey) ||
+                string.IsNullOrWhiteSpace(pSchoolId)) return -1L;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT CITY_ID FROM " + WorkTable +
+                    " WHERE WORK_KEY=@key AND SCHOOL_ID=@school AND PRESERVED=1" +
+                    " ORDER BY WORK_ID LIMIT 1";
+                command.Parameters.AddWithValue("@key", pWorkKey);
+                command.Parameters.AddWithValue("@school", pSchoolId);
+                object value = command.ExecuteScalar();
+                return value == null || value == DBNull.Value ? -1L : Convert.ToInt64(value);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore work city lookup failed: " +
+                                    error.Message);
+                return -1L;
+            }
+        }
+
+        public static bool RecordSchoolWork(string pWorkKey, string pDisplayName,
+            string pSchoolId, long pAuthorActorId, long pCityId, int pYear,
+            long pKingdomId = -1L)
+        {
+            if (DB == null || string.IsNullOrWhiteSpace(pWorkKey) ||
+                string.IsNullOrWhiteSpace(pSchoolId) || pAuthorActorId < 0) return false;
+            if (HasPreservedWork(pWorkKey, pSchoolId)) return false;
+            long workId = TableIdAllocator.Next(DB, WorkTable, "WORK_ID");
+            long eventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
+            if (workId < 0 || eventId < 0) return false;
+            double worldTime = World.world?.getCurWorldTime() ?? 0d;
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            try
+            {
+                using (var work = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    work.CommandText = "INSERT INTO " + WorkTable +
+                        " (WORK_ID,WORK_KEY,DISPLAY_NAME,SCHOOL_ID,AUTHOR_ACTOR_ID,CITY_ID," +
+                        "INSTITUTION_ID,WRITTEN_YEAR,PRESERVED,CONDITION,UPDATED_TIME) VALUES " +
+                        " (@id,@key,@name,@school,@author,@city,-1,@year,1,100,@time)";
+                    work.Parameters.AddWithValue("@id", workId);
+                    work.Parameters.AddWithValue("@key", pWorkKey);
+                    work.Parameters.AddWithValue("@name", pDisplayName ?? pWorkKey);
+                    work.Parameters.AddWithValue("@school", pSchoolId);
+                    work.Parameters.AddWithValue("@author", pAuthorActorId);
+                    work.Parameters.AddWithValue("@city", pCityId);
+                    work.Parameters.AddWithValue("@year", pYear);
+                    work.Parameters.AddWithValue("@time", worldTime);
+                    if (work.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("school work insert failed");
+                }
+                using (var schoolEvent = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    schoolEvent.CommandText = "INSERT INTO " + EventTable +
+                        " (EVENT_ID,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID,CITY_ID," +
+                        "KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME) VALUES " +
+                        " (@id,'work_authored',@actor,-1,@school,@city,@kingdom,@year,@payload,2,@time)";
+                    schoolEvent.Parameters.AddWithValue("@id", eventId);
+                    schoolEvent.Parameters.AddWithValue("@actor", pAuthorActorId);
+                    schoolEvent.Parameters.AddWithValue("@school", pSchoolId);
+                    schoolEvent.Parameters.AddWithValue("@city", pCityId);
+                    schoolEvent.Parameters.AddWithValue("@kingdom", pKingdomId);
+                    schoolEvent.Parameters.AddWithValue("@year", pYear);
+                    schoolEvent.Parameters.AddWithValue("@payload", pWorkKey);
+                    schoolEvent.Parameters.AddWithValue("@time", worldTime);
+                    if (schoolEvent.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("school work event insert failed");
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction.Rollback(); } catch { }
+                ModClass.LogWarning("HistoricalSchoolStore insert work/event failed: " +
                                     error.Message);
                 return false;
             }

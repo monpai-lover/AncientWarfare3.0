@@ -47,6 +47,11 @@ namespace AncientWarfare3.content.schools
             Announce(DeathLogId, pActor, pCity, LogKingdom(pActor));
         }
 
+        public static void AnnounceLecture(Actor pActor, City pCity)
+        {
+            Announce(LectureLogId, pActor, pCity, LogKingdom(pActor));
+        }
+
         private static Kingdom LogKingdom(Actor pActor)
         {
             if (pActor?.data == null) return null;
