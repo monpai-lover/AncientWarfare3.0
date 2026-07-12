@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.schools
 {
@@ -88,7 +89,8 @@ namespace AncientWarfare3.core.schools
                 if (SafeCanonical(item.Value) || !IsQualified(record, pCanonical: false))
                     continue;
                 var candidate = new TeacherCandidate(item.Key,
-                    HistoricalSchoolRules.TeacherOrder(item.Key, pYear), item.Value);
+                    HistoricalSchoolRules.TeacherOrder(item.Key, pYear),
+                    SchoolOrdinal(record.SchoolId), item.Value);
                 InsertBounded(later, candidate, remaining);
             }
             foreach (TeacherCandidate candidate in later) selected.Add(candidate.Actor);
@@ -258,20 +260,35 @@ namespace AncientWarfare3.core.schools
         private static int Compare(TeacherCandidate pFirst, TeacherCandidate pSecond)
         {
             int order = pFirst.Order.CompareTo(pSecond.Order);
-            return order != 0 ? order : pFirst.ActorId.CompareTo(pSecond.ActorId);
+            if (order != 0) return order;
+            int schoolOrder = pFirst.SchoolOrdinal.CompareTo(pSecond.SchoolOrdinal);
+            return schoolOrder != 0
+                ? schoolOrder
+                : pFirst.ActorId.CompareTo(pSecond.ActorId);
+        }
+
+        private static int SchoolOrdinal(string pSchoolId)
+        {
+            for (int index = 0; index < CourtSchoolRegistry.All.Count; index++)
+                if (string.Equals(CourtSchoolRegistry.All[index].Id, pSchoolId,
+                        StringComparison.Ordinal)) return index;
+            return int.MaxValue;
         }
 
         private sealed class TeacherCandidate
         {
-            public TeacherCandidate(long pActorId, long pOrder, TActor pActor)
+            public TeacherCandidate(long pActorId, long pOrder, int pSchoolOrdinal,
+                TActor pActor)
             {
                 ActorId = pActorId;
                 Order = pOrder;
+                SchoolOrdinal = pSchoolOrdinal;
                 Actor = pActor;
             }
 
             public long ActorId { get; }
             public long Order { get; }
+            public int SchoolOrdinal { get; }
             public TActor Actor { get; }
         }
     }
