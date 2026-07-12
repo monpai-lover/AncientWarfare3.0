@@ -81,7 +81,7 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolAnnualMemberSnapshot<Actor> annualMembers =
                     HistoricalSchoolAnnualMemberSnapshotBuilder.Build();
                 HistoricalSchoolActionService.ProcessYear(worldYear, annualMembers);
-                HistoricalSchoolDebateService.ProcessYear(worldYear);
+                HistoricalSchoolDebateService.ProcessYear(worldYear, annualMembers);
                 HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
                     World.world?.getCurWorldTime() ?? 0d);
                 _eligibleYear = nextEligibleYear;

@@ -37,27 +37,21 @@ namespace AncientWarfare3.core.schools
                 if (entry.Key >= 0 && entry.Value > 0) DebateWins[entry.Key] = entry.Value;
         }
 
-        public static void ProcessYear(int pYear)
+        public static void ProcessYear(int pYear,
+            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
         {
-            if (pYear < 0 || World.world == null || pYear == _lastProcessedYear) return;
+            if (pYear < 0 || World.world == null || pMembers == null ||
+                pYear == _lastProcessedYear) return;
             _lastProcessedYear = pYear;
 
             int budget = MaxDebatesPerYear;
             int institutionBudget = 4;
             int processedCities = 0;
             var usedActors = new HashSet<long>();
-            Dictionary<long, int> directDiscipleCounts;
-            try
-            {
-                directDiscipleCounts = SchoolLineageService.BuildDirectDiscipleCounts();
-            }
-            catch (Exception error)
-            {
-                directDiscipleCounts = new Dictionary<long, int>();
-                ModClass.LogWarning("Historical school debate disciple index failed: " +
-                                    error.Message);
-            }
-            Dictionary<long, List<Actor>> actorsByResidence = BuildResidenceActorIndex();
+            IReadOnlyDictionary<long, int> directDiscipleCounts =
+                pMembers.DirectDiscipleCounts;
+            Dictionary<long, List<Actor>> actorsByResidence =
+                BuildResidenceActorIndex(pMembers);
             foreach (City city in LivingCities())
             {
                 if (budget <= 0 || processedCities++ >= MaxCitiesPerYear) break;
@@ -263,21 +257,28 @@ namespace AncientWarfare3.core.schools
             return pLedger.Tradition + pLedger.ActivePresence + pLedger.Momentum;
         }
 
-        private static Dictionary<long, List<Actor>> BuildResidenceActorIndex()
+        private static Dictionary<long, List<Actor>> BuildResidenceActorIndex(
+            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
         {
-            var actors = new Dictionary<long, Actor>();
+            var result = new Dictionary<long, List<Actor>>();
             try
             {
                 int perSchoolLimit = Math.Max(1, MaxIndexedActorsPerYear /
                     Math.Max(1, CourtSchoolRegistry.All.Count));
                 foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
                 {
-                    int schoolCount = 0;
-                    foreach (Actor actor in SchoolMembershipService.LivingMembers(school.Id))
+                    foreach (Actor actor in pMembers.EnumerateLivingMembers(school.Id,
+                                 perSchoolLimit, IsDebateIndexEligible))
                     {
-                        if (!IsDebateIndexEligible(actor)) continue;
-                        if (schoolCount++ >= perSchoolLimit) break;
-                        if (actor?.data != null) actors[actor.data.id] = actor;
+                        City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
+                                         actor.city;
+                        if (residence?.data == null || residence.isRekt()) continue;
+                        if (!result.TryGetValue(residence.data.id, out List<Actor> members))
+                        {
+                            members = new List<Actor>();
+                            result[residence.data.id] = members;
+                        }
+                        members.Add(actor);
                     }
                 }
             }
@@ -287,18 +288,6 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
             }
 
-            var result = new Dictionary<long, List<Actor>>();
-            foreach (Actor actor in actors.Values.OrderBy(p => p.data.id))
-            {
-                City residence = HistoricalAffiliationService.ResidenceCity(actor) ?? actor.city;
-                if (residence?.data == null || residence.isRekt()) continue;
-                if (!result.TryGetValue(residence.data.id, out List<Actor> members))
-                {
-                    members = new List<Actor>();
-                    result[residence.data.id] = members;
-                }
-                members.Add(actor);
-            }
             foreach (long cityId in result.Keys.ToArray())
                 result[cityId] = LimitResidentActors(result[cityId]);
             return result;
@@ -415,15 +404,16 @@ namespace AncientWarfare3.core.schools
 
         private static IEnumerable<City> LivingCities()
         {
-            var result = new List<City>();
+            var result = new HistoricalSchoolBoundedCitySelector<City>(MaxCitiesPerYear,
+                p => p.data.id, p => p?.data != null && !p.isRekt());
             try
             {
-                if (World.world?.kingdoms == null) return result;
+                if (World.world?.kingdoms == null) return result.Ascending();
                 foreach (Kingdom kingdom in World.world.kingdoms)
                 {
                     if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) continue;
                     foreach (City city in kingdom.getCities())
-                        if (city?.data != null && !city.isRekt()) result.Add(city);
+                        result.Consider(city);
                 }
             }
             catch (Exception error)
@@ -431,7 +421,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Historical school debate city scan failed: " +
                                     error.Message);
             }
-            return result.OrderBy(p => p.data.id);
+            return result.Ascending();
         }
 
         private static IEnumerable<string> CityTopics(City pCity)

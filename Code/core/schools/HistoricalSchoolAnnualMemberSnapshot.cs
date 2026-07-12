@@ -62,6 +62,21 @@ namespace AncientWarfare3.core.schools
                 : Array.Empty<TActor>();
         }
 
+        public IEnumerable<TActor> EnumerateLivingMembers(string pSchoolId, int pLimit,
+            Func<TActor, bool> pEligible)
+        {
+            if (pLimit <= 0 || pSchoolId == null ||
+                !_livingBySchool.TryGetValue(pSchoolId,
+                    out SortedDictionary<long, TActor> members)) yield break;
+            int selected = 0;
+            foreach (KeyValuePair<long, TActor> item in members)
+            {
+                if (pEligible != null && !pEligible(item.Value)) continue;
+                yield return item.Value;
+                if (++selected >= pLimit) yield break;
+            }
+        }
+
         public int LivingCount(string pSchoolId)
         {
             return pSchoolId != null && _livingBySchool.TryGetValue(pSchoolId,
