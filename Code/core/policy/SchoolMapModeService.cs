@@ -110,6 +110,17 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
+        public static bool SelectCity(WorldTile pTile, string pPowerId = null)
+        {
+            City city = pTile?.zone?.city;
+            if (city?.data == null || city.isRekt() || !city.isAlive()) return false;
+            SelectedUnit.clear();
+            SelectedMetas.selected_city = city;
+            SelectedObjects.setNanoObject(city);
+            PowerTabController.showTabSelectedMeta(MetaTypeLibrary.city);
+            return true;
+        }
+
         public static void Prepare()
         {
             try

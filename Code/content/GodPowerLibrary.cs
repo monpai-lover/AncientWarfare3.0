@@ -85,10 +85,7 @@ namespace AncientWarfare3.content
 
         private static bool SchoolMapClick(WorldTile pTile, string pPowerId)
         {
-            City city = pTile?.zone?.city;
-            if (city?.data == null) return false;
-            SchoolWindow.OpenCity(city.data.id);
-            return true;
+            return SchoolMapModeService.SelectCity(pTile, pPowerId);
         }
 
         private static void RegisterTechMapMode()
@@ -369,7 +366,7 @@ namespace AncientWarfare3.content
                 AWMapModeMetaObject meta = AWMapModeMetaLibrary.GetSchoolIdentityMetaForCity(city);
                 if (meta == null) continue;
 
-                NameplateText text = pManager.prepareNext(pAsset, meta);
+                NameplateText text = pManager.prepareNext(pAsset, city);
                 text.setupMeta(meta.data, meta.getColor());
                 text.setText(meta.data.name, city.city_center);
                 text.setPriority(city.getPopulationPeople());

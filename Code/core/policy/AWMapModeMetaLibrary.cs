@@ -80,8 +80,42 @@ namespace AncientWarfare3.core.policy
                 DevelopmentMapModeService.POWER_ID, GetDevelopmentMetaForZone);
             SchoolAsset = AddOrGet(AWMapModeMetaTypes.SchoolId, AWMapModeMetaTypes.School,
                 SchoolMapModeService.POWER_ID, GetSchoolMetaForZone);
+            ConfigureSchoolSelectionAsset(SchoolAsset);
             SchoolAsset.tile_get_metaobject = (pZone, _) => GetSchoolIdentityMetaForZone(pZone);
-            SchoolAsset.click_action_zone = SchoolMapModeService.InspectCity;
+            SchoolAsset.click_action_zone = SchoolMapModeService.SelectCity;
+        }
+
+        private static void ConfigureSchoolSelectionAsset(MetaTypeAsset pAsset)
+        {
+            if (pAsset == null) return;
+            pAsset.icon_single_path = "ui/Icons/traits/iconRujia";
+            pAsset.icon_list = "iconCityList";
+            pAsset.window_name = "city";
+            pAsset.power_tab_id = "selected_city";
+            pAsset.get_list = () => World.world?.cities;
+            pAsset.has_any = () => World.world?.cities != null && World.world.cities.hasAny();
+            pAsset.get_selected = () => SelectedMetas.selected_city;
+            pAsset.set_selected = pElement =>
+            {
+                if (pElement is City city) SelectedMetas.selected_city = city;
+            };
+            pAsset.get = pIdValue => World.world?.cities?.get(pIdValue);
+            pAsset.window_action_clear = () => SelectedMetas.selected_city = null;
+            pAsset.window_history_action_update = delegate(ref WindowHistoryData pHistoryData)
+            {
+                pHistoryData.city = SelectedMetas.selected_city;
+            };
+            pAsset.window_history_action_restore = delegate(ref WindowHistoryData pHistoryData)
+            {
+                SelectedMetas.selected_city = pHistoryData.city;
+            };
+            pAsset.selected_tab_action_meta = _ =>
+            {
+                WorldTile tile = World.world?.getMouseTilePos();
+                if (!SchoolMapModeService.SelectCity(tile)) PowerTabController.showMainTab();
+            };
+            pAsset.check_unit_has_meta = pActor => pActor?.city?.data != null;
+            pAsset.set_unit_set_meta_for_meta_for_window = pActor => SelectedMetas.selected_city = pActor?.city;
         }
 
         private static MetaTypeAsset AddOrGet(string pId, MetaType pType, string pPowerId, MetaZoneGetMetaSimple pGetter)
