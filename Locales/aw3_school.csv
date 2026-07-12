@@ -1,0 +1,26 @@
+key,cz,en,ch
+aw_school_mapmode,百家学派地图,Hundred Schools Map,百家學派地圖
+aw_school_mapmode Description,按城市政治精英的学派影响显示百家分布,Show school influence from each city's political elite,按城市政治菁英的學派影響顯示百家分佈
+aw_school_mapmode_description,按城市政治精英的学派影响显示百家分布,Show school influence from each city's political elite,按城市政治菁英的學派影響顯示百家分佈
+aw_school_mapmode_tooltip,百家学派地图,Hundred Schools Map,百家學派地圖
+aw_school_window_title,百家学派,Hundred Schools,百家學派
+aw_school_map_no_influence,此城暂无学派影响,No school influence in this city,此城暫無學派影響
+aw_school_map_dominant,主导学派,Dominant School,主導學派
+aw_school_members_short,人物,People,人物
+aw_school_cities_short,城市,Cities,城市
+aw_school_compatible_offices,相宜官职,Compatible Offices,相宜官職
+aw_school_total_influence,总影响力,Total Influence,總影響力
+aw_school_dominant_cities,主导城市,Dominant Cities,主導城市
+aw_school_contributors,主要贡献者,Leading Contributors,主要貢獻者
+aw_school_city_missing,城市已不存在,City Missing,城市已不存在
+aw_school_sort_historical,历史顺序,Historical Order,歷史順序
+aw_school_sort_influence,影响力排序,Sort by Influence,影響力排序
+aw_school_sort_cities,城市数排序,Sort by Cities,城市數排序
+aw_school_directions,国家倾向,National Tendencies,國家傾向
+aw_school_direction_livelihood,民生,Livelihood,民生
+aw_school_direction_war,军事,War,軍事
+aw_school_direction_aggression,侵略,Aggression,侵略
+aw_school_direction_peace,求和,Peace,求和
+aw_school_direction_order,秩序,Order,秩序
+aw_school_direction_commerce,商业,Commerce,商業
+aw_school_direction_technology,技术,Technology,技術

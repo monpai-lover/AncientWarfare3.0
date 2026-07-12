@@ -30,6 +30,15 @@ namespace AncientWarfare3.patch
         private static bool TryShowMapModeTooltip(Tooltip pTooltip, City city, Kingdom kingdom)
         {
             string selected = GetSelectedMapModePower();
+            if (selected == SchoolMapModeService.POWER_ID ||
+                (selected == null && SchoolMapModeService.IsActive()))
+            {
+                if (city?.data == null) return false;
+                ShowCityMapModeTooltip(pTooltip, city, "aw_school_mapmode_tooltip",
+                    "Hundred Schools Map", SchoolMapModeService.BuildTooltip(city), "#D8C38A");
+                return true;
+            }
+
             if (selected == WarCoreMapModeService.POWER_ID ||
                 (selected == null && WarCoreMapModeService.IsActive()))
             {

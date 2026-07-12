@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.policy
         public const MetaType MandateDynasty = (MetaType)214;
         public const MetaType MandateCore = (MetaType)215;
         public const MetaType Development = (MetaType)216;
+        public const MetaType School = (MetaType)217;
 
         public const string TechId = "aw3_tech_map";
         public const string VassalId = "aw3_vassal_map";
@@ -17,6 +18,7 @@ namespace AncientWarfare3.core.policy
         public const string MandateDynastyId = "aw3_mandate_dynasty_map";
         public const string MandateCoreId = "aw3_mandate_core_map";
         public const string DevelopmentId = "aw3_development_map";
+        public const string SchoolId = "aw3_school_map";
 
         public static bool TryAsString(MetaType pType, out string pResult)
         {
@@ -43,6 +45,9 @@ namespace AncientWarfare3.core.policy
                 case Development:
                     pResult = DevelopmentId;
                     return true;
+                case School:
+                    pResult = SchoolId;
+                    return true;
                 default:
                     pResult = "";
                     return false;
@@ -60,6 +65,7 @@ namespace AncientWarfare3.core.policy
                 case MandateDynastyId:
                 case MandateCoreId:
                 case DevelopmentId:
+                case SchoolId:
                     return true;
                 default:
                     return false;

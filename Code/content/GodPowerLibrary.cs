@@ -1,6 +1,7 @@
 using System;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui.windows;
 
 namespace AncientWarfare3.content
 {
@@ -19,6 +20,7 @@ namespace AncientWarfare3.content
             RegisterWarMapModes();
             RegisterVassalMapMode();
             RegisterMandateMapModes();
+            RegisterSchoolMapMode();
             LinkMapModeAssets();
             AWMapModeMetaLibrary.Init();
             RegisterMapModeNameplates();
@@ -39,6 +41,54 @@ namespace AncientWarfare3.content
             xia.name = SPAWN_XIA;
             xia.actor_asset_id = XiaRace.ID;
             xia.path_icon = "ui/Icons/iconXias";
+        }
+
+        private static void RegisterSchoolMapMode()
+        {
+            RegisterMapModeOption(SchoolMapModeService.POWER_ID);
+            GodPower existing = AssetManager.powers.get(SchoolMapModeService.POWER_ID);
+            if (existing != null)
+            {
+                ConfigureMapModePower(existing, SchoolMapModeService.POWER_ID, OpenSchoolBrowser);
+                existing.click_special_action = new PowerActionWithID(SchoolMapClick);
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = SchoolMapModeService.POWER_ID,
+                name = SchoolMapModeService.POWER_ID,
+                path_icon = "ui/Icons/traits/iconRujia",
+                map_modes_switch = true,
+                multi_toggle = false,
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(SchoolMapModeService.POWER_ID),
+                force_map_mode = AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = BuildMapModeToggleAction(OpenSchoolBrowser),
+                click_special_action = new PowerActionWithID(SchoolMapClick)
+            });
+        }
+
+        private static void OpenSchoolBrowser()
+        {
+            string optionId = AWMapModeMetaRules.ResolveOptionId(SchoolMapModeService.POWER_ID);
+            if (!PlayerConfig.dict.TryGetValue(optionId, out PlayerOptionData data) || !data.boolVal)
+            {
+                SchoolMapModeService.DirtyMap();
+                return;
+            }
+            SchoolMapModeService.Prepare();
+            SchoolWindow.OpenSchool();
+        }
+
+        private static bool SchoolMapClick(WorldTile pTile, string pPowerId)
+        {
+            City city = pTile?.zone?.city;
+            if (city?.data == null) return false;
+            SchoolWindow.OpenCity(city.data.id);
+            return true;
         }
 
         private static void RegisterTechMapMode()

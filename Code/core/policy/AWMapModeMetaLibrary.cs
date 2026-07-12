@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.policy
         public static MetaTypeAsset MandateDynastyAsset { get; private set; }
         public static MetaTypeAsset MandateCoreAsset { get; private set; }
         public static MetaTypeAsset DevelopmentAsset { get; private set; }
+        public static MetaTypeAsset SchoolAsset { get; private set; }
 
         private static ZoneCalculator ZoneManager => World.world?.zone_calculator;
 
@@ -49,6 +50,8 @@ namespace AncientWarfare3.core.policy
                     return MandateCoreAsset;
                 case DevelopmentMapModeService.POWER_ID:
                     return DevelopmentAsset;
+                case SchoolMapModeService.POWER_ID:
+                    return SchoolAsset;
                 default:
                     return null;
             }
@@ -74,6 +77,9 @@ namespace AncientWarfare3.core.policy
                 MandateCoreMapModeService.POWER_ID, GetMandateCoreMetaForZone);
             DevelopmentAsset = AddOrGet(AWMapModeMetaTypes.DevelopmentId, AWMapModeMetaTypes.Development,
                 DevelopmentMapModeService.POWER_ID, GetDevelopmentMetaForZone);
+            SchoolAsset = AddOrGet(AWMapModeMetaTypes.SchoolId, AWMapModeMetaTypes.School,
+                SchoolMapModeService.POWER_ID, GetSchoolMetaForZone);
+            SchoolAsset.click_action_zone = SchoolMapModeService.InspectCity;
         }
 
         private static MetaTypeAsset AddOrGet(string pId, MetaType pType, string pPowerId, MetaZoneGetMetaSimple pGetter)
@@ -284,6 +290,15 @@ namespace AncientWarfare3.core.policy
             string colorKey = DevelopmentMapModeService.GetCityColorKey(city);
             return GetMeta(AWMapModeMetaTypes.Development, "city:" + city.id + ":" + colorKey,
                 city.data.name ?? "", DevelopmentMapModeService.GetColorAssetForKey(colorKey));
+        }
+
+        private static IMetaObject GetSchoolMetaForZone(TileZone pZone)
+        {
+            City city = GetCityForZone(pZone);
+            if (city?.data == null || city.kingdom?.data == null) return null;
+            string colorKey = SchoolMapModeService.GetCityColorHex(city);
+            return GetMeta(AWMapModeMetaTypes.School, "city:" + city.id + ":" + colorKey,
+                city.data.name ?? "", SchoolMapModeService.GetColorAsset(city));
         }
 
         private static AWMapModeMetaObject GetMeta(MetaType pType, string pKey, string pName, ColorAsset pColor)

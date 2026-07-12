@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
+using AncientWarfare3.ui.windows;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,6 +19,7 @@ namespace AncientWarfare3.ui.items
         private UiUnitAvatarElement _avatar;
         private GameObject _avatarHolder;
         private Image _schoolIcon;
+        private Button _schoolButton;
         private Text _name;
         private Text _roles;
         private Button _button;
@@ -65,6 +67,13 @@ namespace AncientWarfare3.ui.items
             _schoolIcon.sprite = schoolSprite;
             _schoolIcon.enabled = schoolSprite != null && !string.IsNullOrEmpty(pNode.SchoolId);
             _schoolIcon.preserveAspect = true;
+            _schoolButton.onClick.RemoveAllListeners();
+            _schoolButton.interactable = _schoolIcon.enabled;
+            if (_schoolIcon.enabled)
+            {
+                string schoolId = pNode.SchoolId;
+                _schoolButton.onClick.AddListener(() => SchoolWindow.OpenSchool(schoolId));
+            }
 
             _name.text = pNode.IsVacancy
                 ? OfficeName(pNode.OfficeId) + " - " + AW_L10n.Text("aw_court_no_officer", "Vacant")
@@ -109,7 +118,8 @@ namespace AncientWarfare3.ui.items
                 }
             }
 
-            var schoolSlot = new GameObject("SchoolIconSlot", typeof(RectTransform), typeof(Image));
+            var schoolSlot = new GameObject("SchoolIconSlot", typeof(RectTransform), typeof(Image),
+                typeof(Button));
             schoolSlot.transform.SetParent(transform, false);
             RectTransform schoolRect = schoolSlot.GetComponent<RectTransform>();
             schoolRect.anchorMin = new Vector2(1f, 1f);
@@ -119,7 +129,8 @@ namespace AncientWarfare3.ui.items
             schoolRect.sizeDelta = new Vector2(SlotSize, SlotSize);
             _schoolIcon = schoolSlot.GetComponent<Image>();
             _schoolIcon.preserveAspect = true;
-            _schoolIcon.raycastTarget = false;
+            _schoolIcon.raycastTarget = true;
+            _schoolButton = schoolSlot.GetComponent<Button>();
 
             _name = CreateText("Name", new Vector2(6f, -62f), new Vector2(Width - 12f, 16f),
                 10, TextAnchor.MiddleCenter);

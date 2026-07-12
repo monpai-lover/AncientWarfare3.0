@@ -91,6 +91,11 @@ namespace AncientWarfare3.patch
 
         private static bool TryGetActiveAwMapMode(bool pCheckOnlyOption, ref MetaType pResult)
         {
+            if (IsActive(AWMapModeMetaLibrary.SchoolAsset, pCheckOnlyOption))
+            {
+                pResult = AWMapModeMetaTypes.School;
+                return true;
+            }
             if (IsActive(AWMapModeMetaLibrary.MandateCoreAsset, pCheckOnlyOption))
             {
                 pResult = AWMapModeMetaTypes.MandateCore;

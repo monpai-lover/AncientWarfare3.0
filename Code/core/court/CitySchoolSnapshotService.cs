@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
 {
@@ -63,6 +64,7 @@ namespace AncientWarfare3.core.court
                 Rebuild(city);
                 rebuilt++;
             }
+            if (rebuilt > 0) SchoolMapModeService.DirtyMapIfActive();
             return rebuilt;
         }
 
