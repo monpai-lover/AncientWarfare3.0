@@ -112,6 +112,10 @@ and index reloads increment the version.
 - SQLite is not queried per portrait or per frame.
 - Missing portraits degrade to a text card rather than aborting the window.
 - Runtime annual school services keep bounded budgets and one guarded top-level call each.
+- Each dirty city-snapshot batch builds one shared resident index and performs one
+  parameterized multi-city ledger read. The resident index is batch-local and is never
+  reused across frames because ordinary member movement has no versioned invalidation
+  signal.
 - The audit will flag direct actor disposal, unbounded world scans, per-frame database
   access, incomplete SQL parameter sets, and cache invalidation that can turn a committed
   transaction into a reported failure.

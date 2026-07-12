@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.schools
         private const double LedgerPresenceDecay = 0.97d;
         private const double LedgerMomentumDecay = 0.85d;
         private const int TraditionDecayGraceYears = 3;
+        private const int LedgerCityQueryChunkSize = 128;
 
         public static long NextMembershipId()
         {
@@ -486,35 +487,82 @@ namespace AncientWarfare3.core.schools
         public static Dictionary<string, HistoricalSchoolLedgerSnapshot> LoadLedgersForCity(
             long pCityId)
         {
-            var result = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
-                StringComparer.Ordinal);
-            if (DB == null || pCityId < 0) return result;
+            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> batches =
+                LoadLedgersForCities(new[] { pCityId });
+            return batches.TryGetValue(pCityId,
+                out Dictionary<string, HistoricalSchoolLedgerSnapshot> result)
+                ? result
+                : new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
+                    StringComparer.Ordinal);
+        }
+
+        public static Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> LoadLedgersForCities(IReadOnlyList<long> pCityIds)
+        {
+            var result =
+                new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
+            if (pCityIds == null || pCityIds.Count == 0) return result;
+
+            var cityIds = new List<long>(pCityIds.Count);
+            var seen = new HashSet<long>();
+            foreach (long cityId in pCityIds)
+            {
+                if (cityId < 0 || !seen.Add(cityId)) continue;
+                cityIds.Add(cityId);
+                result[cityId] = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
+                    StringComparer.Ordinal);
+            }
+            if (DB == null || cityIds.Count == 0) return result;
+
+            for (int offset = 0; offset < cityIds.Count;
+                 offset += LedgerCityQueryChunkSize)
+            {
+                int count = Math.Min(LedgerCityQueryChunkSize, cityIds.Count - offset);
+                LoadLedgerChunk(cityIds, offset, count, result);
+            }
+            return result;
+        }
+
+        private static void LoadLedgerChunk(IReadOnlyList<long> pCityIds, int pOffset,
+            int pCount,
+            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult)
+        {
+            if (pCityIds == null || pResult == null || pCount <= 0) return;
             try
             {
                 using var command = new SQLiteCommand(DB);
-                command.CommandText = "SELECT SCHOOL_ID,TRADITION,MEMBERSHIP,INSTITUTIONS," +
+                var parameters = new List<string>(pCount);
+                for (int i = 0; i < pCount; i++)
+                {
+                    string parameterName = "@city" + i;
+                    parameters.Add(parameterName);
+                    command.Parameters.AddWithValue(parameterName, pCityIds[pOffset + i]);
+                }
+                command.CommandText = "SELECT CITY_ID,SCHOOL_ID,TRADITION,MEMBERSHIP,INSTITUTIONS," +
                                       "ACTIVE_PRESENCE,MOMENTUM,LAST_ACTIVE_YEAR FROM " + LedgerTable +
-                                      " WHERE CITY_ID=@city";
-                command.Parameters.AddWithValue("@city", pCityId);
+                                      " WHERE CITY_ID IN (" +
+                                      string.Join(",", parameters.ToArray()) + ")";
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    string school = ValueString(reader, 0);
-                    if (string.IsNullOrWhiteSpace(school)) continue;
-                    result[school] = new HistoricalSchoolLedgerSnapshot(school,
-                        (float)ClampLedger01(ValueDouble(reader, 1)),
-                        (float)ClampLedger01(ValueDouble(reader, 4)),
-                        (float)ClampLedger01(ValueDouble(reader, 5)), ValueInt(reader, 6, -1),
+                    long cityId = ValueLong(reader, 0, -1L);
+                    string school = ValueString(reader, 1);
+                    if (cityId < 0 || string.IsNullOrWhiteSpace(school) ||
+                        !pResult.TryGetValue(cityId,
+                            out Dictionary<string, HistoricalSchoolLedgerSnapshot> ledgers))
+                        continue;
+                    ledgers[school] = new HistoricalSchoolLedgerSnapshot(school,
                         (float)ClampLedger01(ValueDouble(reader, 2)),
-                        (float)ClampLedgerInstitutions(ValueDouble(reader, 3)));
+                        (float)ClampLedger01(ValueDouble(reader, 5)),
+                        (float)ClampLedger01(ValueDouble(reader, 6)), ValueInt(reader, 7, -1),
+                        (float)ClampLedger01(ValueDouble(reader, 3)),
+                        (float)ClampLedgerInstitutions(ValueDouble(reader, 4)));
                 }
             }
             catch (Exception error)
             {
-                ModClass.LogWarning("HistoricalSchoolStore load city ledgers failed: " +
+                ModClass.LogWarning("HistoricalSchoolStore load city ledger batch failed: " +
                                     error.Message);
             }
-            return result;
         }
 
         public static int ApplyLedgerDecay(int pYear, double pWorldTime,
