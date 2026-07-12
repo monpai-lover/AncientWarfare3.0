@@ -43,14 +43,24 @@ namespace AncientWarfare3.patch
         private static void Dispose_Prefix(Actor __instance)
         {
             if (!PathfindingOwnershipService.ShouldIntercept || __instance?.data == null) return;
-            AWPathfindingBootstrap.Finder?.Cancel(__instance.data.id,
-                AWPathFailureReason.CancelledByNewRequest);
+            AWPathMovementBridge.Cancel(__instance, AWPathFailureReason.CancelledByNewRequest);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), "updateMovement", new[] { typeof(float), typeof(float) })]
+        private static bool UpdateMovement_Prefix(Actor __instance, float pElapsed,
+            float pWalkedDistance = 0f)
+        {
+            if (!PathfindingOwnershipService.ShouldIntercept) return true;
+            AWPathMovementBridge.UpdateSmoothMovement(__instance, pElapsed, pWalkedDistance);
+            return false;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
         private static void ClearWorld_Postfix()
         {
+            AWPathMovementBridge.Clear();
             AWPathfindingBootstrap.ClearWorld();
         }
     }
