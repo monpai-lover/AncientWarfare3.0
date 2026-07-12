@@ -258,7 +258,7 @@ namespace AncientWarfare3.ui.windows
                 Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
                 bool switched = _displayedKingdomId != _kingdomId;
                 _displayedKingdomId = _kingdomId;
-                if (switched || _resetCanvasOnRefresh) ResetCanvas();
+                if (CourtPyramidRules.ShouldResetCanvas(switched, _resetCanvasOnRefresh)) ResetCanvas();
                 _resetCanvasOnRefresh = false;
                 CancelPendingRender();
                 HideNodesAndLinks();

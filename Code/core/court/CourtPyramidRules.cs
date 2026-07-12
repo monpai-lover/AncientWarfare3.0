@@ -114,6 +114,11 @@ namespace AncientWarfare3.core.court
             return hasValidHeir && pTier == CourtTier.Primitive;
         }
 
+        public static bool ShouldResetCanvas(bool switchedKingdom, bool openingWindow)
+        {
+            return switchedKingdom || openingWindow;
+        }
+
         public static List<CourtPyramidNodeModel> BuildLayout(
             IEnumerable<CourtPyramidNodeModel> pSeeds, float horizontalSpacing, float verticalSpacing)
         {
