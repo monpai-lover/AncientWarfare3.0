@@ -355,19 +355,24 @@ namespace AncientWarfare3.core.schools
             string pActionId, int pYear = -1)
         {
             return TryRediscover(pReader, pSchoolId, pWorkKey, pActionId, pYear,
-                HistoricalSchoolAnnualMemberSnapshotBuilder.Build());
+                null, pUseTargetedLivingCount: true);
         }
 
         private static bool TryRediscover(Actor pReader, string pSchoolId, string pWorkKey,
             string pActionId, int pYear,
-            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
+            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers,
+            bool pUseTargetedLivingCount = false)
         {
             if (pReader?.data == null || !pReader.isAlive() || pReader.isRekt() ||
                 HistoricalSchoolDescentService.IsCanonicalMaster(pReader) ||
                 string.IsNullOrWhiteSpace(pWorkKey) || string.IsNullOrWhiteSpace(pActionId) ||
                 SchoolMembershipService.GetActive(pReader.data.id) != null ||
                 !HistoricalAffiliationService.IsPresentForInfluence(pReader)) return false;
-            int livingMembers = pMembers?.LivingCount(pSchoolId) ?? 0;
+            int livingMembers = pMembers != null
+                ? pMembers.LivingCount(pSchoolId)
+                : (pUseTargetedLivingCount
+                    ? SchoolMembershipService.LivingCount(pSchoolId)
+                    : 0);
             if (!HistoricalSchoolRules.CanRediscover(livingMembers,
                     HistoricalSchoolStore.HasPreservedWork(pWorkKey, pSchoolId), true)) return false;
             City city = HistoricalAffiliationService.ResidenceCity(pReader) ?? pReader.city;
@@ -392,8 +397,8 @@ namespace AncientWarfare3.core.schools
             }
             SchoolMembershipRecord joined =
                 SchoolMembershipService.GetActive(pReader.data.id);
-            if (joined == null || pMembers == null ||
-                !pMembers.ApplyMembershipChange(null, joined, pReader))
+            if (pMembers != null && (joined == null ||
+                !pMembers.ApplyMembershipChange(null, joined, pReader)))
                 ModClass.LogWarning("Annual school member snapshot missed rediscovery");
             CitySchoolSnapshotService.MarkDirty(city);
             HistoryWriter.RecordPerson(pReader.data.id,

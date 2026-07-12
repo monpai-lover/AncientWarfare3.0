@@ -295,6 +295,17 @@ namespace AncientWarfare3.core.schools
             return result.ToArray();
         }
 
+        public static int LivingCount(string pSchoolId)
+        {
+            int count = 0;
+            foreach (long actorId in Memberships.Members(pSchoolId))
+            {
+                Actor actor = World.world?.units?.get(actorId);
+                if (actor?.data != null && actor.isAlive() && !actor.isRekt()) count++;
+            }
+            return count;
+        }
+
         public static int Count(string pSchoolId)
         {
             return Memberships.Members(pSchoolId).Count;
