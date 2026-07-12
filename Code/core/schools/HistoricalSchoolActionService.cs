@@ -98,8 +98,9 @@ namespace AncientWarfare3.core.schools
             int rediscoveries = 0;
             foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
             {
-                if (rediscoveries >= MaxRediscoveriesPerYear ||
-                    pMembers.LivingCount(school.Id) > 0) continue;
+                if (rediscoveries >= MaxRediscoveriesPerYear) continue;
+                if (!pMembers.TryGetLivingCount(school.Id, out int livingMembers) ||
+                    livingMembers > 0) continue;
                 IEnumerable<string> works = HistoricalSchoolMasterRegistry.All.Where(
                         p => p.SchoolId == school.Id)
                     .SelectMany(p => p.CanonicalWorks)
@@ -119,8 +120,9 @@ namespace AncientWarfare3.core.schools
                         rediscoveries++;
                         break;
                     }
-                    if (rediscoveries >= MaxRediscoveriesPerYear ||
-                        pMembers.LivingCount(school.Id) > 0) break;
+                    if (rediscoveries >= MaxRediscoveriesPerYear) break;
+                    if (!pMembers.TryGetLivingCount(school.Id,
+                            out int currentLivingMembers) || currentLivingMembers > 0) break;
                 }
             }
         }
@@ -368,11 +370,15 @@ namespace AncientWarfare3.core.schools
                 string.IsNullOrWhiteSpace(pWorkKey) || string.IsNullOrWhiteSpace(pActionId) ||
                 SchoolMembershipService.GetActive(pReader.data.id) != null ||
                 !HistoricalAffiliationService.IsPresentForInfluence(pReader)) return false;
-            int livingMembers = pMembers != null
-                ? pMembers.LivingCount(pSchoolId)
-                : (pUseTargetedLivingCount
+            int livingMembers;
+            if (pMembers != null)
+            {
+                if (!pMembers.TryGetLivingCount(pSchoolId, out livingMembers)) return false;
+            }
+            else
+                livingMembers = pUseTargetedLivingCount
                     ? SchoolMembershipService.LivingCount(pSchoolId)
-                    : 0);
+                    : 0;
             if (!HistoricalSchoolRules.CanRediscover(livingMembers,
                     HistoricalSchoolStore.HasPreservedWork(pWorkKey, pSchoolId), true)) return false;
             City city = HistoricalAffiliationService.ResidenceCity(pReader) ?? pReader.city;

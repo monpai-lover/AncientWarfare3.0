@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.schools
             new Dictionary<long, SchoolMembershipRecord>();
         private readonly Dictionary<long, int> _directDiscipleCounts =
             new Dictionary<long, int>();
+        private readonly HashSet<string> _unreliableLivingCountSchools =
+            new HashSet<string>(StringComparer.Ordinal);
         private readonly Func<TActor, long> _actorId;
         private readonly Func<TActor, bool> _alive;
         private readonly Func<TActor, bool> _canonical;
@@ -41,8 +43,19 @@ namespace AncientWarfare3.core.schools
                 if (!ValidActive(record) || _activeByActor.ContainsKey(record.ActorId)) continue;
                 _activeByActor[record.ActorId] = record;
                 AdjustDirectDiscipleCount(record, 1);
-                TActor actor = SafeResolve(pResolveActor, record.ActorId);
-                if (IsLivingActor(actor, record.ActorId)) AddLiving(record, actor);
+                TActor actor;
+                try { actor = pResolveActor(record.ActorId); }
+                catch
+                {
+                    MarkLivingCountUnreliable(record.SchoolId);
+                    continue;
+                }
+                if (!TryIsLivingActor(actor, record.ActorId, out bool living))
+                {
+                    MarkLivingCountUnreliable(record.SchoolId);
+                    continue;
+                }
+                if (living) AddLiving(record, actor);
             }
         }
 
@@ -81,6 +94,20 @@ namespace AncientWarfare3.core.schools
         {
             return pSchoolId != null && _livingBySchool.TryGetValue(pSchoolId,
                 out SortedDictionary<long, TActor> members) ? members.Count : 0;
+        }
+
+        public bool HasReliableLivingCount(string pSchoolId)
+        {
+            return CourtSchoolRegistry.Find(pSchoolId) != null &&
+                   !_unreliableLivingCountSchools.Contains(pSchoolId);
+        }
+
+        public bool TryGetLivingCount(string pSchoolId, out int pCount)
+        {
+            pCount = 0;
+            if (!HasReliableLivingCount(pSchoolId)) return false;
+            pCount = LivingCount(pSchoolId);
+            return true;
         }
 
         public IReadOnlyList<TActor> QualifiedTeachers(int pYear, int pCapacity)
@@ -159,7 +186,10 @@ namespace AncientWarfare3.core.schools
 
             _activeByActor[actorId] = pCurrent;
             AdjustDirectDiscipleCount(pCurrent, 1);
-            if (IsLivingActor(pActor, actorId)) AddLiving(pCurrent, pActor);
+            if (!TryIsLivingActor(pActor, actorId, out bool living))
+                MarkLivingCountUnreliable(pCurrent.SchoolId);
+            else if (living)
+                AddLiving(pCurrent, pActor);
             return true;
         }
 
@@ -195,11 +225,24 @@ namespace AncientWarfare3.core.schools
             else _directDiscipleCounts.Remove(pRecord.TeacherActorId);
         }
 
-        private bool IsLivingActor(TActor pActor, long pExpectedActorId)
+        private bool TryIsLivingActor(TActor pActor, long pExpectedActorId,
+            out bool pLiving)
         {
-            if (pActor == null) return false;
-            try { return _actorId(pActor) == pExpectedActorId && _alive(pActor); }
+            pLiving = false;
+            if (pActor == null) return true;
+            try
+            {
+                if (_actorId(pActor) != pExpectedActorId) return false;
+                pLiving = _alive(pActor);
+                return true;
+            }
             catch { return false; }
+        }
+
+        private void MarkLivingCountUnreliable(string pSchoolId)
+        {
+            if (CourtSchoolRegistry.Find(pSchoolId) != null)
+                _unreliableLivingCountSchools.Add(pSchoolId);
         }
 
         private bool SafeCanonical(TActor pActor)
@@ -218,12 +261,6 @@ namespace AncientWarfare3.core.schools
         {
             try { return pActor == null ? -1L : _residenceCityId(pActor); }
             catch { return -1L; }
-        }
-
-        private static TActor SafeResolve(Func<long, TActor> pResolveActor, long pActorId)
-        {
-            try { return pResolveActor(pActorId); }
-            catch { return null; }
         }
 
         private static bool IsQualified(SchoolMembershipRecord pRecord, bool pCanonical)

@@ -16,8 +16,7 @@ namespace AncientWarfare3.core.schools
         private static Actor FindActor(long pActorId)
         {
             if (pActorId < 0) return null;
-            try { return World.world?.units?.get(pActorId); }
-            catch { return null; }
+            return World.world?.units?.get(pActorId);
         }
 
         private static long ResidenceCityId(Actor pActor)
