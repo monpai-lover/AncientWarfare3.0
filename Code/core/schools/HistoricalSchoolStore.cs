@@ -487,8 +487,12 @@ namespace AncientWarfare3.core.schools
         public static Dictionary<string, HistoricalSchoolLedgerSnapshot> LoadLedgersForCity(
             long pCityId)
         {
-            TryLoadLedgersForCities(new[] { pCityId },
-                out Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> batches);
+            if (!TryLoadLedgersForCities(new[] { pCityId },
+                    out Dictionary<long,
+                        Dictionary<string, HistoricalSchoolLedgerSnapshot>> batches,
+                    out string failure))
+                ModClass.LogWarning("HistoricalSchoolStore load city ledgers failed for city " +
+                                    pCityId + ": " + failure);
             return batches.TryGetValue(pCityId,
                 out Dictionary<string, HistoricalSchoolLedgerSnapshot> result)
                 ? result
@@ -497,11 +501,17 @@ namespace AncientWarfare3.core.schools
         }
 
         public static bool TryLoadLedgersForCities(IReadOnlyList<long> pCityIds,
-            out Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult)
+            out Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult,
+            out string pFailure)
         {
             pResult =
                 new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
-            if (DB == null) return false;
+            pFailure = "";
+            if (DB == null)
+            {
+                pFailure = "database unavailable";
+                return false;
+            }
             if (pCityIds == null || pCityIds.Count == 0) return true;
 
             var cityIds = new List<long>(pCityIds.Count);
@@ -523,7 +533,12 @@ namespace AncientWarfare3.core.schools
                  offset += LedgerCityQueryChunkSize)
             {
                 int count = Math.Min(LedgerCityQueryChunkSize, cityIds.Count - offset);
-                if (!TryLoadLedgerChunk(cityIds, offset, count, loaded)) return false;
+                if (!TryLoadLedgerChunk(cityIds, offset, count, loaded,
+                        out string chunkFailure))
+                {
+                    pFailure = chunkFailure;
+                    return false;
+                }
             }
             pResult = loaded;
             return true;
@@ -531,9 +546,15 @@ namespace AncientWarfare3.core.schools
 
         private static bool TryLoadLedgerChunk(IReadOnlyList<long> pCityIds, int pOffset,
             int pCount,
-            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult)
+            Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>> pResult,
+            out string pFailure)
         {
-            if (pCityIds == null || pResult == null || pCount <= 0) return false;
+            pFailure = "";
+            if (pCityIds == null || pResult == null || pCount <= 0)
+            {
+                pFailure = "invalid ledger batch chunk at offset " + pOffset;
+                return false;
+            }
             try
             {
                 using var command = new SQLiteCommand(DB);
@@ -568,8 +589,8 @@ namespace AncientWarfare3.core.schools
             }
             catch (Exception error)
             {
-                ModClass.LogWarning("HistoricalSchoolStore ledger batch chunk failed at offset " +
-                                    pOffset + ": " + error.Message);
+                pFailure = "ledger batch chunk failed at offset " + pOffset + ": " +
+                           error.GetType().Name + ": " + error.Message;
                 return false;
             }
         }

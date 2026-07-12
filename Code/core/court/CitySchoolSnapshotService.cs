@@ -16,6 +16,8 @@ namespace AncientWarfare3.core.court
         private static readonly CitySchoolDirtyQueue Dirty = new CitySchoolDirtyQueue();
         private static readonly CitySchoolRetryScheduler Retry =
             new CitySchoolRetryScheduler();
+        private static readonly CitySchoolRetryGate ContextGate =
+            new CitySchoolRetryGate();
         private static int _generation;
 
         private sealed class CitySchoolSnapshotBatchContext
@@ -97,6 +99,7 @@ namespace AncientWarfare3.core.court
         {
             foreach (long retryCityId in Retry.AdvanceAndTakeDue())
                 Dirty.Mark(retryCityId);
+            if (!ContextGate.AdvanceAndCanAttempt()) return 0;
             long[] cityIds = Dirty.TakeBatch(pBudget).ToArray();
             if (cityIds.Length == 0) return 0;
 
@@ -118,12 +121,15 @@ namespace AncientWarfare3.core.court
             if (!TryBuildBatchContext(validCities, out CitySchoolSnapshotBatchContext context,
                     out string contextFailure))
             {
-                string retryDetails = ScheduleFailures(validCityIds);
+                int requeued = Dirty.RequeueFront(validCityIds);
+                int contextRetryDelay = ContextGate.RecordFailure();
                 ModClass.LogWarning("City school snapshot batch context failed for cities [" +
-                                    string.Join(",", validCityIds) + "]; scheduled retries [" +
-                                    retryDetails + "]: " + contextFailure);
+                                    string.Join(",", validCityIds) + "]; requeued " + requeued +
+                                    "; retry in " + contextRetryDelay + " ticks: " +
+                                    contextFailure);
                 return 0;
             }
+            ContextGate.RecordSuccess();
 
             int rebuilt = 0;
             foreach (City city in validCities)
@@ -177,19 +183,8 @@ namespace AncientWarfare3.core.court
             Snapshots.Clear();
             Dirty.Clear();
             Retry.Clear();
+            ContextGate.Clear();
             _generation = 0;
-        }
-
-        private static string ScheduleFailures(IReadOnlyList<long> pCityIds)
-        {
-            var details = new List<string>(pCityIds?.Count ?? 0);
-            if (pCityIds == null) return "";
-            foreach (long cityId in pCityIds)
-            {
-                int delay = Retry.ScheduleFailure(cityId);
-                if (delay > 0) details.Add(cityId + ":" + delay + "t");
-            }
-            return string.Join(",", details.ToArray());
         }
 
         private static bool TryBuildBatchContext(IReadOnlyList<City> pCities,
@@ -203,11 +198,8 @@ namespace AncientWarfare3.core.court
                 for (int i = 0; i < pCities.Count; i++) cityIds[i] = pCities[i].data.id;
                 if (!HistoricalSchoolStore.TryLoadLedgersForCities(cityIds,
                         out Dictionary<long,
-                            Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers))
-                {
-                    pFailure = "ledger batch unavailable";
-                    return false;
-                }
+                            Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers,
+                        out pFailure)) return false;
                 CitySchoolResidentIndex residents = BuildResidentIndex(
                     new HashSet<long>(cityIds));
                 pContext = new CitySchoolSnapshotBatchContext(residents, ledgers);
