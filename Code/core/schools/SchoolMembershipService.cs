@@ -69,6 +69,7 @@ namespace AncientWarfare3.core.schools
             {
                 ModClass.LogWarning("Committed historical descent projection failed: " +
                                     error.Message);
+                return false;
             }
             return true;
         }
