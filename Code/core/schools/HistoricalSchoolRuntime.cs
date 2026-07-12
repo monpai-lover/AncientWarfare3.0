@@ -28,7 +28,6 @@ namespace AncientWarfare3.core.schools
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.LoadState();
-            _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
             _loaded = true;
         }
@@ -61,13 +60,15 @@ namespace AncientWarfare3.core.schools
 
         public static void OnWorldYear()
         {
-            if (!_loaded) LoadState();
             int worldYear = Date.getCurrentYear();
-            if (worldYear == _lastWorldYear || worldYear == _attemptedWorldYear) return;
+            if (worldYear == _attemptedWorldYear) return;
             _attemptedWorldYear = worldYear;
 
             try
             {
+                if (!_loaded) LoadState();
+                if (worldYear == _lastWorldYear) return;
+
                 List<City> cities = LivingXiaCities();
                 int nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
                     cities.Count > 0);
