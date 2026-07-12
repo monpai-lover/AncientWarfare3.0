@@ -77,6 +77,7 @@ namespace AncientWarfare3.patch
             try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
+            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
         }
     }
 }

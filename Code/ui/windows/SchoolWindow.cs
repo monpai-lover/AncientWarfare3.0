@@ -86,7 +86,7 @@ namespace AncientWarfare3.ui.windows
             ApplyRequestAndRefresh();
         }
 
-        private void OnDisable()
+        public override void OnNormalDisable()
         {
             SchoolMapModeService.EndWindowMode();
         }

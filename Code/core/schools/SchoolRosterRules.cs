@@ -79,6 +79,7 @@ namespace AncientWarfare3.core.schools
         public int StartYear => Candidate.StartYear;
         public SchoolRosterStanding Standing { get; }
         public int StableOrder { get; }
+        public int LineageDepth { get; internal set; }
         public int Row { get; internal set; }
         public int Column { get; internal set; }
         public float X { get; internal set; }
@@ -197,25 +198,53 @@ namespace AncientWarfare3.core.schools
             float horizontal = Math.Max(1f, pHorizontalSpacing);
             float vertical = Math.Max(1f, pVerticalSpacing);
             int columns = Math.Max(1, pColumnsPerRow);
+            var byActor = pNodes.ToDictionary(p => p.ActorId);
+            var depthByActor = new Dictionary<long, int>();
             int rowIndex = 0;
             foreach (IGrouping<SchoolRosterStanding, SchoolRosterNode> tier in pNodes
                          .GroupBy(p => p.Standing).OrderBy(p => p.Key))
             {
-                SchoolRosterNode[] items = tier.ToArray();
-                for (int start = 0; start < items.Length; start += columns)
+                SchoolRosterNode[] tierItems = tier.ToArray();
+                foreach (SchoolRosterNode node in tierItems)
+                    node.LineageDepth = ResolveLineageDepth(node, byActor, depthByActor,
+                        new HashSet<long>());
+                foreach (IGrouping<int, SchoolRosterNode> depth in tierItems
+                             .GroupBy(p => p.LineageDepth).OrderBy(p => p.Key))
                 {
-                    SchoolRosterNode[] row = items.Skip(start).Take(columns).ToArray();
-                    float startX = -(row.Length - 1) * horizontal * 0.5f;
-                    for (int column = 0; column < row.Length; column++)
+                    SchoolRosterNode[] items = depth.ToArray();
+                    for (int start = 0; start < items.Length; start += columns)
                     {
-                        row[column].Row = rowIndex;
-                        row[column].Column = column;
-                        row[column].X = startX + column * horizontal;
-                        row[column].Y = -rowIndex * vertical;
+                        SchoolRosterNode[] row = items.Skip(start).Take(columns).ToArray();
+                        float startX = -(row.Length - 1) * horizontal * 0.5f;
+                        for (int column = 0; column < row.Length; column++)
+                        {
+                            row[column].Row = rowIndex;
+                            row[column].Column = column;
+                            row[column].X = startX + column * horizontal;
+                            row[column].Y = -rowIndex * vertical;
+                        }
+                        rowIndex++;
                     }
-                    rowIndex++;
                 }
             }
+        }
+
+        private static int ResolveLineageDepth(SchoolRosterNode pNode,
+            IReadOnlyDictionary<long, SchoolRosterNode> pByActor,
+            IDictionary<long, int> pDepthByActor, ISet<long> pVisiting)
+        {
+            if (pNode == null) return 0;
+            if (pDepthByActor.TryGetValue(pNode.ActorId, out int cached)) return cached;
+            if (!pVisiting.Add(pNode.ActorId)) return 0;
+            int depth = 0;
+            if (HasTeacherSource(pNode.Candidate.Source) && pNode.TeacherActorId >= 0 &&
+                pByActor.TryGetValue(pNode.TeacherActorId, out SchoolRosterNode teacher) &&
+                teacher.ActorId != pNode.ActorId && teacher.Standing <= pNode.Standing)
+                depth = Math.Min(100, ResolveLineageDepth(teacher, pByActor, pDepthByActor,
+                    pVisiting) + 1);
+            pVisiting.Remove(pNode.ActorId);
+            pDepthByActor[pNode.ActorId] = depth;
+            return depth;
         }
     }
 }

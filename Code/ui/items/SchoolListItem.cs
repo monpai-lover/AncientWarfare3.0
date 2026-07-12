@@ -35,6 +35,33 @@ namespace AncientWarfare3.ui.items
             float pInfluence, bool pSelected, Action<string> pOnClick)
         {
             if (pDefinition == null) return;
+            BindDefinition(pDefinition, pSelected, pOnClick);
+            _metrics.text = AW_L10n.Text("aw_school_members_short", "People") + " " + pMembers +
+                            "  " + AW_L10n.Text("aw_school_cities_short", "Cities") + " " + pCities +
+                            "  " + Mathf.RoundToInt(pInfluence);
+        }
+
+        public void BindRoster(CourtSchoolDefinition pDefinition, int pMembers,
+            bool pSelected, Action<string> pOnClick)
+        {
+            if (pDefinition == null) return;
+            BindDefinition(pDefinition, pSelected, pOnClick);
+            _metrics.text = AW_L10n.Text("aw_school_roster_members", "Members") + " " +
+                            Math.Max(0, pMembers);
+        }
+
+        public void SetAvailableWidth(float pWidth)
+        {
+            float textWidth = Mathf.Max(1f, pWidth - 48f);
+            RectTransform nameRect = _name?.GetComponent<RectTransform>();
+            RectTransform metricsRect = _metrics?.GetComponent<RectTransform>();
+            if (nameRect != null) nameRect.sizeDelta = new Vector2(textWidth, 15f);
+            if (metricsRect != null) metricsRect.sizeDelta = new Vector2(textWidth, 13f);
+        }
+
+        private void BindDefinition(CourtSchoolDefinition pDefinition, bool pSelected,
+            Action<string> pOnClick)
+        {
             _background.color = pSelected
                 ? new Color(.30f, .25f, .16f, .98f)
                 : new Color(.09f, .08f, .065f, .94f);
@@ -42,9 +69,6 @@ namespace AncientWarfare3.ui.items
             _icon.sprite = SpriteTextureLoader.getSprite(pDefinition.IconPath);
             _icon.enabled = _icon.sprite != null;
             _name.text = AW_L10n.Text(pDefinition.NameKey, pDefinition.Id);
-            _metrics.text = AW_L10n.Text("aw_school_members_short", "People") + " " + pMembers +
-                            "  " + AW_L10n.Text("aw_school_cities_short", "Cities") + " " + pCities +
-                            "  " + Mathf.RoundToInt(pInfluence);
             _button.onClick.RemoveAllListeners();
             _button.onClick.AddListener(() => pOnClick?.Invoke(pDefinition.Id));
         }
