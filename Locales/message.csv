@@ -11,3 +11,7 @@ vassalWarStartMessage,$first$ 在$kingdom2$开始了附庸战争,The Vassal War 
 vassalWarEndMessage,$first$ 在$kingdom2$结束了附庸战争,The Vassal War has ended in $kingdom2$，the victor is $first$,$first$ 在$kingdom2$结束了附庸战争
 IndependenceWarMessage,$kingdom$ 宣布独立于 $kingdom2$!,$kingdom$ declares independence from $kingdom2$!,$kingdom$ 宣布独立于 $kingdom2$!
 KingIntegrationMessage,$kingdom$ 的 $king$ 继承了 $kingdom2$的爵位!,$king$ the ruler of $kingdom$ has inherited $kingdom2$!,$kingdom$ 的 $king$ 继承了 $kingdom2$的爵位!
+aw_school_master_descended,先师$master$降临$city$,Master $master$ has descended in $city$,先師$master$降臨$city$
+aw_school_master_died,先师$master$在$city$逝世,Master $master$ has died in $city$,先師$master$在$city$逝世
+aw_school_lecture,$master$在$city$开坛讲学,$master$ has lectured in $city$,$master$在$city$開壇講學
+aw_school_debate_result,$master$在$city$完成一场百家论辩,$master$ has concluded a debate in $city$,$master$在$city$完成一場百家論辯

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using Random = UnityEngine.Random;
 
@@ -557,6 +558,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>成为国王/城主/成名者时赋予或刷新贵族身份。由晋升 Hook 调用。</summary>
         public static void OnActorPromoted(Actor pActor, NobleTrigger pTrigger, string pOfficeId = null)
         {
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return;
             if (!CanUseXiaizedLineageGovernment(pActor)) return;
             if (SlaveService.IsSlave(pActor))
                 SlaveService.FreeSlave(pActor, "promoted");
@@ -615,6 +617,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void EnsureOfficialShiAndClan(Actor pActor, string pOfficeId)
         {
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return;
             if (pActor?.data == null || pActor.isRekt() || !CanUseXiaizedLineageGovernment(pActor)) return;
             OnActorPromoted(pActor, NobleTrigger.Official, pOfficeId);
 
@@ -1452,6 +1455,13 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void ApplyDisplayName(Actor pActor)
         {
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor))
+            {
+                var definition = HistoricalSchoolDescentService.DefinitionFor(pActor);
+                if (definition != null && pActor.data.name != definition.CanonicalName)
+                    pActor.setName(definition.CanonicalName);
+                return;
+            }
             if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&
                 !XiaizationService.IsForeignPseudoDynasty(pActor?.kingdom)) return;
 

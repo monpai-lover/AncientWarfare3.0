@@ -204,3 +204,10 @@ aw_war_take_mandate,夺取天命,Seize Mandate,奪取天命
 aw_war_take_mandate_desc,对当前天命国发动天命战争，胜利后转移天命,Start a Mandate war against the current Mandate realm and transfer the Mandate on victory,對當前天命國發動天命戰爭，勝利後轉移天命
 status_title_aw_royal_medical_care,太医照护,Imperial Medical Care,太醫照護
 status_description_aw_royal_medical_care,由在任太医为当前君主或世子提供的临时调养,Temporary care provided to the current ruler or heir by the serving Imperial Physician,由在任太醫為當前君主或世子提供的臨時調養
+status_title_aw_school_guest,客卿礼遇,Guest Scholar Protection,客卿禮遇
+status_description_aw_school_guest,在居住国讲学或任职期间受到的有限礼遇,Limited host protection while teaching or serving abroad,在居住國講學或任職期間受到的有限禮遇
+status_title_aw_school_debate,百家论辩,Hundred Schools Debate,百家論辯
+status_description_aw_school_debate,正在与其他学派进行公开论辩,Participating in a formal public debate with another school,正在與其他學派進行公開論辯
+status_title_aw_school_voyage,远洋访学,Scholarly Sea Voyage,遠洋訪學
+status_description_aw_school_voyage,因长期无船而进行有时限的远洋访学,A bounded scholarly voyage used only after prolonged transport failure,因長期無船而進行有時限的遠洋訪學
+aw_historical_school_scholar,游学先师,Itinerant Master,遊學先師

@@ -46,6 +46,7 @@ namespace AncientWarfare3.patch
             core.lineage.KingdomArchiveWriter.BackfillAll();
             ResetHistoryWindowsAfterArchiveSwitch();
             SchoolMembershipService.LoadIndexes();
+            HistoricalSchoolRuntime.LoadState();
             core.lineage.AWArmyService.RepairSpecialArmiesAfterLoad();
             core.lineage.WarPlotRedirectService.SweepExistingPlots();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
@@ -62,6 +63,7 @@ namespace AncientWarfare3.patch
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
             ResetHistoryWindowsAfterArchiveSwitch();
             SchoolMembershipService.LoadIndexes();
+            HistoricalSchoolRuntime.LoadState();
         }
 
         private static void ResetHistoryWindowsAfterArchiveSwitch()
@@ -72,6 +74,7 @@ namespace AncientWarfare3.patch
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
             try { SchoolMembershipService.ClearRuntime(); } catch { }
+            try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.utils;
@@ -11,6 +12,9 @@ namespace AncientWarfare3.core.schools
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static string MembershipTable => SchoolMembershipTableItem.GetTableName();
+        private static string MasterTable => HistoricalSchoolMasterTableItem.GetTableName();
+        private static string AffiliationTable => SchoolAffiliationTableItem.GetTableName();
+        private static string RuntimeTable => HistoricalSchoolRuntimeStateTableItem.GetTableName();
 
         public static long NextMembershipId()
         {
@@ -119,6 +123,227 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        public static bool DeleteMembership(SchoolMembershipRecord pCurrent)
+        {
+            if (DB == null || pCurrent == null) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "DELETE FROM " + MembershipTable +
+                                      " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor";
+                command.Parameters.AddWithValue("@id", pCurrent.MembershipId);
+                command.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore delete membership failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static List<HistoricalSchoolMasterStoreRecord> LoadMasterStates()
+        {
+            var result = new List<HistoricalSchoolMasterStoreRecord>();
+            if (DB == null) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SPAWNED,DEAD," +
+                    "HOME_KINGDOM_ID,HOMETOWN_CITY_ID,SPAWN_YEAR FROM " + MasterTable +
+                    " WHERE SPAWNED=1";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                    result.Add(new HistoricalSchoolMasterStoreRecord(ValueString(reader, 0),
+                        ValueLong(reader, 1, -1), ValueInt(reader, 2) != 0,
+                        ValueInt(reader, 3) != 0, ValueLong(reader, 4, -1),
+                        ValueLong(reader, 5, -1), ValueInt(reader, 6, -1)));
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load masters failed: " + error.Message);
+            }
+            return result;
+        }
+
+        public static void LoadRuntimeState(out int pEligibleYear, out int pLastWorldYear)
+        {
+            pEligibleYear = 0;
+            pLastWorldYear = -1;
+            if (DB == null) return;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT ELIGIBLE_YEAR,LAST_WORLD_YEAR FROM " +
+                                      RuntimeTable + " WHERE STATE_ID=1";
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return;
+                pEligibleYear = Math.Max(0, ValueInt(reader, 0));
+                pLastWorldYear = ValueInt(reader, 1, -1);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load runtime failed: " + error.Message);
+            }
+        }
+
+        public static void SaveRuntimeState(int pEligibleYear, int pLastWorldYear, double pTime)
+        {
+            if (DB == null) return;
+            if (DB.CheckKeyExist(RuntimeTable,
+                    SimpleColumnConstraint.CreateEq("STATE_ID", 1L)))
+            {
+                DB.UpdateValue(RuntimeTable,
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("STATE_ID", 1L)
+                    },
+                    ColumnVal.Create("ELIGIBLE_YEAR", Math.Max(0, pEligibleYear)),
+                    ColumnVal.Create("LAST_WORLD_YEAR", pLastWorldYear),
+                    ColumnVal.Create("UPDATED_TIME", pTime));
+                return;
+            }
+            DB.Insert(RuntimeTable, ColumnVal.Create("STATE_ID", 1L),
+                ColumnVal.Create("ELIGIBLE_YEAR", Math.Max(0, pEligibleYear)),
+                ColumnVal.Create("LAST_WORLD_YEAR", pLastWorldYear),
+                ColumnVal.Create("UPDATED_TIME", pTime));
+        }
+
+        public static bool TryRecordDescent(HistoricalSchoolMasterDefinition pMaster,
+            long pActorId, long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
+            int pYear, double pTime)
+        {
+            if (DB == null || pMaster == null || pActorId < 0 || pHomeKingdomId < 0 ||
+                pHometownCityId < 0) return false;
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            try
+            {
+                using (var master = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    master.CommandText = "INSERT INTO " + MasterTable +
+                        " (MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED,DEAD," +
+                        "HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
+                        "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME)" +
+                        " VALUES (@master,@actor,@school,@name,1,0,@kingdom,@kingdomName," +
+                        "@city,@year,-1,@state,'',-1,@time)";
+                    master.Parameters.AddWithValue("@master", pMaster.Id);
+                    master.Parameters.AddWithValue("@actor", pActorId);
+                    master.Parameters.AddWithValue("@school", pMaster.SchoolId);
+                    master.Parameters.AddWithValue("@name", pMaster.CanonicalName);
+                    master.Parameters.AddWithValue("@kingdom", pHomeKingdomId);
+                    master.Parameters.AddWithValue("@kingdomName", pHomeKingdomName ?? "");
+                    master.Parameters.AddWithValue("@city", pHometownCityId);
+                    master.Parameters.AddWithValue("@year", pYear);
+                    master.Parameters.AddWithValue("@state",
+                        HistoricalSchoolLifecycleState.AtHome.ToString());
+                    master.Parameters.AddWithValue("@time", pTime);
+                    if (master.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("master state insert failed");
+                }
+                using (var affiliation = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    affiliation.CommandText = "INSERT INTO " + AffiliationTable +
+                        " (ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID," +
+                        "RESIDENCE_CITY_ID,DESTINATION_CITY_ID,SERVICE_KINGDOM_ID," +
+                        "LIFECYCLE_STATE,SERVICE_START_YEAR,SERVICE_END_YEAR,VOYAGE_START_YEAR," +
+                        "VOYAGE_ARRIVAL_YEAR,TRANSPORT_FAILURES,UPDATED_TIME) VALUES " +
+                        "(@actor,@kingdom,@kingdomName,@city,@city,-1,-1,@state,-1,-1,-1,-1,0,@time)";
+                    affiliation.Parameters.AddWithValue("@actor", pActorId);
+                    affiliation.Parameters.AddWithValue("@kingdom", pHomeKingdomId);
+                    affiliation.Parameters.AddWithValue("@kingdomName", pHomeKingdomName ?? "");
+                    affiliation.Parameters.AddWithValue("@city", pHometownCityId);
+                    affiliation.Parameters.AddWithValue("@state",
+                        HistoricalSchoolLifecycleState.AtHome.ToString());
+                    affiliation.Parameters.AddWithValue("@time", pTime);
+                    if (affiliation.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("master affiliation insert failed");
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction.Rollback(); } catch { }
+                ModClass.LogWarning("HistoricalSchoolStore record descent failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static void MarkMasterDead(string pMasterId, long pActorId, int pYear,
+            long pCityId, string pCause, double pTime)
+        {
+            if (DB == null || string.IsNullOrEmpty(pMasterId)) return;
+            try
+            {
+                using var transaction = DB.BeginTransaction();
+                using (var master = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    master.CommandText = "UPDATE " + MasterTable +
+                        " SET DEAD=1,DEATH_YEAR=@year,DEATH_CITY_ID=@city,DEATH_CAUSE=@cause," +
+                        "LIFECYCLE_STATE=@state,UPDATED_TIME=@time WHERE MASTER_ID=@master" +
+                        " AND ACTOR_ID=@actor AND SPAWNED=1";
+                    master.Parameters.AddWithValue("@year", pYear);
+                    master.Parameters.AddWithValue("@city", pCityId);
+                    master.Parameters.AddWithValue("@cause", pCause ?? "death");
+                    master.Parameters.AddWithValue("@state",
+                        HistoricalSchoolLifecycleState.Dead.ToString());
+                    master.Parameters.AddWithValue("@time", pTime);
+                    master.Parameters.AddWithValue("@master", pMasterId);
+                    master.Parameters.AddWithValue("@actor", pActorId);
+                    master.ExecuteNonQuery();
+                }
+                using (var affiliation = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    affiliation.CommandText = "UPDATE " + AffiliationTable +
+                        " SET LIFECYCLE_STATE=@state,SERVICE_KINGDOM_ID=-1," +
+                        "DESTINATION_CITY_ID=-1,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
+                    affiliation.Parameters.AddWithValue("@state",
+                        HistoricalSchoolLifecycleState.Dead.ToString());
+                    affiliation.Parameters.AddWithValue("@time", pTime);
+                    affiliation.Parameters.AddWithValue("@actor", pActorId);
+                    affiliation.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore mark death failed: " + error.Message);
+            }
+        }
+
+        public static void RollbackDescent(string pMasterId, long pActorId)
+        {
+            if (DB == null || string.IsNullOrEmpty(pMasterId) || pActorId < 0) return;
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            try
+            {
+                using (var affiliation = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    affiliation.CommandText = "DELETE FROM " + AffiliationTable +
+                                              " WHERE ACTOR_ID=@actor";
+                    affiliation.Parameters.AddWithValue("@actor", pActorId);
+                    affiliation.ExecuteNonQuery();
+                }
+                using (var master = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    master.CommandText = "DELETE FROM " + MasterTable +
+                                         " WHERE MASTER_ID=@master AND ACTOR_ID=@actor";
+                    master.Parameters.AddWithValue("@master", pMasterId);
+                    master.Parameters.AddWithValue("@actor", pActorId);
+                    master.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+            catch (Exception error)
+            {
+                try { transaction.Rollback(); } catch { }
+                ModClass.LogWarning("HistoricalSchoolStore rollback descent failed: " +
+                                    error.Message);
+            }
+        }
+
         private static void InsertMembershipCommand(SchoolMembershipRecord pRecord, double pTime,
             SQLiteTransaction pTransaction)
         {
@@ -177,5 +402,28 @@ namespace AncientWarfare3.core.schools
         {
             return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? "";
         }
+    }
+
+    internal sealed class HistoricalSchoolMasterStoreRecord
+    {
+        public HistoricalSchoolMasterStoreRecord(string pMasterId, long pActorId, bool pSpawned,
+            bool pDead, long pHomeKingdomId, long pHometownCityId, int pSpawnYear)
+        {
+            MasterId = pMasterId ?? "";
+            ActorId = pActorId;
+            Spawned = pSpawned;
+            Dead = pDead;
+            HomeKingdomId = pHomeKingdomId;
+            HometownCityId = pHometownCityId;
+            SpawnYear = pSpawnYear;
+        }
+
+        public string MasterId { get; }
+        public long ActorId { get; }
+        public bool Spawned { get; }
+        public bool Dead { get; }
+        public long HomeKingdomId { get; }
+        public long HometownCityId { get; }
+        public int SpawnYear { get; }
     }
 }

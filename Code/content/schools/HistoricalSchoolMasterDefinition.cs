@@ -36,7 +36,7 @@ namespace AncientWarfare3.content.schools
             int pWave, IEnumerable<string> pPreferredStateNames, int pSpawnAge, bool pIsMale,
             HistoricalSchoolAbilityProfile pAbilities, IEnumerable<string> pDebateTopics,
             IEnumerable<string> pCanonicalWorks, string pInstitutionId,
-            string pActorAssetId = "xia", string pNameCultureId = "xia",
+            string pActorAssetId = "Xia", string pNameCultureId = "Xia",
             bool pAllowsClanLineage = false)
         {
             RegistryIndex = pRegistryIndex;

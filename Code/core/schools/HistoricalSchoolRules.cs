@@ -81,5 +81,43 @@ namespace AncientWarfare3.core.schools
             }
             return result;
         }
+
+        public static HistoricalSchoolHomeCandidate SelectHome(
+            HistoricalSchoolMasterDefinition pMaster,
+            IEnumerable<HistoricalSchoolHomeCandidate> pCandidates)
+        {
+            if (pMaster == null || pCandidates == null) return null;
+            List<HistoricalSchoolHomeCandidate> living = pCandidates
+                .Where(p => p != null && p.LivingXia && p.KingdomId >= 0 && p.CityId >= 0)
+                .ToList();
+            if (living.Count == 0) return null;
+            List<HistoricalSchoolHomeCandidate> preferred = living.Where(p =>
+                    pMaster.PreferredStateNames.Any(name => StateNameMatches(name, p.KingdomName)))
+                .ToList();
+            List<HistoricalSchoolHomeCandidate> pool = preferred.Count > 0 ? preferred : living;
+            return pool.OrderBy(p => p.ExistingMasterCount)
+                .ThenByDescending(p => p.Capital)
+                .ThenByDescending(p => p.Development)
+                .ThenByDescending(p => p.Population)
+                .ThenBy(p => p.KingdomId)
+                .ThenBy(p => p.CityId)
+                .First();
+        }
+
+        public static bool StateNameMatches(string pPreferredName, string pCurrentName)
+        {
+            return string.Equals(NormalizeStateName(pPreferredName),
+                NormalizeStateName(pCurrentName), StringComparison.Ordinal);
+        }
+
+        private static string NormalizeStateName(string pName)
+        {
+            string value = (pName ?? "").Trim();
+            foreach (string suffix in new[] { "共和国", "帝国", "王国", "义军", "朝", "国" })
+                if (value.Length > suffix.Length && value.EndsWith(suffix,
+                        StringComparison.Ordinal))
+                    return value.Substring(0, value.Length - suffix.Length);
+            return value;
+        }
     }
 }

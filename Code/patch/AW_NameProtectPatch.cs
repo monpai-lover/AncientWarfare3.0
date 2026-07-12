@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -21,10 +22,23 @@ namespace AncientWarfare3.patch
     public static class AW_NameProtectPatch
     {
         [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.getName))]
+        public static void GetName_Prefix(Actor __instance)
+        {
+            RestoreCanonicalName(__instance);
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "generateNewName")]
         public static bool GenerateNewName_Prefix(Actor __instance)
         {
             if (__instance?.data == null) return true;
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(__instance))
+            {
+                RestoreCanonicalName(__instance);
+                return false;
+            }
             if (!LineageService.IsXia(__instance) && !LineageService.UsesAwLineageSystem(__instance)) return true;
 
             // 只保护"已有谱系单名"的夏人:GIVEN_NAME 非空才接管,否则放行原版随机(防递归)。
@@ -39,6 +53,16 @@ namespace AncientWarfare3.patch
                 __instance.setName(given);
 
             return false; // 阻断原版随机命名
+        }
+
+        private static void RestoreCanonicalName(Actor pActor)
+        {
+            if (!HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return;
+            var definition = HistoricalSchoolDescentService.DefinitionFor(pActor);
+            if (definition == null) return;
+            pActor.data.set(LineageKeys.GIVEN_NAME, definition.CanonicalName);
+            if (pActor.data.name != definition.CanonicalName)
+                pActor.setName(definition.CanonicalName);
         }
     }
 }

@@ -32,6 +32,8 @@ namespace AncientWarfare3.content
             BorderGuardContent.Init();
             core.lineage.WarPlotRedirectService.Init();
 
+            schools.HistoricalSchoolContent.Init();
+
             // 历史人物降临(姬发/嬴政/刘邦/曹丕/司马炎):注册开关 toggle + 世界日志资产。
             // 依赖 figure/first 特质(XiaTraits 已注册在前),放最后。
             figures.HistoricalFigureService.Init();

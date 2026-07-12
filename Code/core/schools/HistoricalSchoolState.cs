@@ -96,6 +96,32 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public sealed class HistoricalSchoolHomeCandidate
+    {
+        public HistoricalSchoolHomeCandidate(long pKingdomId, long pCityId, string pKingdomName,
+            bool pLivingXia, int pExistingMasterCount, bool pCapital, float pDevelopment,
+            int pPopulation)
+        {
+            KingdomId = pKingdomId;
+            CityId = pCityId;
+            KingdomName = pKingdomName ?? "";
+            LivingXia = pLivingXia;
+            ExistingMasterCount = Math.Max(0, pExistingMasterCount);
+            Capital = pCapital;
+            Development = Math.Max(0f, pDevelopment);
+            Population = Math.Max(0, pPopulation);
+        }
+
+        public long KingdomId { get; }
+        public long CityId { get; }
+        public string KingdomName { get; }
+        public bool LivingXia { get; }
+        public int ExistingMasterCount { get; }
+        public bool Capital { get; }
+        public float Development { get; }
+        public int Population { get; }
+    }
+
     public static class HistoricalDebateTopicId
     {
         public const string Livelihood = "livelihood";
@@ -211,6 +237,14 @@ namespace AncientWarfare3.core.schools
             pClosed = current.Close(pYear, pReason);
             RemoveActive(current);
             _closed.Add(pClosed);
+            return true;
+        }
+
+        public bool RollbackJoin(long pActorId)
+        {
+            if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
+                return false;
+            RemoveActive(current);
             return true;
         }
 

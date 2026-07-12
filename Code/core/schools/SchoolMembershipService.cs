@@ -89,6 +89,16 @@ namespace AncientWarfare3.core.schools
             Project(pActor, CourtSchoolId.None);
         }
 
+        internal static void RollbackJoin(Actor pActor, string pSourceId)
+        {
+            if (pActor?.data == null) return;
+            SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
+            if (current == null || current.SourceId != (pSourceId ?? "")) return;
+            if (!HistoricalSchoolStore.DeleteMembership(current)) return;
+            Memberships.RollbackJoin(pActor.data.id);
+            Project(pActor, CourtSchoolId.None);
+        }
+
         public static Actor[] LivingMembers(string pSchoolId)
         {
             IReadOnlyList<long> members = Memberships.Members(pSchoolId);

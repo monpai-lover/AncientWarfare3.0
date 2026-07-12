@@ -27,20 +27,20 @@ The system must create visible competition among all fourteen fixed schools whil
 
 ## Historical Registry
 
-The order within each row is the school's descent order. The spellings in this table are canonical and must be used exactly as written, including `田鸠`, `禽滑釐`, `氾胜之`, `宋钘`, and `乌氏倮`; alternate spellings are search/display aliases only.
+The order within each row is the school's descent order. The table uses a documented personal name as the actor's canonical name wherever one is historically supported; honorifics, courtesy names, titles, and alternate spellings remain search/display aliases. Figures whose personal name is disputed or not reliably recorded retain their transmitted historical name rather than receiving an invented one. Canonical spellings must be used exactly as written, including `田鸠`, `禽滑釐`, `氾胜之`, `宋钘`, and `乌氏倮`.
 
 | School | Six unique historical masters |
 |---|---|
-| Ru | 孔子, 曾子, 子思, 孟子, 荀子, 董仲舒 |
-| Mohist | 墨子, 禽滑釐, 孟胜, 相里勤, 邓陵子, 田鸠 |
-| Dao | 老子, 列子, 杨朱, 庄子, 文子, 河上公 |
-| Legalist | 李悝, 商鞅, 申不害, 慎到, 韩非, 李斯 |
-| Military | 孙武, 司马穰苴, 吴起, 孙膑, 尉缭, 白起 |
-| Diplomat | 鬼谷子, 苏秦, 张仪, 公孙衍, 范雎, 鲁仲连 |
+| Ru | 孔丘, 曾参, 孔伋, 孟轲, 荀况, 董仲舒 |
+| Mohist | 墨翟, 禽滑釐, 孟胜, 相里勤, 邓陵子, 田鸠 |
+| Dao | 李耳, 列御寇, 杨朱, 庄周, 辛钘, 河上公 |
+| Legalist | 李悝, 公孙鞅, 申不害, 慎到, 韩非, 李斯 |
+| Military | 孙武, 田穰苴, 吴起, 孙膑, 尉缭, 白起 |
+| Diplomat | 王诩, 苏秦, 张仪, 公孙衍, 范雎, 鲁仲连 |
 | Agrarian | 许行, 陈相, 陈辛, 氾胜之, 贾思勰, 王祯 |
 | Yin-Yang | 邹衍, 邹奭, 甘德, 石申, 唐昧, 落下闳 |
 | Logician | 邓析, 尹文, 惠施, 公孙龙, 宋钘, 桓团 |
-| Medical | 扁鹊, 文挚, 淳于意, 张仲景, 华佗, 葛洪 |
+| Medical | 秦越人, 文挚, 淳于意, 张机, 华佗, 葛洪 |
 | Syncretist | 尸佼, 吕不韦, 刘安, 伍被, 苏飞, 东方朔 |
 | Merchant | 范蠡, 白圭, 猗顿, 乌氏倮, 卓王孙, 桑弘羊 |
 | Craftsman | 公输班, 欧冶子, 干将, 李冰, 郑国, 丁缓 |
@@ -58,6 +58,8 @@ Every registry entry defines:
 - Xia actor asset and naming metadata.
 
 Historical names are protected from random name generation, Xia naming repair, office-derived surname grants, and Chinese Name integration. A master may establish a normal clan only when the registry explicitly defines that lineage; display identity remains canonical.
+
+Familiar historical forms remain aliases rather than actor names: `孔子 -> 孔丘`, `曾子 -> 曾参`, `子思 -> 孔伋`, `孟子 -> 孟轲`, `荀子 -> 荀况`, `墨子 -> 墨翟`, `老子 -> 李耳`, `列子 -> 列御寇`, `庄子 -> 庄周`, `文子 -> 辛钘`, `商鞅 -> 公孙鞅`, `司马穰苴 -> 田穰苴`, `鬼谷子 -> 王诩`, `扁鹊 -> 秦越人`, and `张仲景 -> 张机`.
 
 ## Descent Scheduler
 
