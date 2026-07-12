@@ -3,6 +3,9 @@ aw_school_mapmode,百家学派地图,Hundred Schools Map,百家學派地圖
 aw_school_mapmode Description,按城市政治精英的学派影响显示百家分布,Show school influence from each city's political elite,按城市政治菁英的學派影響顯示百家分佈
 aw_school_mapmode_description,按城市政治精英的学派影响显示百家分布,Show school influence from each city's political elite,按城市政治菁英的學派影響顯示百家分佈
 aw_school_mapmode_tooltip,百家学派地图,Hundred Schools Map,百家學派地圖
+aw_school_overview_btn,百家学派总览,Hundred Schools Overview,百家學派總覽
+aw_school_overview_btn Description,查看所有固定学派的影响城市人物与治国倾向,Browse every fixed school and its cities people and policy tendencies,查看所有固定學派的影響城市人物與治國傾向
+aw_school_overview_btn_description,查看所有固定学派的影响城市人物与治国倾向,Browse every fixed school and its cities people and policy tendencies,查看所有固定學派的影響城市人物與治國傾向
 aw_school_window_title,百家学派,Hundred Schools,百家學派
 aw_school_map_no_influence,此城暂无学派影响,No school influence in this city,此城暫無學派影響
 aw_school_map_dominant,主导学派,Dominant School,主導學派

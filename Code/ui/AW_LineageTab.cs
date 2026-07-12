@@ -39,6 +39,19 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"));
             tab.AddPowerButton(GROUP_LINEAGE, rosterButton);
 
+            PowerButton schoolMapButton = CreateMapModeToggleButton(
+                SchoolMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/Icons/traits/iconRujia")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
+            if (schoolMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, schoolMapButton);
+
+            PowerButton schoolOverviewButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_school_overview_btn",
+                () => windows.SchoolWindow.OpenSchool(),
+                SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
+                ?? SpriteTextureLoader.getSprite("ui/Icons/traits/iconRujia"));
+            if (schoolOverviewButton != null) tab.AddPowerButton(GROUP_LINEAGE, schoolOverviewButton);
+
             PowerButton techMapButton = CreateMapModeToggleButton(
                 TechMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
