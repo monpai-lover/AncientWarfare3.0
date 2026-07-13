@@ -26,7 +26,7 @@ namespace AncientWarfare3.core.schools
                 pCityId, _ => true);
         }
 
-        public int Count => _afterCursor.Count + _wrapped.Count;
+        public int Count => Math.Min(_capacity, _afterCursor.Count + _wrapped.Count);
 
         public void Consider(TCity pCity)
         {
