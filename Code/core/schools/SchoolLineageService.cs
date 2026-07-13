@@ -93,13 +93,18 @@ namespace AncientWarfare3.core.schools
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
             if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return true;
-            SchoolMembershipRecord membership = SchoolMembershipService.GetActive(pActor.data.id);
-            return membership != null &&
-                   (membership.Source == SchoolMembershipSource.DirectDiscipleship ||
-                    membership.Source == SchoolMembershipSource.LaterDiscipleship ||
-                    membership.Source == SchoolMembershipSource.ExplicitConversion ||
-                    membership.Source == SchoolMembershipSource.PreservedWork) &&
-                   membership.Reputation >= 10f;
+            return WasQualifiedTeacherAtDeath(
+                SchoolMembershipService.GetActive(pActor.data.id));
+        }
+
+        public static bool WasQualifiedTeacherAtDeath(SchoolMembershipRecord pMembership)
+        {
+            return pMembership != null && pMembership.Active && pMembership.IsValid &&
+                   (pMembership.Source == SchoolMembershipSource.DirectDiscipleship ||
+                    pMembership.Source == SchoolMembershipSource.LaterDiscipleship ||
+                    pMembership.Source == SchoolMembershipSource.ExplicitConversion ||
+                    pMembership.Source == SchoolMembershipSource.PreservedWork) &&
+                   pMembership.Reputation >= 10f;
         }
 
         public static int DirectDiscipleCount(long pTeacherActorId)

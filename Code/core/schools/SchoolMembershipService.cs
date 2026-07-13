@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
@@ -9,6 +10,22 @@ namespace AncientWarfare3.core.schools
     internal static class SchoolMembershipService
     {
         private static readonly SchoolMembershipBook Memberships = new SchoolMembershipBook();
+        private static readonly HashSet<long> UncertainDeathActors = new HashSet<long>();
+        private static readonly Queue<long> PendingDeathRetries = new Queue<long>();
+        private static readonly HashSet<long> QueuedDeathRetries = new HashSet<long>();
+        private static readonly Dictionary<long, Actor> DeathRetryActors =
+            new Dictionary<long, Actor>();
+        private static readonly Dictionary<long, int> DeathRetryAttempts =
+            new Dictionary<long, int>();
+        private static readonly Dictionary<long, long> DeathRetryReadyFrames =
+            new Dictionary<long, long>();
+        private static readonly HashSet<long> DeathRetryDestroyRequests = new HashSet<long>();
+        private static readonly FieldInfo ActorDestroyQueueField =
+            typeof(SimSystemManager<Actor, ActorData>).GetField("_to_destroy_objects",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        private const int MaxDeathRetryBackoffFrames = 240;
+        private const int MaxDeathRetryQueueScan = 16;
+        private static long _deathRetryFrame;
 
         public static long Version => Memberships.Version;
 
@@ -166,9 +183,10 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        public static SchoolDeathOutcome OnDeath(Actor pActor)
+        public static SchoolDeathOutcome OnDeath(Actor pActor, bool pDestroy = false)
         {
             if (pActor?.data == null) return SchoolDeathOutcome.NotApplicable;
+            if (UncertainDeathActors.Contains(pActor.data.id)) return SchoolDeathOutcome.Failed;
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
             if (current == null) return SchoolDeathOutcome.NotApplicable;
             if (!current.Active || !current.IsValid || current.ActorId != pActor.data.id)
@@ -182,14 +200,22 @@ namespace AncientWarfare3.core.schools
                 ? HistoricalSchoolMasterRegistry.Find(current.SourceId)
                 : null;
             bool wasQualifiedTeacher = historicalMaster ||
-                                       SchoolLineageService.IsQualifiedTeacher(pActor);
+                SchoolLineageService.WasQualifiedTeacherAtDeath(current);
             City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string cause, "death");
             int year = Date.getCurrentYear();
-            if (!HistoricalSchoolStore.CommitSchoolDeath(current, affiliation, master, year,
+            SchoolPersistenceOutcome persistenceOutcome =
+                HistoricalSchoolStore.CommitSchoolDeath(current, affiliation, master, year,
                     city?.data?.id ?? -1L, cause, WorldTime(),
-                    out HistoricalSchoolAffiliationSnapshot committedAffiliation))
+                    out HistoricalSchoolAffiliationSnapshot committedAffiliation);
+            if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
+            {
+                if (persistenceOutcome == SchoolPersistenceOutcome.Unknown)
+                    UncertainDeathActors.Add(pActor.data.id);
+                else if (persistenceOutcome == SchoolPersistenceOutcome.CleanFailure)
+                    QueueDeathRetry(pActor, pDestroy);
                 return SchoolDeathOutcome.Failed;
+            }
 
             if (committedAffiliation != null)
             {
@@ -200,32 +226,42 @@ namespace AncientWarfare3.core.schools
                         ModClass.LogWarning(
                             "Committed school death affiliation adopt rejected: actor=" +
                             pActor.data.id);
-                        HistoricalAffiliationService.LoadState();
+                        ReloadAffiliationAfterCommittedDeath();
                     }
                 }
                 catch (Exception error)
                 {
                     ModClass.LogWarning("Committed school death affiliation adopt failed: " +
                                         error.Message);
-                    HistoricalAffiliationService.LoadState();
+                    ReloadAffiliationAfterCommittedDeath();
                 }
             }
             City committedCity = HistoricalAffiliationService.ResidenceCity(pActor) ?? city;
-            if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId, year,
-                    "death", out _))
+            try
             {
-                ModClass.LogWarning("Committed school death membership adopt failed: actor=" +
-                                    pActor.data.id + " membership=" + current.MembershipId);
-                LoadIndexes();
-            }
-            else
-            {
-                try { Project(pActor, CourtSchoolId.None); }
-                catch (Exception error)
+                if (!Memberships.CloseExpected(pActor.data.id, current.MembershipId, year,
+                        "death", out _))
                 {
-                    ModClass.LogWarning("Committed school death projection failed: " +
-                                        error.Message);
+                    ModClass.LogWarning(
+                        "Committed school death membership adopt failed: actor=" +
+                        pActor.data.id + " membership=" + current.MembershipId);
+                    ReloadMembershipAfterCommittedDeath();
                 }
+                else
+                {
+                    try { Project(pActor, CourtSchoolId.None); }
+                    catch (Exception error)
+                    {
+                        ModClass.LogWarning("Committed school death projection failed: " +
+                                            error.Message);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death membership adopt threw: " +
+                                    error.Message);
+                ReloadMembershipAfterCommittedDeath();
             }
             try { HistoricalSchoolTravelService.OnCommittedDeath(pActor); }
             catch (Exception error)
@@ -262,6 +298,158 @@ namespace AncientWarfare3.core.schools
                 }
             }
             return SchoolDeathOutcome.Committed;
+        }
+
+        private static void ReloadAffiliationAfterCommittedDeath()
+        {
+            try
+            {
+                HistoricalAffiliationService.LoadState();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death affiliation reload failed: " +
+                                    error.Message);
+            }
+        }
+
+        private static void ReloadMembershipAfterCommittedDeath()
+        {
+            try
+            {
+                LoadIndexes();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death membership reload failed: " +
+                                    error.Message);
+            }
+        }
+
+        internal static void ProcessDeathRetries()
+        {
+            ProcessDeathRetries(pIgnoreBackoff: false);
+        }
+
+        private static void ProcessDeathRetries(bool pIgnoreBackoff)
+        {
+            _deathRetryFrame++;
+            long actorId = -1L;
+            int scanBudget = Math.Min(PendingDeathRetries.Count, MaxDeathRetryQueueScan);
+            while (scanBudget-- > 0)
+            {
+                long candidate = PendingDeathRetries.Dequeue();
+                if (!QueuedDeathRetries.Contains(candidate)) continue;
+                if (!pIgnoreBackoff &&
+                    DeathRetryReadyFrames.TryGetValue(candidate, out long readyFrame) &&
+                    readyFrame > _deathRetryFrame)
+                {
+                    PendingDeathRetries.Enqueue(candidate);
+                    continue;
+                }
+                QueuedDeathRetries.Remove(candidate);
+                actorId = candidate;
+                break;
+            }
+            if (actorId < 0) return;
+
+            if (!DeathRetryActors.TryGetValue(actorId, out Actor actor) ||
+                actor?.data == null || actor.data.id != actorId)
+            {
+                ClearDeathRetry(actorId, pCancelQueued: true);
+                ReloadMembershipAfterCommittedDeath();
+                return;
+            }
+
+            DeathRetryAttempts.TryGetValue(actorId, out int previousAttempts);
+            int attempts = previousAttempts + 1;
+            bool destroyRequested = DeathRetryDestroyRequests.Contains(actorId);
+            SchoolDeathOutcome outcome;
+            try
+            {
+                outcome = OnDeath(actor, destroyRequested);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Deferred school death retry failed: " + error.Message);
+                QueueDeathRetry(actor, destroyRequested);
+                outcome = SchoolDeathOutcome.Failed;
+            }
+
+            bool queuedAgain = QueuedDeathRetries.Contains(actorId);
+            if (outcome == SchoolDeathOutcome.Committed ||
+                outcome == SchoolDeathOutcome.NotApplicable ||
+                UncertainDeathActors.Contains(actorId) || !queuedAgain)
+            {
+                ClearDeathRetry(actorId, pCancelQueued: true);
+                if (destroyRequested) QueueDestroyAfterDeathRetry(actor);
+                return;
+            }
+            DeathRetryAttempts[actorId] = attempts;
+            DeathRetryReadyFrames[actorId] = _deathRetryFrame +
+                DeathRetryBackoffFrames(attempts);
+        }
+
+        internal static bool FlushDeathRetriesForSave()
+        {
+            int budget = Math.Min(64, Math.Max(8, QueuedDeathRetries.Count * 8));
+            while (QueuedDeathRetries.Count > 0 && budget-- > 0)
+                ProcessDeathRetries(pIgnoreBackoff: true);
+            return QueuedDeathRetries.Count == 0 && UncertainDeathActors.Count == 0;
+        }
+
+        private static void QueueDeathRetry(Actor pActor, bool pDestroy)
+        {
+            if (pActor?.data == null || pActor.data.id < 0 ||
+                UncertainDeathActors.Contains(pActor.data.id)) return;
+            long actorId = pActor.data.id;
+            DeathRetryActors[actorId] = pActor;
+            if (pDestroy) DeathRetryDestroyRequests.Add(actorId);
+            if (!DeathRetryReadyFrames.ContainsKey(actorId))
+                DeathRetryReadyFrames[actorId] = _deathRetryFrame;
+            if (QueuedDeathRetries.Add(actorId)) PendingDeathRetries.Enqueue(actorId);
+        }
+
+        internal static bool ShouldDeferDestroy(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !DeathRetryActors.TryGetValue(pActor.data.id, out Actor pending) ||
+                !ReferenceEquals(pending, pActor)) return false;
+            DeathRetryDestroyRequests.Add(pActor.data.id);
+            return true;
+        }
+
+        private static int DeathRetryBackoffFrames(int pAttempts)
+        {
+            int exponent = Math.Max(0, Math.Min(8, pAttempts - 1));
+            return Math.Min(MaxDeathRetryBackoffFrames, 1 << exponent);
+        }
+
+        private static void QueueDestroyAfterDeathRetry(Actor pActor)
+        {
+            try
+            {
+                ActorManager units = World.world?.units;
+                if (pActor?.data == null || units == null ||
+                    units.get(pActor.data.id) != pActor) return;
+                if (!(ActorDestroyQueueField?.GetValue(units) is HashSet<Actor> queue))
+                    throw new InvalidOperationException("actor destroy queue unavailable");
+                queue.Add(pActor);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death destroy requeue failed: " +
+                                    error.Message);
+            }
+        }
+
+        private static void ClearDeathRetry(long pActorId, bool pCancelQueued)
+        {
+            if (pCancelQueued) QueuedDeathRetries.Remove(pActorId);
+            DeathRetryActors.Remove(pActorId);
+            DeathRetryAttempts.Remove(pActorId);
+            DeathRetryReadyFrames.Remove(pActorId);
+            DeathRetryDestroyRequests.Remove(pActorId);
         }
 
         internal static bool RollbackJoin(Actor pActor, string pSourceId)
@@ -354,6 +542,14 @@ namespace AncientWarfare3.core.schools
         public static void ClearRuntime()
         {
             Memberships.Clear();
+            UncertainDeathActors.Clear();
+            PendingDeathRetries.Clear();
+            QueuedDeathRetries.Clear();
+            DeathRetryActors.Clear();
+            DeathRetryAttempts.Clear();
+            DeathRetryReadyFrames.Clear();
+            DeathRetryDestroyRequests.Clear();
+            _deathRetryFrame = 0L;
             CitySchoolSnapshotService.Clear();
         }
 

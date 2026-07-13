@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
@@ -24,6 +25,9 @@ namespace AncientWarfare3.patch
         public static void SaveWorldToDirectory_Prefix()
         {
             core.lineage.DeferredRuntimeWorkService.FlushPersistent();
+            if (!SchoolMembershipService.FlushDeathRetriesForSave())
+                throw new InvalidOperationException(
+                    "World save blocked: unresolved school death persistence");
         }
 
         [HarmonyPostfix]

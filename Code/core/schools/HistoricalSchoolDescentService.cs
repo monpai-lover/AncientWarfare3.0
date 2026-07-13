@@ -138,9 +138,22 @@ namespace AncientWarfare3.core.schools
             SchoolPersistenceOutcome persistenceOutcome = SchoolPersistenceOutcome.Unknown;
             try
             {
-                actor = World.world?.units?.createNewUnit(pMaster.ActorAssetId, tile,
-                    pMiracleSpawn: false, 0f, FindXiaSubspecies(pHome), null,
-                    pSpawnWithItems: true, pAdultAge: true);
+                ActorManager units = World.world?.units;
+                using (HistoricalSchoolActorSpawnCapture capture =
+                       HistoricalSchoolActorSpawnCapture.Begin(units))
+                {
+                    try
+                    {
+                        actor = units?.createNewUnit(pMaster.ActorAssetId, tile,
+                            pMiracleSpawn: false, 0f, FindXiaSubspecies(pHome), null,
+                            pSpawnWithItems: true, pAdultAge: true);
+                    }
+                    catch
+                    {
+                        actor = capture.CapturedActor;
+                        throw;
+                    }
+                }
                 if (actor?.data == null || actor.isRekt())
                     throw new InvalidOperationException("actor creation failed");
                 actor.joinCity(pHome);
@@ -190,7 +203,7 @@ namespace AncientWarfare3.core.schools
                 bool canDestroy = !persistenceAttempted ||
                     HistoricalSchoolPersistenceRules.CanDestroy(persistenceOutcome);
                 if (canDestroy)
-                    RemoveFailedActor(actor);
+                    RemoveFailedActor(actor, pMaster.ActorAssetId);
                 else
                     ReservePreservedActor(pMaster, actor, pHome, pEligibleYear);
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
@@ -230,17 +243,14 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void RemoveFailedActor(Actor pActor)
+        private static void RemoveFailedActor(Actor pActor, string pExpectedActorAssetId)
         {
             if (pActor == null) return;
             try
             {
                 ActorManager units = World.world?.units;
-                if (units == null || pActor.data == null) return;
-                if (units.get(pActor.data.id) != pActor) return;
-                pActor.setAlive(pValue: false);
-                pActor.skipUpdates();
-                World.world.units.scheduleDestroyOnPlay(pActor);
+                HistoricalSchoolFailedActorCleanup.Remove(units, pActor,
+                    pExpectedActorAssetId);
             }
             catch (Exception error)
             {

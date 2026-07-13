@@ -48,6 +48,14 @@ namespace AncientWarfare3.core.schools
         Conflict
     }
 
+    public enum SchoolDeathPersistenceRowState
+    {
+        Unchanged,
+        Original,
+        Committed,
+        Conflict
+    }
+
     public enum SchoolDeathOutcome
     {
         NotApplicable,
@@ -76,6 +84,36 @@ namespace AncientWarfare3.core.schools
         public static bool CanDestroy(SchoolPersistenceOutcome pOutcome)
         {
             return pOutcome == SchoolPersistenceOutcome.CleanFailure;
+        }
+    }
+
+    public static class HistoricalSchoolDeathPersistenceRules
+    {
+        public static SchoolPersistenceOutcome Resolve(bool pQuerySucceeded,
+            SchoolDeathPersistenceRowState pMembership,
+            SchoolDeathPersistenceRowState pAffiliation,
+            SchoolDeathPersistenceRowState pMaster)
+        {
+            if (!pQuerySucceeded) return SchoolPersistenceOutcome.Unknown;
+            if (pMembership == SchoolDeathPersistenceRowState.Committed &&
+                IsCommitted(pAffiliation) &&
+                IsCommitted(pMaster)) return SchoolPersistenceOutcome.Committed;
+            if (pMembership == SchoolDeathPersistenceRowState.Original &&
+                IsOriginal(pAffiliation) && IsOriginal(pMaster))
+                return SchoolPersistenceOutcome.CleanFailure;
+            return SchoolPersistenceOutcome.Unknown;
+        }
+
+        private static bool IsCommitted(SchoolDeathPersistenceRowState pState)
+        {
+            return pState == SchoolDeathPersistenceRowState.Committed ||
+                   pState == SchoolDeathPersistenceRowState.Unchanged;
+        }
+
+        private static bool IsOriginal(SchoolDeathPersistenceRowState pState)
+        {
+            return pState == SchoolDeathPersistenceRowState.Original ||
+                   pState == SchoolDeathPersistenceRowState.Unchanged;
         }
     }
 

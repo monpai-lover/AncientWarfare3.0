@@ -1131,7 +1131,8 @@ namespace AncientWarfare3.core.schools
                     "SERVICE_START_YEAR=@serviceStart,SERVICE_END_YEAR=@serviceEnd," +
                     "LAST_TRAVEL_YEAR=@lastTravel,TRAVEL_WAIT_START_YEAR=@waitStart," +
                     "VOYAGE_START_YEAR=@voyageStart,VOYAGE_ARRIVAL_YEAR=@voyageArrival," +
-                    "TRANSPORT_FAILURES=@failures,UPDATED_TIME=@time WHERE ACTOR_ID=@actor";
+                    "TRANSPORT_FAILURES=@failures,UPDATED_TIME=@time WHERE ACTOR_ID=@actor" +
+                    " AND LIFECYCLE_STATE<>@deadState";
                 command.Parameters.AddWithValue("@residence", pState.ResidenceCityId);
                 command.Parameters.AddWithValue("@previous", pState.PreviousResidenceCityId);
                 command.Parameters.AddWithValue("@destination", pState.DestinationCityId);
@@ -1146,6 +1147,8 @@ namespace AncientWarfare3.core.schools
                 command.Parameters.AddWithValue("@failures", pState.TransportFailures);
                 command.Parameters.AddWithValue("@time", pTime);
                 command.Parameters.AddWithValue("@actor", pState.ActorId);
+                command.Parameters.AddWithValue("@deadState",
+                    HistoricalSchoolLifecycleState.Dead.ToString());
                 return command.ExecuteNonQuery() == 1;
             }
             catch (Exception error)
@@ -1422,7 +1425,8 @@ namespace AncientWarfare3.core.schools
                 : SchoolPersistenceRowState.Conflict;
         }
 
-        public static bool CommitSchoolDeath(SchoolMembershipRecord pMembership,
+        public static SchoolPersistenceOutcome CommitSchoolDeath(
+            SchoolMembershipRecord pMembership,
             HistoricalSchoolAffiliationSnapshot pCachedAffiliation,
             HistoricalSchoolMasterDefinition pMaster, int pYear, long pCityId,
             string pCause, double pTime,
@@ -1436,26 +1440,38 @@ namespace AncientWarfare3.core.schools
                 (pCachedAffiliation != null &&
                  pCachedAffiliation.ActorId != pMembership.ActorId) ||
                 (!historicalMaster && pMaster != null) ||
-                (pMaster != null &&
-                 (pMembership.Source != SchoolMembershipSource.HistoricalDescent ||
-                  pMembership.SourceId != pMaster.Id ||
-                  pMembership.SchoolId != pMaster.SchoolId))) return false;
+                 (pMaster != null &&
+                  (pMembership.Source != SchoolMembershipSource.HistoricalDescent ||
+                   pMembership.SourceId != pMaster.Id ||
+                   pMembership.SchoolId != pMaster.SchoolId)))
+                return SchoolPersistenceOutcome.Unknown;
 
             double time = FiniteNonNegative(pTime);
+            string cause = pCause ?? "death";
+            double originalMembershipTime = double.NaN;
+            HistoricalSchoolAffiliationDeathRow originalAffiliation = null;
+            HistoricalSchoolMasterDeathRow originalMaster = null;
+            bool affiliationExpected = pCachedAffiliation != null;
+            long deathCityId = pCityId;
             SQLiteTransaction transaction = null;
             try
             {
                 transaction = DB.BeginTransaction();
+                originalMembershipTime = LoadMembershipTimeForDeath(pMembership, transaction);
                 HistoricalSchoolAffiliationSnapshot authoritativeAffiliation =
-                    LoadAffiliationForDeath(pMembership.ActorId, transaction);
+                    LoadAffiliationForDeath(pMembership.ActorId, transaction,
+                        out originalAffiliation);
+                affiliationExpected |= authoritativeAffiliation != null;
                 if (pCachedAffiliation != null && authoritativeAffiliation == null)
                     throw new InvalidOperationException("cached affiliation row not found");
                 if (authoritativeAffiliation?.LifecycleState ==
                     HistoricalSchoolLifecycleState.Dead)
                     throw new InvalidOperationException("affiliation already dead");
-                long deathCityId = authoritativeAffiliation?.ResidenceCityId >= 0
+                deathCityId = authoritativeAffiliation?.ResidenceCityId >= 0
                     ? authoritativeAffiliation.ResidenceCityId
                     : pCityId;
+                if (historicalMaster)
+                    originalMaster = LoadMasterForDeath(pMembership, transaction);
                 CloseSchoolDeathMembershipCommand(pMembership, pYear, "death", time,
                     transaction);
                 if (authoritativeAffiliation != null)
@@ -1486,7 +1502,7 @@ namespace AncientWarfare3.core.schools
                         " AND ACTOR_ID=@actor AND SCHOOL_ID=@school AND SPAWNED=1 AND DEAD=0";
                     master.Parameters.AddWithValue("@year", pYear);
                     master.Parameters.AddWithValue("@city", deathCityId);
-                    master.Parameters.AddWithValue("@cause", pCause ?? "death");
+                    master.Parameters.AddWithValue("@cause", cause);
                     master.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.Dead.ToString());
                     master.Parameters.AddWithValue("@time", time);
@@ -1498,31 +1514,81 @@ namespace AncientWarfare3.core.schools
                 }
                 transaction.Commit();
                 pCommittedAffiliation = authoritativeAffiliation;
-                return true;
+                return SchoolPersistenceOutcome.Committed;
             }
             catch (Exception error)
             {
                 try { transaction?.Rollback(); } catch { }
                 ModClass.LogWarning("HistoricalSchoolStore commit school death failed: " +
                                     error.Message);
-                return false;
             }
             finally
             {
                 try { transaction?.Dispose(); } catch { }
             }
+
+            if (double.IsNaN(originalMembershipTime))
+                return SchoolPersistenceOutcome.Unknown;
+            try
+            {
+                ReadSchoolDeathState(pMembership, originalMembershipTime,
+                    originalAffiliation, affiliationExpected, originalMaster,
+                    historicalMaster, pYear, deathCityId, cause, time,
+                    out SchoolDeathPersistenceRowState membershipState,
+                    out SchoolDeathPersistenceRowState affiliationState,
+                    out SchoolDeathPersistenceRowState masterState);
+                SchoolPersistenceOutcome outcome = HistoricalSchoolDeathPersistenceRules.Resolve(
+                    pQuerySucceeded: true, membershipState, affiliationState, masterState);
+                if (outcome == SchoolPersistenceOutcome.Committed)
+                    pCommittedAffiliation = originalAffiliation?.State;
+                return outcome;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore school death readback failed: " +
+                                    error.Message);
+                return HistoricalSchoolDeathPersistenceRules.Resolve(pQuerySucceeded: false,
+                    SchoolDeathPersistenceRowState.Conflict,
+                    SchoolDeathPersistenceRowState.Conflict,
+                    SchoolDeathPersistenceRowState.Conflict);
+            }
+        }
+
+        private static double LoadMembershipTimeForDeath(SchoolMembershipRecord pMembership,
+            SQLiteTransaction pTransaction)
+        {
+            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
+                "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
+            command.Parameters.AddWithValue("@id", pMembership.MembershipId);
+            command.Parameters.AddWithValue("@actor", pMembership.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read() || !MatchesMembershipIdentity(reader, pMembership) ||
+                ValueInt(reader, 10, int.MinValue) != pMembership.EndYear ||
+                ValueInt(reader, 11, -1) != 1 ||
+                ValueString(reader, 12) != pMembership.EndReason)
+                throw new InvalidOperationException("active membership row does not match runtime");
+            double updatedTime = ValueDouble(reader, 13, -1d);
+            if (reader.Read())
+                throw new InvalidOperationException("conflicting active membership rows");
+            return updatedTime;
         }
 
         private static HistoricalSchoolAffiliationSnapshot LoadAffiliationForDeath(
-            long pActorId, SQLiteTransaction pTransaction)
+            long pActorId, SQLiteTransaction pTransaction,
+            out HistoricalSchoolAffiliationDeathRow pLoadedRow)
         {
+            pLoadedRow = null;
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
                 "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
                 "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
                 "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
                 "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
-                "TRANSPORT_FAILURES FROM " + AffiliationTable + " WHERE ACTOR_ID=@actor";
+                "TRANSPORT_FAILURES,UPDATED_TIME FROM " + AffiliationTable +
+                " WHERE ACTOR_ID=@actor";
             command.Parameters.AddWithValue("@actor", pActorId);
             using SQLiteDataReader reader = command.ExecuteReader();
             if (!reader.Read()) return null;
@@ -1538,9 +1604,183 @@ namespace AncientWarfare3.core.schools
                 ValueInt(reader, 11, -1), ValueInt(reader, 12, -1),
                 ValueInt(reader, 13, -1), ValueInt(reader, 14, -1),
                 ValueInt(reader, 15));
+            double updatedTime = ValueDouble(reader, 16, -1d);
             if (result.ActorId != pActorId || reader.Read())
                 throw new InvalidOperationException("conflicting affiliation rows");
+            pLoadedRow = new HistoricalSchoolAffiliationDeathRow(result, updatedTime);
             return result;
+        }
+
+        private static HistoricalSchoolMasterDeathRow LoadMasterForDeath(
+            SchoolMembershipRecord pMembership, SQLiteTransaction pTransaction)
+        {
+            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED," +
+                "DEAD,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
+                "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME FROM " +
+                MasterTable + " WHERE MASTER_ID=@master OR ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@master", pMembership.SourceId);
+            command.Parameters.AddWithValue("@actor", pMembership.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+                throw new InvalidOperationException("living master row not found");
+            var result = HistoricalSchoolMasterDeathRow.Read(reader);
+            if (result.MasterId != pMembership.SourceId ||
+                result.ActorId != pMembership.ActorId ||
+                result.SchoolId != pMembership.SchoolId || !result.Spawned || result.Dead ||
+                reader.Read())
+                throw new InvalidOperationException("living master row does not match membership");
+            return result;
+        }
+
+        private static void ReadSchoolDeathState(SchoolMembershipRecord pMembership,
+            double pOriginalMembershipTime,
+            HistoricalSchoolAffiliationDeathRow pOriginalAffiliation,
+            bool pAffiliationExpected, HistoricalSchoolMasterDeathRow pOriginalMaster,
+            bool pHistoricalMaster, int pYear, long pDeathCityId, string pCause, double pTime,
+            out SchoolDeathPersistenceRowState pMembershipState,
+            out SchoolDeathPersistenceRowState pAffiliationState,
+            out SchoolDeathPersistenceRowState pMasterState)
+        {
+            pMembershipState = ReadSchoolDeathMembershipState(pMembership,
+                pOriginalMembershipTime, pYear, pTime);
+            pAffiliationState = ReadSchoolDeathAffiliationState(pMembership.ActorId,
+                pOriginalAffiliation, pAffiliationExpected, pTime);
+            pMasterState = ReadSchoolDeathMasterState(pOriginalMaster, pHistoricalMaster,
+                pYear, pDeathCityId, pCause, pTime);
+        }
+
+        private static SchoolDeathPersistenceRowState ReadSchoolDeathMembershipState(
+            SchoolMembershipRecord pExpected, double pOriginalTime, int pYear, double pTime)
+        {
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
+                "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
+            command.Parameters.AddWithValue("@id", pExpected.MembershipId);
+            command.Parameters.AddWithValue("@actor", pExpected.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            int rowCount = 0;
+            bool original = false;
+            bool committed = false;
+            while (reader.Read())
+            {
+                rowCount++;
+                bool identity = MatchesMembershipIdentity(reader, pExpected);
+                original |= identity &&
+                            ValueInt(reader, 10, int.MinValue) == pExpected.EndYear &&
+                            ValueInt(reader, 11, -1) == 1 &&
+                            ValueString(reader, 12) == pExpected.EndReason &&
+                            ValueDouble(reader, 13, -1d).Equals(pOriginalTime);
+                committed |= identity && ValueInt(reader, 10, int.MinValue) == pYear &&
+                              ValueInt(reader, 11, -1) == 0 &&
+                              ValueString(reader, 12) == "death" &&
+                              ValueDouble(reader, 13, -1d).Equals(pTime);
+            }
+            if (rowCount != 1) return SchoolDeathPersistenceRowState.Conflict;
+            if (committed) return SchoolDeathPersistenceRowState.Committed;
+            if (original) return SchoolDeathPersistenceRowState.Original;
+            return SchoolDeathPersistenceRowState.Conflict;
+        }
+
+        private static bool MatchesMembershipIdentity(SQLiteDataReader pReader,
+            SchoolMembershipRecord pExpected)
+        {
+            return ValueLong(pReader, 0, -1L) == pExpected.MembershipId &&
+                   ValueLong(pReader, 1, -1L) == pExpected.ActorId &&
+                   ValueString(pReader, 2) == pExpected.SchoolId &&
+                   ValueString(pReader, 3) == pExpected.Source.ToString() &&
+                   ValueString(pReader, 4) == pExpected.SourceId &&
+                   ValueLong(pReader, 5, -1L) == pExpected.TeacherActorId &&
+                   ValueLong(pReader, 6, -1L) == pExpected.CityId &&
+                   ValueInt(pReader, 7, -1) == pExpected.Generation &&
+                   ValueDouble(pReader, 8).Equals((double)pExpected.Reputation) &&
+                   ValueInt(pReader, 9, -1) == pExpected.StartYear;
+        }
+
+        private static SchoolDeathPersistenceRowState ReadSchoolDeathAffiliationState(
+            long pActorId, HistoricalSchoolAffiliationDeathRow pOriginal,
+            bool pAffiliationExpected, double pTime)
+        {
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
+                "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
+                "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
+                "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
+                "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
+                "TRANSPORT_FAILURES,UPDATED_TIME FROM " + AffiliationTable +
+                " WHERE ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@actor", pActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+                return pOriginal == null && !pAffiliationExpected
+                    ? SchoolDeathPersistenceRowState.Unchanged
+                    : SchoolDeathPersistenceRowState.Conflict;
+            bool extra = false;
+            bool original = false;
+            bool committed = false;
+            if (pOriginal != null)
+            {
+                HistoricalSchoolAffiliationSnapshot state = pOriginal.State;
+                bool fixedFields = ValueLong(reader, 0, -1L) == state.ActorId &&
+                    ValueLong(reader, 1, -1L) == state.HomeKingdomId &&
+                    ValueString(reader, 2) == state.HomeKingdomName &&
+                    ValueLong(reader, 3, -1L) == state.HometownCityId &&
+                    ValueLong(reader, 4, -1L) == state.ResidenceCityId &&
+                    ValueLong(reader, 5, -1L) == state.PreviousResidenceCityId &&
+                    ValueInt(reader, 11, int.MinValue) == state.LastTravelYear &&
+                    ValueInt(reader, 15, -1) == state.TransportFailures;
+                original = fixedFields &&
+                    ValueLong(reader, 6, long.MinValue) == state.DestinationCityId &&
+                    ValueLong(reader, 7, long.MinValue) == state.ServiceKingdomId &&
+                    ValueString(reader, 8) == state.LifecycleState.ToString() &&
+                    ValueInt(reader, 9, int.MinValue) == state.ServiceStartYear &&
+                    ValueInt(reader, 10, int.MinValue) == state.ServiceEndYear &&
+                    ValueInt(reader, 12, int.MinValue) == state.TravelWaitStartYear &&
+                    ValueInt(reader, 13, int.MinValue) == state.VoyageStartYear &&
+                    ValueInt(reader, 14, int.MinValue) == state.VoyageArrivalYear &&
+                    ValueDouble(reader, 16, -1d).Equals(pOriginal.UpdatedTime);
+                committed = fixedFields &&
+                    ValueLong(reader, 6, long.MinValue) == -1L &&
+                    ValueLong(reader, 7, long.MinValue) == -1L &&
+                    ValueString(reader, 8) == HistoricalSchoolLifecycleState.Dead.ToString() &&
+                    ValueInt(reader, 9, int.MinValue) == -1 &&
+                    ValueInt(reader, 10, int.MinValue) == -1 &&
+                    ValueInt(reader, 12, int.MinValue) == -1 &&
+                    ValueInt(reader, 13, int.MinValue) == -1 &&
+                    ValueInt(reader, 14, int.MinValue) == -1 &&
+                    ValueDouble(reader, 16, -1d).Equals(pTime);
+            }
+            extra = reader.Read();
+            if (extra || pOriginal == null) return SchoolDeathPersistenceRowState.Conflict;
+            if (committed) return SchoolDeathPersistenceRowState.Committed;
+            if (original) return SchoolDeathPersistenceRowState.Original;
+            return SchoolDeathPersistenceRowState.Conflict;
+        }
+
+        private static SchoolDeathPersistenceRowState ReadSchoolDeathMasterState(
+            HistoricalSchoolMasterDeathRow pOriginal, bool pHistoricalMaster, int pYear,
+            long pDeathCityId, string pCause, double pTime)
+        {
+            if (pOriginal == null)
+                return pHistoricalMaster ? SchoolDeathPersistenceRowState.Conflict :
+                    SchoolDeathPersistenceRowState.Unchanged;
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED," +
+                "DEAD,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
+                "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME FROM " +
+                MasterTable + " WHERE MASTER_ID=@master OR ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@master", pOriginal.MasterId);
+            command.Parameters.AddWithValue("@actor", pOriginal.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read()) return SchoolDeathPersistenceRowState.Conflict;
+            HistoricalSchoolMasterDeathRow current = HistoricalSchoolMasterDeathRow.Read(reader);
+            if (reader.Read()) return SchoolDeathPersistenceRowState.Conflict;
+            if (current.MatchesCommittedDeath(pOriginal, pYear, pDeathCityId, pCause, pTime))
+                return SchoolDeathPersistenceRowState.Committed;
+            if (current.MatchesExact(pOriginal)) return SchoolDeathPersistenceRowState.Original;
+            return SchoolDeathPersistenceRowState.Conflict;
         }
 
         private static void CloseSchoolDeathMembershipCommand(
@@ -1974,6 +2214,104 @@ namespace AncientWarfare3.core.schools
         private static string ValueString(SQLiteDataReader pReader, int pIndex)
         {
             return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? "";
+        }
+
+        private sealed class HistoricalSchoolAffiliationDeathRow
+        {
+            public HistoricalSchoolAffiliationDeathRow(
+                HistoricalSchoolAffiliationSnapshot pState, double pUpdatedTime)
+            {
+                State = pState;
+                UpdatedTime = pUpdatedTime;
+            }
+
+            public HistoricalSchoolAffiliationSnapshot State { get; }
+            public double UpdatedTime { get; }
+        }
+
+        private sealed class HistoricalSchoolMasterDeathRow
+        {
+            private HistoricalSchoolMasterDeathRow(string pMasterId, long pActorId,
+                string pSchoolId, string pCanonicalName, bool pSpawned, bool pDead,
+                long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
+                int pSpawnYear, int pDeathYear, string pLifecycleState, string pDeathCause,
+                long pDeathCityId, double pUpdatedTime)
+            {
+                MasterId = pMasterId;
+                ActorId = pActorId;
+                SchoolId = pSchoolId;
+                CanonicalName = pCanonicalName;
+                Spawned = pSpawned;
+                Dead = pDead;
+                HomeKingdomId = pHomeKingdomId;
+                HomeKingdomName = pHomeKingdomName;
+                HometownCityId = pHometownCityId;
+                SpawnYear = pSpawnYear;
+                DeathYear = pDeathYear;
+                LifecycleState = pLifecycleState;
+                DeathCause = pDeathCause;
+                DeathCityId = pDeathCityId;
+                UpdatedTime = pUpdatedTime;
+            }
+
+            public string MasterId { get; }
+            public long ActorId { get; }
+            public string SchoolId { get; }
+            private string CanonicalName { get; }
+            public bool Spawned { get; }
+            public bool Dead { get; }
+            private long HomeKingdomId { get; }
+            private string HomeKingdomName { get; }
+            private long HometownCityId { get; }
+            private int SpawnYear { get; }
+            private int DeathYear { get; }
+            private string LifecycleState { get; }
+            private string DeathCause { get; }
+            private long DeathCityId { get; }
+            private double UpdatedTime { get; }
+
+            public static HistoricalSchoolMasterDeathRow Read(SQLiteDataReader pReader)
+            {
+                return new HistoricalSchoolMasterDeathRow(ValueString(pReader, 0),
+                    ValueLong(pReader, 1, -1L), ValueString(pReader, 2),
+                    ValueString(pReader, 3), ValueInt(pReader, 4) == 1,
+                    ValueInt(pReader, 5) == 1, ValueLong(pReader, 6, -1L),
+                    ValueString(pReader, 7), ValueLong(pReader, 8, -1L),
+                    ValueInt(pReader, 9, -1), ValueInt(pReader, 10, -1),
+                    ValueString(pReader, 11), ValueString(pReader, 12),
+                    ValueLong(pReader, 13, -1L), ValueDouble(pReader, 14, -1d));
+            }
+
+            public bool MatchesExact(HistoricalSchoolMasterDeathRow pExpected)
+            {
+                return pExpected != null && MasterId == pExpected.MasterId &&
+                       ActorId == pExpected.ActorId && SchoolId == pExpected.SchoolId &&
+                       CanonicalName == pExpected.CanonicalName &&
+                       Spawned == pExpected.Spawned && Dead == pExpected.Dead &&
+                       HomeKingdomId == pExpected.HomeKingdomId &&
+                       HomeKingdomName == pExpected.HomeKingdomName &&
+                       HometownCityId == pExpected.HometownCityId &&
+                       SpawnYear == pExpected.SpawnYear && DeathYear == pExpected.DeathYear &&
+                       LifecycleState == pExpected.LifecycleState &&
+                       DeathCause == pExpected.DeathCause &&
+                       DeathCityId == pExpected.DeathCityId &&
+                       UpdatedTime.Equals(pExpected.UpdatedTime);
+            }
+
+            public bool MatchesCommittedDeath(HistoricalSchoolMasterDeathRow pOriginal,
+                int pYear, long pDeathCityId, string pCause, double pTime)
+            {
+                return pOriginal != null && MasterId == pOriginal.MasterId &&
+                       ActorId == pOriginal.ActorId && SchoolId == pOriginal.SchoolId &&
+                       CanonicalName == pOriginal.CanonicalName && Spawned && Dead &&
+                       HomeKingdomId == pOriginal.HomeKingdomId &&
+                       HomeKingdomName == pOriginal.HomeKingdomName &&
+                       HometownCityId == pOriginal.HometownCityId &&
+                       SpawnYear == pOriginal.SpawnYear && DeathYear == pYear &&
+                       LifecycleState == HistoricalSchoolLifecycleState.Dead.ToString() &&
+                       DeathCause == pCause && DeathCityId == pDeathCityId &&
+                       UpdatedTime.Equals(pTime);
+            }
         }
     }
 

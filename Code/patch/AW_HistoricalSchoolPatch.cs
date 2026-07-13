@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
 using ai.behaviours;
@@ -14,13 +15,44 @@ namespace AncientWarfare3.patch
             HistoricalSchoolRuntime.OnWorldYear();
         }
 
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
+        [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die",
             new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        private static void ActorDie_Prefix(Actor __instance)
+        private static Exception ActorDie_Finalizer(Actor __instance, bool pDestroy,
+            Exception __exception)
         {
-            SchoolMembershipService.OnDeath(__instance);
+            try
+            {
+                if (__instance?.data != null && !__instance.isAlive())
+                    SchoolMembershipService.OnDeath(__instance, pDestroy);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("School death finalizer failed: " + error.Message);
+            }
+            return __exception;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapBox), "Update")]
+        private static void MapBoxUpdate_Prefix()
+        {
+            if (!Config.game_loaded || SmoothLoader.isLoading()) return;
+            SchoolMembershipService.ProcessDeathRetries();
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ActorManager), "destroyObject")]
+        private static bool ActorManagerDestroyObject_Prefix(Actor pActor)
+        {
+            return !SchoolMembershipService.ShouldDeferDestroy(pActor);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
+        private static void MapBoxClearWorld_Prefix()
+        {
+            SchoolMembershipService.ClearRuntime();
         }
 
         [HarmonyPrefix]
