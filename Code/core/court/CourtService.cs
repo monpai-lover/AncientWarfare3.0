@@ -272,9 +272,10 @@ namespace AncientWarfare3.core.court
                 }
                 return;
             }
-            string initialSchool = EnsurePersonalSchool(king);
-            SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive, "king_council", initialSchool, null);
-            pOccupiedOffices?.Add("king_council");
+            string initialSchool = SchoolMembershipService.GetSchool(king.data.id);
+            if (SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive,
+                    "king_council", initialSchool, null))
+                pOccupiedOffices?.Add("king_council");
         }
 
         private static void FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,
@@ -285,9 +286,10 @@ namespace AncientWarfare3.core.court
 
             Actor candidate = FindBestCandidate(pKingdom, pRoster, pOfficeId, pPreferredSchool);
             if (candidate == null) return;
-            string school = EnsurePersonalSchool(candidate);
-            SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central, pOfficeId, school, null);
-            pOccupiedOffices?.Add(pOfficeId);
+            string school = SchoolMembershipService.GetSchool(candidate.data.id);
+            if (SetOfficer(candidate, pKingdom, CourtOfficeLayer.Central,
+                    pOfficeId, school, null))
+                pOccupiedOffices?.Add(pOfficeId);
         }
 
         private static Actor FindBestCandidate(Kingdom pKingdom, List<Actor> pRoster,
@@ -376,7 +378,7 @@ namespace AncientWarfare3.core.court
             if (!string.IsNullOrEmpty(currentOffice)) return false;
             if (!CourtRules.CanHoldLayerOffice(CourtOfficeLayer.Central,
                     pActor.isSexMale(), otherwiseEligible: true)) return false;
-            string school = EnsurePersonalSchool(pActor);
+            string school = SchoolMembershipService.GetSchool(pActor.data.id);
             if (string.IsNullOrEmpty(school) || CourtSchoolRegistry.Find(school) == null)
                 return false;
             if (!HistoricalAffiliationService.TryBeginService(pActor, pKingdom,
@@ -437,7 +439,7 @@ namespace AncientWarfare3.core.court
             Kingdom previousKingdom = previousKingdomId >= 0
                 ? World.world?.kingdoms?.get(previousKingdomId)
                 : null;
-            bool clearedPreviousPhysician = false;
+            bool shouldClearPreviousPhysician = false;
             if (!string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId)
             {
                 previousKingdom ??= pKingdom;
@@ -445,35 +447,39 @@ namespace AncientWarfare3.core.court
                 {
                     previousKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
                         out long cachedPhysicianId, -1L);
-                    if (RoyalMedicalCareRules.ShouldClearCachedPhysician(
-                            cachedPhysicianId, pActor.data.id, previousOffice))
-                    {
-                        previousKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
-                        clearedPreviousPhysician = true;
-                    }
+                    shouldClearPreviousPhysician =
+                        RoyalMedicalCareRules.ShouldClearCachedPhysician(
+                            cachedPhysicianId, pActor.data.id, previousOffice);
                 }
-                if (previousKingdom?.data != null)
-                    ChronicleEvents.OnCourtOfficerDismissed(pActor, previousKingdom,
-                        previousOffice, "reassigned");
             }
 
+            string personalSchool = SchoolMembershipService.GetSchool(pActor.data.id);
+            OfficialCareerAppointmentResult careerResult = OfficialCareerService.Appoint(
+                pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
+            if (!careerResult.IsCommitted) return false;
+
+            if (shouldClearPreviousPhysician && previousKingdom?.data != null)
+                previousKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
+            if (careerResult.Mutation == OfficialCareerMutation.Reassigned &&
+                !string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId &&
+                previousKingdom?.data != null)
+                ChronicleEvents.OnCourtOfficerDismissed(pActor, previousKingdom,
+                    previousOffice, "reassigned");
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
-            string personalSchool = EnsurePersonalSchool(pActor);
+            pActor.data.set(LineageKeys.COURT_SCHOOL, personalSchool);
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
-            bool careerStarted = OfficialCareerService.Appoint(pActor, pKingdom, pLayer ?? "",
-                pOfficeId ?? "", personalSchool, pCity);
-            if (careerStarted)
+            if (careerResult.CreatedAppointmentEvent)
                 ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
-            if (clearedPreviousPhysician && previousKingdom?.data != null)
+            if (shouldClearPreviousPhysician && previousKingdom?.data != null)
                 RoyalMedicalCareService.ReconcileTargets(previousKingdom);
             if (pOfficeId == CourtOfficeId.ImperialPhysician)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);

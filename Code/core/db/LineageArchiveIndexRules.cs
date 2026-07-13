@@ -110,6 +110,9 @@ namespace AncientWarfare3.core.db
                     "KINGDOM_ID, ACTIVE, LAYER, OFFICE_ID"),
                 Index("idx_CourtOfficer_actor_active", CourtOfficerTableItem.GetTableName(),
                     "ACTOR_ID, ACTIVE, KINGDOM_ID"),
+                Index("idx_CourtOfficer_actor_layer_active_unique",
+                    CourtOfficerTableItem.GetTableName(), "ACTOR_ID, LAYER", "ACTIVE=1",
+                    pUnique: true),
                 Index("idx_CityBureauState_kingdom_city", CityBureauStateTableItem.GetTableName(),
                     "KINGDOM_ID, CITY_ID"),
 
