@@ -67,6 +67,59 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public sealed class HistoricalSchoolBootstrapRetryGate
+    {
+        public const int InitialRetryDelayFrames = 30;
+        public const int MaxRetryDelayFrames = 240;
+
+        private int _failedAttempts;
+        private long _frame;
+        private long _nextAttemptFrame;
+        private long _attemptedFrame = long.MinValue;
+
+        public bool CanAttempt()
+        {
+            if (_frame < _nextAttemptFrame || _attemptedFrame == _frame) return false;
+            _attemptedFrame = _frame;
+            return true;
+        }
+
+        public void AdvanceFrame()
+        {
+            if (_frame < long.MaxValue) _frame++;
+        }
+
+        public int RecordFailure()
+        {
+            _failedAttempts = Math.Min(31, _failedAttempts + 1);
+            int delay = DelayForAttempt(_failedAttempts);
+            _nextAttemptFrame = _frame > long.MaxValue - delay
+                ? long.MaxValue
+                : _frame + delay;
+            return delay;
+        }
+
+        public void RecordSuccess()
+        {
+            _failedAttempts = 0;
+            _nextAttemptFrame = _frame;
+        }
+
+        public void Clear()
+        {
+            _failedAttempts = 0;
+            _frame = 0L;
+            _nextAttemptFrame = 0L;
+            _attemptedFrame = long.MinValue;
+        }
+
+        private static int DelayForAttempt(int pFailedAttempts)
+        {
+            int shift = Math.Min(3, Math.Max(0, pFailedAttempts - 1));
+            return Math.Min(MaxRetryDelayFrames, InitialRetryDelayFrames << shift);
+        }
+    }
+
     public sealed class HistoricalSchoolPendingRuntimeState
     {
         public const int InitialRetryDelayFrames = 30;

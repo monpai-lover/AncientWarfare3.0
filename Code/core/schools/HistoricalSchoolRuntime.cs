@@ -14,6 +14,8 @@ namespace AncientWarfare3.core.schools
         private static bool _loaded;
         private static readonly HistoricalSchoolPendingRuntimeState PendingRuntimeState =
             new HistoricalSchoolPendingRuntimeState();
+        private static readonly HistoricalSchoolBootstrapRetryGate BootstrapRetryGate =
+            new HistoricalSchoolBootstrapRetryGate();
 
         public static int EligibleYear => _eligibleYear;
 
@@ -31,6 +33,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolDebateService.LoadState();
             _lastQuarterKey = -1;
             PendingRuntimeState.Clear();
+            BootstrapRetryGate.RecordSuccess();
             _loaded = true;
         }
 
@@ -41,6 +44,7 @@ namespace AncientWarfare3.core.schools
             _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
             PendingRuntimeState.Clear();
+            BootstrapRetryGate.Clear();
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
@@ -54,6 +58,7 @@ namespace AncientWarfare3.core.schools
 
         public static void ProcessFrame()
         {
+            BootstrapRetryGate.AdvanceFrame();
             if (!_loaded || World.world == null) return;
             PendingRuntimeState.AdvanceAndTryFlush(HistoricalSchoolStore.SaveRuntimeState);
             HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
@@ -75,8 +80,16 @@ namespace AncientWarfare3.core.schools
             if (worldYear == _attemptedWorldYear) return;
 
             var runner = new HistoricalSchoolAnnualStageRunner(LogAnnualStageFailure);
-            if (!_loaded && !runner.TryRun(HistoricalSchoolAnnualStageId.Bootstrap,
-                    LoadState)) return;
+            if (!_loaded)
+            {
+                if (!BootstrapRetryGate.CanAttempt()) return;
+                if (!runner.TryRun(HistoricalSchoolAnnualStageId.Bootstrap, LoadState))
+                {
+                    BootstrapRetryGate.RecordFailure();
+                    return;
+                }
+                BootstrapRetryGate.RecordSuccess();
+            }
             _attemptedWorldYear = worldYear;
             if (worldYear == _lastWorldYear) return;
 
