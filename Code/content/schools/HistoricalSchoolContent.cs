@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.ai.behaviours.actor;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using ai.behaviours;
@@ -47,9 +48,10 @@ namespace AncientWarfare3.content.schools
             Announce(DeathLogId, pActor, pCity, LogKingdom(pActor));
         }
 
-        public static void AnnounceLecture(Actor pActor, City pCity)
+        public static void AnnounceLecture(Actor pActor, City pCity, string pSchoolId)
         {
-            Announce(LectureLogId, pActor, pCity, LogKingdom(pActor));
+            Announce(LectureLogIdForSchool(pSchoolId), pActor, pCity,
+                LogKingdom(pActor));
         }
 
         public static void AnnounceDebate(Actor pFirst, Actor pSecond, City pCity,
@@ -159,18 +161,31 @@ namespace AncientWarfare3.content.schools
         {
             RegisterLog(DescentLogId, Toolbox.color_log_neutral);
             RegisterLog(DeathLogId, Toolbox.color_log_warning);
-            RegisterLog(LectureLogId, Toolbox.color_log_neutral);
+            RegisterLog(LectureLogId, Toolbox.color_log_neutral,
+                "ui/Icons/iconKnowledge", LectureLogId);
+            foreach (CourtSchoolDefinition definition in CourtSchoolRegistry.All)
+                RegisterLog(LectureLogIdForSchool(definition.Id),
+                    Toolbox.color_log_neutral, definition.IconPath, LectureLogId);
             RegisterLog(DebateLogId, Toolbox.color_log_neutral);
         }
 
-        private static void RegisterLog(string pId, Color pColor)
+        private static string LectureLogIdForSchool(string pSchoolId)
+        {
+            return CourtSchoolRegistry.Find(pSchoolId) == null
+                ? LectureLogId
+                : LectureLogId + "__" + pSchoolId;
+        }
+
+        private static void RegisterLog(string pId, Color pColor,
+            string pIcon = "ui/Icons/traits/iconRujia", string pLocaleId = null)
         {
             if (AssetManager.world_log_library.get(pId) != null) return;
             AssetManager.world_log_library.add(new WorldLogAsset
             {
                 id = pId,
+                locale_id = pLocaleId ?? pId,
                 group = "kings",
-                path_icon = "ui/Icons/traits/iconRujia",
+                path_icon = pIcon,
                 color = pColor,
                 text_replacer = (WorldLogMessage pMessage, ref string pText) =>
                 {

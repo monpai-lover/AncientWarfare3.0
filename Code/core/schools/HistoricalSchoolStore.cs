@@ -37,6 +37,46 @@ namespace AncientWarfare3.core.schools
                 "MEMBERSHIP_ID");
         }
 
+        internal static HistoricalSchoolTeachingHistory LoadTeachingHistory()
+        {
+            try
+            {
+                return HistoricalSchoolTeachingPersistenceDb.LoadHistory(DB);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load teaching history failed: " +
+                                    error.Message);
+                return new HistoricalSchoolTeachingHistory();
+            }
+        }
+
+        internal static HistoricalSchoolTeachingDbResult RecordTeaching(
+            HistoricalSchoolTeachingPlan pPlan, string pActorName, long pTargetActorId,
+            string pTargetActorName, double pWorldTime)
+        {
+            if (DB == null || !pPlan.IsValid)
+                return new HistoricalSchoolTeachingDbResult(
+                    HistoricalSchoolTeachingPersistenceOutcome.Unknown);
+            try
+            {
+                var request = new HistoricalSchoolTeachingDbRequest(pPlan, pActorName,
+                    pTargetActorId, pTargetActorName, pWorldTime);
+                HistoricalSchoolTeachingDbResult result =
+                    HistoricalSchoolTeachingPersistenceDb.Record(DB, request);
+                if (result.PersistedNew)
+                    InvalidateLedgerCaches(pPlan.Candidate.CityId);
+                return result;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore teaching transaction failed: " +
+                                    error.Message);
+                return new HistoricalSchoolTeachingDbResult(
+                    HistoricalSchoolTeachingPersistenceOutcome.Unknown);
+            }
+        }
+
         public static bool RecordSchoolEvent(string pEventType, long pActorId,
             long pTargetActorId, string pSchoolId, long pCityId, long pKingdomId, int pYear,
             string pPayload, int pImportance, double pWorldTime)

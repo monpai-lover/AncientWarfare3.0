@@ -32,8 +32,11 @@ namespace AncientWarfare3.core.schools
             Actor[] historical = teachers
                 .Where(HistoricalSchoolDescentService.IsCanonicalMaster)
                 .ToArray();
+            var teachingBudget = new HistoricalSchoolTeachingBudget(pYear,
+                HistoricalSchoolStore.LoadTeachingHistory());
             foreach (Actor teacher in teachers)
-                TeachInResidence(teacher, pYear, directCounts, pMembers);
+                if (!TeachInResidence(teacher, pYear, directCounts, pMembers,
+                        teachingBudget)) break;
             ProcessExplicitActions(pYear, pMembers);
             ProcessInstitutionFounding(pYear, historical);
         }
@@ -201,22 +204,38 @@ namespace AncientWarfare3.core.schools
             return (pSchoolId ?? "") + ":" + pCityId;
         }
 
-        private static void TeachInResidence(Actor pTeacher, int pYear,
+        private static bool TeachInResidence(Actor pTeacher, int pYear,
             IReadOnlyDictionary<long, int> pDirectCounts,
-            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
+            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers,
+            HistoricalSchoolTeachingBudget pTeachingBudget)
         {
             SchoolMembershipRecord teacherMembership =
                 SchoolMembershipService.GetActive(pTeacher.data.id);
-            if (teacherMembership == null) return;
+            if (teacherMembership == null || pTeachingBudget == null) return true;
             City residence = HistoricalAffiliationService.ResidenceCity(pTeacher) ?? pTeacher.city;
-            if (residence?.data == null || residence.isRekt()) return;
-            if (!HistoricalAffiliationService.IsPresentForInfluence(pTeacher)) return;
-
-            if (!RecordLecture(pTeacher, teacherMembership.SchoolId, residence, pYear))
-                return;
-            // Lectures make the teaching public; the separate persuasion event records
-            // the master's attempt to influence the resident state's policy circle.
-            RecordPersuasion(pTeacher, teacherMembership.SchoolId, residence, pYear);
+            if (residence?.data == null || residence.isRekt() ||
+                residence.kingdom?.data == null ||
+                !HistoricalAffiliationService.IsPresentForInfluence(pTeacher)) return true;
+            bool canonical = HistoricalSchoolDescentService.IsCanonicalMaster(pTeacher);
+            var lectureCandidate = new HistoricalSchoolLectureCandidate(pTeacher.data.id,
+                teacherMembership.SchoolId, residence.data.id, residence.kingdom.id,
+                canonical, teacherMembership.StartYear, teacherMembership.Reputation);
+            if (!pTeachingBudget.TryPlan(lectureCandidate,
+                    out HistoricalSchoolTeachingPlan plan)) return true;
+            Actor target = residence.kingdom.king;
+            long targetActorId = plan.IncludePersuasion
+                ? target?.data?.id ?? -1L
+                : -1L;
+            string targetName = plan.IncludePersuasion ? target?.getName() ?? "" : "";
+            HistoricalSchoolTeachingDbResult teachingResult =
+                HistoricalSchoolStore.RecordTeaching(plan, pTeacher.getName() ?? "",
+                    targetActorId, targetName,
+                    World.world?.getCurWorldTime() ?? 0d);
+            if (!teachingResult.IsCommitted) return false;
+            if (!pTeachingBudget.Commit(plan)) return false;
+            if (teachingResult.PersistedNew && plan.Announce)
+                HistoricalSchoolContent.AnnounceLecture(pTeacher, residence,
+                    teacherMembership.SchoolId);
             if (HistoricalSchoolDescentService.IsCanonicalMaster(pTeacher))
                 RecordHistoricalWork(pTeacher, pYear);
             int directCount = 0;
@@ -266,6 +285,7 @@ namespace AncientWarfare3.core.schools
                     candidate.getName(), "school_disciple", candidate.getName() +
                     " studied under " + pTeacher.getName(), ChronicleCategory.LIFE);
             }
+            return true;
         }
 
         public static bool RecordHistoricalWork(Actor pTeacher, int pYear)
@@ -434,30 +454,6 @@ namespace AncientWarfare3.core.schools
             }
             catch { }
             return result.OrderByDescending(CandidateScore).ThenBy(p => p.data.id);
-        }
-
-        private static bool RecordLecture(Actor pTeacher, string pSchoolId, City pCity,
-            int pYear)
-        {
-            if (!HistoricalSchoolStore.RecordSchoolEvent("lecture", pTeacher.data.id, -1,
-                pSchoolId, pCity.data.id, pCity.kingdom?.data?.id ?? -1L, pYear,
-                pTeacher.data.name ?? "", 1, World.world?.getCurWorldTime() ?? 0d))
-                return false;
-            HistoricalSchoolContent.AnnounceLecture(pTeacher, pCity);
-            return true;
-        }
-
-        private static bool RecordPersuasion(Actor pTeacher, string pSchoolId, City pCity,
-            int pYear)
-        {
-            if (pTeacher?.data == null || pCity?.data == null) return false;
-            long targetActorId = pCity.kingdom?.king?.data?.id ?? -1L;
-            string targetName = pCity.kingdom?.king?.getName() ?? "";
-            string payload = (pTeacher.getName() ?? "") + "|" + targetName;
-            return HistoricalSchoolStore.RecordSchoolEvent("persuasion", pTeacher.data.id,
-                targetActorId, pSchoolId, pCity.data.id,
-                pCity.kingdom?.data?.id ?? -1L, pYear, payload, 1,
-                World.world?.getCurWorldTime() ?? 0d);
         }
 
         private static float CandidateScore(Actor pActor)

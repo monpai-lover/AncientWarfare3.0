@@ -149,7 +149,21 @@ namespace AncientWarfare3.core.db
                 Index("idx_SchoolEvent_guest_operation_unique",
                     SchoolEventTableItem.GetTableName(), "OPERATION_KEY",
                     "OPERATION_KEY<>'' AND EVENT_TYPE IN ('guest_service_started'," +
-                    "'guest_service_renewed')", pUnique: true)
+                    "'guest_service_renewed')", pUnique: true),
+                Index("idx_SchoolEvent_teaching_operation_unique",
+                    SchoolEventTableItem.GetTableName(), "OPERATION_KEY",
+                    "OPERATION_KEY<>'' AND EVENT_TYPE IN ('lecture','persuasion')",
+                    pUnique: true),
+                Index("idx_SchoolEvent_teaching_actor_year",
+                    SchoolEventTableItem.GetTableName(),
+                    "EVENT_TYPE, ACTOR_ID, EVENT_YEAR, EVENT_ID",
+                    "EVENT_TYPE IN ('lecture','persuasion')"),
+                Index("idx_SchoolEvent_lecture_city_school_year",
+                    SchoolEventTableItem.GetTableName(),
+                    "CITY_ID, SCHOOL_ID, EVENT_YEAR, EVENT_ID", "EVENT_TYPE='lecture'"),
+                Index("idx_SchoolEvent_persuasion_kingdom_year",
+                    SchoolEventTableItem.GetTableName(),
+                    "KINGDOM_ID, EVENT_YEAR, EVENT_ID", "EVENT_TYPE='persuasion'")
             };
         }
 

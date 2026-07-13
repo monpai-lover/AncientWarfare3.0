@@ -128,7 +128,7 @@ namespace AncientWarfare3.core.schools
             foreach (KeyValuePair<long, TActor> item in _livingByActor)
             {
                 SchoolMembershipRecord record = _activeByActor[item.Key];
-                if (SafeCanonical(item.Value) || !IsQualified(record, pCanonical: false))
+                if (SafeCanonical(item.Value) || !IsLectureQualified(record, pYear))
                     continue;
                 var candidate = new TeacherCandidate(item.Key,
                     HistoricalSchoolRules.TeacherOrder(item.Key, pYear),
@@ -271,6 +271,13 @@ namespace AncientWarfare3.core.schools
                    pRecord.Source == SchoolMembershipSource.LaterDiscipleship ||
                    pRecord.Source == SchoolMembershipSource.ExplicitConversion ||
                    pRecord.Source == SchoolMembershipSource.PreservedWork;
+        }
+
+        private static bool IsLectureQualified(SchoolMembershipRecord pRecord, int pYear)
+        {
+            return IsQualified(pRecord, pCanonical: false) &&
+                   HistoricalSchoolLectureRules.IsLaterTeacherEligible(
+                       pRecord.StartYear, pRecord.Reputation, pYear);
         }
 
         private static bool ValidActive(SchoolMembershipRecord pRecord)
