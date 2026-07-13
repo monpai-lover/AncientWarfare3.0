@@ -3,6 +3,54 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.schools
 {
+    public sealed class HistoricalSchoolCircularCitySelector<TCity>
+    {
+        private readonly int _capacity;
+        private readonly long _cursor;
+        private readonly Func<TCity, long> _cityId;
+        private readonly Func<TCity, bool> _eligible;
+        private readonly HistoricalSchoolBoundedCitySelector<TCity> _afterCursor;
+        private readonly HistoricalSchoolBoundedCitySelector<TCity> _wrapped;
+
+        public HistoricalSchoolCircularCitySelector(int pCapacity, long pCursor,
+            Func<TCity, long> pCityId, Func<TCity, bool> pEligible)
+        {
+            if (pCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(pCapacity));
+            _capacity = pCapacity;
+            _cursor = pCursor;
+            _cityId = pCityId ?? throw new ArgumentNullException(nameof(pCityId));
+            _eligible = pEligible ?? throw new ArgumentNullException(nameof(pEligible));
+            _afterCursor = new HistoricalSchoolBoundedCitySelector<TCity>(pCapacity,
+                pCityId, _ => true);
+            _wrapped = new HistoricalSchoolBoundedCitySelector<TCity>(pCapacity,
+                pCityId, _ => true);
+        }
+
+        public int Count => _afterCursor.Count + _wrapped.Count;
+
+        public void Consider(TCity pCity)
+        {
+            if (!_eligible(pCity)) return;
+            if (_cityId(pCity) > _cursor) _afterCursor.Consider(pCity);
+            else _wrapped.Consider(pCity);
+        }
+
+        public IEnumerable<TCity> AscendingFromCursor()
+        {
+            int emitted = 0;
+            foreach (TCity city in _afterCursor.Ascending())
+            {
+                if (emitted++ >= _capacity) yield break;
+                yield return city;
+            }
+            foreach (TCity city in _wrapped.Ascending())
+            {
+                if (emitted++ >= _capacity) yield break;
+                yield return city;
+            }
+        }
+    }
+
     public sealed class HistoricalSchoolBoundedCitySelector<TCity>
     {
         private readonly int _capacity;

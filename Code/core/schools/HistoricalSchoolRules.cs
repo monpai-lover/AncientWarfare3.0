@@ -5,6 +5,62 @@ using AncientWarfare3.content.schools;
 
 namespace AncientWarfare3.core.schools
 {
+    public static class HistoricalSchoolAnnualStageId
+    {
+        public const string Bootstrap = "bootstrap";
+        public const string XiaCityScan = "xia_city_scan";
+        public const string Descent = "descent";
+        public const string Guest = "guest";
+        public const string LedgerDecay = "ledger_decay";
+        public const string AnnualSnapshot = "annual_snapshot";
+        public const string Action = "action";
+        public const string Debate = "debate";
+        public const string RuntimeSave = "runtime_save";
+    }
+
+    public sealed class HistoricalSchoolAnnualStageRunner
+    {
+        private readonly Action<string, Exception> _recordFailure;
+
+        public HistoricalSchoolAnnualStageRunner(Action<string, Exception> pRecordFailure)
+        {
+            _recordFailure = pRecordFailure ??
+                             throw new ArgumentNullException(nameof(pRecordFailure));
+        }
+
+        public bool TryRun(string pStageId, Action pStage)
+        {
+            try
+            {
+                if (pStage == null) throw new ArgumentNullException(nameof(pStage));
+                pStage();
+                return true;
+            }
+            catch (Exception error)
+            {
+                _recordFailure(pStageId ?? "", error);
+                return false;
+            }
+        }
+
+        public bool TryRun<TResult>(string pStageId, Func<TResult> pStage,
+            out TResult pResult)
+        {
+            try
+            {
+                if (pStage == null) throw new ArgumentNullException(nameof(pStage));
+                pResult = pStage();
+                return true;
+            }
+            catch (Exception error)
+            {
+                pResult = default;
+                _recordFailure(pStageId ?? "", error);
+                return false;
+            }
+        }
+    }
+
     public static class HistoricalSchoolRules
     {
         public const int MaxDescentsPerEligibleYear = 2;

@@ -65,56 +65,74 @@ namespace AncientWarfare3.core.schools
             if (worldYear == _attemptedWorldYear) return;
             _attemptedWorldYear = worldYear;
 
-            try
-            {
-                if (!_loaded) LoadState();
-                if (worldYear == _lastWorldYear) return;
+            var runner = new HistoricalSchoolAnnualStageRunner(LogAnnualStageFailure);
+            if (!_loaded && !runner.TryRun(HistoricalSchoolAnnualStageId.Bootstrap,
+                    LoadState)) return;
+            if (worldYear == _lastWorldYear) return;
 
-                List<City> cities = LivingXiaCities();
-                int nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
-                    cities.Count > 0);
+            int nextEligibleYear = _eligibleYear;
+            List<City> cities = null;
+            bool cityScanSucceeded = runner.TryRun(HistoricalSchoolAnnualStageId.XiaCityScan,
+                () =>
+                {
+                    cities = LivingXiaCities();
+                    nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
+                        cities.Count > 0);
+                });
+            if (cityScanSucceeded)
+            {
+                _eligibleYear = nextEligibleYear;
                 if (cities.Count > 0)
-                    HistoricalSchoolDescentService.ProcessDue(nextEligibleYear, cities);
-                SchoolGuestOfficeService.ProcessYear(worldYear);
+                    runner.TryRun(HistoricalSchoolAnnualStageId.Descent, () =>
+                        HistoricalSchoolDescentService.ProcessDue(nextEligibleYear, cities));
+            }
+
+            runner.TryRun(HistoricalSchoolAnnualStageId.Guest, () =>
+                SchoolGuestOfficeService.ProcessYear(worldYear));
+            runner.TryRun(HistoricalSchoolAnnualStageId.LedgerDecay, () =>
+            {
                 HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
                     World.world?.getCurWorldTime() ?? 0d, out long[] affectedCityIds);
                 foreach (long cityId in affectedCityIds)
                     CitySchoolSnapshotService.MarkDirtyById(cityId);
-                HistoricalSchoolAnnualMemberSnapshot<Actor> annualMembers =
-                    HistoricalSchoolAnnualMemberSnapshotBuilder.Build();
-                HistoricalSchoolActionService.ProcessYear(worldYear, annualMembers);
-                HistoricalSchoolDebateService.ProcessYear(worldYear, annualMembers);
-                HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
-                    World.world?.getCurWorldTime() ?? 0d);
-                _eligibleYear = nextEligibleYear;
-                _lastWorldYear = worldYear;
-            }
-            catch (Exception error)
+            });
+
+            bool snapshotSucceeded = runner.TryRun(
+                HistoricalSchoolAnnualStageId.AnnualSnapshot,
+                HistoricalSchoolAnnualMemberSnapshotBuilder.Build,
+                out HistoricalSchoolAnnualMemberSnapshot<Actor> annualMembers);
+            if (snapshotSucceeded)
             {
-                ModClass.LogWarning("Historical school annual tick failed: " +
-                                    error.ToString());
+                runner.TryRun(HistoricalSchoolAnnualStageId.Action, () =>
+                    HistoricalSchoolActionService.ProcessYear(worldYear, annualMembers));
+                runner.TryRun(HistoricalSchoolAnnualStageId.Debate, () =>
+                    HistoricalSchoolDebateService.ProcessYear(worldYear, annualMembers));
             }
+
+            runner.TryRun(HistoricalSchoolAnnualStageId.RuntimeSave, () =>
+                HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
+                    World.world?.getCurWorldTime() ?? 0d));
+            _lastWorldYear = worldYear;
         }
 
         private static List<City> LivingXiaCities()
         {
             var result = new List<City>();
-            try
+            if (World.world?.kingdoms == null) return result;
+            foreach (Kingdom kingdom in World.world.kingdoms)
             {
-                if (World.world?.kingdoms == null) return result;
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                {
-                    if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral() ||
-                        !LineageService.IsXiaKingdom(kingdom)) continue;
-                    foreach (City city in kingdom.getCities())
-                        if (city?.data != null && !city.isRekt()) result.Add(city);
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school Xia city scan failed: " + error.Message);
+                if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral() ||
+                    !LineageService.IsXiaKingdom(kingdom)) continue;
+                foreach (City city in kingdom.getCities())
+                    if (city?.data != null && !city.isRekt()) result.Add(city);
             }
             return result;
+        }
+
+        private static void LogAnnualStageFailure(string pStageId, Exception error)
+        {
+            ModClass.LogWarning("Historical school annual stage failed [" + pStageId +
+                                "]: " + error.ToString());
         }
     }
 }

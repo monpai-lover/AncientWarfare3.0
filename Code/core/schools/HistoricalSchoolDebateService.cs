@@ -21,12 +21,14 @@ namespace AncientWarfare3.core.schools
         private const int MaxIndexedActorsPerYear = 4096;
 
         private static int _lastProcessedYear = -1;
+        private static long _lastScannedCityId = long.MinValue;
         private static readonly Dictionary<long, int> DebateWins =
             new Dictionary<long, int>();
 
         public static void ClearRuntime()
         {
             _lastProcessedYear = -1;
+            _lastScannedCityId = long.MinValue;
             DebateWins.Clear();
         }
 
@@ -56,6 +58,7 @@ namespace AncientWarfare3.core.schools
             {
                 if (budget <= 0 || processedCities++ >= MaxCitiesPerYear) break;
                 if (city?.data == null || city.isRekt()) continue;
+                _lastScannedCityId = city.data.id;
 
                 // Cheap filtering (real actors, membership, residence, lifecycle) happens
                 // before any ledger reads or score calculations.
@@ -404,11 +407,12 @@ namespace AncientWarfare3.core.schools
 
         private static IEnumerable<City> LivingCities()
         {
-            var result = new HistoricalSchoolBoundedCitySelector<City>(MaxCitiesPerYear,
-                p => p.data.id, p => p?.data != null && !p.isRekt());
+            var result = new HistoricalSchoolCircularCitySelector<City>(MaxCitiesPerYear,
+                _lastScannedCityId, p => p.data.id,
+                p => p?.data != null && !p.isRekt());
             try
             {
-                if (World.world?.kingdoms == null) return result.Ascending();
+                if (World.world?.kingdoms == null) return result.AscendingFromCursor();
                 foreach (Kingdom kingdom in World.world.kingdoms)
                 {
                     if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) continue;
@@ -421,7 +425,7 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Historical school debate city scan failed: " +
                                     error.Message);
             }
-            return result.Ascending();
+            return result.AscendingFromCursor();
         }
 
         private static IEnumerable<string> CityTopics(City pCity)
