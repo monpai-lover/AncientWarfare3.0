@@ -2,13 +2,14 @@ namespace AncientWarfare3.core.court
 {
     public enum OfficialCareerPersistenceOutcome
     {
+        Unknown,
         Committed,
-        CleanFailure,
-        Unknown
+        CleanFailure
     }
 
     public enum OfficialCareerMutation
     {
+        Noop,
         Started,
         Reassigned,
         Refreshed
@@ -42,6 +43,14 @@ namespace AncientWarfare3.core.court
         public OfficialCareerAppointmentResult(OfficialCareerPersistenceOutcome pPersistence,
             OfficialCareerMutation pMutation, OfficialCareerPrior pPrior)
         {
+            if (pPersistence == OfficialCareerPersistenceOutcome.Committed &&
+                pMutation == OfficialCareerMutation.Reassigned && pPrior == null)
+            {
+                Persistence = OfficialCareerPersistenceOutcome.Unknown;
+                Mutation = OfficialCareerMutation.Noop;
+                Prior = null;
+                return;
+            }
             Persistence = pPersistence;
             Mutation = pMutation;
             Prior = pPersistence == OfficialCareerPersistenceOutcome.Committed &&
@@ -57,6 +66,25 @@ namespace AncientWarfare3.core.court
         public bool CreatedAppointmentEvent => IsCommitted &&
             (Mutation == OfficialCareerMutation.Started ||
              Mutation == OfficialCareerMutation.Reassigned);
+    }
+
+    public static class OfficialCareerProjectionRecoveryRules
+    {
+        public static OfficialCareerPrior SelectCleanupPrior(
+            OfficialCareerAppointmentResult pResult, OfficialCareerPrior pRuntimePrior,
+            long pTargetKingdomId, string pTargetOfficeId)
+        {
+            if (!pResult.IsCommitted) return null;
+            if (pResult.Mutation == OfficialCareerMutation.Reassigned)
+                return pResult.Prior;
+            if (pResult.Mutation != OfficialCareerMutation.Refreshed ||
+                pRuntimePrior == null) return null;
+
+            return pRuntimePrior.KingdomId != pTargetKingdomId ||
+                   pRuntimePrior.OfficeId != (pTargetOfficeId ?? "")
+                ? pRuntimePrior
+                : null;
+        }
     }
 
     public static class OfficialCareerReadbackRules
