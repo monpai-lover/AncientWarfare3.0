@@ -360,8 +360,8 @@ namespace AncientWarfare3.core.court
                 !string.IsNullOrEmpty(existingSchool));
         }
 
-        internal static bool TryAppointGuestOfficer(Actor pActor, Kingdom pKingdom,
-            string pOfficeId, City pCity, int pStartYear, int pEndYear)
+        internal static bool CanAppointGuestOfficer(Actor pActor, Kingdom pKingdom,
+            string pOfficeId, City pCity)
         {
             HistoricalSchoolAffiliationSnapshot affiliation =
                 HistoricalAffiliationService.Get(pActor?.data?.id ?? -1L);
@@ -381,12 +381,7 @@ namespace AncientWarfare3.core.court
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
             if (string.IsNullOrEmpty(school) || CourtSchoolRegistry.Find(school) == null)
                 return false;
-            if (!HistoricalAffiliationService.TryBeginService(pActor, pKingdom,
-                    pStartYear, pEndYear)) return false;
-            if (SetOfficer(pActor, pKingdom, CourtOfficeLayer.Central, pOfficeId, school, pCity))
-                return true;
-            HistoricalAffiliationService.EndService(pActor, pStartYear);
-            return false;
+            return true;
         }
 
         internal static bool EndGuestOfficer(Actor pActor, Kingdom pHost, string pReason,
@@ -452,9 +447,21 @@ namespace AncientWarfare3.core.court
                 pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
             if (!careerResult.IsCommitted) return false;
 
+            return ApplyCommittedOfficerProjection(pActor, pKingdom, pLayer, pOfficeId,
+                personalSchool, pCity, careerResult, runtimePrior,
+                pRecordCareerHistory: true);
+        }
+
+        internal static bool ApplyCommittedOfficerProjection(Actor pActor, Kingdom pKingdom,
+            string pLayer, string pOfficeId, string pSchoolId, City pCity,
+            OfficialCareerAppointmentResult careerResult, OfficialCareerPrior pRuntimePrior,
+            bool pRecordCareerHistory)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                !careerResult.IsCommitted) return false;
             OfficialCareerPrior cleanupPrior =
                 OfficialCareerProjectionRecoveryRules.SelectCleanupPrior(careerResult,
-                    runtimePrior, pKingdom.id, pOfficeId);
+                    pRuntimePrior, pKingdom.id, pOfficeId);
             Kingdom cleanupKingdom = cleanupPrior == null
                 ? null
                 : cleanupPrior.KingdomId == pKingdom.id
@@ -477,27 +484,41 @@ namespace AncientWarfare3.core.court
                     cleanupKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
                 RoyalMedicalCareService.ReconcileTargets(cleanupKingdom);
             }
-            if (careerResult.Mutation == OfficialCareerMutation.Reassigned &&
+            if (pRecordCareerHistory &&
+                careerResult.Mutation == OfficialCareerMutation.Reassigned &&
                 careerResult.Prior != null && cleanupKingdom?.data != null)
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, cleanupKingdom,
                     careerResult.Prior.OfficeId, "reassigned");
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
-            pActor.data.set(LineageKeys.COURT_SCHOOL, personalSchool);
+            pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
             if (targetIsPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
-            if (careerResult.CreatedAppointmentEvent)
-                ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "", personalSchool);
+            if (pRecordCareerHistory && careerResult.CreatedAppointmentEvent)
+                ChronicleEvents.OnCourtOfficerAppointed(pActor, pKingdom, pOfficeId ?? "",
+                    pSchoolId ?? "");
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
             if (targetNeedsReconcile)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
             return true;
+        }
+
+        internal static OfficialCareerPrior CaptureRuntimeOfficerProjection(Actor pActor)
+        {
+            if (pActor?.data == null) return null;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long kingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_CITY_ID, out long cityId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            return kingdomId >= 0 || !string.IsNullOrEmpty(office)
+                ? new OfficialCareerPrior(kingdomId, cityId, layer, office)
+                : null;
         }
 
         private static void ClearOfficer(Actor pActor, string pReason,

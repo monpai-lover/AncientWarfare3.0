@@ -115,6 +115,9 @@ namespace AncientWarfare3.core.db
                 Index("idx_CourtOfficer_actor_layer_active_unique",
                     CourtOfficerTableItem.GetTableName(), "ACTOR_ID, LAYER", "ACTIVE=1",
                     pUnique: true),
+                Index("idx_CourtOfficer_central_host_office_unique",
+                    CourtOfficerTableItem.GetTableName(), "KINGDOM_ID, LAYER, OFFICE_ID",
+                    "ACTIVE=1 AND LAYER='central'", pUnique: true),
                 Index("idx_CityBureauState_kingdom_city", CityBureauStateTableItem.GetTableName(),
                     "KINGDOM_ID, CITY_ID"),
 
@@ -142,7 +145,11 @@ namespace AncientWarfare3.core.db
                 Index("idx_SchoolDebate_city_year", SchoolDebateTableItem.GetTableName(),
                     "CITY_ID, DEBATE_YEAR, DEBATE_ID"),
                 Index("idx_SchoolEvent_school_year", SchoolEventTableItem.GetTableName(),
-                    "SCHOOL_ID, EVENT_YEAR, EVENT_ID")
+                    "SCHOOL_ID, EVENT_YEAR, EVENT_ID"),
+                Index("idx_SchoolEvent_guest_operation_unique",
+                    SchoolEventTableItem.GetTableName(), "OPERATION_KEY",
+                    "OPERATION_KEY<>'' AND EVENT_TYPE IN ('guest_service_started'," +
+                    "'guest_service_renewed')", pUnique: true)
             };
         }
 

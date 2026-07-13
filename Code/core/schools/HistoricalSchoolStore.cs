@@ -51,11 +51,12 @@ namespace AncientWarfare3.core.schools
                 using (var command = new SQLiteCommand(DB) { Transaction = transaction })
                 {
                     command.CommandText = "INSERT INTO " + EventTable +
-                        " (EVENT_ID,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID,CITY_ID," +
+                        " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID,CITY_ID," +
                         "KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME) VALUES " +
-                        " (@id,@type,@actor,@target,@school,@city,@kingdom,@year,@payload," +
+                        " (@id,@operationKey,@type,@actor,@target,@school,@city,@kingdom,@year,@payload," +
                         "@importance,@time)";
                     command.Parameters.AddWithValue("@id", eventId);
+                    command.Parameters.AddWithValue("@operationKey", "");
                     command.Parameters.AddWithValue("@type", pEventType);
                     command.Parameters.AddWithValue("@actor", pActorId);
                     command.Parameters.AddWithValue("@target", pTargetActorId);
@@ -230,9 +231,9 @@ namespace AncientWarfare3.core.schools
                 using (var schoolEvent = new SQLiteCommand(DB) { Transaction = transaction })
                 {
                     schoolEvent.CommandText = "INSERT INTO " + EventTable +
-                        " (EVENT_ID,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID,CITY_ID," +
+                        " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID,CITY_ID," +
                         "KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME) VALUES " +
-                        " (@id,'work_authored',@actor,-1,@school,@city,@kingdom,@year,@payload,2,@time)";
+                        " (@id,'','work_authored',@actor,-1,@school,@city,@kingdom,@year,@payload,2,@time)";
                     schoolEvent.Parameters.AddWithValue("@id", eventId);
                     schoolEvent.Parameters.AddWithValue("@actor", pAuthorActorId);
                     schoolEvent.Parameters.AddWithValue("@school", pSchoolId);
@@ -2133,9 +2134,9 @@ namespace AncientWarfare3.core.schools
         {
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + EventTable +
-                                  " (EVENT_ID,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
+                                  " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
                                   "CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME) " +
-                                  "VALUES (@id,'institution_founded',@actor,-1,@school,@city," +
+                                  "VALUES (@id,'','institution_founded',@actor,-1,@school,@city," +
                                   "@kingdom,@year,@payload,3,@time)";
             command.Parameters.AddWithValue("@id", pEventId);
             command.Parameters.AddWithValue("@actor", pFounderActorId);
@@ -2185,9 +2186,9 @@ namespace AncientWarfare3.core.schools
         {
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + EventTable +
-                                  " (EVENT_ID,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
+                                  " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
                                   "CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME)" +
-                                  " VALUES (@id,'debate',@actor,@target,@school,@city,-1,@year," +
+                                  " VALUES (@id,'','debate',@actor,@target,@school,@city,-1,@year," +
                                   "@payload,2,@time)";
             command.Parameters.AddWithValue("@id", pEventId);
             command.Parameters.AddWithValue("@actor", pActorId);

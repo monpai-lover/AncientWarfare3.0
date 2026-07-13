@@ -44,20 +44,9 @@ namespace AncientWarfare3.core.court
 
             try
             {
-                return OfficialCareerPersistence.Appoint(db, new OfficialCareerAppointment
-                {
-                    ActorId = pActor.data.id,
-                    ActorName = pActor.getName() ?? "",
-                    KingdomId = pKingdom.id,
-                    CityId = pCity?.data?.id ?? -1L,
-                    Layer = pLayer ?? "",
-                    OfficeId = pOfficeId ?? "",
-                    SchoolId = pSchoolId ?? "",
-                    Influence = CourtInfluenceRules.InfluenceWeight(pLayer,
-                        ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor)),
-                    AppointedYear = Date.getCurrentYear(),
-                    AppointedTime = LineageService.CurTime()
-                });
+                return OfficialCareerPersistence.Appoint(db, PrepareAppointment(pActor,
+                    pKingdom, pLayer, pOfficeId, pSchoolId, pCity,
+                    Date.getCurrentYear(), LineageService.CurTime()));
             }
             catch (Exception e)
             {
@@ -66,6 +55,27 @@ namespace AncientWarfare3.core.court
                     OfficialCareerPersistenceOutcome.Unknown,
                     OfficialCareerMutation.Started);
             }
+        }
+
+        internal static OfficialCareerAppointment PrepareAppointment(Actor pActor,
+            Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity,
+            int pAppointedYear, double pAppointedTime)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return null;
+            return new OfficialCareerAppointment
+            {
+                ActorId = pActor.data.id,
+                ActorName = pActor.getName() ?? "",
+                KingdomId = pKingdom.id,
+                CityId = pCity?.data?.id ?? -1L,
+                Layer = pLayer ?? "",
+                OfficeId = pOfficeId ?? "",
+                SchoolId = pSchoolId ?? "",
+                Influence = CourtInfluenceRules.InfluenceWeight(pLayer,
+                    ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor)),
+                AppointedYear = pAppointedYear,
+                AppointedTime = pAppointedTime
+            };
         }
 
         public static List<OfficialCareerReadModel> LoadCareer(long pActorId)

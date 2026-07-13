@@ -62,6 +62,7 @@ namespace AncientWarfare3.core.schools
             if (!_loaded || World.world == null) return;
             PendingRuntimeState.AdvanceAndTryFlush(HistoricalSchoolStore.SaveRuntimeState);
             HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
+            SchoolGuestOfficeService.ProcessPendingFrame();
             int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
             int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
             if (quarterKey == _lastQuarterKey) return;

@@ -249,6 +249,21 @@ namespace AncientWarfare3.core.schools
             return !ReferenceEquals(next, current) && Save(next);
         }
 
+        internal static bool AdoptCommittedService(
+            HistoricalSchoolAffiliationSnapshot pCommittedState)
+        {
+            if (pCommittedState == null || pCommittedState.ActorId < 0 ||
+                pCommittedState.ServiceKingdomId < 0 ||
+                pCommittedState.LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                return false;
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pCommittedState.ActorId);
+            if (SnapshotExact(oldState, pCommittedState)) return true;
+            ByActor[pCommittedState.ActorId] = pCommittedState;
+            InvalidateResidenceData(oldState?.ResidenceCityId ?? -1L,
+                pCommittedState.ResidenceCityId);
+            return true;
+        }
+
         internal static bool EndService(long pActorId, int pYear)
         {
             if (pActorId < 0) return false;
@@ -333,6 +348,27 @@ namespace AncientWarfare3.core.schools
             InvalidateResidenceData(oldState?.ResidenceCityId ?? -1L,
                 pState.ResidenceCityId);
             return true;
+        }
+
+        private static bool SnapshotExact(HistoricalSchoolAffiliationSnapshot pLeft,
+            HistoricalSchoolAffiliationSnapshot pRight)
+        {
+            return pLeft != null && pRight != null && pLeft.ActorId == pRight.ActorId &&
+                   pLeft.HomeKingdomId == pRight.HomeKingdomId &&
+                   pLeft.HomeKingdomName == pRight.HomeKingdomName &&
+                   pLeft.HometownCityId == pRight.HometownCityId &&
+                   pLeft.ResidenceCityId == pRight.ResidenceCityId &&
+                   pLeft.PreviousResidenceCityId == pRight.PreviousResidenceCityId &&
+                   pLeft.DestinationCityId == pRight.DestinationCityId &&
+                   pLeft.ServiceKingdomId == pRight.ServiceKingdomId &&
+                   pLeft.LifecycleState == pRight.LifecycleState &&
+                   pLeft.ServiceStartYear == pRight.ServiceStartYear &&
+                   pLeft.ServiceEndYear == pRight.ServiceEndYear &&
+                   pLeft.LastTravelYear == pRight.LastTravelYear &&
+                   pLeft.TravelWaitStartYear == pRight.TravelWaitStartYear &&
+                   pLeft.VoyageStartYear == pRight.VoyageStartYear &&
+                   pLeft.VoyageArrivalYear == pRight.VoyageArrivalYear &&
+                   pLeft.TransportFailures == pRight.TransportFailures;
         }
 
         private static void InvalidateResidenceData(long pOldResidenceCityId,

@@ -105,5 +105,19 @@ namespace AncientWarfare3.core.court
                 ? OfficialCareerPersistenceOutcome.CleanFailure
                 : OfficialCareerPersistenceOutcome.Unknown;
         }
+
+        public static OfficialCareerPersistenceOutcome ResolveReassignment(
+            bool pQuerySucceeded, int pActiveCount, bool pDesiredActiveExact,
+            bool pClosedOriginalExact, bool pOriginalActiveExact,
+            bool pDesiredRowAbsent)
+        {
+            if (!pQuerySucceeded || pActiveCount < 0)
+                return OfficialCareerPersistenceOutcome.Unknown;
+            if (pActiveCount == 1 && pDesiredActiveExact && pClosedOriginalExact)
+                return OfficialCareerPersistenceOutcome.Committed;
+            if (pActiveCount == 1 && pOriginalActiveExact && pDesiredRowAbsent)
+                return OfficialCareerPersistenceOutcome.CleanFailure;
+            return OfficialCareerPersistenceOutcome.Unknown;
+        }
     }
 }

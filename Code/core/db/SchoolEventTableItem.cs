@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.db
     public sealed class SchoolEventTableItem : AbstractTableItem<SchoolEventTableItem>
     {
         [TableItemDef(pIsPrimary: true)] public long event_id;
+        public string operation_key = "";
         public string event_type;
         public long actor_id = -1;
         public long target_actor_id = -1;

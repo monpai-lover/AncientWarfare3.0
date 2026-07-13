@@ -19,53 +19,72 @@ namespace AncientWarfare3.core.court
         public double AppointedTime;
     }
 
-    internal static class OfficialCareerPersistence
+    internal sealed class OfficialCareerRecord
     {
-        private sealed class ActiveCareer
+        public long OfficerId;
+        public long KingdomId;
+        public long ActorId;
+        public string ActorName = "";
+        public long CityId;
+        public string Layer = "";
+        public string OfficeId = "";
+        public string SchoolId = "";
+        public double Influence;
+        public int AppointedYear;
+        public double AppointedTime;
+        public int EndedYear;
+        public double EndedTime;
+        public int Active;
+        public string EndReason = "";
+        public double UpdatedTime;
+
+        public OfficialCareerRecord Copy()
         {
-            public long OfficerId;
-            public long KingdomId;
-            public long ActorId;
-            public string ActorName = "";
-            public long CityId;
-            public string Layer = "";
-            public string OfficeId = "";
-            public string SchoolId = "";
-            public double Influence;
-            public int AppointedYear;
-            public double AppointedTime;
-            public int EndedYear;
-            public double EndedTime;
-            public int Active;
-            public string EndReason = "";
-            public double UpdatedTime;
-
-            public ActiveCareer Copy()
-            {
-                return (ActiveCareer)MemberwiseClone();
-            }
-
-            public OfficialCareerPrior ToPrior()
-            {
-                return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId);
-            }
-
-            public bool Exact(ActiveCareer pOther, bool pRequireOfficerId = true)
-            {
-                if (pOther == null) return false;
-                return (!pRequireOfficerId || OfficerId == pOther.OfficerId) &&
-                       KingdomId == pOther.KingdomId && ActorId == pOther.ActorId &&
-                       ActorName == pOther.ActorName && CityId == pOther.CityId &&
-                       Layer == pOther.Layer && OfficeId == pOther.OfficeId &&
-                       SchoolId == pOther.SchoolId && Influence.Equals(pOther.Influence) &&
-                       AppointedYear == pOther.AppointedYear &&
-                       AppointedTime.Equals(pOther.AppointedTime) &&
-                       EndedYear == pOther.EndedYear && EndedTime.Equals(pOther.EndedTime) &&
-                       Active == pOther.Active && EndReason == pOther.EndReason &&
-                       UpdatedTime.Equals(pOther.UpdatedTime);
-            }
+            return (OfficialCareerRecord)MemberwiseClone();
         }
 
+        public OfficialCareerPrior ToPrior()
+        {
+            return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId);
+        }
+
+        public bool Exact(OfficialCareerRecord pOther, bool pRequireOfficerId = true)
+        {
+            if (pOther == null) return false;
+            return (!pRequireOfficerId || OfficerId == pOther.OfficerId) &&
+                   KingdomId == pOther.KingdomId && ActorId == pOther.ActorId &&
+                   ActorName == pOther.ActorName && CityId == pOther.CityId &&
+                   Layer == pOther.Layer && OfficeId == pOther.OfficeId &&
+                   SchoolId == pOther.SchoolId && Influence.Equals(pOther.Influence) &&
+                   AppointedYear == pOther.AppointedYear &&
+                   AppointedTime.Equals(pOther.AppointedTime) &&
+                   EndedYear == pOther.EndedYear && EndedTime.Equals(pOther.EndedTime) &&
+                   Active == pOther.Active && EndReason == pOther.EndReason &&
+                   UpdatedTime.Equals(pOther.UpdatedTime);
+        }
+    }
+
+    internal sealed class OfficialCareerPersistenceToken
+    {
+        public OfficialCareerPersistenceToken(OfficialCareerAppointment pAppointment,
+            OfficialCareerRecord pOriginal, OfficialCareerRecord pDesired,
+            OfficialCareerMutation pMutation)
+        {
+            Appointment = pAppointment ?? throw new ArgumentNullException(nameof(pAppointment));
+            Original = pOriginal;
+            Desired = pDesired ?? throw new ArgumentNullException(nameof(pDesired));
+            Mutation = pMutation;
+        }
+
+        public OfficialCareerAppointment Appointment { get; }
+        public OfficialCareerRecord Original { get; }
+        public OfficialCareerRecord Desired { get; }
+        public OfficialCareerMutation Mutation { get; }
+        public OfficialCareerPrior Prior => Original?.ToPrior();
+    }
+
+    internal static class OfficialCareerPersistence
+    {
         public static OfficialCareerAppointmentResult Appoint(SQLiteConnection pDb,
             OfficialCareerAppointment pAppointment)
         {
@@ -75,47 +94,15 @@ namespace AncientWarfare3.core.court
                     OfficialCareerPersistenceOutcome.CleanFailure,
                     OfficialCareerMutation.Started);
 
-            string table = CourtOfficerTableItem.GetTableName();
             SQLiteTransaction transaction = null;
-            ActiveCareer original = null;
-            ActiveCareer desired = null;
-            bool originalCaptured = false;
-            OfficialCareerMutation mutation = OfficialCareerMutation.Started;
+            OfficialCareerPersistenceToken token = null;
             try
             {
                 transaction = pDb.BeginTransaction();
-                original = ReadActive(pDb, transaction, table, pAppointment.ActorId,
-                    pAppointment.Layer);
-                originalCaptured = true;
-                bool insert = CourtOfficerRecordRules.ShouldInsertNewActiveRecord(
-                    original != null,
-                    original != null && original.KingdomId == pAppointment.KingdomId,
-                    original != null && original.OfficeId == pAppointment.OfficeId,
-                    original != null && original.Layer == pAppointment.Layer,
-                    original != null && original.CityId == pAppointment.CityId);
-
-                if (!insert)
-                {
-                    mutation = OfficialCareerMutation.Refreshed;
-                    desired = Refreshed(original, pAppointment);
-                    UpdateSnapshot(pDb, transaction, table, desired);
-                }
-                else
-                {
-                    mutation = original == null
-                        ? OfficialCareerMutation.Started
-                        : OfficialCareerMutation.Reassigned;
-                    desired = NewActive(pAppointment);
-                    if (original != null)
-                        EndOriginal(pDb, transaction, table, original,
-                            pAppointment.AppointedYear, pAppointment.AppointedTime);
-                    desired.OfficerId = NextOfficerId(pDb, transaction, table);
-                    InsertActive(pDb, transaction, table, desired);
-                }
-
+                token = Capture(pDb, transaction, pAppointment);
+                Stage(pDb, transaction, token);
                 transaction.Commit();
-                return BuildResult(OfficialCareerPersistenceOutcome.Committed,
-                    mutation, original);
+                return ResultFor(token, OfficialCareerPersistenceOutcome.Committed);
             }
             catch (Exception error)
             {
@@ -128,55 +115,145 @@ namespace AncientWarfare3.core.court
                 try { transaction?.Dispose(); } catch { }
             }
 
-            if (!originalCaptured || desired == null)
-                return BuildResult(OfficialCareerPersistenceOutcome.Unknown,
-                    mutation, original);
+            if (token == null)
+                return new OfficialCareerAppointmentResult(
+                    OfficialCareerPersistenceOutcome.Unknown,
+                    OfficialCareerMutation.Noop);
 
             try
             {
-                List<ActiveCareer> active = ReadActiveRows(pDb, null, table,
-                    pAppointment.ActorId, pAppointment.Layer);
-                ActiveCareer authoritative = active.Count == 1 ? active[0] : null;
-                OfficialCareerPersistenceOutcome outcome = OfficialCareerReadbackRules.Resolve(
-                    pQuerySucceeded: true, active.Count,
-                    pDesiredExact: authoritative != null &&
-                                   authoritative.Exact(desired,
-                                       pRequireOfficerId: desired.OfficerId >= 0),
-                    pOriginalExisted: original != null,
-                    pOriginalExact: authoritative != null &&
-                                    authoritative.Exact(original));
-                return BuildResult(outcome, mutation, original);
+                return ResultFor(token, Readback(pDb, token));
             }
             catch (Exception error)
             {
                 ModClass.LogWarning("Official career appointment readback failed: " +
                                     error.Message);
-                return BuildResult(
-                    OfficialCareerReadbackRules.Resolve(pQuerySucceeded: false, -1,
-                        pDesiredExact: false, pOriginalExisted: original != null,
-                        pOriginalExact: false), mutation, original);
+                return ResultFor(token, OfficialCareerPersistenceOutcome.Unknown);
             }
         }
 
-        private static OfficialCareerAppointmentResult BuildResult(
-            OfficialCareerPersistenceOutcome pOutcome, OfficialCareerMutation mutation,
-            ActiveCareer original)
+        internal static OfficialCareerPersistenceToken Capture(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, OfficialCareerAppointment pAppointment)
         {
-            return new OfficialCareerAppointmentResult(pOutcome, mutation,
-                original?.ToPrior());
+            if (pDb == null || pTransaction == null || pAppointment == null ||
+                pAppointment.ActorId < 0 || pAppointment.KingdomId < 0)
+                throw new ArgumentException("invalid official career capture");
+
+            string table = CourtOfficerTableItem.GetTableName();
+            OfficialCareerRecord original = ReadActive(pDb, pTransaction, table,
+                pAppointment.ActorId, pAppointment.Layer);
+            bool insert = CourtOfficerRecordRules.ShouldInsertNewActiveRecord(
+                original != null,
+                original != null && original.KingdomId == pAppointment.KingdomId,
+                original != null && original.OfficeId == pAppointment.OfficeId,
+                original != null && original.Layer == pAppointment.Layer,
+                original != null && original.CityId == pAppointment.CityId);
+            if (!insert)
+                return new OfficialCareerPersistenceToken(pAppointment, original,
+                    Refreshed(original, pAppointment), OfficialCareerMutation.Refreshed);
+
+            OfficialCareerRecord desired = NewActive(pAppointment);
+            desired.OfficerId = NextOfficerId(pDb, pTransaction, table);
+            return new OfficialCareerPersistenceToken(pAppointment, original, desired,
+                original == null
+                    ? OfficialCareerMutation.Started
+                    : OfficialCareerMutation.Reassigned);
         }
 
-        private static ActiveCareer ReadActive(SQLiteConnection pDb,
+        internal static void Stage(SQLiteConnection pDb, SQLiteTransaction pTransaction,
+            OfficialCareerPersistenceToken pToken)
+        {
+            if (pDb == null || pTransaction == null || pToken == null)
+                throw new ArgumentException("invalid official career stage");
+            string table = CourtOfficerTableItem.GetTableName();
+            if (pToken.Mutation == OfficialCareerMutation.Refreshed)
+            {
+                UpdateSnapshot(pDb, pTransaction, table, pToken.Desired);
+                return;
+            }
+            if (pToken.Mutation == OfficialCareerMutation.Reassigned)
+                EndOriginal(pDb, pTransaction, table, pToken.Original,
+                    pToken.Appointment.AppointedYear, pToken.Appointment.AppointedTime);
+            if (pToken.Mutation == OfficialCareerMutation.Started ||
+                pToken.Mutation == OfficialCareerMutation.Reassigned)
+            {
+                InsertActive(pDb, pTransaction, table, pToken.Desired);
+                return;
+            }
+            throw new InvalidOperationException("unsupported official career mutation");
+        }
+
+        internal static OfficialCareerPersistenceOutcome Readback(SQLiteConnection pDb,
+            OfficialCareerPersistenceToken pToken)
+        {
+            if (pDb == null || pToken == null)
+                return OfficialCareerPersistenceOutcome.Unknown;
+            string table = CourtOfficerTableItem.GetTableName();
+            List<OfficialCareerRecord> active = ReadActiveRows(pDb, null, table,
+                pToken.Appointment.ActorId, pToken.Appointment.Layer);
+            OfficialCareerRecord authoritative = active.Count == 1 ? active[0] : null;
+
+            if (pToken.Mutation == OfficialCareerMutation.Reassigned)
+            {
+                OfficialCareerRecord closed = ReadClosedOriginal(pDb, pToken,
+                    out int closedCount);
+                List<OfficialCareerRecord> desiredRows = ReadRowsByOfficerId(pDb, null,
+                    table, pToken.Desired.OfficerId);
+                return OfficialCareerReadbackRules.ResolveReassignment(
+                    pQuerySucceeded: closedCount <= 1 && desiredRows.Count <= 1,
+                    active.Count,
+                    pDesiredActiveExact: authoritative != null &&
+                        authoritative.Exact(pToken.Desired),
+                    pClosedOriginalExact: closedCount == 1 &&
+                        ClosedOriginalExact(pToken, closed),
+                    pOriginalActiveExact: authoritative != null &&
+                        authoritative.Exact(pToken.Original),
+                    pDesiredRowAbsent: desiredRows.Count == 0);
+            }
+
+            bool desiredExact = authoritative != null &&
+                                authoritative.Exact(pToken.Desired);
+            bool originalExact = authoritative != null &&
+                                 authoritative.Exact(pToken.Original);
+            OfficialCareerPersistenceOutcome outcome = OfficialCareerReadbackRules.Resolve(
+                pQuerySucceeded: true, active.Count, desiredExact,
+                pOriginalExisted: pToken.Original != null, originalExact);
+            if (outcome == OfficialCareerPersistenceOutcome.CleanFailure &&
+                pToken.Original == null && ReadRowsByOfficerId(pDb, null, table,
+                    pToken.Desired.OfficerId).Count != 0)
+                return OfficialCareerPersistenceOutcome.Unknown;
+            return outcome;
+        }
+
+        internal static OfficialCareerAppointmentResult ResultFor(
+            OfficialCareerPersistenceToken pToken, OfficialCareerPersistenceOutcome pOutcome)
+        {
+            if (pToken == null)
+                return new OfficialCareerAppointmentResult(
+                    OfficialCareerPersistenceOutcome.Unknown,
+                    OfficialCareerMutation.Noop);
+            return new OfficialCareerAppointmentResult(pOutcome, pToken.Mutation,
+                pToken.Prior);
+        }
+
+        internal static List<OfficialCareerRecord> ReadActiveRecords(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, long pActorId, string pLayer)
+        {
+            return ReadActiveRows(pDb, pTransaction, CourtOfficerTableItem.GetTableName(),
+                pActorId, pLayer);
+        }
+
+        private static OfficialCareerRecord ReadActive(SQLiteConnection pDb,
             SQLiteTransaction transaction, string pTable, long pActorId, string pLayer)
         {
-            List<ActiveCareer> rows = ReadActiveRows(pDb, transaction, pTable, pActorId,
+            List<OfficialCareerRecord> rows = ReadActiveRows(pDb, transaction, pTable, pActorId,
                 pLayer);
             if (rows.Count > 1)
                 throw new InvalidOperationException("multiple active careers for actor layer");
             return rows.Count == 0 ? null : rows[0];
         }
 
-        private static List<ActiveCareer> ReadActiveRows(SQLiteConnection pDb,
+        private static List<OfficialCareerRecord> ReadActiveRows(SQLiteConnection pDb,
             SQLiteTransaction transaction, string pTable, long pActorId, string pLayer)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = transaction };
@@ -186,15 +263,52 @@ namespace AncientWarfare3.core.court
                 " WHERE ACTOR_ID=@actor AND LAYER=@layer AND ACTIVE=1";
             command.Parameters.AddWithValue("@actor", pActorId);
             command.Parameters.AddWithValue("@layer", pLayer ?? "");
-            var rows = new List<ActiveCareer>();
+            var rows = new List<OfficialCareerRecord>();
             using SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read()) rows.Add(ReadRow(reader));
             return rows;
         }
 
-        private static ActiveCareer ReadRow(SQLiteDataReader pReader)
+        private static OfficialCareerRecord ReadClosedOriginal(SQLiteConnection pDb,
+            OfficialCareerPersistenceToken pToken, out int pCount)
         {
-            return new ActiveCareer
+            List<OfficialCareerRecord> rows = ReadRowsByOfficerId(pDb, null,
+                CourtOfficerTableItem.GetTableName(), pToken.Original.OfficerId);
+            pCount = rows.Count;
+            return rows.Count == 1 ? rows[0] : null;
+        }
+
+        private static bool ClosedOriginalExact(OfficialCareerPersistenceToken pToken,
+            OfficialCareerRecord pActual)
+        {
+            if (pToken?.Original == null || pActual == null) return false;
+            OfficialCareerRecord expected = pToken.Original.Copy();
+            expected.Active = CourtOfficerRecordRules.ActiveFlag(false);
+            expected.EndedYear = pToken.Appointment.AppointedYear;
+            expected.EndedTime = pToken.Appointment.AppointedTime;
+            expected.EndReason = "reassigned";
+            expected.UpdatedTime = pToken.Appointment.AppointedTime;
+            return pActual.Exact(expected);
+        }
+
+        private static List<OfficialCareerRecord> ReadRowsByOfficerId(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pTable, long pOfficerId)
+        {
+            using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
+            command.CommandText = "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID," +
+                "LAYER,OFFICE_ID,SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME," +
+                "ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME FROM " + pTable +
+                " WHERE OFFICER_ID=@officer";
+            command.Parameters.AddWithValue("@officer", pOfficerId);
+            var rows = new List<OfficialCareerRecord>();
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read()) rows.Add(ReadRow(reader));
+            return rows;
+        }
+
+        private static OfficialCareerRecord ReadRow(SQLiteDataReader pReader)
+        {
+            return new OfficialCareerRecord
             {
                 OfficerId = Long(pReader, 0, -1L),
                 KingdomId = Long(pReader, 1, -1L),
@@ -215,10 +329,10 @@ namespace AncientWarfare3.core.court
             };
         }
 
-        private static ActiveCareer Refreshed(ActiveCareer pOriginal,
+        private static OfficialCareerRecord Refreshed(OfficialCareerRecord pOriginal,
             OfficialCareerAppointment pAppointment)
         {
-            ActiveCareer desired = pOriginal.Copy();
+            OfficialCareerRecord desired = pOriginal.Copy();
             desired.ActorName = pAppointment.ActorName;
             desired.SchoolId = pAppointment.SchoolId;
             desired.Influence = pAppointment.Influence;
@@ -226,9 +340,9 @@ namespace AncientWarfare3.core.court
             return desired;
         }
 
-        private static ActiveCareer NewActive(OfficialCareerAppointment pAppointment)
+        private static OfficialCareerRecord NewActive(OfficialCareerAppointment pAppointment)
         {
-            return new ActiveCareer
+            return new OfficialCareerRecord
             {
                 OfficerId = -1L,
                 KingdomId = pAppointment.KingdomId,
@@ -250,7 +364,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static void UpdateSnapshot(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, string pTable, ActiveCareer pDesired)
+            SQLiteTransaction pTransaction, string pTable, OfficialCareerRecord pDesired)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "UPDATE " + pTable +
@@ -269,7 +383,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static void EndOriginal(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, string pTable, ActiveCareer pOriginal,
+            SQLiteTransaction pTransaction, string pTable, OfficialCareerRecord pOriginal,
             int pYear, double pTime)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
@@ -296,7 +410,7 @@ namespace AncientWarfare3.core.court
         }
 
         private static void InsertActive(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, string pTable, ActiveCareer pCareer)
+            SQLiteTransaction pTransaction, string pTable, OfficialCareerRecord pCareer)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + pTable +

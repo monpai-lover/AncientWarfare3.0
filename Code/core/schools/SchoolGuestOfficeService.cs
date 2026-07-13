@@ -9,29 +9,86 @@ namespace AncientWarfare3.core.schools
 {
     /// <summary>
     /// Coordinates cross-state appointments for scholars who are physically resident
-    /// in a host city.  Nationality remains the affiliation snapshot's home kingdom;
-    /// only the temporary service kingdom and court projection change.  The guarded
-    /// CourtService path performs TryBeginService before TryAppointGuestOfficer writes
-    /// the court row, keeping the two projections from drifting apart.
+    /// in a host city. Nationality remains the affiliation snapshot's home kingdom;
+    /// one durable transaction starts service, records the court tenure, and inserts
+    /// the guest event before any live projection is adopted.
     /// </summary>
     internal static class SchoolGuestOfficeService
     {
         private const int MaxAppointmentsPerYear = 16;
         private const int MaxHostKingdomsPerYear = 96;
         private const int MaxServiceSweepPerYear = 512;
+        private const int MaxPendingGuestOperations = 512;
+        private const int MaxPendingGuestDrainPerFrame = 8;
+        private const int MaxPendingGuestScanPerFrame = 32;
+        private const int MaxPendingGuestRetryBackoffFrames = 3600;
         private static int _lastProcessYear = -1;
         private static int _serviceSweepOffset;
+        private static int _pendingFrame;
+        private static readonly Dictionary<long, PendingGuestOffice> Pending =
+            new Dictionary<long, PendingGuestOffice>();
+        private static readonly Queue<PendingGuestOffice> PendingOrder =
+            new Queue<PendingGuestOffice>();
 
         public static void LoadState()
         {
             _lastProcessYear = -1;
             _serviceSweepOffset = 0;
+            _pendingFrame = 0;
+            Pending.Clear();
+            PendingOrder.Clear();
+            SeedPendingRecovery();
         }
 
         public static void ClearRuntime()
         {
             _lastProcessYear = -1;
             _serviceSweepOffset = 0;
+            _pendingFrame = 0;
+            Pending.Clear();
+            PendingOrder.Clear();
+        }
+
+        public static void ProcessPendingFrame()
+        {
+            _pendingFrame++;
+            int scanCount = GuestOfficePendingRules.DrainCount(PendingOrder.Count,
+                MaxPendingGuestScanPerFrame);
+            int attempts = 0;
+            for (int index = 0; index < scanCount; index++)
+            {
+                PendingGuestOffice pending = PendingOrder.Dequeue();
+                long actorId = pending?.ActorId ?? -1L;
+                if (!Pending.TryGetValue(actorId, out PendingGuestOffice current) ||
+                    !ReferenceEquals(current, pending)) continue;
+                if (pending.ReadyFrame > _pendingFrame ||
+                    attempts >= MaxPendingGuestDrainPerFrame)
+                {
+                    PendingOrder.Enqueue(pending);
+                    continue;
+                }
+                attempts++;
+                bool completed = false;
+                try
+                {
+                    completed = TryProcessPending(pending);
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Pending guest projection retry failed for actor " +
+                                        actorId + ": " + error.Message);
+                }
+                if (completed)
+                {
+                    Pending.Remove(actorId);
+                    continue;
+                }
+                if (Pending.ContainsKey(actorId))
+                {
+                    SchedulePendingRetry(pending);
+                    PendingOrder.Enqueue(pending);
+                }
+            }
         }
 
         public static void ProcessYear(int pYear)
@@ -111,8 +168,9 @@ namespace AncientWarfare3.core.schools
                 City residence = alive ? HistoricalAffiliationService.ResidenceCity(actor) : null;
                 bool residenceValid = residence?.data != null && !residence.isRekt() &&
                                       residence.kingdom == host;
-                bool projectionValid = alive && hostAlive && residenceValid &&
-                                       CourtService.HasOfficialCourt(host) &&
+                bool durableEnvironmentValid = alive && hostAlive && residenceValid &&
+                                               CourtService.HasOfficialCourt(host);
+                bool projectionValid = durableEnvironmentValid &&
                                        IsGuestProjectionValid(actor, host);
                 int remaining = state.ServiceEndYear < 0
                     ? 0
@@ -121,6 +179,18 @@ namespace AncientWarfare3.core.schools
                 if (projectionValid && remaining <= 0 && TryRenew(actor, host, state, pYear))
                     continue;
                 if (projectionValid && remaining > 0) continue;
+
+                if (!projectionValid && durableEnvironmentValid && remaining > 0)
+                {
+                    RegisterPendingRecovery(state);
+                    if (Pending.TryGetValue(state.ActorId,
+                            out PendingGuestOffice pending))
+                    {
+                        if (TryProcessPending(pending)) Pending.Remove(state.ActorId);
+                        else SchedulePendingRetry(pending);
+                    }
+                    continue;
+                }
 
                 if (actor?.data != null)
                 {
@@ -169,26 +239,189 @@ namespace AncientWarfare3.core.schools
                 pTermYears < SchoolGuestOfficeRules.MinTermYears ||
                 pTermYears > SchoolGuestOfficeRules.MaxTermYears) return false;
             int endYear = pStartYear + pTermYears;
-            if (!CourtService.TryAppointGuestOfficer(pActor, pHost, pOffice, pResidence,
-                    pStartYear, endYear)) return false;
-
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
-            string payload = (pOffice ?? "") + "|" + pStartYear + "|" + endYear;
-            if (!HistoricalSchoolStore.RecordSchoolEvent(pEventType, pActor.data.id, -1,
-                    school, pResidence.data.id, pHost.id, pStartYear, payload, 3,
-                    World.world?.getCurWorldTime() ?? 0d))
+            if (!CourtService.CanAppointGuestOfficer(pActor, pHost, pOffice, pResidence) ||
+                string.IsNullOrEmpty(school)) return false;
+            HistoricalSchoolAffiliationSnapshot expected =
+                HistoricalAffiliationService.Get(pActor.data.id);
+            double worldTime = LineageService.CurTime();
+            OfficialCareerAppointment appointment = OfficialCareerService.PrepareAppointment(
+                pActor, pHost, CourtOfficeLayer.Central, pOffice, school, pResidence,
+                pStartYear, worldTime);
+            OfficialCareerPrior runtimePrior =
+                CourtService.CaptureRuntimeOfficerProjection(pActor);
+            GuestOfficeStartRequest request = GuestOfficePersistence.PrepareStart(expected,
+                appointment, pEventType,
+                school, pOffice, pHost.id, pResidence.data.id, pStartYear, endYear,
+                worldTime);
+            if (request == null) return false;
+            var pending = PendingGuestOffice.ForStart(request, runtimePrior);
+            if (!RegisterPendingStart(pending)) return false;
+            bool completed = TryProcessPending(pending);
+            if (completed) Pending.Remove(pending.ActorId);
+            else SchedulePendingRetry(pending);
+            return completed;
+        }
+
+        private static bool RegisterPendingStart(PendingGuestOffice pPending)
+        {
+            if (pPending == null || pPending.ActorId < 0 ||
+                Pending.ContainsKey(pPending.ActorId) ||
+                Pending.Count >= MaxPendingGuestOperations) return false;
+            Pending.Add(pPending.ActorId, pPending);
+            PendingOrder.Enqueue(pPending);
+            return true;
+        }
+
+        private static bool RegisterPendingRecovery(
+            HistoricalSchoolAffiliationSnapshot pState)
+        {
+            if (pState == null || pState.ActorId < 0 ||
+                pState.LifecycleState != HistoricalSchoolLifecycleState.Serving) return false;
+            if (Pending.ContainsKey(pState.ActorId)) return true;
+            if (Pending.Count >= MaxPendingGuestOperations) return false;
+            PendingGuestOffice pending = PendingGuestOffice.ForRecovery(pState);
+            Pending.Add(pending.ActorId, pending);
+            PendingOrder.Enqueue(pending);
+            return true;
+        }
+
+        private static void SeedPendingRecovery()
+        {
+            int seeded = 0;
+            foreach (HistoricalSchoolAffiliationSnapshot state in
+                     HistoricalAffiliationService.ActiveSnapshots())
             {
-                CourtService.EndGuestOfficer(pActor, pHost, "guest_event_failed", pStartYear);
-                return false;
+                if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                    continue;
+                if (RegisterPendingRecovery(state)) seeded++;
+                if (seeded >= MaxPendingGuestOperations) break;
+            }
+        }
+
+        private static bool TryProcessPending(PendingGuestOffice pPending)
+        {
+            if (pPending == null) return true;
+            Actor actor = FindActor(pPending.ActorId);
+            Kingdom host = FindKingdom(pPending.HostKingdomId);
+            City residence = FindCity(pPending.CityId);
+            if (actor?.data == null || host?.data == null || residence?.data == null ||
+                residence.kingdom != host) return false;
+
+            GuestOfficeStartResult startResult = null;
+            GuestOfficeRecoveryResult recoveryResult = null;
+            if (pPending.StartRequest != null)
+            {
+                startResult = GuestOfficePersistence.Start(pPending.StartRequest);
+                pPending.PersistenceOutcome = startResult.Persistence.Outcome;
+                pPending.RecoveredExisting |= startResult.RecoveredExisting;
+                if (!GuestOfficeAdoptionRules.ShouldAdopt(
+                        startResult.Persistence.Outcome)) return false;
+                pPending.CommittedAffiliation = startResult.Affiliation;
+            }
+            else
+            {
+                HistoricalSchoolAffiliationSnapshot current =
+                    HistoricalAffiliationService.Get(pPending.ActorId);
+                if (current?.LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                    return true;
+                recoveryResult = GuestOfficePersistence.ReadCommittedTuple(
+                    pPending.ActorId, pPending.RecoveryAffiliation);
+                if (recoveryResult.Decision == GuestOfficeRecoveryDecision.Retry)
+                    return false;
+                if (recoveryResult.Decision != GuestOfficeRecoveryDecision.Adopt)
+                    return false;
+                pPending.PersistenceOutcome = GuestOfficePersistenceOutcome.Committed;
+                pPending.RecoveredExisting = true;
+                pPending.CommittedAffiliation = recoveryResult.Affiliation;
+                pPending.OfficeId = recoveryResult.OfficeId;
+                pPending.SchoolId = recoveryResult.SchoolId;
             }
 
+            if (!pPending.AffiliationAdopted)
+            {
+                if (!HistoricalAffiliationService.AdoptCommittedService(
+                        pPending.CommittedAffiliation)) return false;
+                pPending.AffiliationAdopted = true;
+            }
+
+            if (!pPending.CourtApplied)
+            {
+                try
+                {
+                    bool applied;
+                    if (startResult != null)
+                    {
+                        applied = CourtService.ApplyCommittedOfficerProjection(actor, host,
+                            CourtOfficeLayer.Central, pPending.OfficeId, pPending.SchoolId,
+                            residence, startResult.Career, pPending.RuntimePrior,
+                            pRecordCareerHistory: GuestOfficePendingRules.ShouldRecordHistory(
+                                pPending.RecoveredExisting));
+                    }
+                    else
+                    {
+                        var recoveredCareer = new OfficialCareerAppointmentResult(
+                            OfficialCareerPersistenceOutcome.Committed,
+                            OfficialCareerMutation.Refreshed);
+                        applied = CourtService.ApplyCommittedOfficerProjection(actor, host,
+                            CourtOfficeLayer.Central, recoveryResult.OfficeId,
+                            recoveryResult.SchoolId, residence, recoveredCareer,
+                            CourtService.CaptureRuntimeOfficerProjection(actor),
+                            pRecordCareerHistory: false);
+                    }
+                    if (!applied) return false;
+                    pPending.CourtApplied = true;
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed guest court projection failed for actor " +
+                                        pPending.ActorId + ": " + error.Message);
+                    return false;
+                }
+            }
+
+            if (!pPending.StatusApplied)
+            {
+                try
+                {
+                    actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
+                        pColorEffect: false);
+                    pPending.StatusApplied = true;
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed guest status projection failed for actor " +
+                                        pPending.ActorId + ": " + error.Message);
+                    return false;
+                }
+            }
+
+            if (GuestOfficePendingRules.ShouldRetain(pPending.PersistenceOutcome,
+                    pPending.AffiliationAdopted, pPending.CourtApplied,
+                    pPending.StatusApplied)) return false;
+            if (pPending.StartRequest != null &&
+                GuestOfficePendingRules.ShouldRecordHistory(pPending.RecoveredExisting))
+                RecordSupplementalGuestHistory(actor, host, residence, pPending.OfficeId);
+            return true;
+        }
+
+        private static void SchedulePendingRetry(PendingGuestOffice pPending)
+        {
+            if (pPending == null) return;
+            pPending.Attempts++;
+            pPending.ReadyFrame = _pendingFrame +
+                GuestOfficePendingRules.RetryDelayFrames(pPending.Attempts,
+                    MaxPendingGuestRetryBackoffFrames);
+        }
+
+        private static void RecordSupplementalGuestHistory(Actor pActor, Kingdom pHost,
+            City pResidence, string pOfficeId)
+        {
             try
             {
-                pActor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
-                    pColorEffect: false);
                 string name = SafeName(pActor);
                 HistoryWriter.RecordPerson(pActor.data.id, pHost, name,
-                    "school_guest_service", name + " served as " + (pOffice ?? ""),
+                    "school_guest_service", name + " served as " + (pOfficeId ?? ""),
                     ChronicleCategory.HONOR);
                 HistoryWriter.RecordCity(pResidence, pHost, "school_guest_service",
                     name + " served the court");
@@ -198,7 +431,6 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Historical school guest history failed: " +
                                     error.Message);
             }
-            return true;
         }
 
         private static Dictionary<long, List<GuestCandidateProfile>> BuildCandidateIndex(
@@ -422,6 +654,12 @@ namespace AncientWarfare3.core.schools
             catch { return null; }
         }
 
+        private static City FindCity(long pId)
+        {
+            try { return pId >= 0 ? World.world?.cities?.get(pId) : null; }
+            catch { return null; }
+        }
+
         private static Kingdom FindKingdom(long pId)
         {
             try { return pId >= 0 ? World.world?.kingdoms?.get(pId) : null; }
@@ -448,6 +686,64 @@ namespace AncientWarfare3.core.schools
         {
             try { return pActor?.getName() ?? pActor?.data?.name ?? ""; }
             catch { return pActor?.data?.name ?? ""; }
+        }
+
+        private sealed class PendingGuestOffice
+        {
+            private PendingGuestOffice()
+            {
+            }
+
+            public long ActorId { get; private set; }
+            public long HostKingdomId { get; private set; }
+            public long CityId { get; private set; }
+            public string OfficeId { get; set; } = "";
+            public string SchoolId { get; set; } = "";
+            public GuestOfficeStartRequest StartRequest { get; private set; }
+            public HistoricalSchoolAffiliationSnapshot RecoveryAffiliation {
+                get;
+                private set;
+            }
+            public HistoricalSchoolAffiliationSnapshot CommittedAffiliation { get; set; }
+            public OfficialCareerPrior RuntimePrior { get; private set; }
+            public GuestOfficePersistenceOutcome PersistenceOutcome { get; set; } =
+                GuestOfficePersistenceOutcome.Unknown;
+            public bool RecoveredExisting { get; set; }
+            public bool AffiliationAdopted { get; set; }
+            public bool CourtApplied { get; set; }
+            public bool StatusApplied { get; set; }
+            public int Attempts { get; set; }
+            public int ReadyFrame { get; set; }
+
+            public static PendingGuestOffice ForStart(GuestOfficeStartRequest pRequest,
+                OfficialCareerPrior pRuntimePrior)
+            {
+                if (pRequest == null) return null;
+                return new PendingGuestOffice
+                {
+                    ActorId = pRequest.CareerAppointment?.ActorId ?? -1L,
+                    HostKingdomId = pRequest.HostKingdomId,
+                    CityId = pRequest.CityId,
+                    OfficeId = pRequest.OfficeId,
+                    SchoolId = pRequest.SchoolId,
+                    StartRequest = pRequest,
+                    RuntimePrior = pRuntimePrior
+                };
+            }
+
+            public static PendingGuestOffice ForRecovery(
+                HistoricalSchoolAffiliationSnapshot pState)
+            {
+                if (pState == null) return null;
+                return new PendingGuestOffice
+                {
+                    ActorId = pState.ActorId,
+                    HostKingdomId = pState.ServiceKingdomId,
+                    CityId = pState.ResidenceCityId,
+                    RecoveryAffiliation = pState,
+                    RecoveredExisting = true
+                };
+            }
         }
 
         private sealed class GuestCandidate
