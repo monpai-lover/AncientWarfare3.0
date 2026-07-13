@@ -30,6 +30,9 @@ namespace AncientWarfare3.core.schools
         private const double LedgerMomentumDecay = 0.85d;
         private const int TraditionDecayGraceYears = 3;
         private const int LedgerCityQueryChunkSize = 128;
+        private static long _lectureRevision;
+
+        public static long LectureRevision => _lectureRevision;
 
         public static long NextMembershipId()
         {
@@ -65,7 +68,10 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolTeachingDbResult result =
                     HistoricalSchoolTeachingPersistenceDb.Record(DB, request);
                 if (result.PersistedNew)
+                {
+                    unchecked { _lectureRevision++; }
                     InvalidateLedgerCaches(pPlan.Candidate.CityId);
+                }
                 return result;
             }
             catch (Exception error)
@@ -117,6 +123,8 @@ namespace AncientWarfare3.core.schools
                     UpsertLedgerCommand(transaction, pCityId, pSchoolId, ledgerDelta,
                         pWorldTime, membershipDelta);
                 transaction.Commit();
+                if (string.Equals(pEventType, "lecture", StringComparison.Ordinal))
+                    unchecked { _lectureRevision++; }
                 InvalidateLedgerCaches(pCityId);
                 return true;
             }
@@ -1123,6 +1131,36 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
+        internal static Dictionary<long, SchoolLectureSeniority>
+            LoadEarliestLectureSeniority(string pSchoolId)
+        {
+            var result = new Dictionary<long, SchoolLectureSeniority>();
+            if (DB == null || string.IsNullOrWhiteSpace(pSchoolId)) return result;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT ACTOR_ID,MIN(EVENT_YEAR),MIN(WORLD_TIME) FROM " +
+                    EventTable + " WHERE SCHOOL_ID=@school AND EVENT_TYPE='lecture'" +
+                    " AND ACTOR_ID>=0 GROUP BY ACTOR_ID";
+                command.Parameters.AddWithValue("@school", pSchoolId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long actorId = ValueLong(reader, 0, -1L);
+                    if (actorId < 0) continue;
+                    result[actorId] = new SchoolLectureSeniority(
+                        ValueInt(reader, 1, int.MaxValue),
+                        ValueDouble(reader, 2, double.MaxValue));
+                }
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore load lecture seniority failed: " +
+                                    error.Message);
+            }
+            return result;
+        }
+
         public static List<HistoricalSchoolAffiliationSnapshot> LoadAffiliations()
         {
             var result = new List<HistoricalSchoolAffiliationSnapshot>();
@@ -1269,6 +1307,31 @@ namespace AncientWarfare3.core.schools
                 return SchoolPersistenceOutcome.Unknown;
 
             long actorId = pMembership.ActorId;
+            if (pIdentity.IdsFrozen)
+            {
+                try
+                {
+                    ReadHistoricalDescentState(pMaster, pMembership, pHomeKingdomId,
+                        pHomeKingdomName, pHometownCityId, pYear, time, pIdentity,
+                        out SchoolPersistenceRowState existingMembership,
+                        out SchoolPersistenceRowState existingMaster,
+                        out SchoolPersistenceRowState existingAffiliation,
+                        out SchoolPersistenceRowState existingLineage,
+                        out SchoolPersistenceRowState existingShi);
+                    SchoolPersistenceOutcome existing =
+                        HistoricalSchoolPersistenceRules.Resolve(pQuerySucceeded: true,
+                            existingMembership, existingMaster, existingAffiliation,
+                            existingLineage, existingShi);
+                    if (existing != SchoolPersistenceOutcome.CleanFailure) return existing;
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("HistoricalSchoolStore descent preflight failed: " +
+                                        error.Message);
+                    return SchoolPersistenceOutcome.Unknown;
+                }
+            }
+
             SQLiteTransaction transaction = null;
             try
             {

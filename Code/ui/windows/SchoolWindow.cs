@@ -52,6 +52,8 @@ namespace AncientWarfare3.ui.windows
         private ScrollRect _detailScroll;
         private Text _detailTitle;
         private Text _detailBody;
+        private Button _rosterButton;
+        private Text _rosterButtonText;
         private SchoolInfluenceBreakdownView _breakdown;
         private Text _sortText;
         private SortMode _sortMode;
@@ -59,6 +61,7 @@ namespace AncientWarfare3.ui.windows
         private long _selectedCity = -1L;
         private int _displayedSnapshotGeneration = -1;
         private long _displayedMembershipVersion = -1L;
+        private long _displayedLectureRevision = -1L;
         private float _nextRefreshCheckTime;
 
         public static void OpenSchool(string pSchoolId = CourtSchoolId.Ru)
@@ -110,7 +113,8 @@ namespace AncientWarfare3.ui.windows
                 Time.unscaledTime < _nextRefreshCheckTime) return;
             _nextRefreshCheckTime = Time.unscaledTime + RefreshCheckInterval;
             if (_displayedSnapshotGeneration == CitySchoolSnapshotService.Generation &&
-                _displayedMembershipVersion == SchoolMembershipService.Version) return;
+                _displayedMembershipVersion == SchoolMembershipService.Version &&
+                _displayedLectureRevision == HistoricalSchoolStore.LectureRevision) return;
             Refresh();
         }
 
@@ -209,11 +213,16 @@ namespace AncientWarfare3.ui.windows
             listScroll.movementType = ScrollRect.MovementType.Clamped;
 
             _detailTitle = Text("Title", _detailContent, new Vector2(0f, 1f), new Vector2(12f, -8f),
-                new Vector2(right.sizeDelta.x - 24f, 26f), 14, TextAnchor.UpperLeft);
+                new Vector2(right.sizeDelta.x - 150f, 26f), 14, TextAnchor.UpperLeft);
+            _rosterButton = ButtonWithText("OpenCurrentSchoolRoster", _detailContent,
+                new Vector2(0f, 1f), new Vector2(right.sizeDelta.x - 132f, -6f),
+                new Vector2(120f, 24f), out _rosterButtonText);
+            _rosterButton.onClick.AddListener(() => SchoolRosterWindow.Open(_selectedSchool));
+            _rosterButton.gameObject.SetActive(false);
             _detailBody = Text("Body", _detailContent, new Vector2(0f, 1f), new Vector2(12f, -40f),
-                new Vector2(right.sizeDelta.x - 24f, 152f), 10, TextAnchor.UpperLeft);
+                new Vector2(right.sizeDelta.x - 24f, 1f), 10, TextAnchor.UpperLeft);
             _detailBody.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _detailBody.verticalOverflow = VerticalWrapMode.Truncate;
+            _detailBody.verticalOverflow = VerticalWrapMode.Overflow;
 
             for (int i = 0; i < CourtSchoolRegistry.All.Count; i++)
                 _listItems.Add(SchoolListItem.Create(_listContent));
@@ -302,6 +311,7 @@ namespace AncientWarfare3.ui.windows
             }
             _displayedSnapshotGeneration = CitySchoolSnapshotService.Generation;
             _displayedMembershipVersion = SchoolMembershipService.Version;
+            _displayedLectureRevision = HistoricalSchoolStore.LectureRevision;
         }
 
         private Dictionary<string, SchoolMetrics> BuildMetrics()
@@ -340,6 +350,9 @@ namespace AncientWarfare3.ui.windows
             Dictionary<string, SchoolMetrics> pMetrics)
         {
             if (pDefinition == null) return;
+            _rosterButton.gameObject.SetActive(true);
+            _rosterButtonText.text = AW_L10n.Text("aw_school_roster_open_current",
+                "Teacher Lineage");
             _detailTitle.color = Parse(pDefinition.ColorHex, Color.white);
             _detailTitle.text = AW_L10n.Text(pDefinition.NameKey, pDefinition.Id);
             SchoolMetrics metrics = pMetrics[pDefinition.Id];
@@ -360,8 +373,9 @@ namespace AncientWarfare3.ui.windows
                                    "School Institutions") + " / " +
                                AW_L10n.Text("aw_school_lineage_list", "Teacher Lineage") + "\n" +
                                RecentHistory(pDefinition.Id);
-            int representatives = ShowRepresentatives(pDefinition.Id, 205f);
-            float top = 205f + ActorCardRows(representatives) *
+            float top = LayoutDetailBody();
+            int representatives = ShowRepresentatives(pDefinition.Id, top);
+            top += ActorCardRows(representatives) *
                 (SchoolActorCardView.Height + 6f) + 12f;
             int masters = ShowMasterGallery(pDefinition.Id, top);
             top += MasterCardRows(masters) * (SchoolMasterCardView.Height + 6f) + 12f;
@@ -416,11 +430,12 @@ namespace AncientWarfare3.ui.windows
 
         private void ShowCityDetail(City pCity)
         {
+            _rosterButton.gameObject.SetActive(false);
             if (pCity?.data == null)
             {
                 _detailTitle.text = AW_L10n.Text("aw_school_city_missing", "City missing");
                 _detailBody.text = "";
-                SetDetailContentHeight(180f);
+                SetDetailContentHeight(LayoutDetailBody() + 18f);
                 ResetDetailScroll();
                 return;
             }
@@ -436,16 +451,18 @@ namespace AncientWarfare3.ui.windows
                   string.Join(" / ", snapshot.Contributors.Take(5)
                       .Select(p => p.ActorName + " " + Mathf.RoundToInt(p.Score)).ToArray()) +
                   LedgerSummary(snapshot) + "\n" + SchoolLandmarkService.Describe(pCity);
+            float top = LayoutDetailBody();
             if (snapshot != null && snapshot.TotalScore > 0f)
             {
                 _breakdown.Bind(pCity);
                 RectTransform breakdownRect = _breakdown.GetComponent<RectTransform>();
-                breakdownRect.anchoredPosition = new Vector2(12f, -198f);
-                breakdownRect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 92f);
+                float breakdownHeight = _breakdown.LayoutHeight(DetailWidth());
+                breakdownRect.anchoredPosition = new Vector2(12f, -top);
+                top += breakdownHeight + 8f;
             }
             if (snapshot == null || snapshot.TotalScore <= 0f)
             {
-                SetDetailContentHeight(180f);
+                SetDetailContentHeight(top + 18f);
                 ResetDetailScroll();
                 return;
             }
@@ -456,14 +473,15 @@ namespace AncientWarfare3.ui.windows
                 if (index >= _bars.Count) break;
                 SchoolInfluenceBar bar = _bars[index];
                 RectTransform rect = bar.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f, -296f - index * (SchoolInfluenceBar.Height + 4f));
-                rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, SchoolInfluenceBar.Height);
+                rect.anchoredPosition = new Vector2(12f,
+                    -top - index * (SchoolInfluenceBar.Height + 4f));
+                rect.sizeDelta = new Vector2(DetailWidth(), SchoolInfluenceBar.Height);
                 bar.Bind(CourtSchoolRegistry.Find(item.Key), item.Value,
                     item.Value / snapshot.TotalScore, SelectSchool);
                 bar.gameObject.SetActive(true);
                 index++;
             }
-            float contributorTop = 296f + index * (SchoolInfluenceBar.Height + 4f) + 10f;
+            float contributorTop = top + index * (SchoolInfluenceBar.Height + 4f) + 10f;
             int contributors = ShowContributors(snapshot.Contributors, contributorTop);
             SetDetailContentHeight(contributorTop + ActorCardRows(contributors) *
                 (SchoolActorCardView.Height + 6f) + 18f);
@@ -505,22 +523,24 @@ namespace AncientWarfare3.ui.windows
 
         private int ShowRepresentatives(string pSchoolId, float pTop)
         {
-            Actor[] actors = SchoolMembershipService.Members(pSchoolId)
-                .Select(id => World.world?.units?.get(id))
-                .Where(p => p?.data != null && p.isAlive() && !p.isRekt())
-                .OrderByDescending(Ability)
-                .ThenBy(p => p.data.id)
+            SchoolRosterReadNode[] representatives =
+                SchoolRosterReadModelService.Build(pSchoolId, 1f, 1f,
+                        SchoolRosterRules.DefaultColumnsPerRow).Nodes
+                .OrderBy(p => p.Layout.StableOrder)
                 .Take(_actorCards.Count)
                 .ToArray();
-            for (int i = 0; i < actors.Length; i++)
+            for (int i = 0; i < representatives.Length; i++)
             {
-                Actor actor = actors[i];
+                SchoolRosterReadNode representative = representatives[i];
+                Actor actor = representative.Actor;
                 SchoolActorCardView card = _actorCards[i];
                 LayoutActorCard(card, i, pTop);
                 card.Bind(actor, StandingText(i),
-                    AW_L10n.Text("aw_school_ability", "Ability") + "  " + Mathf.RoundToInt(Ability(actor)));
+                    RosterStandingText(representative.Layout.Standing) + "  " +
+                    AW_L10n.Text("aw_school_ability", "Ability") + "  " +
+                    Mathf.RoundToInt(Ability(actor)));
             }
-            return actors.Length;
+            return representatives.Length;
         }
 
         private int ShowMasterGallery(string pSchoolId, float pTop)
@@ -553,6 +573,8 @@ namespace AncientWarfare3.ui.windows
         {
             List<SchoolInstitutionReadModel> institutions =
                 HistoricalSchoolStore.LoadInstitutions(pSchoolId, pLimit: _institutionRows.Count);
+            float cursor = pTop;
+            int rendered = 0;
             for (int i = 0; i < _institutionRows.Count; i++)
             {
                 SchoolInstitutionRowView row = _institutionRows[i];
@@ -563,12 +585,12 @@ namespace AncientWarfare3.ui.windows
                 }
                 SchoolInstitutionReadModel institution = institutions[i];
                 RectTransform rect = row.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f,
-                    -pTop - i * (rect.sizeDelta.y + 4f));
-                rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 26f);
+                rect.anchoredPosition = new Vector2(12f, -cursor);
                 row.Bind(institution, FindCityName(institution.CityId));
+                cursor += row.LayoutHeight(DetailWidth()) + 4f;
+                rendered++;
             }
-            return institutions.Count == 0 ? pTop : pTop + institutions.Count * 30f + 8f;
+            return rendered == 0 ? pTop : cursor + 4f;
         }
 
         private float ShowLineage(string pSchoolId, float pTop)
@@ -580,6 +602,8 @@ namespace AncientWarfare3.ui.windows
                 .ThenBy(p => p.ActorId)
                 .Take(_lineageRows.Count)
                 .ToArray();
+            float cursor = pTop;
+            int rendered = 0;
             for (int i = 0; i < _lineageRows.Count; i++)
             {
                 SchoolLineageRowView row = _lineageRows[i];
@@ -599,14 +623,14 @@ namespace AncientWarfare3.ui.windows
                       ("actor " + membership.ActorId);
                 string teacherName = teacher?.data != null ? SafeActorName(teacher) : "";
                 RectTransform rect = row.GetComponent<RectTransform>();
-                rect.anchoredPosition = new Vector2(12f,
-                    -pTop - i * (rect.sizeDelta.y + 4f));
-                rect.sizeDelta = new Vector2(_detailPanel.sizeDelta.x - 24f, 26f);
+                rect.anchoredPosition = new Vector2(12f, -cursor);
                 row.Bind(studentName, teacherName, membership.Generation,
                     membership.Reputation, student?.data != null && student.isAlive() &&
                     !student.isRekt());
+                cursor += row.LayoutHeight(DetailWidth()) + 4f;
+                rendered++;
             }
-            return members.Length == 0 ? pTop : pTop + members.Length * 30f;
+            return rendered == 0 ? pTop : cursor;
         }
 
         private static string RecentHistory(string pSchoolId)
@@ -617,17 +641,22 @@ namespace AncientWarfare3.ui.windows
             List<SchoolDebateReadModel> debates = HistoricalSchoolStore.LoadDebates(pSchoolId,
                 pLimit: 2);
             var lines = new List<string>();
+            string debateLabel = AW_L10n.Text("aw_school_history_debate", "Debate");
+            string workLabel = AW_L10n.Text("aw_school_history_work", "Work");
             foreach (SchoolEventReadModel item in events)
                 lines.Add((item.EventYear >= 0 ? item.EventYear + " " : "") +
                           EventLabel(item.EventType));
             foreach (SchoolDebateReadModel item in debates)
                 lines.Add((item.DebateYear >= 0 ? item.DebateYear + " " : "") +
-                          "debate " + (item.TopicId ?? ""));
+                          debateLabel + " " + (item.TopicId ?? ""));
             foreach (SchoolWorkReadModel item in works)
                 lines.Add((item.WrittenYear >= 0 ? item.WrittenYear + " " : "") +
-                          "work " + (item.DisplayName ?? item.WorkKey));
-            return lines.Count == 0 ? "Recent history: none" :
-                "Recent history: " + string.Join(" / ", lines.Take(5).ToArray());
+                          workLabel + " " + (item.DisplayName ?? item.WorkKey));
+            string heading = AW_L10n.Text("aw_school_recent_history",
+                "Recent School History");
+            return heading + ": " + (lines.Count == 0
+                ? AW_L10n.Text("aw_school_none", "None")
+                : string.Join(" / ", lines.Take(5).ToArray()));
         }
 
         private static string EventLabel(string pEventType)
@@ -644,6 +673,8 @@ namespace AncientWarfare3.ui.windows
                 case "journey_arrival": return AW_L10n.Text(key, "Journey arrival");
                 case "guest_service_started": return AW_L10n.Text(key, "Guest service");
                 case "guest_service_renewed": return AW_L10n.Text(key, "Guest service renewed");
+                case "institution_founded": return AW_L10n.Text(key, "Institution founded");
+                case "lineage_successor": return AW_L10n.Text(key, "Lineage succession");
                 default: return type;
             }
         }
@@ -715,6 +746,7 @@ namespace AncientWarfare3.ui.windows
             _selectedCity = -1L;
             _displayedSnapshotGeneration = -1;
             _displayedMembershipVersion = -1L;
+            _displayedLectureRevision = -1L;
             _nextRefreshCheckTime = 0f;
             if (_detailTitle != null) _detailTitle.text = "";
             if (_detailBody != null) _detailBody.text = "";
@@ -746,6 +778,43 @@ namespace AncientWarfare3.ui.windows
                 default:
                     return AW_L10n.Text("aw_school_standing_representative", "Representative");
             }
+        }
+
+        private static string RosterStandingText(SchoolRosterStanding pStanding)
+        {
+            switch (pStanding)
+            {
+                case SchoolRosterStanding.HistoricalMaster:
+                    return AW_L10n.Text("aw_school_roster_standing_master",
+                        "Historical Master");
+                case SchoolRosterStanding.QualifiedTeacher:
+                    return AW_L10n.Text("aw_school_roster_standing_teacher", "Teacher");
+                case SchoolRosterStanding.DirectDisciple:
+                    return AW_L10n.Text("aw_school_roster_standing_direct",
+                        "Direct Disciple");
+                case SchoolRosterStanding.LaterDisciple:
+                    return AW_L10n.Text("aw_school_roster_standing_later",
+                        "Later Disciple");
+                default:
+                    return AW_L10n.Text("aw_school_roster_standing_member", "Member");
+            }
+        }
+
+        private float DetailWidth()
+        {
+            return Mathf.Max(1f, (_detailPanel?.sizeDelta.x ?? 1f) - 24f);
+        }
+
+        private float LayoutDetailBody()
+        {
+            RectTransform rect = _detailBody?.GetComponent<RectTransform>();
+            if (rect == null) return 40f;
+            float width = DetailWidth();
+            rect.anchoredPosition = new Vector2(12f, -40f);
+            rect.sizeDelta = new Vector2(width, 1f);
+            float height = Mathf.Max(18f, Mathf.Ceil(_detailBody.preferredHeight) + 4f);
+            rect.sizeDelta = new Vector2(width, height);
+            return 40f + height + 12f;
         }
 
         private void SetDetailContentHeight(float pHeight)

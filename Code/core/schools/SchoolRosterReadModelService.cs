@@ -31,13 +31,14 @@ namespace AncientWarfare3.core.schools
     internal sealed class SchoolRosterReadModel
     {
         public SchoolRosterReadModel(string pSchoolId, long pMembershipVersion,
-            long pResidenceRevision,
+            long pResidenceRevision, long pLectureRevision,
             IReadOnlyList<SchoolRosterReadNode> pNodes,
             IReadOnlyList<SchoolRosterLink> pLinks, int pExcludedCount, int pTeacherCount)
         {
             SchoolId = pSchoolId ?? "";
             MembershipVersion = pMembershipVersion;
             ResidenceRevision = pResidenceRevision;
+            LectureRevision = pLectureRevision;
             Nodes = pNodes ?? Array.Empty<SchoolRosterReadNode>();
             Links = pLinks ?? Array.Empty<SchoolRosterLink>();
             ExcludedCount = Math.Max(0, pExcludedCount);
@@ -47,6 +48,7 @@ namespace AncientWarfare3.core.schools
         public string SchoolId { get; }
         public long MembershipVersion { get; }
         public long ResidenceRevision { get; }
+        public long LectureRevision { get; }
         public IReadOnlyList<SchoolRosterReadNode> Nodes { get; }
         public IReadOnlyList<SchoolRosterLink> Links { get; }
         public int ExcludedCount { get; }
@@ -60,7 +62,10 @@ namespace AncientWarfare3.core.schools
         {
             long membershipVersion = SchoolMembershipService.Version;
             long residenceRevision = HistoricalAffiliationService.ResidenceRevision;
+            long lectureRevision = HistoricalSchoolStore.LectureRevision;
             long[] memberIds = SchoolMembershipService.Members(pSchoolId);
+            Dictionary<long, SchoolLectureSeniority> lectureSeniority =
+                HistoricalSchoolStore.LoadEarliestLectureSeniority(pSchoolId);
             Dictionary<long, int> followerCounts =
                 SchoolLineageService.BuildDirectDiscipleCounts();
             var candidates = new List<SchoolRosterCandidate>(memberIds.Length);
@@ -82,11 +87,19 @@ namespace AncientWarfare3.core.schools
                     HistoricalSchoolDescentService.IsCanonicalMaster(actor);
                 bool qualifiedTeacher = live &&
                     SchoolLineageService.IsQualifiedTeacher(actor);
+                int firstLectureYear = int.MaxValue;
+                double firstLectureTime = double.MaxValue;
+                if (lectureSeniority.TryGetValue(actorId,
+                        out SchoolLectureSeniority lecture))
+                {
+                    firstLectureYear = lecture.FirstLectureYear;
+                    firstLectureTime = lecture.FirstLectureTime;
+                }
                 candidates.Add(new SchoolRosterCandidate(actorId, schoolId, source,
                     membership?.TeacherActorId ?? -1L, membership?.Generation ?? 0,
                     membership?.Reputation ?? 0f, followers, Learning(actor),
                     membership?.StartYear ?? -1, canonical, qualifiedTeacher, live,
-                    membershipValid));
+                    membershipValid, firstLectureYear, firstLectureTime, SafeAge(actor)));
 
                 if (!live || !membershipValid) continue;
                 City residence = HistoricalAffiliationService.ResidenceCity(actor) ?? actor.city;
@@ -116,7 +129,8 @@ namespace AncientWarfare3.core.schools
             int teacherCount = layout.Nodes.Count(p =>
                 p.Candidate.CanonicalMaster || p.Candidate.QualifiedTeacher);
             return new SchoolRosterReadModel(pSchoolId, membershipVersion,
-                residenceRevision, nodes, layout.Links, layout.ExcludedCount, teacherCount);
+                residenceRevision, lectureRevision, nodes, layout.Links,
+                layout.ExcludedCount, teacherCount);
         }
 
         private static Actor FindActor(long pActorId)
@@ -130,6 +144,12 @@ namespace AncientWarfare3.core.schools
         {
             float learning = SafeStat(pActor, "learning");
             return learning > 0f ? learning : SafeStat(pActor, "intelligence");
+        }
+
+        private static int SafeAge(Actor pActor)
+        {
+            try { return Math.Max(0, pActor?.getAge() ?? 0); }
+            catch { return 0; }
         }
 
         private static float SafeStat(Actor pActor, string pStat)

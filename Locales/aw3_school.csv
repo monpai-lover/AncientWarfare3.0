@@ -45,6 +45,8 @@ aw_school_institutions,机构,Institutions,機構
 aw_school_active_presence,现时驻留,Active Presence,現時駐留
 aw_school_momentum,声势,Momentum,聲勢
 aw_school_recent_history,近期学派史,Recent School History,近期學派史
+aw_school_history_debate,论辩,Debate,論辯
+aw_school_history_work,著述,Work,著述
 aw_school_master_gallery,先师谱,Historical Masters,先師譜
 aw_school_master_living,在世,Living,在世
 aw_school_master_dead,已逝,Dead,已逝
@@ -52,7 +54,28 @@ aw_school_master_queued,待降临,Queued,待降臨
 aw_school_master_active_residence,现时驻留,Active residence,現時駐留
 aw_school_master_awaiting_xia_descent,待华夏降临,Awaiting Xia descent,待華夏降臨
 aw_school_institution_list,学派机构,School Institutions,學派機構
+aw_school_institution_academy,儒学书院,Ru Academy,儒學書院
+aw_school_institution_mohist_lodge,墨者馆,Mohist Lodge,墨者館
+aw_school_institution_dao_hall,道家学宫,Dao Hall,道家學宮
+aw_school_institution_legal_academy,法家学宫,Legal Academy,法家學宮
+aw_school_institution_military_academy,武学,Military Academy,武學
+aw_school_institution_diplomat_school,纵横馆,Diplomatic School,縱橫館
+aw_school_institution_agrarian_school,农圃学舍,Agrarian School,農圃學舍
+aw_school_institution_observatory,观象台,Observatory,觀象臺
+aw_school_institution_names_school,名辩馆,School of Names,名辯館
+aw_school_institution_clinic,医馆,Clinic,醫館
+aw_school_institution_syncretic_academy,杂学馆,Syncretic Academy,雜學館
+aw_school_institution_merchant_guild,商馆,Merchant Guild,商館
+aw_school_institution_craft_workshop,工坊,Craft Workshop,工坊
+aw_school_institution_archive,史馆,Archive,史館
+aw_school_institution_unknown,学派机构,School Institution,學派機構
+aw_school_institution_level,等级,Level,等級
+aw_school_institution_condition,完好度,Condition,完好度
+aw_school_unknown_city,未知城市,Unknown City,未知城市
+aw_school_landmark,学派地标,School Landmark,學派地標
 aw_school_lineage_list,师承谱系,Teacher Lineage,師承譜系
+aw_school_lineage_dead,已故,Deceased,已故
+aw_school_lineage_founder,开山先师,Founder,開山先師
 aw_school_guest_service,客卿任官,Guest Court Service,客卿任官
 aw_school_role_scholar,游学先师/传承教师,Resident Scholar,遊學先師/傳承教師
 aw_school_event_lecture,讲学,Lecture,講學
@@ -64,12 +87,17 @@ aw_school_event_journey_arrival,游学抵达,Journey arrival,遊學抵達
 aw_school_event_guest_service,客卿任官,Guest service,客卿任官
 aw_school_event_guest_service_started,客卿任官,Guest service,客卿任官
 aw_school_event_guest_service_renewed,续聘客卿,Guest service renewed,續聘客卿
+aw_school_event_institution_founded,创立学宫,Institution founded,創立學宮
+aw_school_event_lineage_successor,师承继位,Lineage succession,師承繼位
+aw_school_master_historical_record,历史留档,Historical record,歷史留檔
 aw_school_roster Title,学派人物,School Members,學派人物
 aw_school_roster_btn,学派人物,School Members,學派人物
 aw_school_roster_btn Description,查看每个学派内所有真实人物及师承地位,Browse every real member and teacher lineage in each school,查看每個學派內所有真實人物及師承地位
 aw_school_roster_btn_description,查看每个学派内所有真实人物及师承地位,Browse every real member and teacher lineage in each school,查看每個學派內所有真實人物及師承地位
 aw_school_roster_title,学派人物,School Members,學派人物
+aw_school_roster_open_current,师承谱系,Teacher Lineage,師承譜系
 aw_school_roster_standing,学派地位,School Standing,學派地位
+aw_school_roster_standing_leader,领袖,Leader,領袖
 aw_school_roster_standing_master,历史宗师,Historical Master,歷史宗師
 aw_school_roster_standing_teacher,授业师长,Qualified Teacher,授業師長
 aw_school_roster_standing_direct,亲传弟子,Direct Disciple,親傳弟子

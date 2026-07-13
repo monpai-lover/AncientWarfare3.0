@@ -75,7 +75,7 @@ namespace AncientWarfare3.ui.items
 
             _name.text = pNode.ActorName;
             _name.color = kingdomColor;
-            _standing.text = StandingName(pNode.Layout.Standing);
+            _standing.text = StandingLabel(pNode);
             _detail.text = AW_L10n.Text("aw_school_roster_generation", "Generation") + " " +
                            pNode.Layout.Generation + "  " +
                            AW_L10n.Text("aw_school_roster_reputation", "Reputation") + " " +
@@ -245,7 +245,7 @@ namespace AncientWarfare3.ui.items
             var lines = new List<string>
             {
                 AW_L10n.Text("aw_school_roster_standing", "Standing") + ": " +
-                StandingName(pNode.Layout.Standing),
+                StandingLabel(pNode),
                 AW_L10n.Text("aw_school_roster_reputation", "Reputation") + ": " +
                 Mathf.RoundToInt(pNode.Layout.Reputation),
                 AW_L10n.Text("aw_school_roster_generation", "Generation") + ": " +
@@ -283,6 +283,15 @@ namespace AncientWarfare3.ui.items
                 default:
                     return AW_L10n.Text("aw_school_roster_standing_member", "Member");
             }
+        }
+
+        private static string StandingLabel(SchoolRosterReadNode pNode)
+        {
+            string standing = StandingName(pNode.Layout.Standing);
+            return pNode.Layout.StableOrder == 0
+                ? AW_L10n.Text("aw_school_roster_standing_leader", "Leader") +
+                  " / " + standing
+                : standing;
         }
 
         private static Color KingdomColor(Kingdom pKingdom)

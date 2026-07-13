@@ -4,6 +4,7 @@ using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using ai.behaviours;
+using NeoModLoader.General;
 using UnityEngine;
 
 namespace AncientWarfare3.content.schools
@@ -11,6 +12,9 @@ namespace AncientWarfare3.content.schools
     internal static class HistoricalSchoolContent
     {
         public const string MasterTraitId = "aw_historical_school_master";
+        public const string MasterTraitLocaleId = "trait_aw_historical_school_master";
+        public const string MasterTraitDescriptionLocaleId =
+            "trait_aw_historical_school_master_info";
         public const string GuestStatusId = "aw_school_guest";
         public const string DebateStatusId = "aw_school_debate";
         public const string VoyageStatusId = "aw_school_voyage";
@@ -72,19 +76,32 @@ namespace AncientWarfare3.content.schools
 
         private static void RegisterTrait()
         {
-            if (AssetManager.traits.get(MasterTraitId) != null) return;
-            var trait = new ActorTrait
+            ActorTrait trait = AssetManager.traits.get(MasterTraitId);
+            if (trait == null)
             {
-                id = MasterTraitId,
-                path_icon = "ui/Icons/iconXias",
-                rate_birth = 0,
-                rate_inherit = 0,
-                needs_to_be_explored = false,
-                unlocked_with_achievement = false,
-                group_id = XiaTraitGroups.AW2
-            };
-            // AssetManager initializes base_stats when the trait is registered.
-            AssetManager.traits.add(trait);
+                trait = new ActorTrait
+                {
+                    id = MasterTraitId,
+                    path_icon = "ui/Icons/iconXias",
+                    rate_birth = 0,
+                    rate_inherit = 0,
+                    needs_to_be_explored = false,
+                    unlocked_with_achievement = false,
+                    group_id = XiaTraitGroups.AW2,
+                    special_locale_id = MasterTraitLocaleId,
+                    special_locale_description = MasterTraitDescriptionLocaleId,
+                    has_description_2 = false
+                };
+                // AssetManager initializes base_stats when the trait is registered.
+                AssetManager.traits.add(trait);
+            }
+            else
+            {
+                // Hot reloads can retain an older asset, so repair its explicit locale route.
+                trait.special_locale_id = MasterTraitLocaleId;
+                trait.special_locale_description = MasterTraitDescriptionLocaleId;
+                trait.has_description_2 = false;
+            }
             trait.unlock();
             trait.base_stats["health"] = 20f;
             trait.base_stats["lifespan"] = 25f;
@@ -93,6 +110,30 @@ namespace AncientWarfare3.content.schools
             trait.base_stats["stewardship"] = 3f;
             trait.base_stats["diplomacy"] = 3f;
             trait.base_stats["intelligence"] = 4f;
+            EnsureMasterTraitLocalization();
+        }
+
+        private static void EnsureMasterTraitLocalization()
+        {
+            if (LocalizedTextManager.instance == null) return;
+            if (LocalizedTextManager.stringExists(MasterTraitLocaleId) &&
+                LocalizedTextManager.stringExists(MasterTraitDescriptionLocaleId)) return;
+            try
+            {
+                // NML normally applies Locales before OnModLoad. Reapply once when another
+                // mod or a hot reload left the game's active locale dictionary stale.
+                LM.ApplyLocale(false);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical master locale reapply failed: " +
+                                    error.Message);
+            }
+            if (!LocalizedTextManager.stringExists(MasterTraitLocaleId) ||
+                !LocalizedTextManager.stringExists(MasterTraitDescriptionLocaleId))
+                ModClass.LogWarning("Historical master trait locale missing: " +
+                                    MasterTraitLocaleId + " / " +
+                                    MasterTraitDescriptionLocaleId);
         }
 
         private static void RegisterStatuses()

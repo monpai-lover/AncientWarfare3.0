@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AncientWarfare3.core.policy;
 using NeoModLoader.General;
@@ -23,6 +24,7 @@ namespace AncientWarfare3.ui
                 "AW3 Lineage",
                 "AW3 Lineage Description",
                 SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
+            ApplyNativeTabSprites(tab);
 
             tab.SetLayout(new List<string> { GROUP_LINEAGE, GROUP_CREATURE });
 
@@ -120,6 +122,16 @@ namespace AncientWarfare3.ui
             if (figureToggle != null) tab.AddPowerButton(GROUP_CREATURE, figureToggle);
 
             tab.UpdateLayout();
+        }
+
+        private static void ApplyNativeTabSprites(PowersTab pTab)
+        {
+            if (pTab == null) return;
+            PowersTab native = PowerTabController.instance?.tab_main ??
+                               ResourcesFinder.FindResource<PowersTab>("tab_main");
+            if (native == null || ReferenceEquals(native, pTab)) return;
+            pTab.image_normal = native.image_normal;
+            pTab.image_selected = native.image_selected;
         }
 
         private static void OpenOverview()

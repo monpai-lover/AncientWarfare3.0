@@ -106,10 +106,11 @@ namespace AncientWarfare3.ui.windows
             HistoryListItem.OnFilterToggle = _ =>
             {
                 // 循环：全部→life→honor→career→clan→war→bond→全部
+                (string cat, string label)[] categories = BuildCategories();
                 int cur = 0;
-                for (int k = 0; k < CATEGORIES.Length; k++)
-                    if (CATEGORIES[k].cat == _personFilter) { cur = k; break; }
-                _personFilter = CATEGORIES[(cur + 1) % CATEGORIES.Length].cat;
+                for (int k = 0; k < categories.Length; k++)
+                    if (categories[k].cat == _personFilter) { cur = k; break; }
+                _personFilter = categories[(cur + 1) % categories.Length].cat;
                 Instance?.Refresh();
             };
             HistoryListItem.OnActorBiography = actorId =>
@@ -225,16 +226,24 @@ namespace AncientWarfare3.ui.windows
         }
 
         // ─── 人物传记：分类筛选条 + 事件平铺 ───
-        private static readonly (string cat, string label)[] CATEGORIES =
+        private static (string cat, string label)[] BuildCategories()
         {
-            ("",      AW_L10n.Text("aw_history_filter_all", "\u5168\u90E8")),
-            (ChronicleCategory.LIFE,  AW_L10n.Text("aw_history_filter_life", "\u4EBA\u751F")),
-            (ChronicleCategory.HONOR, AW_L10n.Text("aw_history_filter_honor", "\u8363\u8000")),
-            (CareerFilter, AW_L10n.Text("aw_history_filter_career", "\u4ED5\u9014")),
-            (ChronicleCategory.CLAN,  AW_L10n.Text("aw_history_filter_clan", "\u6C0F\u65CF")),
-            (ChronicleCategory.WAR,   AW_L10n.Text("aw_history_filter_war", "\u6218\u4E8B")),
-            (ChronicleCategory.BOND,  AW_L10n.Text("aw_history_filter_bond", "\u7F81\u7ECA")),
-        };
+            return new[]
+            {
+                ("", AW_L10n.Text("aw_history_filter_all", "\u5168\u90E8")),
+                (ChronicleCategory.LIFE,
+                    AW_L10n.Text("aw_history_filter_life", "\u4EBA\u751F")),
+                (ChronicleCategory.HONOR,
+                    AW_L10n.Text("aw_history_filter_honor", "\u8363\u8000")),
+                (CareerFilter, AW_L10n.Text("aw_history_filter_career", "\u4ED5\u9014")),
+                (ChronicleCategory.CLAN,
+                    AW_L10n.Text("aw_history_filter_clan", "\u6C0F\u65CF")),
+                (ChronicleCategory.WAR,
+                    AW_L10n.Text("aw_history_filter_war", "\u6218\u4E8B")),
+                (ChronicleCategory.BOND,
+                    AW_L10n.Text("aw_history_filter_bond", "\u7F81\u7ECA"))
+            };
+        }
 
         private void RefreshPerson()
         {
@@ -369,7 +378,7 @@ namespace AncientWarfare3.ui.windows
         {
             // 拼成单行文本，HistoryListItem 负责渲染为可点击区域
             var sb = new System.Text.StringBuilder();
-            foreach (var (cat, label) in CATEGORIES)
+            foreach (var (cat, label) in BuildCategories())
                 sb.Append(_personFilter == cat ? "[" + label + "]" : label).Append(" ");
             return sb.ToString().TrimEnd();
         }

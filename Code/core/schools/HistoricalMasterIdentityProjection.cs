@@ -19,8 +19,19 @@ namespace AncientWarfare3.core.schools
 
             if (clan.data.chief_id != pActor.data.id) clan.setChief(pActor);
             LineageService.RenameClanByLeader(clan, pActor);
-            if (!LineageArchiveWriter.ReplaceHistoricalMasterIdentity(pActor, pIdentity))
-                return false;
+            string expectedClanName =
+                HistoricalMasterIdentityRules.EnsureSingleShiSuffix(pMaster.CanonicalShiName);
+            if (clan.data.name != expectedClanName)
+            {
+                try { clan.setName(expectedClanName); }
+                catch { return false; }
+            }
+
+            bool archiveProjected =
+                LineageArchiveWriter.ReplaceHistoricalMasterIdentity(pActor, pIdentity);
+            if (!archiveProjected)
+                ModClass.LogWarning("Historical school master archive mirror pending: " +
+                                    pMaster.Id + " actor=" + pActor.data.id);
 
             LineageService.SyncExistingChildrenAfterLineageChange(pActor);
             return MatchesProjectedIdentity(pActor, pMaster, pIdentity, clan);
@@ -106,7 +117,8 @@ namespace AncientWarfare3.core.schools
                    pActor.data.name == pMaster.CanonicalName &&
                    pClan?.data?.founder_actor_id == pActor.data.id &&
                    pClan.data.chief_id == pActor.data.id &&
-                   pClan.data.name == expectedClanName;
+                   pClan.data.name == expectedClanName &&
+                   pActor.hasTrait(HistoricalSchoolContent.MasterTraitId);
         }
     }
 }

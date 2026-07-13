@@ -22,8 +22,8 @@ namespace AncientWarfare3.ui.items
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(.5f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(0f, Height);
             obj.GetComponent<Image>().color = new Color(.06f, .06f, .055f, .92f);
             SchoolInfluenceBar bar = obj.AddComponent<SchoolInfluenceBar>();

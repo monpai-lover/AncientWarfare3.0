@@ -1,5 +1,17 @@
 namespace AncientWarfare3.core.schools
 {
+    internal readonly struct SchoolLectureSeniority
+    {
+        public SchoolLectureSeniority(int pFirstLectureYear, double pFirstLectureTime)
+        {
+            FirstLectureYear = pFirstLectureYear;
+            FirstLectureTime = pFirstLectureTime;
+        }
+
+        public int FirstLectureYear { get; }
+        public double FirstLectureTime { get; }
+    }
+
     internal sealed class SchoolInstitutionReadModel
     {
         public long InstitutionId { get; set; }

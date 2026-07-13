@@ -14,8 +14,8 @@ namespace AncientWarfare3.ui.windows
 {
     internal sealed class SchoolRosterWindow : AbstractWindow<SchoolRosterWindow>
     {
-        private const float DefaultWidth = 720f;
-        private const float DefaultHeight = 440f;
+        private const float DefaultWidth = 560f;
+        private const float DefaultHeight = 360f;
         private const float MinWidth = 520f;
         private const float MinHeight = 320f;
         private const float MaxWidth = 1000f;
@@ -61,6 +61,7 @@ namespace AncientWarfare3.ui.windows
         private string _displayedSchool = "";
         private long _displayedMembershipVersion = -1L;
         private long _displayedResidenceRevision = -1L;
+        private long _displayedLectureRevision = -1L;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
         private int _activeLinkCount;
@@ -106,7 +107,8 @@ namespace AncientWarfare3.ui.windows
             if (!isActiveAndEnabled || World.world == null) return;
             if (_displayedMembershipVersion != SchoolMembershipService.Version ||
                 _displayedResidenceRevision !=
-                HistoricalAffiliationService.ResidenceRevision)
+                HistoricalAffiliationService.ResidenceRevision ||
+                _displayedLectureRevision != HistoricalSchoolStore.LectureRevision)
             {
                 Refresh();
                 return;
@@ -348,6 +350,7 @@ namespace AncientWarfare3.ui.windows
             _displayedSchool = model.SchoolId;
             _displayedMembershipVersion = model.MembershipVersion;
             _displayedResidenceRevision = model.ResidenceRevision;
+            _displayedLectureRevision = model.LectureRevision;
             UpdateSummary(model);
             LayoutCanvas(model.Nodes);
             List<SchoolRosterLinkSegment> linkSegments = BuildLinks(model);
@@ -449,8 +452,7 @@ namespace AncientWarfare3.ui.windows
                 if (!byActor.TryGetValue(link.TeacherActorId,
                         out SchoolRosterReadNode teacher) ||
                     !byActor.TryGetValue(link.StudentActorId,
-                        out SchoolRosterReadNode student) ||
-                    teacher.Layout.Row >= student.Layout.Row) continue;
+                        out SchoolRosterReadNode student)) continue;
                 float fromX = teacher.Layout.X + _nodeOffset.x;
                 float fromY = teacher.Layout.Y + _nodeOffset.y - SchoolRosterNodeView.Height;
                 float toX = student.Layout.X + _nodeOffset.x;
@@ -621,6 +623,7 @@ namespace AncientWarfare3.ui.windows
             _displayedSchool = "";
             _displayedMembershipVersion = -1L;
             _displayedResidenceRevision = -1L;
+            _displayedLectureRevision = -1L;
             _resetCanvasOnRefresh = true;
             TrimPools(0, 0, pForce: true);
         }

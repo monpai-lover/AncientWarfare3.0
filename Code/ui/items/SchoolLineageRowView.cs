@@ -16,8 +16,8 @@ namespace AncientWarfare3.ui.items
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(.5f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(0f, 26f);
             obj.GetComponent<Image>().color = new Color(.075f, .07f, .06f, .82f);
             var view = obj.AddComponent<SchoolLineageRowView>();
@@ -33,12 +33,31 @@ namespace AncientWarfare3.ui.items
                 gameObject.SetActive(false);
                 return;
             }
-            _label.text = (pIsAlive ? "" : "[dead] ") + pStudent + "  <-  " +
-                          (string.IsNullOrWhiteSpace(pTeacher) ? "founder" : pTeacher) +
-                          "  G" + pGeneration + "  Rep " + Mathf.RoundToInt(pReputation);
+            string life = pIsAlive
+                ? ""
+                : "[" + AW_L10n.Text("aw_school_lineage_dead", "Deceased") + "] ";
+            string teacher = string.IsNullOrWhiteSpace(pTeacher)
+                ? AW_L10n.Text("aw_school_lineage_founder", "Founder")
+                : pTeacher;
+            _label.text = life + pStudent + "  ←  " + teacher + "  " +
+                          AW_L10n.Text("aw_school_roster_generation", "Generation") +
+                          " " + pGeneration + "  " +
+                          AW_L10n.Text("aw_school_roster_reputation", "Reputation") +
+                          " " + Mathf.RoundToInt(pReputation);
             _label.color = pIsAlive ? new Color(.84f, .86f, .80f, 1f) :
                 new Color(.55f, .55f, .55f, 1f);
             gameObject.SetActive(true);
+        }
+
+        public float LayoutHeight(float pWidth)
+        {
+            RectTransform root = GetComponent<RectTransform>();
+            if (root == null || _label == null) return 26f;
+            float width = Mathf.Max(1f, pWidth);
+            root.sizeDelta = new Vector2(width, 26f);
+            float height = Mathf.Max(26f, Mathf.Ceil(_label.preferredHeight) + 6f);
+            root.sizeDelta = new Vector2(width, height);
+            return height;
         }
 
         private void Build()
@@ -55,10 +74,8 @@ namespace AncientWarfare3.ui.items
             _label.fontSize = 8;
             _label.alignment = TextAnchor.MiddleLeft;
             _label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _label.verticalOverflow = VerticalWrapMode.Truncate;
-            _label.resizeTextForBestFit = true;
-            _label.resizeTextMinSize = 6;
-            _label.resizeTextMaxSize = 8;
+            _label.verticalOverflow = VerticalWrapMode.Overflow;
+            _label.resizeTextForBestFit = false;
             _label.raycastTarget = false;
         }
     }

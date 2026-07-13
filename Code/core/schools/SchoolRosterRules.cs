@@ -19,7 +19,8 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipSource pSource, long pTeacherActorId, int pGeneration,
             float pReputation, int pFollowerCount, float pLearning, int pStartYear,
             bool pCanonicalMaster, bool pQualifiedTeacher, bool pAlive = true,
-            bool pMembershipValid = true)
+            bool pMembershipValid = true, int pFirstLectureYear = int.MaxValue,
+            double pFirstLectureTime = double.MaxValue, int pAge = 0)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -34,6 +35,9 @@ namespace AncientWarfare3.core.schools
             QualifiedTeacher = pQualifiedTeacher;
             Alive = pAlive;
             MembershipValid = pMembershipValid;
+            FirstLectureYear = pFirstLectureYear < 0 ? int.MaxValue : pFirstLectureYear;
+            FirstLectureTime = FiniteLectureTime(pFirstLectureTime);
+            Age = Math.Max(0, pAge);
         }
 
         public long ActorId { get; }
@@ -49,12 +53,22 @@ namespace AncientWarfare3.core.schools
         public bool QualifiedTeacher { get; }
         public bool Alive { get; }
         public bool MembershipValid { get; }
+        public int FirstLectureYear { get; }
+        public double FirstLectureTime { get; }
+        public int Age { get; }
 
         private static float FiniteNonNegative(float pValue)
         {
             return float.IsNaN(pValue) || float.IsInfinity(pValue)
                 ? 0f
                 : Math.Max(0f, pValue);
+        }
+
+        private static double FiniteLectureTime(double pValue)
+        {
+            return double.IsNaN(pValue) || double.IsInfinity(pValue) || pValue < 0d
+                ? double.MaxValue
+                : pValue;
         }
     }
 
@@ -77,6 +91,9 @@ namespace AncientWarfare3.core.schools
         public int FollowerCount => Candidate.FollowerCount;
         public float Learning => Candidate.Learning;
         public int StartYear => Candidate.StartYear;
+        public int FirstLectureYear => Candidate.FirstLectureYear;
+        public double FirstLectureTime => Candidate.FirstLectureTime;
+        public int Age => Candidate.Age;
         public SchoolRosterStanding Standing { get; }
         public int StableOrder { get; }
         public int LineageDepth { get; internal set; }
@@ -195,11 +212,12 @@ namespace AncientWarfare3.core.schools
 
             List<SchoolRosterNode> nodes = valid
                 .Select(p => new SchoolRosterNode(p, StandingFor(p), 0))
-                .OrderBy(p => p.Standing)
-                .ThenByDescending(p => p.Reputation)
-                .ThenByDescending(p => p.FollowerCount)
-                .ThenByDescending(p => p.Learning)
+                .OrderByDescending(p => p.Candidate.CanonicalMaster)
+                .ThenBy(p => p.Generation)
                 .ThenBy(p => p.StartYear < 0 ? int.MaxValue : p.StartYear)
+                .ThenBy(p => p.FirstLectureYear)
+                .ThenBy(p => p.FirstLectureTime)
+                .ThenByDescending(p => p.Age)
                 .ThenBy(p => p.ActorId)
                 .ToList();
             for (int i = 0; i < nodes.Count; i++)
@@ -217,7 +235,9 @@ namespace AncientWarfare3.core.schools
                     student.TeacherActorId < 0 || student.TeacherActorId == student.ActorId ||
                     !byActor.TryGetValue(student.TeacherActorId, out SchoolRosterNode teacher) ||
                     !string.Equals(teacher.SchoolId, student.SchoolId,
-                        StringComparison.Ordinal)) continue;
+                        StringComparison.Ordinal) ||
+                    teacher.LineageDepth >= student.LineageDepth ||
+                    teacher.Row >= student.Row) continue;
                 links.Add(new SchoolRosterLink(teacher.ActorId, student.ActorId));
             }
             return new SchoolRosterLayout(nodes, links, excluded);
@@ -263,32 +283,57 @@ namespace AncientWarfare3.core.schools
             int columns = Math.Max(1, pColumnsPerRow);
             var byActor = pNodes.ToDictionary(p => p.ActorId);
             var depthByActor = new Dictionary<long, int>();
+            foreach (SchoolRosterNode node in pNodes)
+                node.LineageDepth = ResolveLineageDepth(node, byActor, depthByActor,
+                    new HashSet<long>());
+
+            SchoolRosterNode[] attached = pNodes.Where(p =>
+                    p.Candidate.CanonicalMaster || p.Candidate.QualifiedTeacher ||
+                    HasVisibleTeacher(p, byActor))
+                .ToArray();
+            var attachedIds = new HashSet<long>(attached.Select(p => p.ActorId));
             int rowIndex = 0;
-            foreach (IGrouping<SchoolRosterStanding, SchoolRosterNode> tier in pNodes
-                         .GroupBy(p => p.Standing).OrderBy(p => p.Key))
+            foreach (IGrouping<int, SchoolRosterNode> depth in attached
+                         .GroupBy(p => p.LineageDepth).OrderBy(p => p.Key))
             {
-                SchoolRosterNode[] tierItems = tier.ToArray();
-                foreach (SchoolRosterNode node in tierItems)
-                    node.LineageDepth = ResolveLineageDepth(node, byActor, depthByActor,
-                        new HashSet<long>());
-                foreach (IGrouping<int, SchoolRosterNode> depth in tierItems
-                             .GroupBy(p => p.LineageDepth).OrderBy(p => p.Key))
+                PlaceRows(depth.OrderBy(p => p.StableOrder).ToArray(), horizontal,
+                    vertical, columns, ref rowIndex);
+            }
+
+            SchoolRosterNode[] unlinked = pNodes.Where(p => !attachedIds.Contains(p.ActorId))
+                .OrderBy(p => p.StableOrder).ToArray();
+            if (unlinked.Length == 0) return;
+            int unlinkedDepth = attached.Length == 0
+                ? 0
+                : attached.Max(p => p.LineageDepth) + 1;
+            foreach (SchoolRosterNode node in unlinked) node.LineageDepth = unlinkedDepth;
+            PlaceRows(unlinked, horizontal, vertical, columns, ref rowIndex);
+        }
+
+        private static bool HasVisibleTeacher(SchoolRosterNode pNode,
+            IReadOnlyDictionary<long, SchoolRosterNode> pByActor)
+        {
+            return pNode != null && HasTeacherSource(pNode.Candidate.Source) &&
+                   pNode.TeacherActorId >= 0 && pNode.TeacherActorId != pNode.ActorId &&
+                   pByActor.TryGetValue(pNode.TeacherActorId, out SchoolRosterNode teacher) &&
+                   string.Equals(teacher.SchoolId, pNode.SchoolId, StringComparison.Ordinal);
+        }
+
+        private static void PlaceRows(IReadOnlyList<SchoolRosterNode> pItems,
+            float pHorizontal, float pVertical, int pColumns, ref int pRowIndex)
+        {
+            for (int start = 0; start < pItems.Count; start += pColumns)
+            {
+                SchoolRosterNode[] row = pItems.Skip(start).Take(pColumns).ToArray();
+                float startX = -(row.Length - 1) * pHorizontal * 0.5f;
+                for (int column = 0; column < row.Length; column++)
                 {
-                    SchoolRosterNode[] items = depth.ToArray();
-                    for (int start = 0; start < items.Length; start += columns)
-                    {
-                        SchoolRosterNode[] row = items.Skip(start).Take(columns).ToArray();
-                        float startX = -(row.Length - 1) * horizontal * 0.5f;
-                        for (int column = 0; column < row.Length; column++)
-                        {
-                            row[column].Row = rowIndex;
-                            row[column].Column = column;
-                            row[column].X = startX + column * horizontal;
-                            row[column].Y = -rowIndex * vertical;
-                        }
-                        rowIndex++;
-                    }
+                    row[column].Row = pRowIndex;
+                    row[column].Column = column;
+                    row[column].X = startX + column * pHorizontal;
+                    row[column].Y = -pRowIndex * pVertical;
                 }
+                pRowIndex++;
             }
         }
 
@@ -302,7 +347,8 @@ namespace AncientWarfare3.core.schools
             int depth = 0;
             if (HasTeacherSource(pNode.Candidate.Source) && pNode.TeacherActorId >= 0 &&
                 pByActor.TryGetValue(pNode.TeacherActorId, out SchoolRosterNode teacher) &&
-                teacher.ActorId != pNode.ActorId && teacher.Standing <= pNode.Standing)
+                teacher.ActorId != pNode.ActorId &&
+                string.Equals(teacher.SchoolId, pNode.SchoolId, StringComparison.Ordinal))
                 depth = Math.Min(100, ResolveLineageDepth(teacher, pByActor, pDepthByActor,
                     pVisiting) + 1);
             pVisiting.Remove(pNode.ActorId);

@@ -260,10 +260,10 @@ namespace AncientWarfare3.core.schools
                 if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
                     throw new InvalidOperationException("historical descent persistence " +
                                                         persistenceOutcome);
-                if (!ProjectCommittedIdentity(actor, pMaster, identity))
-                    throw new InvalidOperationException("committed identity projection failed");
                 if (!SchoolMembershipService.AdoptCommittedHistoricalDescent(actor, membership))
                     throw new InvalidOperationException("committed membership adopt failed");
+                if (!ProjectCommittedIdentity(actor, pMaster, identity))
+                    throw new InvalidOperationException("committed identity projection failed");
                 if (!ReservePreservedActor(pMaster, actor, pHome, pEligibleYear))
                     throw new InvalidOperationException("duplicate descent ledger state");
                 AnnounceReconciledDescent(actor, pMaster, pHome);
@@ -384,10 +384,10 @@ namespace AncientWarfare3.core.schools
                 return;
             }
             if (outcome != SchoolPersistenceOutcome.Committed ||
-                !ProjectCommittedIdentity(pending.Actor, pending.Master,
-                    pending.Identity) ||
                 !SchoolMembershipService.AdoptCommittedHistoricalDescent(pending.Actor,
-                    pending.Membership))
+                    pending.Membership) ||
+                !ProjectCommittedIdentity(pending.Actor, pending.Master,
+                    pending.Identity))
             {
                 RequeuePendingDescent(pending);
                 return;

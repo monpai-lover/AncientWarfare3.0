@@ -21,8 +21,8 @@ namespace AncientWarfare3.ui.items
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(.5f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(0f, 92f);
             obj.GetComponent<Image>().color = new Color(.06f, .055f, .045f, .86f);
             var view = obj.AddComponent<SchoolInfluenceBreakdownView>();
@@ -80,6 +80,20 @@ namespace AncientWarfare3.ui.items
             gameObject.SetActive(true);
         }
 
+        public float LayoutHeight(float pWidth)
+        {
+            RectTransform root = GetComponent<RectTransform>();
+            RectTransform body = _body?.GetComponent<RectTransform>();
+            float width = Mathf.Max(1f, pWidth);
+            if (root == null || body == null) return 92f;
+            body.sizeDelta = new Vector2(-20f, 1f);
+            float bodyHeight = Mathf.Max(56f, Mathf.Ceil(_body.preferredHeight) + 4f);
+            float height = 28f + bodyHeight + 8f;
+            root.sizeDelta = new Vector2(width, height);
+            body.sizeDelta = new Vector2(-20f, bodyHeight);
+            return height;
+        }
+
         private static string ComponentLine(string pSchoolId,
             HistoricalSchoolLedgerSnapshot pLedger)
         {
@@ -123,7 +137,7 @@ namespace AncientWarfare3.ui.items
             text.fontSize = pFontSize;
             text.alignment = pAlignment;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.resizeTextForBestFit = true;
             text.resizeTextMinSize = 6;
             text.resizeTextMaxSize = pFontSize;

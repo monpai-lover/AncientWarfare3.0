@@ -146,6 +146,9 @@ namespace AncientWarfare3.core.db
                     "CITY_ID, DEBATE_YEAR, DEBATE_ID"),
                 Index("idx_SchoolEvent_school_year", SchoolEventTableItem.GetTableName(),
                     "SCHOOL_ID, EVENT_YEAR, EVENT_ID"),
+                Index("idx_SchoolEvent_school_type_actor_first",
+                    SchoolEventTableItem.GetTableName(),
+                    "SCHOOL_ID, EVENT_TYPE, ACTOR_ID, EVENT_YEAR, WORLD_TIME"),
                 Index("idx_SchoolEvent_guest_operation_unique",
                     SchoolEventTableItem.GetTableName(), "OPERATION_KEY",
                     "OPERATION_KEY<>'' AND EVENT_TYPE IN ('guest_service_started'," +

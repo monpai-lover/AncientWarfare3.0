@@ -1,3 +1,4 @@
+using System;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using UnityEngine;
@@ -16,8 +17,8 @@ namespace AncientWarfare3.ui.items
             obj.transform.SetParent(pParent, false);
             RectTransform rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(.5f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(0f, 26f);
             obj.GetComponent<Image>().color = new Color(.11f, .095f, .07f, .84f);
             var view = obj.AddComponent<SchoolInstitutionRowView>();
@@ -32,11 +33,29 @@ namespace AncientWarfare3.ui.items
                 gameObject.SetActive(false);
                 return;
             }
-            _label.text = (pInstitution.InstitutionType ?? "institution") +
-                          "  Lv." + pInstitution.Level + "  " +
-                          (pCityName ?? ("city " + pInstitution.CityId)) +
-                          "  " + Mathf.RoundToInt((float)pInstitution.Condition) + "%";
+            string type = AW_L10n.Text(pInstitution.InstitutionType,
+                AW_L10n.Text("aw_school_institution_unknown", "Institution"));
+            string city = string.IsNullOrWhiteSpace(pCityName)
+                ? AW_L10n.Text("aw_school_unknown_city", "Unknown City") + " " +
+                  pInstitution.CityId
+                : pCityName;
+            _label.text = type + "  " +
+                          AW_L10n.Text("aw_school_institution_level", "Level") + " " +
+                          pInstitution.Level + "  " + city + "  " +
+                          AW_L10n.Text("aw_school_institution_condition", "Condition") +
+                          " " + Mathf.RoundToInt((float)pInstitution.Condition) + "%";
             gameObject.SetActive(true);
+        }
+
+        public float LayoutHeight(float pWidth)
+        {
+            RectTransform root = GetComponent<RectTransform>();
+            if (root == null || _label == null) return 26f;
+            float width = Mathf.Max(1f, pWidth);
+            root.sizeDelta = new Vector2(width, 26f);
+            float height = Mathf.Max(26f, Mathf.Ceil(_label.preferredHeight) + 6f);
+            root.sizeDelta = new Vector2(width, height);
+            return height;
         }
 
         private void Build()
@@ -54,10 +73,8 @@ namespace AncientWarfare3.ui.items
             _label.alignment = TextAnchor.MiddleLeft;
             _label.color = new Color(.86f, .82f, .72f, 1f);
             _label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _label.verticalOverflow = VerticalWrapMode.Truncate;
-            _label.resizeTextForBestFit = true;
-            _label.resizeTextMinSize = 6;
-            _label.resizeTextMaxSize = 8;
+            _label.verticalOverflow = VerticalWrapMode.Overflow;
+            _label.resizeTextForBestFit = false;
             _label.raycastTarget = false;
         }
     }

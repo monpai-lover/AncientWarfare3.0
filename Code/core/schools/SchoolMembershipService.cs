@@ -95,7 +95,18 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null || pRecord == null || !pRecord.IsValid ||
                 !pRecord.Active || pRecord.ActorId != pActor.data.id ||
                 pRecord.Source != SchoolMembershipSource.HistoricalDescent) return false;
-            if (!Memberships.TryJoin(pRecord))
+            SchoolMembershipRecord existing = Memberships.GetActive(pRecord.ActorId);
+            if (existing != null)
+            {
+                if (!SameMembershipRecord(existing, pRecord))
+                {
+                    ModClass.LogWarning("Committed historical descent membership conflict: actor=" +
+                                        pRecord.ActorId + " membership=" +
+                                        pRecord.MembershipId);
+                    return false;
+                }
+            }
+            else if (!Memberships.TryJoin(pRecord))
             {
                 LoadIndexes();
                 if (!SameMembershipRecord(Memberships.GetActive(pRecord.ActorId), pRecord))

@@ -69,7 +69,8 @@ namespace AncientWarfare3.ui.items
             _status.color = dead ? new Color(.65f, .65f, .65f, 1f) :
                 new Color(.92f, .82f, .55f, 1f);
             _detail.text = "#" + pDefinition.Order + "  " +
-                           (dead ? AW_L10n.Text("aw_school_recent_history", "historical record") :
+                           (dead ? AW_L10n.Text("aw_school_master_historical_record",
+                                "Historical record") :
                             pRecord?.Spawned == true
                                 ? AW_L10n.Text("aw_school_master_active_residence",
                                     "Residence active")

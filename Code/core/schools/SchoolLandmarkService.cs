@@ -1,3 +1,5 @@
+using AncientWarfare3.ui;
+
 namespace AncientWarfare3.core.schools
 {
     internal static class SchoolLandmarkService
@@ -38,9 +40,14 @@ namespace AncientWarfare3.core.schools
         public static string Describe(City pCity)
         {
             SchoolInstitutionReadModel institution = Leading(pCity);
-            if (institution == null) return "Academic landmark: none";
-            return "Academic landmark: " + (institution.InstitutionType ?? "institution") +
-                   " (Lv." + institution.Level + ")";
+            string label = AW_L10n.Text("aw_school_landmark", "Academic Landmark");
+            if (institution == null)
+                return label + ": " + AW_L10n.Text("aw_school_none", "None");
+            string type = AW_L10n.Text(institution.InstitutionType,
+                AW_L10n.Text("aw_school_institution_unknown", "Institution"));
+            return label + ": " + type + " (" +
+                   AW_L10n.Text("aw_school_institution_level", "Level") + " " +
+                   institution.Level + ")";
         }
     }
 }
