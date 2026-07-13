@@ -434,37 +434,31 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
 
-            pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long previousKingdomId, -1L);
-            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string previousOffice, "");
-            Kingdom previousKingdom = previousKingdomId >= 0
-                ? World.world?.kingdoms?.get(previousKingdomId)
-                : null;
-            bool shouldClearPreviousPhysician = false;
-            if (!string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId)
-            {
-                previousKingdom ??= pKingdom;
-                if (previousKingdom?.data != null)
-                {
-                    previousKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
-                        out long cachedPhysicianId, -1L);
-                    shouldClearPreviousPhysician =
-                        RoyalMedicalCareRules.ShouldClearCachedPhysician(
-                            cachedPhysicianId, pActor.data.id, previousOffice);
-                }
-            }
-
             string personalSchool = SchoolMembershipService.GetSchool(pActor.data.id);
             OfficialCareerAppointmentResult careerResult = OfficialCareerService.Appoint(
                 pActor, pKingdom, pLayer ?? "", pOfficeId ?? "", personalSchool, pCity);
             if (!careerResult.IsCommitted) return false;
 
+            OfficialCareerPrior prior = careerResult.Prior;
+            Kingdom previousKingdom = prior == null
+                ? null
+                : prior.KingdomId == pKingdom.id
+                    ? pKingdom
+                    : World.world?.kingdoms?.get(prior.KingdomId);
+            bool shouldClearPreviousPhysician = false;
+            if (prior != null && previousKingdom?.data != null)
+            {
+                previousKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
+                    out long cachedPhysicianId, -1L);
+                shouldClearPreviousPhysician =
+                    RoyalMedicalCareRules.ShouldClearCachedPhysician(
+                        cachedPhysicianId, pActor.data.id, prior.OfficeId);
+            }
             if (shouldClearPreviousPhysician && previousKingdom?.data != null)
                 previousKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
-            if (careerResult.Mutation == OfficialCareerMutation.Reassigned &&
-                !string.IsNullOrEmpty(previousOffice) && previousOffice != pOfficeId &&
-                previousKingdom?.data != null)
+            if (prior != null && previousKingdom?.data != null)
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, previousKingdom,
-                    previousOffice, "reassigned");
+                    prior.OfficeId, "reassigned");
             pActor.data.set(LineageKeys.COURT_KINGDOM_ID, pKingdom.id);
             pActor.data.set(LineageKeys.COURT_LAYER, pLayer ?? "");
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");

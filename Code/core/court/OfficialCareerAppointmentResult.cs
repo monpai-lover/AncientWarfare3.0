@@ -14,17 +14,45 @@ namespace AncientWarfare3.core.court
         Refreshed
     }
 
+    public sealed class OfficialCareerPrior
+    {
+        public OfficialCareerPrior(long pKingdomId, long pCityId, string pLayer,
+            string pOfficeId)
+        {
+            KingdomId = pKingdomId;
+            CityId = pCityId;
+            Layer = pLayer ?? "";
+            OfficeId = pOfficeId ?? "";
+        }
+
+        public long KingdomId { get; }
+        public long CityId { get; }
+        public string Layer { get; }
+        public string OfficeId { get; }
+    }
+
     public readonly struct OfficialCareerAppointmentResult
     {
         public OfficialCareerAppointmentResult(OfficialCareerPersistenceOutcome pPersistence,
             OfficialCareerMutation pMutation)
+            : this(pPersistence, pMutation, null)
+        {
+        }
+
+        public OfficialCareerAppointmentResult(OfficialCareerPersistenceOutcome pPersistence,
+            OfficialCareerMutation pMutation, OfficialCareerPrior pPrior)
         {
             Persistence = pPersistence;
             Mutation = pMutation;
+            Prior = pPersistence == OfficialCareerPersistenceOutcome.Committed &&
+                    pMutation == OfficialCareerMutation.Reassigned
+                ? pPrior
+                : null;
         }
 
         public OfficialCareerPersistenceOutcome Persistence { get; }
         public OfficialCareerMutation Mutation { get; }
+        public OfficialCareerPrior Prior { get; }
         public bool IsCommitted => Persistence == OfficialCareerPersistenceOutcome.Committed;
         public bool CreatedAppointmentEvent => IsCommitted &&
             (Mutation == OfficialCareerMutation.Started ||

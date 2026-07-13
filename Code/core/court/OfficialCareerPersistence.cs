@@ -45,6 +45,11 @@ namespace AncientWarfare3.core.court
                 return (ActiveCareer)MemberwiseClone();
             }
 
+            public OfficialCareerPrior ToPrior()
+            {
+                return new OfficialCareerPrior(KingdomId, CityId, Layer, OfficeId);
+            }
+
             public bool Exact(ActiveCareer pOther, bool pRequireOfficerId = true)
             {
                 if (pOther == null) return false;
@@ -109,8 +114,8 @@ namespace AncientWarfare3.core.court
                 }
 
                 transaction.Commit();
-                return new OfficialCareerAppointmentResult(
-                    OfficialCareerPersistenceOutcome.Committed, mutation);
+                return BuildResult(OfficialCareerPersistenceOutcome.Committed,
+                    mutation, original);
             }
             catch (Exception error)
             {
@@ -124,8 +129,8 @@ namespace AncientWarfare3.core.court
             }
 
             if (!originalCaptured || desired == null)
-                return new OfficialCareerAppointmentResult(
-                    OfficialCareerPersistenceOutcome.Unknown, mutation);
+                return BuildResult(OfficialCareerPersistenceOutcome.Unknown,
+                    mutation, original);
 
             try
             {
@@ -140,17 +145,25 @@ namespace AncientWarfare3.core.court
                     pOriginalExisted: original != null,
                     pOriginalExact: authoritative != null &&
                                     authoritative.Exact(original));
-                return new OfficialCareerAppointmentResult(outcome, mutation);
+                return BuildResult(outcome, mutation, original);
             }
             catch (Exception error)
             {
                 ModClass.LogWarning("Official career appointment readback failed: " +
                                     error.Message);
-                return new OfficialCareerAppointmentResult(
+                return BuildResult(
                     OfficialCareerReadbackRules.Resolve(pQuerySucceeded: false, -1,
                         pDesiredExact: false, pOriginalExisted: original != null,
-                        pOriginalExact: false), mutation);
+                        pOriginalExact: false), mutation, original);
             }
+        }
+
+        private static OfficialCareerAppointmentResult BuildResult(
+            OfficialCareerPersistenceOutcome pOutcome, OfficialCareerMutation mutation,
+            ActiveCareer original)
+        {
+            return new OfficialCareerAppointmentResult(pOutcome, mutation,
+                original?.ToPrior());
         }
 
         private static ActiveCareer ReadActive(SQLiteConnection pDb,
