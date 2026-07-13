@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.court
             new CitySchoolRetryScheduler();
         private static readonly CitySchoolRetryGate ContextGate =
             new CitySchoolRetryGate();
+        private static readonly CitySchoolResidentIndexCache ResidentIndexCache =
+            new CitySchoolResidentIndexCache();
         private static int _generation;
 
         private sealed class CitySchoolSnapshotBatchContext
@@ -184,6 +186,7 @@ namespace AncientWarfare3.core.court
             Dirty.Clear();
             Retry.Clear();
             ContextGate.Clear();
+            ResidentIndexCache.Clear();
             _generation = 0;
         }
 
@@ -200,8 +203,10 @@ namespace AncientWarfare3.core.court
                         out Dictionary<long,
                             Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers,
                         out pFailure)) return false;
-                CitySchoolResidentIndex residents = BuildResidentIndex(
-                    new HashSet<long>(cityIds));
+                CitySchoolResidentIndex residents = ResidentIndexCache.GetOrBuild(
+                    SchoolMembershipService.Version,
+                    HistoricalAffiliationService.ResidenceRevision,
+                    BuildResidentIndex);
                 pContext = new CitySchoolSnapshotBatchContext(residents, ledgers);
                 return true;
             }
@@ -212,36 +217,33 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static CitySchoolResidentIndex BuildResidentIndex(
-            HashSet<long> pBatchCityIds)
+        private static CitySchoolResidentIndex BuildResidentIndex()
         {
             var candidates = new List<CitySchoolResidentCandidate>();
-            if (pBatchCityIds == null || pBatchCityIds.Count == 0)
-                return CitySchoolResidentIndexRules.Build(candidates);
-            for (int schoolOrder = 0; schoolOrder < CourtSchoolRegistry.All.Count;
-                 schoolOrder++)
+            var schoolOrders = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < CourtSchoolRegistry.All.Count; i++)
+                schoolOrders[CourtSchoolRegistry.All[i].Id] = i;
+            foreach (SchoolMembershipRecord membership in
+                     SchoolMembershipService.ActiveMemberships())
             {
-                CourtSchoolDefinition school = CourtSchoolRegistry.All[schoolOrder];
-                Actor[] actors;
-                try { actors = SchoolMembershipService.LivingMembers(school.Id); }
-                catch { continue; }
-                foreach (Actor actor in actors)
+                try
                 {
-                    try
-                    {
-                        if (actor?.data == null) continue;
-                        bool present = HistoricalAffiliationService.IsPresentForInfluence(actor);
-                        City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
-                                         actor.city;
-                        long cityId = residence?.data?.id ?? -1L;
-                        if (!present || !pBatchCityIds.Contains(cityId)) continue;
-                        bool qualified = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
-                                         SchoolLineageService.IsQualifiedTeacher(actor);
-                        candidates.Add(new CitySchoolResidentCandidate(actor.data.id, school.Id,
-                            cityId, pPresent: true, qualified, schoolOrder));
-                    }
-                    catch { }
+                    if (membership == null || !membership.Active ||
+                        !schoolOrders.TryGetValue(membership.SchoolId, out int schoolOrder))
+                        continue;
+                    Actor actor = World.world?.units?.get(membership.ActorId);
+                    if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
+                    bool present = HistoricalAffiliationService.IsPresentForInfluence(actor);
+                    City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
+                                     actor.city;
+                    long cityId = residence?.data?.id ?? -1L;
+                    if (!present || cityId < 0) continue;
+                    bool qualified = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
+                                     SchoolLineageService.IsQualifiedTeacher(actor);
+                    candidates.Add(new CitySchoolResidentCandidate(actor.data.id,
+                        membership.SchoolId, cityId, pPresent: true, qualified, schoolOrder));
                 }
+                catch { }
             }
             return CitySchoolResidentIndexRules.Build(candidates);
         }

@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
 using ai.behaviours;
@@ -8,6 +9,21 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_HistoricalSchoolPatch
     {
+        private readonly struct ActorSetCityState
+        {
+            public ActorSetCityState(bool pOriginalAllowed, bool pHasActiveMembership,
+                City pOldCity)
+            {
+                OriginalAllowed = pOriginalAllowed;
+                HasActiveMembership = pHasActiveMembership;
+                OldCity = pOldCity;
+            }
+
+            public bool OriginalAllowed { get; }
+            public bool HasActiveMembership { get; }
+            public City OldCity { get; }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.updateAge))]
         private static void KingdomUpdateAge_Postfix()
@@ -76,9 +92,29 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Actor), "setCity", new[] { typeof(City) })]
-        private static bool ActorSetCity_Prefix(Actor __instance, City pCity)
+        private static bool ActorSetCity_Prefix(Actor __instance, City pCity,
+            out ActorSetCityState __state)
         {
-            return HistoricalAffiliationService.CanJoinCity(__instance, pCity);
+            bool allowed = HistoricalAffiliationService.CanJoinCity(__instance, pCity);
+            City oldCity = __instance?.city;
+            bool activeMember = false;
+            if (allowed && oldCity != pCity && __instance?.data != null)
+                activeMember = SchoolMembershipService.GetActive(__instance.data.id) != null;
+            __state = new ActorSetCityState(allowed, activeMember, oldCity);
+            return allowed;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "setCity", new[] { typeof(City) })]
+        private static void ActorSetCity_Postfix(Actor __instance, ActorSetCityState __state)
+        {
+            long oldCityId = __state.OldCity?.data?.id ?? -1L;
+            long newCityId = __instance?.city?.data?.id ?? -1L;
+            if (!SchoolResidenceInvalidationRules.ShouldInvalidateActiveMemberMove(
+                    __state.OriginalAllowed, __state.HasActiveMembership, oldCityId,
+                    newCityId)) return;
+            HistoricalAffiliationService.NotifyActiveMemberCityChanged(__state.OldCity,
+                __instance.city);
         }
 
         [HarmonyPrefix]

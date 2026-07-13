@@ -31,11 +31,13 @@ namespace AncientWarfare3.core.schools
     internal sealed class SchoolRosterReadModel
     {
         public SchoolRosterReadModel(string pSchoolId, long pMembershipVersion,
+            long pResidenceRevision,
             IReadOnlyList<SchoolRosterReadNode> pNodes,
             IReadOnlyList<SchoolRosterLink> pLinks, int pExcludedCount, int pTeacherCount)
         {
             SchoolId = pSchoolId ?? "";
             MembershipVersion = pMembershipVersion;
+            ResidenceRevision = pResidenceRevision;
             Nodes = pNodes ?? Array.Empty<SchoolRosterReadNode>();
             Links = pLinks ?? Array.Empty<SchoolRosterLink>();
             ExcludedCount = Math.Max(0, pExcludedCount);
@@ -44,6 +46,7 @@ namespace AncientWarfare3.core.schools
 
         public string SchoolId { get; }
         public long MembershipVersion { get; }
+        public long ResidenceRevision { get; }
         public IReadOnlyList<SchoolRosterReadNode> Nodes { get; }
         public IReadOnlyList<SchoolRosterLink> Links { get; }
         public int ExcludedCount { get; }
@@ -55,7 +58,8 @@ namespace AncientWarfare3.core.schools
         public static SchoolRosterReadModel Build(string pSchoolId,
             float pHorizontalSpacing, float pVerticalSpacing, int pColumnsPerRow)
         {
-            long version = SchoolMembershipService.Version;
+            long membershipVersion = SchoolMembershipService.Version;
+            long residenceRevision = HistoricalAffiliationService.ResidenceRevision;
             long[] memberIds = SchoolMembershipService.Members(pSchoolId);
             Dictionary<long, int> followerCounts =
                 SchoolLineageService.BuildDirectDiscipleCounts();
@@ -111,8 +115,8 @@ namespace AncientWarfare3.core.schools
 
             int teacherCount = layout.Nodes.Count(p =>
                 p.Candidate.CanonicalMaster || p.Candidate.QualifiedTeacher);
-            return new SchoolRosterReadModel(pSchoolId, version, nodes, layout.Links,
-                layout.ExcludedCount, teacherCount);
+            return new SchoolRosterReadModel(pSchoolId, membershipVersion,
+                residenceRevision, nodes, layout.Links, layout.ExcludedCount, teacherCount);
         }
 
         private static Actor FindActor(long pActorId)

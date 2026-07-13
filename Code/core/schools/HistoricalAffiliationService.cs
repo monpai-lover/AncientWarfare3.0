@@ -9,26 +9,44 @@ namespace AncientWarfare3.core.schools
     {
         private static readonly Dictionary<long, HistoricalSchoolAffiliationSnapshot> ByActor =
             new Dictionary<long, HistoricalSchoolAffiliationSnapshot>();
+        private static long _residenceRevision;
+
+        public static long ResidenceRevision => _residenceRevision;
 
         public static void LoadState()
         {
-            ByActor.Clear();
+            var loaded = new Dictionary<long, HistoricalSchoolAffiliationSnapshot>();
             foreach (HistoricalSchoolAffiliationSnapshot state in
                      HistoricalSchoolStore.LoadAffiliations())
-                if (state.ActorId >= 0) ByActor[state.ActorId] = state;
+                if (state.ActorId >= 0) loaded[state.ActorId] = state;
+            var affectedCityIds = new HashSet<long>(ByActor.Values
+                .Select(p => p.ResidenceCityId));
+            foreach (HistoricalSchoolAffiliationSnapshot state in loaded.Values)
+                affectedCityIds.Add(state.ResidenceCityId);
+            ByActor.Clear();
+            foreach (KeyValuePair<long, HistoricalSchoolAffiliationSnapshot> item in loaded)
+                ByActor[item.Key] = item.Value;
+            InvalidateResidenceData(affectedCityIds);
         }
 
         public static void ClearRuntime()
         {
+            long[] affectedCityIds = ByActor.Values.Select(p => p.ResidenceCityId).ToArray();
             ByActor.Clear();
+            InvalidateResidenceData(affectedCityIds);
         }
 
         internal static void RegisterDescent(long pActorId, long pHomeKingdomId,
             string pHomeKingdomName, long pHometownCityId, int pYear)
         {
             if (pActorId < 0 || pHomeKingdomId < 0 || pHometownCityId < 0) return;
-            ByActor[pActorId] = HistoricalSchoolAffiliationSnapshot.CreateHome(pActorId,
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pActorId);
+            HistoricalSchoolAffiliationSnapshot next =
+                HistoricalSchoolAffiliationSnapshot.CreateHome(pActorId,
                 pHomeKingdomId, pHomeKingdomName, pHometownCityId, pYear);
+            ByActor[pActorId] = next;
+            InvalidateResidenceData(oldState?.ResidenceCityId ?? -1L,
+                next.ResidenceCityId);
         }
 
         internal static bool EnsureMemberAffiliation(Actor pActor, long pCityId)
@@ -44,8 +62,11 @@ namespace AncientWarfare3.core.schools
             int year = Date.getCurrentYear();
             if (!HistoricalSchoolStore.EnsureMemberAffiliation(pActor.data.id, kingdom.id,
                     kingdom.name, city.data.id, year, WorldTime())) return false;
-            ByActor[pActor.data.id] = HistoricalSchoolAffiliationSnapshot.CreateHome(
+            HistoricalSchoolAffiliationSnapshot next =
+                HistoricalSchoolAffiliationSnapshot.CreateHome(
                 pActor.data.id, kingdom.id, kingdom.name, city.data.id, year);
+            ByActor[pActor.data.id] = next;
+            InvalidateResidenceData(-1L, next.ResidenceCityId);
             return true;
         }
 
@@ -253,9 +274,19 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolLifecycleState.Dead, -1, -1,
                 pCommittedState.LastTravelYear, -1, -1, -1,
                 pCommittedState.TransportFailures);
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pCommittedState.ActorId);
             ByActor[pCommittedState.ActorId] = dead;
-            CitySchoolSnapshotService.MarkDirty(FindCity(pCommittedState.ResidenceCityId));
+            InvalidateResidenceData(oldState?.ResidenceCityId ??
+                pCommittedState.ResidenceCityId, dead.ResidenceCityId);
             return true;
+        }
+
+        internal static void NotifyActiveMemberCityChanged(City pOldCity, City pNewCity)
+        {
+            long oldCityId = pOldCity?.data?.id ?? -1L;
+            long newCityId = pNewCity?.data?.id ?? -1L;
+            if (oldCityId == newCityId) return;
+            InvalidateResidenceData(oldCityId, newCityId);
         }
 
         public static bool CanJoinCity(Actor pActor, City pTarget)
@@ -297,9 +328,34 @@ namespace AncientWarfare3.core.schools
         private static bool Save(HistoricalSchoolAffiliationSnapshot pState)
         {
             if (!HistoricalSchoolStore.SaveAffiliation(pState, WorldTime())) return false;
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pState.ActorId);
             ByActor[pState.ActorId] = pState;
-            CitySchoolSnapshotService.MarkDirty(FindCity(pState.ResidenceCityId));
+            InvalidateResidenceData(oldState?.ResidenceCityId ?? -1L,
+                pState.ResidenceCityId);
             return true;
+        }
+
+        private static void InvalidateResidenceData(long pOldResidenceCityId,
+            long pNewResidenceCityId)
+        {
+            if (pOldResidenceCityId >= 0)
+                CitySchoolSnapshotService.MarkDirtyById(pOldResidenceCityId);
+            if (pNewResidenceCityId >= 0 && pNewResidenceCityId != pOldResidenceCityId)
+                CitySchoolSnapshotService.MarkDirtyById(pNewResidenceCityId);
+            AdvanceResidenceRevision();
+        }
+
+        private static void InvalidateResidenceData(IEnumerable<long> pResidenceCityIds)
+        {
+            if (pResidenceCityIds != null)
+                foreach (long cityId in pResidenceCityIds.Distinct())
+                    if (cityId >= 0) CitySchoolSnapshotService.MarkDirtyById(cityId);
+            AdvanceResidenceRevision();
+        }
+
+        private static void AdvanceResidenceRevision()
+        {
+            unchecked { _residenceRevision++; }
         }
 
         private static bool IsUsable(Actor pActor, HistoricalSchoolAffiliationSnapshot pState)

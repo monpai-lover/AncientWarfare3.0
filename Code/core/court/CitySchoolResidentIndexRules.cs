@@ -70,12 +70,48 @@ namespace AncientWarfare3.core.court
         }
     }
 
+    public static class SchoolResidenceInvalidationRules
+    {
+        public static bool ShouldInvalidateActiveMemberMove(bool pOriginalAllowed,
+            bool pHasActiveMembership, long pOldCityId, long pNewCityId)
+        {
+            return pOriginalAllowed && pHasActiveMembership && pOldCityId != pNewCityId;
+        }
+    }
+
+    public sealed class CitySchoolResidentIndexCache
+    {
+        private CitySchoolResidentIndex _index;
+        private long _membershipVersion;
+        private long _residenceRevision;
+
+        public CitySchoolResidentIndex GetOrBuild(long pMembershipVersion,
+            long pResidenceRevision, Func<CitySchoolResidentIndex> pBuild)
+        {
+            if (_index != null && _membershipVersion == pMembershipVersion &&
+                _residenceRevision == pResidenceRevision) return _index;
+            if (pBuild == null) throw new ArgumentNullException(nameof(pBuild));
+            CitySchoolResidentIndex next = pBuild();
+            if (next == null) throw new InvalidOperationException(
+                "Resident index builder returned null");
+            _index = next;
+            _membershipVersion = pMembershipVersion;
+            _residenceRevision = pResidenceRevision;
+            return _index;
+        }
+
+        public void Clear()
+        {
+            _index = null;
+            _membershipVersion = 0L;
+            _residenceRevision = 0L;
+        }
+    }
+
     public static class CitySchoolResidentIndexRules
     {
         public const int MaxScholarActorsPerCity = 24;
 
-        // This projection is intentionally batch-local. Actor residence has no versioned
-        // invalidation signal, so callers must rebuild it for every snapshot batch.
         public static CitySchoolResidentIndex Build(
             IEnumerable<CitySchoolResidentCandidate> pCandidates)
         {

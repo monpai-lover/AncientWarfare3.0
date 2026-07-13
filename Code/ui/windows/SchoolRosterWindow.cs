@@ -59,6 +59,7 @@ namespace AncientWarfare3.ui.windows
         private string _selectedSchool = CourtSchoolId.Ru;
         private string _displayedSchool = "";
         private long _displayedMembershipVersion = -1L;
+        private long _displayedResidenceRevision = -1L;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
         private int _activeLinkCount;
@@ -102,7 +103,9 @@ namespace AncientWarfare3.ui.windows
         private void Update()
         {
             if (!isActiveAndEnabled || World.world == null) return;
-            if (_displayedMembershipVersion != SchoolMembershipService.Version)
+            if (_displayedMembershipVersion != SchoolMembershipService.Version ||
+                _displayedResidenceRevision !=
+                HistoricalAffiliationService.ResidenceRevision)
             {
                 Refresh();
                 return;
@@ -343,6 +346,7 @@ namespace AncientWarfare3.ui.windows
                 StringComparison.Ordinal);
             _displayedSchool = model.SchoolId;
             _displayedMembershipVersion = model.MembershipVersion;
+            _displayedResidenceRevision = model.ResidenceRevision;
             UpdateSummary(model);
             LayoutCanvas(model.Nodes);
             List<SchoolRosterLinkSegment> linkSegments = BuildLinks(model);
@@ -611,6 +615,7 @@ namespace AncientWarfare3.ui.windows
             HideNodesAndLinks();
             _displayedSchool = "";
             _displayedMembershipVersion = -1L;
+            _displayedResidenceRevision = -1L;
             _resetCanvasOnRefresh = true;
             TrimPools(0, 0, pForce: true);
         }
