@@ -39,6 +39,9 @@
 **Files:**
 - Create: `Code/core/schools/GuestOfficeEndPersistence.cs`
 - Modify: `Code/core/schools/GuestOfficePersistenceRules.cs`
+- Modify: `Code/core/court/OfficialCareerAppointmentResult.cs`
+- Modify: `Code/core/court/OfficialCareerPersistence.cs`
+- Modify: `Code/core/court/OfficialCareerService.cs`
 - Modify: `Code/core/schools/HistoricalAffiliationService.cs`
 - Modify: `Code/core/schools/SchoolGuestOfficeService.cs`
 - Modify: `Code/core/court/CourtService.cs`
@@ -46,6 +49,7 @@
 - Test: `F:/tmp/AW3HistoricalSchoolRuleTests/GuestSqliteIntegration/Program.cs`
 
 - [ ] Add failing cases for affiliation-close failure after career-close staging, career-close failure after affiliation staging, ambiguous commit, replay, dead/missing Actor, and host loss; confirm RED.
+- [ ] Add reusable career-close `Capture`, `Stage`, `Readback`, and `ResultFor` seams with exact affected-row checks, while preserving a self-owned wrapper for callers that do not participate in a larger transaction.
 - [ ] Implement one transaction that freezes the serving affiliation and exact active central career, stages both closures, commits, and performs strict two-table readback.
 - [ ] Change renewal to close and reopen only through frozen operations; an uncertain close remains pending and cannot start a second term.
 - [ ] Move `ClearOfficer`, guest status removal, history, and cache invalidation after `Committed`; missing live Actor closes by ID without live work.
