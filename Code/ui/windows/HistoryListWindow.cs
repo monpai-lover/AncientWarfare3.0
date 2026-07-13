@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.items;
@@ -29,6 +30,7 @@ namespace AncientWarfare3.ui.windows
         private List<ReignPeriod>  _reigns;     // 城市史用
 
         // 人物传记分类筛选（"" = 全部）
+        private const string CareerFilter = "career";
         private static string _personFilter = "";
 
         public static void OpenPerson(long pActorId)
@@ -103,7 +105,7 @@ namespace AncientWarfare3.ui.windows
             // 分类筛选 toggle 回调：整行点击→循环切下一个分类
             HistoryListItem.OnFilterToggle = _ =>
             {
-                // 循环：全部→life→honor→clan→war→bond→全部
+                // 循环：全部→life→honor→career→clan→war→bond→全部
                 int cur = 0;
                 for (int k = 0; k < CATEGORIES.Length; k++)
                     if (CATEGORIES[k].cat == _personFilter) { cur = k; break; }
@@ -228,6 +230,7 @@ namespace AncientWarfare3.ui.windows
             ("",      AW_L10n.Text("aw_history_filter_all", "\u5168\u90E8")),
             (ChronicleCategory.LIFE,  AW_L10n.Text("aw_history_filter_life", "\u4EBA\u751F")),
             (ChronicleCategory.HONOR, AW_L10n.Text("aw_history_filter_honor", "\u8363\u8000")),
+            (CareerFilter, AW_L10n.Text("aw_history_filter_career", "\u4ED5\u9014")),
             (ChronicleCategory.CLAN,  AW_L10n.Text("aw_history_filter_clan", "\u6C0F\u65CF")),
             (ChronicleCategory.WAR,   AW_L10n.Text("aw_history_filter_war", "\u6218\u4E8B")),
             (ChronicleCategory.BOND,  AW_L10n.Text("aw_history_filter_bond", "\u7F81\u7ECA")),
@@ -252,12 +255,114 @@ namespace AncientWarfare3.ui.windows
                 text = BuildFilterBarText(),
                 dim = false
             });
+
+            if (_personFilter == CareerFilter)
+            {
+                RefreshCareer();
+                return;
+            }
+
             // 渲染（过滤后的）事件行
             foreach (var e in HistoryQuery.ReadPerson(_contextId))
             {
                 if (_personFilter != "" && e.category != _personFilter) continue;
                 AddItemToList(BuildEventRow(e, false));
             }
+        }
+
+        private void RefreshCareer()
+        {
+            List<OfficialCareerReadModel> career =
+                OfficialCareerService.LoadCareer(_contextId);
+            if (career.Count == 0)
+            {
+                AddItemToList(new HistoryRow
+                {
+                    text = AW_L10n.Text("aw_career_empty", "No recorded official career"),
+                    dim = true,
+                    tooltip_title = AW_L10n.Text("aw_history_filter_career", "Career"),
+                    tooltip_desc = AW_L10n.Text("aw_career_empty", "No recorded official career")
+                });
+                return;
+            }
+
+            foreach (OfficialCareerReadModel record in career)
+                AddItemToList(BuildCareerRow(record));
+        }
+
+        private static HistoryRow BuildCareerRow(OfficialCareerReadModel pCareer)
+        {
+            string office = CareerOfficeLabel(pCareer.OfficeId);
+            string kingdomName = string.IsNullOrEmpty(pCareer.KingdomName)
+                ? AW_L10n.Text("aw_career_unknown_kingdom", "Unknown realm")
+                : pCareer.KingdomName;
+            string kingdom = RichName(kingdomName, pCareer.KingdomColor);
+            var text = new System.Text.StringBuilder();
+            text.Append(AW_L10n.Text("aw_career_office", "Office"))
+                .Append(": ").Append(HistoryColors.EscapeRich(office)).Append("\n")
+                .Append(AW_L10n.Text("aw_career_kingdom", "Realm"))
+                .Append(": ").Append(kingdom);
+            if (pCareer.HasCity)
+            {
+                string city = string.IsNullOrEmpty(pCareer.CityName)
+                    ? AW_L10n.Text("aw_career_unknown_city", "Unknown city")
+                    : pCareer.CityName;
+                text.Append("  ").Append(AW_L10n.Text("aw_career_city", "City"))
+                    .Append(": ").Append(HistoryColors.EscapeRich(city));
+            }
+
+            text.Append("\n").Append(AW_L10n.Text("aw_career_appointed", "Appointed"))
+                .Append(": ").Append(CareerTimeLabel(pCareer.AppointedTime)).Append("  ");
+            if (pCareer.IsCurrent)
+            {
+                text.Append(AW_L10n.Text("aw_career_current", "Currently serving"));
+            }
+            else
+            {
+                text.Append(AW_L10n.Text("aw_career_ended", "Ended"))
+                    .Append(": ").Append(CareerTimeLabel(pCareer.EndedTime))
+                    .Append("\n").Append(AW_L10n.Text("aw_career_end_reason", "Reason"))
+                    .Append(": ").Append(HistoryColors.EscapeRich(
+                        CareerEndReasonLabel(pCareer.EndReason)));
+            }
+
+            return new HistoryRow
+            {
+                text = text.ToString(),
+                dim = false,
+                tooltip_title = office,
+                tooltip_desc = text.ToString()
+            };
+        }
+
+        private static string CareerOfficeLabel(string pOfficeId)
+        {
+            string unknown = AW_L10n.Text("aw_career_unknown_office", "Unknown office");
+            if (string.IsNullOrWhiteSpace(pOfficeId)) return unknown;
+            string fallback = unknown + " (" + HumanizeIdentifier(pOfficeId) + ")";
+            return AW_L10n.Text("aw_court_office_" + pOfficeId, fallback);
+        }
+
+        private static string CareerEndReasonLabel(string pReason)
+        {
+            string unknown = AW_L10n.Text("aw_career_unknown_reason", "Unknown reason");
+            if (string.IsNullOrWhiteSpace(pReason)) return unknown;
+            string fallback = unknown + " (" + HumanizeIdentifier(pReason) + ")";
+            return AW_L10n.Text("aw_career_end_reason_" + pReason, fallback);
+        }
+
+        private static string CareerTimeLabel(double pTime)
+        {
+            return pTime < 0
+                ? AW_L10n.Text("aw_career_unknown_time", "Unknown time")
+                : HistoryWriter.FormatDate(pTime);
+        }
+
+        private static string HumanizeIdentifier(string pValue)
+        {
+            return string.IsNullOrWhiteSpace(pValue)
+                ? ""
+                : pValue.Trim().Replace('_', ' ').Replace('-', ' ');
         }
 
         private static string BuildFilterBarText()

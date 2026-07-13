@@ -74,6 +74,36 @@ aw_tech_three_departments_desc,将三公九卿升级为三省六部，中枢分�
 aw_court_central_officers,中央官员,Central Officers,中央官員
 aw_court_local_bureaus,地方官署,Local Bureaus,地方官署
 aw_court_office_slots,官职数,Slots,官職數
+aw_history_filter_career,仕途,Career,仕途
+aw_career_empty,暂无仕途记录,No recorded official career,暫無仕途記錄
+aw_career_office,官职,Office,官職
+aw_career_kingdom,所属国家,Realm,所屬國家
+aw_career_city,所属城市,City,所屬城市
+aw_career_appointed,起任时间,Appointed,起任時間
+aw_career_ended,离任时间,Ended,離任時間
+aw_career_current,当前在任,Currently serving,當前在任
+aw_career_end_reason,离任原因,End reason,離任原因
+aw_career_unknown_office,未知官职,Unknown office,未知官職
+aw_career_unknown_kingdom,未知国家,Unknown realm,未知國家
+aw_career_unknown_city,未知城市,Unknown city,未知城市
+aw_career_unknown_reason,原因未载,Unknown reason,原因未載
+aw_career_unknown_time,时间未载,Unknown time,時間未載
+aw_career_end_reason_reassigned,调任,Transferred,調任
+aw_career_end_reason_invalid,资格失效,Ineligible,資格失效
+aw_career_end_reason_reform,官制改革,Office reform,官制改革
+aw_career_end_reason_guest_term,客卿任期结束,Guest term ended,客卿任期結束
+aw_career_end_reason_guest_term_expired,客卿任期届满,Guest term expired,客卿任期屆滿
+aw_career_end_reason_guest_term_renewal,客卿续任,Guest term renewed,客卿續任
+aw_career_end_reason_guest_host_lost,客卿所在国覆亡,Guest host lost,客卿所在國覆亡
+aw_career_end_reason_guest_event_failed,客卿任命未成,Guest appointment failed,客卿任命未成
+aw_career_end_reason_guest_actor_missing,人员失踪,Actor unavailable,人員失蹤
+aw_career_end_reason_death,身故,Died,身故
+aw_career_end_reason_dead,身故,Died,身故
+aw_career_end_reason_missing,失踪,Missing,失蹤
+aw_career_end_reason_defected,改投他国,Defected,改投他國
+aw_career_end_reason_replaced,被替任,Replaced,被替任
+aw_career_end_reason_removed,被免职,Removed,被免職
+aw_career_end_reason_succession,政权更替,Succession,政權更替
 aw_court_layer_central,中央官场,Central Court,中央官場
 aw_court_layer_city,地方官署,City Bureau,地方官署
 aw_court_layer_military,军府,Military Bureau,軍府
