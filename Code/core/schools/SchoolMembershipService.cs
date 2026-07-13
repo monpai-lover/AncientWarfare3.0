@@ -30,7 +30,7 @@ namespace AncientWarfare3.core.schools
 
             public Actor Actor { get; }
             public SchoolMembershipRecord Membership { get; }
-            public HistoricalSchoolAffiliationSnapshot CachedAffiliation { get; }
+            public HistoricalSchoolAffiliationSnapshot CachedAffiliation { get; set; }
             public HistoricalSchoolMasterDefinition Master { get; }
             public bool WasQualifiedTeacher { get; }
             public City RuntimeCity { get; }
@@ -254,37 +254,41 @@ namespace AncientWarfare3.core.schools
         private static SchoolDeathOutcome PersistPendingDeath(PendingSchoolDeath pending,
             bool pReconcileUnknown)
         {
-            HistoricalSchoolAffiliationSnapshot committedAffiliation;
+            HistoricalSchoolAffiliationSnapshot authoritativeAffiliation;
             SchoolPersistenceOutcome persistenceOutcome;
             long effectiveDeathCityId = pending.DeathCityId;
             if (pReconcileUnknown)
                 persistenceOutcome = HistoricalSchoolStore.ReconcileSchoolDeath(
                     pending.Membership, pending.CachedAffiliation, pending.Master,
                     pending.DeathYear, pending.DeathCityId, pending.DeathCause,
-                    pending.PersistenceTime, out committedAffiliation);
+                    pending.PersistenceTime, out authoritativeAffiliation);
             else
                 persistenceOutcome = HistoricalSchoolStore.CommitSchoolDeath(
                     pending.Membership, pending.CachedAffiliation, pending.Master,
                     pending.DeathYear, pending.DeathCityId, pending.DeathCause,
-                    pending.PersistenceTime, out committedAffiliation,
+                    pending.PersistenceTime, out authoritativeAffiliation,
                     out effectiveDeathCityId);
             pending.DeathCityId = effectiveDeathCityId;
+            if (authoritativeAffiliation != null)
+                pending.CachedAffiliation = authoritativeAffiliation;
             if (pReconcileUnknown &&
                 persistenceOutcome == SchoolPersistenceOutcome.CleanFailure)
             {
                 persistenceOutcome = HistoricalSchoolStore.CommitSchoolDeath(
                     pending.Membership, pending.CachedAffiliation, pending.Master,
                     pending.DeathYear, pending.DeathCityId, pending.DeathCause,
-                    pending.PersistenceTime, out committedAffiliation,
+                    pending.PersistenceTime, out authoritativeAffiliation,
                     out effectiveDeathCityId);
                 pending.DeathCityId = effectiveDeathCityId;
+                if (authoritativeAffiliation != null)
+                    pending.CachedAffiliation = authoritativeAffiliation;
             }
             if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
             {
                 pending.Uncertain = persistenceOutcome == SchoolPersistenceOutcome.Unknown;
                 return SchoolDeathOutcome.Failed;
             }
-            return ApplyCommittedDeath(pending, committedAffiliation);
+            return ApplyCommittedDeath(pending, authoritativeAffiliation);
         }
 
         private static SchoolDeathOutcome ApplyCommittedDeath(PendingSchoolDeath pending,

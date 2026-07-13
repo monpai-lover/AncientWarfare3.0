@@ -1469,6 +1469,7 @@ namespace AncientWarfare3.core.schools
                 if (authoritativeAffiliation?.LifecycleState ==
                     HistoricalSchoolLifecycleState.Dead)
                     throw new InvalidOperationException("affiliation already dead");
+                pCommittedAffiliation = authoritativeAffiliation;
                 deathCityId = authoritativeAffiliation?.ResidenceCityId >= 0
                     ? authoritativeAffiliation.ResidenceCityId
                     : pCityId;
@@ -1586,15 +1587,14 @@ namespace AncientWarfare3.core.schools
                 SchoolDeathPersistenceRowState affiliationState =
                     ReadAuthoritativeSchoolDeathAffiliationState(pMembership.ActorId,
                         pCachedAffiliation, time,
-                        out HistoricalSchoolAffiliationSnapshot adoptionAffiliation);
+                        out HistoricalSchoolAffiliationSnapshot authoritativeAffiliation);
                 SchoolDeathPersistenceRowState masterState =
                     ReadAuthoritativeSchoolDeathMasterState(pMembership, historicalMaster,
                         pYear, pCityId, cause, time);
                 SchoolPersistenceOutcome outcome =
                     HistoricalSchoolDeathPersistenceRules.Resolve(pQuerySucceeded: true,
                         membershipState, affiliationState, masterState);
-                if (outcome == SchoolPersistenceOutcome.Committed)
-                    pCommittedAffiliation = adoptionAffiliation;
+                pCommittedAffiliation = authoritativeAffiliation;
                 return outcome;
             }
             catch (Exception error)
@@ -1645,9 +1645,9 @@ namespace AncientWarfare3.core.schools
         private static SchoolDeathPersistenceRowState
             ReadAuthoritativeSchoolDeathAffiliationState(long pActorId,
                 HistoricalSchoolAffiliationSnapshot pExpected, double pTime,
-                out HistoricalSchoolAffiliationSnapshot pAdoptionAffiliation)
+                out HistoricalSchoolAffiliationSnapshot pAuthoritativeAffiliation)
         {
-            pAdoptionAffiliation = null;
+            pAuthoritativeAffiliation = null;
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
                 "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
@@ -1694,17 +1694,21 @@ namespace AncientWarfare3.core.schools
                 current.VoyageArrivalYear == -1 && updatedTime.Equals(pTime);
             if (committed)
             {
-                pAdoptionAffiliation =
+                pAuthoritativeAffiliation = pExpected ??
                     CreateAffiliationForCommittedDeathAdoption(current);
                 return SchoolDeathPersistenceRowState.Committed;
             }
             if (pExpected == null)
-                return current.LifecycleState != HistoricalSchoolLifecycleState.Dead
-                    ? SchoolDeathPersistenceRowState.Original
-                    : SchoolDeathPersistenceRowState.Conflict;
-            return SameAffiliationState(current, pExpected)
-                ? SchoolDeathPersistenceRowState.Original
-                : SchoolDeathPersistenceRowState.Conflict;
+            {
+                if (current.LifecycleState == HistoricalSchoolLifecycleState.Dead)
+                    return SchoolDeathPersistenceRowState.Conflict;
+                pAuthoritativeAffiliation = current;
+                return SchoolDeathPersistenceRowState.Original;
+            }
+            if (current.LifecycleState == HistoricalSchoolLifecycleState.Dead)
+                return SchoolDeathPersistenceRowState.Conflict;
+            pAuthoritativeAffiliation = current;
+            return SchoolDeathPersistenceRowState.Original;
         }
 
         private static HistoricalSchoolAffiliationSnapshot
@@ -1718,28 +1722,6 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolLifecycleState.AtHome, -1, -1,
                 pCommitted.LastTravelYear, -1, -1, -1,
                 pCommitted.TransportFailures);
-        }
-
-        private static bool SameAffiliationState(HistoricalSchoolAffiliationSnapshot pFirst,
-            HistoricalSchoolAffiliationSnapshot pSecond)
-        {
-            return pFirst != null && pSecond != null &&
-                   pFirst.ActorId == pSecond.ActorId &&
-                   pFirst.HomeKingdomId == pSecond.HomeKingdomId &&
-                   pFirst.HomeKingdomName == pSecond.HomeKingdomName &&
-                   pFirst.HometownCityId == pSecond.HometownCityId &&
-                   pFirst.ResidenceCityId == pSecond.ResidenceCityId &&
-                   pFirst.PreviousResidenceCityId == pSecond.PreviousResidenceCityId &&
-                   pFirst.DestinationCityId == pSecond.DestinationCityId &&
-                   pFirst.ServiceKingdomId == pSecond.ServiceKingdomId &&
-                   pFirst.LifecycleState == pSecond.LifecycleState &&
-                   pFirst.ServiceStartYear == pSecond.ServiceStartYear &&
-                   pFirst.ServiceEndYear == pSecond.ServiceEndYear &&
-                   pFirst.LastTravelYear == pSecond.LastTravelYear &&
-                   pFirst.TravelWaitStartYear == pSecond.TravelWaitStartYear &&
-                   pFirst.VoyageStartYear == pSecond.VoyageStartYear &&
-                   pFirst.VoyageArrivalYear == pSecond.VoyageArrivalYear &&
-                   pFirst.TransportFailures == pSecond.TransportFailures;
         }
 
         private static SchoolDeathPersistenceRowState ReadAuthoritativeSchoolDeathMasterState(
