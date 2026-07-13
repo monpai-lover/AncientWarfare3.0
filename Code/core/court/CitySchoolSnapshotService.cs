@@ -226,24 +226,20 @@ namespace AncientWarfare3.core.court
             foreach (SchoolMembershipRecord membership in
                      SchoolMembershipService.ActiveMemberships())
             {
-                try
-                {
-                    if (membership == null || !membership.Active ||
-                        !schoolOrders.TryGetValue(membership.SchoolId, out int schoolOrder))
-                        continue;
-                    Actor actor = World.world?.units?.get(membership.ActorId);
-                    if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
-                    bool present = HistoricalAffiliationService.IsPresentForInfluence(actor);
-                    City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
-                                     actor.city;
-                    long cityId = residence?.data?.id ?? -1L;
-                    if (!present || cityId < 0) continue;
-                    bool qualified = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
-                                     SchoolLineageService.IsQualifiedTeacher(actor);
-                    candidates.Add(new CitySchoolResidentCandidate(actor.data.id,
-                        membership.SchoolId, cityId, pPresent: true, qualified, schoolOrder));
-                }
-                catch { }
+                if (membership == null || !membership.Active ||
+                    !schoolOrders.TryGetValue(membership.SchoolId, out int schoolOrder))
+                    continue;
+                Actor actor = World.world?.units?.get(membership.ActorId);
+                if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
+                bool present = HistoricalAffiliationService.IsPresentForInfluence(actor);
+                City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
+                                 actor.city;
+                long cityId = residence?.data?.id ?? -1L;
+                if (!present || cityId < 0) continue;
+                bool qualified = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
+                                 SchoolLineageService.IsQualifiedTeacher(actor);
+                candidates.Add(new CitySchoolResidentCandidate(actor.data.id,
+                    membership.SchoolId, cityId, pPresent: true, qualified, schoolOrder));
             }
             return CitySchoolResidentIndexRules.Build(candidates);
         }
