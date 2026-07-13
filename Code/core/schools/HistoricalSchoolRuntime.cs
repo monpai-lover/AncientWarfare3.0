@@ -44,12 +44,14 @@ namespace AncientWarfare3.core.schools
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.ClearRuntime();
+            HistoricalSchoolDescentService.ClearRuntime();
             _loaded = false;
         }
 
         public static void ProcessFrame()
         {
             if (!_loaded || World.world == null) return;
+            HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
             int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
             int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
             if (quarterKey == _lastQuarterKey) return;

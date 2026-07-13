@@ -45,6 +45,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(ActorManager), "destroyObject")]
         private static bool ActorManagerDestroyObject_Prefix(Actor pActor)
         {
+            if (HistoricalSchoolDescentService.ShouldDeferDestroy(pActor)) return false;
             return !SchoolMembershipService.ShouldDeferDestroy(pActor);
         }
 
@@ -52,6 +53,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
         private static void MapBoxClearWorld_Prefix()
         {
+            HistoricalSchoolRuntime.ClearRuntime();
             SchoolMembershipService.ClearRuntime();
         }
 

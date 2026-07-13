@@ -9,18 +9,58 @@ namespace AncientWarfare3.core.schools
 {
     internal static class HistoricalSchoolDescentService
     {
+        private sealed class PendingHistoricalDescent
+        {
+            public PendingHistoricalDescent(Actor pActor,
+                HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
+                long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
+                int pPersistenceYear, double pPersistenceTime, int pEligibleYear)
+            {
+                Actor = pActor;
+                Master = pMaster;
+                Membership = pMembership;
+                HomeKingdomId = pHomeKingdomId;
+                HomeKingdomName = pHomeKingdomName ?? "";
+                HometownCityId = pHometownCityId;
+                PersistenceYear = pPersistenceYear;
+                PersistenceTime = pPersistenceTime;
+                EligibleYear = pEligibleYear;
+            }
+
+            public Actor Actor { get; }
+            public HistoricalSchoolMasterDefinition Master { get; }
+            public SchoolMembershipRecord Membership { get; }
+            public long HomeKingdomId { get; }
+            public string HomeKingdomName { get; }
+            public long HometownCityId { get; }
+            public int PersistenceYear { get; }
+            public double PersistenceTime { get; }
+            public int EligibleYear { get; }
+            public int Attempts { get; set; }
+            public long ReadyFrame { get; set; }
+            public bool DestroyRequested { get; set; }
+        }
+
         private static HistoricalSchoolDescentLedger _ledger =
             new HistoricalSchoolDescentLedger();
         private static readonly Dictionary<long, string> MasterByActor =
             new Dictionary<long, string>();
         private static readonly Dictionary<long, int> HomeCounts =
             new Dictionary<long, int>();
+        private static readonly Dictionary<long, PendingHistoricalDescent>
+            PendingDescentsByActor = new Dictionary<long, PendingHistoricalDescent>();
+        private static readonly Dictionary<string, long> PendingActorByMaster =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+        private static readonly Queue<long> PendingDescentRetries = new Queue<long>();
+        private const int MaxPendingDescentRetryBackoffFrames = 240;
+        private const int MaxPendingDescentRetryQueueScan = 16;
+        private static long _pendingDescentRetryFrame;
+
+        internal static bool HasPendingDescents => PendingDescentsByActor.Count > 0;
 
         public static void LoadState()
         {
-            _ledger = new HistoricalSchoolDescentLedger();
-            MasterByActor.Clear();
-            HomeCounts.Clear();
+            ClearRuntime();
             foreach (HistoricalSchoolMasterStoreRecord row in
                      HistoricalSchoolStore.LoadMasterStates())
             {
@@ -56,6 +96,17 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        public static void ClearRuntime()
+        {
+            _ledger = new HistoricalSchoolDescentLedger();
+            MasterByActor.Clear();
+            HomeCounts.Clear();
+            PendingDescentsByActor.Clear();
+            PendingActorByMaster.Clear();
+            PendingDescentRetries.Clear();
+            _pendingDescentRetryFrame = 0L;
+        }
+
         public static bool IsCanonicalMaster(Actor pActor)
         {
             if (pActor?.data == null) return false;
@@ -84,6 +135,7 @@ namespace AncientWarfare3.core.schools
             int spawned = 0;
             foreach (HistoricalSchoolMasterDefinition master in due)
             {
+                if (HasPendingDescents) break;
                 City home = SelectHome(master, pLivingXiaCities);
                 if (home == null || !TryDescend(master, home, pEligibleYear)) continue;
                 spawned++;
@@ -134,8 +186,14 @@ namespace AncientWarfare3.core.schools
             WorldTile tile = pHome?.getTile();
             if (tile == null || pHome.kingdom?.data == null || pHome.kingdom.isRekt()) return false;
             Actor actor = null;
+            SchoolMembershipRecord membership = null;
             bool persistenceAttempted = false;
             SchoolPersistenceOutcome persistenceOutcome = SchoolPersistenceOutcome.Unknown;
+            long homeKingdomId = pHome.kingdom.id;
+            string homeKingdomName = pHome.kingdom.name;
+            long hometownCityId = pHome.data.id;
+            int persistenceYear = Date.getCurrentYear();
+            double persistenceTime = WorldTime();
             try
             {
                 ActorManager units = World.world?.units;
@@ -162,15 +220,14 @@ namespace AncientWarfare3.core.schools
                     actor.current_tile == null)
                     throw new InvalidOperationException("actor home assignment failed");
                 ApplyCanonicalIdentity(actor, pMaster);
-                SchoolMembershipRecord membership =
-                    SchoolMembershipService.PrepareHistoricalDescent(actor, pMaster.SchoolId,
-                        pMaster.Id, pHome.data.id, 0);
+                membership = SchoolMembershipService.PrepareHistoricalDescent(actor,
+                    pMaster.SchoolId, pMaster.Id, hometownCityId, 0);
                 if (membership == null)
                     throw new InvalidOperationException("membership prepare rejected");
                 persistenceAttempted = true;
                 persistenceOutcome = HistoricalSchoolStore.CommitHistoricalDescent(pMaster,
-                    membership, pHome.kingdom.id, pHome.kingdom.name, pHome.data.id,
-                    Date.getCurrentYear(), WorldTime());
+                    membership, homeKingdomId, homeKingdomName, hometownCityId,
+                    persistenceYear, persistenceTime);
                 if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
                     throw new InvalidOperationException("historical descent persistence " +
                                                         persistenceOutcome);
@@ -178,38 +235,230 @@ namespace AncientWarfare3.core.schools
                     throw new InvalidOperationException("committed membership adopt failed");
                 if (!ReservePreservedActor(pMaster, actor, pHome, pEligibleYear))
                     throw new InvalidOperationException("duplicate descent ledger state");
-                try
-                {
-                    LineageService.ArchiveActor(actor, pAlive: true);
-                    HistoricalSchoolContent.AnnounceDescent(actor, pHome);
-                    HistoryWriter.RecordPerson(actor.data.id, pHome.kingdom,
-                        pMaster.CanonicalName, "school_master_descent",
-                        pMaster.CanonicalName + "降临" + pHome.data.name,
-                        ChronicleCategory.LIFE);
-                    HistoryWriter.RecordCity(pHome, pHome.kingdom, "school_master_descent",
-                        pMaster.CanonicalName + "降临此城");
-                    ModClass.LogInfo("Historical school master descended: " + pMaster.Id +
-                                     " actor=" + actor.data.id + " city=" + pHome.data.id);
-                }
-                catch (Exception sideEffectError)
-                {
-                    ModClass.LogWarning("Historical school descent announcement failed: " +
-                                        sideEffectError.Message);
-                }
+                AnnounceReconciledDescent(actor, pMaster, pHome);
                 return true;
             }
             catch (Exception error)
             {
-                bool canDestroy = !persistenceAttempted ||
-                    HistoricalSchoolPersistenceRules.CanDestroy(persistenceOutcome);
-                if (canDestroy)
-                    RemoveFailedActor(actor, pMaster.ActorAssetId);
+                if (persistenceAttempted && membership != null &&
+                    persistenceOutcome != SchoolPersistenceOutcome.CleanFailure)
+                {
+                    QueuePendingDescent(actor, pMaster, membership, homeKingdomId,
+                        homeKingdomName, hometownCityId, persistenceYear, persistenceTime,
+                        pEligibleYear);
+                }
                 else
-                    ReservePreservedActor(pMaster, actor, pHome, pEligibleYear);
+                {
+                    RemoveFailedActor(actor, pMaster.ActorAssetId);
+                }
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
                                     error.Message + " persistence=" + persistenceOutcome);
                 return false;
             }
+        }
+
+        private static void QueuePendingDescent(Actor pActor,
+            HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
+            long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
+            int pPersistenceYear, double pPersistenceTime, int pEligibleYear)
+        {
+            if (pActor?.data == null || pMaster == null || pMembership == null) return;
+            long actorId = pActor.data.id;
+            if (PendingDescentsByActor.ContainsKey(actorId)) return;
+            var pending = new PendingHistoricalDescent(pActor, pMaster, pMembership,
+                pHomeKingdomId, pHomeKingdomName, pHometownCityId, pPersistenceYear,
+                pPersistenceTime, pEligibleYear);
+            PendingDescentsByActor[actorId] = pending;
+            PendingActorByMaster[pMaster.Id] = actorId;
+            PendingDescentRetries.Enqueue(actorId);
+            MasterByActor[actorId] = pMaster.Id;
+            if (pHomeKingdomId >= 0)
+                HomeCounts[pHomeKingdomId] = HomeCount(pHomeKingdomId) + 1;
+        }
+
+        internal static void ProcessPendingDescentReconciliations()
+        {
+            ProcessPendingDescentReconciliation(pIgnoreBackoff: false);
+        }
+
+        internal static bool FlushPendingDescentsForSchoolWrite()
+        {
+            return FlushPendingDescents(32);
+        }
+
+        internal static bool FlushPendingDescentsForSave()
+        {
+            return FlushPendingDescents(64);
+        }
+
+        private static bool FlushPendingDescents(int pMaximumAttempts)
+        {
+            int budget = Math.Min(pMaximumAttempts,
+                Math.Max(8, PendingDescentsByActor.Count * 8));
+            while (PendingDescentsByActor.Count > 0 && budget-- > 0)
+                ProcessPendingDescentReconciliation(pIgnoreBackoff: true);
+            return PendingDescentsByActor.Count == 0;
+        }
+
+        private static void ProcessPendingDescentReconciliation(bool pIgnoreBackoff)
+        {
+            _pendingDescentRetryFrame++;
+            int scanBudget = Math.Min(PendingDescentRetries.Count,
+                MaxPendingDescentRetryQueueScan);
+            while (scanBudget-- > 0)
+            {
+                long actorId = PendingDescentRetries.Dequeue();
+                if (!PendingDescentsByActor.TryGetValue(actorId,
+                        out PendingHistoricalDescent pending)) continue;
+                if (!pIgnoreBackoff && pending.ReadyFrame > _pendingDescentRetryFrame)
+                {
+                    PendingDescentRetries.Enqueue(actorId);
+                    continue;
+                }
+                try
+                {
+                    ReconcilePendingDescent(pending);
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Pending historical descent reconciliation failed: " +
+                                        error.Message);
+                    if (PendingDescentsByActor.TryGetValue(actorId,
+                            out PendingHistoricalDescent current) &&
+                        ReferenceEquals(current, pending))
+                        RequeuePendingDescent(pending);
+                }
+                return;
+            }
+        }
+
+        private static void ReconcilePendingDescent(PendingHistoricalDescent pending)
+        {
+            SchoolPersistenceOutcome outcome =
+                HistoricalSchoolStore.CommitHistoricalDescent(pending.Master,
+                    pending.Membership, pending.HomeKingdomId, pending.HomeKingdomName,
+                    pending.HometownCityId, pending.PersistenceYear,
+                    pending.PersistenceTime);
+            if (outcome == SchoolPersistenceOutcome.Unknown)
+            {
+                RequeuePendingDescent(pending);
+                return;
+            }
+            if (outcome == SchoolPersistenceOutcome.CleanFailure)
+            {
+                RemovePendingDescent(pending, pReleaseReservation: true);
+                RemoveFailedActor(pending.Actor, pending.Master.ActorAssetId);
+                return;
+            }
+            if (outcome != SchoolPersistenceOutcome.Committed ||
+                !SchoolMembershipService.AdoptCommittedHistoricalDescent(pending.Actor,
+                    pending.Membership))
+            {
+                RequeuePendingDescent(pending);
+                return;
+            }
+
+            if (!_ledger.IsSpawned(pending.Master.Id) &&
+                !_ledger.MarkSpawned(pending.Master, pending.EligibleYear))
+            {
+                RequeuePendingDescent(pending);
+                return;
+            }
+            HistoricalAffiliationService.RegisterDescent(pending.Membership.ActorId,
+                pending.HomeKingdomId, pending.HomeKingdomName, pending.HometownCityId,
+                pending.PersistenceYear);
+            bool destroyRequested = pending.DestroyRequested;
+            RemovePendingDescent(pending, pReleaseReservation: false);
+            City home = FindCity(pending.HometownCityId) ?? pending.Actor?.city;
+            AnnounceReconciledDescent(pending.Actor, pending.Master, home);
+
+            bool actorDead = pending.Actor?.data != null &&
+                (!pending.Actor.isAlive() || pending.Actor.isRekt());
+            if (actorDead)
+            {
+                SchoolDeathOutcome deathOutcome =
+                    SchoolMembershipService.OnDeath(pending.Actor, pDestroy: true);
+                if (deathOutcome == SchoolDeathOutcome.Committed ||
+                    deathOutcome == SchoolDeathOutcome.NotApplicable)
+                    HistoricalSchoolActorDestroyQueue.Queue(pending.Actor,
+                        "Reconciled historical descent destroy requeue failed");
+            }
+            else if (destroyRequested)
+            {
+                HistoricalSchoolActorDestroyQueue.Queue(pending.Actor,
+                    "Reconciled historical descent destroy requeue failed");
+            }
+        }
+
+        private static void RemovePendingDescent(PendingHistoricalDescent pPending,
+            bool pReleaseReservation)
+        {
+            if (pPending == null) return;
+            long actorId = pPending.Membership.ActorId;
+            PendingDescentsByActor.Remove(actorId);
+            if (PendingActorByMaster.TryGetValue(pPending.Master.Id, out long reservedActor) &&
+                reservedActor == actorId)
+                PendingActorByMaster.Remove(pPending.Master.Id);
+            if (!pReleaseReservation) return;
+            if (MasterByActor.TryGetValue(actorId, out string masterId) &&
+                masterId == pPending.Master.Id)
+                MasterByActor.Remove(actorId);
+            int count = HomeCount(pPending.HomeKingdomId);
+            if (count <= 1) HomeCounts.Remove(pPending.HomeKingdomId);
+            else HomeCounts[pPending.HomeKingdomId] = count - 1;
+        }
+
+        private static void RequeuePendingDescent(PendingHistoricalDescent pPending)
+        {
+            pPending.Attempts++;
+            int exponent = Math.Max(0, Math.Min(8, pPending.Attempts - 1));
+            int delay = Math.Min(MaxPendingDescentRetryBackoffFrames, 1 << exponent);
+            pPending.ReadyFrame = _pendingDescentRetryFrame + delay;
+            PendingDescentRetries.Enqueue(pPending.Membership.ActorId);
+        }
+
+        internal static bool ShouldDeferDestroy(Actor pActor)
+        {
+            if (pActor?.data == null ||
+                !PendingDescentsByActor.TryGetValue(pActor.data.id,
+                    out PendingHistoricalDescent pending) ||
+                !ReferenceEquals(pending.Actor, pActor)) return false;
+            pending.DestroyRequested = true;
+            return true;
+        }
+
+        private static void AnnounceReconciledDescent(Actor pActor,
+            HistoricalSchoolMasterDefinition pMaster, City pHome)
+        {
+            if (pActor?.data == null || pMaster == null) return;
+            try
+            {
+                if (pActor.isAlive() && !pActor.isRekt())
+                    LineageService.ArchiveActor(pActor, pAlive: true);
+                HistoricalSchoolContent.AnnounceDescent(pActor, pHome);
+                HistoryWriter.RecordPerson(pActor.data.id, pHome?.kingdom,
+                    pMaster.CanonicalName, "school_master_descent",
+                    pMaster.CanonicalName + "降临" + (pHome?.data?.name ?? ""),
+                    ChronicleCategory.LIFE);
+                if (pHome?.data != null)
+                    HistoryWriter.RecordCity(pHome, pHome.kingdom, "school_master_descent",
+                        pMaster.CanonicalName + "降临此城");
+                ModClass.LogInfo("Historical school master descended: " + pMaster.Id +
+                                 " actor=" + pActor.data.id + " city=" +
+                                 (pHome?.data?.id ?? -1L));
+            }
+            catch (Exception sideEffectError)
+            {
+                ModClass.LogWarning("Historical school descent announcement failed: " +
+                                    sideEffectError.Message);
+            }
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0) return null;
+            try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
         }
 
         private static bool ReservePreservedActor(HistoricalSchoolMasterDefinition pMaster,

@@ -25,9 +25,23 @@ namespace AncientWarfare3.patch
         public static void SaveWorldToDirectory_Prefix()
         {
             core.lineage.DeferredRuntimeWorkService.FlushPersistent();
-            if (!SchoolMembershipService.FlushDeathRetriesForSave())
+            bool descentsResolved =
+                HistoricalSchoolDescentService.FlushPendingDescentsForSave();
+            bool deathsResolved = SchoolMembershipService.FlushDeathRetriesForSave();
+            if (!descentsResolved || !deathsResolved)
                 throw new InvalidOperationException(
-                    "World save blocked: unresolved school death persistence");
+                    "World save blocked: unresolved school persistence");
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld),
+            new[] { typeof(string), typeof(bool) })]
+        public static void LoadWorld_Prefix()
+        {
+            try { SchoolWindow.ResetWorldCache(); } catch { }
+            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
+            HistoricalSchoolRuntime.ClearRuntime();
+            SchoolMembershipService.ClearRuntime();
         }
 
         [HarmonyPostfix]

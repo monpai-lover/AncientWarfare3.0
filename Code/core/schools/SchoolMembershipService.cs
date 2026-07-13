@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
@@ -20,9 +19,6 @@ namespace AncientWarfare3.core.schools
         private static readonly Dictionary<long, long> DeathRetryReadyFrames =
             new Dictionary<long, long>();
         private static readonly HashSet<long> DeathRetryDestroyRequests = new HashSet<long>();
-        private static readonly FieldInfo ActorDestroyQueueField =
-            typeof(SimSystemManager<Actor, ActorData>).GetField("_to_destroy_objects",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         private const int MaxDeathRetryBackoffFrames = 240;
         private const int MaxDeathRetryQueueScan = 16;
         private static long _deathRetryFrame;
@@ -53,6 +49,8 @@ namespace AncientWarfare3.core.schools
                 CourtSchoolRegistry.Find(pSchoolId) == null ||
                 string.IsNullOrWhiteSpace(pMasterId) || pCityId < 0 || pGeneration < 0 ||
                 Memberships.GetActive(pActor.data.id) != null) return null;
+            if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
+                return null;
             long membershipId = HistoricalSchoolStore.NextMembershipId();
             if (membershipId < 0) return null;
             var record = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
@@ -103,6 +101,8 @@ namespace AncientWarfare3.core.schools
                 return existing.SchoolId == pSchoolId && existing.Source == pSource &&
                        existing.SourceId == pSourceId;
 
+            if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
+                return false;
             long membershipId = HistoricalSchoolStore.NextMembershipId();
             if (membershipId < 0) return false;
             int year = Date.getCurrentYear();
@@ -142,6 +142,8 @@ namespace AncientWarfare3.core.schools
             if ((HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
                  SchoolLineageService.IsQualifiedTeacher(pActor)) &&
                 !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
+                return false;
+            if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
                 return false;
             long membershipId = HistoricalSchoolStore.NextMembershipId();
             if (membershipId < 0) return false;
@@ -185,8 +187,22 @@ namespace AncientWarfare3.core.schools
 
         public static SchoolDeathOutcome OnDeath(Actor pActor, bool pDestroy = false)
         {
+            return OnDeath(pActor, pDestroy, pRetryUncertain: false);
+        }
+
+        private static SchoolDeathOutcome OnDeath(Actor pActor, bool pDestroy,
+            bool pRetryUncertain)
+        {
             if (pActor?.data == null) return SchoolDeathOutcome.NotApplicable;
-            if (UncertainDeathActors.Contains(pActor.data.id)) return SchoolDeathOutcome.Failed;
+            if (UncertainDeathActors.Contains(pActor.data.id))
+            {
+                if (!pRetryUncertain)
+                {
+                    QueueDeathRetry(pActor, pDestroy);
+                    return SchoolDeathOutcome.Failed;
+                }
+                UncertainDeathActors.Remove(pActor.data.id);
+            }
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
             if (current == null) return SchoolDeathOutcome.NotApplicable;
             if (!current.Active || !current.IsValid || current.ActorId != pActor.data.id)
@@ -211,8 +227,11 @@ namespace AncientWarfare3.core.schools
             if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
             {
                 if (persistenceOutcome == SchoolPersistenceOutcome.Unknown)
+                {
                     UncertainDeathActors.Add(pActor.data.id);
-                else if (persistenceOutcome == SchoolPersistenceOutcome.CleanFailure)
+                }
+                if (persistenceOutcome == SchoolPersistenceOutcome.Unknown ||
+                    persistenceOutcome == SchoolPersistenceOutcome.CleanFailure)
                     QueueDeathRetry(pActor, pDestroy);
                 return SchoolDeathOutcome.Failed;
             }
@@ -367,7 +386,7 @@ namespace AncientWarfare3.core.schools
             SchoolDeathOutcome outcome;
             try
             {
-                outcome = OnDeath(actor, destroyRequested);
+                outcome = OnDeath(actor, destroyRequested, pRetryUncertain: true);
             }
             catch (Exception error)
             {
@@ -379,10 +398,12 @@ namespace AncientWarfare3.core.schools
             bool queuedAgain = QueuedDeathRetries.Contains(actorId);
             if (outcome == SchoolDeathOutcome.Committed ||
                 outcome == SchoolDeathOutcome.NotApplicable ||
-                UncertainDeathActors.Contains(actorId) || !queuedAgain)
+                !queuedAgain)
             {
                 ClearDeathRetry(actorId, pCancelQueued: true);
-                if (destroyRequested) QueueDestroyAfterDeathRetry(actor);
+                if (destroyRequested)
+                    HistoricalSchoolActorDestroyQueue.Queue(actor,
+                        "Committed school death destroy requeue failed");
                 return;
             }
             DeathRetryAttempts[actorId] = attempts;
@@ -400,8 +421,7 @@ namespace AncientWarfare3.core.schools
 
         private static void QueueDeathRetry(Actor pActor, bool pDestroy)
         {
-            if (pActor?.data == null || pActor.data.id < 0 ||
-                UncertainDeathActors.Contains(pActor.data.id)) return;
+            if (pActor?.data == null || pActor.data.id < 0) return;
             long actorId = pActor.data.id;
             DeathRetryActors[actorId] = pActor;
             if (pDestroy) DeathRetryDestroyRequests.Add(actorId);
@@ -425,27 +445,10 @@ namespace AncientWarfare3.core.schools
             return Math.Min(MaxDeathRetryBackoffFrames, 1 << exponent);
         }
 
-        private static void QueueDestroyAfterDeathRetry(Actor pActor)
-        {
-            try
-            {
-                ActorManager units = World.world?.units;
-                if (pActor?.data == null || units == null ||
-                    units.get(pActor.data.id) != pActor) return;
-                if (!(ActorDestroyQueueField?.GetValue(units) is HashSet<Actor> queue))
-                    throw new InvalidOperationException("actor destroy queue unavailable");
-                queue.Add(pActor);
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Committed school death destroy requeue failed: " +
-                                    error.Message);
-            }
-        }
-
         private static void ClearDeathRetry(long pActorId, bool pCancelQueued)
         {
             if (pCancelQueued) QueuedDeathRetries.Remove(pActorId);
+            UncertainDeathActors.Remove(pActorId);
             DeathRetryActors.Remove(pActorId);
             DeathRetryAttempts.Remove(pActorId);
             DeathRetryReadyFrames.Remove(pActorId);
