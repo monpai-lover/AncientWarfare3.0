@@ -1430,9 +1430,11 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolAffiliationSnapshot pCachedAffiliation,
             HistoricalSchoolMasterDefinition pMaster, int pYear, long pCityId,
             string pCause, double pTime,
-            out HistoricalSchoolAffiliationSnapshot pCommittedAffiliation)
+            out HistoricalSchoolAffiliationSnapshot pCommittedAffiliation,
+            out long pEffectiveDeathCityId)
         {
             pCommittedAffiliation = null;
+            pEffectiveDeathCityId = pCityId;
             bool historicalMaster = pMembership?.Source ==
                                     SchoolMembershipSource.HistoricalDescent;
             if (DB == null || pMembership == null || !pMembership.Active ||
@@ -1470,6 +1472,7 @@ namespace AncientWarfare3.core.schools
                 deathCityId = authoritativeAffiliation?.ResidenceCityId >= 0
                     ? authoritativeAffiliation.ResidenceCityId
                     : pCityId;
+                pEffectiveDeathCityId = deathCityId;
                 if (historicalMaster)
                     originalMaster = LoadMasterForDeath(pMembership, transaction);
                 CloseSchoolDeathMembershipCommand(pMembership, pYear, "death", time,
@@ -1552,6 +1555,219 @@ namespace AncientWarfare3.core.schools
                     SchoolDeathPersistenceRowState.Conflict,
                     SchoolDeathPersistenceRowState.Conflict);
             }
+        }
+
+        public static SchoolPersistenceOutcome ReconcileSchoolDeath(
+            SchoolMembershipRecord pMembership,
+            HistoricalSchoolAffiliationSnapshot pCachedAffiliation,
+            HistoricalSchoolMasterDefinition pMaster, int pYear, long pCityId,
+            string pCause, double pTime,
+            out HistoricalSchoolAffiliationSnapshot pCommittedAffiliation)
+        {
+            pCommittedAffiliation = null;
+            bool historicalMaster = pMembership?.Source ==
+                                    SchoolMembershipSource.HistoricalDescent;
+            if (DB == null || pMembership == null || !pMembership.Active ||
+                !pMembership.IsValid || pYear < pMembership.StartYear ||
+                (pCachedAffiliation != null &&
+                 pCachedAffiliation.ActorId != pMembership.ActorId) ||
+                (!historicalMaster && pMaster != null) ||
+                (pMaster != null &&
+                 (pMembership.SourceId != pMaster.Id ||
+                  pMembership.SchoolId != pMaster.SchoolId)))
+                return SchoolPersistenceOutcome.Unknown;
+
+            double time = FiniteNonNegative(pTime);
+            string cause = pCause ?? "death";
+            try
+            {
+                SchoolDeathPersistenceRowState membershipState =
+                    ReadAuthoritativeSchoolDeathMembershipState(pMembership, pYear, time);
+                SchoolDeathPersistenceRowState affiliationState =
+                    ReadAuthoritativeSchoolDeathAffiliationState(pMembership.ActorId,
+                        pCachedAffiliation, time,
+                        out HistoricalSchoolAffiliationSnapshot adoptionAffiliation);
+                SchoolDeathPersistenceRowState masterState =
+                    ReadAuthoritativeSchoolDeathMasterState(pMembership, historicalMaster,
+                        pYear, pCityId, cause, time);
+                SchoolPersistenceOutcome outcome =
+                    HistoricalSchoolDeathPersistenceRules.Resolve(pQuerySucceeded: true,
+                        membershipState, affiliationState, masterState);
+                if (outcome == SchoolPersistenceOutcome.Committed)
+                    pCommittedAffiliation = adoptionAffiliation;
+                return outcome;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore authoritative death readback failed: " +
+                                    error.Message);
+                return HistoricalSchoolDeathPersistenceRules.Resolve(pQuerySucceeded: false,
+                    SchoolDeathPersistenceRowState.Conflict,
+                    SchoolDeathPersistenceRowState.Conflict,
+                    SchoolDeathPersistenceRowState.Conflict);
+            }
+        }
+
+        private static SchoolDeathPersistenceRowState
+            ReadAuthoritativeSchoolDeathMembershipState(SchoolMembershipRecord pExpected,
+                int pYear, double pTime)
+        {
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
+                "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
+            command.Parameters.AddWithValue("@id", pExpected.MembershipId);
+            command.Parameters.AddWithValue("@actor", pExpected.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            int rowCount = 0;
+            bool original = false;
+            bool committed = false;
+            while (reader.Read())
+            {
+                rowCount++;
+                bool identity = MatchesMembershipIdentity(reader, pExpected);
+                original |= identity &&
+                            ValueInt(reader, 10, int.MinValue) == pExpected.EndYear &&
+                            ValueInt(reader, 11, -1) == 1 &&
+                            ValueString(reader, 12) == pExpected.EndReason;
+                committed |= identity && ValueInt(reader, 10, int.MinValue) == pYear &&
+                              ValueInt(reader, 11, -1) == 0 &&
+                              ValueString(reader, 12) == "death" &&
+                              ValueDouble(reader, 13, -1d).Equals(pTime);
+            }
+            if (rowCount != 1) return SchoolDeathPersistenceRowState.Conflict;
+            if (committed) return SchoolDeathPersistenceRowState.Committed;
+            if (original) return SchoolDeathPersistenceRowState.Original;
+            return SchoolDeathPersistenceRowState.Conflict;
+        }
+
+        private static SchoolDeathPersistenceRowState
+            ReadAuthoritativeSchoolDeathAffiliationState(long pActorId,
+                HistoricalSchoolAffiliationSnapshot pExpected, double pTime,
+                out HistoricalSchoolAffiliationSnapshot pAdoptionAffiliation)
+        {
+            pAdoptionAffiliation = null;
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
+                "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
+                "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
+                "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
+                "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
+                "TRANSPORT_FAILURES,UPDATED_TIME FROM " + AffiliationTable +
+                " WHERE ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@actor", pActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+                return pExpected == null
+                    ? SchoolDeathPersistenceRowState.Unchanged
+                    : SchoolDeathPersistenceRowState.Conflict;
+            if (!Enum.TryParse(ValueString(reader, 8), out
+                    HistoricalSchoolLifecycleState lifecycleState))
+                return SchoolDeathPersistenceRowState.Conflict;
+            var current = new HistoricalSchoolAffiliationSnapshot(
+                ValueLong(reader, 0, -1L), ValueLong(reader, 1, -1L),
+                ValueString(reader, 2), ValueLong(reader, 3, -1L),
+                ValueLong(reader, 4, -1L), ValueLong(reader, 5, -1L),
+                ValueLong(reader, 6, -1L), ValueLong(reader, 7, -1L), lifecycleState,
+                ValueInt(reader, 9, -1), ValueInt(reader, 10, -1),
+                ValueInt(reader, 11, -1), ValueInt(reader, 12, -1),
+                ValueInt(reader, 13, -1), ValueInt(reader, 14, -1),
+                ValueInt(reader, 15));
+            double updatedTime = ValueDouble(reader, 16, -1d);
+            if (current.ActorId != pActorId || reader.Read())
+                return SchoolDeathPersistenceRowState.Conflict;
+
+            bool fixedFields = pExpected == null ||
+                current.HomeKingdomId == pExpected.HomeKingdomId &&
+                current.HomeKingdomName == pExpected.HomeKingdomName &&
+                current.HometownCityId == pExpected.HometownCityId &&
+                current.ResidenceCityId == pExpected.ResidenceCityId &&
+                current.PreviousResidenceCityId == pExpected.PreviousResidenceCityId &&
+                current.LastTravelYear == pExpected.LastTravelYear &&
+                current.TransportFailures == pExpected.TransportFailures;
+            bool committed = fixedFields &&
+                current.LifecycleState == HistoricalSchoolLifecycleState.Dead &&
+                current.DestinationCityId == -1 && current.ServiceKingdomId == -1 &&
+                current.ServiceStartYear == -1 && current.ServiceEndYear == -1 &&
+                current.TravelWaitStartYear == -1 && current.VoyageStartYear == -1 &&
+                current.VoyageArrivalYear == -1 && updatedTime.Equals(pTime);
+            if (committed)
+            {
+                pAdoptionAffiliation =
+                    CreateAffiliationForCommittedDeathAdoption(current);
+                return SchoolDeathPersistenceRowState.Committed;
+            }
+            if (pExpected == null)
+                return current.LifecycleState != HistoricalSchoolLifecycleState.Dead
+                    ? SchoolDeathPersistenceRowState.Original
+                    : SchoolDeathPersistenceRowState.Conflict;
+            return SameAffiliationState(current, pExpected)
+                ? SchoolDeathPersistenceRowState.Original
+                : SchoolDeathPersistenceRowState.Conflict;
+        }
+
+        private static HistoricalSchoolAffiliationSnapshot
+            CreateAffiliationForCommittedDeathAdoption(
+                HistoricalSchoolAffiliationSnapshot pCommitted)
+        {
+            return new HistoricalSchoolAffiliationSnapshot(pCommitted.ActorId,
+                pCommitted.HomeKingdomId, pCommitted.HomeKingdomName,
+                pCommitted.HometownCityId, pCommitted.ResidenceCityId,
+                pCommitted.PreviousResidenceCityId, -1, -1,
+                HistoricalSchoolLifecycleState.AtHome, -1, -1,
+                pCommitted.LastTravelYear, -1, -1, -1,
+                pCommitted.TransportFailures);
+        }
+
+        private static bool SameAffiliationState(HistoricalSchoolAffiliationSnapshot pFirst,
+            HistoricalSchoolAffiliationSnapshot pSecond)
+        {
+            return pFirst != null && pSecond != null &&
+                   pFirst.ActorId == pSecond.ActorId &&
+                   pFirst.HomeKingdomId == pSecond.HomeKingdomId &&
+                   pFirst.HomeKingdomName == pSecond.HomeKingdomName &&
+                   pFirst.HometownCityId == pSecond.HometownCityId &&
+                   pFirst.ResidenceCityId == pSecond.ResidenceCityId &&
+                   pFirst.PreviousResidenceCityId == pSecond.PreviousResidenceCityId &&
+                   pFirst.DestinationCityId == pSecond.DestinationCityId &&
+                   pFirst.ServiceKingdomId == pSecond.ServiceKingdomId &&
+                   pFirst.LifecycleState == pSecond.LifecycleState &&
+                   pFirst.ServiceStartYear == pSecond.ServiceStartYear &&
+                   pFirst.ServiceEndYear == pSecond.ServiceEndYear &&
+                   pFirst.LastTravelYear == pSecond.LastTravelYear &&
+                   pFirst.TravelWaitStartYear == pSecond.TravelWaitStartYear &&
+                   pFirst.VoyageStartYear == pSecond.VoyageStartYear &&
+                   pFirst.VoyageArrivalYear == pSecond.VoyageArrivalYear &&
+                   pFirst.TransportFailures == pSecond.TransportFailures;
+        }
+
+        private static SchoolDeathPersistenceRowState ReadAuthoritativeSchoolDeathMasterState(
+            SchoolMembershipRecord pMembership, bool pHistoricalMaster, int pYear,
+            long pDeathCityId, string pCause, double pTime)
+        {
+            if (!pHistoricalMaster) return SchoolDeathPersistenceRowState.Unchanged;
+            using var command = new SQLiteCommand(DB);
+            command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED," +
+                "DEAD,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
+                "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME FROM " +
+                MasterTable + " WHERE MASTER_ID=@master OR ACTOR_ID=@actor";
+            command.Parameters.AddWithValue("@master", pMembership.SourceId);
+            command.Parameters.AddWithValue("@actor", pMembership.ActorId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read()) return SchoolDeathPersistenceRowState.Conflict;
+            HistoricalSchoolMasterDeathRow current = HistoricalSchoolMasterDeathRow.Read(reader);
+            if (reader.Read() || current.MasterId != pMembership.SourceId ||
+                current.ActorId != pMembership.ActorId ||
+                current.SchoolId != pMembership.SchoolId || !current.Spawned)
+                return SchoolDeathPersistenceRowState.Conflict;
+            bool committed = current.MatchesAuthoritativeCommittedDeath(pMembership,
+                pYear, pDeathCityId, pCause, pTime);
+            if (committed) return SchoolDeathPersistenceRowState.Committed;
+            bool original = current.MatchesAuthoritativeOriginal(pMembership);
+            return original
+                ? SchoolDeathPersistenceRowState.Original
+                : SchoolDeathPersistenceRowState.Conflict;
         }
 
         private static double LoadMembershipTimeForDeath(SchoolMembershipRecord pMembership,
@@ -2311,6 +2527,26 @@ namespace AncientWarfare3.core.schools
                        LifecycleState == HistoricalSchoolLifecycleState.Dead.ToString() &&
                        DeathCause == pCause && DeathCityId == pDeathCityId &&
                        UpdatedTime.Equals(pTime);
+            }
+
+            public bool MatchesAuthoritativeCommittedDeath(SchoolMembershipRecord pMembership,
+                int pYear, long pDeathCityId, string pCause, double pTime)
+            {
+                return pMembership != null && MasterId == pMembership.SourceId &&
+                       ActorId == pMembership.ActorId && SchoolId == pMembership.SchoolId &&
+                       Spawned && Dead && DeathYear == pYear &&
+                       LifecycleState == HistoricalSchoolLifecycleState.Dead.ToString() &&
+                       DeathCause == pCause && DeathCityId == pDeathCityId &&
+                       UpdatedTime.Equals(pTime);
+            }
+
+            public bool MatchesAuthoritativeOriginal(SchoolMembershipRecord pMembership)
+            {
+                return pMembership != null && MasterId == pMembership.SourceId &&
+                       ActorId == pMembership.ActorId && SchoolId == pMembership.SchoolId &&
+                       Spawned && !Dead && DeathYear == -1 &&
+                       LifecycleState != HistoricalSchoolLifecycleState.Dead.ToString() &&
+                       DeathCause == "" && DeathCityId == -1L;
             }
         }
     }

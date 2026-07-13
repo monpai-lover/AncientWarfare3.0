@@ -33,17 +33,6 @@ namespace AncientWarfare3.patch
                     "World save blocked: unresolved school persistence");
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld),
-            new[] { typeof(string), typeof(bool) })]
-        public static void LoadWorld_Prefix()
-        {
-            try { SchoolWindow.ResetWorldCache(); } catch { }
-            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
-            HistoricalSchoolRuntime.ClearRuntime();
-            SchoolMembershipService.ClearRuntime();
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
         public static void SaveWorldToDirectory_Postfix(string pFolder)
