@@ -10,8 +10,8 @@ namespace AncientWarfare3.core.schools
     /// <summary>
     /// Coordinates cross-state appointments for scholars who are physically resident
     /// in a host city. Nationality remains the affiliation snapshot's home kingdom;
-    /// one durable transaction starts service, records the court tenure, and inserts
-    /// the guest event before any live projection is adopted.
+    /// one durable transaction starts service and another closes affiliation plus career;
+    /// live projections are adopted only after either transaction is proven committed.
     /// </summary>
     internal static class SchoolGuestOfficeService
     {
@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.schools
         private const int MaxHostKingdomsPerYear = 96;
         private const int MaxServiceSweepPerYear = 512;
         private const int MaxPendingGuestOperations = 512;
+        private const int MaxPendingGuestRecoveryScan = 2048;
         private const int MaxPendingGuestDrainPerFrame = 8;
         private const int MaxPendingGuestScanPerFrame = 32;
         private const int MaxPendingGuestRetryBackoffFrames = 3600;
@@ -192,20 +193,14 @@ namespace AncientWarfare3.core.schools
                     continue;
                 }
 
-                if (actor?.data != null)
-                {
-                    CourtService.EndGuestOfficer(actor, host,
-                        hostAlive ? "guest_term_expired" : "guest_host_lost", pYear);
-                }
-                else
-                {
-                    // The actor may already have been removed from the live unit index.
-                    // Close both durable projections by id so a missing unit cannot leave
-                    // an immortal service row or occupied office.
-                    OfficialCareerService.EndForKingdom(state.ActorId,
-                        state.ServiceKingdomId, "guest_actor_missing");
-                    HistoricalAffiliationService.EndService(state.ActorId, pYear);
-                }
+                string reason = !hostAlive
+                    ? "guest_host_lost"
+                    : actor?.data == null
+                        ? "guest_actor_missing"
+                        : !alive
+                            ? "guest_actor_dead"
+                            : "guest_term_expired";
+                EndGuestOfficer(state.ActorId, actor, host, reason, pYear);
             }
             _serviceSweepOffset = (start + count) % states.Length;
         }
@@ -230,6 +225,50 @@ namespace AncientWarfare3.core.schools
             int term = SchoolGuestOfficeRules.TermYears(pActor.data.id, pHost.id, pYear);
             return TryAppointAndRecord(pActor, pHost, office, residence, pYear, term,
                 "guest_service_renewed");
+        }
+
+        internal static bool EndGuestOfficer(Actor pActor, Kingdom pHost, string pReason,
+            int pYear)
+        {
+            return EndGuestOfficer(pActor?.data?.id ?? -1L, pActor, pHost, pReason, pYear);
+        }
+
+        internal static bool EndGuestOfficer(long pActorId, Kingdom pHost, string pReason,
+            int pYear)
+        {
+            return EndGuestOfficer(pActorId, FindActor(pActorId), pHost, pReason, pYear);
+        }
+
+        private static bool EndGuestOfficer(long pActorId, Actor pActor, Kingdom pHost,
+            string pReason, int pYear)
+        {
+            HistoricalSchoolAffiliationSnapshot state =
+                HistoricalAffiliationService.Get(pActorId);
+            if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                state.ServiceKingdomId < 0 ||
+                (pHost?.data != null && state.ServiceKingdomId != pHost.id)) return false;
+
+            if (!TryGetPendingEnd(pActorId, out PendingGuestOffice pending))
+            {
+                pending = PendingGuestOffice.ForEnd(state, pActor,
+                    pReason ?? "guest_term", pYear, LineageService.CurTime());
+                if (!RegisterPendingEnd(pending)) return false;
+            }
+            bool completed = TryProcessPending(pending);
+            if (completed) Pending.Remove(pending.ActorId);
+            else SchedulePendingRetry(pending);
+            return completed && GuestOfficeEndPendingRules.CanOpenNextTerm(
+                pending.PersistenceOutcome);
+        }
+
+        private static bool TryGetPendingEnd(long pActorId,
+            out PendingGuestOffice pPending)
+        {
+            if (Pending.TryGetValue(pActorId, out pPending) &&
+                pPending?.EndExpectedAffiliation != null &&
+                !pPending.RecoverCommittedEnd) return true;
+            pPending = null;
+            return false;
         }
 
         private static bool TryAppointAndRecord(Actor pActor, Kingdom pHost, string pOffice,
@@ -273,6 +312,16 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        private static bool RegisterPendingEnd(PendingGuestOffice pPending)
+        {
+            if (pPending == null || pPending.ActorId < 0) return false;
+            bool replacing = Pending.ContainsKey(pPending.ActorId);
+            if (!replacing && Pending.Count >= MaxPendingGuestOperations) return false;
+            Pending[pPending.ActorId] = pPending;
+            PendingOrder.Enqueue(pPending);
+            return true;
+        }
+
         private static bool RegisterPendingRecovery(
             HistoricalSchoolAffiliationSnapshot pState)
         {
@@ -286,15 +335,53 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        private static bool RegisterPendingEndRecovery(
+            HistoricalSchoolAffiliationSnapshot pState)
+        {
+            if (pState == null || pState.ActorId < 0 || pState.ServiceKingdomId >= 0 ||
+                pState.ServiceStartYear >= 0 || pState.ServiceEndYear < 0 ||
+                (pState.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
+                 pState.LifecycleState != HistoricalSchoolLifecycleState.Resident))
+                return false;
+            Actor actor = FindActor(pState.ActorId);
+            if (actor?.data == null) return false;
+            actor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long runtimeKingdomId, -1L);
+            actor.data.get(LineageKeys.COURT_LAYER, out string runtimeLayer, "");
+            actor.data.get(LineageKeys.COURT_OFFICE_ID, out string runtimeOffice, "");
+            bool hasRuntimeProjection = runtimeKingdomId >= 0 &&
+                runtimeLayer == CourtOfficeLayer.Central &&
+                !string.IsNullOrEmpty(runtimeOffice);
+            bool hasGuestStatus;
+            try { hasGuestStatus = actor.hasStatus(HistoricalSchoolContent.GuestStatusId); }
+            catch { hasGuestStatus = false; }
+            if (!hasRuntimeProjection && !hasGuestStatus) return false;
+            if (!hasRuntimeProjection)
+            {
+                runtimeKingdomId = -1L;
+                runtimeOffice = "";
+            }
+            if (Pending.ContainsKey(pState.ActorId)) return true;
+            if (Pending.Count >= MaxPendingGuestOperations) return false;
+            PendingGuestOffice pending = PendingGuestOffice.ForEndRecovery(pState, actor,
+                runtimeKingdomId, runtimeOffice);
+            Pending.Add(pending.ActorId, pending);
+            PendingOrder.Enqueue(pending);
+            return true;
+        }
+
         private static void SeedPendingRecovery()
         {
             int seeded = 0;
             foreach (HistoricalSchoolAffiliationSnapshot state in
-                     HistoricalAffiliationService.ActiveSnapshots())
+                     HistoricalAffiliationService.BoundedRecoverySnapshots(
+                         MaxPendingGuestRecoveryScan))
             {
-                if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving)
-                    continue;
-                if (RegisterPendingRecovery(state)) seeded++;
+                bool registered = state?.LifecycleState ==
+                                  HistoricalSchoolLifecycleState.Serving
+                    ? RegisterPendingRecovery(state)
+                    : RegisterPendingEndRecovery(state);
+                if (registered) seeded++;
                 if (seeded >= MaxPendingGuestOperations) break;
             }
         }
@@ -302,6 +389,8 @@ namespace AncientWarfare3.core.schools
         private static bool TryProcessPending(PendingGuestOffice pPending)
         {
             if (pPending == null) return true;
+            if (pPending.EndExpectedAffiliation != null)
+                return TryProcessPendingEnd(pPending);
             Actor actor = FindActor(pPending.ActorId);
             Kingdom host = FindKingdom(pPending.HostKingdomId);
             City residence = FindCity(pPending.CityId);
@@ -403,6 +492,67 @@ namespace AncientWarfare3.core.schools
                 GuestOfficePendingRules.ShouldRecordHistory(pPending.RecoveredExisting))
                 RecordSupplementalGuestHistory(actor, host, residence, pPending.OfficeId);
             return true;
+        }
+
+        private static bool TryProcessPendingEnd(PendingGuestOffice pPending)
+        {
+            if (pPending?.EndExpectedAffiliation == null) return true;
+            if (pPending.RecoverCommittedEnd)
+            {
+                GuestOfficeEndRecoveryResult recovery =
+                    GuestOfficeEndPersistence.ReadCommittedEnd(
+                        pPending.EndExpectedAffiliation, pPending.HostKingdomId,
+                        CourtOfficeLayer.Central, pPending.OfficeId);
+                pPending.PersistenceOutcome = recovery.Persistence.Outcome;
+                if (recovery.Persistence.Outcome ==
+                    GuestOfficePersistenceOutcome.CleanFailure) return true;
+                if (!GuestOfficeEndPendingRules.CanOpenNextTerm(
+                        recovery.Persistence.Outcome)) return false;
+                pPending.CommittedAffiliation = recovery.Affiliation;
+                pPending.HostKingdomId = recovery.HostKingdomId;
+                pPending.OfficeId = recovery.OfficeId;
+                pPending.EndReason = recovery.EndReason;
+            }
+            else if (pPending.EndRequest == null)
+            {
+                pPending.EndRequest = GuestOfficeEndPersistence.PrepareEnd(
+                    pPending.EndExpectedAffiliation, pPending.EndReason,
+                    pPending.EndedYear, pPending.EndedTime);
+                if (pPending.EndRequest == null) return false;
+                pPending.OfficeId = pPending.EndRequest.OfficeId;
+                pPending.SchoolId = pPending.EndRequest.SchoolId;
+            }
+            if (!pPending.RecoverCommittedEnd)
+            {
+                GuestOfficeEndResult result = GuestOfficeEndPersistence.End(
+                    pPending.EndRequest);
+                pPending.PersistenceOutcome = result.Persistence.Outcome;
+                pPending.RecoveredExisting |= result.RecoveredExisting;
+                if (!GuestOfficeEndPendingRules.CanOpenNextTerm(
+                        result.Persistence.Outcome)) return false;
+                pPending.CommittedAffiliation = result.Affiliation;
+            }
+
+            if (!pPending.AffiliationAdopted)
+            {
+                if (!HistoricalAffiliationService.AdoptCommittedServiceEnd(
+                        pPending.CommittedAffiliation)) return false;
+                pPending.AffiliationAdopted = true;
+            }
+
+            if (!pPending.CourtApplied)
+            {
+                Actor actor = pPending.EndActor ?? FindActor(pPending.ActorId);
+                Kingdom host = FindKingdom(pPending.HostKingdomId);
+                if (!CourtService.ApplyCommittedGuestOfficerEnd(actor, host,
+                        pPending.HostKingdomId, pPending.OfficeId,
+                        pPending.EndReason)) return false;
+                pPending.CourtApplied = true;
+            }
+
+            return !GuestOfficeEndPendingRules.ShouldRetain(
+                pPending.PersistenceOutcome, pPending.AffiliationAdopted,
+                pPending.CourtApplied);
         }
 
         private static void SchedulePendingRetry(PendingGuestOffice pPending)
@@ -695,11 +845,20 @@ namespace AncientWarfare3.core.schools
             }
 
             public long ActorId { get; private set; }
-            public long HostKingdomId { get; private set; }
+            public long HostKingdomId { get; set; }
             public long CityId { get; private set; }
             public string OfficeId { get; set; } = "";
             public string SchoolId { get; set; } = "";
             public GuestOfficeStartRequest StartRequest { get; private set; }
+            public GuestOfficeEndRequest EndRequest { get; set; }
+            public Actor EndActor { get; private set; }
+            public HistoricalSchoolAffiliationSnapshot EndExpectedAffiliation {
+                get;
+                private set;
+            }
+            public string EndReason { get; set; } = "";
+            public int EndedYear { get; private set; } = -1;
+            public double EndedTime { get; private set; } = -1d;
             public HistoricalSchoolAffiliationSnapshot RecoveryAffiliation {
                 get;
                 private set;
@@ -709,6 +868,7 @@ namespace AncientWarfare3.core.schools
             public GuestOfficePersistenceOutcome PersistenceOutcome { get; set; } =
                 GuestOfficePersistenceOutcome.Unknown;
             public bool RecoveredExisting { get; set; }
+            public bool RecoverCommittedEnd { get; private set; }
             public bool AffiliationAdopted { get; set; }
             public bool CourtApplied { get; set; }
             public bool StatusApplied { get; set; }
@@ -741,6 +901,46 @@ namespace AncientWarfare3.core.schools
                     HostKingdomId = pState.ServiceKingdomId,
                     CityId = pState.ResidenceCityId,
                     RecoveryAffiliation = pState,
+                    RecoveredExisting = true
+                };
+            }
+
+            public static PendingGuestOffice ForEnd(
+                HistoricalSchoolAffiliationSnapshot pState, Actor pActor, string pReason,
+                int pEndedYear, double pEndedTime)
+            {
+                if (pState == null || pState.ActorId < 0 ||
+                    pState.ServiceKingdomId < 0 ||
+                    pState.LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                    return null;
+                return new PendingGuestOffice
+                {
+                    ActorId = pState.ActorId,
+                    HostKingdomId = pState.ServiceKingdomId,
+                    CityId = pState.ResidenceCityId,
+                    EndActor = pActor,
+                    EndExpectedAffiliation = pState,
+                    EndReason = pReason ?? "guest_term",
+                    EndedYear = pEndedYear,
+                    EndedTime = pEndedTime
+                };
+            }
+
+            public static PendingGuestOffice ForEndRecovery(
+                HistoricalSchoolAffiliationSnapshot pState, Actor pActor,
+                long pHostKingdomId, string pOfficeId)
+            {
+                if (pState == null || pState.ActorId < 0 || pHostKingdomId < -1L)
+                    return null;
+                return new PendingGuestOffice
+                {
+                    ActorId = pState.ActorId,
+                    HostKingdomId = pHostKingdomId,
+                    CityId = pState.ResidenceCityId,
+                    OfficeId = pOfficeId,
+                    EndActor = pActor,
+                    EndExpectedAffiliation = pState,
+                    RecoverCommittedEnd = true,
                     RecoveredExisting = true
                 };
             }

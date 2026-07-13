@@ -83,8 +83,174 @@ namespace AncientWarfare3.core.court
         public OfficialCareerPrior Prior => Original?.ToPrior();
     }
 
+    internal sealed class OfficialCareerCloseRequest
+    {
+        public OfficialCareerCloseRequest(long pActorId, long pKingdomId, string pLayer,
+            string pOfficeId, int pEndedYear, double pEndedTime, string pEndReason)
+        {
+            ActorId = pActorId;
+            KingdomId = pKingdomId;
+            Layer = pLayer ?? "";
+            OfficeId = pOfficeId;
+            EndedYear = pEndedYear;
+            EndedTime = pEndedTime;
+            EndReason = pEndReason ?? "";
+        }
+
+        public long ActorId { get; }
+        public long KingdomId { get; }
+        public string Layer { get; }
+        public string OfficeId { get; }
+        public int EndedYear { get; }
+        public double EndedTime { get; }
+        public string EndReason { get; }
+    }
+
+    internal sealed class OfficialCareerCloseToken
+    {
+        public OfficialCareerCloseToken(OfficialCareerCloseRequest pRequest,
+            OfficialCareerRecord pOriginal, OfficialCareerRecord pDesired)
+        {
+            Request = pRequest ?? throw new ArgumentNullException(nameof(pRequest));
+            Original = pOriginal ?? throw new ArgumentNullException(nameof(pOriginal));
+            Desired = pDesired ?? throw new ArgumentNullException(nameof(pDesired));
+        }
+
+        public OfficialCareerCloseRequest Request { get; }
+        public OfficialCareerRecord Original { get; }
+        public OfficialCareerRecord Desired { get; }
+        public OfficialCareerPrior Prior => Original.ToPrior();
+    }
+
     internal static class OfficialCareerPersistence
     {
+        internal static OfficialCareerCloseResult Close(SQLiteConnection pDb,
+            OfficialCareerCloseRequest pRequest)
+        {
+            if (pDb == null || !ValidCloseRequest(pRequest))
+                return new OfficialCareerCloseResult(
+                    OfficialCareerPersistenceOutcome.CleanFailure, null);
+
+            SQLiteTransaction transaction = null;
+            OfficialCareerCloseToken token = null;
+            try
+            {
+                transaction = pDb.BeginTransaction();
+                token = CaptureClose(pDb, transaction, pRequest);
+                StageClose(pDb, transaction, token);
+                transaction.Commit();
+                return ResultForClose(token, OfficialCareerPersistenceOutcome.Committed);
+            }
+            catch (Exception error)
+            {
+                try { transaction?.Rollback(); } catch { }
+                ModClass.LogWarning("Official career close transaction failed: " +
+                                    error.Message);
+            }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
+            }
+
+            if (token == null)
+                return new OfficialCareerCloseResult(
+                    OfficialCareerPersistenceOutcome.CleanFailure, null);
+            try
+            {
+                return ResultForClose(token, ReadbackClose(pDb, token));
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Official career close readback failed: " +
+                                    error.Message);
+                return ResultForClose(token, OfficialCareerPersistenceOutcome.Unknown);
+            }
+        }
+
+        internal static OfficialCareerCloseToken CaptureClose(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, OfficialCareerCloseRequest pRequest)
+        {
+            if (pDb == null || pTransaction == null || !ValidCloseRequest(pRequest))
+                throw new ArgumentException("invalid official career close capture");
+            string table = CourtOfficerTableItem.GetTableName();
+            List<OfficialCareerRecord> active = ReadActiveRows(pDb, pTransaction, table,
+                pRequest.ActorId, pRequest.Layer);
+            if (active.Count != 1)
+                throw new InvalidOperationException(
+                    "official career close requires one active actor-layer row");
+            OfficialCareerRecord original = active[0];
+            if (original.KingdomId != pRequest.KingdomId ||
+                pRequest.OfficeId != null && original.OfficeId != pRequest.OfficeId)
+                throw new InvalidOperationException(
+                    "active career does not match the frozen close target");
+            OfficialCareerRecord desired = original.Copy();
+            desired.Active = CourtOfficerRecordRules.ActiveFlag(false);
+            desired.EndedYear = pRequest.EndedYear;
+            desired.EndedTime = pRequest.EndedTime;
+            desired.EndReason = pRequest.EndReason;
+            desired.UpdatedTime = pRequest.EndedTime;
+            return new OfficialCareerCloseToken(pRequest, original, desired);
+        }
+
+        internal static void StageClose(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, OfficialCareerCloseToken pToken)
+        {
+            if (pDb == null || pTransaction == null || pToken == null)
+                throw new ArgumentException("invalid official career close stage");
+            OfficialCareerRecord original = pToken.Original;
+            OfficialCareerRecord desired = pToken.Desired;
+            using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
+            command.CommandText = "UPDATE " + CourtOfficerTableItem.GetTableName() +
+                " SET ACTIVE=@dActive,ENDED_YEAR=@dEndedYear,ENDED_TIME=@dEndedTime," +
+                "END_REASON=@dReason,UPDATED_TIME=@dUpdated" +
+                " WHERE OFFICER_ID=@oId AND KINGDOM_ID=@oKingdom AND ACTOR_ID=@oActor" +
+                " AND ACTOR_NAME=@oName AND CITY_ID=@oCity AND LAYER=@oLayer" +
+                " AND OFFICE_ID=@oOffice AND SCHOOL_ID=@oSchool" +
+                " AND INFLUENCE=@oInfluence AND APPOINTED_YEAR=@oAppointedYear" +
+                " AND APPOINTED_TIME=@oAppointedTime AND ENDED_YEAR=@oEndedYear" +
+                " AND ENDED_TIME=@oEndedTime AND ACTIVE=@oActive" +
+                " AND END_REASON=@oReason AND UPDATED_TIME=@oUpdated";
+            command.Parameters.AddWithValue("@dActive", desired.Active);
+            command.Parameters.AddWithValue("@dEndedYear", desired.EndedYear);
+            command.Parameters.AddWithValue("@dEndedTime", desired.EndedTime);
+            command.Parameters.AddWithValue("@dReason", desired.EndReason);
+            command.Parameters.AddWithValue("@dUpdated", desired.UpdatedTime);
+            BindCareerRecord(command, "o", original);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("exact active career close failed");
+        }
+
+        internal static OfficialCareerPersistenceOutcome ReadbackClose(
+            SQLiteConnection pDb, OfficialCareerCloseToken pToken)
+        {
+            return ReadbackClose(pDb, null, pToken);
+        }
+
+        internal static OfficialCareerPersistenceOutcome ReadbackClose(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction,
+            OfficialCareerCloseToken pToken)
+        {
+            if (pDb == null || pToken == null)
+                return OfficialCareerPersistenceOutcome.Unknown;
+            string table = CourtOfficerTableItem.GetTableName();
+            List<OfficialCareerRecord> rows = ReadRowsByOfficerId(pDb, pTransaction,
+                table, pToken.Original.OfficerId);
+            List<OfficialCareerRecord> active = ReadActiveRows(pDb, pTransaction, table,
+                pToken.Original.ActorId, pToken.Original.Layer);
+            OfficialCareerRecord actual = rows.Count == 1 ? rows[0] : null;
+            return OfficialCareerReadbackRules.ResolveClose(pQuerySucceeded: true,
+                rows.Count, active.Count,
+                pDesiredClosedExact: actual != null && actual.Exact(pToken.Desired),
+                pOriginalActiveExact: actual != null && actual.Exact(pToken.Original) &&
+                    active.Count == 1 && active[0].Exact(pToken.Original));
+        }
+
+        internal static OfficialCareerCloseResult ResultForClose(
+            OfficialCareerCloseToken pToken, OfficialCareerPersistenceOutcome pOutcome)
+        {
+            return new OfficialCareerCloseResult(pOutcome, pToken?.Prior);
+        }
+
         public static OfficialCareerAppointmentResult Appoint(SQLiteConnection pDb,
             OfficialCareerAppointment pAppointment)
         {
@@ -459,6 +625,38 @@ namespace AncientWarfare3.core.court
             return pReader.IsDBNull(pOrdinal)
                 ? ""
                 : pReader.GetValue(pOrdinal)?.ToString() ?? "";
+        }
+
+        private static bool ValidCloseRequest(OfficialCareerCloseRequest pRequest)
+        {
+            return pRequest != null && pRequest.ActorId >= 0 &&
+                   pRequest.KingdomId >= 0 && !string.IsNullOrEmpty(pRequest.Layer) &&
+                   pRequest.EndedYear >= 0 && !double.IsNaN(pRequest.EndedTime) &&
+                   !double.IsInfinity(pRequest.EndedTime) && pRequest.EndedTime >= 0d;
+        }
+
+        private static void BindCareerRecord(SQLiteCommand pCommand, string pPrefix,
+            OfficialCareerRecord pRecord)
+        {
+            string prefix = "@" + pPrefix;
+            pCommand.Parameters.AddWithValue(prefix + "Id", pRecord.OfficerId);
+            pCommand.Parameters.AddWithValue(prefix + "Kingdom", pRecord.KingdomId);
+            pCommand.Parameters.AddWithValue(prefix + "Actor", pRecord.ActorId);
+            pCommand.Parameters.AddWithValue(prefix + "Name", pRecord.ActorName);
+            pCommand.Parameters.AddWithValue(prefix + "City", pRecord.CityId);
+            pCommand.Parameters.AddWithValue(prefix + "Layer", pRecord.Layer);
+            pCommand.Parameters.AddWithValue(prefix + "Office", pRecord.OfficeId);
+            pCommand.Parameters.AddWithValue(prefix + "School", pRecord.SchoolId);
+            pCommand.Parameters.AddWithValue(prefix + "Influence", pRecord.Influence);
+            pCommand.Parameters.AddWithValue(prefix + "AppointedYear",
+                pRecord.AppointedYear);
+            pCommand.Parameters.AddWithValue(prefix + "AppointedTime",
+                pRecord.AppointedTime);
+            pCommand.Parameters.AddWithValue(prefix + "EndedYear", pRecord.EndedYear);
+            pCommand.Parameters.AddWithValue(prefix + "EndedTime", pRecord.EndedTime);
+            pCommand.Parameters.AddWithValue(prefix + "Active", pRecord.Active);
+            pCommand.Parameters.AddWithValue(prefix + "Reason", pRecord.EndReason);
+            pCommand.Parameters.AddWithValue(prefix + "Updated", pRecord.UpdatedTime);
         }
     }
 }

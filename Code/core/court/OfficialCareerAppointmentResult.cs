@@ -68,6 +68,20 @@ namespace AncientWarfare3.core.court
              Mutation == OfficialCareerMutation.Reassigned);
     }
 
+    internal readonly struct OfficialCareerCloseResult
+    {
+        public OfficialCareerCloseResult(OfficialCareerPersistenceOutcome pPersistence,
+            OfficialCareerPrior pPrior)
+        {
+            Persistence = pPersistence;
+            Prior = pPrior;
+        }
+
+        public OfficialCareerPersistenceOutcome Persistence { get; }
+        public OfficialCareerPrior Prior { get; }
+        public bool IsCommitted => Persistence == OfficialCareerPersistenceOutcome.Committed;
+    }
+
     public static class OfficialCareerProjectionRecoveryRules
     {
         public static OfficialCareerPrior SelectCleanupPrior(
@@ -116,6 +130,19 @@ namespace AncientWarfare3.core.court
             if (pActiveCount == 1 && pDesiredActiveExact && pClosedOriginalExact)
                 return OfficialCareerPersistenceOutcome.Committed;
             if (pActiveCount == 1 && pOriginalActiveExact && pDesiredRowAbsent)
+                return OfficialCareerPersistenceOutcome.CleanFailure;
+            return OfficialCareerPersistenceOutcome.Unknown;
+        }
+
+        public static OfficialCareerPersistenceOutcome ResolveClose(bool pQuerySucceeded,
+            int pRowCount, int pActiveCount, bool pDesiredClosedExact,
+            bool pOriginalActiveExact)
+        {
+            if (!pQuerySucceeded || pRowCount != 1 || pActiveCount < 0)
+                return OfficialCareerPersistenceOutcome.Unknown;
+            if (pActiveCount == 0 && pDesiredClosedExact)
+                return OfficialCareerPersistenceOutcome.Committed;
+            if (pActiveCount == 1 && pOriginalActiveExact)
                 return OfficialCareerPersistenceOutcome.CleanFailure;
             return OfficialCareerPersistenceOutcome.Unknown;
         }

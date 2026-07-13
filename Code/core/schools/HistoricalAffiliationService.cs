@@ -107,6 +107,16 @@ namespace AncientWarfare3.core.schools
             return query.ToArray();
         }
 
+        internal static HistoricalSchoolAffiliationSnapshot[] BoundedRecoverySnapshots(
+            int pLimit)
+        {
+            if (pLimit <= 0) return Array.Empty<HistoricalSchoolAffiliationSnapshot>();
+            return ByActor.Values
+                .Where(p => p.LifecycleState != HistoricalSchoolLifecycleState.Dead)
+                .Take(pLimit)
+                .ToArray();
+        }
+
         public static bool IsTravelEligible(Actor pActor)
         {
             if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt()) return false;
@@ -255,6 +265,23 @@ namespace AncientWarfare3.core.schools
             if (pCommittedState == null || pCommittedState.ActorId < 0 ||
                 pCommittedState.ServiceKingdomId < 0 ||
                 pCommittedState.LifecycleState != HistoricalSchoolLifecycleState.Serving)
+                return false;
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pCommittedState.ActorId);
+            if (SnapshotExact(oldState, pCommittedState)) return true;
+            ByActor[pCommittedState.ActorId] = pCommittedState;
+            InvalidateResidenceData(oldState?.ResidenceCityId ?? -1L,
+                pCommittedState.ResidenceCityId);
+            return true;
+        }
+
+        internal static bool AdoptCommittedServiceEnd(
+            HistoricalSchoolAffiliationSnapshot pCommittedState)
+        {
+            if (pCommittedState == null || pCommittedState.ActorId < 0 ||
+                pCommittedState.ServiceKingdomId >= 0 ||
+                pCommittedState.ServiceStartYear >= 0 ||
+                (pCommittedState.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
+                 pCommittedState.LifecycleState != HistoricalSchoolLifecycleState.Resident))
                 return false;
             HistoricalSchoolAffiliationSnapshot oldState = Get(pCommittedState.ActorId);
             if (SnapshotExact(oldState, pCommittedState)) return true;

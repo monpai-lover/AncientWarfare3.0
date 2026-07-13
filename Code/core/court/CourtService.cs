@@ -387,30 +387,33 @@ namespace AncientWarfare3.core.court
         internal static bool EndGuestOfficer(Actor pActor, Kingdom pHost, string pReason,
             int pYear)
         {
-            if (pActor?.data == null) return false;
-            HistoricalSchoolAffiliationSnapshot state = HistoricalAffiliationService.Get(
-                pActor.data.id);
-            if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
-                state.ServiceKingdomId < 0 ||
-                (pHost?.data != null && state.ServiceKingdomId != pHost.id)) return false;
+            return SchoolGuestOfficeService.EndGuestOfficer(pActor, pHost, pReason, pYear);
+        }
 
-            // The host can be destroyed or the actor can die between yearly ticks.  In
-            // either case the persisted service row is still closed, while ClearOfficer
-            // removes the stale court projection/career when the actor is available.
-            Kingdom resolvedHost = pHost?.data != null
-                ? pHost
-                : World.world?.kingdoms?.get(state.ServiceKingdomId);
-            ClearOfficer(pActor, pReason ?? "guest_term");
+        internal static bool ApplyCommittedGuestOfficerEnd(Actor pActor, Kingdom pHost,
+            long pHostKingdomId, string pOfficeId, string pReason)
+        {
+            if (pActor?.data == null)
+            {
+                if (pHost?.data != null) CourtDirectionService.MarkDirty(pHost);
+                return true;
+            }
+
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long runtimeKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER, out string runtimeLayer, "");
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string runtimeOffice, "");
+            bool frozenProjectionStillLive = runtimeKingdomId == pHostKingdomId &&
+                runtimeLayer == CourtOfficeLayer.Central &&
+                runtimeOffice == (pOfficeId ?? "");
+            if (frozenProjectionStillLive)
+                ClearOfficer(pActor, pReason ?? "guest_term", pPersistCareer: false);
             try { pActor.finishStatusEffect(HistoricalSchoolContent.GuestStatusId); }
             catch { }
-            bool ended = HistoricalAffiliationService.EndService(pActor, pYear);
-            if (!ended)
-                ended = HistoricalAffiliationService.EndService(pActor.data.id, pYear);
-            if (!ended && !pActor.isAlive())
-                OfficialCareerService.EndForKingdom(pActor.data.id, state.ServiceKingdomId,
-                    pReason ?? "guest_term");
-            if (resolvedHost?.data != null) CourtDirectionService.MarkDirty(resolvedHost);
-            return ended;
+            if (!frozenProjectionStillLive && pHost?.data != null)
+                CourtDirectionService.MarkDirty(pHost);
+            CitySchoolSnapshotService.MarkActorDirty(pActor);
+            return true;
         }
 
         internal static void ClearGuestOfficerAfterDeath(Actor pActor,
@@ -522,7 +525,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static void ClearOfficer(Actor pActor, string pReason,
-            bool pRecordHistory = true, bool pArchive = true)
+            bool pRecordHistory = true, bool pArchive = true,
+            bool pPersistCareer = true)
         {
             if (pActor?.data == null) return;
 
@@ -548,7 +552,8 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, -1L);
 
-            OfficialCareerService.End(pActor, layer, office, pReason ?? "");
+            if (pPersistCareer)
+                OfficialCareerService.End(pActor, layer, office, pReason ?? "");
             if (pRecordHistory && courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: true);

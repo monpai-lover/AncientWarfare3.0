@@ -57,6 +57,42 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public static class GuestOfficeEndReadbackRules
+    {
+        public static GuestOfficePersistenceOutcome Resolve(bool pQuerySucceeded,
+            GuestOfficeProjectionState pAffiliation,
+            AncientWarfare3.core.court.OfficialCareerPersistenceOutcome pCareer)
+        {
+            if (!pQuerySucceeded) return GuestOfficePersistenceOutcome.Unknown;
+            bool affiliationDesired = pAffiliation == GuestOfficeProjectionState.Desired ||
+                                      pAffiliation == GuestOfficeProjectionState.Both;
+            bool affiliationOriginal = pAffiliation == GuestOfficeProjectionState.Original ||
+                                       pAffiliation == GuestOfficeProjectionState.Both;
+            if (affiliationDesired && pCareer ==
+                    AncientWarfare3.core.court.OfficialCareerPersistenceOutcome.Committed)
+                return GuestOfficePersistenceOutcome.Committed;
+            if (affiliationOriginal && pCareer ==
+                    AncientWarfare3.core.court.OfficialCareerPersistenceOutcome.CleanFailure)
+                return GuestOfficePersistenceOutcome.CleanFailure;
+            return GuestOfficePersistenceOutcome.Unknown;
+        }
+    }
+
+    public static class GuestOfficeEndPendingRules
+    {
+        public static bool CanOpenNextTerm(GuestOfficePersistenceOutcome pOutcome)
+        {
+            return pOutcome == GuestOfficePersistenceOutcome.Committed;
+        }
+
+        public static bool ShouldRetain(GuestOfficePersistenceOutcome pOutcome,
+            bool pAffiliationAdopted, bool pLiveProjectionClosed)
+        {
+            return pOutcome != GuestOfficePersistenceOutcome.Committed ||
+                   !pAffiliationAdopted || !pLiveProjectionClosed;
+        }
+    }
+
     public static class GuestOfficeAdoptionRules
     {
         public static bool ShouldAdopt(GuestOfficePersistenceOutcome pOutcome)
