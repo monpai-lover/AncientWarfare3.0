@@ -14,7 +14,8 @@ namespace AncientWarfare3.core.schools
             public PendingHistoricalDescent(Actor pActor,
                 HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
                 long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
-                int pPersistenceYear, double pPersistenceTime, int pEligibleYear)
+                int pPersistenceYear, double pPersistenceTime, int pEligibleYear,
+                HistoricalMasterLineageCommitIdentity pIdentity)
             {
                 Actor = pActor;
                 Master = pMaster;
@@ -25,6 +26,7 @@ namespace AncientWarfare3.core.schools
                 PersistenceYear = pPersistenceYear;
                 PersistenceTime = pPersistenceTime;
                 EligibleYear = pEligibleYear;
+                Identity = pIdentity;
             }
 
             public Actor Actor { get; }
@@ -36,6 +38,7 @@ namespace AncientWarfare3.core.schools
             public int PersistenceYear { get; }
             public double PersistenceTime { get; }
             public int EligibleYear { get; }
+            public HistoricalMasterLineageCommitIdentity Identity { get; }
             public int Attempts { get; set; }
             public long ReadyFrame { get; set; }
             public bool DestroyRequested { get; set; }
@@ -71,6 +74,28 @@ namespace AncientWarfare3.core.schools
                 if (row.ActorId >= 0) MasterByActor[row.ActorId] = master.Id;
                 if (row.HomeKingdomId >= 0)
                     HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
+                try
+                {
+                    Actor actor = row.ActorId >= 0
+                        ? World.world?.units?.get(row.ActorId)
+                        : null;
+                    if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
+                        row.LineageId < 0 || row.ShiId < 0 || row.CreatedTime < 0d)
+                        continue;
+                    var identity = new HistoricalMasterLineageCommitIdentity(row.ActorId,
+                        master.CanonicalName, master.CanonicalShiName,
+                        master.CanonicalGivenName, master.CanonicalFamilyName,
+                        row.HomeKingdomId, row.HometownCityId, row.CreatedTime);
+                    identity.FreezeIds(row.LineageId, row.ShiId);
+                    if (!HistoricalMasterIdentityProjection.TryApply(actor, master, identity))
+                        ModClass.LogWarning("Historical school master identity repair pending: " +
+                                            master.Id);
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Historical school master identity repair failed: " +
+                                        master.Id + " - " + error.Message);
+                }
             }
             try
             {
@@ -187,6 +212,7 @@ namespace AncientWarfare3.core.schools
             if (tile == null || pHome.kingdom?.data == null || pHome.kingdom.isRekt()) return false;
             Actor actor = null;
             SchoolMembershipRecord membership = null;
+            HistoricalMasterLineageCommitIdentity identity = null;
             bool persistenceAttempted = false;
             SchoolPersistenceOutcome persistenceOutcome = SchoolPersistenceOutcome.Unknown;
             long homeKingdomId = pHome.kingdom.id;
@@ -219,7 +245,10 @@ namespace AncientWarfare3.core.schools
                     actor.city != pHome || actor.kingdom != pHome.kingdom ||
                     actor.current_tile == null)
                     throw new InvalidOperationException("actor home assignment failed");
-                ApplyCanonicalIdentity(actor, pMaster);
+                identity = new HistoricalMasterLineageCommitIdentity(actor.data.id,
+                    pMaster.CanonicalName, pMaster.CanonicalShiName,
+                    pMaster.CanonicalGivenName, pMaster.CanonicalFamilyName,
+                    homeKingdomId, hometownCityId, persistenceTime);
                 membership = SchoolMembershipService.PrepareHistoricalDescent(actor,
                     pMaster.SchoolId, pMaster.Id, hometownCityId, 0);
                 if (membership == null)
@@ -227,10 +256,12 @@ namespace AncientWarfare3.core.schools
                 persistenceAttempted = true;
                 persistenceOutcome = HistoricalSchoolStore.CommitHistoricalDescent(pMaster,
                     membership, homeKingdomId, homeKingdomName, hometownCityId,
-                    persistenceYear, persistenceTime);
+                    persistenceYear, persistenceTime, identity);
                 if (persistenceOutcome != SchoolPersistenceOutcome.Committed)
                     throw new InvalidOperationException("historical descent persistence " +
                                                         persistenceOutcome);
+                if (!ProjectCommittedIdentity(actor, pMaster, identity))
+                    throw new InvalidOperationException("committed identity projection failed");
                 if (!SchoolMembershipService.AdoptCommittedHistoricalDescent(actor, membership))
                     throw new InvalidOperationException("committed membership adopt failed");
                 if (!ReservePreservedActor(pMaster, actor, pHome, pEligibleYear))
@@ -245,7 +276,7 @@ namespace AncientWarfare3.core.schools
                 {
                     QueuePendingDescent(actor, pMaster, membership, homeKingdomId,
                         homeKingdomName, hometownCityId, persistenceYear, persistenceTime,
-                        pEligibleYear);
+                        pEligibleYear, identity);
                 }
                 else
                 {
@@ -260,14 +291,16 @@ namespace AncientWarfare3.core.schools
         private static void QueuePendingDescent(Actor pActor,
             HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
             long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
-            int pPersistenceYear, double pPersistenceTime, int pEligibleYear)
+            int pPersistenceYear, double pPersistenceTime, int pEligibleYear,
+            HistoricalMasterLineageCommitIdentity pIdentity)
         {
-            if (pActor?.data == null || pMaster == null || pMembership == null) return;
+            if (pActor?.data == null || pMaster == null || pMembership == null ||
+                pIdentity == null) return;
             long actorId = pActor.data.id;
             if (PendingDescentsByActor.ContainsKey(actorId)) return;
             var pending = new PendingHistoricalDescent(pActor, pMaster, pMembership,
                 pHomeKingdomId, pHomeKingdomName, pHometownCityId, pPersistenceYear,
-                pPersistenceTime, pEligibleYear);
+                pPersistenceTime, pEligibleYear, pIdentity);
             PendingDescentsByActor[actorId] = pending;
             PendingActorByMaster[pMaster.Id] = actorId;
             PendingDescentRetries.Enqueue(actorId);
@@ -338,7 +371,7 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolStore.CommitHistoricalDescent(pending.Master,
                     pending.Membership, pending.HomeKingdomId, pending.HomeKingdomName,
                     pending.HometownCityId, pending.PersistenceYear,
-                    pending.PersistenceTime);
+                    pending.PersistenceTime, pending.Identity);
             if (outcome == SchoolPersistenceOutcome.Unknown)
             {
                 RequeuePendingDescent(pending);
@@ -351,6 +384,8 @@ namespace AncientWarfare3.core.schools
                 return;
             }
             if (outcome != SchoolPersistenceOutcome.Committed ||
+                !ProjectCommittedIdentity(pending.Actor, pending.Master,
+                    pending.Identity) ||
                 !SchoolMembershipService.AdoptCommittedHistoricalDescent(pending.Actor,
                     pending.Membership))
             {
@@ -508,24 +543,11 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void ApplyCanonicalIdentity(Actor pActor,
-            HistoricalSchoolMasterDefinition pMaster)
+        private static bool ProjectCommittedIdentity(Actor pActor,
+            HistoricalSchoolMasterDefinition pMaster,
+            HistoricalMasterLineageCommitIdentity pIdentity)
         {
-            pActor.data.sex = pMaster.IsMale ? ActorSex.Male : ActorSex.Female;
-            pActor.data.age_overgrowth = pMaster.SpawnAge;
-            pActor.data.favorite = true;
-            pActor.data.set(LineageKeys.SCHOOL_MASTER_ID, pMaster.Id);
-            pActor.data.set(LineageKeys.GIVEN_NAME, pMaster.CanonicalName);
-            pActor.data.set("aw_school_master_stewardship", pMaster.Abilities.Stewardship);
-            pActor.data.set("aw_school_master_diplomacy", pMaster.Abilities.Diplomacy);
-            pActor.data.set("aw_school_master_warfare", pMaster.Abilities.Warfare);
-            pActor.data.set("aw_school_master_intelligence", pMaster.Abilities.Intelligence);
-            pActor.setName(pMaster.CanonicalName);
-            if (!pActor.hasTrait(HistoricalSchoolContent.MasterTraitId))
-                pActor.addTrait(HistoricalSchoolContent.MasterTraitId);
-            pActor.setStatsDirty();
-            pActor.updateStats();
-            pActor.setHealth(pActor.getMaxHealth());
+            return HistoricalMasterIdentityProjection.TryApply(pActor, pMaster, pIdentity);
         }
 
         private static Subspecies FindXiaSubspecies(City pCity)

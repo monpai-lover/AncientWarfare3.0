@@ -911,14 +911,17 @@ namespace AncientWarfare3.core.schools
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SPAWNED,DEAD," +
-                    "HOME_KINGDOM_ID,HOMETOWN_CITY_ID,SPAWN_YEAR FROM " + MasterTable +
+                    "HOME_KINGDOM_ID,HOMETOWN_CITY_ID,SPAWN_YEAR,LINEAGE_ID,SHI_ID," +
+                    "UPDATED_TIME FROM " + MasterTable +
                     " WHERE SPAWNED=1";
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                     result.Add(new HistoricalSchoolMasterStoreRecord(ValueString(reader, 0),
                         ValueLong(reader, 1, -1), ValueInt(reader, 2) != 0,
                         ValueInt(reader, 3) != 0, ValueLong(reader, 4, -1),
-                        ValueLong(reader, 5, -1), ValueInt(reader, 6, -1)));
+                        ValueLong(reader, 5, -1), ValueInt(reader, 6, -1),
+                        ValueLong(reader, 7, -1), ValueLong(reader, 8, -1),
+                        ValueDouble(reader, 9, -1d)));
             }
             catch (Exception error)
             {
@@ -1246,30 +1249,40 @@ namespace AncientWarfare3.core.schools
         public static SchoolPersistenceOutcome CommitHistoricalDescent(
             HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
             long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId, int pYear,
-            double pTime)
+            double pTime, HistoricalMasterLineageCommitIdentity pIdentity)
         {
+            double time = FiniteNonNegative(pTime);
             if (DB == null || pMaster == null || pMembership == null ||
                 !pMembership.IsValid || !pMembership.Active ||
                 pMembership.Source != SchoolMembershipSource.HistoricalDescent ||
                 pMembership.SourceId != pMaster.Id || pMembership.SchoolId != pMaster.SchoolId ||
-                pMembership.ActorId < 0 || pHomeKingdomId < 0 || pHometownCityId < 0)
+                pMembership.ActorId < 0 || pHomeKingdomId < 0 || pHometownCityId < 0 ||
+                pIdentity == null || !pIdentity.IsValid ||
+                pIdentity.ActorId != pMembership.ActorId ||
+                pIdentity.CanonicalName != pMaster.CanonicalName ||
+                pIdentity.ShiName != pMaster.CanonicalShiName ||
+                pIdentity.GivenName != pMaster.CanonicalGivenName ||
+                pIdentity.FamilyName != pMaster.CanonicalFamilyName ||
+                pIdentity.HomeKingdomId != pHomeKingdomId ||
+                pIdentity.HometownCityId != pHometownCityId ||
+                !pIdentity.CreatedTime.Equals(time))
                 return SchoolPersistenceOutcome.Unknown;
 
             long actorId = pMembership.ActorId;
-            double time = FiniteNonNegative(pTime);
             SQLiteTransaction transaction = null;
             try
             {
                 transaction = DB.BeginTransaction();
+                HistoricalMasterLineagePersistence.FreezeIds(DB, transaction, pIdentity);
                 InsertMembershipCommand(pMembership, time, transaction);
                 using (var master = new SQLiteCommand(DB) { Transaction = transaction })
                 {
                     master.CommandText = "INSERT INTO " + MasterTable +
                         " (MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED,DEAD," +
-                        "HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
-                        "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME)" +
+                        "HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,LINEAGE_ID,SHI_ID," +
+                        "SPAWN_YEAR,DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME)" +
                         " VALUES (@master,@actor,@school,@name,1,0,@kingdom,@kingdomName," +
-                        "@city,@year,-1,@state,'',-1,@time)";
+                        "@city,@lineage,@shi,@year,-1,@state,'',-1,@time)";
                     master.Parameters.AddWithValue("@master", pMaster.Id);
                     master.Parameters.AddWithValue("@actor", actorId);
                     master.Parameters.AddWithValue("@school", pMaster.SchoolId);
@@ -1277,6 +1290,8 @@ namespace AncientWarfare3.core.schools
                     master.Parameters.AddWithValue("@kingdom", pHomeKingdomId);
                     master.Parameters.AddWithValue("@kingdomName", pHomeKingdomName ?? "");
                     master.Parameters.AddWithValue("@city", pHometownCityId);
+                    master.Parameters.AddWithValue("@lineage", pIdentity.LineageId);
+                    master.Parameters.AddWithValue("@shi", pIdentity.ShiId);
                     master.Parameters.AddWithValue("@year", pYear);
                     master.Parameters.AddWithValue("@state",
                         HistoricalSchoolLifecycleState.AtHome.ToString());
@@ -1305,6 +1320,7 @@ namespace AncientWarfare3.core.schools
                     if (affiliation.ExecuteNonQuery() != 1)
                         throw new InvalidOperationException("master affiliation insert failed");
                 }
+                HistoricalMasterLineagePersistence.Stage(DB, transaction, pIdentity);
                 transaction.Commit();
                 return SchoolPersistenceOutcome.Committed;
             }
@@ -1322,18 +1338,21 @@ namespace AncientWarfare3.core.schools
             try
             {
                 ReadHistoricalDescentState(pMaster, pMembership, pHomeKingdomId,
-                    pHomeKingdomName, pHometownCityId, pYear, time,
+                    pHomeKingdomName, pHometownCityId, pYear, time, pIdentity,
                     out SchoolPersistenceRowState membershipState,
                     out SchoolPersistenceRowState masterState,
-                    out SchoolPersistenceRowState affiliationState);
+                    out SchoolPersistenceRowState affiliationState,
+                    out SchoolPersistenceRowState lineageState,
+                    out SchoolPersistenceRowState shiState);
                 return HistoricalSchoolPersistenceRules.Resolve(pQuerySucceeded: true,
-                    membershipState, masterState, affiliationState);
+                    membershipState, masterState, affiliationState, lineageState, shiState);
             }
             catch (Exception error)
             {
                 ModClass.LogWarning("HistoricalSchoolStore descent readback failed: " +
                                     error.Message);
                 return HistoricalSchoolPersistenceRules.Resolve(pQuerySucceeded: false,
+                    SchoolPersistenceRowState.Missing, SchoolPersistenceRowState.Missing,
                     SchoolPersistenceRowState.Missing, SchoolPersistenceRowState.Missing,
                     SchoolPersistenceRowState.Missing);
             }
@@ -1342,15 +1361,23 @@ namespace AncientWarfare3.core.schools
         private static void ReadHistoricalDescentState(
             HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
             long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId, int pYear,
-            double pTime, out SchoolPersistenceRowState pMembershipState,
+            double pTime, HistoricalMasterLineageCommitIdentity pIdentity,
+            out SchoolPersistenceRowState pMembershipState,
             out SchoolPersistenceRowState pMasterState,
-            out SchoolPersistenceRowState pAffiliationState)
+            out SchoolPersistenceRowState pAffiliationState,
+            out SchoolPersistenceRowState pLineageState,
+            out SchoolPersistenceRowState pShiState)
         {
             pMembershipState = ReadMembershipState(pMembership, pTime);
             pMasterState = ReadMasterState(pMaster, pMembership.ActorId, pHomeKingdomId,
-                pHomeKingdomName, pHometownCityId, pYear, pTime);
+                pHomeKingdomName, pHometownCityId, pYear, pTime, pIdentity);
             pAffiliationState = ReadAffiliationState(pMembership.ActorId, pHomeKingdomId,
                 pHomeKingdomName, pHometownCityId, pYear, pTime);
+            HistoricalMasterLineagePersistence.ReadStates(DB, pIdentity,
+                out HistoricalMasterLineageRowState lineageState,
+                out HistoricalMasterLineageRowState shiState);
+            pLineageState = ToSchoolRowState(lineageState);
+            pShiState = ToSchoolRowState(shiState);
         }
 
         private static SchoolPersistenceRowState ReadMembershipState(
@@ -1392,12 +1419,14 @@ namespace AncientWarfare3.core.schools
 
         private static SchoolPersistenceRowState ReadMasterState(
             HistoricalSchoolMasterDefinition pMaster, long pActorId, long pHomeKingdomId,
-            string pHomeKingdomName, long pHometownCityId, int pYear, double pTime)
+            string pHomeKingdomName, long pHometownCityId, int pYear, double pTime,
+            HistoricalMasterLineageCommitIdentity pIdentity)
         {
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED," +
                 "DEAD,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
-                "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME FROM " +
+                "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME," +
+                "LINEAGE_ID,SHI_ID FROM " +
                 MasterTable + " WHERE MASTER_ID=@master OR ACTOR_ID=@actor";
             command.Parameters.AddWithValue("@master", pMaster.Id);
             command.Parameters.AddWithValue("@actor", pActorId);
@@ -1421,7 +1450,9 @@ namespace AncientWarfare3.core.schools
                          HistoricalSchoolLifecycleState.AtHome.ToString() &&
                          ValueString(reader, 12) == "" &&
                          ValueLong(reader, 13, long.MinValue) == -1L &&
-                         ValueDouble(reader, 14, -1d).Equals(pTime);
+                         ValueDouble(reader, 14, -1d).Equals(pTime) &&
+                         ValueLong(reader, 15, -1L) == pIdentity.LineageId &&
+                         ValueLong(reader, 16, -1L) == pIdentity.ShiId;
             }
             if (rowCount == 0) return SchoolPersistenceRowState.Missing;
             return rowCount == 1 && exact
@@ -1464,6 +1495,17 @@ namespace AncientWarfare3.core.schools
             return !reader.Read() && exact
                 ? SchoolPersistenceRowState.Exact
                 : SchoolPersistenceRowState.Conflict;
+        }
+
+        private static SchoolPersistenceRowState ToSchoolRowState(
+            HistoricalMasterLineageRowState pState)
+        {
+            return pState switch
+            {
+                HistoricalMasterLineageRowState.Missing => SchoolPersistenceRowState.Missing,
+                HistoricalMasterLineageRowState.Exact => SchoolPersistenceRowState.Exact,
+                _ => SchoolPersistenceRowState.Conflict
+            };
         }
 
         public static SchoolPersistenceOutcome CommitSchoolDeath(
@@ -2577,7 +2619,8 @@ namespace AncientWarfare3.core.schools
     internal sealed class HistoricalSchoolMasterStoreRecord
     {
         public HistoricalSchoolMasterStoreRecord(string pMasterId, long pActorId, bool pSpawned,
-            bool pDead, long pHomeKingdomId, long pHometownCityId, int pSpawnYear)
+            bool pDead, long pHomeKingdomId, long pHometownCityId, int pSpawnYear,
+            long pLineageId, long pShiId, double pCreatedTime)
         {
             MasterId = pMasterId ?? "";
             ActorId = pActorId;
@@ -2586,6 +2629,9 @@ namespace AncientWarfare3.core.schools
             HomeKingdomId = pHomeKingdomId;
             HometownCityId = pHometownCityId;
             SpawnYear = pSpawnYear;
+            LineageId = pLineageId;
+            ShiId = pShiId;
+            CreatedTime = pCreatedTime;
         }
 
         public string MasterId { get; }
@@ -2595,5 +2641,8 @@ namespace AncientWarfare3.core.schools
         public long HomeKingdomId { get; }
         public long HometownCityId { get; }
         public int SpawnYear { get; }
+        public long LineageId { get; }
+        public long ShiId { get; }
+        public double CreatedTime { get; }
     }
 }

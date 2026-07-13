@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.schools;
@@ -950,7 +951,7 @@ namespace AncientWarfare3.core.lineage
             return pNewKing.data.parent_id_1 == previousId || pNewKing.data.parent_id_2 == previousId;
         }
 
-        private static void SyncExistingChildrenAfterLineageChange(Actor pParent)
+        internal static void SyncExistingChildrenAfterLineageChange(Actor pParent)
         {
             if (pParent?.data == null || (!IsXia(pParent) && !UsesAwLineageSystem(pParent))) return;
             if (!HasLineageData(pParent)) return;
@@ -1406,6 +1407,18 @@ namespace AncientWarfare3.core.lineage
         {
             if (pClan?.data == null || pLeader?.data == null) return;
 
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(pLeader))
+            {
+                HistoricalSchoolMasterDefinition definition =
+                    HistoricalSchoolDescentService.DefinitionFor(pLeader);
+                string canonicalName = HistoricalMasterIdentityRules.EnsureSingleShiSuffix(
+                    definition?.CanonicalShiName);
+                if (!string.IsNullOrEmpty(canonicalName) &&
+                    pClan.data.name != canonicalName)
+                    try { pClan.setName(canonicalName); } catch { }
+                return;
+            }
+
             pLeader.data.get(LineageKeys.CLAN_NAME, out string shi, "");
             bool isKing = pLeader.isKing();
             string place = isKing ? pLeader.kingdom?.name : pLeader.city?.data?.name;
@@ -1458,8 +1471,12 @@ namespace AncientWarfare3.core.lineage
             if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor))
             {
                 var definition = HistoricalSchoolDescentService.DefinitionFor(pActor);
-                if (definition != null && pActor.data.name != definition.CanonicalName)
-                    pActor.setName(definition.CanonicalName);
+                if (definition != null)
+                {
+                    pActor.data.set("display_name", definition.CanonicalName);
+                    if (pActor.data.name != definition.CanonicalName)
+                        pActor.setName(definition.CanonicalName);
+                }
                 return;
             }
             if (!IsXia(pActor) && !UsesAwLineageSystem(pActor) &&

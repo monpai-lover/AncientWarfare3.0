@@ -37,6 +37,8 @@ namespace AncientWarfare3.content.schools
             HistoricalSchoolAbilityProfile pAbilities, IEnumerable<string> pDebateTopics,
             IEnumerable<string> pCanonicalWorks, string pInstitutionId,
             string pActorAssetId = "Xia", string pNameCultureId = "Xia",
+            string pCanonicalShiName = "", string pCanonicalGivenName = "",
+            string pCanonicalFamilyName = "",
             bool pAllowsClanLineage = false)
         {
             RegistryIndex = pRegistryIndex;
@@ -55,6 +57,9 @@ namespace AncientWarfare3.content.schools
             InstitutionId = pInstitutionId ?? "";
             ActorAssetId = pActorAssetId ?? "";
             NameCultureId = pNameCultureId ?? "";
+            CanonicalShiName = pCanonicalShiName ?? "";
+            CanonicalGivenName = pCanonicalGivenName ?? "";
+            CanonicalFamilyName = pCanonicalFamilyName ?? "";
             AllowsClanLineage = pAllowsClanLineage;
         }
 
@@ -74,6 +79,9 @@ namespace AncientWarfare3.content.schools
         public string InstitutionId { get; }
         public string ActorAssetId { get; }
         public string NameCultureId { get; }
+        public string CanonicalShiName { get; }
+        public string CanonicalGivenName { get; }
+        public string CanonicalFamilyName { get; }
         public bool AllowsClanLineage { get; }
 
         private static IReadOnlyList<string> Freeze(IEnumerable<string> pValues)

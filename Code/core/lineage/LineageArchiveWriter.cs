@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
@@ -176,6 +177,59 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("PHENOTYPE_INDEX", phenotypeIndex),
                 ColumnVal.Create("PHENOTYPE_SHADE", phenotypeShade),
                 ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", foundedBranchShi));
+        }
+
+        internal static bool ReplaceHistoricalMasterIdentity(Actor pActor,
+            HistoricalMasterLineageCommitIdentity pIdentity)
+        {
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            Clan clan = pActor?.clan;
+            if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful ||
+                pActor?.data == null || pIdentity == null || !pIdentity.IsValid ||
+                !pIdentity.IdsFrozen || pActor.data.id != pIdentity.ActorId ||
+                clan?.data == null)
+                return false;
+
+            Upsert(pActor, pAlive: true);
+            long clanId = clan.data.id;
+            string clanColorText = clan.getColor()?.color_text ?? "";
+            int clanColorId = clan.data.color_id;
+            int clanBannerIconId = clan.data.banner_icon_id;
+            int clanBannerBackgroundId = clan.data.banner_background_id;
+            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                new List<SimpleColumnConstraint>
+                {
+                    SimpleColumnConstraint.CreateEq("ID", pActor.data.id)
+                },
+                ColumnVal.Create("GIVEN_NAME", pIdentity.GivenName),
+                ColumnVal.Create("DISPLAY_NAME", pIdentity.CanonicalName),
+                ColumnVal.Create("FAMILY_NAME", pIdentity.FamilyName),
+                ColumnVal.Create("CLAN_NAME", pIdentity.ShiName),
+                ColumnVal.Create("LINEAGE_ID", pIdentity.LineageId),
+                ColumnVal.Create("SHI_ID", pIdentity.ShiId),
+                ColumnVal.Create("ORIGINAL_CLAN_ID", clanId),
+                ColumnVal.Create("CLAN_COLOR_TEXT", clanColorText),
+                ColumnVal.Create("CLAN_COLOR_ID", clanColorId),
+                ColumnVal.Create("CLAN_BANNER_ICON_ID", clanBannerIconId),
+                ColumnVal.Create("CLAN_BANNER_BACKGROUND_ID", clanBannerBackgroundId),
+                ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", -1L),
+                ColumnVal.Create("IS_ALIVE", 1),
+                ColumnVal.Create("DEATH_TIME", -1d),
+                ColumnVal.Create("DEATH_CAUSE", ""));
+
+            ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActor.data.id);
+            return row != null && row.given_name == pIdentity.GivenName &&
+                   row.display_name == pIdentity.CanonicalName &&
+                   row.family_name == pIdentity.FamilyName &&
+                   row.clan_name == pIdentity.ShiName &&
+                   row.lineage_id == pIdentity.LineageId && row.shi_id == pIdentity.ShiId &&
+                   row.original_clan_id == clanId &&
+                   (row.clan_color_text ?? "") == clanColorText &&
+                   row.clan_color_id == clanColorId &&
+                   row.clan_banner_icon_id == clanBannerIconId &&
+                   row.clan_banner_background_id == clanBannerBackgroundId &&
+                   row.founded_branch_shi_id == -1L && row.is_alive == 1 &&
+                   row.death_time < 0d && string.IsNullOrEmpty(row.death_cause);
         }
 
         private static (int ever, long originId, string originName, int distance) ResolveNobleBloodSnapshot(

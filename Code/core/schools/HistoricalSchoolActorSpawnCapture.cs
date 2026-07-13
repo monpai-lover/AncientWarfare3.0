@@ -79,6 +79,15 @@ namespace AncientWarfare3.core.schools
             capture._currentFrame.AllocationArmed = true;
         }
 
+        internal static bool IsTargetActor(Actor pActor)
+        {
+            HistoricalSchoolActorSpawnCapture capture = _current;
+            FactoryFrame frame = capture?._currentFrame;
+            return pActor != null && capture != null && !capture._disposed &&
+                   frame != null && frame.Parent == null &&
+                   ReferenceEquals(frame.CapturedActor, pActor);
+        }
+
         internal static void ExitFactory(FactoryFrame pFrame)
         {
             if (pFrame == null)

@@ -1,5 +1,6 @@
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 using HarmonyLib;
 using UnityEngine;
 
@@ -12,6 +13,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "newCreature")]
         public static void NewCreature_Postfix(Actor __instance)
         {
+            if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             HistoricalFigureService.TrySpawnOn(__instance, "newCreature");
         }
 

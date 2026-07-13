@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -24,6 +25,7 @@ namespace AncientWarfare3.patch
         public static void NewCreature_Postfix(Actor __instance)
         {
             if (__instance?.data == null) return;
+            if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             if (!LineageService.IsXia(__instance)) return;
 
             LineageService.OnActorBorn(__instance);

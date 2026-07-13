@@ -15,6 +15,8 @@ namespace AncientWarfare3.core.db
         public long home_kingdom_id = -1;
         public string home_kingdom_name;
         public long hometown_city_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long lineage_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long shi_id = -1;
         public int spawn_year = -1;
         public int death_year = -1;
         public string lifecycle_state;

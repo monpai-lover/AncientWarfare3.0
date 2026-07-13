@@ -81,6 +81,28 @@ namespace AncientWarfare3.core.schools
             return SchoolPersistenceOutcome.Unknown;
         }
 
+        public static SchoolPersistenceOutcome Resolve(bool pQuerySucceeded,
+            SchoolPersistenceRowState pMembership, SchoolPersistenceRowState pMaster,
+            SchoolPersistenceRowState pAffiliation,
+            SchoolPersistenceRowState pLineage,
+            SchoolPersistenceRowState pShi)
+        {
+            if (!pQuerySucceeded) return SchoolPersistenceOutcome.Unknown;
+            if (pMembership == SchoolPersistenceRowState.Exact &&
+                pMaster == SchoolPersistenceRowState.Exact &&
+                pAffiliation == SchoolPersistenceRowState.Exact &&
+                pLineage == SchoolPersistenceRowState.Exact &&
+                pShi == SchoolPersistenceRowState.Exact)
+                return SchoolPersistenceOutcome.Committed;
+            if (pMembership == SchoolPersistenceRowState.Missing &&
+                pMaster == SchoolPersistenceRowState.Missing &&
+                pAffiliation == SchoolPersistenceRowState.Missing &&
+                pLineage == SchoolPersistenceRowState.Missing &&
+                pShi == SchoolPersistenceRowState.Missing)
+                return SchoolPersistenceOutcome.CleanFailure;
+            return SchoolPersistenceOutcome.Unknown;
+        }
+
         public static bool CanDestroy(SchoolPersistenceOutcome pOutcome)
         {
             return pOutcome == SchoolPersistenceOutcome.CleanFailure;

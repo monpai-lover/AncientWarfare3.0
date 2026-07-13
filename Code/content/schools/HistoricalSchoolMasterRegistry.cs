@@ -33,6 +33,16 @@ namespace AncientWarfare3.content.schools
                 Definitions.Length) errors.Add("duplicate historical master ID");
             if (Definitions.Select(p => p.CanonicalName).Distinct(StringComparer.Ordinal).Count() !=
                 Definitions.Length) errors.Add("duplicate canonical historical name");
+            if (HistoricalMasterIdentityRules.Count != Definitions.Length)
+                errors.Add("historical master identity count mismatch");
+            foreach (HistoricalSchoolMasterDefinition definition in Definitions)
+                if (!definition.AllowsClanLineage ||
+                    string.IsNullOrWhiteSpace(definition.CanonicalShiName) ||
+                    string.IsNullOrWhiteSpace(definition.CanonicalGivenName) ||
+                    string.IsNullOrWhiteSpace(definition.CanonicalFamilyName) ||
+                    definition.CanonicalName != definition.CanonicalShiName +
+                    definition.CanonicalGivenName)
+                    errors.Add("invalid canonical identity: " + definition.Id);
             return errors.ToArray();
         }
 
@@ -219,10 +229,16 @@ namespace AncientWarfare3.content.schools
             {
                 MasterSeed seed = pRoster[i];
                 int order = i + 1;
+                HistoricalMasterCanonicalIdentity identity =
+                    HistoricalMasterIdentityRules.Resolve(seed.Name);
                 pResult.Add(new HistoricalSchoolMasterDefinition(pResult.Count,
                     "aw_master_" + pSchoolId + "_" + order.ToString("00"), seed.Name,
                     seed.Aliases, pSchoolId, order, WaveForOrder(order), pStates, seed.Age,
-                    pIsMale: true, pAbilities, pTopics, seed.Works, pInstitutionId));
+                    pIsMale: true, pAbilities, pTopics, seed.Works, pInstitutionId,
+                    pCanonicalShiName: identity.ShiName,
+                    pCanonicalGivenName: identity.GivenName,
+                    pCanonicalFamilyName: identity.FamilyName,
+                    pAllowsClanLineage: true));
             }
         }
 
