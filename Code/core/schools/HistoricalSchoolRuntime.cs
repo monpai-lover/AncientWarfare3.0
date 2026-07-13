@@ -12,6 +12,8 @@ namespace AncientWarfare3.core.schools
         private static int _attemptedWorldYear = -1;
         private static int _lastQuarterKey = -1;
         private static bool _loaded;
+        private static readonly HistoricalSchoolPendingRuntimeState PendingRuntimeState =
+            new HistoricalSchoolPendingRuntimeState();
 
         public static int EligibleYear => _eligibleYear;
 
@@ -28,6 +30,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.LoadState();
             _lastQuarterKey = -1;
+            PendingRuntimeState.Clear();
             _loaded = true;
         }
 
@@ -37,6 +40,7 @@ namespace AncientWarfare3.core.schools
             _lastWorldYear = -1;
             _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
+            PendingRuntimeState.Clear();
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
@@ -51,6 +55,7 @@ namespace AncientWarfare3.core.schools
         public static void ProcessFrame()
         {
             if (!_loaded || World.world == null) return;
+            PendingRuntimeState.AdvanceAndTryFlush(HistoricalSchoolStore.SaveRuntimeState);
             HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
             int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
             int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
@@ -59,15 +64,20 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
         }
 
+        internal static bool FlushPendingStateForSave()
+        {
+            return PendingRuntimeState.FlushForSave(HistoricalSchoolStore.SaveRuntimeState);
+        }
+
         public static void OnWorldYear()
         {
             int worldYear = Date.getCurrentYear();
             if (worldYear == _attemptedWorldYear) return;
-            _attemptedWorldYear = worldYear;
 
             var runner = new HistoricalSchoolAnnualStageRunner(LogAnnualStageFailure);
             if (!_loaded && !runner.TryRun(HistoricalSchoolAnnualStageId.Bootstrap,
                     LoadState)) return;
+            _attemptedWorldYear = worldYear;
             if (worldYear == _lastWorldYear) return;
 
             int nextEligibleYear = _eligibleYear;
@@ -109,9 +119,15 @@ namespace AncientWarfare3.core.schools
                     HistoricalSchoolDebateService.ProcessYear(worldYear, annualMembers));
             }
 
+            PendingRuntimeState.Freeze(nextEligibleYear, worldYear,
+                World.world?.getCurWorldTime() ?? 0d);
             runner.TryRun(HistoricalSchoolAnnualStageId.RuntimeSave, () =>
-                HistoricalSchoolStore.SaveRuntimeState(nextEligibleYear, worldYear,
-                    World.world?.getCurWorldTime() ?? 0d));
+            {
+                if (!PendingRuntimeState.FlushForSave(
+                        HistoricalSchoolStore.SaveRuntimeState))
+                    throw new InvalidOperationException(
+                        "Historical school runtime state remains pending");
+            });
             _lastWorldYear = worldYear;
         }
 

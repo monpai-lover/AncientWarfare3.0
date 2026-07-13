@@ -38,7 +38,7 @@ namespace AncientWarfare3.core.schools
             }
             catch (Exception error)
             {
-                _recordFailure(pStageId ?? "", error);
+                RecordFailure(pStageId, error);
                 return false;
             }
         }
@@ -55,9 +55,103 @@ namespace AncientWarfare3.core.schools
             catch (Exception error)
             {
                 pResult = default;
-                _recordFailure(pStageId ?? "", error);
+                RecordFailure(pStageId, error);
                 return false;
             }
+        }
+
+        private void RecordFailure(string pStageId, Exception pError)
+        {
+            try { _recordFailure(pStageId ?? "", pError); }
+            catch { }
+        }
+    }
+
+    public sealed class HistoricalSchoolPendingRuntimeState
+    {
+        public const int InitialRetryDelayFrames = 30;
+        public const int MaxRetryDelayFrames = 240;
+
+        private int _pendingEligibleYear;
+        private int _pendingWorldYear = -1;
+        private double _pendingTime;
+        private int _retryDelayFrames;
+        private int _remainingRetryFrames;
+
+        public bool HasPending { get; private set; }
+        public int PendingEligibleYear => _pendingEligibleYear;
+        public int PendingWorldYear => _pendingWorldYear;
+
+        public void Freeze(int pEligibleYear, int pWorldYear, double pTime)
+        {
+            int eligibleYear = Math.Max(0, pEligibleYear);
+            double time = double.IsNaN(pTime) || double.IsInfinity(pTime)
+                ? 0d
+                : Math.Max(0d, pTime);
+            if (!HasPending)
+            {
+                _pendingEligibleYear = eligibleYear;
+                _pendingWorldYear = pWorldYear;
+                _pendingTime = time;
+                HasPending = true;
+                return;
+            }
+
+            _pendingEligibleYear = Math.Max(_pendingEligibleYear, eligibleYear);
+            _pendingWorldYear = Math.Max(_pendingWorldYear, pWorldYear);
+            _pendingTime = Math.Max(_pendingTime, time);
+        }
+
+        public bool AdvanceAndTryFlush(Func<int, int, double, bool> pPersist)
+        {
+            if (!HasPending) return true;
+            if (_remainingRetryFrames > 0)
+            {
+                _remainingRetryFrames--;
+                return false;
+            }
+            return TryFlush(pPersist);
+        }
+
+        public bool FlushForSave(Func<int, int, double, bool> pPersist)
+        {
+            return !HasPending || TryFlush(pPersist);
+        }
+
+        public void Clear()
+        {
+            HasPending = false;
+            _pendingEligibleYear = 0;
+            _pendingWorldYear = -1;
+            _pendingTime = 0d;
+            _retryDelayFrames = 0;
+            _remainingRetryFrames = 0;
+        }
+
+        private bool TryFlush(Func<int, int, double, bool> pPersist)
+        {
+            bool persisted;
+            try
+            {
+                persisted = pPersist != null && pPersist(_pendingEligibleYear,
+                    _pendingWorldYear, _pendingTime);
+            }
+            catch
+            {
+                persisted = false;
+            }
+
+            if (persisted)
+            {
+                Clear();
+                return true;
+            }
+
+            _retryDelayFrames = _retryDelayFrames <= 0
+                ? InitialRetryDelayFrames
+                : Math.Min(MaxRetryDelayFrames, _retryDelayFrames * 2);
+            _remainingRetryFrames = _retryDelayFrames;
+            return false;
         }
     }
 

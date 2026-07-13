@@ -9,8 +9,11 @@ namespace AncientWarfare3.core.schools
         private readonly long _cursor;
         private readonly Func<TCity, long> _cityId;
         private readonly Func<TCity, bool> _eligible;
-        private readonly HistoricalSchoolBoundedCitySelector<TCity> _afterCursor;
-        private readonly HistoricalSchoolBoundedCitySelector<TCity> _wrapped;
+        private readonly SortedSet<Entry> _afterCursor =
+            new SortedSet<Entry>(EntryComparer.Instance);
+        private readonly SortedSet<Entry> _wrapped =
+            new SortedSet<Entry>(EntryComparer.Instance);
+        private readonly HashSet<long> _retainedCityIds = new HashSet<long>();
 
         public HistoricalSchoolCircularCitySelector(int pCapacity, long pCursor,
             Func<TCity, long> pCityId, Func<TCity, bool> pEligible)
@@ -20,10 +23,6 @@ namespace AncientWarfare3.core.schools
             _cursor = pCursor;
             _cityId = pCityId ?? throw new ArgumentNullException(nameof(pCityId));
             _eligible = pEligible ?? throw new ArgumentNullException(nameof(pEligible));
-            _afterCursor = new HistoricalSchoolBoundedCitySelector<TCity>(pCapacity,
-                pCityId, _ => true);
-            _wrapped = new HistoricalSchoolBoundedCitySelector<TCity>(pCapacity,
-                pCityId, _ => true);
         }
 
         public int Count => Math.Min(_capacity, _afterCursor.Count + _wrapped.Count);
@@ -31,22 +30,53 @@ namespace AncientWarfare3.core.schools
         public void Consider(TCity pCity)
         {
             if (!_eligible(pCity)) return;
-            if (_cityId(pCity) > _cursor) _afterCursor.Consider(pCity);
-            else _wrapped.Consider(pCity);
+            long cityId = _cityId(pCity);
+            if (!_retainedCityIds.Add(cityId)) return;
+            SortedSet<Entry> retained = cityId > _cursor ? _afterCursor : _wrapped;
+            retained.Add(new Entry(cityId, pCity));
+            if (retained.Count <= _capacity) return;
+            Entry removed = retained.Max;
+            retained.Remove(removed);
+            _retainedCityIds.Remove(removed.CityId);
         }
 
         public IEnumerable<TCity> AscendingFromCursor()
         {
             int emitted = 0;
-            foreach (TCity city in _afterCursor.Ascending())
+            foreach (Entry entry in _afterCursor)
             {
                 if (emitted++ >= _capacity) yield break;
-                yield return city;
+                yield return entry.City;
             }
-            foreach (TCity city in _wrapped.Ascending())
+            foreach (Entry entry in _wrapped)
             {
                 if (emitted++ >= _capacity) yield break;
-                yield return city;
+                yield return entry.City;
+            }
+        }
+
+        private sealed class Entry
+        {
+            public Entry(long pCityId, TCity pCity)
+            {
+                CityId = pCityId;
+                City = pCity;
+            }
+
+            public long CityId { get; }
+            public TCity City { get; }
+        }
+
+        private sealed class EntryComparer : IComparer<Entry>
+        {
+            public static readonly EntryComparer Instance = new EntryComparer();
+
+            public int Compare(Entry pFirst, Entry pSecond)
+            {
+                if (ReferenceEquals(pFirst, pSecond)) return 0;
+                if (pFirst == null) return -1;
+                if (pSecond == null) return 1;
+                return pFirst.CityId.CompareTo(pSecond.CityId);
             }
         }
     }

@@ -1180,26 +1180,26 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        public static void SaveRuntimeState(int pEligibleYear, int pLastWorldYear, double pTime)
+        public static bool SaveRuntimeState(int pEligibleYear, int pLastWorldYear, double pTime)
         {
-            if (DB == null) return;
-            if (DB.CheckKeyExist(RuntimeTable,
-                    SimpleColumnConstraint.CreateEq("STATE_ID", 1L)))
+            if (DB == null) return false;
+            try
             {
-                DB.UpdateValue(RuntimeTable,
-                    new List<SimpleColumnConstraint>
-                    {
-                        SimpleColumnConstraint.CreateEq("STATE_ID", 1L)
-                    },
-                    ColumnVal.Create("ELIGIBLE_YEAR", Math.Max(0, pEligibleYear)),
-                    ColumnVal.Create("LAST_WORLD_YEAR", pLastWorldYear),
-                    ColumnVal.Create("UPDATED_TIME", pTime));
-                return;
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "INSERT OR REPLACE INTO " + RuntimeTable +
+                    " (STATE_ID,ELIGIBLE_YEAR,LAST_WORLD_YEAR,UPDATED_TIME)" +
+                    " VALUES (1,@eligible,@world,@time)";
+                command.Parameters.AddWithValue("@eligible", Math.Max(0, pEligibleYear));
+                command.Parameters.AddWithValue("@world", pLastWorldYear);
+                command.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                return command.ExecuteNonQuery() == 1;
             }
-            DB.Insert(RuntimeTable, ColumnVal.Create("STATE_ID", 1L),
-                ColumnVal.Create("ELIGIBLE_YEAR", Math.Max(0, pEligibleYear)),
-                ColumnVal.Create("LAST_WORLD_YEAR", pLastWorldYear),
-                ColumnVal.Create("UPDATED_TIME", pTime));
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore save runtime failed: " +
+                                    error.ToString());
+                return false;
+            }
         }
 
         public static SchoolPersistenceOutcome CommitHistoricalDescent(
