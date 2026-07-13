@@ -113,9 +113,53 @@ namespace AncientWarfare3.core.schools
         public int ExcludedCount { get; }
     }
 
+    public readonly struct SchoolRosterCanvasPlacement
+    {
+        internal SchoolRosterCanvasPlacement(float pCanvasWidth, float pCanvasHeight,
+            float pNodeOffsetX, float pNodeOffsetY, float pInitialPanX,
+            float pInitialPanY)
+        {
+            CanvasWidth = pCanvasWidth;
+            CanvasHeight = pCanvasHeight;
+            NodeOffsetX = pNodeOffsetX;
+            NodeOffsetY = pNodeOffsetY;
+            InitialPanX = pInitialPanX;
+            InitialPanY = pInitialPanY;
+        }
+
+        public float CanvasWidth { get; }
+        public float CanvasHeight { get; }
+        public float NodeOffsetX { get; }
+        public float NodeOffsetY { get; }
+        public float InitialPanX { get; }
+        public float InitialPanY { get; }
+    }
+
     public static class SchoolRosterRules
     {
         public const int DefaultColumnsPerRow = 6;
+
+        public static SchoolRosterCanvasPlacement PlaceCanvas(float pViewportWidth,
+            float pViewportHeight, float pMinX, float pMaxX, float pMinY, float pMaxY,
+            float pPadding)
+        {
+            float viewportWidth = PositiveOrOne(pViewportWidth);
+            float viewportHeight = PositiveOrOne(pViewportHeight);
+            float padding = FiniteNonNegative(pPadding);
+            float minX = FiniteOrZero(Math.Min(pMinX, pMaxX));
+            float maxX = FiniteOrZero(Math.Max(pMinX, pMaxX));
+            float minY = FiniteOrZero(Math.Min(pMinY, pMaxY));
+            float maxY = FiniteOrZero(Math.Max(pMinY, pMaxY));
+            float halfWidth = Math.Max(Math.Abs(minX), Math.Abs(maxX));
+            float canvasWidth = Math.Max(viewportWidth, halfWidth * 2f + padding * 2f);
+            float canvasHeight = Math.Max(viewportHeight,
+                Math.Max(0f, maxY - minY) + padding * 2f);
+            float initialPanX = canvasWidth <= viewportWidth
+                ? 0f
+                : (viewportWidth - canvasWidth) * .5f;
+            return new SchoolRosterCanvasPlacement(canvasWidth, canvasHeight,
+                canvasWidth * .5f, -padding - maxY, initialPanX, 0f);
+        }
 
         public static SchoolRosterStanding StandingFor(SchoolRosterCandidate pCandidate)
         {
@@ -190,6 +234,25 @@ namespace AncientWarfare3.core.schools
         {
             return pSource == SchoolMembershipSource.DirectDiscipleship ||
                    pSource == SchoolMembershipSource.LaterDiscipleship;
+        }
+
+        private static float PositiveOrOne(float pValue)
+        {
+            return float.IsNaN(pValue) || float.IsInfinity(pValue) || pValue <= 0f
+                ? 1f
+                : pValue;
+        }
+
+        private static float FiniteNonNegative(float pValue)
+        {
+            return float.IsNaN(pValue) || float.IsInfinity(pValue)
+                ? 0f
+                : Math.Max(0f, pValue);
+        }
+
+        private static float FiniteOrZero(float pValue)
+        {
+            return float.IsNaN(pValue) || float.IsInfinity(pValue) ? 0f : pValue;
         }
 
         private static void LayoutRows(List<SchoolRosterNode> pNodes,

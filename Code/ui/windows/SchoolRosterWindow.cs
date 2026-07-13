@@ -56,6 +56,7 @@ namespace AncientWarfare3.ui.windows
         private Text _emptyText;
         private RectTransform _resizeHandle;
         private Vector2 _nodeOffset;
+        private Vector2 _initialCanvasPan;
         private string _selectedSchool = CourtSchoolId.Ru;
         private string _displayedSchool = "";
         private long _displayedMembershipVersion = -1L;
@@ -414,6 +415,7 @@ namespace AncientWarfare3.ui.windows
             if (pNodes == null || pNodes.Count == 0)
             {
                 _nodeOffset = new Vector2(CanvasPadding, -CanvasPadding);
+                _initialCanvasPan = Vector2.zero;
                 _canvasRect.sizeDelta = new Vector2(
                     Mathf.Max(1f, _canvasViewport.sizeDelta.x),
                     Mathf.Max(1f, _canvasViewport.sizeDelta.y));
@@ -424,10 +426,13 @@ namespace AncientWarfare3.ui.windows
             float maxX = pNodes.Max(p => p.Layout.X + SchoolRosterNodeView.Width * .5f);
             float minY = pNodes.Min(p => p.Layout.Y - SchoolRosterNodeView.Height);
             float maxY = pNodes.Max(p => p.Layout.Y);
-            _nodeOffset = new Vector2(CanvasPadding - minX, -CanvasPadding - maxY);
-            _canvasRect.sizeDelta = new Vector2(
-                Mathf.Max(_canvasViewport.sizeDelta.x, maxX - minX + CanvasPadding * 2f),
-                Mathf.Max(_canvasViewport.sizeDelta.y, maxY - minY + CanvasPadding * 2f));
+            SchoolRosterCanvasPlacement placement = SchoolRosterRules.PlaceCanvas(
+                _canvasViewport.sizeDelta.x, _canvasViewport.sizeDelta.y,
+                minX, maxX, minY, maxY, CanvasPadding);
+            _nodeOffset = new Vector2(placement.NodeOffsetX, placement.NodeOffsetY);
+            _initialCanvasPan = new Vector2(placement.InitialPanX, placement.InitialPanY);
+            _canvasRect.sizeDelta = new Vector2(placement.CanvasWidth,
+                placement.CanvasHeight);
         }
 
         private List<SchoolRosterLinkSegment> BuildLinks(SchoolRosterReadModel pModel)
@@ -605,7 +610,7 @@ namespace AncientWarfare3.ui.windows
         private void ResetCanvas()
         {
             if (_canvasRect == null) return;
-            _canvasRect.anchoredPosition = Vector2.zero;
+            _canvasRect.anchoredPosition = _initialCanvasPan;
             _canvasRect.localScale = Vector3.one;
         }
 

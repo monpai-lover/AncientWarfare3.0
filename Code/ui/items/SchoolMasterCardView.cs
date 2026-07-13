@@ -22,6 +22,10 @@ namespace AncientWarfare3.ui.items
         private Button _button;
         private TipButton _tip;
         private long _boundActorId = -1L;
+        private long _boundArchiveActorId = -1L;
+        private string _boundArchiveMasterId = "";
+        private bool _boundArchiveDead;
+        private bool _hasArchiveBinding;
         private bool _portraitAttemptedForBind;
 
         public static SchoolMasterCardView Create(Transform pParent)
@@ -66,16 +70,35 @@ namespace AncientWarfare3.ui.items
                 new Color(.92f, .82f, .55f, 1f);
             _detail.text = "#" + pDefinition.Order + "  " +
                            (dead ? AW_L10n.Text("aw_school_recent_history", "historical record") :
-                            pRecord?.Spawned == true ? "active residence" :
-                            "awaiting Xia descent");
+                            pRecord?.Spawned == true
+                                ? AW_L10n.Text("aw_school_master_active_residence",
+                                    "Residence active")
+                                : AW_L10n.Text("aw_school_master_awaiting_xia_descent",
+                                    "Awaiting descent"));
 
             long actorId = live ? pActor.data.id : -1L;
+            long archiveActorId = live ? -1L : pRecord?.ActorId ?? -1L;
+            string archiveMasterId = live ? "" : pRecord?.MasterId ?? pDefinition.Id;
             bool reusePortrait = live && _boundActorId == actorId;
+            bool reuseArchivePortrait = !live && _hasArchiveBinding &&
+                                        _boundArchiveActorId == archiveActorId &&
+                                        _boundArchiveDead == dead &&
+                                        string.Equals(_boundArchiveMasterId, archiveMasterId,
+                                            StringComparison.Ordinal) &&
+                                        _archivePortrait.sprite != null;
             ClearInteractions();
-            if (!reusePortrait)
+            if (!reusePortrait && !reuseArchivePortrait)
             {
                 ReleaseActorBinding();
-                if (live) _boundActorId = actorId;
+                if (live)
+                    _boundActorId = actorId;
+                else
+                {
+                    _boundArchiveActorId = archiveActorId;
+                    _boundArchiveMasterId = archiveMasterId;
+                    _boundArchiveDead = dead;
+                    _hasArchiveBinding = true;
+                }
             }
             gameObject.SetActive(true);
             _portraitHolder.SetActive(true);
@@ -86,13 +109,16 @@ namespace AncientWarfare3.ui.items
             }
             else
             {
-                Sprite icon = pRecord?.ActorId >= 0
-                    ? FamilyTreeNodeView.BuildArchivedPortrait(pRecord.ActorId)
-                    : null;
-                icon ??= SpriteTextureLoader.getSprite(
-                    CourtSchoolRegistry.Find(pDefinition.SchoolId)?.IconPath ?? "") ??
-                    SpriteTextureLoader.getSprite("ui/Icons/iconKnowledge");
-                _archivePortrait.sprite = icon;
+                if (!reuseArchivePortrait)
+                {
+                    Sprite icon = archiveActorId >= 0
+                        ? FamilyTreeNodeView.BuildArchivedPortrait(archiveActorId)
+                        : null;
+                    icon ??= SpriteTextureLoader.getSprite(
+                        CourtSchoolRegistry.Find(pDefinition.SchoolId)?.IconPath ?? "") ??
+                        SpriteTextureLoader.getSprite("ui/Icons/iconKnowledge");
+                    _archivePortrait.sprite = icon;
+                }
                 _archivePortrait.color = dead ? new Color(.55f, .55f, .55f, 1f) : schoolColor;
             }
 
@@ -128,6 +154,11 @@ namespace AncientWarfare3.ui.items
         private void ReleaseActorBinding()
         {
             _boundActorId = -1L;
+            _boundArchiveActorId = -1L;
+            _boundArchiveMasterId = "";
+            _boundArchiveDead = false;
+            _hasArchiveBinding = false;
+            _archivePortrait.sprite = null;
             _portraitAttemptedForBind = false;
             ReleasePortrait();
         }

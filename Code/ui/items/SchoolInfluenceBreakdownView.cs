@@ -51,7 +51,7 @@ namespace AncientWarfare3.ui.items
                 _title.text = AW_L10n.Text("aw_school_influence_components",
                     "Influence Components");
                 _body.text = rows.Length == 0
-                    ? "No durable school ledger in this city."
+                    ? AW_L10n.Text("aw_school_no_durable_ledger", "No school ledger")
                     : string.Join("\n", rows.Select(p => ComponentLine(p.Key, p.Value))
                         .ToArray());
             }
@@ -74,7 +74,8 @@ namespace AncientWarfare3.ui.items
                              " " + Percent(ledger.ActivePresence) + "\n" +
                              AW_L10n.Text("aw_school_momentum", "Momentum") + " " +
                              Percent(ledger.Momentum) +
-                             "   Last active " + ledger.LastActiveYear;
+                             "   " + AW_L10n.Text("aw_school_last_active", "Active year") +
+                             " " + ledger.LastActiveYear;
             }
             gameObject.SetActive(true);
         }

@@ -49,6 +49,8 @@ aw_school_master_gallery,先师谱,Historical Masters,先師譜
 aw_school_master_living,在世,Living,在世
 aw_school_master_dead,已逝,Dead,已逝
 aw_school_master_queued,待降临,Queued,待降臨
+aw_school_master_active_residence,现时驻留,Active residence,現時駐留
+aw_school_master_awaiting_xia_descent,待华夏降临,Awaiting Xia descent,待華夏降臨
 aw_school_institution_list,学派机构,School Institutions,學派機構
 aw_school_lineage_list,师承谱系,Teacher Lineage,師承譜系
 aw_school_guest_service,客卿任官,Guest Court Service,客卿任官
@@ -82,3 +84,5 @@ aw_school_roster_teacher,师承,Teacher,師承
 aw_school_roster_residence,所在城市,Residence,所在城市
 aw_school_roster_empty,此学派暂无在世人物,No living members in this school,此學派暫無在世人物
 aw_school_ledger_influence,账册影响力,Ledger Influence,賬冊影響力
+aw_school_no_durable_ledger,此城暂无持久学派账册,No durable school ledger in this city.,此城暫無持久學派賬冊
+aw_school_last_active,最近活跃,Last active,最近活躍
