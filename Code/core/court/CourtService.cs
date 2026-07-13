@@ -460,20 +460,23 @@ namespace AncientWarfare3.core.court
                 : cleanupPrior.KingdomId == pKingdom.id
                     ? pKingdom
                     : World.world?.kingdoms?.get(cleanupPrior.KingdomId);
-            bool shouldClearPreviousPhysician = false;
-            bool cleanupNeedsReconcile = cleanupPrior != null &&
-                cleanupPrior.OfficeId == CourtOfficeId.ImperialPhysician &&
-                cleanupKingdom?.data != null;
-            if (cleanupPrior != null && cleanupKingdom?.data != null)
+            bool targetIsPhysician = pOfficeId == CourtOfficeId.ImperialPhysician;
+            bool cleanupWasPhysician = cleanupPrior != null &&
+                cleanupPrior.OfficeId == CourtOfficeId.ImperialPhysician;
+            bool continuousPhysician = cleanupWasPhysician && targetIsPhysician &&
+                cleanupKingdom?.data != null && cleanupKingdom.id == pKingdom.id;
+            bool cleanupNeedsReconcile = cleanupWasPhysician &&
+                cleanupKingdom?.data != null && !continuousPhysician;
+            bool targetNeedsReconcile = targetIsPhysician;
+            if (cleanupNeedsReconcile)
             {
                 cleanupKingdom.data.get(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID,
                     out long cachedPhysicianId, -1L);
-                shouldClearPreviousPhysician =
-                    RoyalMedicalCareRules.ShouldClearCachedPhysician(
-                        cachedPhysicianId, pActor.data.id, cleanupPrior.OfficeId);
+                if (RoyalMedicalCareRules.ShouldClearCachedPhysician(
+                        cachedPhysicianId, pActor.data.id, cleanupPrior.OfficeId))
+                    cleanupKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
+                RoyalMedicalCareService.ReconcileTargets(cleanupKingdom);
             }
-            if (shouldClearPreviousPhysician && cleanupKingdom?.data != null)
-                cleanupKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, -1L);
             if (careerResult.Mutation == OfficialCareerMutation.Reassigned &&
                 careerResult.Prior != null && cleanupKingdom?.data != null)
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, cleanupKingdom,
@@ -483,7 +486,7 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
             pActor.data.set(LineageKeys.COURT_SCHOOL, personalSchool);
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
-            if (pOfficeId == CourtOfficeId.ImperialPhysician)
+            if (targetIsPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             LineageService.EnsureOfficialShiAndClan(pActor, pOfficeId);
             SyncSchoolTrait(pActor, active: true);
@@ -492,12 +495,7 @@ namespace AncientWarfare3.core.court
             LineageService.ArchiveActor(pActor, pAlive: true);
             CourtDirectionService.MarkDirty(pKingdom);
             CitySchoolSnapshotService.MarkActorDirty(pActor);
-            if (cleanupNeedsReconcile &&
-                cleanupKingdom.id != pKingdom.id)
-                RoyalMedicalCareService.ReconcileTargets(cleanupKingdom);
-            if (pOfficeId == CourtOfficeId.ImperialPhysician ||
-                (cleanupNeedsReconcile &&
-                 cleanupKingdom.id == pKingdom.id))
+            if (targetNeedsReconcile)
                 RoyalMedicalCareService.ReconcileTargets(pKingdom);
             return true;
         }
