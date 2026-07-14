@@ -11,6 +11,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
+            if (pActor?.data == null || !pActor.isWarrior()) return;
             SlaveService.OnMadeWarrior(__instance, pActor);
             RoyalGuardService.StripActorFromNormalArmy(pActor);
             if (SlaveService.IsFillingSlaveArmy) return;

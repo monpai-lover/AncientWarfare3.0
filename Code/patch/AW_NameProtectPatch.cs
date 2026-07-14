@@ -60,7 +60,7 @@ namespace AncientWarfare3.patch
             if (!HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return;
             var definition = HistoricalSchoolDescentService.DefinitionFor(pActor);
             if (definition == null) return;
-            pActor.data.set(LineageKeys.GIVEN_NAME, definition.CanonicalName);
+            pActor.data.set(LineageKeys.GIVEN_NAME, definition.CanonicalGivenName);
             if (pActor.data.name != definition.CanonicalName)
                 pActor.setName(definition.CanonicalName);
         }

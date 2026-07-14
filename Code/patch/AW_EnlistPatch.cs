@@ -14,6 +14,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static void MakeWarrior_Postfix(Actor pActor)
         {
+            if (pActor?.data == null || !pActor.isWarrior()) return;
             ChronicleEvents.OnEnlisted(pActor);
         }
     }
