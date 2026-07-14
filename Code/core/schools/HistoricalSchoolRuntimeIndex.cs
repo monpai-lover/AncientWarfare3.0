@@ -14,7 +14,8 @@ namespace AncientWarfare3.core.schools
             bool pTravelling,
             long pServiceKingdomId,
             int pTravelBucket = 0,
-            int pPromotionDueYear = -1)
+            int pPromotionDueYear = -1,
+            bool pTravelEligible = false)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -22,8 +23,9 @@ namespace AncientWarfare3.core.schools
             Standing = pStanding;
             Present = pPresent;
             Travelling = pTravelling;
+            TravelEligible = pTravelEligible || pTravelling;
             ServiceKingdomId = pServiceKingdomId;
-            TravelBucket = pTravelling ? Math.Max(0, pTravelBucket) : -1;
+            TravelBucket = TravelEligible ? Math.Max(0, pTravelBucket) : -1;
             PromotionDueYear = pPromotionDueYear;
         }
 
@@ -33,6 +35,7 @@ namespace AncientWarfare3.core.schools
         public HistoricalSchoolStanding Standing { get; }
         public bool Present { get; }
         public bool Travelling { get; }
+        public bool TravelEligible { get; }
         public long ServiceKingdomId { get; }
         public int TravelBucket { get; }
         public int PromotionDueYear { get; }
@@ -55,7 +58,7 @@ namespace AncientWarfare3.core.schools
         private readonly Dictionary<long, Dictionary<string, HashSet<long>>>
             _presentByCitySchool =
                 new Dictionary<long, Dictionary<string, HashSet<long>>>();
-        private readonly Dictionary<int, HashSet<long>> _travelByBucket =
+        private readonly Dictionary<int, HashSet<long>> _travelEligibleByBucket =
             new Dictionary<int, HashSet<long>>();
         private readonly Dictionary<long, HashSet<long>> _servingByKingdom =
             new Dictionary<long, HashSet<long>>();
@@ -80,8 +83,8 @@ namespace AncientWarfare3.core.schools
                 Add(_leadersBySchool, pEntry.SchoolId, pEntry.ActorId);
             if (pEntry.Present && pEntry.ResidenceCityId >= 0)
                 AddPresent(pEntry.ResidenceCityId, pEntry.SchoolId, pEntry.ActorId);
-            if (pEntry.Travelling && pEntry.TravelBucket >= 0)
-                Add(_travelByBucket, pEntry.TravelBucket, pEntry.ActorId);
+            if (pEntry.TravelEligible && pEntry.TravelBucket >= 0)
+                Add(_travelEligibleByBucket, pEntry.TravelBucket, pEntry.ActorId);
             if (pEntry.ServiceKingdomId >= 0)
                 Add(_servingByKingdom, pEntry.ServiceKingdomId, pEntry.ActorId);
             if (pEntry.PromotionDueYear >= 0)
@@ -101,8 +104,8 @@ namespace AncientWarfare3.core.schools
                 Remove(_leadersBySchool, old.SchoolId, pActorId);
             if (old.Present && old.ResidenceCityId >= 0)
                 RemovePresent(old.ResidenceCityId, old.SchoolId, pActorId);
-            if (old.Travelling && old.TravelBucket >= 0)
-                Remove(_travelByBucket, old.TravelBucket, pActorId);
+            if (old.TravelEligible && old.TravelBucket >= 0)
+                Remove(_travelEligibleByBucket, old.TravelBucket, pActorId);
             if (old.ServiceKingdomId >= 0)
                 Remove(_servingByKingdom, old.ServiceKingdomId, pActorId);
             if (old.PromotionDueYear >= 0)
@@ -121,8 +124,8 @@ namespace AncientWarfare3.core.schools
             BucketCount(_teachersBySchool, pSchoolId);
         public int LeaderCount(string pSchoolId) =>
             BucketCount(_leadersBySchool, pSchoolId);
-        public int TravellingCount(int pBucket) =>
-            BucketCount(_travelByBucket, pBucket);
+        public int TravelEligibleCount(int pBucket) =>
+            BucketCount(_travelEligibleByBucket, pBucket);
         public int ServingCount(long pKingdomId) =>
             BucketCount(_servingByKingdom, pKingdomId);
 
@@ -153,8 +156,8 @@ namespace AncientWarfare3.core.schools
             return CopyStable(actors);
         }
 
-        public long[] TravellingIds(int pBucket) =>
-            CopyStable(_travelByBucket, pBucket);
+        public long[] TravelEligibleIds(int pBucket) =>
+            CopyStable(_travelEligibleByBucket, pBucket);
 
         public long[] ServingIds(long pKingdomId) =>
             CopyStable(_servingByKingdom, pKingdomId);
@@ -196,7 +199,7 @@ namespace AncientWarfare3.core.schools
             _teachersBySchool.Clear();
             _leadersBySchool.Clear();
             _presentByCitySchool.Clear();
-            _travelByBucket.Clear();
+            _travelEligibleByBucket.Clear();
             _servingByKingdom.Clear();
             _promotionByYear.Clear();
         }

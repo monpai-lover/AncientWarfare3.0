@@ -20,6 +20,7 @@ namespace AncientWarfare3.content.schools
         public const string VoyageStatusId = "aw_school_voyage";
         public const string CitizenJobId = "aw_historical_school_scholar";
         public const string ActorJobId = "aw_historical_school_job";
+        public const string IdleRoamTaskId = "aw_historical_school_idle_roam";
         public const string TravelTaskId = "aw_historical_school_travel";
         public const string LectureTaskId = "aw_historical_school_lecture";
         public const string DebateTravelTaskId = "aw_historical_school_debate_travel";
@@ -181,13 +182,29 @@ namespace AncientWarfare3.content.schools
             }
             if (AssetManager.job_actor.has(ActorJobId)) return;
             ActorJob job = AssetManager.job_actor.add(new ActorJob { id = ActorJobId });
-            job.addTask(TravelTaskId);
+            job.addTask(IdleRoamTaskId);
             job.addTask("wait");
             job.addTask("check_if_stuck_on_small_land");
         }
 
         private static void RegisterTasks()
         {
+            if (!AssetManager.tasks_actor.has(IdleRoamTaskId))
+            {
+                var idleRoam = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = IdleRoamTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    speed_multiplier = 1f,
+                    locale_key = "task_unit_walk"
+                });
+                idleRoam.setIcon("ui/Icons/iconKnowledge");
+                idleRoam.addBeh(new BehHistoricalSchoolIdleRoam());
+                idleRoam.addBeh(new BehGoToTileTarget());
+                idleRoam.addBeh(new BehRandomWait(3f, 6f));
+            }
+
             if (!AssetManager.tasks_actor.has(TravelTaskId))
             {
                 var travel = AssetManager.tasks_actor.add(new BehaviourTaskActor

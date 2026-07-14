@@ -109,9 +109,26 @@ internal static class SchoolRuntimePerformanceTests
             "old residence bucket is removed");
         Equal(1, index.TeacherCount("ru"),
             "promotion updates teacher bucket");
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            43,
+            "mo",
+            9,
+            HistoricalSchoolStanding.Teacher,
+            true,
+            false,
+            -1,
+            pTravelBucket: 2,
+            pTravelEligible: true));
+        Equal(1, index.TravelEligibleCount(2),
+            "resident teacher enters the eligible travel bucket before departure");
+        Equal(43L, index.TravelEligibleIds(2)[0],
+            "eligible travel bucket returns the resident teacher");
         index.Remove(42);
         Equal(0, index.MemberCount("ru"),
             "death/close removes all buckets");
+        index.Remove(43);
+        Equal(0, index.TravelEligibleCount(2),
+            "membership close removes the eligible travel bucket entry");
 
         index.SetLivingXiaCity(100, true);
         Equal(1, index.LivingXiaCityCount,
@@ -155,6 +172,67 @@ internal static class SchoolRuntimePerformanceTests
         for (int i = 0; i < 10_000; i++) leases.TryExpireOne(100, out _);
         Equal(0L, GC.GetAllocatedBytesForCurrentThread() - leaseAllocatedBefore,
             "empty activity scheduler allocates zero bytes");
+
+        var cityCache = new HistoricalSchoolFixedLru<long, int>(128);
+        for (int city = 0; city < 128; city++) cityCache.Set(city, city);
+        True(cityCache.TryGet(0, out _), "LRU access refreshes oldest city");
+        cityCache.Set(128, 128);
+        Equal(false, cityCache.ContainsKey(1), "LRU evicts the least recent city");
+        True(cityCache.ContainsKey(0), "recently accessed city remains cached");
+        True(cityCache.Remove(0), "city destruction removes its cache entry");
+        Equal(127, cityCache.Count, "city cache remains at fixed capacity after removal");
+
+        var cityStamp = new HistoricalSchoolCityCacheStamp(
+            pIdentityToken: 17, pKingdomId: 4, pZoneCount: 12,
+            pCenterX: 80, pCenterY: 40);
+        True(cityStamp.Matches(17, 4, 12, 80, 40),
+            "unchanged city identity and geometry keep a cache entry valid");
+        Equal(false, cityStamp.Matches(17, 5, 12, 80, 40),
+            "city transfer invalidates its cache entry");
+        Equal(false, cityStamp.Matches(17, 4, 13, 80, 40),
+            "city zone growth invalidates its cache entry");
+        Equal(false, cityStamp.Matches(18, 4, 12, 80, 40),
+            "reused city id cannot reuse another city object's cache entry");
+
+        Equal(HistoricalSchoolVenueSourceKind.Academy,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: true, pPublicAvailable: true, pLocalAvailable: true),
+            "academy venue has first priority");
+        Equal(HistoricalSchoolVenueSourceKind.PublicCity,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: false, pPublicAvailable: true, pLocalAvailable: true),
+            "public city venue is the first fallback");
+        Equal(HistoricalSchoolVenueSourceKind.Local,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: false, pPublicAvailable: false, pLocalAvailable: true),
+            "bounded local venue is the final fallback");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsPublicCandidate(
+                pInsideCity: true, pWalkable: true, pCityCenter: true),
+            "city center is never a universal public venue");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 35),
+            "idle roam never chooses a tile nearer than six tiles");
+        True(HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 36),
+            "idle roam accepts the six-tile boundary");
+        True(HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 324),
+            "idle roam accepts the eighteen-tile boundary");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 325),
+            "idle roam remains within eighteen tiles");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: true, pDistanceSquared: 100),
+            "idle roam never chooses a residence border zone");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

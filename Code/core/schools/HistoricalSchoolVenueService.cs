@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace AncientWarfare3.core.schools
 {
@@ -24,23 +24,37 @@ namespace AncientWarfare3.core.schools
     internal static class HistoricalSchoolVenueService
     {
         private const int MaxCandidates = 48;
+        private const int LocalDiameter = 37;
+        private const int LocalSearchCount = LocalDiameter * LocalDiameter;
+        private static readonly List<WorldTile> NoCandidates = new List<WorldTile>(0);
+
+        private sealed class CityVenueCacheEntry
+        {
+            public City City;
+            public HistoricalSchoolCityCacheStamp Stamp;
+            public List<WorldTile> Tiles;
+        }
+
         private static readonly Dictionary<string, HistoricalSchoolVenueClaim> ByOperation =
             new Dictionary<string, HistoricalSchoolVenueClaim>(StringComparer.Ordinal);
         private static readonly Dictionary<long, HashSet<long>> OccupiedByCity =
             new Dictionary<long, HashSet<long>>();
-        private static readonly Dictionary<long, List<WorldTile>> CandidateTilesByCity =
-            new Dictionary<long, List<WorldTile>>();
+        private static readonly HistoricalSchoolFixedLru<long, CityVenueCacheEntry>
+            CandidateTilesByCity =
+                new HistoricalSchoolFixedLru<long, CityVenueCacheEntry>(128);
 
-        public static bool TryClaimLecture(City pCity, string pOperationKey,
-            out HistoricalSchoolVenueClaim pClaim)
+        public static bool TryClaimLecture(City pCity, Actor pActor, string pSchoolId,
+            string pOperationKey, out HistoricalSchoolVenueClaim pClaim)
         {
-            return TryClaim(pCity, pOperationKey, pNeedsSecondary: false, out pClaim);
+            return TryClaim(pCity, pActor, pSchoolId, pOperationKey,
+                HistoricalSchoolVenueKind.Lecture, out pClaim);
         }
 
-        public static bool TryClaimDebate(City pCity, string pOperationKey,
-            out HistoricalSchoolVenueClaim pClaim)
+        public static bool TryClaimDebate(City pCity, Actor pActor, string pSchoolId,
+            string pOperationKey, out HistoricalSchoolVenueClaim pClaim)
         {
-            return TryClaim(pCity, pOperationKey, pNeedsSecondary: true, out pClaim);
+            return TryClaim(pCity, pActor, pSchoolId, pOperationKey,
+                HistoricalSchoolVenueKind.Debate, out pClaim);
         }
 
         public static void Release(string pOperationKey)
@@ -49,10 +63,13 @@ namespace AncientWarfare3.core.schools
                 !ByOperation.TryGetValue(pOperationKey, out HistoricalSchoolVenueClaim claim))
                 return;
             ByOperation.Remove(pOperationKey);
-            if (!OccupiedByCity.TryGetValue(claim.CityId, out HashSet<long> occupied)) return;
-            occupied.Remove(TileKey(claim.Primary));
-            if (claim.Secondary != null) occupied.Remove(TileKey(claim.Secondary));
-            if (occupied.Count == 0) OccupiedByCity.Remove(claim.CityId);
+            ReleaseOccupied(claim);
+        }
+
+        public static void InvalidateCity(long pCityId)
+        {
+            if (pCityId < 0) return;
+            CandidateTilesByCity.Remove(pCityId);
         }
 
         public static void Clear()
@@ -62,59 +79,122 @@ namespace AncientWarfare3.core.schools
             CandidateTilesByCity.Clear();
         }
 
-        private static bool TryClaim(City pCity, string pOperationKey,
-            bool pNeedsSecondary, out HistoricalSchoolVenueClaim pClaim)
+        internal static bool TryFindPublicVenue(
+            City pCity,
+            Actor pActor,
+            string pSchoolId,
+            HistoricalSchoolVenueKind pKind,
+            out WorldTile pPrimary,
+            out WorldTile pSecondary)
+        {
+            pPrimary = null;
+            pSecondary = null;
+            List<WorldTile> candidates = CandidatesForCity(pCity);
+            if (candidates.Count == 0) return false;
+            OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied);
+            int start = PositiveModulo(StableHash(pActor, pSchoolId, pKind), candidates.Count);
+            for (int offset = 0; offset < candidates.Count; offset++)
+            {
+                WorldTile candidate = candidates[(start + offset) % candidates.Count];
+                if (!IsVenueCandidate(candidate, pCity, pActor, pKind) ||
+                    occupied?.Contains(TileKey(candidate)) == true) continue;
+                pPrimary = candidate;
+                break;
+            }
+            if (pPrimary == null) return false;
+            if (pKind != HistoricalSchoolVenueKind.Debate) return true;
+            pSecondary = FindSecondary(candidates, pCity, pPrimary, occupied);
+            return pSecondary != null;
+        }
+
+        internal static bool TryFindLocalVenue(
+            City pCity,
+            Actor pActor,
+            string pSchoolId,
+            HistoricalSchoolVenueKind pKind,
+            out WorldTile pPrimary,
+            out WorldTile pSecondary)
+        {
+            pPrimary = null;
+            pSecondary = null;
+            WorldTile origin = pActor?.current_tile;
+            if (pCity?.data == null || origin == null) return false;
+            OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied);
+            int start = PositiveModulo(StableHash(pActor, pSchoolId, pKind),
+                LocalSearchCount);
+            for (int offset = 0; offset < LocalSearchCount; offset++)
+            {
+                int index = (start + offset) % LocalSearchCount;
+                int dx = index % LocalDiameter - 18;
+                int dy = index / LocalDiameter - 18;
+                int distanceSquared = dx * dx + dy * dy;
+                WorldTile candidate = World.world?.GetTile(origin.x + dx, origin.y + dy);
+                if (!HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                        candidate?.zone?.city == pCity,
+                        IsWalkable(candidate),
+                        candidate == pCity.getTile(),
+                        IsBorder(candidate, pCity),
+                        distanceSquared) ||
+                    occupied?.Contains(TileKey(candidate)) == true) continue;
+                if (pPrimary == null)
+                {
+                    pPrimary = candidate;
+                    if (pKind != HistoricalSchoolVenueKind.Debate) return true;
+                    continue;
+                }
+                pSecondary = candidate;
+                return true;
+            }
+            return pPrimary != null && pKind != HistoricalSchoolVenueKind.Debate;
+        }
+
+        private static bool TryClaim(City pCity, Actor pActor, string pSchoolId,
+            string pOperationKey, HistoricalSchoolVenueKind pKind,
+            out HistoricalSchoolVenueClaim pClaim)
         {
             pClaim = null;
-            if (pCity?.data == null || pCity.isRekt() ||
-                string.IsNullOrEmpty(pOperationKey)) return false;
+            if (pCity?.data == null || pCity.isRekt() || pActor?.data == null ||
+                string.IsNullOrEmpty(pSchoolId) || string.IsNullOrEmpty(pOperationKey))
+                return false;
             if (ByOperation.TryGetValue(pOperationKey, out pClaim)) return true;
-            List<WorldTile> candidates = CandidatesForCity(pCity,
-                pNeedsSecondary ? 2 : 1);
-            if (candidates.Count == 0) return false;
-            if (!OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupiedKeys))
+            if (!HistoricalSchoolVenueProvider.TryFind(pCity, pActor, pSchoolId, pKind,
+                    out WorldTile primary, out WorldTile secondary)) return false;
+            if (!IsVenueCandidate(primary, pCity, pActor, pKind) ||
+                pKind == HistoricalSchoolVenueKind.Debate &&
+                (!IsVenueCandidate(secondary, pCity, pActor, pKind) || secondary == primary))
+                return false;
+            if (!OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied))
             {
-                occupiedKeys = new HashSet<long>();
-                OccupiedByCity[pCity.data.id] = occupiedKeys;
+                occupied = new HashSet<long>();
+                OccupiedByCity[pCity.data.id] = occupied;
             }
-            var occupiedIndices = new HashSet<int>();
-            for (int index = 0; index < candidates.Count; index++)
-                if (occupiedKeys.Contains(TileKey(candidates[index]))) occupiedIndices.Add(index);
-            if (!HistoricalSchoolVenueRules.TrySelect(StableHash(pOperationKey),
-                    candidates.Count, occupiedIndices, out int primaryIndex)) return false;
-            WorldTile primary = candidates[primaryIndex];
-            WorldTile secondary = null;
-            if (pNeedsSecondary)
+            if (!occupied.Add(TileKey(primary))) return false;
+            if (secondary != null && !occupied.Add(TileKey(secondary)))
             {
-                secondary = candidates
-                    .Where(tile => tile != primary && !occupiedKeys.Contains(TileKey(tile)))
-                    .OrderBy(tile => DistanceSquared(primary, tile))
-                    .ThenBy(tile => tile.x)
-                    .ThenBy(tile => tile.y)
-                    .FirstOrDefault();
-                if (secondary == null) return false;
+                occupied.Remove(TileKey(primary));
+                if (occupied.Count == 0) OccupiedByCity.Remove(pCity.data.id);
+                return false;
             }
-            occupiedKeys.Add(TileKey(primary));
-            if (secondary != null) occupiedKeys.Add(TileKey(secondary));
             pClaim = new HistoricalSchoolVenueClaim(pOperationKey, pCity.data.id,
                 primary, secondary);
             ByOperation[pOperationKey] = pClaim;
             return true;
         }
 
-        private static List<WorldTile> CandidatesForCity(City pCity, int pMinimumCount)
+        private static List<WorldTile> CandidatesForCity(City pCity)
         {
-            WorldTile center = pCity.getTile();
-            if (CandidateTilesByCity.TryGetValue(pCity.data.id,
-                    out List<WorldTile> cached))
-            {
-                List<WorldTile> valid = cached.Where(tile => tile != center &&
-                        IsUsable(tile, pCity))
-                    .Take(MaxCandidates).ToList();
-                if (valid.Count >= pMinimumCount) return valid;
-            }
+            if (pCity?.data == null || pCity.isRekt()) return EmptyCandidates();
+            HistoricalSchoolCityCacheStamp stamp = StampFor(pCity);
+            if (CandidateTilesByCity.TryGet(pCity.data.id, out CityVenueCacheEntry cached) &&
+                ReferenceEquals(cached.City, pCity) && StampMatches(cached.Stamp, pCity) &&
+                AllCandidatesValid(cached.Tiles, pCity)) return cached.Tiles;
             List<WorldTile> rebuilt = BuildCandidates(pCity);
-            CandidateTilesByCity[pCity.data.id] = rebuilt;
+            CandidateTilesByCity.Set(pCity.data.id, new CityVenueCacheEntry
+            {
+                City = pCity,
+                Stamp = stamp,
+                Tiles = rebuilt
+            });
             return rebuilt;
         }
 
@@ -124,12 +204,14 @@ namespace AncientWarfare3.core.schools
             WorldTile center = pCity.getTile();
             try
             {
-                foreach (TileZone zone in pCity.zones.OrderBy(zone => zone.id))
+                foreach (TileZone zone in pCity.zones)
                 {
-                    foreach (WorldTile tile in zone.tiles.OrderBy(tile => tile.x)
-                                 .ThenBy(tile => tile.y))
+                    if (zone == null) continue;
+                    foreach (WorldTile tile in zone.tiles)
                     {
-                        if (tile == center || !IsUsable(tile, pCity)) continue;
+                        if (!HistoricalSchoolVenueRules.IsPublicCandidate(
+                                tile?.zone?.city == pCity, IsWalkable(tile), tile == center))
+                            continue;
                         result.Add(tile);
                         if (result.Count >= MaxCandidates) return result;
                     }
@@ -139,11 +221,109 @@ namespace AncientWarfare3.core.schools
             return result;
         }
 
-        private static bool IsUsable(WorldTile pTile, City pCity)
+        private static WorldTile FindSecondary(List<WorldTile> pCandidates, City pCity,
+            WorldTile pPrimary, HashSet<long> pOccupied)
         {
-            return pTile?.Type != null && pTile.zone?.city == pCity &&
-                   pTile.Type.ground && !pTile.Type.liquid && !pTile.Type.lava &&
-                   !pTile.Type.block;
+            WorldTile result = null;
+            int bestDistance = int.MaxValue;
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                WorldTile candidate = pCandidates[i];
+                if (candidate == pPrimary || !IsPublicCandidate(candidate, pCity) ||
+                    pOccupied?.Contains(TileKey(candidate)) == true) continue;
+                int distance = DistanceSquared(pPrimary, candidate);
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                result = candidate;
+            }
+            return result;
+        }
+
+        private static bool AllCandidatesValid(List<WorldTile> pCandidates, City pCity)
+        {
+            if (pCandidates == null || pCandidates.Count == 0) return false;
+            for (int i = 0; i < pCandidates.Count; i++)
+                if (!IsPublicCandidate(pCandidates[i], pCity)) return false;
+            return true;
+        }
+
+        private static bool IsVenueCandidate(WorldTile pTile, City pCity, Actor pActor,
+            HistoricalSchoolVenueKind pKind)
+        {
+            if (!IsPublicCandidate(pTile, pCity)) return false;
+            if (pKind != HistoricalSchoolVenueKind.IdleRoam) return true;
+            WorldTile origin = pActor?.current_tile;
+            return origin != null && HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pTile.zone?.city == pCity,
+                IsWalkable(pTile),
+                pTile == pCity.getTile(),
+                IsBorder(pTile, pCity),
+                DistanceSquared(origin, pTile));
+        }
+
+        private static bool IsPublicCandidate(WorldTile pTile, City pCity)
+        {
+            return HistoricalSchoolVenueRules.IsPublicCandidate(
+                       pTile?.zone?.city == pCity,
+                       IsWalkable(pTile),
+                       pTile == pCity?.getTile()) &&
+                   !IsBorder(pTile, pCity);
+        }
+
+        private static bool IsWalkable(WorldTile pTile)
+        {
+            return pTile?.Type != null && pTile.Type.ground && !pTile.Type.liquid &&
+                   !pTile.Type.lava && !pTile.Type.block;
+        }
+
+        private static bool IsBorder(WorldTile pTile, City pCity)
+        {
+            if (pTile == null || pCity == null) return true;
+            try
+            {
+                return World.world?.GetTile(pTile.x - 1, pTile.y)?.zone?.city != pCity ||
+                       World.world?.GetTile(pTile.x + 1, pTile.y)?.zone?.city != pCity ||
+                       World.world?.GetTile(pTile.x, pTile.y - 1)?.zone?.city != pCity ||
+                       World.world?.GetTile(pTile.x, pTile.y + 1)?.zone?.city != pCity;
+            }
+            catch { return true; }
+        }
+
+        private static HistoricalSchoolCityCacheStamp StampFor(City pCity)
+        {
+            WorldTile center = pCity?.getTile();
+            return new HistoricalSchoolCityCacheStamp(
+                RuntimeHelpers.GetHashCode(pCity),
+                pCity?.kingdom?.data?.id ?? -1L,
+                pCity?.zones?.Count ?? 0,
+                center?.x ?? int.MinValue,
+                center?.y ?? int.MinValue);
+        }
+
+        private static bool StampMatches(HistoricalSchoolCityCacheStamp pStamp, City pCity)
+        {
+            WorldTile center = pCity?.getTile();
+            return pStamp.Matches(
+                RuntimeHelpers.GetHashCode(pCity),
+                pCity?.kingdom?.data?.id ?? -1L,
+                pCity?.zones?.Count ?? 0,
+                center?.x ?? int.MinValue,
+                center?.y ?? int.MinValue);
+        }
+
+        private static void ReleaseOccupied(HistoricalSchoolVenueClaim pClaim)
+        {
+            if (pClaim == null ||
+                !OccupiedByCity.TryGetValue(pClaim.CityId, out HashSet<long> occupied))
+                return;
+            occupied.Remove(TileKey(pClaim.Primary));
+            if (pClaim.Secondary != null) occupied.Remove(TileKey(pClaim.Secondary));
+            if (occupied.Count == 0) OccupiedByCity.Remove(pClaim.CityId);
+        }
+
+        private static List<WorldTile> EmptyCandidates()
+        {
+            return NoCandidates;
         }
 
         private static long TileKey(WorldTile pTile)
@@ -151,19 +331,29 @@ namespace AncientWarfare3.core.schools
             return pTile == null ? long.MinValue : ((long)pTile.x << 32) ^ (uint)pTile.y;
         }
 
-        private static long StableHash(string pValue)
+        private static long StableHash(Actor pActor, string pSchoolId,
+            HistoricalSchoolVenueKind pKind)
         {
             unchecked
             {
                 long hash = 1469598103934665603L;
-                foreach (char character in pValue ?? "")
+                hash = (hash ^ (pActor?.data?.id ?? -1L)) * 1099511628211L;
+                foreach (char character in pSchoolId ?? "")
                     hash = (hash ^ character) * 1099511628211L;
-                return hash;
+                return (hash ^ (int)pKind) * 1099511628211L;
             }
+        }
+
+        private static int PositiveModulo(long pValue, int pCount)
+        {
+            if (pCount <= 0) return 0;
+            long remainder = pValue % pCount;
+            return (int)(remainder < 0 ? remainder + pCount : remainder);
         }
 
         private static int DistanceSquared(WorldTile pFirst, WorldTile pSecond)
         {
+            if (pFirst == null || pSecond == null) return int.MaxValue;
             int dx = pFirst.x - pSecond.x;
             int dy = pFirst.y - pSecond.y;
             return dx * dx + dy * dy;

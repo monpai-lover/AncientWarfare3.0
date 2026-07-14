@@ -125,9 +125,13 @@ namespace AncientWarfare3.core.schools
                     return true;
                 }
                 City city = FindCity(request.CityId);
+                Actor first = FindActor(activity.Record.FirstActorId);
+                Actor second = FindActor(activity.Record.SecondActorId);
                 if (city?.data == null || city.isRekt() ||
-                    !HistoricalSchoolVenueService.TryClaimDebate(city,
-                        activity.OperationKey, out HistoricalSchoolVenueClaim venue))
+                    !IsUsable(first) || !IsUsable(second) ||
+                    !HistoricalSchoolVenueService.TryClaimDebate(city, first,
+                        activity.Record.FirstSchoolId, activity.OperationKey,
+                        out HistoricalSchoolVenueClaim venue))
                 {
                     DecrementYearCount(request.Year);
                     return true;
@@ -144,13 +148,6 @@ namespace AncientWarfare3.core.schools
                 UsedActorYears.Add(activity.Record.DebateYear,
                     activity.Record.SecondActorId.ToString(
                         System.Globalization.CultureInfo.InvariantCulture));
-                Actor first = FindActor(activity.Record.FirstActorId);
-                Actor second = FindActor(activity.Record.SecondActorId);
-                if (!IsUsable(first) || !IsUsable(second))
-                {
-                    Finish(activity);
-                    return true;
-                }
                 long frame = HistoricalSchoolActivityQueue.CurrentFrame;
                 bool firstScheduled = HistoricalSchoolTaskLeaseService.TrySchedule(
                     first,

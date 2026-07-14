@@ -783,6 +783,8 @@ namespace AncientWarfare3.core.schools
             bool travelling = affiliation != null &&
                 (affiliation.LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
                  affiliation.LifecycleState == HistoricalSchoolLifecycleState.Voyage);
+            bool travelEligible = affiliation != null &&
+                HistoricalAffiliationService.IsTravelEligible(FindLivingActor(pActorId));
             HistoricalSchoolRuntimeIndex.Instance.Upsert(
                 new HistoricalSchoolIndexEntry(
                     pActorId,
@@ -793,7 +795,8 @@ namespace AncientWarfare3.core.schools
                     travelling,
                     affiliation?.ServiceKingdomId ?? -1L,
                     HistoricalSchoolRules.TravelBucket(pActorId),
-                    PromotionDueYear(membership)));
+                    PromotionDueYear(membership),
+                    travelEligible));
         }
 
         private static HistoricalSchoolStanding ResolveStanding(

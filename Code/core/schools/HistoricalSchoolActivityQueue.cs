@@ -165,6 +165,8 @@ namespace AncientWarfare3.core.schools
                         out HistoricalSchoolLectureActivity expiredLecture) &&
                     expiredLecture.Plan.OperationKey == expired.ActivityId)
                     FinishLecture(expiredLecture);
+                else if (expired.TaskId == HistoricalSchoolContent.TravelTaskId)
+                    HistoricalSchoolTravelService.CancelExpiredLease(expired);
                 else
                     HistoricalSchoolDebateActivityService.CancelExpiredLease(expired);
                 return;
@@ -190,8 +192,9 @@ namespace AncientWarfare3.core.schools
             }
             if (!IsValidLectureActor(actor, pending, pRequireVenue: false) ||
                 city?.data == null || city.isRekt() ||
-                !HistoricalSchoolVenueService.TryClaimLecture(city,
-                    pending.Plan.OperationKey, out HistoricalSchoolVenueClaim venue))
+                !HistoricalSchoolVenueService.TryClaimLecture(city, actor,
+                    pending.Plan.Candidate.SchoolId, pending.Plan.OperationKey,
+                    out HistoricalSchoolVenueClaim venue))
             {
                 HistoricalSchoolVenueService.Release(pending.Plan.OperationKey);
                 DecrementYearCount(pending.Plan.Year);

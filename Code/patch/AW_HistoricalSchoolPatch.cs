@@ -77,6 +77,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.newCityEvent))]
         private static void CityNewCityEvent_Postfix(City __instance)
         {
+            InvalidateSchoolCityCaches(__instance);
             HistoricalSchoolRuntime.RefreshLivingXiaCity(__instance);
         }
 
@@ -86,6 +87,7 @@ namespace AncientWarfare3.patch
             City __instance,
             bool pFromLoad)
         {
+            InvalidateSchoolCityCaches(__instance);
             if (!pFromLoad) HistoricalSchoolRuntime.RefreshLivingXiaCity(__instance);
         }
 
@@ -94,7 +96,16 @@ namespace AncientWarfare3.patch
         private static void CityDestroyCity_Prefix(City __instance)
         {
             long cityId = __instance?.data?.id ?? -1L;
+            HistoricalSchoolVenueService.InvalidateCity(cityId);
+            HistoricalSchoolRecruitCandidateCache.InvalidateCity(cityId);
             HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);
+        }
+
+        private static void InvalidateSchoolCityCaches(City pCity)
+        {
+            long cityId = pCity?.data?.id ?? -1L;
+            HistoricalSchoolVenueService.InvalidateCity(cityId);
+            HistoricalSchoolRecruitCandidateCache.InvalidateCity(cityId);
         }
 
         [HarmonyPrefix]
