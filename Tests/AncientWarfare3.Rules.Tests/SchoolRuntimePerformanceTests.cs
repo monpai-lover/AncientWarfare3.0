@@ -54,6 +54,41 @@ internal static class SchoolRuntimePerformanceTests
         Equal(false,
             FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 12),
             "another city cannot borrow a permit");
+
+        var index = new HistoricalSchoolRuntimeIndex();
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            42,
+            "ru",
+            7,
+            HistoricalSchoolStanding.Disciple,
+            true,
+            false,
+            -1));
+        Equal(1, index.MemberCount("ru"), "school member is indexed once");
+        Equal(1, index.ResidentCount(7, "ru"),
+            "present resident is indexed by city");
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            42,
+            "ru",
+            9,
+            HistoricalSchoolStanding.Teacher,
+            true,
+            true,
+            -1));
+        Equal(0, index.ResidentCount(7, "ru"),
+            "old residence bucket is removed");
+        Equal(1, index.TeacherCount("ru"),
+            "promotion updates teacher bucket");
+        index.Remove(42);
+        Equal(0, index.MemberCount("ru"),
+            "death/close removes all buckets");
+
+        index.SetLivingXiaCity(100, true);
+        Equal(1, index.LivingXiaCityCount,
+            "living Xia city enters the descent index");
+        index.SetLivingXiaCity(100, false);
+        Equal(0, index.LivingXiaCityCount,
+            "destroyed or transferred Xia city leaves the descent index");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

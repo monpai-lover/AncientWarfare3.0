@@ -68,7 +68,13 @@ namespace AncientWarfare3.core.schools
         public static bool ApplyReputationDelta(long pActorId, float pDelta)
         {
             if (pActorId < 0 || float.IsNaN(pDelta) || float.IsInfinity(pDelta)) return false;
-            return Memberships.UpdateReputation(pActorId, pDelta);
+            SchoolMembershipRecord oldRecord = Memberships.GetActive(pActorId);
+            if (oldRecord == null || !Memberships.UpdateReputation(pActorId, pDelta))
+                return false;
+            SchoolMembershipRecord nextRecord = Memberships.GetActive(pActorId);
+            HistoricalSchoolRevisionService.ApplyMembershipChange(oldRecord, nextRecord);
+            RefreshRuntimeIndex(pActorId);
+            return true;
         }
 
         internal static SchoolMembershipRecord PrepareHistoricalDescent(Actor pActor,
@@ -96,6 +102,7 @@ namespace AncientWarfare3.core.schools
                 !pRecord.Active || pRecord.ActorId != pActor.data.id ||
                 pRecord.Source != SchoolMembershipSource.HistoricalDescent) return false;
             SchoolMembershipRecord existing = Memberships.GetActive(pRecord.ActorId);
+            bool added = false;
             if (existing != null)
             {
                 if (!SameMembershipRecord(existing, pRecord))
@@ -117,6 +124,13 @@ namespace AncientWarfare3.core.schools
                     return false;
                 }
             }
+            else
+            {
+                added = true;
+            }
+            if (added)
+                HistoricalSchoolRevisionService.ApplyMembershipChange(null, pRecord);
+            RefreshRuntimeIndex(pRecord.ActorId);
             try
             {
                 Project(pActor, pRecord.SchoolId);
@@ -157,6 +171,8 @@ namespace AncientWarfare3.core.schools
                 LoadIndexes();
                 return false;
             }
+            HistoricalSchoolRevisionService.ApplyMembershipChange(null, record);
+            RefreshRuntimeIndex(record.ActorId);
             bool needsTravelAffiliation = pSource != SchoolMembershipSource.HistoricalDescent &&
                 (HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
                  SchoolLineageService.IsQualifiedTeacher(pActor));
@@ -199,6 +215,8 @@ namespace AncientWarfare3.core.schools
                 LoadIndexes();
                 return false;
             }
+            HistoricalSchoolRevisionService.ApplyMembershipChange(current, replacement);
+            RefreshRuntimeIndex(pActor.data.id);
             Project(pActor, pSchoolId);
             return true;
         }
@@ -222,6 +240,8 @@ namespace AncientWarfare3.core.schools
                 LoadIndexes();
                 return false;
             }
+            HistoricalSchoolRevisionService.ApplyMembershipChange(replacement, pOriginal);
+            RefreshRuntimeIndex(pActor.data.id);
             Project(pActor, pOriginal.SchoolId);
             return true;
         }
@@ -341,6 +361,8 @@ namespace AncientWarfare3.core.schools
                 }
                 else
                 {
+                    HistoricalSchoolRevisionService.ApplyMembershipChange(current, null);
+                    HistoricalSchoolRuntimeIndex.Instance.Remove(pActor.data.id);
                     try { Project(pActor, CourtSchoolId.None); }
                     catch (Exception error)
                     {
@@ -543,6 +565,8 @@ namespace AncientWarfare3.core.schools
                 LoadIndexes();
                 return false;
             }
+            HistoricalSchoolRevisionService.ApplyMembershipChange(current, null);
+            HistoricalSchoolRuntimeIndex.Instance.Remove(pActor.data.id);
             Project(pActor, CourtSchoolId.None);
             return true;
         }
@@ -588,13 +612,62 @@ namespace AncientWarfare3.core.schools
             return Memberships.ActiveRecords();
         }
 
+        internal static void RefreshRuntimeIndex(long pActorId)
+        {
+            SchoolMembershipRecord membership = Memberships.GetActive(pActorId);
+            if (membership == null || !membership.Active)
+            {
+                HistoricalSchoolRuntimeIndex.Instance.Remove(pActorId);
+                return;
+            }
+
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActorId);
+            long residenceCityId = affiliation?.ResidenceCityId ?? membership.CityId;
+            bool travelling = affiliation != null &&
+                (affiliation.LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
+                 affiliation.LifecycleState == HistoricalSchoolLifecycleState.Voyage);
+            HistoricalSchoolRuntimeIndex.Instance.Upsert(
+                new HistoricalSchoolIndexEntry(
+                    pActorId,
+                    membership.SchoolId,
+                    residenceCityId,
+                    ResolveStanding(membership),
+                    HistoricalSchoolRevisionService.IsPresent(affiliation),
+                    travelling,
+                    affiliation?.ServiceKingdomId ?? -1L,
+                    HistoricalSchoolRules.TravelBucket(pActorId)));
+        }
+
+        private static HistoricalSchoolStanding ResolveStanding(
+            SchoolMembershipRecord pMembership)
+        {
+            if (pMembership.Source == SchoolMembershipSource.HistoricalDescent)
+                return HistoricalSchoolStanding.CanonicalMaster;
+            if (pMembership.Source != SchoolMembershipSource.DirectDiscipleship &&
+                pMembership.Source != SchoolMembershipSource.LaterDiscipleship)
+                return HistoricalSchoolStanding.Member;
+            return HistoricalSchoolStandingRules.ResolvePromotion(
+                HistoricalSchoolStanding.Disciple,
+                Math.Max(0, Date.getCurrentYear() - pMembership.StartYear),
+                pMembership.Reputation);
+        }
+
         public static void LoadIndexes()
         {
             Memberships.Clear();
+            HistoricalSchoolRuntimeIndex.Instance.ClearMembers();
+            HistoricalSchoolRevisionService.Clear();
             var duplicates = new List<SchoolMembershipRecord>();
             foreach (SchoolMembershipRecord record in HistoricalSchoolStore.LoadActiveMemberships())
             {
-                if (!Memberships.TryJoin(record)) duplicates.Add(record);
+                if (!Memberships.TryJoin(record))
+                {
+                    duplicates.Add(record);
+                    continue;
+                }
+                HistoricalSchoolRevisionService.ApplyMembershipChange(null, record);
+                RefreshRuntimeIndex(record.ActorId);
             }
             foreach (SchoolMembershipRecord duplicate in duplicates)
                 HistoricalSchoolStore.CloseMembership(duplicate, Date.getCurrentYear(),
@@ -618,6 +691,8 @@ namespace AncientWarfare3.core.schools
         public static void ClearRuntime()
         {
             Memberships.Clear();
+            HistoricalSchoolRuntimeIndex.Instance.ClearMembers();
+            HistoricalSchoolRevisionService.Clear();
             PendingDeathRetries.Clear();
             QueuedDeathRetries.Clear();
             PendingDeathsByActor.Clear();

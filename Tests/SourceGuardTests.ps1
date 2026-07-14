@@ -91,6 +91,9 @@ Require-Present 'archive WAL pragma' 'Code/core/db/LineageArchivePragmaService.c
 Require-Present 'archive NORMAL sync pragma' 'Code/core/db/LineageArchivePragmaService.cs' 'PRAGMA synchronous=NORMAL'
 Require-Present 'archive save checkpoint' 'Code/patch/AW_SavePatch.cs' 'LineageArchivePragmaService.CheckpointForSave'
 Require-Present 'school performance counters' 'Code/core/schools/HistoricalSchoolDiagnostics.cs' 'IdleAllocatedBytes'
+Require-Absent 'unconditional school residence revision' 'Code/core/schools/HistoricalAffiliationService.cs' 'AdvanceResidenceRevision()'
+Require-Present 'membership runtime index projection' 'Code/core/schools/SchoolMembershipService.cs' 'HistoricalSchoolRuntimeIndex.Instance.Upsert'
+Require-Present 'narrow affiliation revisions' 'Code/core/schools/HistoricalAffiliationService.cs' 'HistoricalSchoolRevisionService.ApplyAffiliationChange'
 
 $activityQueue = Read-Source 'Code/core/schools/HistoricalSchoolActivityQueue.cs'
 $debateFrame = $activityQueue.IndexOf('if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;', [System.StringComparison]::Ordinal)

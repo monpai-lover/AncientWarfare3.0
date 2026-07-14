@@ -73,6 +73,30 @@ namespace AncientWarfare3.patch
             SchoolMembershipService.ClearRuntime();
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.newCityEvent))]
+        private static void CityNewCityEvent_Postfix(City __instance)
+        {
+            HistoricalSchoolRuntime.RefreshLivingXiaCity(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), "setKingdom")]
+        private static void CitySetKingdom_Postfix(
+            City __instance,
+            bool pFromLoad)
+        {
+            if (!pFromLoad) HistoricalSchoolRuntime.RefreshLivingXiaCity(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), nameof(City.destroyCity))]
+        private static void CityDestroyCity_Prefix(City __instance)
+        {
+            long cityId = __instance?.data?.id ?? -1L;
+            HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);
+        }
+
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(Actor), nameof(Actor.joinCity))]

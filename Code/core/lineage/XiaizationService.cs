@@ -5,6 +5,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -199,6 +200,7 @@ namespace AncientWarfare3.core.lineage
             string mode = IsXiaOccupationMode(pOccupationType) ? pOccupationType : TYPE_FOREIGN_ENTRY;
             EnsureForeignOccupier(pOwner, pCity, mode, level);
             UpsertCityState(pCity, pOwner, mode + "_xiaized", 100.0, 100.0, GetCityResentment(pCity));
+            HistoricalSchoolRuntime.RefreshLivingXiaCity(pCity);
 
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.XIAIZATION_PROGRESS,
                 HistoryText.City(pCity, pOwner) + " \u5728" + HistoryText.Kingdom(pOwner) +
@@ -516,6 +518,26 @@ namespace AncientWarfare3.core.lineage
                 return value == null || value == DBNull.Value ? 0.0 : Convert.ToDouble(value);
             }
             catch { return 0.0; }
+        }
+
+        internal static bool IsFullyXiaizedCity(City pCity)
+        {
+            if (!Ready || pCity?.data == null) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT XIA_PROGRESS FROM " +
+                                  CityXiaizationStateTableItem.GetTableName() +
+                                  " WHERE CITY_ID=@c LIMIT 1";
+                cmd.Parameters.AddWithValue("@c", pCity.id);
+                object value = cmd.ExecuteScalar();
+                return value != null && value != DBNull.Value &&
+                       Convert.ToDouble(value) >= 100.0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static float MaxCityResentment(Kingdom pKingdom)

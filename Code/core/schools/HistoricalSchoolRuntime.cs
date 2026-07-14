@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.schools
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.LoadState();
+            RebuildLivingXiaCityIndex();
             _lastQuarterKey = -1;
             PendingRuntimeState.Clear();
             BootstrapRetryGate.RecordSuccess();
@@ -56,6 +57,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.ClearRuntime();
             HistoricalSchoolDescentService.ClearRuntime();
+            HistoricalSchoolRuntimeIndex.Instance.ClearLivingXiaCities();
             _loaded = false;
         }
 
@@ -166,15 +168,47 @@ namespace AncientWarfare3.core.schools
         private static List<City> LivingXiaCities()
         {
             var result = new List<City>();
-            if (World.world?.kingdoms == null) return result;
-            foreach (Kingdom kingdom in World.world.kingdoms)
+            if (World.world?.cities == null) return result;
+            foreach (long cityId in
+                     HistoricalSchoolRuntimeIndex.Instance.LivingXiaCityIds())
             {
-                if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral() ||
-                    !LineageService.IsXiaKingdom(kingdom)) continue;
-                foreach (City city in kingdom.getCities())
-                    if (city?.data != null && !city.isRekt()) result.Add(city);
+                City city = null;
+                try { city = World.world.cities.get(cityId); }
+                catch { }
+                if (IsLivingCity(city)) result.Add(city);
+                else HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(cityId, false);
             }
             return result;
+        }
+
+        internal static void RefreshLivingXiaCity(City pCity)
+        {
+            long cityId = pCity?.data?.id ?? -1L;
+            if (cityId < 0) return;
+            HistoricalSchoolRuntimeIndex.Instance.SetLivingXiaCity(
+                cityId, IsLivingXiaCity(pCity));
+        }
+
+        private static void RebuildLivingXiaCityIndex()
+        {
+            HistoricalSchoolRuntimeIndex.Instance.ClearLivingXiaCities();
+            if (World.world?.cities == null) return;
+            foreach (City city in World.world.cities) RefreshLivingXiaCity(city);
+        }
+
+        private static bool IsLivingXiaCity(City pCity)
+        {
+            Kingdom kingdom = pCity?.kingdom;
+            return IsLivingCity(pCity) &&
+                   (LineageService.IsXiaKingdom(kingdom) ||
+                    XiaizationService.IsFullyXiaizedCity(pCity));
+        }
+
+        private static bool IsLivingCity(City pCity)
+        {
+            Kingdom kingdom = pCity?.kingdom;
+            return pCity?.data != null && !pCity.isRekt() &&
+                   kingdom?.data != null && !kingdom.isRekt() && !kingdom.isNeutral();
         }
 
         private static void LogAnnualStageFailure(string pStageId, Exception error)
