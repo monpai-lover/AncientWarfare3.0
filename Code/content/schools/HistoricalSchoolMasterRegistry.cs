@@ -36,13 +36,27 @@ namespace AncientWarfare3.content.schools
             if (HistoricalMasterIdentityRules.Count != Definitions.Length)
                 errors.Add("historical master identity count mismatch");
             foreach (HistoricalSchoolMasterDefinition definition in Definitions)
-                if (!definition.AllowsClanLineage ||
-                    string.IsNullOrWhiteSpace(definition.CanonicalShiName) ||
-                    string.IsNullOrWhiteSpace(definition.CanonicalGivenName) ||
-                    string.IsNullOrWhiteSpace(definition.CanonicalFamilyName) ||
-                    definition.CanonicalName != definition.CanonicalShiName +
-                    definition.CanonicalGivenName)
+            {
+                HistoricalMasterCanonicalIdentity identity =
+                    HistoricalMasterIdentityRules.Resolve(definition.CanonicalName);
+                if (!identity.IsValid || !definition.AllowsClanLineage ||
+                    definition.CanonicalShiName != identity.ShiName ||
+                    definition.CanonicalGivenName != identity.GivenName ||
+                    definition.CanonicalFamilyName != identity.FamilyName ||
+                    definition.FamilyEvidence != identity.FamilyEvidence ||
+                    definition.MilitaryEligible != identity.MilitaryEligible)
                     errors.Add("invalid canonical identity: " + definition.Id);
+            }
+            if (Definitions.Count(p => p.FamilyEvidence ==
+                    HistoricalMasterFamilyEvidence.KnownDistinct) != 12 ||
+                Definitions.Count(p => p.FamilyEvidence ==
+                    HistoricalMasterFamilyEvidence.KnownSame) != 22 ||
+                Definitions.Count(p => p.FamilyEvidence ==
+                    HistoricalMasterFamilyEvidence.Unknown) != 50)
+                errors.Add("historical master family evidence partition mismatch");
+            if (Definitions.Count(p => p.MilitaryEligible) != 11 ||
+                Definitions.Count(p => !p.MilitaryEligible) != 73)
+                errors.Add("historical master military eligibility partition mismatch");
             return errors.ToArray();
         }
 
@@ -238,6 +252,8 @@ namespace AncientWarfare3.content.schools
                     pCanonicalShiName: identity.ShiName,
                     pCanonicalGivenName: identity.GivenName,
                     pCanonicalFamilyName: identity.FamilyName,
+                    pFamilyEvidence: identity.FamilyEvidence,
+                    pMilitaryEligible: identity.MilitaryEligible,
                     pAllowsClanLineage: true));
             }
         }
