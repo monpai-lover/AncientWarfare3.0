@@ -34,7 +34,7 @@ namespace AncientWarfare3.core.schools
             if (pArmy == null) return true;
             string role = AWArmyService.IsRoleArmy(pArmy, AWArmyRole.RoyalGuard)
                 ? AWArmyRole.RoyalGuard
-                : SlaveService.IsSlaveArmy(pArmy)
+                : AWArmyService.IsRoleArmy(pArmy, AWArmyRole.SlaveArmy)
                     ? AWArmyRole.SlaveArmy
                     : AWArmyService.IsRoleArmy(pArmy, AWArmyRole.BorderArmy)
                         ? AWArmyRole.BorderArmy
