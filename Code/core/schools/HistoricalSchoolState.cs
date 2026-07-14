@@ -510,7 +510,9 @@ namespace AncientWarfare3.core.schools
         public SchoolMembershipRecord(long pMembershipId, long pActorId, string pSchoolId,
             SchoolMembershipSource pSource, string pSourceId, long pTeacherActorId, long pCityId,
             int pGeneration, float pReputation, int pStartYear, int pEndYear = -1,
-            bool pActive = true, string pEndReason = "")
+            bool pActive = true, string pEndReason = "",
+            HistoricalSchoolStanding? pStanding = null,
+            int pLoyaltyUntilYear = -1)
         {
             MembershipId = pMembershipId;
             ActorId = pActorId;
@@ -525,6 +527,8 @@ namespace AncientWarfare3.core.schools
             EndYear = pEndYear;
             Active = pActive;
             EndReason = pEndReason ?? "";
+            Standing = pStanding ?? InitialStanding(pSource);
+            LoyaltyUntilYear = pLoyaltyUntilYear;
         }
 
         public long MembershipId { get; }
@@ -540,6 +544,8 @@ namespace AncientWarfare3.core.schools
         public int EndYear { get; }
         public bool Active { get; }
         public string EndReason { get; }
+        public HistoricalSchoolStanding Standing { get; }
+        public int LoyaltyUntilYear { get; }
 
         public bool IsValid => MembershipId >= 0 && ActorId >= 0 &&
                                CourtSchoolRegistry.Find(SchoolId) != null &&
@@ -550,20 +556,43 @@ namespace AncientWarfare3.core.schools
         {
             return new SchoolMembershipRecord(MembershipId, ActorId, SchoolId, Source, SourceId,
                 TeacherActorId, CityId, Generation, Reputation, StartYear,
-                Math.Max(StartYear, pEndYear), pActive: false, pReason);
+                Math.Max(StartYear, pEndYear), pActive: false, pReason,
+                Standing, LoyaltyUntilYear);
         }
 
         public SchoolMembershipRecord WithReputation(float pReputation)
         {
             return new SchoolMembershipRecord(MembershipId, ActorId, SchoolId, Source, SourceId,
                 TeacherActorId, CityId, Generation, Math.Max(0f, Math.Min(100f, pReputation)),
-                StartYear, EndYear, Active, EndReason);
+                StartYear, EndYear, Active, EndReason, Standing, LoyaltyUntilYear);
+        }
+
+        public SchoolMembershipRecord WithStanding(HistoricalSchoolStanding pStanding)
+        {
+            return new SchoolMembershipRecord(MembershipId, ActorId, SchoolId, Source, SourceId,
+                TeacherActorId, CityId, Generation, Reputation, StartYear, EndYear, Active,
+                EndReason, pStanding, LoyaltyUntilYear);
         }
 
         private static bool RequiresTeacher(SchoolMembershipSource pSource)
         {
             return pSource == SchoolMembershipSource.DirectDiscipleship ||
                    pSource == SchoolMembershipSource.LaterDiscipleship;
+        }
+
+        private static HistoricalSchoolStanding InitialStanding(
+            SchoolMembershipSource pSource)
+        {
+            switch (pSource)
+            {
+                case SchoolMembershipSource.HistoricalDescent:
+                    return HistoricalSchoolStanding.CanonicalMaster;
+                case SchoolMembershipSource.DirectDiscipleship:
+                case SchoolMembershipSource.LaterDiscipleship:
+                    return HistoricalSchoolStanding.Disciple;
+                default:
+                    return HistoricalSchoolStanding.Member;
+            }
         }
     }
 
@@ -654,6 +683,30 @@ namespace AncientWarfare3.core.schools
             if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current))
                 return false;
             _activeByActor[pActorId] = current.WithReputation(current.Reputation + pDelta);
+            MarkChanged();
+            return true;
+        }
+
+        public bool ReplaceStanding(
+            long pActorId,
+            long pMembershipId,
+            HistoricalSchoolStanding pStanding,
+            out SchoolMembershipRecord pPrevious,
+            out SchoolMembershipRecord pNext)
+        {
+            pPrevious = null;
+            pNext = null;
+            if (!_activeByActor.TryGetValue(pActorId, out SchoolMembershipRecord current) ||
+                current.MembershipId != pMembershipId) return false;
+            if (current.Standing == pStanding)
+            {
+                pPrevious = current;
+                pNext = current;
+                return true;
+            }
+            pPrevious = current;
+            pNext = current.WithStanding(pStanding);
+            _activeByActor[pActorId] = pNext;
             MarkChanged();
             return true;
         }

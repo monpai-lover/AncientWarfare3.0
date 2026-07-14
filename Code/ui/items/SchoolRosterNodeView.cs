@@ -274,6 +274,8 @@ namespace AncientWarfare3.ui.items
             {
                 case SchoolRosterStanding.HistoricalMaster:
                     return AW_L10n.Text("aw_school_roster_standing_master", "Historical Master");
+                case SchoolRosterStanding.Leader:
+                    return AW_L10n.Text("aw_school_roster_standing_leader", "Leader");
                 case SchoolRosterStanding.QualifiedTeacher:
                     return AW_L10n.Text("aw_school_roster_standing_teacher", "Teacher");
                 case SchoolRosterStanding.DirectDisciple:
@@ -287,11 +289,7 @@ namespace AncientWarfare3.ui.items
 
         private static string StandingLabel(SchoolRosterReadNode pNode)
         {
-            string standing = StandingName(pNode.Layout.Standing);
-            return pNode.Layout.StableOrder == 0
-                ? AW_L10n.Text("aw_school_roster_standing_leader", "Leader") +
-                  " / " + standing
-                : standing;
+            return StandingName(pNode.Layout.Standing);
         }
 
         private static Color KingdomColor(Kingdom pKingdom)

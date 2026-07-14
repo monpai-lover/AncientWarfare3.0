@@ -781,18 +781,23 @@ namespace AncientWarfare3.core.schools
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT MEMBERSHIP_ID, ACTOR_ID, SCHOOL_ID, " +
                     "SOURCE_TYPE, SOURCE_ID, TEACHER_ACTOR_ID, CITY_ID, GENERATION, " +
-                    "REPUTATION, START_YEAR FROM " + MembershipTable +
+                    "REPUTATION, START_YEAR, STANDING, LOYALTY_UNTIL_YEAR FROM " +
+                    MembershipTable +
                     " WHERE ACTIVE=1 ORDER BY ACTOR_ID, START_YEAR DESC, MEMBERSHIP_ID DESC";
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     if (!Enum.TryParse(ValueString(reader, 3), ignoreCase: false,
                             out SchoolMembershipSource source)) continue;
+                    if (!Enum.TryParse(ValueString(reader, 10), ignoreCase: false,
+                            out HistoricalSchoolStanding standing)) continue;
                     result.Add(new SchoolMembershipRecord(ValueLong(reader, 0),
                         ValueLong(reader, 1), ValueString(reader, 2), source,
                         ValueString(reader, 4), ValueLong(reader, 5, -1),
                         ValueLong(reader, 6, -1), ValueInt(reader, 7),
-                        (float)ValueDouble(reader, 8), ValueInt(reader, 9)));
+                        (float)ValueDouble(reader, 8), ValueInt(reader, 9),
+                        pStanding: standing,
+                        pLoyaltyUntilYear: ValueInt(reader, 11, -1)));
                 }
             }
             catch (Exception error)
@@ -822,6 +827,8 @@ namespace AncientWarfare3.core.schools
                     ColumnVal.Create("END_YEAR", -1),
                     ColumnVal.Create("ACTIVE", 1),
                     ColumnVal.Create("END_REASON", ""),
+                    ColumnVal.Create("STANDING", pRecord.Standing.ToString()),
+                    ColumnVal.Create("LOYALTY_UNTIL_YEAR", pRecord.LoyaltyUntilYear),
                     ColumnVal.Create("UPDATED_TIME", pTime));
                 return true;
             }
@@ -851,6 +858,95 @@ namespace AncientWarfare3.core.schools
             {
                 try { transaction.Rollback(); } catch { }
                 ModClass.LogWarning("HistoricalSchoolStore convert membership failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static bool UpdateMembershipStanding(
+            SchoolMembershipRecord pCurrent,
+            SchoolMembershipRecord pNext,
+            double pTime)
+        {
+            if (DB == null || pCurrent == null || pNext == null ||
+                pCurrent.MembershipId != pNext.MembershipId ||
+                pCurrent.ActorId != pNext.ActorId || !pCurrent.Active || !pNext.Active)
+                return false;
+            if (pCurrent.Standing == pNext.Standing) return true;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + MembershipTable +
+                    " SET STANDING=@next,UPDATED_TIME=@time" +
+                    " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor AND ACTIVE=1" +
+                    " AND STANDING=@current AND LOYALTY_UNTIL_YEAR=@loyalty";
+                command.Parameters.AddWithValue("@next", pNext.Standing.ToString());
+                command.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                command.Parameters.AddWithValue("@id", pCurrent.MembershipId);
+                command.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                command.Parameters.AddWithValue("@current", pCurrent.Standing.ToString());
+                command.Parameters.AddWithValue("@loyalty", pCurrent.LoyaltyUntilYear);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore update standing failed: " +
+                                    error.Message);
+                return false;
+            }
+        }
+
+        public static bool UpdateSchoolLeader(
+            string pSchoolId,
+            long pLeaderActorId,
+            double pTime)
+        {
+            if (DB == null || string.IsNullOrEmpty(pSchoolId)) return false;
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            try
+            {
+                using (var demote = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    demote.CommandText = "UPDATE " + MembershipTable +
+                        " SET STANDING=@teacher,UPDATED_TIME=@time" +
+                        " WHERE SCHOOL_ID=@school AND ACTIVE=1 AND STANDING=@leader" +
+                        " AND ACTOR_ID<>@target";
+                    demote.Parameters.AddWithValue(
+                        "@teacher", HistoricalSchoolStanding.Teacher.ToString());
+                    demote.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                    demote.Parameters.AddWithValue("@school", pSchoolId);
+                    demote.Parameters.AddWithValue(
+                        "@leader", HistoricalSchoolStanding.Leader.ToString());
+                    demote.Parameters.AddWithValue("@target", pLeaderActorId);
+                    demote.ExecuteNonQuery();
+                }
+
+                if (pLeaderActorId >= 0)
+                {
+                    using var promote = new SQLiteCommand(DB) { Transaction = transaction };
+                    promote.CommandText = "UPDATE " + MembershipTable +
+                        " SET STANDING=@leader,UPDATED_TIME=@time" +
+                        " WHERE SCHOOL_ID=@school AND ACTOR_ID=@target AND ACTIVE=1" +
+                        " AND (STANDING=@teacher OR STANDING=@leader)";
+                    promote.Parameters.AddWithValue(
+                        "@leader", HistoricalSchoolStanding.Leader.ToString());
+                    promote.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+                    promote.Parameters.AddWithValue("@school", pSchoolId);
+                    promote.Parameters.AddWithValue("@target", pLeaderActorId);
+                    promote.Parameters.AddWithValue(
+                        "@teacher", HistoricalSchoolStanding.Teacher.ToString());
+                    if (promote.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException(
+                            "school leader candidate is no longer eligible");
+                }
+
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception error)
+            {
+                try { transaction.Rollback(); } catch { }
+                ModClass.LogWarning("HistoricalSchoolStore update leader failed: " +
                                     error.Message);
                 return false;
             }
@@ -1477,7 +1573,7 @@ namespace AncientWarfare3.core.schools
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
                 "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
-                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING,LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
                 " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
             command.Parameters.AddWithValue("@id", pExpected.MembershipId);
             command.Parameters.AddWithValue("@actor", pExpected.ActorId);
@@ -1500,7 +1596,10 @@ namespace AncientWarfare3.core.schools
                          ValueInt(reader, 10, int.MinValue) == pExpected.EndYear &&
                          ValueInt(reader, 11, -1) == 1 &&
                          ValueString(reader, 12) == pExpected.EndReason &&
-                         ValueDouble(reader, 13, -1d).Equals(pTime);
+                         ValueDouble(reader, 13, -1d).Equals(pTime) &&
+                         ValueString(reader, 14) == pExpected.Standing.ToString() &&
+                         ValueInt(reader, 15, int.MinValue) ==
+                         pExpected.LoyaltyUntilYear;
             }
             if (rowCount == 0) return SchoolPersistenceRowState.Missing;
             return rowCount == 1 && exact
@@ -1789,7 +1888,7 @@ namespace AncientWarfare3.core.schools
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
                 "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
-                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING,LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
                 " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
             command.Parameters.AddWithValue("@id", pExpected.MembershipId);
             command.Parameters.AddWithValue("@actor", pExpected.ActorId);
@@ -1932,7 +2031,7 @@ namespace AncientWarfare3.core.schools
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
                 "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
-                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING,LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
                 " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
             command.Parameters.AddWithValue("@id", pMembership.MembershipId);
             command.Parameters.AddWithValue("@actor", pMembership.ActorId);
@@ -2028,7 +2127,7 @@ namespace AncientWarfare3.core.schools
             using var command = new SQLiteCommand(DB);
             command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
                 "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
-                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME FROM " + MembershipTable +
+                "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING,LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
                 " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
             command.Parameters.AddWithValue("@id", pExpected.MembershipId);
             command.Parameters.AddWithValue("@actor", pExpected.ActorId);
@@ -2068,7 +2167,10 @@ namespace AncientWarfare3.core.schools
                    ValueLong(pReader, 6, -1L) == pExpected.CityId &&
                    ValueInt(pReader, 7, -1) == pExpected.Generation &&
                    ValueDouble(pReader, 8).Equals((double)pExpected.Reputation) &&
-                   ValueInt(pReader, 9, -1) == pExpected.StartYear;
+                   ValueInt(pReader, 9, -1) == pExpected.StartYear &&
+                   ValueString(pReader, 14) == pExpected.Standing.ToString() &&
+                   ValueInt(pReader, 15, int.MinValue) ==
+                   pExpected.LoyaltyUntilYear;
         }
 
         private static SchoolDeathPersistenceRowState ReadSchoolDeathAffiliationState(
@@ -2182,9 +2284,10 @@ namespace AncientWarfare3.core.schools
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + MembershipTable +
                 " (MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE,SOURCE_ID,TEACHER_ACTOR_ID," +
-                "CITY_ID,GENERATION,REPUTATION,START_YEAR,END_YEAR,ACTIVE,END_REASON,UPDATED_TIME)" +
+                "CITY_ID,GENERATION,REPUTATION,START_YEAR,END_YEAR,ACTIVE,END_REASON,UPDATED_TIME," +
+                "STANDING,LOYALTY_UNTIL_YEAR)" +
                 " VALUES (@id,@actor,@school,@source,@sourceId,@teacher,@city,@generation," +
-                "@reputation,@start,-1,1,'',@time)";
+                "@reputation,@start,-1,1,'',@time,@standing,@loyalty)";
             command.Parameters.AddWithValue("@id", pRecord.MembershipId);
             command.Parameters.AddWithValue("@actor", pRecord.ActorId);
             command.Parameters.AddWithValue("@school", pRecord.SchoolId);
@@ -2196,6 +2299,8 @@ namespace AncientWarfare3.core.schools
             command.Parameters.AddWithValue("@reputation", pRecord.Reputation);
             command.Parameters.AddWithValue("@start", pRecord.StartYear);
             command.Parameters.AddWithValue("@time", pTime);
+            command.Parameters.AddWithValue("@standing", pRecord.Standing.ToString());
+            command.Parameters.AddWithValue("@loyalty", pRecord.LoyaltyUntilYear);
             if (command.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("membership insert failed");
         }

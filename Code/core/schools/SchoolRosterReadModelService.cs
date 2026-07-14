@@ -99,7 +99,8 @@ namespace AncientWarfare3.core.schools
                     membership?.TeacherActorId ?? -1L, membership?.Generation ?? 0,
                     membership?.Reputation ?? 0f, followers, Learning(actor),
                     membership?.StartYear ?? -1, canonical, qualifiedTeacher, live,
-                    membershipValid, firstLectureYear, firstLectureTime, SafeAge(actor)));
+                    membershipValid, firstLectureYear, firstLectureTime, SafeAge(actor),
+                    membership?.Standing ?? HistoricalSchoolStanding.Member));
 
                 if (!live || !membershipValid) continue;
                 City residence = HistoricalAffiliationService.ResidenceCity(actor) ?? actor.city;
@@ -127,7 +128,9 @@ namespace AncientWarfare3.core.schools
             }
 
             int teacherCount = layout.Nodes.Count(p =>
-                p.Candidate.CanonicalMaster || p.Candidate.QualifiedTeacher);
+                p.Candidate.PersistedStanding == HistoricalSchoolStanding.CanonicalMaster ||
+                p.Candidate.PersistedStanding == HistoricalSchoolStanding.Leader ||
+                p.Candidate.PersistedStanding == HistoricalSchoolStanding.Teacher);
             return new SchoolRosterReadModel(pSchoolId, membershipVersion,
                 residenceRevision, lectureRevision, nodes, layout.Links,
                 layout.ExcludedCount, teacherCount);

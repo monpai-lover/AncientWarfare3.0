@@ -28,15 +28,14 @@ namespace AncientWarfare3.core.schools
                    serviceFree && !forbidden && centralOfficeMale && reputationFit && officeFit;
         }
 
-        public static bool IsQualifiedTeacher(bool pCanonicalMaster,
-            SchoolMembershipSource pSource, float pReputation)
+        public static bool IsQualifiedTeacher(
+            bool pCanonicalMaster,
+            HistoricalSchoolStanding pStanding)
         {
-            if (pCanonicalMaster) return true;
-            bool teacherSource = pSource == SchoolMembershipSource.DirectDiscipleship ||
-                                 pSource == SchoolMembershipSource.LaterDiscipleship ||
-                                 pSource == SchoolMembershipSource.ExplicitConversion ||
-                                 pSource == SchoolMembershipSource.PreservedWork;
-            return teacherSource && pReputation >= 10f;
+            return pCanonicalMaster ||
+                   pStanding == HistoricalSchoolStanding.Teacher ||
+                   pStanding == HistoricalSchoolStanding.Leader ||
+                   pStanding == HistoricalSchoolStanding.CanonicalMaster;
         }
 
         public static int TermYears(long pActorId, long pHostKingdomId, int pYear)

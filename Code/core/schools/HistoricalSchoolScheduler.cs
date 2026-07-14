@@ -130,10 +130,10 @@ namespace AncientWarfare3.core.schools
                         SchoolGuestOfficeService.ProcessYear(_activeYear);
                         break;
                     case HistoricalSchoolSchedulerStage.ServiceAppointment:
-                        break;
-                    case HistoricalSchoolSchedulerStage.Promotion:
                         ProcessLedgerDecay();
                         break;
+                    case HistoricalSchoolSchedulerStage.Promotion:
+                        return SchoolMembershipService.ProcessStandingFrame(_activeYear);
                     case HistoricalSchoolSchedulerStage.LecturePlan:
                         ProcessLecturePlan();
                         break;

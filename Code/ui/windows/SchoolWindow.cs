@@ -787,6 +787,8 @@ namespace AncientWarfare3.ui.windows
                 case SchoolRosterStanding.HistoricalMaster:
                     return AW_L10n.Text("aw_school_roster_standing_master",
                         "Historical Master");
+                case SchoolRosterStanding.Leader:
+                    return AW_L10n.Text("aw_school_roster_standing_leader", "Leader");
                 case SchoolRosterStanding.QualifiedTeacher:
                     return AW_L10n.Text("aw_school_roster_standing_teacher", "Teacher");
                 case SchoolRosterStanding.DirectDisciple:

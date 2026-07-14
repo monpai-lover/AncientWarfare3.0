@@ -18,6 +18,8 @@ namespace AncientWarfare3.core.db
         public int end_year = -1;
         public int active;
         public string end_reason;
+        public string standing;
+        public int loyalty_until_year = -1;
         public double updated_time;
     }
 }

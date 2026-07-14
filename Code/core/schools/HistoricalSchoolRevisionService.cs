@@ -130,7 +130,9 @@ namespace AncientWarfare3.core.schools
                    pLeft.StartYear == pRight.StartYear &&
                    pLeft.EndYear == pRight.EndYear &&
                    pLeft.Active == pRight.Active &&
-                   pLeft.EndReason == pRight.EndReason;
+                   pLeft.EndReason == pRight.EndReason &&
+                   pLeft.Standing == pRight.Standing &&
+                   pLeft.LoyaltyUntilYear == pRight.LoyaltyUntilYear;
         }
 
         private static CityRevisions GetCity(long pCityId)

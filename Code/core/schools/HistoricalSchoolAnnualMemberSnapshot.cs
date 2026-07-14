@@ -266,18 +266,15 @@ namespace AncientWarfare3.core.schools
         private static bool IsQualified(SchoolMembershipRecord pRecord, bool pCanonical)
         {
             if (pCanonical) return true;
-            if (pRecord == null || pRecord.Reputation < 10f) return false;
-            return pRecord.Source == SchoolMembershipSource.DirectDiscipleship ||
-                   pRecord.Source == SchoolMembershipSource.LaterDiscipleship ||
-                   pRecord.Source == SchoolMembershipSource.ExplicitConversion ||
-                   pRecord.Source == SchoolMembershipSource.PreservedWork;
+            return pRecord != null &&
+                   (pRecord.Standing == HistoricalSchoolStanding.Teacher ||
+                    pRecord.Standing == HistoricalSchoolStanding.Leader ||
+                    pRecord.Standing == HistoricalSchoolStanding.CanonicalMaster);
         }
 
         private static bool IsLectureQualified(SchoolMembershipRecord pRecord, int pYear)
         {
-            return IsQualified(pRecord, pCanonical: false) &&
-                   HistoricalSchoolLectureRules.IsLaterTeacherEligible(
-                       pRecord.StartYear, pRecord.Reputation, pYear);
+            return IsQualified(pRecord, pCanonical: false);
         }
 
         private static bool ValidActive(SchoolMembershipRecord pRecord)

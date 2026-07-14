@@ -1,7 +1,28 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.schools
 {
+    public readonly struct HistoricalSchoolLeaderCandidate
+    {
+        public HistoricalSchoolLeaderCandidate(
+            long pActorId,
+            int pStartYear,
+            HistoricalSchoolStanding pStanding,
+            bool pAvailable)
+        {
+            ActorId = pActorId;
+            StartYear = pStartYear;
+            Standing = pStanding;
+            Available = pAvailable;
+        }
+
+        public long ActorId { get; }
+        public int StartYear { get; }
+        public HistoricalSchoolStanding Standing { get; }
+        public bool Available { get; }
+    }
+
     public enum HistoricalSchoolStanding
     {
         Member,
@@ -48,6 +69,28 @@ namespace AncientWarfare3.core.schools
         public static int NextFairIndex(int pCurrentIndex, int pCount)
         {
             return pCount <= 0 ? -1 : (Math.Max(-1, pCurrentIndex) + 1) % pCount;
+        }
+
+        public static long SelectLeaderActorId(
+            IReadOnlyList<HistoricalSchoolLeaderCandidate> pCandidates)
+        {
+            long selectedActorId = -1L;
+            int selectedStartYear = int.MaxValue;
+            if (pCandidates == null) return selectedActorId;
+
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                HistoricalSchoolLeaderCandidate candidate = pCandidates[i];
+                bool qualified = candidate.Standing == HistoricalSchoolStanding.Teacher ||
+                                 candidate.Standing == HistoricalSchoolStanding.Leader;
+                if (!candidate.Available || !qualified || candidate.ActorId < 0) continue;
+                if (candidate.StartYear > selectedStartYear) continue;
+                if (candidate.StartYear == selectedStartYear &&
+                    selectedActorId >= 0 && candidate.ActorId >= selectedActorId) continue;
+                selectedStartYear = candidate.StartYear;
+                selectedActorId = candidate.ActorId;
+            }
+            return selectedActorId;
         }
     }
 }

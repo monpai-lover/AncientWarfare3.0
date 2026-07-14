@@ -8,7 +8,8 @@ namespace AncientWarfare3.core.schools
     {
         public HistoricalSchoolLectureCandidate(long pActorId, string pSchoolId,
             long pCityId, long pKingdomId, bool pCanonical, int pStartYear,
-            float pReputation)
+            float pReputation,
+            HistoricalSchoolStanding pStanding = HistoricalSchoolStanding.Member)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -17,6 +18,7 @@ namespace AncientWarfare3.core.schools
             Canonical = pCanonical;
             StartYear = pStartYear;
             Reputation = pReputation;
+            Standing = pStanding;
         }
 
         public long ActorId { get; }
@@ -26,6 +28,7 @@ namespace AncientWarfare3.core.schools
         public bool Canonical { get; }
         public int StartYear { get; }
         public float Reputation { get; }
+        public HistoricalSchoolStanding Standing { get; }
         public bool IsValid => ActorId >= 0 && CityId >= 0 && KingdomId >= 0 &&
                                !string.IsNullOrWhiteSpace(SchoolId);
     }
@@ -263,8 +266,6 @@ namespace AncientWarfare3.core.schools
     public static class HistoricalSchoolLectureRules
     {
         public const int CanonicalLectureCooldownYears = 3;
-        public const int LaterTeacherMinimumMembershipYears = 3;
-        public const float LaterTeacherMinimumReputation = 25f;
         public const int LaterLectureCooldownYears = 5;
         public const int MaxWorldLecturesPerYear = 8;
         public const int MaxCityLecturesPerYear = 2;
@@ -282,17 +283,8 @@ namespace AncientWarfare3.core.schools
             if (!pCandidate.IsValid || pYear < 0 || float.IsNaN(pCandidate.Reputation) ||
                 float.IsInfinity(pCandidate.Reputation)) return false;
             if (pCandidate.Canonical) return true;
-            return IsLaterTeacherEligible(pCandidate.StartYear, pCandidate.Reputation,
-                pYear);
-        }
-
-        public static bool IsLaterTeacherEligible(int pStartYear, float pReputation,
-            int pYear)
-        {
-            return pYear >= 0 && pStartYear >= 0 && !float.IsNaN(pReputation) &&
-                   !float.IsInfinity(pReputation) &&
-                   pYear - pStartYear >= LaterTeacherMinimumMembershipYears &&
-                   pReputation >= LaterTeacherMinimumReputation;
+            return pCandidate.Standing == HistoricalSchoolStanding.Teacher ||
+                   pCandidate.Standing == HistoricalSchoolStanding.Leader;
         }
 
         public static bool CanPersuade(HistoricalSchoolLectureCandidate pCandidate)

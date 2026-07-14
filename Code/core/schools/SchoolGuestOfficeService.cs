@@ -616,7 +616,7 @@ namespace AncientWarfare3.core.schools
                 bool canonicalMaster =
                     HistoricalSchoolDescentService.IsCanonicalMaster(actor);
                 if (!SchoolGuestOfficeRules.IsQualifiedTeacher(canonicalMaster,
-                        membership.Source, membership.Reputation)) continue;
+                        membership.Standing)) continue;
                 HistoricalSchoolMasterDefinition definition = canonicalMaster
                     ? HistoricalSchoolDescentService.DefinitionFor(actor)
                     : null;

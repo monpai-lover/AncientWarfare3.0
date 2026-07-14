@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.schools
     public enum SchoolRosterStanding
     {
         HistoricalMaster = 0,
+        Leader = 5,
         QualifiedTeacher = 10,
         DirectDisciple = 20,
         LaterDisciple = 30,
@@ -20,7 +21,8 @@ namespace AncientWarfare3.core.schools
             float pReputation, int pFollowerCount, float pLearning, int pStartYear,
             bool pCanonicalMaster, bool pQualifiedTeacher, bool pAlive = true,
             bool pMembershipValid = true, int pFirstLectureYear = int.MaxValue,
-            double pFirstLectureTime = double.MaxValue, int pAge = 0)
+            double pFirstLectureTime = double.MaxValue, int pAge = 0,
+            HistoricalSchoolStanding pStanding = HistoricalSchoolStanding.Member)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -38,6 +40,7 @@ namespace AncientWarfare3.core.schools
             FirstLectureYear = pFirstLectureYear < 0 ? int.MaxValue : pFirstLectureYear;
             FirstLectureTime = FiniteLectureTime(pFirstLectureTime);
             Age = Math.Max(0, pAge);
+            PersistedStanding = pStanding;
         }
 
         public long ActorId { get; }
@@ -56,6 +59,7 @@ namespace AncientWarfare3.core.schools
         public int FirstLectureYear { get; }
         public double FirstLectureTime { get; }
         public int Age { get; }
+        public HistoricalSchoolStanding PersistedStanding { get; }
 
         private static float FiniteNonNegative(float pValue)
         {
@@ -180,13 +184,17 @@ namespace AncientWarfare3.core.schools
 
         public static SchoolRosterStanding StandingFor(SchoolRosterCandidate pCandidate)
         {
-            if (pCandidate?.CanonicalMaster == true)
+            if (pCandidate?.PersistedStanding ==
+                HistoricalSchoolStanding.CanonicalMaster)
                 return SchoolRosterStanding.HistoricalMaster;
-            if (pCandidate?.QualifiedTeacher == true)
+            if (pCandidate?.PersistedStanding == HistoricalSchoolStanding.Leader)
+                return SchoolRosterStanding.Leader;
+            if (pCandidate?.PersistedStanding == HistoricalSchoolStanding.Teacher)
                 return SchoolRosterStanding.QualifiedTeacher;
-            if (pCandidate?.Source == SchoolMembershipSource.DirectDiscipleship)
+            if (pCandidate?.PersistedStanding == HistoricalSchoolStanding.Disciple &&
+                pCandidate.Source == SchoolMembershipSource.DirectDiscipleship)
                 return SchoolRosterStanding.DirectDisciple;
-            if (pCandidate?.Source == SchoolMembershipSource.LaterDiscipleship)
+            if (pCandidate?.PersistedStanding == HistoricalSchoolStanding.Disciple)
                 return SchoolRosterStanding.LaterDisciple;
             return SchoolRosterStanding.Member;
         }
@@ -212,7 +220,7 @@ namespace AncientWarfare3.core.schools
 
             List<SchoolRosterNode> nodes = valid
                 .Select(p => new SchoolRosterNode(p, StandingFor(p), 0))
-                .OrderByDescending(p => p.Candidate.CanonicalMaster)
+                .OrderBy(p => p.Standing)
                 .ThenBy(p => p.Generation)
                 .ThenBy(p => p.StartYear < 0 ? int.MaxValue : p.StartYear)
                 .ThenBy(p => p.FirstLectureYear)

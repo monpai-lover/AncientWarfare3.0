@@ -13,7 +13,8 @@ namespace AncientWarfare3.core.schools
             bool pPresent,
             bool pTravelling,
             long pServiceKingdomId,
-            int pTravelBucket = 0)
+            int pTravelBucket = 0,
+            int pPromotionDueYear = -1)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -23,6 +24,7 @@ namespace AncientWarfare3.core.schools
             Travelling = pTravelling;
             ServiceKingdomId = pServiceKingdomId;
             TravelBucket = pTravelling ? Math.Max(0, pTravelBucket) : -1;
+            PromotionDueYear = pPromotionDueYear;
         }
 
         public long ActorId { get; }
@@ -33,6 +35,7 @@ namespace AncientWarfare3.core.schools
         public bool Travelling { get; }
         public long ServiceKingdomId { get; }
         public int TravelBucket { get; }
+        public int PromotionDueYear { get; }
         public bool IsValid => ActorId >= 0 && !string.IsNullOrEmpty(SchoolId);
     }
 
@@ -56,6 +59,8 @@ namespace AncientWarfare3.core.schools
             new Dictionary<int, HashSet<long>>();
         private readonly Dictionary<long, HashSet<long>> _servingByKingdom =
             new Dictionary<long, HashSet<long>>();
+        private readonly SortedDictionary<int, HashSet<long>> _promotionByYear =
+            new SortedDictionary<int, HashSet<long>>();
         private readonly HashSet<long> _livingXiaCities = new HashSet<long>();
 
         public static HistoricalSchoolRuntimeIndex Instance => Shared;
@@ -79,6 +84,8 @@ namespace AncientWarfare3.core.schools
                 Add(_travelByBucket, pEntry.TravelBucket, pEntry.ActorId);
             if (pEntry.ServiceKingdomId >= 0)
                 Add(_servingByKingdom, pEntry.ServiceKingdomId, pEntry.ActorId);
+            if (pEntry.PromotionDueYear >= 0)
+                Add(_promotionByYear, pEntry.PromotionDueYear, pEntry.ActorId);
         }
 
         public bool Remove(long pActorId)
@@ -98,6 +105,8 @@ namespace AncientWarfare3.core.schools
                 Remove(_travelByBucket, old.TravelBucket, pActorId);
             if (old.ServiceKingdomId >= 0)
                 Remove(_servingByKingdom, old.ServiceKingdomId, pActorId);
+            if (old.PromotionDueYear >= 0)
+                Remove(_promotionByYear, old.PromotionDueYear, pActorId);
             return true;
         }
 
@@ -150,6 +159,21 @@ namespace AncientWarfare3.core.schools
         public long[] ServingIds(long pKingdomId) =>
             CopyStable(_servingByKingdom, pKingdomId);
 
+        public long[] PromotionDueIds(int pYear)
+        {
+            if (pYear < 0 || _promotionByYear.Count == 0) return Array.Empty<long>();
+            var result = new List<long>();
+            foreach (KeyValuePair<int, HashSet<long>> bucket in _promotionByYear)
+            {
+                if (bucket.Key > pYear) break;
+                result.AddRange(bucket.Value);
+            }
+            if (result.Count == 0) return Array.Empty<long>();
+            long[] ids = result.ToArray();
+            Array.Sort(ids);
+            return ids;
+        }
+
         public void SetLivingXiaCity(long pCityId, bool pLivingXia)
         {
             if (pCityId < 0) return;
@@ -174,6 +198,7 @@ namespace AncientWarfare3.core.schools
             _presentByCitySchool.Clear();
             _travelByBucket.Clear();
             _servingByKingdom.Clear();
+            _promotionByYear.Clear();
         }
 
         public void ClearLivingXiaCities() => _livingXiaCities.Clear();
@@ -209,7 +234,7 @@ namespace AncientWarfare3.core.schools
         }
 
         private static void Add<TKey>(
-            Dictionary<TKey, HashSet<long>> pBuckets,
+            IDictionary<TKey, HashSet<long>> pBuckets,
             TKey pKey,
             long pActorId)
         {
@@ -222,7 +247,7 @@ namespace AncientWarfare3.core.schools
         }
 
         private static void Remove<TKey>(
-            Dictionary<TKey, HashSet<long>> pBuckets,
+            IDictionary<TKey, HashSet<long>> pBuckets,
             TKey pKey,
             long pActorId)
         {
@@ -232,7 +257,7 @@ namespace AncientWarfare3.core.schools
         }
 
         private static int BucketCount<TKey>(
-            Dictionary<TKey, HashSet<long>> pBuckets,
+            IDictionary<TKey, HashSet<long>> pBuckets,
             TKey pKey)
         {
             return pBuckets.TryGetValue(pKey, out HashSet<long> actors)
@@ -241,7 +266,7 @@ namespace AncientWarfare3.core.schools
         }
 
         private static long[] CopyStable<TKey>(
-            Dictionary<TKey, HashSet<long>> pBuckets,
+            IDictionary<TKey, HashSet<long>> pBuckets,
             TKey pKey)
         {
             return pBuckets.TryGetValue(pKey, out HashSet<long> actors)

@@ -100,11 +100,9 @@ namespace AncientWarfare3.core.schools
         public static bool WasQualifiedTeacherAtDeath(SchoolMembershipRecord pMembership)
         {
             return pMembership != null && pMembership.Active && pMembership.IsValid &&
-                   (pMembership.Source == SchoolMembershipSource.DirectDiscipleship ||
-                    pMembership.Source == SchoolMembershipSource.LaterDiscipleship ||
-                    pMembership.Source == SchoolMembershipSource.ExplicitConversion ||
-                    pMembership.Source == SchoolMembershipSource.PreservedWork) &&
-                   pMembership.Reputation >= 10f;
+                   (pMembership.Standing == HistoricalSchoolStanding.Teacher ||
+                    pMembership.Standing == HistoricalSchoolStanding.Leader ||
+                    pMembership.Standing == HistoricalSchoolStanding.CanonicalMaster);
         }
 
         public static int DirectDiscipleCount(long pTeacherActorId)

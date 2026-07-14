@@ -231,7 +231,8 @@ namespace AncientWarfare3.core.schools
             bool canonical = HistoricalSchoolDescentService.IsCanonicalMaster(pTeacher);
             var lectureCandidate = new HistoricalSchoolLectureCandidate(pTeacher.data.id,
                 teacherMembership.SchoolId, residence.data.id, residence.kingdom.id,
-                canonical, teacherMembership.StartYear, teacherMembership.Reputation);
+                canonical, teacherMembership.StartYear, teacherMembership.Reputation,
+                teacherMembership.Standing);
             if (!pTeachingBudget.TryPlan(lectureCandidate,
                     out HistoricalSchoolTeachingPlan plan)) return true;
             int directCount = 0;
@@ -410,6 +411,8 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord current = SchoolMembershipService.GetActive(pActor.data.id);
             if (current == null || !HistoricalSchoolRules.CanExplicitlyConvert(false,
                     pYearsWithoutOwnTeacher, pRivalExposure, true)) return false;
+            int eventYear = pYear >= 0 ? pYear : Date.getCurrentYear();
+            if (eventYear < current.LoyaltyUntilYear) return false;
             if (string.Equals(current.SchoolId, pTargetSchoolId, StringComparison.Ordinal))
                 return false;
             City city = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
@@ -417,7 +420,6 @@ namespace AncientWarfare3.core.schools
             if (!SchoolMembershipService.TryConvert(pActor, pTargetSchoolId,
                     "conversion:" + pActionId + ":actor:" + pActor.data.id,
                     city.data.id)) return false;
-            int eventYear = pYear >= 0 ? pYear : Date.getCurrentYear();
             if (!HistoricalSchoolStore.RecordSchoolEvent("school_conversion", pActor.data.id,
                 -1,
                 pTargetSchoolId, city.data.id, city.kingdom?.data?.id ?? -1L,

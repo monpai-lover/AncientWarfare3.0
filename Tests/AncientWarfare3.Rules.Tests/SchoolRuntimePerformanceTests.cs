@@ -48,6 +48,34 @@ internal static class SchoolRuntimePerformanceTests
             HistoricalSchoolStandingRules.CanConvert(40, 18, 5, 0.45f, true),
             "busy member cannot convert");
 
+        var leaderCandidates = new[]
+        {
+            new HistoricalSchoolLeaderCandidate(
+                11, 8, HistoricalSchoolStanding.Teacher, true),
+            new HistoricalSchoolLeaderCandidate(
+                9, 8, HistoricalSchoolStanding.Teacher, true),
+            new HistoricalSchoolLeaderCandidate(
+                5, 3, HistoricalSchoolStanding.Disciple, true),
+            new HistoricalSchoolLeaderCandidate(
+                2, 1, HistoricalSchoolStanding.Teacher, false)
+        };
+        Equal(9L,
+            HistoricalSchoolStandingRules.SelectLeaderActorId(leaderCandidates),
+            "senior available teacher wins with actor id tie-break");
+
+        int fairCursor = -1;
+        var visitedSchools = new HashSet<int>();
+        for (int slot = 0; slot < 14; slot++)
+        {
+            fairCursor = HistoricalSchoolStandingRules.NextFairIndex(fairCursor, 14);
+            True(visitedSchools.Add(fairCursor),
+                "fair school cursor does not repeat before full coverage");
+        }
+        Equal(14, visitedSchools.Count,
+            "two eight-slot years can cover all fourteen schools");
+        Equal(0, HistoricalSchoolStandingRules.NextFairIndex(fairCursor, 14),
+            "fair school cursor repeats only after full coverage");
+
         True(FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 11),
             "exact committed transfer is allowed");
         Equal(false,
