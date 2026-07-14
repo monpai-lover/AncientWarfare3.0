@@ -6,6 +6,21 @@ namespace AncientWarfare3.core.schools
 {
     internal static class HistoricalSchoolRevisionService
     {
+        private sealed class LiveRevisionSource : IHistoricalSchoolRevisionSource
+        {
+            public long StructureRevision(string pSchoolId) =>
+                HistoricalSchoolRevisionService.StructureRevision(pSchoolId);
+
+            public long ScoreRevision(string pSchoolId) =>
+                HistoricalSchoolRevisionService.ScoreRevision(pSchoolId);
+
+            public long ActivityRevision(string pSchoolId) =>
+                HistoricalSchoolRevisionService.ActivityRevision(pSchoolId);
+
+            public long ResidenceRevisionForCity(long pCityId) =>
+                HistoricalSchoolRevisionService.ResidenceRevisionForCity(pCityId);
+        }
+
         private sealed class CityRevisions
         {
             public long Residence;
@@ -21,9 +36,8 @@ namespace AncientWarfare3.core.schools
             new Dictionary<string, long>(StringComparer.Ordinal);
         private static readonly Dictionary<long, CityRevisions> ByCity =
             new Dictionary<long, CityRevisions>();
-        private static long _residenceRevision;
-
-        public static long ResidenceRevision => _residenceRevision;
+        public static IHistoricalSchoolRevisionSource Source { get; } =
+            new LiveRevisionSource();
 
         public static long StructureRevision(string pSchoolId) =>
             Get(StructureBySchool, pSchoolId);
@@ -85,7 +99,6 @@ namespace AncientWarfare3.core.schools
             if (oldResidence >= 0) CitySchoolSnapshotService.MarkDirtyById(oldResidence);
             if (nextResidence >= 0 && nextResidence != oldResidence)
                 CitySchoolSnapshotService.MarkDirtyById(nextResidence);
-            _residenceRevision = Next(_residenceRevision);
             return mask;
         }
 
@@ -100,7 +113,6 @@ namespace AncientWarfare3.core.schools
             ScoreBySchool.Clear();
             ActivityBySchool.Clear();
             ByCity.Clear();
-            _residenceRevision = 0L;
         }
 
         internal static bool IsPresent(HistoricalSchoolAffiliationSnapshot pState)

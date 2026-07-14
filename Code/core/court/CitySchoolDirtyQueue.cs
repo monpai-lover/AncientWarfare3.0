@@ -32,18 +32,18 @@ namespace AncientWarfare3.core.court
             return true;
         }
 
-        public long[] TakeBatch(int pBudget)
+        public bool TryDequeue(out long pCityId)
         {
-            int budget = Math.Max(0, pBudget);
-            var result = new List<long>(Math.Min(budget, _queue.Count));
-            while (result.Count < budget && _queue.First != null)
+            LinkedListNode<long> first = _queue.First;
+            if (first == null)
             {
-                long cityId = _queue.First.Value;
-                _queue.RemoveFirst();
-                _nodes.Remove(cityId);
-                result.Add(cityId);
+                pCityId = -1L;
+                return false;
             }
-            return result.ToArray();
+            pCityId = first.Value;
+            _queue.RemoveFirst();
+            _nodes.Remove(pCityId);
+            return true;
         }
 
         public int RequeueFront(IEnumerable<long> pCityIds)

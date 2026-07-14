@@ -180,6 +180,8 @@ namespace AncientWarfare3.core.schools
                     pActivity.FirstDelta, pActivity.SecondDelta, worldTime);
             if (persistence != HistoricalSchoolTeachingPersistenceOutcome.Committed)
                 return persistence;
+            HistoricalSchoolRevisionService.MarkActivity(debate.FirstSchoolId);
+            HistoricalSchoolRevisionService.MarkActivity(debate.SecondSchoolId);
             TryFoundInstitutionAfterQueuedDebate(first, second, city, debate.DebateYear,
                 worldTime);
             ApplyCommittedDebate(first, second, city, debate.Outcome, debate.TopicId,

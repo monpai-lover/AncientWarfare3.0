@@ -60,8 +60,7 @@ namespace AncientWarfare3.ui.windows
         private string _selectedSchool = CourtSchoolId.Ru;
         private long _selectedCity = -1L;
         private int _displayedSnapshotGeneration = -1;
-        private long _displayedMembershipVersion = -1L;
-        private long _displayedLectureRevision = -1L;
+        private HistoricalSchoolRosterRevisionStamp _displayedSchoolRevisionStamp;
         private float _nextRefreshCheckTime;
 
         public static void OpenSchool(string pSchoolId = CourtSchoolId.Ru)
@@ -112,9 +111,13 @@ namespace AncientWarfare3.ui.windows
             if (!isActiveAndEnabled || World.world == null ||
                 Time.unscaledTime < _nextRefreshCheckTime) return;
             _nextRefreshCheckTime = Time.unscaledTime + RefreshCheckInterval;
+            if (CitySchoolSnapshotService.HasPendingDemand) return;
+            bool schoolRevisionCurrent = _selectedCity >= 0 ||
+                _displayedSchoolRevisionStamp != null &&
+                _displayedSchoolRevisionStamp.IsCurrent(_selectedSchool,
+                    HistoricalSchoolRevisionService.Source);
             if (_displayedSnapshotGeneration == CitySchoolSnapshotService.Generation &&
-                _displayedMembershipVersion == SchoolMembershipService.Version &&
-                _displayedLectureRevision == HistoricalSchoolStore.LectureRevision) return;
+                schoolRevisionCurrent) return;
             Refresh();
         }
 
@@ -300,18 +303,19 @@ namespace AncientWarfare3.ui.windows
             }
 
             HideDetailRows(pReleaseActorReferences: false);
+            HistoricalSchoolRosterRevisionStamp schoolRevisionStamp = null;
             try
             {
                 if (_selectedCity >= 0) ShowCityDetail(World.world?.cities?.get(_selectedCity));
-                else ShowSchoolDetail(CourtSchoolRegistry.Find(_selectedSchool), metrics);
+                else ShowSchoolDetail(CourtSchoolRegistry.Find(_selectedSchool), metrics,
+                    out schoolRevisionStamp);
             }
             finally
             {
                 ReleaseUnusedActorCards();
             }
             _displayedSnapshotGeneration = CitySchoolSnapshotService.Generation;
-            _displayedMembershipVersion = SchoolMembershipService.Version;
-            _displayedLectureRevision = HistoricalSchoolStore.LectureRevision;
+            _displayedSchoolRevisionStamp = schoolRevisionStamp;
         }
 
         private Dictionary<string, SchoolMetrics> BuildMetrics()
@@ -347,8 +351,10 @@ namespace AncientWarfare3.ui.windows
         }
 
         private void ShowSchoolDetail(CourtSchoolDefinition pDefinition,
-            Dictionary<string, SchoolMetrics> pMetrics)
+            Dictionary<string, SchoolMetrics> pMetrics,
+            out HistoricalSchoolRosterRevisionStamp pRevisionStamp)
         {
+            pRevisionStamp = null;
             if (pDefinition == null) return;
             _rosterButton.gameObject.SetActive(true);
             _rosterButtonText.text = AW_L10n.Text("aw_school_roster_open_current",
@@ -374,7 +380,8 @@ namespace AncientWarfare3.ui.windows
                                AW_L10n.Text("aw_school_lineage_list", "Teacher Lineage") + "\n" +
                                RecentHistory(pDefinition.Id);
             float top = LayoutDetailBody();
-            int representatives = ShowRepresentatives(pDefinition.Id, top);
+            int representatives = ShowRepresentatives(pDefinition.Id, top,
+                out pRevisionStamp);
             top += ActorCardRows(representatives) *
                 (SchoolActorCardView.Height + 6f) + 12f;
             int masters = ShowMasterGallery(pDefinition.Id, top);
@@ -521,11 +528,13 @@ namespace AncientWarfare3.ui.windows
             return index;
         }
 
-        private int ShowRepresentatives(string pSchoolId, float pTop)
+        private int ShowRepresentatives(string pSchoolId, float pTop,
+            out HistoricalSchoolRosterRevisionStamp pRevisionStamp)
         {
-            SchoolRosterReadNode[] representatives =
-                SchoolRosterReadModelService.Build(pSchoolId, 1f, 1f,
-                        SchoolRosterRules.DefaultColumnsPerRow).Nodes
+            SchoolRosterReadModel model = SchoolRosterReadModelService.Build(pSchoolId,
+                1f, 1f, SchoolRosterRules.DefaultColumnsPerRow);
+            pRevisionStamp = model.RevisionStamp;
+            SchoolRosterReadNode[] representatives = model.Nodes
                 .OrderBy(p => p.Layout.StableOrder)
                 .Take(_actorCards.Count)
                 .ToArray();
@@ -745,8 +754,7 @@ namespace AncientWarfare3.ui.windows
             _selectedSchool = CourtSchoolId.Ru;
             _selectedCity = -1L;
             _displayedSnapshotGeneration = -1;
-            _displayedMembershipVersion = -1L;
-            _displayedLectureRevision = -1L;
+            _displayedSchoolRevisionStamp = null;
             _nextRefreshCheckTime = 0f;
             if (_detailTitle != null) _detailTitle.text = "";
             if (_detailBody != null) _detailBody.text = "";

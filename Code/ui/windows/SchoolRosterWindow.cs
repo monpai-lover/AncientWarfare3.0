@@ -59,9 +59,7 @@ namespace AncientWarfare3.ui.windows
         private Vector2 _initialCanvasPan;
         private string _selectedSchool = CourtSchoolId.Ru;
         private string _displayedSchool = "";
-        private long _displayedMembershipVersion = -1L;
-        private long _displayedResidenceRevision = -1L;
-        private long _displayedLectureRevision = -1L;
+        private HistoricalSchoolRosterRevisionStamp _displayedRevisionStamp;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
         private int _activeLinkCount;
@@ -105,10 +103,9 @@ namespace AncientWarfare3.ui.windows
         private void Update()
         {
             if (!isActiveAndEnabled || World.world == null) return;
-            if (_displayedMembershipVersion != SchoolMembershipService.Version ||
-                _displayedResidenceRevision !=
-                HistoricalAffiliationService.ResidenceRevision ||
-                _displayedLectureRevision != HistoricalSchoolStore.LectureRevision)
+            if (_displayedRevisionStamp == null ||
+                !_displayedRevisionStamp.IsCurrent(_selectedSchool,
+                    HistoricalSchoolRevisionService.Source))
             {
                 Refresh();
                 return;
@@ -348,9 +345,7 @@ namespace AncientWarfare3.ui.windows
             bool switchedSchool = !string.Equals(_displayedSchool, model.SchoolId,
                 StringComparison.Ordinal);
             _displayedSchool = model.SchoolId;
-            _displayedMembershipVersion = model.MembershipVersion;
-            _displayedResidenceRevision = model.ResidenceRevision;
-            _displayedLectureRevision = model.LectureRevision;
+            _displayedRevisionStamp = model.RevisionStamp;
             UpdateSummary(model);
             LayoutCanvas(model.Nodes);
             List<SchoolRosterLinkSegment> linkSegments = BuildLinks(model);
@@ -537,10 +532,10 @@ namespace AncientWarfare3.ui.windows
                     {
                         view.gameObject.SetActive(true);
                         if (!view.SetPortraitVisible(IsNodeVisible(rect)))
-                            _displayedMembershipVersion = -1L;
+                            _displayedRevisionStamp = null;
                     }
                     else
-                        _displayedMembershipVersion = -1L;
+                        _displayedRevisionStamp = null;
                 }
                 if (index < pNodes.Count) yield return null;
             }
@@ -558,7 +553,7 @@ namespace AncientWarfare3.ui.windows
                 if (!visible)
                 {
                     if (!view.SetPortraitVisible(false))
-                        _displayedMembershipVersion = -1L;
+                        _displayedRevisionStamp = null;
                     continue;
                 }
                 if (!view.HasPortrait && view.CanAttemptPortrait)
@@ -567,7 +562,7 @@ namespace AncientWarfare3.ui.windows
                     portraitBudget--;
                 }
                 if (!view.SetPortraitVisible(true))
-                    _displayedMembershipVersion = -1L;
+                    _displayedRevisionStamp = null;
             }
         }
 
@@ -621,9 +616,7 @@ namespace AncientWarfare3.ui.windows
             CancelPendingRender();
             HideNodesAndLinks();
             _displayedSchool = "";
-            _displayedMembershipVersion = -1L;
-            _displayedResidenceRevision = -1L;
-            _displayedLectureRevision = -1L;
+            _displayedRevisionStamp = null;
             _resetCanvasOnRefresh = true;
             TrimPools(0, 0, pForce: true);
         }

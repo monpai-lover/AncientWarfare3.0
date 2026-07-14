@@ -10,9 +10,6 @@ namespace AncientWarfare3.core.schools
         private static readonly Dictionary<long, HistoricalSchoolAffiliationSnapshot> ByActor =
             new Dictionary<long, HistoricalSchoolAffiliationSnapshot>();
 
-        public static long ResidenceRevision =>
-            HistoricalSchoolRevisionService.ResidenceRevision;
-
         public static void LoadState()
         {
             var previous = new Dictionary<long, HistoricalSchoolAffiliationSnapshot>(ByActor);

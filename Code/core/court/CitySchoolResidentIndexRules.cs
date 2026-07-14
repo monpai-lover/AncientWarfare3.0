@@ -79,35 +79,6 @@ namespace AncientWarfare3.core.court
         }
     }
 
-    public sealed class CitySchoolResidentIndexCache
-    {
-        private CitySchoolResidentIndex _index;
-        private long _membershipVersion;
-        private long _residenceRevision;
-
-        public CitySchoolResidentIndex GetOrBuild(long pMembershipVersion,
-            long pResidenceRevision, Func<CitySchoolResidentIndex> pBuild)
-        {
-            if (_index != null && _membershipVersion == pMembershipVersion &&
-                _residenceRevision == pResidenceRevision) return _index;
-            if (pBuild == null) throw new ArgumentNullException(nameof(pBuild));
-            CitySchoolResidentIndex next = pBuild();
-            if (next == null) throw new InvalidOperationException(
-                "Resident index builder returned null");
-            _index = next;
-            _membershipVersion = pMembershipVersion;
-            _residenceRevision = pResidenceRevision;
-            return _index;
-        }
-
-        public void Clear()
-        {
-            _index = null;
-            _membershipVersion = 0L;
-            _residenceRevision = 0L;
-        }
-    }
-
     public static class CitySchoolResidentIndexRules
     {
         public const int MaxScholarActorsPerCity = 24;

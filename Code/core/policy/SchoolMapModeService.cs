@@ -49,7 +49,11 @@ namespace AncientWarfare3.core.policy
 
         public static void ProcessFrame()
         {
-            CitySchoolSnapshotService.ProcessDirty(IsActive() ? 4 : 1);
+            bool active = IsActive();
+            if (active)
+                CitySchoolSnapshotService.ProcessDirty(4);
+            else if (CitySchoolSnapshotService.HasPendingDemand)
+                CitySchoolSnapshotService.ProcessDirty(1, pDemandOnly: true);
             SchoolMapBottomBarController.ProcessFrame();
         }
 

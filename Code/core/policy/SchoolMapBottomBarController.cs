@@ -15,6 +15,7 @@ namespace AncientWarfare3.core.policy
         private static long _cityId = -1L;
         private static int _generation = -1;
         private static bool _showRequested;
+        private static bool _visibleOrPending;
 
         public static void Show(City pCity)
         {
@@ -28,6 +29,7 @@ namespace AncientWarfare3.core.policy
             _cityId = pCity.data.id;
             _generation = -1;
             _showRequested = true;
+            _visibleOrPending = true;
             CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
             if (snapshot == null) return;
             _generation = snapshot.Generation;
@@ -38,7 +40,7 @@ namespace AncientWarfare3.core.policy
         {
             if (!SchoolMapModeService.IsActive())
             {
-                Hide();
+                if (_visibleOrPending) Hide();
                 return;
             }
 
@@ -75,8 +77,10 @@ namespace AncientWarfare3.core.policy
 
         public static void Hide()
         {
+            if (!_visibleOrPending && _tabBeforeInitialization == null) return;
             CancelPendingInitialization();
             _showRequested = false;
+            _visibleOrPending = false;
             _pendingCity = null;
             _cityId = -1L;
             _generation = -1;

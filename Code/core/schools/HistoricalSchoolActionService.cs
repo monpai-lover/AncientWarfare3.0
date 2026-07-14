@@ -363,6 +363,7 @@ namespace AncientWarfare3.core.schools
             if (!teachingResult.IsCommitted) return teachingResult.Outcome;
             if (!teachingResult.PersistedNew) return teachingResult.Outcome;
 
+            HistoricalSchoolRevisionService.MarkActivity(plan.Candidate.SchoolId);
             ShowLectureEffect(teacher);
             if (plan.Announce)
                 HistoricalSchoolContent.AnnounceLecture(teacher, residence,

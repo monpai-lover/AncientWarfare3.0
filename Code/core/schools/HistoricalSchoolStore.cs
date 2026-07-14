@@ -30,10 +30,6 @@ namespace AncientWarfare3.core.schools
         private const double LedgerMomentumDecay = 0.85d;
         private const int TraditionDecayGraceYears = 3;
         private const int LedgerCityQueryChunkSize = 128;
-        private static long _lectureRevision;
-
-        public static long LectureRevision => _lectureRevision;
-
         public static long NextMembershipId()
         {
             return DB == null ? -1L : TableIdAllocator.Next(DB, MembershipTable,
@@ -68,10 +64,7 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolTeachingDbResult result =
                     HistoricalSchoolTeachingPersistenceDb.Record(DB, request);
                 if (result.PersistedNew)
-                {
-                    unchecked { _lectureRevision++; }
                     InvalidateLedgerCaches(pPlan.Candidate.CityId);
-                }
                 return result;
             }
             catch (Exception error)
@@ -123,8 +116,6 @@ namespace AncientWarfare3.core.schools
                     UpsertLedgerCommand(transaction, pCityId, pSchoolId, ledgerDelta,
                         pWorldTime, membershipDelta);
                 transaction.Commit();
-                if (string.Equals(pEventType, "lecture", StringComparison.Ordinal))
-                    unchecked { _lectureRevision++; }
                 InvalidateLedgerCaches(pCityId);
                 return true;
             }

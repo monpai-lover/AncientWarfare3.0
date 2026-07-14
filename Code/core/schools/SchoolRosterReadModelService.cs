@@ -30,15 +30,13 @@ namespace AncientWarfare3.core.schools
 
     internal sealed class SchoolRosterReadModel
     {
-        public SchoolRosterReadModel(string pSchoolId, long pMembershipVersion,
-            long pResidenceRevision, long pLectureRevision,
+        public SchoolRosterReadModel(string pSchoolId,
+            HistoricalSchoolRosterRevisionStamp pRevisionStamp,
             IReadOnlyList<SchoolRosterReadNode> pNodes,
             IReadOnlyList<SchoolRosterLink> pLinks, int pExcludedCount, int pTeacherCount)
         {
             SchoolId = pSchoolId ?? "";
-            MembershipVersion = pMembershipVersion;
-            ResidenceRevision = pResidenceRevision;
-            LectureRevision = pLectureRevision;
+            RevisionStamp = pRevisionStamp;
             Nodes = pNodes ?? Array.Empty<SchoolRosterReadNode>();
             Links = pLinks ?? Array.Empty<SchoolRosterLink>();
             ExcludedCount = Math.Max(0, pExcludedCount);
@@ -46,9 +44,7 @@ namespace AncientWarfare3.core.schools
         }
 
         public string SchoolId { get; }
-        public long MembershipVersion { get; }
-        public long ResidenceRevision { get; }
-        public long LectureRevision { get; }
+        public HistoricalSchoolRosterRevisionStamp RevisionStamp { get; }
         public IReadOnlyList<SchoolRosterReadNode> Nodes { get; }
         public IReadOnlyList<SchoolRosterLink> Links { get; }
         public int ExcludedCount { get; }
@@ -60,14 +56,9 @@ namespace AncientWarfare3.core.schools
         public static SchoolRosterReadModel Build(string pSchoolId,
             float pHorizontalSpacing, float pVerticalSpacing, int pColumnsPerRow)
         {
-            long membershipVersion = SchoolMembershipService.Version;
-            long residenceRevision = HistoricalAffiliationService.ResidenceRevision;
-            long lectureRevision = HistoricalSchoolStore.LectureRevision;
             long[] memberIds = SchoolMembershipService.Members(pSchoolId);
             Dictionary<long, SchoolLectureSeniority> lectureSeniority =
                 HistoricalSchoolStore.LoadEarliestLectureSeniority(pSchoolId);
-            Dictionary<long, int> followerCounts =
-                SchoolLineageService.BuildDirectDiscipleCounts();
             var candidates = new List<SchoolRosterCandidate>(memberIds.Length);
             var metadata = new Dictionary<long, RosterActorMetadata>();
 
@@ -82,7 +73,7 @@ namespace AncientWarfare3.core.schools
                 string schoolId = membership?.SchoolId ?? pSchoolId ?? "";
                 SchoolMembershipSource source = membership?.Source ??
                     SchoolMembershipSource.AuthoredEvent;
-                followerCounts.TryGetValue(actorId, out int followers);
+                int followers = HistoricalSchoolRuntimeIndex.Instance.DirectDiscipleCount(actorId);
                 bool canonical = live &&
                     HistoricalSchoolDescentService.IsCanonicalMaster(actor);
                 bool qualifiedTeacher = live &&
@@ -131,8 +122,11 @@ namespace AncientWarfare3.core.schools
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.CanonicalMaster ||
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.Leader ||
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.Teacher);
-            return new SchoolRosterReadModel(pSchoolId, membershipVersion,
-                residenceRevision, lectureRevision, nodes, layout.Links,
+            HistoricalSchoolRosterRevisionStamp revisionStamp =
+                HistoricalSchoolRosterRevisionStamp.Capture(pSchoolId,
+                    nodes.Select(p => p.ResidenceCity?.data?.id ?? -1L),
+                    HistoricalSchoolRevisionService.Source);
+            return new SchoolRosterReadModel(pSchoolId, revisionStamp, nodes, layout.Links,
                 layout.ExcludedCount, teacherCount);
         }
 

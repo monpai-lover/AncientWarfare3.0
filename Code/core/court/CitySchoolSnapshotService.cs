@@ -14,12 +14,13 @@ namespace AncientWarfare3.core.court
         private static readonly Dictionary<long, CitySchoolSnapshot> Snapshots =
             new Dictionary<long, CitySchoolSnapshot>();
         private static readonly CitySchoolDirtyQueue Dirty = new CitySchoolDirtyQueue();
+        private static readonly CitySchoolDirtyQueue DemandedDirty =
+            new CitySchoolDirtyQueue();
+        private static readonly HashSet<long> Demanded = new HashSet<long>();
         private static readonly CitySchoolRetryScheduler Retry =
             new CitySchoolRetryScheduler();
         private static readonly CitySchoolRetryGate ContextGate =
             new CitySchoolRetryGate();
-        private static readonly CitySchoolResidentIndexCache ResidentIndexCache =
-            new CitySchoolResidentIndexCache();
         private static int _generation;
 
         private sealed class CitySchoolSnapshotBatchContext
@@ -51,13 +52,15 @@ namespace AncientWarfare3.core.court
         }
 
         public static int Generation => _generation;
+        public static bool HasPendingDemand => Demanded.Count > 0;
 
         public static CitySchoolSnapshot GetSnapshot(City pCity)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
-            if (Snapshots.TryGetValue(pCity.data.id, out CitySchoolSnapshot snapshot)) return snapshot;
-            if (!Retry.Contains(pCity.data.id)) Dirty.Mark(pCity.data.id);
-            return null;
+            long cityId = pCity.data.id;
+            if (!Snapshots.TryGetValue(cityId, out CitySchoolSnapshot snapshot) ||
+                Dirty.Contains(cityId)) Demand(cityId);
+            return snapshot;
         }
 
         public static void MarkDirty(City pCity)
@@ -65,6 +68,7 @@ namespace AncientWarfare3.core.court
             if (pCity?.data == null || pCity.isRekt()) return;
             Retry.Forget(pCity.data.id);
             Dirty.Mark(pCity.data.id);
+            if (Demanded.Contains(pCity.data.id)) DemandedDirty.Mark(pCity.data.id);
         }
 
         public static void MarkDirtyById(long pCityId)
@@ -72,6 +76,7 @@ namespace AncientWarfare3.core.court
             if (pCityId < 0) return;
             Retry.Forget(pCityId);
             Dirty.Mark(pCityId);
+            if (Demanded.Contains(pCityId)) DemandedDirty.Mark(pCityId);
         }
 
         public static void MarkActorDirty(Actor pActor)
@@ -97,33 +102,46 @@ namespace AncientWarfare3.core.court
             catch { }
         }
 
-        public static int ProcessDirty(int pBudget)
+        public static int ProcessDirty(int pBudget, bool pDemandOnly = false)
         {
+            if (pBudget <= 0) return 0;
+            if (Dirty.Count == 0 && DemandedDirty.Count == 0 && Retry.Count == 0) return 0;
             foreach (long retryCityId in Retry.AdvanceAndTakeDue())
-                Dirty.Mark(retryCityId);
-            if (!ContextGate.AdvanceAndCanAttempt()) return 0;
-            long[] cityIds = Dirty.TakeBatch(pBudget).ToArray();
-            if (cityIds.Length == 0) return 0;
-
-            var validCities = new List<City>(cityIds.Length);
-            foreach (long cityId in cityIds)
             {
+                Dirty.Mark(retryCityId);
+                if (Demanded.Contains(retryCityId)) DemandedDirty.Mark(retryCityId);
+            }
+            CitySchoolDirtyQueue source = pDemandOnly ? DemandedDirty : Dirty;
+            if (source.Count == 0) return 0;
+            if (!ContextGate.AdvanceAndCanAttempt()) return 0;
+            int budget = Math.Max(1, pBudget);
+            if (!source.TryDequeue(out long firstCityId)) return 0;
+            var validCities = new List<City>(budget);
+            var validCityIds = new List<long>(budget);
+            for (int index = 0; index < budget; index++)
+            {
+                long cityId = index == 0 ? firstCityId : -1L;
+                if (index > 0 && !source.TryDequeue(out cityId)) break;
+                Dirty.Remove(cityId);
+                DemandedDirty.Remove(cityId);
                 City city = World.world?.cities?.get(cityId);
                 if (city?.data == null || city.isRekt())
                 {
                     Retry.Forget(cityId);
                     Snapshots.Remove(cityId);
+                    Demanded.Remove(cityId);
                     continue;
                 }
                 validCities.Add(city);
+                validCityIds.Add(cityId);
             }
             if (validCities.Count == 0) return 0;
 
-            long[] validCityIds = validCities.Select(p => p.data.id).ToArray();
             if (!TryBuildBatchContext(validCities, out CitySchoolSnapshotBatchContext context,
                     out string contextFailure))
             {
                 int requeued = Dirty.RequeueFront(validCityIds);
+                RequeueDemandedFront(validCityIds);
                 int contextRetryDelay = ContextGate.RecordFailure();
                 ModClass.LogWarning("City school snapshot batch context failed for cities [" +
                                     string.Join(",", validCityIds) + "]; requeued " + requeued +
@@ -140,6 +158,8 @@ namespace AncientWarfare3.core.court
                 {
                     Rebuild(city, context);
                     Retry.Forget(city.data.id);
+                    Demanded.Remove(city.data.id);
+                    DemandedDirty.Remove(city.data.id);
                     rebuilt++;
                 }
                 catch (Exception error)
@@ -184,9 +204,10 @@ namespace AncientWarfare3.core.court
         {
             Snapshots.Clear();
             Dirty.Clear();
+            DemandedDirty.Clear();
+            Demanded.Clear();
             Retry.Clear();
             ContextGate.Clear();
-            ResidentIndexCache.Clear();
             _generation = 0;
         }
 
@@ -203,10 +224,7 @@ namespace AncientWarfare3.core.court
                         out Dictionary<long,
                             Dictionary<string, HistoricalSchoolLedgerSnapshot>> ledgers,
                         out pFailure)) return false;
-                CitySchoolResidentIndex residents = ResidentIndexCache.GetOrBuild(
-                    SchoolMembershipService.Version,
-                    HistoricalAffiliationService.ResidenceRevision,
-                    BuildResidentIndex);
+                CitySchoolResidentIndex residents = BuildResidentIndex(pCities);
                 pContext = new CitySchoolSnapshotBatchContext(residents, ledgers);
                 return true;
             }
@@ -217,31 +235,54 @@ namespace AncientWarfare3.core.court
             }
         }
 
-        private static CitySchoolResidentIndex BuildResidentIndex()
+        private static CitySchoolResidentIndex BuildResidentIndex(
+            IReadOnlyList<City> pCities)
         {
             var candidates = new List<CitySchoolResidentCandidate>();
             var schoolOrders = new Dictionary<string, int>(StringComparer.Ordinal);
             for (int i = 0; i < CourtSchoolRegistry.All.Count; i++)
                 schoolOrders[CourtSchoolRegistry.All[i].Id] = i;
-            foreach (SchoolMembershipRecord membership in
-                     SchoolMembershipService.ActiveMemberships())
+            HistoricalSchoolRuntimeIndex runtime = HistoricalSchoolRuntimeIndex.Instance;
+            for (int cityIndex = 0; cityIndex < (pCities?.Count ?? 0); cityIndex++)
             {
-                if (membership == null || !membership.Active ||
-                    !schoolOrders.TryGetValue(membership.SchoolId, out int schoolOrder))
-                    continue;
-                Actor actor = World.world?.units?.get(membership.ActorId);
-                if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
-                bool present = HistoricalAffiliationService.IsPresentForInfluence(actor);
-                City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
-                                 actor.city;
-                long cityId = residence?.data?.id ?? -1L;
-                if (!present || cityId < 0) continue;
-                bool qualified = HistoricalSchoolDescentService.IsCanonicalMaster(actor) ||
-                                 SchoolLineageService.IsQualifiedTeacher(actor);
-                candidates.Add(new CitySchoolResidentCandidate(actor.data.id,
-                    membership.SchoolId, cityId, pPresent: true, qualified, schoolOrder));
+                City city = pCities[cityIndex];
+                if (city?.data == null || city.isRekt()) continue;
+                foreach (long actorId in
+                         HistoricalSchoolRuntimeIndex.Instance.ResidentIds(city.data.id))
+                {
+                    if (!runtime.TryGet(actorId, out HistoricalSchoolIndexEntry entry) ||
+                        !entry.Present || entry.ResidenceCityId != city.data.id ||
+                        !schoolOrders.TryGetValue(entry.SchoolId, out int schoolOrder))
+                        continue;
+                    Actor actor = World.world?.units?.get(actorId);
+                    if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
+                    bool qualified = entry.Standing == HistoricalSchoolStanding.Teacher ||
+                                     entry.Standing == HistoricalSchoolStanding.Leader ||
+                                     entry.Standing == HistoricalSchoolStanding.CanonicalMaster;
+                    candidates.Add(new CitySchoolResidentCandidate(actorId,
+                        entry.SchoolId, city.data.id, pPresent: true, qualified,
+                        schoolOrder));
+                }
             }
             return CitySchoolResidentIndexRules.Build(candidates);
+        }
+
+        private static void Demand(long pCityId)
+        {
+            if (pCityId < 0) return;
+            Demanded.Add(pCityId);
+            if (Retry.Contains(pCityId)) return;
+            Dirty.Mark(pCityId);
+            DemandedDirty.Mark(pCityId);
+        }
+
+        private static void RequeueDemandedFront(IEnumerable<long> pCityIds)
+        {
+            if (pCityIds == null) return;
+            var demanded = new List<long>();
+            foreach (long cityId in pCityIds)
+                if (Demanded.Contains(cityId)) demanded.Add(cityId);
+            DemandedDirty.RequeueFront(demanded);
         }
 
         private static CitySchoolSnapshot Rebuild(City pCity,

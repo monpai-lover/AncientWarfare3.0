@@ -1,4 +1,5 @@
 using AncientWarfare3.core.schools;
+using AncientWarfare3.core.court;
 
 internal static class SchoolRuntimePerformanceTests
 {
@@ -259,6 +260,64 @@ internal static class SchoolRuntimePerformanceTests
                 pInsideResidenceCity: true, pWalkable: true,
                 pCityCenter: false, pBorderZone: true, pDistanceSquared: 100),
             "idle roam never chooses a residence border zone");
+
+        var rosterRevisions = new TestSchoolRevisionSource();
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 5, pActivity: 7);
+        rosterRevisions.SetSchool("bing", pStructure: 11, pScore: 13, pActivity: 17);
+        rosterRevisions.SetCity(41, 19);
+        rosterRevisions.SetCity(43, 23);
+        rosterRevisions.SetCity(47, 29);
+        HistoricalSchoolRosterRevisionStamp rosterStamp =
+            HistoricalSchoolRosterRevisionStamp.Capture("ru",
+                new long[] { 43, 41, 43 }, rosterRevisions);
+        Equal(2, rosterStamp.CityCount,
+            "roster revision stamp deduplicates represented cities");
+        True(rosterStamp.IsCurrent("ru", rosterRevisions),
+            "unchanged selected school roster stays current");
+        rosterRevisions.SetSchool("bing", pStructure: 31, pScore: 37, pActivity: 41);
+        rosterRevisions.SetCity(47, 43);
+        True(rosterStamp.IsCurrent("ru", rosterRevisions),
+            "another school and unrelated city do not invalidate the roster");
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 6, pActivity: 7);
+        Equal(false, rosterStamp.IsCurrent("ru", rosterRevisions),
+            "selected-school score change invalidates the roster");
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 5, pActivity: 7);
+        rosterRevisions.SetCity(43, 24);
+        Equal(false, rosterStamp.IsCurrent("ru", rosterRevisions),
+            "represented-city residence change invalidates the roster");
+        rosterRevisions.SetCity(43, 23);
+        Equal(false, rosterStamp.IsCurrent("bing", rosterRevisions),
+            "switching the selected school invalidates the roster");
+        rosterStamp.IsCurrent("ru", rosterRevisions);
+        long rosterAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int rosterIndex = 0; rosterIndex < 10_000; rosterIndex++)
+            rosterStamp.IsCurrent("ru", rosterRevisions);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - rosterAllocatedBefore,
+            "unchanged roster revision checks allocate zero bytes");
+
+        var dirtyCities = new CitySchoolDirtyQueue();
+        True(dirtyCities.Mark(1), "first dirty city enters the queue");
+        Equal(false, dirtyCities.Mark(1), "duplicate dirty city is coalesced");
+        dirtyCities.Mark(2);
+        dirtyCities.Mark(3);
+        Equal(2, dirtyCities.RequeueFront(new long[] { 3, 2, 3 }),
+            "front requeue deduplicates the requested cities");
+        True(dirtyCities.TryDequeue(out long firstDirty),
+            "dirty queue dequeues its first city");
+        Equal(3L, firstDirty, "front requeue preserves requested order");
+        True(dirtyCities.Remove(1), "dirty city can be removed before processing");
+        True(dirtyCities.TryDequeue(out long secondDirty),
+            "dirty queue dequeues the remaining city");
+        Equal(2L, secondDirty, "dirty queue remains FIFO after removal");
+        Equal(false, dirtyCities.TryDequeue(out long emptyDirty),
+            "empty dirty queue reports no work");
+        Equal(-1L, emptyDirty, "empty dirty queue returns the sentinel id");
+        dirtyCities.TryDequeue(out _);
+        long dirtyAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int dirtyIndex = 0; dirtyIndex < 10_000; dirtyIndex++)
+            dirtyCities.TryDequeue(out _);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - dirtyAllocatedBefore,
+            "empty dirty queue allocates zero bytes");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
@@ -270,5 +329,38 @@ internal static class SchoolRuntimePerformanceTests
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private sealed class TestSchoolRevisionSource : IHistoricalSchoolRevisionSource
+    {
+        private readonly Dictionary<string, long[]> _schools =
+            new Dictionary<string, long[]>(StringComparer.Ordinal);
+        private readonly Dictionary<long, long> _cities = new Dictionary<long, long>();
+
+        public void SetSchool(string pSchoolId, long pStructure, long pScore, long pActivity)
+        {
+            _schools[pSchoolId] = new long[] { pStructure, pScore, pActivity };
+        }
+
+        public void SetCity(long pCityId, long pRevision)
+        {
+            _cities[pCityId] = pRevision;
+        }
+
+        public long StructureRevision(string pSchoolId) => School(pSchoolId, 0);
+        public long ScoreRevision(string pSchoolId) => School(pSchoolId, 1);
+        public long ActivityRevision(string pSchoolId) => School(pSchoolId, 2);
+
+        public long ResidenceRevisionForCity(long pCityId)
+        {
+            return _cities.TryGetValue(pCityId, out long revision) ? revision : 0L;
+        }
+
+        private long School(string pSchoolId, int pIndex)
+        {
+            return pSchoolId != null && _schools.TryGetValue(pSchoolId, out long[] values)
+                ? values[pIndex]
+                : 0L;
+        }
     }
 }

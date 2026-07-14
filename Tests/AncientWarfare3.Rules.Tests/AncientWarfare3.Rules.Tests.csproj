@@ -20,5 +20,6 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolRuntimeIndex.cs" Link="Production\HistoricalSchoolRuntimeIndex.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTaskLeaseRules.cs" Link="Production\HistoricalSchoolTaskLeaseRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolCacheRules.cs" Link="Production\HistoricalSchoolCacheRules.cs" />
+    <Compile Include="..\..\Code\core\court\CitySchoolDirtyQueue.cs" Link="Production\CitySchoolDirtyQueue.cs" />
   </ItemGroup>
 </Project>
