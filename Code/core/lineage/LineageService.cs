@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -583,13 +584,49 @@ namespace AncientWarfare3.core.lineage
         public static void EnsureLineageForNoble(Actor pActor, NobleTrigger pTrigger,
             string pOfficeId = null)
         {
+            if (pActor?.data == null) return;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existing, -1);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShi, -1L);
+            if (HasCompleteLineageData(pActor)) return;
+
+            Actor father = FindFatherOfChild(pActor);
+            Actor currentRoyal = pActor.kingdom?.king;
+            if (currentRoyal == pActor) currentRoyal = null;
+            bool currentRoyalRelated = AreClosePatrilinealRelatives(pActor, currentRoyal);
+            Actor sibling = FindCompleteLineageSibling(pActor, father);
+            RoyalLineageSourceKind sourceKind = RoyalLineageResolutionRules.Resolve(
+                pSelfComplete: false,
+                pFatherComplete: HasCompleteLineageData(father),
+                pCurrentRoyalComplete: HasCompleteLineageData(currentRoyal),
+                pCurrentRoyalRelated: currentRoyalRelated,
+                pSiblingComplete: HasCompleteLineageData(sibling));
+            Actor source = sourceKind switch
+            {
+                RoyalLineageSourceKind.Father => father,
+                RoyalLineageSourceKind.CurrentRoyal => currentRoyal,
+                RoyalLineageSourceKind.Sibling => sibling,
+                _ => null
+            };
+            if (source != null && TryInheritLineageFromSource(pActor, source,
+                    pRequireClan: true)) return;
+
             if (existing >= 0)
             {
                 if (pTrigger == NobleTrigger.Official &&
                     OfficialShiRules.ShouldGrantOfficialShi(existingShi >= 0))
                     GrantOfficialShiBranch(pActor, existing, pOfficeId);
+                else if (existingShi < 0)
+                {
+                    (string existingClanName, string existingSourceType) = GenerateShiName(pActor);
+                    long existingNewShiId = LineageIdAllocator.NextShiId();
+                    if (existingNewShiId >= 0 && !string.IsNullOrEmpty(existingClanName))
+                    {
+                        InsertShiBranch(existingNewShiId, existing, existingClanName, pActor,
+                            existingSourceType);
+                        pActor.data.set(LineageKeys.SHI_ID, existingNewShiId);
+                        pActor.data.set(LineageKeys.CLAN_NAME, existingClanName);
+                    }
+                }
                 return;
             }
 
@@ -614,6 +651,95 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.FAMILY_NAME, familyName);
             pActor.data.set(LineageKeys.CLAN_NAME, clanName);
             pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, familyName);
+        }
+
+        public static void EnsureRoyalHeirLineage(Kingdom pKingdom, Actor pHeir)
+        {
+            if (pKingdom?.data == null || pHeir?.data == null ||
+                HistoricalSchoolDescentService.IsCanonicalMaster(pHeir) ||
+                (!IsXia(pHeir) && !UsesAwLineageSystem(pHeir))) return;
+            EnsureLineageForNoble(pHeir, NobleTrigger.King);
+            if (!HasCompleteLineageData(pHeir)) return;
+            pHeir.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            pHeir.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            if (!pHeir.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pHeir.addTrait(LineageKeys.TRAIT_GUIZU);
+            ApplyDisplayName(pHeir);
+            ArchiveActor(pHeir, pAlive: true);
+            SyncExistingChildrenAfterLineageChange(pHeir);
+        }
+
+        private static Actor FindCompleteLineageSibling(Actor pActor, Actor pFather)
+        {
+            if (pActor?.data == null) return null;
+            var candidates = new Dictionary<long, Actor>();
+            try
+            {
+                if (pFather?.data != null)
+                    foreach (Actor child in pFather.getChildren(pOnlyCurrentFamily: false))
+                        if (child?.data != null) candidates[child.data.id] = child;
+            }
+            catch { }
+            try
+            {
+                if (pActor.family != null)
+                    foreach (Actor member in pActor.family.units)
+                        if (member?.data != null) candidates[member.data.id] = member;
+            }
+            catch { }
+            foreach (long parentId in new[] { pActor.data.parent_id_1, pActor.data.parent_id_2 })
+            {
+                if (parentId < 0) continue;
+                foreach (long childId in LineageQuery.GetChildIds(parentId))
+                {
+                    Actor child = World.world?.units?.get(childId);
+                    if (child?.data != null) candidates[child.data.id] = child;
+                }
+            }
+
+            return candidates.Values
+                .Where(candidate => candidate != pActor &&
+                                    AreClosePatrilinealRelatives(pActor, candidate) &&
+                                    HasCompleteLineageData(candidate))
+                .OrderByDescending(candidate => candidate.isKing())
+                .ThenBy(candidate => candidate.data.id)
+                .FirstOrDefault();
+        }
+
+        private static bool AreClosePatrilinealRelatives(Actor pFirst, Actor pSecond)
+        {
+            if (pFirst?.data == null || pSecond?.data == null || pFirst == pSecond)
+                return false;
+            long firstId = pFirst.data.id;
+            long secondId = pSecond.data.id;
+            if (pSecond.isSexMale() &&
+                (pFirst.data.parent_id_1 == secondId || pFirst.data.parent_id_2 == secondId))
+                return true;
+            if (pFirst.isSexMale() &&
+                (pSecond.data.parent_id_1 == firstId || pSecond.data.parent_id_2 == firstId))
+                return true;
+
+            long firstFatherId = FindKnownFatherId(pFirst);
+            long secondFatherId = FindKnownFatherId(pSecond);
+            return RoyalLineageResolutionRules.SharesKnownFather(firstFatherId,
+                secondFatherId);
+        }
+
+        private static long FindKnownFatherId(Actor pActor)
+        {
+            if (pActor?.data == null) return -1L;
+            foreach (long parentId in new[] { pActor.data.parent_id_1, pActor.data.parent_id_2 })
+            {
+                if (parentId < 0) continue;
+                Actor parent = World.world?.units?.get(parentId);
+                if (parent?.data != null && parent.isSexMale()) return parentId;
+                try
+                {
+                    if (LineageArchiveReader.GetSex(parentId) == 0) return parentId;
+                }
+                catch { }
+            }
+            return -1L;
         }
 
         public static void EnsureOfficialShiAndClan(Actor pActor, string pOfficeId)
@@ -869,27 +995,22 @@ namespace AncientWarfare3.core.lineage
                 minCadetDistanceForBranch: MIN_CADET_DISTANCE_FOR_NEW_BRANCH);
             if (!shouldFound) return;
 
-            // 1) 原版 clan:从旧 clan 脱离,新建以国王为创始人的 clan。
-            try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); } catch { /* clan 新建失败不致命 */ }
-
-            // 2) 开新氏支(同姓族 lineageId,新氏名按国/城生成)。
+            // Freeze the branch before vanilla creates/names the visible Clan.
             (string clanName, _) = GenerateShiName(pKing);
             long newShiId = LineageIdAllocator.NextShiId();
+            if (newShiId < 0 || string.IsNullOrEmpty(clanName)) return;
             InsertShiBranch(newShiId, lineageId, clanName, pKing, ShiSourceType.KING_FOUNDED);
 
-            // 3) 国王改挂新氏支,成为新支始祖(距离归零、贵族、改氏名)。
             pKing.data.set(LineageKeys.SHI_ID, newShiId);
             pKing.data.set(LineageKeys.CLAN_NAME, clanName);
             pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
 
-            // 4) 在国王 data 上标记"建立的新支 id"(原氏族树在他位置显示"建立分支X氏"+点击跳转用)。
             pKing.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, newShiId);
 
-            // 5) 重命名新建的原版 clan(此时 CLAN_NAME 已就绪,王族命名=国名+氏+"氏")。
-            //    newClan Postfix 时氏未就绪已跳过,这里补上。
-            RenameClanByLeader(pKing.clan, pKing);
+            try { World.world.clans.newClan(pKing, pAddDefaultTraits: true); }
+            catch { /* Clan creation failure remains non-fatal to succession. */ }
 
             ApplyDisplayName(pKing);          // 氏变 → 重拼显示名
             ArchiveActor(pKing, pAlive: true);

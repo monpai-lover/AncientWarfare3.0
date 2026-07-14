@@ -26,65 +26,6 @@ namespace AncientWarfare3.content
             "祖祀", "祀典", "王礼"
         };
 
-        internal static int EnsureWorldNames()
-        {
-            int changed = 0;
-
-            if (World.world?.kingdoms != null)
-            {
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                {
-                    if (TryApplyFullyXiaizedKingdomName(kingdom))
-                    {
-                        changed++;
-                        continue;
-                    }
-
-                    bool applied = false;
-                    kingdom?.data?.get(LineageKeys.XIA_FULL_NAME_APPLIED, out applied, false);
-                    bool originalXia = kingdom?.data?.original_actor_asset == XiaRace.ID ||
-                                       kingdom?.asset?.id == XiaRace.ID;
-                    if (XiaizedKingdomNamingRules.ShouldRunOrdinaryRepair(originalXia,
-                            XiaizationService.GetLevel(kingdom), XiaizationService.LevelXiaizedDynasty, applied) &&
-                        TryRenameKingdom(kingdom, null, pForce: false)) changed++;
-                }
-            }
-
-            if (World.world?.cultures != null)
-            {
-                foreach (Culture culture in World.world.cultures)
-                {
-                    if (TryRenameCulture(culture, null, pForce: false)) changed++;
-                }
-            }
-
-            if (World.world?.languages != null)
-            {
-                foreach (Language language in World.world.languages)
-                {
-                    if (TryRenameLanguage(language, null, pForce: false)) changed++;
-                }
-            }
-
-            if (World.world?.subspecies != null)
-            {
-                foreach (Subspecies subspecies in World.world.subspecies)
-                {
-                    if (TryRenameSubspecies(subspecies, null, pForce: false)) changed++;
-                }
-            }
-
-            if (World.world?.religions != null)
-            {
-                foreach (Religion religion in World.world.religions)
-                {
-                    if (TryRenameReligion(religion, null, pForce: false)) changed++;
-                }
-            }
-
-            return changed;
-        }
-
         internal static bool TryRenameKingdom(Kingdom pKingdom, Actor pActor, bool pForce)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;

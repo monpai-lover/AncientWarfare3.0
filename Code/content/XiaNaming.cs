@@ -73,7 +73,12 @@ namespace AncientWarfare3.content
 
                     // 优先取"氏"(clan_name);无氏回退"姓"(chinese_family_name),保证模板有值。
                     string shi = ResolveClanShi(pClan, pActor);
-                    pParameters["founder_family_name"] = string.IsNullOrEmpty(shi) ? "无名" : shi;
+                    if (XiaNameRepairRules.IsInvalidGeneratedMetaName(shi))
+                    {
+                        long seed = pActor?.data?.id ?? pClan?.getID() ?? 0L;
+                        shi = XiaFallbackNameRules.LocalClanShiName(seed);
+                    }
+                    pParameters["founder_family_name"] = shi;
                 });
             }
             catch (Exception e)

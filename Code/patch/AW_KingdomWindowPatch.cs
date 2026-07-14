@@ -27,27 +27,6 @@ namespace AncientWarfare3.patch
                 __instance.gameObject.AddComponent<KingdomWindowAddition>();
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(KingdomWindow), "showTopPartInformation")]
-        public static void ShowTopPartInformation_Postfix(KingdomWindow __instance)
-        {
-            Kingdom kingdom = SelectedMetas.selected_kingdom;
-            if (__instance == null || kingdom?.data == null) return;
-            string dataName = kingdom.data.name?.Trim();
-            if (string.IsNullOrEmpty(dataName)) return;
-
-            NameInput nameInput = __instance.transform.FindRecursive("NameInputElement")?.GetComponent<NameInput>();
-            if (nameInput == null) return;
-            string visibleName = nameInput.textField?.text ?? nameInput.inputField?.text ?? "";
-            nameInput.setText(dataName);
-            ColorAsset color = kingdom.getColor();
-            if (nameInput.textField != null && color != null)
-                nameInput.textField.color = color.getColorText();
-            if (!string.Equals(visibleName, dataName, System.StringComparison.Ordinal))
-                ModClass.LogInfo("[Kingdom detail name] rebound kingdom=" + kingdom.id +
-                                 " visible=" + visibleName + " data=" + dataName);
-        }
-
         // ── 头衔:stats 行(继承人交给原版 tryToShowActor 画,不在此重复)──
         [HarmonyPostfix]
         [HarmonyPatch(typeof(KingdomWindow), nameof(KingdomWindow.showStatsRows))]

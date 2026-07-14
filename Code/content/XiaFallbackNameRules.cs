@@ -38,6 +38,12 @@ namespace AncientWarfare3.content
             "Xia Covenant"
         };
 
+        private static readonly string[] ClanShiNames =
+        {
+            "姬", "姜", "嬴", "妫", "姒", "子", "芈", "祁",
+            "孔", "孟", "季", "叔", "仲", "孙", "田", "范"
+        };
+
         public static string FirstUsefulMetaName(params string[] pCandidates)
         {
             if (pCandidates == null) return "";
@@ -91,6 +97,11 @@ namespace AncientWarfare3.content
         public static string LocalAllianceName(long pSeed)
         {
             return Pick(AllianceNames, pSeed);
+        }
+
+        public static string LocalClanShiName(long pSeed)
+        {
+            return Pick(ClanShiNames, pSeed);
         }
 
         private static string Pick(string[] pNames, long pSeed)

@@ -334,6 +334,8 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             Actor heir = pSelection.Actor;
             RecallForeignSelectedHeir(pKingdom, heir);
+            if (heir?.data != null)
+                LineageService.EnsureRoyalHeirLineage(pKingdom, heir);
             pKingdom.data.set(LineageKeys.KINGDOM_HEIR_ID, heir?.data?.id ?? -1L);
             pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
                 heir?.data == null ? SuccessionMode.NONE : pSelection.Mode);

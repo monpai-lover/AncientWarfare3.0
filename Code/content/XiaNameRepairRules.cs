@@ -8,7 +8,10 @@ namespace AncientWarfare3.content
         {
             if (string.IsNullOrWhiteSpace(pName)) return true;
 
-            string normalized = Normalize(pName);
+            string trimmed = pName.Trim();
+            if (trimmed == "无名" || trimmed == "无名氏") return true;
+
+            string normalized = Normalize(trimmed).Trim('#');
             if (normalized.Length == 0) return true;
 
             return normalized.StartsWith("NAME", StringComparison.Ordinal) ||
