@@ -35,6 +35,10 @@ namespace AncientWarfare3.patch
                 !activitiesResolved)
                 throw new InvalidOperationException(
                     "World save blocked: unresolved school persistence");
+            if (!LineageArchivePragmaService.CheckpointForSave(
+                    LineageArchiveManager.Instance.OperatingDB))
+                throw new InvalidOperationException(
+                    "World save blocked: lineage archive checkpoint failed");
         }
 
         [HarmonyPostfix]

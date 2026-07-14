@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 
@@ -60,17 +61,31 @@ namespace AncientWarfare3.core.schools
 
         public static void ProcessFrame()
         {
-            BootstrapRetryGate.AdvanceFrame();
-            if (!_loaded || World.world == null) return;
-            PendingRuntimeState.AdvanceAndTryFlush(HistoricalSchoolStore.SaveRuntimeState);
-            HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
-            SchoolGuestOfficeService.ProcessPendingFrame();
-            HistoricalSchoolActivityQueue.ProcessFrame();
-            int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
-            int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
-            if (quarterKey == _lastQuarterKey) return;
-            _lastQuarterKey = quarterKey;
-            HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
+            long started = Stopwatch.GetTimestamp();
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            bool idle = !_loaded || World.world == null;
+            try
+            {
+                BootstrapRetryGate.AdvanceFrame();
+                if (idle) return;
+                PendingRuntimeState.AdvanceAndTryFlush(
+                    HistoricalSchoolStore.SaveRuntimeState);
+                HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
+                SchoolGuestOfficeService.ProcessPendingFrame();
+                HistoricalSchoolActivityQueue.ProcessFrame();
+                int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
+                int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
+                if (quarterKey == _lastQuarterKey) return;
+                _lastQuarterKey = quarterKey;
+                HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
+            }
+            finally
+            {
+                HistoricalSchoolDiagnostics.RecordSchedulerFrame(
+                    Stopwatch.GetTimestamp() - started,
+                    GC.GetAllocatedBytesForCurrentThread() - allocatedBefore,
+                    idle);
+            }
         }
 
         internal static bool FlushPendingStateForSave()

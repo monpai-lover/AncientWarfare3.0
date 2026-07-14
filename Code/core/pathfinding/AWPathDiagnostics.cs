@@ -30,6 +30,8 @@ namespace AncientWarfare3.core.pathfinding
         private long _expandedNodes;
         private long _fallbackSearches;
         private long _staleSteps;
+        private long _fastSteps;
+        private long _vanillaSteps;
         private bool _queuePressureReported;
 
         public long Generated => Interlocked.Read(ref _generated);
@@ -40,6 +42,8 @@ namespace AncientWarfare3.core.pathfinding
         public long ExpandedNodes => Interlocked.Read(ref _expandedNodes);
         public long FallbackSearches => Interlocked.Read(ref _fallbackSearches);
         public long StaleSteps => Interlocked.Read(ref _staleSteps);
+        public long FastSteps => Interlocked.Read(ref _fastSteps);
+        public long VanillaSteps => Interlocked.Read(ref _vanillaSteps);
 
         public void OnGenerated() => Interlocked.Increment(ref _generated);
         public void OnReused() => Interlocked.Increment(ref _reused);
@@ -49,6 +53,8 @@ namespace AncientWarfare3.core.pathfinding
         public void AddExpandedNodes(int pCount) => Interlocked.Add(ref _expandedNodes, pCount);
         public void OnFallback() => Interlocked.Increment(ref _fallbackSearches);
         public void OnStaleStep() => Interlocked.Increment(ref _staleSteps);
+        public void OnFastStep() => Interlocked.Increment(ref _fastSteps);
+        public void OnVanillaStep() => Interlocked.Increment(ref _vanillaSteps);
         public void Enqueue(AWPathDiagnosticEvent pEvent) => _events.Enqueue(pEvent);
         public bool TryDequeue(out AWPathDiagnosticEvent pEvent) => _events.TryDequeue(out pEvent);
 

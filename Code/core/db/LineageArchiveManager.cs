@@ -72,6 +72,7 @@ namespace AncientWarfare3.core.db
                 SQLiteConnection.CreateFile(path);
                 _db = new SQLiteConnection("data source=" + path);
                 _db.Open();
+                LineageArchivePragmaService.Configure(_db);
                 InitializeTables();
                 InitializeSuccessful = true;
             }
@@ -101,6 +102,7 @@ namespace AncientWarfare3.core.db
                 File.Copy(savedDb, runtime, overwrite: true);
                 _db = new SQLiteConnection("data source=" + runtime);
                 _db.Open();
+                LineageArchivePragmaService.Configure(_db);
                 EnsureLoadedSchema(); // 注册表元信息 + 旧档案幂等补列(否则 Insert 抛 KeyNotFound / no such column)
                 InitializeSuccessful = true;
             }
@@ -120,11 +122,16 @@ namespace AncientWarfare3.core.db
                 if (_db == null) return;
                 if (!Directory.Exists(pSaveFolder)) Directory.CreateDirectory(pSaveFolder);
                 string dest = Path.Combine(pSaveFolder, DB_FILE_NAME);
+                DeleteDatabaseSidecars(dest);
 
                 // SQLite 在连接打开时直接复制文件可能漏掉未刷盘数据,先用 backup API 落盘到目标。
                 using var destConn = new SQLiteConnection("data source=" + dest);
                 destConn.Open();
+                LineageArchivePragmaService.Configure(destConn);
                 _db.BackupDatabase(destConn, "main", "main", -1, null, 0);
+                if (!LineageArchivePragmaService.CheckpointForSave(destConn))
+                    throw new InvalidOperationException(
+                        "Destination lineage archive checkpoint failed");
             }
             catch (Exception e)
             {
@@ -139,6 +146,15 @@ namespace AncientWarfare3.core.db
             _db = null;
             string path = RuntimeDbPath;
             if (File.Exists(path)) File.Delete(path);
+            DeleteDatabaseSidecars(path);
+        }
+
+        private static void DeleteDatabaseSidecars(string pPath)
+        {
+            string wal = pPath + "-wal";
+            string sharedMemory = pPath + "-shm";
+            if (File.Exists(wal)) File.Delete(wal);
+            if (File.Exists(sharedMemory)) File.Delete(sharedMemory);
         }
 
         /// <summary>反射扫描本程序集所有 [TableDef] 类,按字段类型**建表**(新库用)。</summary>
