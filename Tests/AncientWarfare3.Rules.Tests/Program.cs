@@ -128,4 +128,6 @@ True(restoredSlots.TryRestoreActive("mo", "mozi", 88),
 Equal(false, restoredSlots.TryRestoreActive("mo", "qinhuazi", 99),
     "load blocks a second living master in the same school");
 
+SchoolRuntimePerformanceTests.Run();
+
 Console.WriteLine("Rule tests passed.");

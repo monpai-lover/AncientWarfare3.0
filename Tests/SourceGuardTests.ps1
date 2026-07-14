@@ -9,14 +9,23 @@ function Read-Source([string]$relativePath) {
 }
 
 function Require-Absent([string]$name, [string]$relativePath, [string]$needle) {
-    $text = Read-Source $relativePath
+    $fullPath = Join-Path $root $relativePath
+    if (-not [System.IO.File]::Exists($fullPath)) {
+        return
+    }
+    $text = [System.IO.File]::ReadAllText($fullPath)
     if ($text.Contains($needle)) {
         $failures.Add("${name}: found forbidden text '$needle' in $relativePath")
     }
 }
 
 function Require-Present([string]$name, [string]$relativePath, [string]$needle) {
-    $text = Read-Source $relativePath
+    $fullPath = Join-Path $root $relativePath
+    if (-not [System.IO.File]::Exists($fullPath)) {
+        $failures.Add("${name}: missing source file $relativePath")
+        return
+    }
+    $text = [System.IO.File]::ReadAllText($fullPath)
     if (-not $text.Contains($needle)) {
         $failures.Add("${name}: missing required text '$needle' in $relativePath")
     }
@@ -65,10 +74,19 @@ Require-Present 'city-change activity task restoration' 'Code/patch/AW_Historica
 Require-Present 'death activity cleanup without restoration' 'Code/core/schools/SchoolMembershipService.cs' 'CancelActor(pActor, pRestoreActor: false)'
 Require-Present 'lecture excludes active debate actors' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' 'HistoricalSchoolDebateActivityService.IsActorBusy(actor.data.id)'
 Require-Present 'debate excludes active lecture actors' 'Code/core/schools/HistoricalSchoolDebateService.cs' 'HistoricalSchoolActivityQueue.IsLectureActorBusy(pActor.data.id)'
-Require-Present 'lecture planning excludes serving guests' 'Code/core/schools/HistoricalSchoolActionService.cs' 'HistoricalAffiliationService.IsAvailableForOffice(pTeacher)'
-Require-Present 'lecture runtime excludes serving guests' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' 'HistoricalAffiliationService.IsAvailableForOffice(pActor)'
 Require-Present 'pending master requires slot attachment' 'Code/core/schools/HistoricalSchoolDescentService.cs' 'if (!ActiveMasterSlots.TryAttachActor(pMaster.SchoolId, pMaster.Id, actorId))'
 Require-Present 'nearby lecture completion effect' 'Code/core/schools/HistoricalSchoolActionService.cs' 'EffectsLibrary.spawnAtTileRandomScale("fx_experience_gain"'
+
+Require-Absent 'school updateAge synchronous runner' 'Code/patch/AW_HistoricalSchoolPatch.cs' 'HistoricalSchoolRuntime.OnWorldYear()'
+Require-Absent 'school frame stopwatch allocation' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' 'Stopwatch.StartNew()'
+Require-Absent 'per-frame activity LINQ ordering' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' '.OrderBy('
+Require-Absent 'per-frame debate distinct scan' 'Code/core/schools/HistoricalSchoolDebateActivityService.cs' '.Distinct()'
+Require-Absent 'permanent scholar job restoration' 'Code/core/schools/HistoricalSchoolTravelService.cs' 'RestoreScholarJob('
+Require-Absent 'lecture requires vanilla city equality' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' 'pActor.city?.data?.id == residence.data.id'
+Require-Absent 'inactive school map rebuild' 'Code/core/policy/SchoolMapModeService.cs' 'IsActive() ? 4 : 1'
+Require-Present 'year token enqueue' 'Code/patch/AW_HistoricalSchoolPatch.cs' 'HistoricalSchoolRuntime.EnqueueWorldYear()'
+Require-Present 'temporary school task scheduling' 'Code/core/schools/HistoricalSchoolTaskLeaseService.cs' 'scheduleTask('
+Require-Present 'scoped formal affiliation transfer' 'Code/core/schools/FormalAffiliationTransferScope.cs' 'FormalAffiliationTransferRules.Allows'
 
 $activityQueue = Read-Source 'Code/core/schools/HistoricalSchoolActivityQueue.cs'
 $debateFrame = $activityQueue.IndexOf('if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;', [System.StringComparison]::Ordinal)

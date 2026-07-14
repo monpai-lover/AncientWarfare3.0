@@ -13,5 +13,9 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceOutcome.cs" Link="Production\HistoricalSchoolTeachingPersistenceOutcome.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolVenueRules.cs" Link="Production\HistoricalSchoolVenueRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolActiveMasterSlots.cs" Link="Production\HistoricalSchoolActiveMasterSlots.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolSchedulerRules.cs" Link="Production\HistoricalSchoolSchedulerRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolRevisionRules.cs" Link="Production\HistoricalSchoolRevisionRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolStandingRules.cs" Link="Production\HistoricalSchoolStandingRules.cs" />
+    <Compile Include="..\..\Code\core\schools\FormalAffiliationTransferScope.cs" Link="Production\FormalAffiliationTransferScope.cs" />
   </ItemGroup>
 </Project>
