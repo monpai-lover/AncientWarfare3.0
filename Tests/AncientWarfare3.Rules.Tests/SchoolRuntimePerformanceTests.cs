@@ -130,6 +130,32 @@ internal static class SchoolRuntimePerformanceTests
         Equal(0, index.TravelEligibleCount(2),
             "membership close removes the eligible travel bucket entry");
 
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            50, "mo", 9, HistoricalSchoolStanding.Teacher,
+            true, false, -1));
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            51, "mo", 9, HistoricalSchoolStanding.Disciple,
+            true, false, -1,
+            pTeacherActorId: 50, pDirectDiscipleship: true));
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            52, "fa", 10, HistoricalSchoolStanding.Teacher,
+            false, false, 7));
+        Equal(1, index.DirectDiscipleCount(50),
+            "direct disciple count is maintained by membership projection");
+        Equal(50L, index.ResidentTeacherIds(9, "mo")[0],
+            "present city-school teacher bucket returns the teacher");
+        Equal(2, index.ResidentIds(9).Length,
+            "city residence bucket joins schools without a world scan");
+        Equal(9L, index.PresentCityIds()[0],
+            "present city ids are available without rebuilding an annual map");
+        Equal(52L, index.ServingActorIds()[0],
+            "serving actor ids are available without affiliation snapshots");
+        index.Remove(51);
+        Equal(0, index.DirectDiscipleCount(50),
+            "closing a disciple removes the teacher's direct count");
+        index.Remove(50);
+        index.Remove(52);
+
         index.SetLivingXiaCity(100, true);
         Equal(1, index.LivingXiaCityCount,
             "living Xia city enters the descent index");

@@ -37,7 +37,6 @@ namespace AncientWarfare3.core.schools
         private static int _nextEligibleYear;
         private static int _lastCompletedYear = -1;
         private static List<City> _livingXiaCities;
-        private static HistoricalSchoolAnnualMemberSnapshot<Actor> _annualMembers;
 
         public static int EligibleYear => _eligibleYear;
         public static bool HasPendingWork =>
@@ -99,7 +98,6 @@ namespace AncientWarfare3.core.schools
             _nextEligibleYear = 0;
             _lastCompletedYear = -1;
             _livingXiaCities = null;
-            _annualMembers = null;
         }
 
         private static bool StartNextYear()
@@ -109,7 +107,6 @@ namespace AncientWarfare3.core.schools
             _activeYear = year;
             _nextEligibleYear = _eligibleYear;
             _livingXiaCities = null;
-            _annualMembers = null;
             _stage = HistoricalSchoolSchedulerStage.Bootstrap;
             return true;
         }
@@ -138,9 +135,7 @@ namespace AncientWarfare3.core.schools
                         ProcessLecturePlan();
                         break;
                     case HistoricalSchoolSchedulerStage.DebatePlan:
-                        if (_annualMembers != null)
-                            HistoricalSchoolDebateService.ProcessYear(
-                                _activeYear, _annualMembers);
+                        HistoricalSchoolDebateService.ProcessYear(_activeYear);
                         break;
                     case HistoricalSchoolSchedulerStage.Conversion:
                     case HistoricalSchoolSchedulerStage.Rediscovery:
@@ -198,8 +193,7 @@ namespace AncientWarfare3.core.schools
 
         private static void ProcessLecturePlan()
         {
-            _annualMembers = HistoricalSchoolAnnualMemberSnapshotBuilder.Build();
-            HistoricalSchoolActionService.ProcessYear(_activeYear, _annualMembers);
+            HistoricalSchoolActionService.ProcessYear(_activeYear);
         }
 
         private static bool ProcessRuntimeCommit()
@@ -216,7 +210,6 @@ namespace AncientWarfare3.core.schools
             _lastCompletedYear = _activeYear;
             _activeYear = -1;
             _livingXiaCities = null;
-            _annualMembers = null;
             _stage = HistoricalSchoolSchedulerStage.None;
             return true;
         }

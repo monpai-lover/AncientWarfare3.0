@@ -21,15 +21,20 @@ namespace AncientWarfare3.core.schools
             HandledTeacherDeaths.Clear();
             foreach (KeyValuePair<long, long> item in HistoricalSchoolStore.LoadLineageSuccessors())
                 if (item.Key >= 0 && item.Value >= 0) SuccessorByTeacher[item.Key] = item.Value;
-            foreach (HistoricalSchoolAffiliationSnapshot state in
-                     HistoricalAffiliationService.ActiveSnapshots(pTravelEligibleOnly: true,
-                         pTravelOnly: true))
+            for (int bucket = 0; bucket < 4; bucket++)
             {
-                if (state.LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
-                    state.LifecycleState != HistoricalSchoolLifecycleState.Voyage) continue;
-                Actor actor = FindActor(state.ActorId);
-                if (actor?.data == null) continue;
-                TryReserveItinerant(actor, SchoolMembershipService.GetSchool(state.ActorId));
+                foreach (long actorId in
+                         HistoricalSchoolRuntimeIndex.Instance.TravelEligibleIds(bucket))
+                {
+                    HistoricalSchoolAffiliationSnapshot state =
+                        HistoricalAffiliationService.Get(actorId);
+                    if (state?.LifecycleState != HistoricalSchoolLifecycleState.Travelling &&
+                        state?.LifecycleState != HistoricalSchoolLifecycleState.Voyage) continue;
+                    Actor actor = FindActor(actorId);
+                    if (actor?.data == null) continue;
+                    TryReserveItinerant(actor,
+                        SchoolMembershipService.GetSchool(actorId));
+                }
             }
         }
 

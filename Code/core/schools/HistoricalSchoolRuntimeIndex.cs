@@ -15,7 +15,9 @@ namespace AncientWarfare3.core.schools
             long pServiceKingdomId,
             int pTravelBucket = 0,
             int pPromotionDueYear = -1,
-            bool pTravelEligible = false)
+            bool pTravelEligible = false,
+            long pTeacherActorId = -1,
+            bool pDirectDiscipleship = false)
         {
             ActorId = pActorId;
             SchoolId = pSchoolId ?? "";
@@ -27,6 +29,8 @@ namespace AncientWarfare3.core.schools
             ServiceKingdomId = pServiceKingdomId;
             TravelBucket = TravelEligible ? Math.Max(0, pTravelBucket) : -1;
             PromotionDueYear = pPromotionDueYear;
+            DirectDiscipleship = pDirectDiscipleship && pTeacherActorId >= 0;
+            TeacherActorId = DirectDiscipleship ? pTeacherActorId : -1L;
         }
 
         public long ActorId { get; }
@@ -39,6 +43,8 @@ namespace AncientWarfare3.core.schools
         public long ServiceKingdomId { get; }
         public int TravelBucket { get; }
         public int PromotionDueYear { get; }
+        public long TeacherActorId { get; }
+        public bool DirectDiscipleship { get; }
         public bool IsValid => ActorId >= 0 && !string.IsNullOrEmpty(SchoolId);
     }
 
@@ -64,6 +70,8 @@ namespace AncientWarfare3.core.schools
             new Dictionary<long, HashSet<long>>();
         private readonly SortedDictionary<int, HashSet<long>> _promotionByYear =
             new SortedDictionary<int, HashSet<long>>();
+        private readonly Dictionary<long, int> _directDisciplesByTeacher =
+            new Dictionary<long, int>();
         private readonly HashSet<long> _livingXiaCities = new HashSet<long>();
 
         public static HistoricalSchoolRuntimeIndex Instance => Shared;
@@ -89,6 +97,8 @@ namespace AncientWarfare3.core.schools
                 Add(_servingByKingdom, pEntry.ServiceKingdomId, pEntry.ActorId);
             if (pEntry.PromotionDueYear >= 0)
                 Add(_promotionByYear, pEntry.PromotionDueYear, pEntry.ActorId);
+            if (pEntry.DirectDiscipleship)
+                AdjustCount(_directDisciplesByTeacher, pEntry.TeacherActorId, 1);
         }
 
         public bool Remove(long pActorId)
@@ -110,6 +120,8 @@ namespace AncientWarfare3.core.schools
                 Remove(_servingByKingdom, old.ServiceKingdomId, pActorId);
             if (old.PromotionDueYear >= 0)
                 Remove(_promotionByYear, old.PromotionDueYear, pActorId);
+            if (old.DirectDiscipleship)
+                AdjustCount(_directDisciplesByTeacher, old.TeacherActorId, -1);
             return true;
         }
 
@@ -128,6 +140,10 @@ namespace AncientWarfare3.core.schools
             BucketCount(_travelEligibleByBucket, pBucket);
         public int ServingCount(long pKingdomId) =>
             BucketCount(_servingByKingdom, pKingdomId);
+        public int DirectDiscipleCount(long pTeacherActorId) =>
+            _directDisciplesByTeacher.TryGetValue(pTeacherActorId, out int count)
+                ? count
+                : 0;
 
         public int ResidentCount(long pCityId, string pSchoolId)
         {
@@ -156,11 +172,59 @@ namespace AncientWarfare3.core.schools
             return CopyStable(actors);
         }
 
+        public long[] ResidentIds(long pCityId)
+        {
+            if (!_presentByCitySchool.TryGetValue(pCityId, out var schools) ||
+                schools.Count == 0) return Array.Empty<long>();
+            var result = new List<long>();
+            foreach (HashSet<long> actors in schools.Values) result.AddRange(actors);
+            long[] ids = result.ToArray();
+            Array.Sort(ids);
+            return ids;
+        }
+
+        public long[] ResidentTeacherIds(long pCityId, string pSchoolId)
+        {
+            if (!_presentByCitySchool.TryGetValue(pCityId, out var schools) ||
+                string.IsNullOrEmpty(pSchoolId) ||
+                !schools.TryGetValue(pSchoolId, out HashSet<long> residents) ||
+                !_teachersBySchool.TryGetValue(pSchoolId, out HashSet<long> teachers))
+                return Array.Empty<long>();
+            var result = new List<long>(Math.Min(residents.Count, teachers.Count));
+            HashSet<long> smaller = residents.Count <= teachers.Count ? residents : teachers;
+            HashSet<long> larger = ReferenceEquals(smaller, residents) ? teachers : residents;
+            foreach (long actorId in smaller)
+                if (larger.Contains(actorId)) result.Add(actorId);
+            long[] ids = result.ToArray();
+            Array.Sort(ids);
+            return ids;
+        }
+
+        public long[] PresentCityIds()
+        {
+            if (_presentByCitySchool.Count == 0) return Array.Empty<long>();
+            var result = new long[_presentByCitySchool.Count];
+            _presentByCitySchool.Keys.CopyTo(result, 0);
+            Array.Sort(result);
+            return result;
+        }
+
         public long[] TravelEligibleIds(int pBucket) =>
             CopyStable(_travelEligibleByBucket, pBucket);
 
         public long[] ServingIds(long pKingdomId) =>
             CopyStable(_servingByKingdom, pKingdomId);
+
+        public long[] ServingActorIds()
+        {
+            if (_servingByKingdom.Count == 0) return Array.Empty<long>();
+            var result = new List<long>();
+            foreach (HashSet<long> actors in _servingByKingdom.Values)
+                result.AddRange(actors);
+            long[] ids = result.ToArray();
+            Array.Sort(ids);
+            return ids;
+        }
 
         public long[] PromotionDueIds(int pYear)
         {
@@ -202,6 +266,7 @@ namespace AncientWarfare3.core.schools
             _travelEligibleByBucket.Clear();
             _servingByKingdom.Clear();
             _promotionByYear.Clear();
+            _directDisciplesByTeacher.Clear();
         }
 
         public void ClearLivingXiaCities() => _livingXiaCities.Clear();
@@ -266,6 +331,18 @@ namespace AncientWarfare3.core.schools
             return pBuckets.TryGetValue(pKey, out HashSet<long> actors)
                 ? actors.Count
                 : 0;
+        }
+
+        private static void AdjustCount(
+            IDictionary<long, int> pCounts,
+            long pKey,
+            int pDelta)
+        {
+            if (pKey < 0 || pDelta == 0) return;
+            pCounts.TryGetValue(pKey, out int count);
+            count += pDelta;
+            if (count > 0) pCounts[pKey] = count;
+            else pCounts.Remove(pKey);
         }
 
         private static long[] CopyStable<TKey>(

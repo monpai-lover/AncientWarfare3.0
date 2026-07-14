@@ -62,7 +62,7 @@ Require-Present 'debate receiver task locale' $localePath 'task_unit_aw_historic
 
 Require-Present 'frame activity queue' 'Code/core/schools/HistoricalSchoolRuntime.cs' 'HistoricalSchoolActivityQueue.ProcessFrame()'
 Require-Present 'school-level canonical master slots' 'Code/core/schools/HistoricalSchoolDescentService.cs' 'HistoricalSchoolActiveMasterSlots'
-Require-Present 'deferred school maintenance schedule' 'Code/core/schools/HistoricalSchoolActionService.cs' 'ScheduleDeferredActions(pYear, pMembers)'
+Require-Present 'deferred school maintenance schedule' 'Code/core/schools/HistoricalSchoolActionService.cs' 'ScheduleDeferredActions(pYear)'
 Require-Present 'deferred school maintenance frame step' 'Code/core/schools/HistoricalSchoolActivityQueue.cs' 'HistoricalSchoolActionService.ProcessDeferredFrame()'
 Require-Absent 'per-teacher city resident scan' 'Code/core/schools/HistoricalSchoolActionService.cs' 'foreach (Actor actor in pCity.units)'
 Require-Present 'school activity save flush' 'Code/patch/AW_SavePatch.cs' 'HistoricalSchoolActivityQueue.FlushPendingPersistenceForSave()'
@@ -102,6 +102,12 @@ Require-Absent 'unconditional school residence revision' 'Code/core/schools/Hist
 Require-Present 'membership runtime index projection' 'Code/core/schools/SchoolMembershipService.cs' 'HistoricalSchoolRuntimeIndex.Instance.Upsert'
 Require-Present 'narrow affiliation revisions' 'Code/core/schools/HistoricalAffiliationService.cs' 'HistoricalSchoolRevisionService.ApplyAffiliationChange'
 Require-Absent 'reputation twenty-five lecture gate' 'Code/core/schools/HistoricalSchoolLectureRules.cs' 'LaterTeacherMinimumReputation'
+Require-Absent 'annual member snapshot runtime' 'Code/core/schools/HistoricalSchoolScheduler.cs' 'HistoricalSchoolAnnualMemberSnapshotBuilder.Build'
+Require-Absent 'annual member snapshot action planner' 'Code/core/schools/HistoricalSchoolActionService.cs' 'HistoricalSchoolAnnualMemberSnapshot<Actor>'
+Require-Absent 'annual member snapshot debate planner' 'Code/core/schools/HistoricalSchoolDebateService.cs' 'HistoricalSchoolAnnualMemberSnapshot<Actor>'
+Require-Absent 'annual active affiliation array' 'Code/core/schools/SchoolGuestOfficeService.cs' 'ActiveSnapshots()'
+Require-Absent 'quarter active affiliation array' 'Code/core/schools/HistoricalSchoolTravelService.cs' 'ActiveSnapshots('
+Require-Absent 'lecture formal-city equality' 'Code/core/schools/HistoricalSchoolActionService.cs' 'pTeacher.city?.data?.id != residence.data.id'
 
 $activityQueue = Read-Source 'Code/core/schools/HistoricalSchoolActivityQueue.cs'
 $debateFrame = $activityQueue.IndexOf('if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;', [System.StringComparison]::Ordinal)

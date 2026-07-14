@@ -16,17 +16,17 @@ namespace AncientWarfare3.core.schools
     {
         public const int MaxDebatesPerYear = 48;
         private const int MaxCitiesPerYear = 256;
-        private const int MaxActorsPerCity = 96;
         private const int MaxDebateCandidatesPerCity = 32;
-        private const int MaxIndexedActorsPerYear = 4096;
 
         private static int _lastProcessedYear = -1;
+        private static int _cityCursor;
         private static readonly Dictionary<long, int> DebateWins =
             new Dictionary<long, int>();
 
         public static void ClearRuntime()
         {
             _lastProcessedYear = -1;
+            _cityCursor = 0;
             DebateWins.Clear();
         }
 
@@ -37,34 +37,73 @@ namespace AncientWarfare3.core.schools
                 if (entry.Key >= 0 && entry.Value > 0) DebateWins[entry.Key] = entry.Value;
         }
 
-        public static void ProcessYear(int pYear,
-            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
+        public static void ProcessYear(int pYear)
         {
-            if (pYear < 0 || World.world == null || pMembers == null ||
-                pYear == _lastProcessedYear) return;
+            if (pYear < 0 || World.world == null || pYear == _lastProcessedYear) return;
             _lastProcessedYear = pYear;
 
-            IReadOnlyDictionary<long, int> directDiscipleCounts =
-                pMembers.DirectDiscipleCounts;
-            Dictionary<long, List<Actor>> actorsByResidence =
-                BuildResidenceActorIndex(pMembers);
-            int processedCities = 0;
-            foreach (KeyValuePair<long, List<Actor>> residence in actorsByResidence
-                         .OrderBy(p => p.Key))
+            long[] cityIds = HistoricalSchoolRuntimeIndex.Instance.PresentCityIds();
+            int count = Math.Min(MaxCitiesPerYear, cityIds.Length);
+            if (count == 0) return;
+            int start = _cityCursor % cityIds.Length;
+            int processed = 0;
+            int enqueued = 0;
+            for (; processed < count && enqueued < MaxDebatesPerYear; processed++)
             {
-                if (processedCities++ >= MaxCitiesPerYear) break;
-                HistoricalSchoolDebateActorSeed[] seeds = residence.Value
-                    .Where(IsDebateIndexEligible)
-                    .OrderBy(p => p.data.id)
-                    .Take(MaxDebateCandidatesPerCity)
-                    .Select(actor => new HistoricalSchoolDebateActorSeed(actor.data.id,
-                        directDiscipleCounts != null && directDiscipleCounts.TryGetValue(
-                            actor.data.id, out int count) ? count : 0))
-                    .ToArray();
+                long cityId = cityIds[(start + processed) % cityIds.Length];
+                HistoricalSchoolDebateActorSeed[] seeds = BuildCitySeeds(cityId);
                 if (seeds.Length >= 2)
-                    HistoricalSchoolDebateActivityService.TryEnqueueCity(residence.Key,
-                        pYear, seeds);
+                    if (HistoricalSchoolDebateActivityService.TryEnqueueCity(cityId,
+                            pYear, seeds)) enqueued++;
             }
+            _cityCursor = (start + Math.Max(1, processed)) % cityIds.Length;
+        }
+
+        private static HistoricalSchoolDebateActorSeed[] BuildCitySeeds(long pCityId)
+        {
+            var selected = new List<HistoricalSchoolDebateActorSeed>(
+                MaxDebateCandidatesPerCity);
+            var selectedIds = new HashSet<long>();
+            var teacherBuckets = new List<long[]>(CourtSchoolRegistry.All.Count);
+            foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
+            {
+                long[] teacherIds = HistoricalSchoolRuntimeIndex.Instance
+                    .ResidentTeacherIds(pCityId, school.Id);
+                teacherBuckets.Add(teacherIds);
+                AddFirstEligibleSeed(teacherIds, selectedIds, selected);
+                if (selected.Count >= MaxDebateCandidatesPerCity)
+                    return selected.ToArray();
+            }
+            if (selected.Count < 2) return Array.Empty<HistoricalSchoolDebateActorSeed>();
+            for (int bucketIndex = 0; bucketIndex < teacherBuckets.Count &&
+                 selected.Count < MaxDebateCandidatesPerCity; bucketIndex++)
+            {
+                long[] teacherIds = teacherBuckets[bucketIndex];
+                for (int actorIndex = 0; actorIndex < teacherIds.Length &&
+                     selected.Count < MaxDebateCandidatesPerCity; actorIndex++)
+                    AddSeed(teacherIds[actorIndex], selectedIds, selected);
+            }
+            return selected.ToArray();
+        }
+
+        private static void AddFirstEligibleSeed(long[] pActorIds, ISet<long> pSelectedIds,
+            ICollection<HistoricalSchoolDebateActorSeed> pSelected)
+        {
+            for (int index = 0; index < (pActorIds?.Length ?? 0); index++)
+                if (AddSeed(pActorIds[index], pSelectedIds, pSelected)) return;
+        }
+
+        private static bool AddSeed(long pActorId, ISet<long> pSelectedIds,
+            ICollection<HistoricalSchoolDebateActorSeed> pSelected)
+        {
+            if (pSelectedIds == null || pSelected == null ||
+                pSelectedIds.Contains(pActorId)) return false;
+            Actor actor = FindActor(pActorId);
+            if (!IsDebateIndexEligible(actor)) return false;
+            pSelectedIds.Add(pActorId);
+            pSelected.Add(new HistoricalSchoolDebateActorSeed(pActorId,
+                HistoricalSchoolRuntimeIndex.Instance.DirectDiscipleCount(pActorId)));
+            return true;
         }
 
         internal static bool TryCreateQueuedDebate(long pCityId, int pYear,
@@ -277,68 +316,6 @@ namespace AncientWarfare3.core.schools
         {
             if (pLedger == null) return 0d;
             return pLedger.Tradition + pLedger.ActivePresence + pLedger.Momentum;
-        }
-
-        private static Dictionary<long, List<Actor>> BuildResidenceActorIndex(
-            HistoricalSchoolAnnualMemberSnapshot<Actor> pMembers)
-        {
-            var result = new Dictionary<long, List<Actor>>();
-            try
-            {
-                int perSchoolLimit = Math.Max(1, MaxIndexedActorsPerYear /
-                    Math.Max(1, CourtSchoolRegistry.All.Count));
-                foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
-                {
-                    foreach (Actor actor in pMembers.EnumerateLivingMembers(school.Id,
-                                 perSchoolLimit, IsDebateIndexEligible))
-                    {
-                        City residence = HistoricalAffiliationService.ResidenceCity(actor) ??
-                                         actor.city;
-                        if (residence?.data == null || residence.isRekt()) continue;
-                        if (!result.TryGetValue(residence.data.id, out List<Actor> members))
-                        {
-                            members = new List<Actor>();
-                            result[residence.data.id] = members;
-                        }
-                        members.Add(actor);
-                    }
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school residence actor index failed: " +
-                                    error.Message);
-            }
-
-            foreach (long cityId in result.Keys.ToArray())
-                result[cityId] = LimitResidentActors(result[cityId]);
-            return result;
-        }
-
-        private static List<Actor> LimitResidentActors(IEnumerable<Actor> pActors)
-        {
-            Actor[] actors = (pActors ?? Array.Empty<Actor>())
-                .Where(IsDebateIndexEligible)
-                .OrderBy(p => p.data.id)
-                .ToArray();
-            var selected = new List<Actor>(MaxActorsPerCity);
-            var selectedIds = new HashSet<long>();
-            foreach (IGrouping<string, Actor> group in actors.GroupBy(p =>
-                         SchoolMembershipService.GetActive(p.data.id)?.SchoolId ?? "",
-                         StringComparer.Ordinal))
-            {
-                Actor first = group.FirstOrDefault();
-                if (first == null || string.IsNullOrEmpty(group.Key) ||
-                    !selectedIds.Add(first.data.id)) continue;
-                selected.Add(first);
-                if (selected.Count >= MaxActorsPerCity) return selected;
-            }
-            foreach (Actor actor in actors)
-            {
-                if (selected.Count >= MaxActorsPerCity) break;
-                if (selectedIds.Add(actor.data.id)) selected.Add(actor);
-            }
-            return selected;
         }
 
         private static bool IsDebateIndexEligible(Actor pActor)

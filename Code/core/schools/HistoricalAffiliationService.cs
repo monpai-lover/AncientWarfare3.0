@@ -95,23 +95,6 @@ namespace AncientWarfare3.core.schools
                 : null;
         }
 
-        public static HistoricalSchoolAffiliationSnapshot[] ActiveSnapshots(
-            bool pTravelEligibleOnly = false, bool pTravelOnly = false,
-            int pTravelBucket = -1)
-        {
-            IEnumerable<HistoricalSchoolAffiliationSnapshot> query = ByActor.Values
-                .Where(p => p.LifecycleState != HistoricalSchoolLifecycleState.Dead);
-            if (pTravelEligibleOnly)
-                query = query.Where(p => IsTravelEligible(FindActor(p.ActorId)));
-            if (pTravelOnly)
-                query = query.Where(p => p.LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
-                    p.LifecycleState == HistoricalSchoolLifecycleState.Voyage);
-            if (pTravelBucket >= 0)
-                query = query.Where(p => HistoricalSchoolRules.TravelBucket(p.ActorId) ==
-                    pTravelBucket);
-            return query.ToArray();
-        }
-
         internal static HistoricalSchoolAffiliationSnapshot[] BoundedRecoverySnapshots(
             int pLimit)
         {

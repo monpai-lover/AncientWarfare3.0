@@ -17,6 +17,8 @@ namespace AncientWarfare3.core.schools
     {
         private const int MaxAppointmentsPerYear = 16;
         private const int MaxHostKingdomsPerYear = 96;
+        private const int MaxHostCitiesPerYear = 128;
+        private const int MaxGuestCandidatesPerHost = 192;
         private const int MaxServiceSweepPerYear = 512;
         private const int MaxPendingGuestOperations = 512;
         private const int MaxPendingGuestRecoveryScan = 2048;
@@ -99,13 +101,9 @@ namespace AncientWarfare3.core.schools
 
             try
             {
-                HistoricalSchoolAffiliationSnapshot[] annualStates =
-                    HistoricalAffiliationService.ActiveSnapshots();
-                CloseExpiredOrInvalidServices(pYear, annualStates);
+                CloseExpiredOrInvalidServices(pYear);
                 int budget = MaxAppointmentsPerYear;
                 if (budget <= 0) return;
-                Dictionary<long, List<GuestCandidateProfile>> candidateIndex =
-                    BuildCandidateIndex(annualStates);
 
                 foreach (Kingdom host in HostKingdoms())
                 {
@@ -117,8 +115,17 @@ namespace AncientWarfare3.core.schools
                         CourtService.GetActiveOfficers(host, 96)
                             .Where(p => !string.IsNullOrEmpty(p.office_id))
                             .Select(p => p.office_id), StringComparer.Ordinal);
-                    if (!candidateIndex.TryGetValue(host.id,
-                            out List<GuestCandidateProfile> hostCandidates)) continue;
+                    bool hasVacancy = false;
+                    for (int officeIndex = 0; officeIndex < offices.Length; officeIndex++)
+                        if (!occupied.Contains(offices[officeIndex]))
+                        {
+                            hasVacancy = true;
+                            break;
+                        }
+                    if (!hasVacancy) continue;
+                    List<GuestCandidateProfile> hostCandidates =
+                        BuildCandidateIndex(host);
+                    if (hostCandidates.Count == 0) continue;
                     var appointedActors = new HashSet<long>();
 
                     foreach (string office in offices)
@@ -147,21 +154,19 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void CloseExpiredOrInvalidServices(int pYear,
-            IReadOnlyList<HistoricalSchoolAffiliationSnapshot> pAnnualStates)
+        private static void CloseExpiredOrInvalidServices(int pYear)
         {
-            HistoricalSchoolAffiliationSnapshot[] states =
-                (pAnnualStates ?? Array.Empty<HistoricalSchoolAffiliationSnapshot>())
-                    .Where(p => p != null && p.LifecycleState ==
-                                HistoricalSchoolLifecycleState.Serving)
-                    .OrderBy(p => p.ActorId)
-                    .ToArray();
-            if (states.Length == 0) return;
-            int start = _serviceSweepOffset % states.Length;
-            int count = Math.Min(MaxServiceSweepPerYear, states.Length);
+            long[] actorIds = HistoricalSchoolRuntimeIndex.Instance.ServingActorIds();
+            if (actorIds.Length == 0) return;
+            int start = _serviceSweepOffset % actorIds.Length;
+            int count = Math.Min(MaxServiceSweepPerYear, actorIds.Length);
             for (int index = 0; index < count; index++)
             {
-                HistoricalSchoolAffiliationSnapshot state = states[(start + index) % states.Length];
+                long actorId = actorIds[(start + index) % actorIds.Length];
+                HistoricalSchoolAffiliationSnapshot state =
+                    HistoricalAffiliationService.Get(actorId);
+                if (state?.LifecycleState != HistoricalSchoolLifecycleState.Serving ||
+                    state.ServiceKingdomId < 0) continue;
                 Actor actor = FindActor(state.ActorId);
                 Kingdom host = FindKingdom(state.ServiceKingdomId);
                 bool alive = actor?.data != null && actor.isAlive() && !actor.isRekt();
@@ -202,7 +207,7 @@ namespace AncientWarfare3.core.schools
                             : "guest_term_expired";
                 EndGuestOfficer(state.ActorId, actor, host, reason, pYear);
             }
-            _serviceSweepOffset = (start + count) % states.Length;
+            _serviceSweepOffset = (start + count) % actorIds.Length;
         }
 
         private static bool TryRenew(Actor pActor, Kingdom pHost,
@@ -583,53 +588,60 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static Dictionary<long, List<GuestCandidateProfile>> BuildCandidateIndex(
-            IEnumerable<HistoricalSchoolAffiliationSnapshot> pStates)
+        private static List<GuestCandidateProfile> BuildCandidateIndex(Kingdom pHost)
         {
-            var result = new Dictionary<long, List<GuestCandidateProfile>>();
-            if (pStates == null) return result;
-            foreach (HistoricalSchoolAffiliationSnapshot annualState in pStates)
+            var result = new List<GuestCandidateProfile>();
+            if (pHost?.data == null || pHost.isRekt()) return result;
+            var seenActors = new HashSet<long>();
+            int cities = 0;
+            foreach (City city in pHost.getCities())
             {
-                if (annualState == null) continue;
-                HistoricalSchoolAffiliationSnapshot state =
-                    HistoricalAffiliationService.Get(annualState.ActorId);
-                if (state == null || state.LifecycleState == HistoricalSchoolLifecycleState.Serving ||
-                    state.ServiceKingdomId >= 0 ||
-                    (state.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
-                     state.LifecycleState != HistoricalSchoolLifecycleState.Resident)) continue;
-                Actor actor = FindActor(state.ActorId);
-                if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
-                    actor.isKing() || actor.isCityLeader() || GeneralService.IsGeneral(actor) ||
-                    actor.hasTrait(LineageKeys.TRAIT_SLAVE) || actor.hasTrait("madness") ||
-                    !actor.isSexMale()) continue;
-                City residence = HistoricalAffiliationService.ResidenceCity(actor);
-                Kingdom host = residence?.kingdom;
-                if (residence?.data == null || residence.isRekt() || host?.data == null ||
-                    host.isRekt() || state.HomeKingdomId == host.id) continue;
-                actor.data.get(LineageKeys.COURT_OFFICE_ID, out string currentOffice, "");
-                actor.data.get(LineageKeys.COURT_KINGDOM_ID, out long currentKingdom, -1L);
-                if (!string.IsNullOrEmpty(currentOffice) || currentKingdom >= 0) continue;
-
-                SchoolMembershipRecord membership = SchoolMembershipService.GetActive(
-                    actor.data.id);
-                if (membership == null) continue;
-                bool canonicalMaster =
-                    HistoricalSchoolDescentService.IsCanonicalMaster(actor);
-                if (!SchoolGuestOfficeRules.IsQualifiedTeacher(canonicalMaster,
-                        membership.Standing)) continue;
-                HistoricalSchoolMasterDefinition definition = canonicalMaster
-                    ? HistoricalSchoolDescentService.DefinitionFor(actor)
-                    : null;
-                float reputation = ScholarReputation(membership, definition);
-                if (reputation < 15f) continue;
-
-                if (!result.TryGetValue(host.id, out List<GuestCandidateProfile> bucket))
+                if (cities++ >= MaxHostCitiesPerYear ||
+                    result.Count >= MaxGuestCandidatesPerHost) break;
+                if (city?.data == null || city.isRekt() || city.kingdom != pHost) continue;
+                foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)
                 {
-                    bucket = new List<GuestCandidateProfile>();
-                    result.Add(host.id, bucket);
+                    foreach (long actorId in HistoricalSchoolRuntimeIndex.Instance
+                                 .ResidentTeacherIds(city.data.id, school.Id))
+                    {
+                        if (result.Count >= MaxGuestCandidatesPerHost) break;
+                        if (!seenActors.Add(actorId)) continue;
+                        HistoricalSchoolAffiliationSnapshot state =
+                            HistoricalAffiliationService.Get(actorId);
+                        if (state == null || state.ServiceKingdomId >= 0 ||
+                            state.HomeKingdomId == pHost.id ||
+                            (state.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
+                             state.LifecycleState != HistoricalSchoolLifecycleState.Resident))
+                            continue;
+                        Actor actor = FindActor(actorId);
+                        if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
+                            actor.isKing() || actor.isCityLeader() ||
+                            GeneralService.IsGeneral(actor) ||
+                            actor.hasTrait(LineageKeys.TRAIT_SLAVE) ||
+                            actor.hasTrait("madness") || !actor.isSexMale()) continue;
+                        actor.data.get(LineageKeys.COURT_OFFICE_ID,
+                            out string currentOffice, "");
+                        actor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                            out long currentKingdom, -1L);
+                        if (!string.IsNullOrEmpty(currentOffice) || currentKingdom >= 0)
+                            continue;
+                        SchoolMembershipRecord membership =
+                            SchoolMembershipService.GetActive(actorId);
+                        if (membership == null) continue;
+                        bool canonicalMaster =
+                            HistoricalSchoolDescentService.IsCanonicalMaster(actor);
+                        if (!SchoolGuestOfficeRules.IsQualifiedTeacher(canonicalMaster,
+                                membership.Standing)) continue;
+                        HistoricalSchoolMasterDefinition definition = canonicalMaster
+                            ? HistoricalSchoolDescentService.DefinitionFor(actor)
+                            : null;
+                        float reputation = ScholarReputation(membership, definition);
+                        if (reputation < 15f) continue;
+                        result.Add(new GuestCandidateProfile(actor, state, membership,
+                            definition, reputation));
+                    }
+                    if (result.Count >= MaxGuestCandidatesPerHost) break;
                 }
-                bucket.Add(new GuestCandidateProfile(actor, state, membership, definition,
-                    reputation));
             }
             return result;
         }
