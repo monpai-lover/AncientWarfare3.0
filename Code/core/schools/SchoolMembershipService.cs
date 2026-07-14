@@ -183,9 +183,8 @@ namespace AncientWarfare3.core.schools
             }
             HistoricalSchoolRevisionService.ApplyMembershipChange(null, record);
             RefreshRuntimeIndex(record.ActorId);
-            bool needsTravelAffiliation = pSource != SchoolMembershipSource.HistoricalDescent &&
-                (HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
-                 SchoolLineageService.IsQualifiedTeacher(pActor));
+            bool needsTravelAffiliation =
+                pSource != SchoolMembershipSource.HistoricalDescent;
             if (needsTravelAffiliation &&
                 !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
             {
@@ -206,9 +205,7 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
             if (current == null || current.Source == SchoolMembershipSource.HistoricalDescent ||
                 current.SchoolId == pSchoolId) return false;
-            if ((HistoricalSchoolDescentService.IsCanonicalMaster(pActor) ||
-                 SchoolLineageService.IsQualifiedTeacher(pActor)) &&
-                !HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
+            if (!HistoricalAffiliationService.EnsureMemberAffiliation(pActor, pCityId))
                 return false;
             if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
                 return false;
@@ -399,6 +396,12 @@ namespace AncientWarfare3.core.schools
             catch (Exception error)
             {
                 ModClass.LogWarning("Committed school death activity cleanup failed: " +
+                                    error.Message);
+            }
+            try { HistoricalSchoolTaskLeaseService.ReleaseActor(pActor.data.id); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death task lease cleanup failed: " +
                                     error.Message);
             }
             try { CourtService.ClearGuestOfficerAfterDeath(pActor, committedAffiliation); }

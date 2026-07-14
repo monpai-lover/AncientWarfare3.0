@@ -119,6 +119,42 @@ internal static class SchoolRuntimePerformanceTests
         index.SetLivingXiaCity(100, false);
         Equal(0, index.LivingXiaCityCount,
             "destroyed or transferred Xia city leaves the descent index");
+
+        var leases = new HistoricalSchoolTaskLeaseBook();
+        var firstLease = new HistoricalSchoolTaskLease(
+            42, "lecture:1", "aw_school_lecture", "ru", 7, "venue:1", 10, 20);
+        True(leases.TryAcquire(firstLease), "task lease can be acquired");
+        Equal(false, leases.TryAcquire(firstLease),
+            "duplicate actor task lease is rejected");
+        Equal(false, leases.TryRelease(42, "stale", out _),
+            "stale completion cannot release current lease");
+        True(leases.TryRelease(42, "lecture:1", out HistoricalSchoolTaskLease released),
+            "exact completion releases current lease");
+        Equal("venue:1", released.VenueKey, "released lease preserves venue owner");
+
+        var expiringLease = new HistoricalSchoolTaskLease(
+            43, "debate:1", "aw_school_debate", "mo", 8, "venue:2", 11, 15);
+        True(leases.TryAcquire(expiringLease), "expiring lease can be acquired");
+        Equal(false, leases.TryExpireOne(14, out _),
+            "lease does not expire before its deadline");
+        True(leases.TryExpireOne(15, out HistoricalSchoolTaskLease expired),
+            "lease expires at its deadline");
+        Equal(43L, expired.ActorId, "expiry returns the exact actor lease");
+
+        True(leases.TryAcquire(new HistoricalSchoolTaskLease(
+            44, "debate:2", "aw_school_debate", "fa", 9, "venue:3", 16, 30)),
+            "death-release lease can be acquired");
+        True(leases.TryReleaseActor(44, out _), "death releases actor lease");
+        leases.TryAcquire(new HistoricalSchoolTaskLease(
+            45, "lecture:2", "aw_school_lecture", "dao", 10, "venue:4", 20, 40));
+        leases.Clear();
+        Equal(0, leases.Count, "clear removes every task lease");
+
+        leases.TryExpireOne(100, out _);
+        long leaseAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++) leases.TryExpireOne(100, out _);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - leaseAllocatedBefore,
+            "empty activity scheduler allocates zero bytes");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

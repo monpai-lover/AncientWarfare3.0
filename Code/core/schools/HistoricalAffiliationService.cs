@@ -83,9 +83,7 @@ namespace AncientWarfare3.core.schools
                 foreach (long actorId in SchoolMembershipService.Members(school.Id))
                 {
                     Actor actor = FindActor(actorId);
-                    if (actor?.data == null ||
-                        (!HistoricalSchoolDescentService.IsCanonicalMaster(actor) &&
-                         !SchoolLineageService.IsQualifiedTeacher(actor))) continue;
+                    if (actor?.data == null) continue;
                     EnsureMemberAffiliation(actor, actor.city?.data?.id ?? -1L);
                 }
         }

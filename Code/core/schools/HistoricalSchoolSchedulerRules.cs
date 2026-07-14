@@ -46,7 +46,14 @@ namespace AncientWarfare3.core.schools
         {
             if (pYear < 0 || string.IsNullOrEmpty(pKey)) return false;
             Prune(pYear - 1);
+            if (pYear < _oldestYear) return false;
             return _keys.Add(pYear + ":" + pKey);
+        }
+
+        public bool Contains(int pYear, string pKey)
+        {
+            return pYear >= 0 && !string.IsNullOrEmpty(pKey) &&
+                   _keys.Contains(pYear + ":" + pKey);
         }
 
         public void Prune(int pOldestYear)

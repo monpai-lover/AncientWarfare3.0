@@ -164,7 +164,6 @@ namespace AncientWarfare3.core.schools
             }
             if (pState.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
                 pState.LifecycleState != HistoricalSchoolLifecycleState.Resident) return null;
-            RestoreScholarJob(actor);
             if (pState.LifecycleState == HistoricalSchoolLifecycleState.Resident)
                 actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                     pColorEffect: false);
@@ -263,7 +262,6 @@ namespace AncientWarfare3.core.schools
                 }
                 SchoolLineageService.ReleaseItinerant(actor);
                 actor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
-                RestoreScholarJob(actor);
                 actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                     pColorEffect: false);
                 CitySchoolSnapshotService.MarkDirty(previousResidence);
@@ -291,7 +289,6 @@ namespace AncientWarfare3.core.schools
             HistoricalAffiliationService.CancelTravel(pActor);
             SchoolLineageService.ReleaseItinerant(pActor);
             pActor.finishStatusEffect(HistoricalSchoolContent.VoyageStatusId);
-            RestoreScholarJob(pActor);
         }
 
         private static void RestorePhysicalArrival(Actor pActor,
@@ -301,13 +298,6 @@ namespace AncientWarfare3.core.schools
             WorldTile tile = residence?.getTile();
             if (tile != null) pActor.spawnOn(tile);
             EnsureTravelTask(pActor);
-        }
-
-        private static void RestoreScholarJob(Actor pActor)
-        {
-            CitizenJobAsset job =
-                AssetManager.citizen_job_library.get(HistoricalSchoolContent.CitizenJobId);
-            if (job != null) pActor.setCitizenJob(job);
         }
 
         private static void EnsureTravelTask(Actor pActor)

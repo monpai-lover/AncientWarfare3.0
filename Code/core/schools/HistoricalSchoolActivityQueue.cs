@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using AncientWarfare3.content.schools;
 
 namespace AncientWarfare3.core.schools
@@ -20,6 +18,7 @@ namespace AncientWarfare3.core.schools
         public long[] CandidateActorIds { get; set; } = Array.Empty<long>();
         public HistoricalSchoolVenueClaim Venue { get; set; }
         public bool Ready { get; set; }
+        public bool ReadyQueued { get; set; }
         public int Attempts { get; set; }
         public long RetryFrame { get; set; }
         public long StartFrame { get; set; }
@@ -27,18 +26,25 @@ namespace AncientWarfare3.core.schools
 
     internal static class HistoricalSchoolActivityQueue
     {
-        private const double FrameBudgetMilliseconds = 1.25d;
         private const int MaxQueuedLectures = 8;
+        private const long TaskLeaseFrames = 600L;
         private static readonly Queue<HistoricalSchoolLectureActivity> PendingLectures =
             new Queue<HistoricalSchoolLectureActivity>();
         private static readonly Dictionary<long, HistoricalSchoolLectureActivity>
             ActiveLectures = new Dictionary<long, HistoricalSchoolLectureActivity>();
-        private static readonly HashSet<string> OperationKeys =
-            new HashSet<string>(StringComparer.Ordinal);
+        private static readonly Queue<long> ReadyLectureActors = new Queue<long>();
+        private static readonly Queue<long> ValidationActors = new Queue<long>();
+        private static readonly Dictionary<int, int> QueuedLecturesByYear =
+            new Dictionary<int, int>();
+        private static readonly HistoricalSchoolBoundedYearKeys OperationKeys =
+            new HistoricalSchoolBoundedYearKeys();
+        private static readonly HashSet<long> QueuedLectureActors = new HashSet<long>();
         private static HistoricalSchoolTeachingHistory _teachingHistory =
             new HistoricalSchoolTeachingHistory();
         private static bool _loaded;
         private static long _frame;
+
+        internal static long CurrentFrame => _frame;
 
         public static void LoadState()
         {
@@ -54,7 +60,12 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolVenueService.Release(activity.Plan.OperationKey);
             PendingLectures.Clear();
             ActiveLectures.Clear();
+            ReadyLectureActors.Clear();
+            ValidationActors.Clear();
+            QueuedLecturesByYear.Clear();
             OperationKeys.Clear();
+            QueuedLectureActors.Clear();
+            HistoricalSchoolTaskLeaseService.Clear();
             HistoricalSchoolVenueService.Clear();
             HistoricalSchoolRecruitCandidateCache.Clear();
             HistoricalSchoolDebateActivityService.ClearRuntime();
@@ -67,8 +78,14 @@ namespace AncientWarfare3.core.schools
         {
             EnsureLoaded();
             HistoricalSchoolTeachingHistory planningHistory = _teachingHistory.Clone();
-            foreach (HistoricalSchoolLectureActivity activity in PendingLectures
-                         .Concat(ActiveLectures.Values).Distinct())
+            foreach (HistoricalSchoolLectureActivity activity in PendingLectures)
+            {
+                planningHistory.RecordLecture(activity.Plan.Candidate, activity.Plan.Year);
+                if (activity.Plan.IncludePersuasion)
+                    planningHistory.RecordPersuasion(activity.Plan.Candidate,
+                        activity.Plan.Year);
+            }
+            foreach (HistoricalSchoolLectureActivity activity in ActiveLectures.Values)
             {
                 planningHistory.RecordLecture(activity.Plan.Candidate, activity.Plan.Year);
                 if (activity.Plan.IncludePersuasion)
@@ -82,14 +99,16 @@ namespace AncientWarfare3.core.schools
             int pDirectDiscipleCount)
         {
             if (!pPlan.IsValid) return false;
-            int yearCount = PendingLectures.Count(p => p.Plan.Year == pPlan.Year) +
-                            ActiveLectures.Values.Count(p => p.Plan.Year == pPlan.Year);
-            bool duplicate = OperationKeys.Contains(pPlan.OperationKey);
+            QueuedLecturesByYear.TryGetValue(pPlan.Year, out int yearCount);
+            bool duplicate = OperationKeys.Contains(pPlan.Year, pPlan.OperationKey);
+            if (QueuedLectureActors.Contains(pPlan.Candidate.ActorId)) return false;
             if (!HistoricalSchoolActivityQueueRules.CanEnqueue(yearCount,
                     MaxQueuedLectures, duplicate)) return false;
-            OperationKeys.Add(pPlan.OperationKey);
+            if (!OperationKeys.Add(pPlan.Year, pPlan.OperationKey)) return false;
+            QueuedLectureActors.Add(pPlan.Candidate.ActorId);
             PendingLectures.Enqueue(new HistoricalSchoolLectureActivity(pPlan,
                 pDirectDiscipleCount));
+            QueuedLecturesByYear[pPlan.Year] = yearCount + 1;
             return true;
         }
 
@@ -99,7 +118,10 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null ||
                 !ActiveLectures.TryGetValue(pActor.data.id,
                     out HistoricalSchoolLectureActivity activity) ||
-                !IsValidLectureActor(pActor, activity)) return false;
+                !IsValidLectureActor(pActor, activity) ||
+                !HistoricalSchoolTaskLeaseService.IsCurrent(
+                    pActor.data.id, activity.Plan.OperationKey,
+                    HistoricalSchoolContent.LectureTaskId)) return false;
             pTarget = activity.Venue?.Primary;
             return pTarget != null;
         }
@@ -109,8 +131,12 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null ||
                 !ActiveLectures.TryGetValue(pActor.data.id,
                     out HistoricalSchoolLectureActivity activity) ||
-                !IsValidLectureActor(pActor, activity)) return false;
+                !IsValidLectureActor(pActor, activity) ||
+                !HistoricalSchoolTaskLeaseService.IsCurrent(
+                    pActor.data.id, activity.Plan.OperationKey) ||
+                !AtVenue(pActor, activity.Venue?.Primary)) return false;
             activity.Ready = true;
+            EnqueueReady(activity);
             return true;
         }
 
@@ -124,7 +150,7 @@ namespace AncientWarfare3.core.schools
             if (pActor?.data == null) return;
             if (ActiveLectures.TryGetValue(pActor.data.id,
                     out HistoricalSchoolLectureActivity activity))
-                FinishLecture(activity, pRestoreActor);
+                FinishLecture(activity);
             HistoricalSchoolDebateActivityService.CancelActor(pActor, pRestoreActor);
         }
 
@@ -132,30 +158,20 @@ namespace AncientWarfare3.core.schools
         {
             EnsureLoaded();
             _frame++;
-            var timer = Stopwatch.StartNew();
-            int transitions = 0;
-            HistoricalSchoolLectureActivity invalid = ActiveLectures.Values
-                .OrderBy(p => p.Plan.Candidate.ActorId)
-                .FirstOrDefault(activity => ShouldCancelLecture(activity));
-            if (invalid != null)
+            if (HistoricalSchoolTaskLeaseService.TryTakeExpired(
+                    _frame, out HistoricalSchoolTaskLease expired))
             {
-                FinishLecture(invalid, pRestoreActor: true);
-                return;
-            }
-            HistoricalSchoolLectureActivity ready = ActiveLectures.Values
-                .Where(p => p.Ready && p.RetryFrame <= _frame)
-                .OrderBy(p => p.Plan.Candidate.ActorId)
-                .FirstOrDefault();
-            if (ready != null && HistoricalSchoolActivityQueueRules.CanAdvance(transitions,
-                    timer.Elapsed.TotalMilliseconds, FrameBudgetMilliseconds))
-            {
-                transitions++;
-                ResolveReadyLecture(ready, pScheduleRetry: true);
+                if (ActiveLectures.TryGetValue(expired.ActorId,
+                        out HistoricalSchoolLectureActivity expiredLecture) &&
+                    expiredLecture.Plan.OperationKey == expired.ActivityId)
+                    FinishLecture(expiredLecture);
+                else
+                    HistoricalSchoolDebateActivityService.CancelExpiredLease(expired);
                 return;
             }
 
-            if (!HistoricalSchoolActivityQueueRules.CanAdvance(transitions,
-                    timer.Elapsed.TotalMilliseconds, FrameBudgetMilliseconds)) return;
+            if (TryProcessValidation()) return;
+            if (TryProcessReadyLecture()) return;
             if (PendingLectures.Count == 0)
             {
                 if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;
@@ -172,11 +188,14 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolDebateActivityService.ProcessFrame();
                 return;
             }
-            if (!IsValidLectureActor(actor, pending) || city?.data == null || city.isRekt() ||
+            if (!IsValidLectureActor(actor, pending, pRequireVenue: false) ||
+                city?.data == null || city.isRekt() ||
                 !HistoricalSchoolVenueService.TryClaimLecture(city,
                     pending.Plan.OperationKey, out HistoricalSchoolVenueClaim venue))
             {
                 HistoricalSchoolVenueService.Release(pending.Plan.OperationKey);
+                DecrementYearCount(pending.Plan.Year);
+                QueuedLectureActors.Remove(pending.Plan.Candidate.ActorId);
                 return;
             }
             pending.Venue = venue;
@@ -184,14 +203,19 @@ namespace AncientWarfare3.core.schools
             pending.CandidateActorIds = HistoricalSchoolRecruitCandidateCache.Get(city,
                 actor, pending.Plan.Year);
             ActiveLectures[actor.data.id] = pending;
-            try
+            ValidationActors.Enqueue(actor.data.id);
+            if (!HistoricalSchoolTaskLeaseService.TrySchedule(
+                    actor,
+                    pending.Plan.OperationKey,
+                    HistoricalSchoolContent.LectureTaskId,
+                    pending.Plan.Candidate.SchoolId,
+                    pending.Plan.Candidate.CityId,
+                    pending.Plan.OperationKey,
+                    venue.Primary,
+                    _frame,
+                    _frame + TaskLeaseFrames))
             {
-                actor.setTask(HistoricalSchoolContent.LectureTaskId, pClean: true,
-                    pCleanJob: false, pForceAction: true);
-            }
-            catch
-            {
-                FinishLecture(pending, pRestoreActor: true);
+                FinishLecture(pending);
             }
         }
 
@@ -199,12 +223,17 @@ namespace AncientWarfare3.core.schools
         {
             EnsureLoaded();
             bool resolved = true;
-            HistoricalSchoolLectureActivity[] lectures = ActiveLectures.Values
-                .Where(p => HistoricalSchoolActivityQueueRules.ShouldFlushForSave(p.Ready))
-                .OrderBy(p => p.Plan.Candidate.ActorId)
-                .ToArray();
-            foreach (HistoricalSchoolLectureActivity lecture in lectures)
-                if (!ResolveReadyLecture(lecture, pScheduleRetry: false)) resolved = false;
+            int readyBudget = ReadyLectureActors.Count;
+            while (readyBudget-- > 0 && ReadyLectureActors.Count > 0)
+            {
+                long actorId = ReadyLectureActors.Dequeue();
+                if (!ActiveLectures.TryGetValue(actorId,
+                        out HistoricalSchoolLectureActivity lecture) || !lecture.Ready)
+                    continue;
+                lecture.ReadyQueued = false;
+                if (!ResolveReadyLecture(lecture, pScheduleRetry: false))
+                    resolved = false;
+            }
             if (!HistoricalSchoolDebateActivityService.FlushPendingPersistenceForSave())
                 resolved = false;
             return resolved;
@@ -235,7 +264,7 @@ namespace AncientWarfare3.core.schools
             }
             if (HistoricalSchoolActivityQueueRules.IsPersistenceResolved(outcome))
             {
-                FinishLecture(pActivity, pRestoreActor: true);
+                FinishLecture(pActivity);
                 return true;
             }
             if (pScheduleRetry)
@@ -243,26 +272,26 @@ namespace AncientWarfare3.core.schools
                 pActivity.Attempts++;
                 pActivity.RetryFrame = _frame + RetryDelay(pActivity.Attempts);
             }
+            EnqueueReady(pActivity);
             return false;
         }
 
-        private static void FinishLecture(HistoricalSchoolLectureActivity pActivity,
-            bool pRestoreActor)
+        private static void FinishLecture(HistoricalSchoolLectureActivity pActivity)
         {
             if (pActivity == null) return;
             long actorId = pActivity.Plan.Candidate.ActorId;
-            ActiveLectures.Remove(actorId);
-            HistoricalSchoolVenueService.Release(pActivity.Plan.OperationKey);
-            if (!pRestoreActor) return;
-            Actor actor = FindActor(actorId);
-            if (actor?.data == null || actor.isRekt()) return;
-            CitizenJobAsset job = AssetManager.citizen_job_library.get(
-                HistoricalSchoolContent.CitizenJobId);
-            if (job != null) actor.setCitizenJob(job);
+            if (ActiveLectures.Remove(actorId)) DecrementYearCount(pActivity.Plan.Year);
+            QueuedLectureActors.Remove(actorId);
+            pActivity.ReadyQueued = false;
+            if (!HistoricalSchoolTaskLeaseService.ReleaseExact(
+                    actorId, pActivity.Plan.OperationKey))
+                HistoricalSchoolVenueService.Release(pActivity.Plan.OperationKey);
         }
 
-        private static bool IsValidLectureActor(Actor pActor,
-            HistoricalSchoolLectureActivity pActivity)
+        private static bool IsValidLectureActor(
+            Actor pActor,
+            HistoricalSchoolLectureActivity pActivity,
+            bool pRequireVenue = true)
         {
             if (pActor?.data == null || pActivity == null || !pActor.isAlive() ||
                 pActor.isRekt()) return false;
@@ -271,19 +300,84 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord membership = SchoolMembershipService.GetActive(
                 pActor.data.id);
             if (membership == null || membership.SchoolId != candidate.SchoolId) return false;
-            City residence = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id);
+            City residence = HistoricalAffiliationService.ResidenceCity(pActor);
             return residence?.data != null && !residence.isRekt() &&
                    residence.data.id == candidate.CityId &&
-                   pActor.city?.data?.id == residence.data.id &&
-                   HistoricalAffiliationService.IsAvailableForOffice(pActor) &&
-                   HistoricalAffiliationService.IsPresentForInfluence(pActor);
+                   affiliation?.ResidenceCityId == candidate.CityId &&
+                   HistoricalSchoolRevisionService.IsPresent(affiliation) &&
+                   (!pRequireVenue ||
+                    pActivity.Venue?.OperationKey == pActivity.Plan.OperationKey &&
+                    pActivity.Venue.Primary != null);
+        }
+
+        private static bool TryProcessValidation()
+        {
+            while (ValidationActors.Count > 0)
+            {
+                long actorId = ValidationActors.Dequeue();
+                if (!ActiveLectures.TryGetValue(actorId,
+                        out HistoricalSchoolLectureActivity activity)) continue;
+                if (ShouldCancelLecture(activity))
+                {
+                    FinishLecture(activity);
+                    return true;
+                }
+                ValidationActors.Enqueue(actorId);
+                return false;
+            }
+            return false;
+        }
+
+        private static bool TryProcessReadyLecture()
+        {
+            while (ReadyLectureActors.Count > 0)
+            {
+                long actorId = ReadyLectureActors.Dequeue();
+                if (!ActiveLectures.TryGetValue(actorId,
+                        out HistoricalSchoolLectureActivity activity) || !activity.Ready)
+                    continue;
+                activity.ReadyQueued = false;
+                if (activity.RetryFrame > _frame)
+                {
+                    EnqueueReady(activity);
+                    return false;
+                }
+                ResolveReadyLecture(activity, pScheduleRetry: true);
+                return true;
+            }
+            return false;
+        }
+
+        private static void EnqueueReady(HistoricalSchoolLectureActivity pActivity)
+        {
+            if (pActivity == null || pActivity.ReadyQueued) return;
+            pActivity.ReadyQueued = true;
+            ReadyLectureActors.Enqueue(pActivity.Plan.Candidate.ActorId);
+        }
+
+        private static void DecrementYearCount(int pYear)
+        {
+            if (!QueuedLecturesByYear.TryGetValue(pYear, out int count)) return;
+            if (count > 1) QueuedLecturesByYear[pYear] = count - 1;
+            else QueuedLecturesByYear.Remove(pYear);
+        }
+
+        private static bool AtVenue(Actor pActor, WorldTile pVenue)
+        {
+            return pActor?.current_tile != null && pVenue != null &&
+                   Toolbox.SquaredDistTile(pActor.current_tile, pVenue) <= 4;
         }
 
         private static bool ShouldCancelLecture(HistoricalSchoolLectureActivity pActivity)
         {
             Actor actor = FindActor(pActivity?.Plan.Candidate.ActorId ?? -1L);
             if (!IsValidLectureActor(actor, pActivity)) return true;
-            bool expectedTask = actor.isTask(HistoricalSchoolContent.LectureTaskId);
+            bool expectedTask = HistoricalSchoolTaskLeaseService.IsCurrent(
+                actor.data.id, pActivity.Plan.OperationKey,
+                HistoricalSchoolContent.LectureTaskId) &&
+                actor.isTask(HistoricalSchoolContent.LectureTaskId);
             return HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(
                 pActivity.Ready, expectedTask, _frame - pActivity.StartFrame, 120L);
         }

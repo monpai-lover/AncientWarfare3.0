@@ -28,12 +28,13 @@ namespace AncientWarfare3.core.schools
                 .Where(p => p.ActorId >= 0)
                 .OrderBy(p => p.ActorId)
                 .ToArray();
+            OperationKey = "school-debate:" + Year + ":" + CityId;
         }
 
         public long CityId { get; }
         public int Year { get; }
         public HistoricalSchoolDebateActorSeed[] Actors { get; }
-        public string OperationKey => "school-debate:" + Year + ":" + CityId;
+        public string OperationKey { get; }
     }
 
     internal sealed class HistoricalSchoolDebateActivity
@@ -45,6 +46,7 @@ namespace AncientWarfare3.core.schools
             Record = pRecord;
             FirstDelta = pFirstDelta;
             SecondDelta = pSecondDelta;
+            OperationKey = "school-debate:" + Record.DebateYear + ":" + Record.CityId;
         }
 
         public HistoricalSchoolDebateRecord Record { get; }
@@ -53,106 +55,127 @@ namespace AncientWarfare3.core.schools
         public HistoricalSchoolVenueClaim Venue { get; set; }
         public bool FirstReady { get; set; }
         public bool SecondReady { get; set; }
+        public bool ReadyQueued { get; set; }
         public int Attempts { get; set; }
         public long RetryFrame { get; set; }
         public long StartFrame { get; set; }
-        public string OperationKey => "school-debate:" + Record.DebateYear + ":" +
-                                      Record.CityId;
+        public string OperationKey { get; }
     }
 
     internal static class HistoricalSchoolDebateActivityService
     {
         private const int MaxQueuedPerYear = HistoricalSchoolDebateService.MaxDebatesPerYear;
         private const int MaxConcurrentDebates = 4;
+        private const long TaskLeaseFrames = 600L;
         private static readonly Queue<HistoricalSchoolDebateCityRequest> PendingCities =
             new Queue<HistoricalSchoolDebateCityRequest>();
         private static readonly Dictionary<long, HistoricalSchoolDebateActivity> ByActor =
             new Dictionary<long, HistoricalSchoolDebateActivity>();
-        private static readonly HashSet<string> OperationKeys =
-            new HashSet<string>(StringComparer.Ordinal);
-        private static readonly HashSet<string> UsedActorYears =
-            new HashSet<string>(StringComparer.Ordinal);
-        private static long _frame;
+        private static readonly Dictionary<string, HistoricalSchoolDebateActivity>
+            ActivitiesById =
+                new Dictionary<string, HistoricalSchoolDebateActivity>(StringComparer.Ordinal);
+        private static readonly Queue<string> ReadyActivityIds = new Queue<string>();
+        private static readonly Queue<string> ValidationActivityIds = new Queue<string>();
+        private static readonly Dictionary<int, int> QueuedDebatesByYear =
+            new Dictionary<int, int>();
+        private static readonly HistoricalSchoolBoundedYearKeys OperationKeys =
+            new HistoricalSchoolBoundedYearKeys();
+        private static readonly HistoricalSchoolBoundedYearKeys UsedActorYears =
+            new HistoricalSchoolBoundedYearKeys();
 
         public static bool TryEnqueueCity(long pCityId, int pYear,
             IEnumerable<HistoricalSchoolDebateActorSeed> pActors)
         {
             var request = new HistoricalSchoolDebateCityRequest(pCityId, pYear, pActors);
-            int yearCount = PendingCities.Count(p => p.Year == pYear) +
-                            ByActor.Values.Distinct().Count(p => p.Record.DebateYear == pYear);
+            QueuedDebatesByYear.TryGetValue(pYear, out int yearCount);
             if (request.CityId < 0 || request.Year < 0 || request.Actors.Length < 2 ||
                 !HistoricalSchoolActivityQueueRules.CanEnqueue(yearCount,
-                    MaxQueuedPerYear, OperationKeys.Contains(request.OperationKey))) return false;
-            OperationKeys.Add(request.OperationKey);
+                    MaxQueuedPerYear,
+                    OperationKeys.Contains(request.Year, request.OperationKey))) return false;
+            if (!OperationKeys.Add(request.Year, request.OperationKey)) return false;
             PendingCities.Enqueue(request);
+            QueuedDebatesByYear[pYear] = yearCount + 1;
             return true;
         }
 
         public static bool ProcessFrame()
         {
-            _frame++;
-            HistoricalSchoolDebateActivity invalid = ByActor.Values.Distinct()
-                .OrderBy(p => p.Record.CityId)
-                .FirstOrDefault(ShouldCancelActivity);
-            if (invalid != null)
-            {
-                Finish(invalid, pRestoreActors: true);
-                return true;
-            }
-            HistoricalSchoolDebateActivity ready = ByActor.Values.Distinct()
-                .Where(p => p.FirstReady && p.SecondReady && p.RetryFrame <= _frame)
-                .OrderBy(p => p.Record.CityId)
-                .FirstOrDefault();
-            if (ready != null)
-            {
-                ResolveReadyDebate(ready, pScheduleRetry: true);
-                return true;
-            }
+            if (TryProcessValidation()) return true;
+            if (TryProcessReady()) return true;
 
-            int activeCount = ByActor.Values.Distinct().Count();
-            if (!HistoricalSchoolActivityQueueRules.CanActivate(activeCount,
+            if (!HistoricalSchoolActivityQueueRules.CanActivate(ActivitiesById.Count,
                     MaxConcurrentDebates)) return false;
 
             while (PendingCities.Count > 0)
             {
                 HistoricalSchoolDebateCityRequest request = PendingCities.Dequeue();
-                HistoricalSchoolDebateActorSeed[] available = request.Actors
-                    .Where(p => !UsedActorYears.Contains(
-                        HistoricalSchoolActivityQueueRules.ActorYearKey(request.Year,
-                            p.ActorId))).ToArray();
+                var availableActors = new List<HistoricalSchoolDebateActorSeed>(
+                    request.Actors.Length);
+                foreach (HistoricalSchoolDebateActorSeed actor in request.Actors)
+                    if (!ByActor.ContainsKey(actor.ActorId) &&
+                        !UsedActorYears.Contains(request.Year,
+                            actor.ActorId.ToString(
+                                System.Globalization.CultureInfo.InvariantCulture)))
+                        availableActors.Add(actor);
                 if (!HistoricalSchoolDebateService.TryCreateQueuedDebate(request.CityId,
-                        request.Year, available, out HistoricalSchoolDebateActivity activity))
+                        request.Year, availableActors,
+                        out HistoricalSchoolDebateActivity activity))
+                {
+                    DecrementYearCount(request.Year);
                     return true;
+                }
                 City city = FindCity(request.CityId);
                 if (city?.data == null || city.isRekt() ||
                     !HistoricalSchoolVenueService.TryClaimDebate(city,
                         activity.OperationKey, out HistoricalSchoolVenueClaim venue))
+                {
+                    DecrementYearCount(request.Year);
                     return true;
+                }
                 activity.Venue = venue;
-                activity.StartFrame = _frame;
+                activity.StartFrame = HistoricalSchoolActivityQueue.CurrentFrame;
+                ActivitiesById[activity.OperationKey] = activity;
                 ByActor[activity.Record.FirstActorId] = activity;
                 ByActor[activity.Record.SecondActorId] = activity;
-                UsedActorYears.Add(HistoricalSchoolActivityQueueRules.ActorYearKey(
-                    activity.Record.DebateYear, activity.Record.FirstActorId));
-                UsedActorYears.Add(HistoricalSchoolActivityQueueRules.ActorYearKey(
-                    activity.Record.DebateYear, activity.Record.SecondActorId));
+                ValidationActivityIds.Enqueue(activity.OperationKey);
+                UsedActorYears.Add(activity.Record.DebateYear,
+                    activity.Record.FirstActorId.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
+                UsedActorYears.Add(activity.Record.DebateYear,
+                    activity.Record.SecondActorId.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture));
                 Actor first = FindActor(activity.Record.FirstActorId);
                 Actor second = FindActor(activity.Record.SecondActorId);
                 if (!IsUsable(first) || !IsUsable(second))
                 {
-                    Finish(activity, pRestoreActors: true);
+                    Finish(activity);
                     return true;
                 }
-                try
+                long frame = HistoricalSchoolActivityQueue.CurrentFrame;
+                bool firstScheduled = HistoricalSchoolTaskLeaseService.TrySchedule(
+                    first,
+                    activity.OperationKey,
+                    HistoricalSchoolContent.DebateTravelTaskId,
+                    activity.Record.FirstSchoolId,
+                    activity.Record.CityId,
+                    activity.OperationKey,
+                    venue.Primary,
+                    frame,
+                    frame + TaskLeaseFrames);
+                bool secondScheduled = firstScheduled &&
+                    HistoricalSchoolTaskLeaseService.TrySchedule(
+                        second,
+                        activity.OperationKey,
+                        HistoricalSchoolContent.DebateReceivingTaskId,
+                        activity.Record.SecondSchoolId,
+                        activity.Record.CityId,
+                        activity.OperationKey,
+                        venue.Secondary,
+                        frame,
+                        frame + TaskLeaseFrames);
+                if (!secondScheduled)
                 {
-                    first.setTask(HistoricalSchoolContent.DebateTravelTaskId, pClean: true,
-                        pCleanJob: false, pForceAction: true);
-                    second.setTask(HistoricalSchoolContent.DebateReceivingTaskId,
-                        pClean: true, pCleanJob: false, pForceAction: true);
-                }
-                catch
-                {
-                    Finish(activity, pRestoreActors: true);
+                    Finish(activity);
                 }
                 return true;
             }
@@ -162,13 +185,16 @@ namespace AncientWarfare3.core.schools
         internal static bool FlushPendingPersistenceForSave()
         {
             bool resolved = true;
-            HistoricalSchoolDebateActivity[] activities = ByActor.Values.Distinct()
-                .Where(p => HistoricalSchoolActivityQueueRules.ShouldFlushForSave(
-                    p.FirstReady && p.SecondReady))
-                .OrderBy(p => p.Record.CityId)
-                .ToArray();
-            foreach (HistoricalSchoolDebateActivity activity in activities)
+            int readyBudget = ReadyActivityIds.Count;
+            while (readyBudget-- > 0 && ReadyActivityIds.Count > 0)
+            {
+                string activityId = ReadyActivityIds.Dequeue();
+                if (!ActivitiesById.TryGetValue(activityId,
+                        out HistoricalSchoolDebateActivity activity) ||
+                    !activity.FirstReady || !activity.SecondReady) continue;
+                activity.ReadyQueued = false;
                 if (!ResolveReadyDebate(activity, pScheduleRetry: false)) resolved = false;
+            }
             return resolved;
         }
 
@@ -177,7 +203,8 @@ namespace AncientWarfare3.core.schools
             pTarget = null;
             if (pActor?.data == null || !ByActor.TryGetValue(pActor.data.id,
                     out HistoricalSchoolDebateActivity activity) || !IsValidActor(pActor,
-                    activity)) return false;
+                    activity) || !HistoricalSchoolTaskLeaseService.IsCurrent(
+                    pActor.data.id, activity.OperationKey)) return false;
             pTarget = pActor.data.id == activity.Record.FirstActorId
                 ? activity.Venue?.Primary
                 : activity.Venue?.Secondary;
@@ -189,18 +216,31 @@ namespace AncientWarfare3.core.schools
             return pActor?.data != null && ByActor.TryGetValue(pActor.data.id,
                        out HistoricalSchoolDebateActivity activity) &&
                    activity.Record.FirstActorId == pActor.data.id &&
-                   IsValidActor(pActor, activity);
+                   IsValidActor(pActor, activity) &&
+                   HistoricalSchoolTaskLeaseService.IsCurrent(
+                       pActor.data.id, activity.OperationKey) &&
+                   AtVenue(pActor, activity.Venue?.Primary);
         }
 
         public static bool MarkActorReady(Actor pActor)
         {
             if (pActor?.data == null || !ByActor.TryGetValue(pActor.data.id,
                     out HistoricalSchoolDebateActivity activity) ||
-                !IsValidActor(pActor, activity)) return false;
-            if (pActor.data.id == activity.Record.FirstActorId) activity.FirstReady = true;
+                !IsValidActor(pActor, activity) ||
+                !HistoricalSchoolTaskLeaseService.IsCurrent(
+                    pActor.data.id, activity.OperationKey)) return false;
+            if (pActor.data.id == activity.Record.FirstActorId)
+            {
+                if (!AtVenue(pActor, activity.Venue?.Primary)) return false;
+                activity.FirstReady = true;
+            }
             else if (pActor.data.id == activity.Record.SecondActorId)
+            {
+                if (!AtVenue(pActor, activity.Venue?.Secondary)) return false;
                 activity.SecondReady = true;
+            }
             else return false;
+            if (activity.FirstReady && activity.SecondReady) EnqueueReady(activity);
             return true;
         }
 
@@ -213,18 +253,31 @@ namespace AncientWarfare3.core.schools
         {
             if (pActor?.data != null && ByActor.TryGetValue(pActor.data.id,
                     out HistoricalSchoolDebateActivity activity))
-                Finish(activity, pRestoreActors);
+                Finish(activity);
+        }
+
+        internal static void CancelExpiredLease(HistoricalSchoolTaskLease pLease)
+        {
+            if (!string.IsNullOrEmpty(pLease.ActivityId) &&
+                ActivitiesById.TryGetValue(pLease.ActivityId,
+                    out HistoricalSchoolDebateActivity activity) &&
+                (activity.Record.FirstActorId == pLease.ActorId ||
+                 activity.Record.SecondActorId == pLease.ActorId))
+                Finish(activity);
         }
 
         public static void ClearRuntime()
         {
-            foreach (HistoricalSchoolDebateActivity activity in ByActor.Values.Distinct())
+            foreach (HistoricalSchoolDebateActivity activity in ActivitiesById.Values)
                 HistoricalSchoolVenueService.Release(activity.OperationKey);
             PendingCities.Clear();
             ByActor.Clear();
+            ActivitiesById.Clear();
+            ReadyActivityIds.Clear();
+            ValidationActivityIds.Clear();
+            QueuedDebatesByYear.Clear();
             OperationKeys.Clear();
             UsedActorYears.Clear();
-            _frame = 0L;
         }
 
         private static bool ResolveReadyDebate(HistoricalSchoolDebateActivity pActivity,
@@ -242,36 +295,32 @@ namespace AncientWarfare3.core.schools
             }
             if (HistoricalSchoolActivityQueueRules.IsPersistenceResolved(outcome))
             {
-                Finish(pActivity, pRestoreActors: true);
+                Finish(pActivity);
                 return true;
             }
             if (pScheduleRetry)
             {
                 pActivity.Attempts++;
-                pActivity.RetryFrame = _frame + Math.Min(120,
+                pActivity.RetryFrame = HistoricalSchoolActivityQueue.CurrentFrame + Math.Min(120,
                     1L << Math.Min(6, pActivity.Attempts));
             }
+            EnqueueReady(pActivity);
             return false;
         }
 
-        private static void Finish(HistoricalSchoolDebateActivity pActivity,
-            bool pRestoreActors)
+        private static void Finish(HistoricalSchoolDebateActivity pActivity)
         {
             if (pActivity == null) return;
+            if (!ActivitiesById.Remove(pActivity.OperationKey)) return;
             ByActor.Remove(pActivity.Record.FirstActorId);
             ByActor.Remove(pActivity.Record.SecondActorId);
+            pActivity.ReadyQueued = false;
+            DecrementYearCount(pActivity.Record.DebateYear);
+            HistoricalSchoolTaskLeaseService.ReleaseExact(
+                pActivity.Record.FirstActorId, pActivity.OperationKey);
+            HistoricalSchoolTaskLeaseService.ReleaseExact(
+                pActivity.Record.SecondActorId, pActivity.OperationKey);
             HistoricalSchoolVenueService.Release(pActivity.OperationKey);
-            if (!pRestoreActors) return;
-            RestoreScholar(FindActor(pActivity.Record.FirstActorId));
-            RestoreScholar(FindActor(pActivity.Record.SecondActorId));
-        }
-
-        private static void RestoreScholar(Actor pActor)
-        {
-            if (!IsUsable(pActor)) return;
-            CitizenJobAsset job = AssetManager.citizen_job_library.get(
-                HistoricalSchoolContent.CitizenJobId);
-            if (job != null) pActor.setCitizenJob(job);
         }
 
         private static bool IsValidActor(Actor pActor,
@@ -285,10 +334,73 @@ namespace AncientWarfare3.core.schools
                     : "";
             SchoolMembershipRecord membership = SchoolMembershipService.GetActive(
                 pActor.data.id);
-            City residence = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id);
+            City residence = HistoricalAffiliationService.ResidenceCity(pActor);
             return !string.IsNullOrEmpty(expectedSchool) && membership?.SchoolId ==
                    expectedSchool && residence?.data?.id == pActivity.Record.CityId &&
-                   HistoricalAffiliationService.IsPresentForInfluence(pActor);
+                   affiliation?.ResidenceCityId == pActivity.Record.CityId &&
+                   HistoricalSchoolRevisionService.IsPresent(affiliation) &&
+                   pActivity.Venue?.OperationKey == pActivity.OperationKey &&
+                   pActivity.Venue.Primary != null && pActivity.Venue.Secondary != null;
+        }
+
+        private static bool TryProcessValidation()
+        {
+            while (ValidationActivityIds.Count > 0)
+            {
+                string activityId = ValidationActivityIds.Dequeue();
+                if (!ActivitiesById.TryGetValue(activityId,
+                        out HistoricalSchoolDebateActivity activity)) continue;
+                if (ShouldCancelActivity(activity))
+                {
+                    Finish(activity);
+                    return true;
+                }
+                ValidationActivityIds.Enqueue(activityId);
+                return false;
+            }
+            return false;
+        }
+
+        private static bool TryProcessReady()
+        {
+            while (ReadyActivityIds.Count > 0)
+            {
+                string activityId = ReadyActivityIds.Dequeue();
+                if (!ActivitiesById.TryGetValue(activityId,
+                        out HistoricalSchoolDebateActivity activity) ||
+                    !activity.FirstReady || !activity.SecondReady) continue;
+                activity.ReadyQueued = false;
+                if (activity.RetryFrame > HistoricalSchoolActivityQueue.CurrentFrame)
+                {
+                    EnqueueReady(activity);
+                    return false;
+                }
+                ResolveReadyDebate(activity, pScheduleRetry: true);
+                return true;
+            }
+            return false;
+        }
+
+        private static void EnqueueReady(HistoricalSchoolDebateActivity pActivity)
+        {
+            if (pActivity == null || pActivity.ReadyQueued) return;
+            pActivity.ReadyQueued = true;
+            ReadyActivityIds.Enqueue(pActivity.OperationKey);
+        }
+
+        private static void DecrementYearCount(int pYear)
+        {
+            if (!QueuedDebatesByYear.TryGetValue(pYear, out int count)) return;
+            if (count > 1) QueuedDebatesByYear[pYear] = count - 1;
+            else QueuedDebatesByYear.Remove(pYear);
+        }
+
+        private static bool AtVenue(Actor pActor, WorldTile pVenue)
+        {
+            return pActor?.current_tile != null && pVenue != null &&
+                   Toolbox.SquaredDistTile(pActor.current_tile, pVenue) <= 4;
         }
 
         private static bool ShouldCancelActivity(HistoricalSchoolDebateActivity pActivity)
@@ -301,7 +413,11 @@ namespace AncientWarfare3.core.schools
                                  first.isTask(HistoricalSchoolContent.DebateTaskId);
             bool secondExpected = second.isTask(
                 HistoricalSchoolContent.DebateReceivingTaskId);
-            long age = _frame - pActivity.StartFrame;
+            firstExpected &= HistoricalSchoolTaskLeaseService.IsCurrent(
+                first.data.id, pActivity.OperationKey);
+            secondExpected &= HistoricalSchoolTaskLeaseService.IsCurrent(
+                second.data.id, pActivity.OperationKey);
+            long age = HistoricalSchoolActivityQueue.CurrentFrame - pActivity.StartFrame;
             return HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(
                        pActivity.FirstReady, firstExpected, age, 120L) ||
                    HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(
