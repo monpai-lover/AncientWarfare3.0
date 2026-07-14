@@ -1,5 +1,6 @@
 using System;
 using System.Data.SQLite;
+using AncientWarfare3.content.schools;
 
 namespace AncientWarfare3.core.schools
 {
@@ -14,14 +15,15 @@ namespace AncientWarfare3.core.schools
     {
         public HistoricalMasterLineageCommitIdentity(long pActorId,
             string pCanonicalName, string pShiName, string pGivenName,
-            string pFamilyName, long pHomeKingdomId, long pHometownCityId,
-            double pCreatedTime)
+            string pFamilyName, HistoricalMasterFamilyEvidence pFamilyEvidence,
+            long pHomeKingdomId, long pHometownCityId, double pCreatedTime)
         {
             ActorId = pActorId;
             CanonicalName = pCanonicalName ?? "";
             ShiName = pShiName ?? "";
             GivenName = pGivenName ?? "";
             FamilyName = pFamilyName ?? "";
+            FamilyEvidence = pFamilyEvidence;
             HomeKingdomId = pHomeKingdomId;
             HometownCityId = pHometownCityId;
             CreatedTime = pCreatedTime;
@@ -32,6 +34,7 @@ namespace AncientWarfare3.core.schools
         public string ShiName { get; }
         public string GivenName { get; }
         public string FamilyName { get; }
+        public HistoricalMasterFamilyEvidence FamilyEvidence { get; }
         public long HomeKingdomId { get; }
         public long HometownCityId { get; }
         public double CreatedTime { get; }
@@ -43,10 +46,19 @@ namespace AncientWarfare3.core.schools
                                !string.IsNullOrWhiteSpace(CanonicalName) &&
                                !string.IsNullOrWhiteSpace(ShiName) &&
                                !string.IsNullOrWhiteSpace(GivenName) &&
-                               !string.IsNullOrWhiteSpace(FamilyName) &&
+                               FamilyIsValid &&
                                CanonicalName == ShiName + GivenName &&
                                !double.IsNaN(CreatedTime) &&
                                !double.IsInfinity(CreatedTime) && CreatedTime >= 0d;
+
+        private bool FamilyIsValid => FamilyEvidence ==
+            HistoricalMasterFamilyEvidence.Unknown
+                ? string.IsNullOrEmpty(FamilyName)
+                : !string.IsNullOrWhiteSpace(FamilyName) &&
+                  (FamilyEvidence == HistoricalMasterFamilyEvidence.KnownSame
+                      ? FamilyName == ShiName
+                      : FamilyEvidence == HistoricalMasterFamilyEvidence.KnownDistinct &&
+                        FamilyName != ShiName);
 
         public void FreezeIds(long pLineageId, long pShiId)
         {

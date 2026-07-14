@@ -47,7 +47,8 @@ namespace AncientWarfare3.core.schools
                    pMaster.CanonicalName == pIdentity.CanonicalName &&
                    pMaster.CanonicalShiName == pIdentity.ShiName &&
                    pMaster.CanonicalGivenName == pIdentity.GivenName &&
-                   pMaster.CanonicalFamilyName == pIdentity.FamilyName;
+                   pMaster.CanonicalFamilyName == pIdentity.FamilyName &&
+                   pMaster.FamilyEvidence == pIdentity.FamilyEvidence;
         }
 
         private static void ApplyCanonicalActorFields(Actor pActor,
@@ -112,6 +113,7 @@ namespace AncientWarfare3.core.schools
                    displayName == pMaster.CanonicalName &&
                    familyName == pMaster.CanonicalFamilyName &&
                    chineseFamilyName == pMaster.CanonicalFamilyName &&
+                   pMaster.FamilyEvidence == pIdentity.FamilyEvidence &&
                    shiName == pMaster.CanonicalShiName &&
                    lineageId == pIdentity.LineageId && shiId == pIdentity.ShiId &&
                    pActor.data.name == pMaster.CanonicalName &&

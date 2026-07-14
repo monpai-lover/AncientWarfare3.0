@@ -1301,6 +1301,7 @@ namespace AncientWarfare3.core.schools
                 pIdentity.ShiName != pMaster.CanonicalShiName ||
                 pIdentity.GivenName != pMaster.CanonicalGivenName ||
                 pIdentity.FamilyName != pMaster.CanonicalFamilyName ||
+                pIdentity.FamilyEvidence != pMaster.FamilyEvidence ||
                 pIdentity.HomeKingdomId != pHomeKingdomId ||
                 pIdentity.HometownCityId != pHometownCityId ||
                 !pIdentity.CreatedTime.Equals(time))

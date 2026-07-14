@@ -85,6 +85,7 @@ namespace AncientWarfare3.core.schools
                     var identity = new HistoricalMasterLineageCommitIdentity(row.ActorId,
                         master.CanonicalName, master.CanonicalShiName,
                         master.CanonicalGivenName, master.CanonicalFamilyName,
+                        master.FamilyEvidence,
                         row.HomeKingdomId, row.HometownCityId, row.CreatedTime);
                     identity.FreezeIds(row.LineageId, row.ShiId);
                     if (!HistoricalMasterIdentityProjection.TryApply(actor, master, identity))
@@ -248,6 +249,7 @@ namespace AncientWarfare3.core.schools
                 identity = new HistoricalMasterLineageCommitIdentity(actor.data.id,
                     pMaster.CanonicalName, pMaster.CanonicalShiName,
                     pMaster.CanonicalGivenName, pMaster.CanonicalFamilyName,
+                    pMaster.FamilyEvidence,
                     homeKingdomId, hometownCityId, persistenceTime);
                 membership = SchoolMembershipService.PrepareHistoricalDescent(actor,
                     pMaster.SchoolId, pMaster.Id, hometownCityId, 0);
