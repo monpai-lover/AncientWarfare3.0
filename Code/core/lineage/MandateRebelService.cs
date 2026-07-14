@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.content.schools;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -453,6 +455,8 @@ namespace AncientWarfare3.core.lineage
         private static bool CanMobilize(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAdult()) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.RebelLevy)) return false;
             if (pActor.asset?.is_boat == true) return false;
             try { if (!pActor.isSexMale()) return false; } catch { }
             if (pActor.isKing() || pActor.isCityLeader()) return false;

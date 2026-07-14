@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -63,6 +65,8 @@ namespace AncientWarfare3.core.lineage
             string pName, bool pDetached)
         {
             if (pKingdom?.data == null || pCaptain?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole))
+                return null;
+            if (!HistoricalMasterVocationService.CanEnterArmyRole(pCaptain, pRole))
                 return null;
 
             City anchor = pAnchorCity ?? pCaptain.city ?? pKingdom.capital;
@@ -149,6 +153,7 @@ namespace AncientWarfare3.core.lineage
         public static void AddToArmy(Actor pActor, Army pArmy)
         {
             if (pActor?.data == null || pArmy?.data == null) return;
+            if (!HistoricalMasterVocationService.CanJoinArmy(pActor, pArmy)) return;
             if (pActor.army == pArmy)
             {
                 try
@@ -168,6 +173,7 @@ namespace AncientWarfare3.core.lineage
                 catch { }
             }
             pActor.setArmy(pArmy);
+            if (pActor.army != pArmy) return;
             try
             {
                 if (!pArmy.units.Contains(pActor))
@@ -188,6 +194,9 @@ namespace AncientWarfare3.core.lineage
         public static void SetCaptainIfChanged(Army pArmy, Actor pCaptain)
         {
             if (pArmy?.data == null || pCaptain?.data == null || pCaptain.isRekt()) return;
+            if (!HistoricalMasterVocationService.CanJoinArmy(pCaptain, pArmy) ||
+                !HistoricalMasterVocationService.CanEnter(pCaptain,
+                    HistoricalMasterMilitaryContext.ArmyCaptain)) return;
             long currentId = -1L;
             try { currentId = pArmy.getCaptain()?.data?.id ?? -1L; }
             catch { }

@@ -164,6 +164,7 @@ namespace AncientWarfare3.core.schools
             }
             if (pState.LifecycleState != HistoricalSchoolLifecycleState.AtHome &&
                 pState.LifecycleState != HistoricalSchoolLifecycleState.Resident) return null;
+            RestoreScholarJob(actor);
             if (pState.LifecycleState == HistoricalSchoolLifecycleState.Resident)
                 actor.addStatusEffect(HistoricalSchoolContent.GuestStatusId, 120f,
                     pColorEffect: false);
@@ -391,8 +392,9 @@ namespace AncientWarfare3.core.schools
             if (pState.ServiceKingdomId >= 0 ||
                 pState.LifecycleState == HistoricalSchoolLifecycleState.Serving) return true;
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
-            if (courtKingdomId >= 0 || pActor.isKing() || pActor.isCityLeader() ||
-                GeneralService.IsGeneral(pActor)) return true;
+            if (courtKingdomId >= 0 || pActor.isKing() || pActor.isCityLeader()) return true;
+            if (pActor.isWarrior() || pActor.hasArmy() || GeneralService.IsGeneral(pActor))
+                return true;
             try { return HeirService.IsCurrentHeir(pActor.kingdom, pActor); }
             catch { return false; }
         }

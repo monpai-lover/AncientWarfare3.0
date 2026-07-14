@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -334,6 +336,8 @@ namespace AncientWarfare3.core.lineage
         private static bool CanRemainGeneral(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.General)) return false;
             if (pActor.kingdom != pKingdom) return false;
             if (pActor.isRekt() || !pActor.isAdult()) return false;
             if (pActor.isKing()) return false;

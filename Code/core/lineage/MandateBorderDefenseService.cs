@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
+using AncientWarfare3.content.schools;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using ai.behaviours;
 using UnityEngine;
@@ -623,13 +625,17 @@ namespace AncientWarfare3.core.lineage
         private static bool CanBeBorderGuard(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.BorderArmy)) return false;
+            bool canonicalMaster = HistoricalSchoolDescentService.IsCanonicalMaster(pActor);
             if (pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAdult()) return false;
             if (pActor.asset?.is_boat == true) return false;
             if (pActor.isKing() || pActor.isCityLeader()) return false;
             if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
             if (SlaveService.IsSlave(pActor) || SlaveService.IsRetiredSoldier(pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor) || MandateRebelService.IsRebelLeader(pActor)) return false;
-            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return false;
+            if (!canonicalMaster && (pActor.hasTrait("figure") || pActor.hasTrait("first")))
+                return false;
             return pActor.isWarrior() || pActor.isUnitFitToRule();
         }
 

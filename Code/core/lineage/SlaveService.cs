@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -1467,7 +1469,9 @@ namespace AncientWarfare3.core.lineage
                 bool cadre = unit != captain &&
                              CanBeSlaveArmyCaptainCandidate(unit, pCity.kingdom, pCity,
                                  pRequireWarrior: false);
-                bool slave = unit.isAdult() && IsSlave(unit) && !IsRetiredSoldier(unit) &&
+                bool slave = HistoricalMasterVocationService.CanEnter(unit,
+                                 HistoricalMasterMilitaryContext.SlaveArmyCadre) &&
+                             unit.isAdult() && IsSlave(unit) && !IsRetiredSoldier(unit) &&
                              !RoyalGuardService.IsRoyalGuard(unit) && unit.asset?.is_boat != true;
                 if (!cadre && !slave) continue;
 
@@ -1513,6 +1517,8 @@ namespace AncientWarfare3.core.lineage
                 if (SlaveArmyMaintenanceRules.ShouldStopFillBatch(
                         pAddedThisPass, SLAVE_ARMY_FILL_BATCH_LIMIT)) return;
                 if (candidate?.data == null || candidate.army == pArmy) continue;
+                if (!HistoricalMasterVocationService.CanEnter(candidate,
+                        HistoricalMasterMilitaryContext.SlaveArmyCadre)) continue;
 
                 bool compositionAllows = pTotal < MAX_SLAVE_ARMY_SIZE &&
                     (pIsSlave
@@ -1789,6 +1795,8 @@ namespace AncientWarfare3.core.lineage
                 if (!IsSlave(unit) || IsRetiredSoldier(unit)) continue;
                 if (RoyalGuardService.IsRoyalGuard(unit)) continue;
                 if (unit.asset?.is_boat == true) continue;
+                if (!HistoricalMasterVocationService.CanEnter(unit,
+                        HistoricalMasterMilitaryContext.SlaveArmyCadre)) continue;
                 result.Add(unit);
             }
             return result;
@@ -1797,6 +1805,8 @@ namespace AncientWarfare3.core.lineage
         private static bool EnsureWarriorForSlaveArmy(City pCity, Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt()) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.SlaveArmyCadre)) return false;
             if (pActor.isWarrior()) return true;
             if (pCity?.data == null || pActor.city != pCity) return false;
             if (!pCity.checkCanMakeWarrior(pActor)) return false;
@@ -1808,6 +1818,8 @@ namespace AncientWarfare3.core.lineage
             bool pRequireWarrior)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.SlaveArmyCadre)) return false;
             if (pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAdult()) return false;
             if (pActor.asset?.is_boat == true) return false;
             if (pRequireWarrior && !pActor.isWarrior()) return false;
@@ -1998,6 +2010,9 @@ namespace AncientWarfare3.core.lineage
                 if (!unit.isWarrior()) continue;
                 if (unit.army != pArmy) continue;
                 if (IsSlave(unit)) continue;
+                if (!HistoricalMasterVocationService.CanJoinArmy(unit, pArmy) ||
+                    !HistoricalMasterVocationService.CanEnter(unit,
+                        HistoricalMasterMilitaryContext.ArmyCaptain)) continue;
                 return unit;
             }
             return null;

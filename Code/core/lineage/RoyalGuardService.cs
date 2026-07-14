@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using AncientWarfare3.content;
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -931,6 +933,8 @@ namespace AncientWarfare3.core.lineage
         private static bool IsGuardCandidate(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.RoyalGuard)) return false;
             return RoyalGuardSelectionRules.IsEligibleCore(
                 isXia: LineageService.IsXia(pActor),
                 sameKingdom: pActor.kingdom == pKingdom,
@@ -1043,6 +1047,8 @@ namespace AncientWarfare3.core.lineage
 
         private static void AppointGuard(Actor pActor, Kingdom pKingdom, string pGuardName, bool pCaptain)
         {
+            if (!HistoricalMasterVocationService.CanEnter(pActor,
+                    HistoricalMasterMilitaryContext.RoyalGuard)) return;
             if (!RoyalGuardMaintenanceRules.ShouldPersistNewGuardDuringFill(pFinalRefreshWillRun: true)) return;
             int runtimeRefreshesApplied = 0;
             RefreshGuardIdentity(pActor, pKingdom, pGuardName, pCaptain, null,
