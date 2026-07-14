@@ -27,6 +27,7 @@ namespace AncientWarfare3.core.schools
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();
             HistoricalSchoolActionService.ClearRuntime();
+            HistoricalSchoolActivityQueue.LoadState();
             SchoolGuestOfficeService.LoadState();
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
@@ -48,6 +49,7 @@ namespace AncientWarfare3.core.schools
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
+            HistoricalSchoolActivityQueue.ClearRuntime();
             SchoolGuestOfficeService.ClearRuntime();
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
@@ -63,6 +65,7 @@ namespace AncientWarfare3.core.schools
             PendingRuntimeState.AdvanceAndTryFlush(HistoricalSchoolStore.SaveRuntimeState);
             HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
             SchoolGuestOfficeService.ProcessPendingFrame();
+            HistoricalSchoolActivityQueue.ProcessFrame();
             int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
             int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
             if (quarterKey == _lastQuarterKey) return;

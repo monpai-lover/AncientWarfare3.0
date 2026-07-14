@@ -115,6 +115,7 @@ namespace AncientWarfare3.patch
                     newCityId)) return;
             HistoricalAffiliationService.NotifyActiveMemberCityChanged(__state.OldCity,
                 __instance.city);
+            HistoricalSchoolActivityQueue.CancelActor(__instance, pRestoreActor: true);
         }
 
         [HarmonyPrefix]

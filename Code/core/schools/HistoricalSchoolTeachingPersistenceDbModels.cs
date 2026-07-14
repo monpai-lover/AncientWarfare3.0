@@ -2,14 +2,6 @@ using System;
 
 namespace AncientWarfare3.core.schools
 {
-    internal enum HistoricalSchoolTeachingPersistenceOutcome
-    {
-        Unknown = 0,
-        Committed = 1,
-        Replayed = 2,
-        CleanFailure = 3
-    }
-
     internal readonly struct HistoricalSchoolTeachingDbResult
     {
         public HistoricalSchoolTeachingDbResult(

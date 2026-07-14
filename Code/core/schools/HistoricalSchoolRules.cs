@@ -249,7 +249,8 @@ namespace AncientWarfare3.core.schools
         }
 
         public static IReadOnlyList<HistoricalSchoolMasterDefinition> SelectDue(
-            int pEligibleYear, HistoricalSchoolDescentLedger pLedger, int pLimit = 2)
+            int pEligibleYear, HistoricalSchoolDescentLedger pLedger, int pLimit = 2,
+            ISet<string> pOccupiedSchoolIds = null)
         {
             if (pLedger == null || pEligibleYear <= 0 || pLimit <= 0)
                 return Array.Empty<HistoricalSchoolMasterDefinition>();
@@ -258,6 +259,8 @@ namespace AncientWarfare3.core.schools
                 .Where(p => !pLedger.IsSpawned(p.Id))
                 .GroupBy(p => p.SchoolId, StringComparer.Ordinal)
                 .Select(p => p.OrderBy(v => v.Order).ThenBy(v => v.RegistryIndex).First())
+                .Where(p => pOccupiedSchoolIds == null ||
+                            !pOccupiedSchoolIds.Contains(p.SchoolId))
                 .Where(p => pEligibleYear >= WaveOpeningYear(p.Wave))
                 .ToList();
             if (nextBySchool.Count == 0) return Array.Empty<HistoricalSchoolMasterDefinition>();

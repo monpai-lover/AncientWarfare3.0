@@ -135,6 +135,20 @@ namespace AncientWarfare3.core.schools
             return Count(_kingdomPersuasionsByYear, YearLongKey(pYear, pKingdomId));
         }
 
+        public HistoricalSchoolTeachingHistory Clone()
+        {
+            var clone = new HistoricalSchoolTeachingHistory();
+            Copy(_lastLectureByActor, clone._lastLectureByActor);
+            Copy(_lastPersuasionByActor, clone._lastPersuasionByActor);
+            Copy(_lastLectureByCitySchool, clone._lastLectureByCitySchool);
+            Copy(_worldLecturesByYear, clone._worldLecturesByYear);
+            Copy(_cityLecturesByYear, clone._cityLecturesByYear);
+            Copy(_schoolLecturesByYear, clone._schoolLecturesByYear);
+            Copy(_citySchoolLecturesByYear, clone._citySchoolLecturesByYear);
+            Copy(_kingdomPersuasionsByYear, clone._kingdomPersuasionsByYear);
+            return clone;
+        }
+
         private static void SetLatest<TKey>(IDictionary<TKey, int> pValues, TKey pKey,
             int pYear)
         {
@@ -151,6 +165,13 @@ namespace AncientWarfare3.core.schools
         private static int Count<TKey>(IReadOnlyDictionary<TKey, int> pValues, TKey pKey)
         {
             return pValues.TryGetValue(pKey, out int count) ? count : 0;
+        }
+
+        private static void Copy<TKey>(IReadOnlyDictionary<TKey, int> pSource,
+            IDictionary<TKey, int> pTarget)
+        {
+            foreach (KeyValuePair<TKey, int> entry in pSource)
+                pTarget[entry.Key] = entry.Value;
         }
 
         private static string YearLongKey(int pYear, long pValue)

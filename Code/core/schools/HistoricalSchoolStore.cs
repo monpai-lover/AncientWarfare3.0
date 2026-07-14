@@ -316,11 +316,13 @@ namespace AncientWarfare3.core.schools
         ///     deltas atomically.  The duplicate check is repeated after the
         ///     transaction starts so a caller cannot race a second yearly result.
         /// </summary>
-        public static bool TryRecordDebateAndLedger(HistoricalSchoolDebateRecord pDebate,
+        internal static HistoricalSchoolTeachingPersistenceOutcome RecordDebateAndLedger(
+            HistoricalSchoolDebateRecord pDebate,
             HistoricalSchoolLedgerDelta pFirstDelta, HistoricalSchoolLedgerDelta pSecondDelta,
             double pWorldTime)
         {
-            if (DB == null || pDebate == null || pFirstDelta == null || pSecondDelta == null ||
+            if (DB == null) return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+            if (pDebate == null || pFirstDelta == null || pSecondDelta == null ||
                 pDebate.CityId < 0 || pDebate.DebateYear < 0 || pDebate.FirstActorId < 0 ||
                 pDebate.SecondActorId < 0 ||
                 pDebate.FirstActorId == pDebate.SecondActorId ||
@@ -328,34 +330,48 @@ namespace AncientWarfare3.core.schools
                 string.IsNullOrWhiteSpace(pDebate.SecondSchoolId) ||
                 string.Equals(pDebate.FirstSchoolId, pDebate.SecondSchoolId,
                     StringComparison.Ordinal) || string.IsNullOrWhiteSpace(pDebate.TopicId) ||
-                !Enum.IsDefined(typeof(SchoolDebateOutcome), pDebate.Outcome)) return false;
+                !Enum.IsDefined(typeof(SchoolDebateOutcome), pDebate.Outcome))
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
 
             string firstSchool = ResolveLedgerSchool(pFirstDelta, pDebate.FirstSchoolId);
             string secondSchool = ResolveLedgerSchool(pSecondDelta, pDebate.SecondSchoolId);
             if (string.IsNullOrWhiteSpace(firstSchool) || string.IsNullOrWhiteSpace(secondSchool) ||
                 !string.Equals(firstSchool, pDebate.FirstSchoolId, StringComparison.Ordinal) ||
                 !string.Equals(secondSchool, pDebate.SecondSchoolId, StringComparison.Ordinal) ||
-                string.Equals(firstSchool, secondSchool, StringComparison.Ordinal)) return false;
+                string.Equals(firstSchool, secondSchool, StringComparison.Ordinal))
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+
+            try
+            {
+                HistoricalSchoolTeachingPersistenceOutcome existing =
+                    ReadExistingDebateOutcome(null, pDebate, out bool exists);
+                if (exists) return existing;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("HistoricalSchoolStore read debate state failed: " +
+                                    error.Message);
+                return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+            }
 
             // IDs are allocated before opening the transaction.  Ledger rows use
             // city+school keys and therefore do not consume an allocator id.
             long debateId = TableIdAllocator.Next(DB, DebateTable, "DEBATE_ID");
             long firstEventId = TableIdAllocator.Next(DB, EventTable, "EVENT_ID");
             if (debateId < 0 || firstEventId < 0 || firstEventId >= long.MaxValue - 1L)
-                return false;
+                return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
             long secondEventId = firstEventId + 1L;
 
             SQLiteTransaction transaction = null;
             try
             {
                 transaction = DB.BeginTransaction();
-                if (HasAnyDebateForYearCommand(transaction, pDebate.CityId,
-                        pDebate.DebateYear) || HasDebateForYearCommand(transaction,
-                        pDebate.CityId, pDebate.FirstActorId, pDebate.SecondActorId,
-                        pDebate.DebateYear))
+                HistoricalSchoolTeachingPersistenceOutcome existing =
+                    ReadExistingDebateOutcome(transaction, pDebate, out bool exists);
+                if (exists)
                 {
                     transaction.Rollback();
-                    return false;
+                    return existing;
                 }
 
                 InsertDebateCommand(transaction, debateId, pDebate);
@@ -373,14 +389,25 @@ namespace AncientWarfare3.core.schools
                     ReputationDelta(pDebate.Outcome, pFirst: false), pWorldTime);
                 transaction.Commit();
                 InvalidateLedgerCaches(pDebate.CityId);
-                return true;
+                return HistoricalSchoolTeachingPersistenceOutcome.Committed;
             }
             catch (Exception error)
             {
                 try { transaction?.Rollback(); } catch { }
                 ModClass.LogWarning("HistoricalSchoolStore record debate failed: " +
                                     error.Message);
-                return false;
+                try
+                {
+                    HistoricalSchoolTeachingPersistenceOutcome recovered =
+                        ReadExistingDebateOutcome(null, pDebate, out bool exists);
+                    if (exists) return recovered;
+                }
+                catch (Exception recoveryError)
+                {
+                    ModClass.LogWarning("HistoricalSchoolStore recover debate failed: " +
+                                        recoveryError.Message);
+                }
+                return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
             }
             finally
             {
@@ -2188,30 +2215,42 @@ namespace AncientWarfare3.core.schools
                 throw new InvalidOperationException("active membership row not found");
         }
 
-        private static bool HasDebateForYearCommand(SQLiteTransaction pTransaction, long pCityId,
-            long pFirstActorId, long pSecondActorId, int pYear)
+        private static HistoricalSchoolTeachingPersistenceOutcome ReadExistingDebateOutcome(
+            SQLiteTransaction pTransaction, HistoricalSchoolDebateRecord pDebate,
+            out bool pExists)
         {
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
-            command.CommandText = "SELECT 1 FROM " + DebateTable +
-                                  " WHERE CITY_ID=@city AND DEBATE_YEAR=@year AND " +
-                                  "((FIRST_ACTOR_ID=@first AND SECOND_ACTOR_ID=@second) OR " +
-                                  "(FIRST_ACTOR_ID=@second AND SECOND_ACTOR_ID=@first)) LIMIT 1";
-            command.Parameters.AddWithValue("@city", pCityId);
-            command.Parameters.AddWithValue("@year", pYear);
-            command.Parameters.AddWithValue("@first", pFirstActorId);
-            command.Parameters.AddWithValue("@second", pSecondActorId);
-            return command.ExecuteScalar() != null;
+            command.CommandText = "SELECT TOPIC_ID,FIRST_ACTOR_ID,FIRST_SCHOOL_ID," +
+                                  "SECOND_ACTOR_ID,SECOND_SCHOOL_ID,SEED,FIRST_SCORE," +
+                                  "SECOND_SCORE,RESULT,RESOLVED FROM " + DebateTable +
+                                  " WHERE CITY_ID=@city AND DEBATE_YEAR=@year LIMIT 1";
+            command.Parameters.AddWithValue("@city", pDebate.CityId);
+            command.Parameters.AddWithValue("@year", pDebate.DebateYear);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            pExists = reader.Read();
+            if (!pExists) return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+            bool exact = string.Equals(ValueString(reader, 0), pDebate.TopicId,
+                             StringComparison.Ordinal) &&
+                         ValueLong(reader, 1, -1L) == pDebate.FirstActorId &&
+                         string.Equals(ValueString(reader, 2), pDebate.FirstSchoolId,
+                             StringComparison.Ordinal) &&
+                         ValueLong(reader, 3, -1L) == pDebate.SecondActorId &&
+                         string.Equals(ValueString(reader, 4), pDebate.SecondSchoolId,
+                             StringComparison.Ordinal) &&
+                         ValueLong(reader, 5) == pDebate.Seed &&
+                         SameStoredScore(ValueDouble(reader, 6), pDebate.FirstScore) &&
+                         SameStoredScore(ValueDouble(reader, 7), pDebate.SecondScore) &&
+                         string.Equals(ValueString(reader, 8), pDebate.Outcome.ToString(),
+                             StringComparison.Ordinal) &&
+                         (ValueInt(reader, 9) != 0) == pDebate.Resolved;
+            return exact
+                ? HistoricalSchoolTeachingPersistenceOutcome.Replayed
+                : HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
         }
 
-        private static bool HasAnyDebateForYearCommand(SQLiteTransaction pTransaction,
-            long pCityId, int pYear)
+        private static bool SameStoredScore(double pStored, double pExpected)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
-            command.CommandText = "SELECT 1 FROM " + DebateTable +
-                                  " WHERE CITY_ID=@city AND DEBATE_YEAR=@year LIMIT 1";
-            command.Parameters.AddWithValue("@city", pCityId);
-            command.Parameters.AddWithValue("@year", pYear);
-            return command.ExecuteScalar() != null;
+            return Math.Abs(pStored - pExpected) <= 0.000000001d;
         }
 
         private static bool HasActiveInstitutionCommand(SQLiteTransaction pTransaction,

@@ -9,5 +9,9 @@
   <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
     <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolActivityQueueRules.cs" Link="Production\HistoricalSchoolActivityQueueRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceOutcome.cs" Link="Production\HistoricalSchoolTeachingPersistenceOutcome.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolVenueRules.cs" Link="Production\HistoricalSchoolVenueRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolActiveMasterSlots.cs" Link="Production\HistoricalSchoolActiveMasterSlots.cs" />
   </ItemGroup>
 </Project>

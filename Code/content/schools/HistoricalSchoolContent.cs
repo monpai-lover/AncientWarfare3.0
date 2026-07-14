@@ -21,6 +21,11 @@ namespace AncientWarfare3.content.schools
         public const string CitizenJobId = "aw_historical_school_scholar";
         public const string ActorJobId = "aw_historical_school_job";
         public const string TravelTaskId = "aw_historical_school_travel";
+        public const string LectureTaskId = "aw_historical_school_lecture";
+        public const string DebateTravelTaskId = "aw_historical_school_debate_travel";
+        public const string DebateTaskId = "aw_historical_school_debate";
+        public const string DebateReceivingTaskId =
+            "aw_historical_school_debate_receiving";
         public const string DescentLogId = "aw_school_master_descended";
         public const string DeathLogId = "aw_school_master_died";
         public const string LectureLogId = "aw_school_lecture";
@@ -183,19 +188,85 @@ namespace AncientWarfare3.content.schools
 
         private static void RegisterTasks()
         {
-            if (AssetManager.tasks_actor.has(TravelTaskId)) return;
-            var travel = AssetManager.tasks_actor.add(new BehaviourTaskActor
+            if (!AssetManager.tasks_actor.has(TravelTaskId))
             {
-                id = TravelTaskId,
-                cancellable_by_reproduction = false,
-                cancellable_by_socialize = false,
-                speed_multiplier = 1f,
-                locale_key = "task_unit_move"
-            });
-            travel.setIcon("ui/Icons/iconBoat");
-            travel.addBeh(new BehHistoricalSchoolTravel());
-            travel.addBeh(new BehGoToTileTarget());
-            travel.addBeh(new BehHistoricalSchoolArrive());
+                var travel = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = TravelTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    speed_multiplier = 1f,
+                    locale_key = "task_unit_move"
+                });
+                travel.setIcon("ui/Icons/iconBoat");
+                travel.addBeh(new BehHistoricalSchoolTravel());
+                travel.addBeh(new BehGoToTileTarget());
+                travel.addBeh(new BehHistoricalSchoolArrive());
+            }
+
+            if (!AssetManager.tasks_actor.has(LectureTaskId))
+            {
+                var lecture = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = LectureTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    speed_multiplier = 1f,
+                    locale_key = "task_unit_aw_historical_school_lecture"
+                });
+                lecture.setIcon("ui/Icons/iconKnowledge");
+                lecture.addBeh(new BehHistoricalSchoolPrepareLecture());
+                lecture.addBeh(new BehGoToTileTarget());
+                lecture.addBeh(new BehRandomWait(4f, 7f));
+                lecture.addBeh(new BehHistoricalSchoolCompleteLecture());
+            }
+
+            if (!AssetManager.tasks_actor.has(DebateTravelTaskId))
+            {
+                var travel = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = DebateTravelTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    speed_multiplier = 1f,
+                    locale_key = "task_unit_aw_historical_school_debate_travel"
+                });
+                travel.setIcon("ui/Icons/traits/iconmingjia");
+                travel.addBeh(new BehHistoricalSchoolPrepareDebate());
+                travel.addBeh(new BehGoToTileTarget());
+                travel.addBeh(new BehHistoricalSchoolBeginDebate());
+            }
+
+            if (!AssetManager.tasks_actor.has(DebateTaskId))
+            {
+                var debate = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = DebateTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    locale_key = "task_unit_aw_historical_school_debate"
+                });
+                debate.setIcon("ui/Icons/traits/iconmingjia");
+                debate.addBeh(new BehRandomWait(4f, 7f));
+                debate.addBeh(new BehHistoricalSchoolCompleteDebate());
+            }
+
+            if (!AssetManager.tasks_actor.has(DebateReceivingTaskId))
+            {
+                var receiving = AssetManager.tasks_actor.add(new BehaviourTaskActor
+                {
+                    id = DebateReceivingTaskId,
+                    cancellable_by_reproduction = false,
+                    cancellable_by_socialize = false,
+                    speed_multiplier = 1f,
+                    locale_key = "task_unit_aw_historical_school_debate_receiving"
+                });
+                receiving.setIcon("ui/Icons/traits/iconmingjia");
+                receiving.addBeh(new BehHistoricalSchoolPrepareDebate());
+                receiving.addBeh(new BehGoToTileTarget());
+                receiving.addBeh(new BehRandomWait(4f, 7f));
+                receiving.addBeh(new BehHistoricalSchoolCompleteDebate());
+            }
         }
 
         private static void RegisterWorldLogs()

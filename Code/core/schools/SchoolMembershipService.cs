@@ -361,6 +361,12 @@ namespace AncientWarfare3.core.schools
                 ModClass.LogWarning("Committed school death travel cleanup failed: " +
                                     error.Message);
             }
+            try { HistoricalSchoolActivityQueue.CancelActor(pActor, pRestoreActor: false); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Committed school death activity cleanup failed: " +
+                                    error.Message);
+            }
             try { CourtService.ClearGuestOfficerAfterDeath(pActor, committedAffiliation); }
             catch (Exception error)
             {

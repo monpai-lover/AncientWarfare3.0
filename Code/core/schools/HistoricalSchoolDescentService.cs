@@ -54,6 +54,8 @@ namespace AncientWarfare3.core.schools
             PendingDescentsByActor = new Dictionary<long, PendingHistoricalDescent>();
         private static readonly Dictionary<string, long> PendingActorByMaster =
             new Dictionary<string, long>(StringComparer.Ordinal);
+        private static readonly HistoricalSchoolActiveMasterSlots ActiveMasterSlots =
+            new HistoricalSchoolActiveMasterSlots();
         private static readonly Queue<long> PendingDescentRetries = new Queue<long>();
         private const int MaxPendingDescentRetryBackoffFrames = 240;
         private const int MaxPendingDescentRetryQueueScan = 16;
@@ -71,15 +73,24 @@ namespace AncientWarfare3.core.schools
                     HistoricalSchoolMasterRegistry.Find(row.MasterId);
                 if (master == null || !row.Spawned) continue;
                 _ledger.MarkSpawned(master, row.SpawnYear);
-                if (row.ActorId >= 0) MasterByActor[row.ActorId] = master.Id;
-                if (row.HomeKingdomId >= 0)
-                    HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
                 try
                 {
                     Actor actor = row.ActorId >= 0
                         ? World.world?.units?.get(row.ActorId)
                         : null;
-                    if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
+                    if (actor?.data == null || !actor.isAlive() || actor.isRekt())
+                        continue;
+                    if (!ActiveMasterSlots.TryRestoreActive(master.SchoolId, master.Id,
+                            actor.data.id))
+                    {
+                        ModClass.LogWarning("Duplicate living historical master blocked: " +
+                                            master.SchoolId + " / " + master.Id);
+                        continue;
+                    }
+                    MasterByActor[actor.data.id] = master.Id;
+                    if (row.HomeKingdomId >= 0)
+                        HomeCounts[row.HomeKingdomId] = HomeCount(row.HomeKingdomId) + 1;
+                    if (
                         row.LineageId < 0 || row.ShiId < 0 || row.CreatedTime < 0d)
                         continue;
                     var identity = new HistoricalMasterLineageCommitIdentity(row.ActorId,
@@ -98,28 +109,6 @@ namespace AncientWarfare3.core.schools
                                         master.Id + " - " + error.Message);
                 }
             }
-            try
-            {
-                if (World.world?.units == null) return;
-                foreach (Actor actor in World.world.units)
-                {
-                    if (actor?.data == null || !actor.isAlive() || actor.isRekt()) continue;
-                    actor.data.get(LineageKeys.SCHOOL_MASTER_ID, out string masterId, "");
-                    HistoricalSchoolMasterDefinition master =
-                        HistoricalSchoolMasterRegistry.Find(masterId);
-                    if (master == null) continue;
-                    bool missingFromLedger = !_ledger.IsSpawned(master.Id);
-                    ReservePreservedActor(master, actor, actor.city, Date.getCurrentYear());
-                    if (missingFromLedger)
-                        ModClass.LogWarning("Preserved unknown historical school actor reserved: " +
-                                            master.Id + " actor=" + actor.data.id);
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school preserved actor scan failed: " +
-                                    error.Message);
-            }
         }
 
         public static void ClearRuntime()
@@ -130,6 +119,7 @@ namespace AncientWarfare3.core.schools
             PendingDescentsByActor.Clear();
             PendingActorByMaster.Clear();
             PendingDescentRetries.Clear();
+            ActiveMasterSlots.Clear();
             _pendingDescentRetryFrame = 0L;
         }
 
@@ -154,16 +144,21 @@ namespace AncientWarfare3.core.schools
         public static int ProcessDue(int pEligibleYear, IReadOnlyList<City> pLivingXiaCities)
         {
             if (pLivingXiaCities == null || pLivingXiaCities.Count == 0) return 0;
+            var occupiedSchools = new HashSet<string>(
+                HistoricalSchoolMasterRegistry.All.Select(p => p.SchoolId)
+                    .Where(ActiveMasterSlots.IsOccupied), StringComparer.Ordinal);
             IReadOnlyList<HistoricalSchoolMasterDefinition> due =
                 HistoricalSchoolRules.SelectDue(pEligibleYear, _ledger,
-                    HistoricalSchoolRules.MaxDescentsPerEligibleYear);
+                    HistoricalSchoolRules.MaxDescentsPerEligibleYear, occupiedSchools);
             if (due.Count == 0) return 0;
             int spawned = 0;
             foreach (HistoricalSchoolMasterDefinition master in due)
             {
                 if (HasPendingDescents) break;
                 City home = SelectHome(master, pLivingXiaCities);
-                if (home == null || !TryDescend(master, home, pEligibleYear)) continue;
+                if (home == null ||
+                    !ActiveMasterSlots.TryReserve(master.SchoolId, master.Id) ||
+                    !TryDescend(master, home, pEligibleYear)) continue;
                 spawned++;
             }
             return spawned;
@@ -173,6 +168,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolMasterDefinition pMaster, City pCity)
         {
             if (pActor?.data == null || pMaster == null) return;
+            ActiveMasterSlots.TryRelease(pMaster.SchoolId, pMaster.Id, pActor.data.id);
             HistoricalSchoolContent.AnnounceDeath(pActor, pCity);
             HistoryWriter.RecordPerson(pActor.data.id,
                 HistoricalAffiliationService.HomeKingdom(pActor), pMaster.CanonicalName,
@@ -210,7 +206,11 @@ namespace AncientWarfare3.core.schools
             int pEligibleYear)
         {
             WorldTile tile = pHome?.getTile();
-            if (tile == null || pHome.kingdom?.data == null || pHome.kingdom.isRekt()) return false;
+            if (tile == null || pHome.kingdom?.data == null || pHome.kingdom.isRekt())
+            {
+                ReleaseMasterSlot(pMaster, null);
+                return false;
+            }
             Actor actor = null;
             SchoolMembershipRecord membership = null;
             HistoricalMasterLineageCommitIdentity identity = null;
@@ -241,6 +241,9 @@ namespace AncientWarfare3.core.schools
                 }
                 if (actor?.data == null || actor.isRekt())
                     throw new InvalidOperationException("actor creation failed");
+                if (!ActiveMasterSlots.TryAttachActor(pMaster.SchoolId, pMaster.Id,
+                        actor.data.id))
+                    throw new InvalidOperationException("school master slot attach failed");
                 actor.joinCity(pHome);
                 if (actor.data == null || !actor.isAlive() || actor.isRekt() ||
                     actor.city != pHome || actor.kingdom != pHome.kingdom ||
@@ -268,6 +271,9 @@ namespace AncientWarfare3.core.schools
                     throw new InvalidOperationException("committed identity projection failed");
                 if (!ReservePreservedActor(pMaster, actor, pHome, pEligibleYear))
                     throw new InvalidOperationException("duplicate descent ledger state");
+                if (!ActiveMasterSlots.TryActivate(pMaster.SchoolId, pMaster.Id,
+                        actor.data.id))
+                    throw new InvalidOperationException("school master slot activation failed");
                 AnnounceReconciledDescent(actor, pMaster, pHome);
                 return true;
             }
@@ -276,12 +282,18 @@ namespace AncientWarfare3.core.schools
                 if (persistenceAttempted && membership != null &&
                     persistenceOutcome != SchoolPersistenceOutcome.CleanFailure)
                 {
-                    QueuePendingDescent(actor, pMaster, membership, homeKingdomId,
+                    bool queued = QueuePendingDescent(actor, pMaster, membership, homeKingdomId,
                         homeKingdomName, hometownCityId, persistenceYear, persistenceTime,
                         pEligibleYear, identity);
+                    if (!queued)
+                    {
+                        ReleaseMasterSlot(pMaster, actor);
+                        RemoveFailedActor(actor, pMaster.ActorAssetId);
+                    }
                 }
                 else
                 {
+                    ReleaseMasterSlot(pMaster, actor);
                     RemoveFailedActor(actor, pMaster.ActorAssetId);
                 }
                 ModClass.LogWarning("Historical school descent failed: " + pMaster.Id + " - " +
@@ -290,16 +302,18 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void QueuePendingDescent(Actor pActor,
+        private static bool QueuePendingDescent(Actor pActor,
             HistoricalSchoolMasterDefinition pMaster, SchoolMembershipRecord pMembership,
             long pHomeKingdomId, string pHomeKingdomName, long pHometownCityId,
             int pPersistenceYear, double pPersistenceTime, int pEligibleYear,
             HistoricalMasterLineageCommitIdentity pIdentity)
         {
             if (pActor?.data == null || pMaster == null || pMembership == null ||
-                pIdentity == null) return;
+                pIdentity == null) return false;
             long actorId = pActor.data.id;
-            if (PendingDescentsByActor.ContainsKey(actorId)) return;
+            if (PendingDescentsByActor.ContainsKey(actorId)) return true;
+            if (!ActiveMasterSlots.TryAttachActor(pMaster.SchoolId, pMaster.Id, actorId))
+                return false;
             var pending = new PendingHistoricalDescent(pActor, pMaster, pMembership,
                 pHomeKingdomId, pHomeKingdomName, pHometownCityId, pPersistenceYear,
                 pPersistenceTime, pEligibleYear, pIdentity);
@@ -309,6 +323,7 @@ namespace AncientWarfare3.core.schools
             MasterByActor[actorId] = pMaster.Id;
             if (pHomeKingdomId >= 0)
                 HomeCounts[pHomeKingdomId] = HomeCount(pHomeKingdomId) + 1;
+            return true;
         }
 
         internal static void ProcessPendingDescentReconciliations()
@@ -401,6 +416,12 @@ namespace AncientWarfare3.core.schools
                 RequeuePendingDescent(pending);
                 return;
             }
+            if (!ActiveMasterSlots.TryActivate(pending.Master.SchoolId,
+                    pending.Master.Id, pending.Membership.ActorId))
+            {
+                RequeuePendingDescent(pending);
+                return;
+            }
             HistoricalAffiliationService.RegisterDescent(pending.Membership.ActorId,
                 pending.HomeKingdomId, pending.HomeKingdomName, pending.HometownCityId,
                 pending.PersistenceYear);
@@ -437,6 +458,8 @@ namespace AncientWarfare3.core.schools
                 reservedActor == actorId)
                 PendingActorByMaster.Remove(pPending.Master.Id);
             if (!pReleaseReservation) return;
+            ActiveMasterSlots.TryRelease(pPending.Master.SchoolId, pPending.Master.Id,
+                actorId);
             if (MasterByActor.TryGetValue(actorId, out string masterId) &&
                 masterId == pPending.Master.Id)
                 MasterByActor.Remove(actorId);
@@ -452,6 +475,14 @@ namespace AncientWarfare3.core.schools
             int delay = Math.Min(MaxPendingDescentRetryBackoffFrames, 1 << exponent);
             pPending.ReadyFrame = _pendingDescentRetryFrame + delay;
             PendingDescentRetries.Enqueue(pPending.Membership.ActorId);
+        }
+
+        private static void ReleaseMasterSlot(HistoricalSchoolMasterDefinition pMaster,
+            Actor pActor)
+        {
+            if (pMaster == null) return;
+            long actorId = pActor?.data?.id ?? -1L;
+            ActiveMasterSlots.TryRelease(pMaster.SchoolId, pMaster.Id, actorId);
         }
 
         internal static bool ShouldDeferDestroy(Actor pActor)

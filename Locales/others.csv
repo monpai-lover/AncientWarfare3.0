@@ -211,4 +211,8 @@ status_description_aw_school_debate,正在与其他学派进行公开论辩,Part
 status_title_aw_school_voyage,远洋访学,Scholarly Sea Voyage,遠洋訪學
 status_description_aw_school_voyage,因长期无船而进行有时限的远洋访学,A bounded scholarly voyage used only after prolonged transport failure,因長期無船而進行有時限的遠洋訪學
 aw_historical_school_scholar,游学先师,Itinerant Master,遊學先師
+task_unit_aw_historical_school_lecture,开坛讲学,Public Lecture,開壇講學
+task_unit_aw_historical_school_debate_travel,赴会论辩,Travel to Debate,赴會論辯
+task_unit_aw_historical_school_debate,百家论辩,School Debate,百家論辯
+task_unit_aw_historical_school_debate_receiving,应邀论辩,Debate Respondent,應邀論辯
 aw_family_name_unknown,未详,Unknown,未詳

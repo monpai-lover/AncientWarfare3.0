@@ -21,14 +21,12 @@ namespace AncientWarfare3.core.schools
         private const int MaxIndexedActorsPerYear = 4096;
 
         private static int _lastProcessedYear = -1;
-        private static long _lastScannedCityId = long.MinValue;
         private static readonly Dictionary<long, int> DebateWins =
             new Dictionary<long, int>();
 
         public static void ClearRuntime()
         {
             _lastProcessedYear = -1;
-            _lastScannedCityId = long.MinValue;
             DebateWins.Clear();
         }
 
@@ -46,80 +44,108 @@ namespace AncientWarfare3.core.schools
                 pYear == _lastProcessedYear) return;
             _lastProcessedYear = pYear;
 
-            int budget = MaxDebatesPerYear;
-            int institutionBudget = 4;
-            int processedCities = 0;
-            var usedActors = new HashSet<long>();
             IReadOnlyDictionary<long, int> directDiscipleCounts =
                 pMembers.DirectDiscipleCounts;
             Dictionary<long, List<Actor>> actorsByResidence =
                 BuildResidenceActorIndex(pMembers);
-            foreach (City city in LivingCities())
+            int processedCities = 0;
+            foreach (KeyValuePair<long, List<Actor>> residence in actorsByResidence
+                         .OrderBy(p => p.Key))
             {
-                if (budget <= 0 || processedCities++ >= MaxCitiesPerYear) break;
-                if (city?.data == null || city.isRekt()) continue;
-                _lastScannedCityId = city.data.id;
-
-                // Cheap filtering (real actors, membership, residence, lifecycle) happens
-                // before any ledger reads or score calculations.
-                actorsByResidence.TryGetValue(city.data.id, out List<Actor> residentActors);
-                List<DebateCandidateContext> contexts = CollectCandidates(city, usedActors,
-                    directDiscipleCounts, residentActors);
-                if (contexts.Count < 2) continue;
-
-                Dictionary<string, HistoricalSchoolLedgerSnapshot> cityLedgers =
-                    HistoricalSchoolStore.LoadLedgersForCity(city.data.id);
-                HistoricalSchoolDebatePair pair = SelectPairByLedger(contexts, cityLedgers);
-                if (pair == null) continue;
-                DebateCandidateContext first = contexts.FirstOrDefault(p =>
-                    p.Candidate.ActorId == pair.First.ActorId);
-                DebateCandidateContext second = contexts.FirstOrDefault(p =>
-                    p.Candidate.ActorId == pair.Second.ActorId);
-                if (first == null || second == null ||
-                    usedActors.Contains(first.Candidate.ActorId) ||
-                    usedActors.Contains(second.Candidate.ActorId)) continue;
-
-                HistoricalSchoolMasterDefinition firstDefinition = DefinitionFor(first.Actor,
-                    first.Membership.SchoolId);
-                HistoricalSchoolMasterDefinition secondDefinition = DefinitionFor(second.Actor,
-                    second.Membership.SchoolId);
-                string topic = HistoricalSchoolDebateRules.SelectTopic(firstDefinition,
-                    secondDefinition, CityTopics(city));
-                if (string.IsNullOrWhiteSpace(topic)) continue;
-
-                HistoricalSchoolLedgerSnapshot firstLedger = LedgerFor(city.data.id,
-                    first.Membership.SchoolId, cityLedgers);
-                HistoricalSchoolLedgerSnapshot secondLedger = LedgerFor(city.data.id,
-                    second.Membership.SchoolId, cityLedgers);
-                HistoricalSchoolDebateScore firstScore = HistoricalSchoolDebateRules.Score(
-                    first.Candidate, topic, firstLedger);
-                HistoricalSchoolDebateScore secondScore = HistoricalSchoolDebateRules.Score(
-                    second.Candidate, topic, secondLedger);
-                SchoolDebateOutcome outcome = HistoricalSchoolDebateRules.ResolveOutcome(
-                    firstScore.Value, secondScore.Value);
-                long seed = DebateSeed(city.data.id, pYear, first.Candidate.ActorId,
-                    second.Candidate.ActorId, topic);
-                double worldTime = World.world.getCurWorldTime();
-                var debate = new HistoricalSchoolDebateRecord(-1L, city.data.id, pYear,
-                    topic, first.Candidate.ActorId, first.Membership.SchoolId,
-                    second.Candidate.ActorId, second.Membership.SchoolId, seed,
-                    firstScore.Value, secondScore.Value, outcome, pUpdatedTime: worldTime);
-                HistoricalSchoolLedgerDelta firstDelta = HistoricalSchoolDebateRules.LedgerDelta(
-                    outcome, pFirstWon: true, pYear).ForSchool(first.Membership.SchoolId);
-                HistoricalSchoolLedgerDelta secondDelta = HistoricalSchoolDebateRules.LedgerDelta(
-                    outcome, pFirstWon: false, pYear).ForSchool(second.Membership.SchoolId);
-
-                if (!HistoricalSchoolStore.TryRecordDebateAndLedger(debate, firstDelta,
-                        secondDelta, worldTime)) continue;
-
-                usedActors.Add(first.Candidate.ActorId);
-                usedActors.Add(second.Candidate.ActorId);
-                if (institutionBudget > 0 && TryFoundInstitutionAfterDebate(first, second,
-                        firstDefinition, secondDefinition, city, pYear, worldTime))
-                    institutionBudget--;
-                ApplyCommittedDebate(first.Actor, second.Actor, city, outcome, topic, pYear);
-                budget--;
+                if (processedCities++ >= MaxCitiesPerYear) break;
+                HistoricalSchoolDebateActorSeed[] seeds = residence.Value
+                    .Where(IsDebateIndexEligible)
+                    .OrderBy(p => p.data.id)
+                    .Take(MaxDebateCandidatesPerCity)
+                    .Select(actor => new HistoricalSchoolDebateActorSeed(actor.data.id,
+                        directDiscipleCounts != null && directDiscipleCounts.TryGetValue(
+                            actor.data.id, out int count) ? count : 0))
+                    .ToArray();
+                if (seeds.Length >= 2)
+                    HistoricalSchoolDebateActivityService.TryEnqueueCity(residence.Key,
+                        pYear, seeds);
             }
+        }
+
+        internal static bool TryCreateQueuedDebate(long pCityId, int pYear,
+            IReadOnlyList<HistoricalSchoolDebateActorSeed> pSeeds,
+            out HistoricalSchoolDebateActivity pActivity)
+        {
+            pActivity = null;
+            City city = FindCity(pCityId);
+            if (city?.data == null || city.isRekt() || pSeeds == null || pSeeds.Count < 2)
+                return false;
+            var directCounts = pSeeds.ToDictionary(p => p.ActorId,
+                p => p.DirectDiscipleCount);
+            Actor[] actors = pSeeds.Select(p => FindActor(p.ActorId))
+                .Where(p => p?.data != null).ToArray();
+            List<DebateCandidateContext> contexts = CollectCandidates(city,
+                new HashSet<long>(), directCounts, actors);
+            if (contexts.Count < 2) return false;
+            Dictionary<string, HistoricalSchoolLedgerSnapshot> cityLedgers =
+                HistoricalSchoolStore.LoadLedgersForCity(city.data.id);
+            HistoricalSchoolDebatePair pair = SelectPairByLedger(contexts, cityLedgers);
+            if (pair == null) return false;
+            DebateCandidateContext first = contexts.FirstOrDefault(p =>
+                p.Candidate.ActorId == pair.First.ActorId);
+            DebateCandidateContext second = contexts.FirstOrDefault(p =>
+                p.Candidate.ActorId == pair.Second.ActorId);
+            if (first == null || second == null) return false;
+            HistoricalSchoolMasterDefinition firstDefinition = DefinitionFor(first.Actor,
+                first.Membership.SchoolId);
+            HistoricalSchoolMasterDefinition secondDefinition = DefinitionFor(second.Actor,
+                second.Membership.SchoolId);
+            string topic = HistoricalSchoolDebateRules.SelectTopic(firstDefinition,
+                secondDefinition, CityTopics(city));
+            if (string.IsNullOrWhiteSpace(topic)) return false;
+            HistoricalSchoolLedgerSnapshot firstLedger = LedgerFor(city.data.id,
+                first.Membership.SchoolId, cityLedgers);
+            HistoricalSchoolLedgerSnapshot secondLedger = LedgerFor(city.data.id,
+                second.Membership.SchoolId, cityLedgers);
+            HistoricalSchoolDebateScore firstScore = HistoricalSchoolDebateRules.Score(
+                first.Candidate, topic, firstLedger);
+            HistoricalSchoolDebateScore secondScore = HistoricalSchoolDebateRules.Score(
+                second.Candidate, topic, secondLedger);
+            SchoolDebateOutcome outcome = HistoricalSchoolDebateRules.ResolveOutcome(
+                firstScore.Value, secondScore.Value);
+            var debate = new HistoricalSchoolDebateRecord(-1L, city.data.id, pYear,
+                topic, first.Candidate.ActorId, first.Membership.SchoolId,
+                second.Candidate.ActorId, second.Membership.SchoolId,
+                DebateSeed(city.data.id, pYear, first.Candidate.ActorId,
+                    second.Candidate.ActorId, topic), firstScore.Value, secondScore.Value,
+                outcome, pUpdatedTime: World.world?.getCurWorldTime() ?? 0d);
+            pActivity = new HistoricalSchoolDebateActivity(debate,
+                HistoricalSchoolDebateRules.LedgerDelta(outcome, pFirstWon: true,
+                    pYear).ForSchool(first.Membership.SchoolId),
+                HistoricalSchoolDebateRules.LedgerDelta(outcome, pFirstWon: false,
+                    pYear).ForSchool(second.Membership.SchoolId));
+            return true;
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome CommitQueuedDebate(
+            HistoricalSchoolDebateActivity pActivity)
+        {
+            HistoricalSchoolDebateRecord debate = pActivity?.Record;
+            if (debate == null)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            Actor first = FindActor(debate.FirstActorId);
+            Actor second = FindActor(debate.SecondActorId);
+            City city = FindCity(debate.CityId);
+            if (!IsDebateActorValid(first, debate.FirstSchoolId, debate.CityId) ||
+                !IsDebateActorValid(second, debate.SecondSchoolId, debate.CityId) ||
+                city?.data == null || city.isRekt())
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            double worldTime = World.world?.getCurWorldTime() ?? 0d;
+            HistoricalSchoolTeachingPersistenceOutcome persistence =
+                HistoricalSchoolStore.RecordDebateAndLedger(debate,
+                    pActivity.FirstDelta, pActivity.SecondDelta, worldTime);
+            if (persistence != HistoricalSchoolTeachingPersistenceOutcome.Committed)
+                return persistence;
+            TryFoundInstitutionAfterQueuedDebate(first, second, city, debate.DebateYear,
+                worldTime);
+            ApplyCommittedDebate(first, second, city, debate.Outcome, debate.TopicId,
+                debate.DebateYear);
+            return persistence;
         }
 
         private static List<DebateCandidateContext> CollectCandidates(City pCity,
@@ -127,19 +153,12 @@ namespace AncientWarfare3.core.schools
             IEnumerable<Actor> pResidentActors)
         {
             var result = new List<DebateCandidateContext>();
-            int scanned = 0;
             try
             {
                 var actors = new Dictionary<long, Actor>();
                 if (pResidentActors != null)
                     foreach (Actor actor in pResidentActors)
                         if (actor?.data != null) actors[actor.data.id] = actor;
-                foreach (Actor actor in pCity.units)
-                {
-                    if (++scanned > MaxActorsPerCity) break;
-                    if (actor?.data != null && !actors.ContainsKey(actor.data.id))
-                        actors.Add(actor.data.id, actor);
-                }
                 foreach (Actor actor in actors.Values.OrderBy(p => p.data.id))
                 {
                     if (actor?.data == null || actor.isRekt() || !actor.isAlive() ||
@@ -326,6 +345,7 @@ namespace AncientWarfare3.core.schools
         {
             return pActor?.data != null && pActor.isAlive() && !pActor.isRekt() &&
                    !pActor.isBaby() && SchoolMembershipService.GetActive(pActor.data.id) != null &&
+                   !HistoricalSchoolActivityQueue.IsLectureActorBusy(pActor.data.id) &&
                    SchoolLineageService.IsQualifiedTeacher(pActor) &&
                    HistoricalAffiliationService.IsPresentForInfluence(pActor) &&
                    !IsExcludedLifecycle(pActor);
@@ -379,53 +399,6 @@ namespace AncientWarfare3.core.schools
             if (secondWon) IncrementDebateWins(pSecond);
             CitySchoolSnapshotService.MarkDirty(pCity);
             SchoolMapModeService.DirtyMapIfActive();
-        }
-
-        private static bool TryFoundInstitutionAfterDebate(DebateCandidateContext pFirst,
-            DebateCandidateContext pSecond, HistoricalSchoolMasterDefinition pFirstDefinition,
-            HistoricalSchoolMasterDefinition pSecondDefinition, City pCity, int pYear,
-            double pWorldTime)
-        {
-            // Prefer the first canonical master for deterministic yearly results, then let
-            // the second canonical master use the same small budget.  Non-historical teachers
-            // never become institution founders through this path.
-            DebateCandidateContext founder = HistoricalSchoolDescentService.IsCanonicalMaster(
-                pFirst?.Actor) ? pFirst :
-                (HistoricalSchoolDescentService.IsCanonicalMaster(pSecond?.Actor)
-                    ? pSecond : null);
-            if (founder?.Actor?.data == null || pCity?.data == null) return false;
-            HistoricalSchoolMasterDefinition definition = founder == pFirst
-                ? pFirstDefinition
-                : pSecondDefinition;
-            HistoricalSchoolMasterDefinition canonical =
-                HistoricalSchoolDescentService.DefinitionFor(founder.Actor);
-            if (canonical == null || definition == null ||
-                !ReferenceEquals(canonical, definition)) definition = canonical;
-            return HistoricalSchoolStore.TryFoundInstitution(definition, founder.Actor.data.id,
-                pCity.data.id, pYear, pWorldTime);
-        }
-
-        private static IEnumerable<City> LivingCities()
-        {
-            var result = new HistoricalSchoolCircularCitySelector<City>(MaxCitiesPerYear,
-                _lastScannedCityId, p => p.data.id,
-                p => p?.data != null && !p.isRekt());
-            try
-            {
-                if (World.world?.kingdoms == null) return result.AscendingFromCursor();
-                foreach (Kingdom kingdom in World.world.kingdoms)
-                {
-                    if (kingdom?.data == null || kingdom.isRekt() || kingdom.isNeutral()) continue;
-                    foreach (City city in kingdom.getCities())
-                        result.Consider(city);
-                }
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school debate city scan failed: " +
-                                    error.Message);
-            }
-            return result.AscendingFromCursor();
         }
 
         private static IEnumerable<string> CityTopics(City pCity)
@@ -546,6 +519,43 @@ namespace AncientWarfare3.core.schools
                 foreach (char value in pTopic ?? "") hash = (hash ^ value) * 1099511628211L;
                 return hash;
             }
+        }
+
+        private static bool IsDebateActorValid(Actor pActor, string pSchoolId,
+            long pCityId)
+        {
+            if (!IsDebateIndexEligible(pActor)) return false;
+            SchoolMembershipRecord membership = SchoolMembershipService.GetActive(
+                pActor.data.id);
+            City residence = HistoricalAffiliationService.ResidenceCity(pActor) ?? pActor.city;
+            return membership?.SchoolId == pSchoolId && residence?.data?.id == pCityId;
+        }
+
+        private static void TryFoundInstitutionAfterQueuedDebate(Actor pFirst,
+            Actor pSecond, City pCity, int pYear, double pWorldTime)
+        {
+            Actor founder = HistoricalSchoolDescentService.IsCanonicalMaster(pFirst)
+                ? pFirst
+                : HistoricalSchoolDescentService.IsCanonicalMaster(pSecond)
+                    ? pSecond
+                    : null;
+            HistoricalSchoolMasterDefinition definition =
+                HistoricalSchoolDescentService.DefinitionFor(founder);
+            if (founder?.data == null || definition == null || pCity?.data == null) return;
+            HistoricalSchoolStore.TryFoundInstitution(definition, founder.data.id,
+                pCity.data.id, pYear, pWorldTime);
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            try { return pActorId >= 0 ? World.world?.units?.get(pActorId) : null; }
+            catch { return null; }
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            try { return pCityId >= 0 ? World.world?.cities?.get(pCityId) : null; }
+            catch { return null; }
         }
 
         private static string SafeName(Actor pActor)
