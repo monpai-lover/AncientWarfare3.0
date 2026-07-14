@@ -33,6 +33,15 @@ namespace AncientWarfare3.content.schools
             return string.IsNullOrEmpty(value) ? "" : value + "氏";
         }
 
+        public static string BuildClanDisplayName(string pFounderCityName, string pShiName)
+        {
+            string place = (pFounderCityName ?? "").Trim();
+            string shi = NormalizeShiName(pShiName);
+            return string.IsNullOrEmpty(place) || string.IsNullOrEmpty(shi)
+                ? ""
+                : place + shi + "氏";
+        }
+
         private static Dictionary<string, HistoricalMasterCanonicalIdentity> Build()
         {
             var result = new Dictionary<string, HistoricalMasterCanonicalIdentity>(

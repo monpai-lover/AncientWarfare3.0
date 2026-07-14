@@ -19,8 +19,17 @@ namespace AncientWarfare3.core.schools
 
             if (clan.data.chief_id != pActor.data.id) clan.setChief(pActor);
             LineageService.RenameClanByLeader(clan, pActor);
-            string expectedClanName =
-                HistoricalMasterIdentityRules.EnsureSingleShiSuffix(pMaster.CanonicalShiName);
+            string founderCityName = clan.data.founder_city_name;
+            if (string.IsNullOrWhiteSpace(founderCityName))
+            {
+                City founderCity = World.world?.cities?.get(pIdentity.HometownCityId);
+                founderCityName = founderCity?.data?.name ?? "";
+                if (!string.IsNullOrWhiteSpace(founderCityName))
+                    clan.data.founder_city_name = founderCityName;
+            }
+            string expectedClanName = HistoricalMasterIdentityRules.BuildClanDisplayName(
+                founderCityName, pMaster.CanonicalShiName);
+            if (string.IsNullOrEmpty(expectedClanName)) return false;
             if (clan.data.name != expectedClanName)
             {
                 try { clan.setName(expectedClanName); }
@@ -107,8 +116,8 @@ namespace AncientWarfare3.core.schools
             pActor.data.get(LineageKeys.CLAN_NAME, out string shiName, "");
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
-            string expectedClanName =
-                HistoricalMasterIdentityRules.EnsureSingleShiSuffix(pMaster.CanonicalShiName);
+            string expectedClanName = HistoricalMasterIdentityRules.BuildClanDisplayName(
+                pClan?.data?.founder_city_name, pMaster.CanonicalShiName);
             return masterId == pMaster.Id && givenName == pMaster.CanonicalGivenName &&
                    displayName == pMaster.CanonicalName &&
                    familyName == pMaster.CanonicalFamilyName &&

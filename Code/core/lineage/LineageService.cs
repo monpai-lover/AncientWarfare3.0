@@ -1411,11 +1411,10 @@ namespace AncientWarfare3.core.lineage
             {
                 HistoricalSchoolMasterDefinition definition =
                     HistoricalSchoolDescentService.DefinitionFor(pLeader);
-                string canonicalName = HistoricalMasterIdentityRules.EnsureSingleShiSuffix(
-                    definition?.CanonicalShiName);
-                if (!string.IsNullOrEmpty(canonicalName) &&
-                    pClan.data.name != canonicalName)
-                    try { pClan.setName(canonicalName); } catch { }
+                string expected = HistoricalMasterIdentityRules.BuildClanDisplayName(
+                    pClan.data.founder_city_name, definition?.CanonicalShiName);
+                if (!string.IsNullOrEmpty(expected) && pClan.data.name != expected)
+                    try { pClan.setName(expected); } catch { }
                 return;
             }
 

@@ -1,4 +1,7 @@
+using AncientWarfare3.content.schools;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
+using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
 
@@ -31,8 +34,43 @@ namespace AncientWarfare3.patch
             actor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
             actor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
 
-            bool integrated = IsKingdomIntegrated(actor);
             ShowRawRow(__instance, "aw_identity", IdentityText(status));
+
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(actor))
+            {
+                HistoricalSchoolMasterDefinition master =
+                    HistoricalSchoolDescentService.DefinitionFor(actor);
+                if (master != null)
+                {
+                    string familyValue = master.FamilyEvidence ==
+                        HistoricalMasterFamilyEvidence.Unknown
+                            ? AW_L10n.Text("aw_family_name_unknown", "Unknown")
+                            : master.CanonicalFamilyName;
+                    KeyValueField familyRow = ShowRawRow(__instance, "aw_family_name",
+                        familyValue);
+                    if (familyRow != null && master.FamilyEvidence !=
+                        HistoricalMasterFamilyEvidence.Unknown)
+                    {
+                        string knownFamily = master.CanonicalFamilyName;
+                        familyRow.on_click_value = () =>
+                            ShiBranchListWindow.OpenFor(knownFamily);
+                    }
+                    if (!string.IsNullOrEmpty(master.CanonicalShiName) && shiId >= 0)
+                    {
+                        KeyValueField shiRow = ShowRawRow(__instance, "aw_clan_name",
+                            master.CanonicalShiName);
+                        if (shiRow != null)
+                        {
+                            long branchId = shiId;
+                            shiRow.on_click_value = () =>
+                                FamilyTreeWindow.OpenBigTree(branchId);
+                        }
+                    }
+                }
+                return;
+            }
+
+            bool integrated = IsKingdomIntegrated(actor);
 
             bool isNoble = status == LineageStatus.NOBLE;
             if (hasLineage && !integrated && isNoble && !string.IsNullOrEmpty(family))
