@@ -10,6 +10,8 @@ internal static class SchoolRuntimePerformanceTests
         Equal(75, years.PendingYear, "latest pending year wins");
         Equal(75, years.TakePendingYear(), "pending year is consumed once");
         Equal(-1, years.TakePendingYear(), "empty scheduler stays empty");
+        Equal(false, years.EnqueueYear(75),
+            "consumed year cannot be requeued by another kingdom");
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 10_000; i++) years.HasPendingWork();

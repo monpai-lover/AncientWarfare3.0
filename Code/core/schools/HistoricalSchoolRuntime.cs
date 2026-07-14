@@ -8,21 +8,18 @@ namespace AncientWarfare3.core.schools
 {
     internal static class HistoricalSchoolRuntime
     {
-        private static int _eligibleYear;
-        private static int _lastWorldYear = -1;
-        private static int _attemptedWorldYear = -1;
         private static int _lastQuarterKey = -1;
         private static bool _loaded;
-        private static readonly HistoricalSchoolPendingRuntimeState PendingRuntimeState =
-            new HistoricalSchoolPendingRuntimeState();
-        private static readonly HistoricalSchoolBootstrapRetryGate BootstrapRetryGate =
-            new HistoricalSchoolBootstrapRetryGate();
 
-        public static int EligibleYear => _eligibleYear;
+        public static int EligibleYear => HistoricalSchoolScheduler.EligibleYear;
+        internal static bool IsLoaded => _loaded;
 
         public static void LoadState()
         {
-            HistoricalSchoolStore.LoadRuntimeState(out _eligibleYear, out _lastWorldYear);
+            HistoricalSchoolStore.LoadRuntimeState(
+                out int eligibleYear, out int lastWorldYear);
+            HistoricalSchoolScheduler.RestorePersistentState(
+                eligibleYear, lastWorldYear);
             HistoricalAffiliationService.LoadState();
             HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
@@ -35,19 +32,13 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolDebateService.LoadState();
             RebuildLivingXiaCityIndex();
             _lastQuarterKey = -1;
-            PendingRuntimeState.Clear();
-            BootstrapRetryGate.RecordSuccess();
             _loaded = true;
         }
 
         public static void ClearRuntime()
         {
-            _eligibleYear = 0;
-            _lastWorldYear = -1;
-            _attemptedWorldYear = -1;
             _lastQuarterKey = -1;
-            PendingRuntimeState.Clear();
-            BootstrapRetryGate.Clear();
+            HistoricalSchoolScheduler.Clear();
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
@@ -63,109 +54,33 @@ namespace AncientWarfare3.core.schools
 
         public static void ProcessFrame()
         {
-            long started = Stopwatch.GetTimestamp();
-            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-            bool idle = !_loaded || World.world == null;
-            try
-            {
-                BootstrapRetryGate.AdvanceFrame();
-                if (idle) return;
-                PendingRuntimeState.AdvanceAndTryFlush(
-                    HistoricalSchoolStore.SaveRuntimeState);
-                HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
-                SchoolGuestOfficeService.ProcessPendingFrame();
-                HistoricalSchoolActivityQueue.ProcessFrame();
-                int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
-                int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
-                if (quarterKey == _lastQuarterKey) return;
-                _lastQuarterKey = quarterKey;
-                HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
-            }
-            finally
-            {
-                HistoricalSchoolDiagnostics.RecordSchedulerFrame(
-                    Stopwatch.GetTimestamp() - started,
-                    GC.GetAllocatedBytesForCurrentThread() - allocatedBefore,
-                    idle);
-            }
+            if (World.world == null) return;
+            HistoricalSchoolScheduler.ProcessFrame();
+            if (!_loaded) return;
+            HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
+            SchoolGuestOfficeService.ProcessPendingFrame();
+            HistoricalSchoolActivityQueue.ProcessFrame();
+            int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
+            int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
+            if (quarterKey == _lastQuarterKey) return;
+            _lastQuarterKey = quarterKey;
+            HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
         }
 
         internal static bool FlushPendingStateForSave()
         {
-            return PendingRuntimeState.FlushForSave(HistoricalSchoolStore.SaveRuntimeState);
+            return HistoricalSchoolScheduler.FlushPendingStateForSave();
         }
 
-        public static void OnWorldYear()
+        public static void EnqueueWorldYear()
         {
-            int worldYear = Date.getCurrentYear();
-            if (worldYear == _attemptedWorldYear) return;
-
-            var runner = new HistoricalSchoolAnnualStageRunner(LogAnnualStageFailure);
-            if (!_loaded)
-            {
-                if (!BootstrapRetryGate.CanAttempt()) return;
-                if (!runner.TryRun(HistoricalSchoolAnnualStageId.Bootstrap, LoadState))
-                {
-                    BootstrapRetryGate.RecordFailure();
-                    return;
-                }
-                BootstrapRetryGate.RecordSuccess();
-            }
-            _attemptedWorldYear = worldYear;
-            if (worldYear == _lastWorldYear) return;
-
-            int nextEligibleYear = _eligibleYear;
-            List<City> cities = null;
-            bool cityScanSucceeded = runner.TryRun(HistoricalSchoolAnnualStageId.XiaCityScan,
-                () =>
-                {
-                    cities = LivingXiaCities();
-                    nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(_eligibleYear,
-                        cities.Count > 0);
-                });
-            if (cityScanSucceeded)
-            {
-                _eligibleYear = nextEligibleYear;
-                if (cities.Count > 0)
-                    runner.TryRun(HistoricalSchoolAnnualStageId.Descent, () =>
-                        HistoricalSchoolDescentService.ProcessDue(nextEligibleYear, cities));
-            }
-
-            runner.TryRun(HistoricalSchoolAnnualStageId.Guest, () =>
-                SchoolGuestOfficeService.ProcessYear(worldYear));
-            runner.TryRun(HistoricalSchoolAnnualStageId.LedgerDecay, () =>
-            {
-                HistoricalSchoolStore.ApplyLedgerDecay(worldYear,
-                    World.world?.getCurWorldTime() ?? 0d, out long[] affectedCityIds);
-                foreach (long cityId in affectedCityIds)
-                    CitySchoolSnapshotService.MarkDirtyById(cityId);
-            });
-
-            bool snapshotSucceeded = runner.TryRun(
-                HistoricalSchoolAnnualStageId.AnnualSnapshot,
-                HistoricalSchoolAnnualMemberSnapshotBuilder.Build,
-                out HistoricalSchoolAnnualMemberSnapshot<Actor> annualMembers);
-            if (snapshotSucceeded)
-            {
-                runner.TryRun(HistoricalSchoolAnnualStageId.Action, () =>
-                    HistoricalSchoolActionService.ProcessYear(worldYear, annualMembers));
-                runner.TryRun(HistoricalSchoolAnnualStageId.Debate, () =>
-                    HistoricalSchoolDebateService.ProcessYear(worldYear, annualMembers));
-            }
-
-            PendingRuntimeState.Freeze(nextEligibleYear, worldYear,
-                World.world?.getCurWorldTime() ?? 0d);
-            runner.TryRun(HistoricalSchoolAnnualStageId.RuntimeSave, () =>
-            {
-                if (!PendingRuntimeState.FlushForSave(
-                        HistoricalSchoolStore.SaveRuntimeState))
-                    throw new InvalidOperationException(
-                        "Historical school runtime state remains pending");
-            });
-            _lastWorldYear = worldYear;
+            long started = Stopwatch.GetTimestamp();
+            HistoricalSchoolScheduler.EnqueueYear(Date.getCurrentYear());
+            HistoricalSchoolDiagnostics.RecordYearEnqueue(
+                Stopwatch.GetTimestamp() - started);
         }
 
-        private static List<City> LivingXiaCities()
+        internal static List<City> LivingXiaCities()
         {
             var result = new List<City>();
             if (World.world?.cities == null) return result;
@@ -211,7 +126,7 @@ namespace AncientWarfare3.core.schools
                    kingdom?.data != null && !kingdom.isRekt() && !kingdom.isNeutral();
         }
 
-        private static void LogAnnualStageFailure(string pStageId, Exception error)
+        internal static void LogAnnualStageFailure(string pStageId, Exception error)
         {
             ModClass.LogWarning("Historical school annual stage failed [" + pStageId +
                                 "]: " + error.ToString());

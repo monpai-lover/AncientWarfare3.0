@@ -28,7 +28,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.updateAge))]
         private static void KingdomUpdateAge_Postfix()
         {
-            HistoricalSchoolRuntime.OnWorldYear();
+            HistoricalSchoolRuntime.EnqueueWorldYear();
         }
 
         [HarmonyFinalizer]

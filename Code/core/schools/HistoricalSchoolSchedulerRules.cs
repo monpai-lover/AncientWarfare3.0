@@ -6,12 +6,14 @@ namespace AncientWarfare3.core.schools
     public sealed class HistoricalSchoolSchedulerState
     {
         private int _pendingYear = -1;
+        private int _latestAcceptedYear = -1;
 
         public int PendingYear => _pendingYear;
 
         public bool EnqueueYear(int pYear)
         {
-            if (pYear < 0 || pYear <= _pendingYear) return false;
+            if (pYear < 0 || pYear <= _latestAcceptedYear) return false;
+            _latestAcceptedYear = pYear;
             _pendingYear = pYear;
             return true;
         }
@@ -25,7 +27,11 @@ namespace AncientWarfare3.core.schools
 
         public bool HasPendingWork() => _pendingYear >= 0;
 
-        public void Clear() => _pendingYear = -1;
+        public void Clear()
+        {
+            _pendingYear = -1;
+            _latestAcceptedYear = -1;
+        }
     }
 
     public sealed class HistoricalSchoolBoundedYearKeys
