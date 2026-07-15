@@ -1,7 +1,12 @@
-namespace AncientWarfare3.content.figures
+namespace AncientWarfare3.core.lineage
 {
-    public static class HistoricalFigureMinimapRules
+    public static class HeirMinimapVisualRules
     {
+        public static long ResolveVisualKingdomId(long pLegalKingdomId, long pCurrentKingdomId)
+        {
+            return pCurrentKingdomId >= 0 ? pCurrentKingdomId : pLegalKingdomId;
+        }
+
         public static bool ShouldDrawIcon(
             bool markersEnabled,
             bool isAlive,
@@ -9,8 +14,7 @@ namespace AncientWarfare3.content.figures
             bool hasCurrentTile,
             bool hasVisibleZone,
             bool isKing,
-            bool isCityLeader,
-            bool isRegisteredFigure)
+            bool isCityLeader)
         {
             return markersEnabled &&
                    isAlive &&
@@ -18,8 +22,7 @@ namespace AncientWarfare3.content.figures
                    hasCurrentTile &&
                    hasVisibleZone &&
                    !isKing &&
-                   !isCityLeader &&
-                   isRegisteredFigure;
+                   !isCityLeader;
         }
     }
 }

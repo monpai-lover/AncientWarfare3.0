@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 using UnityEngine;
@@ -13,42 +14,78 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_HeirMinimapPatch
     {
+        private static readonly HashSet<long> DrawnHeirActorIds = new HashSet<long>();
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawKings")]
         public static void DrawKings_Heir_Postfix(QuantumSpriteAsset pAsset)
         {
             if (pAsset?.group_system == null) return;
+            bool markersEnabled = PlayerConfig.optionBoolEnabled("map_kings_leaders");
+            if (!markersEnabled) return;
 
             Sprite baseIcon = SpriteTextureLoader.getSprite("civ/icons/minimap_heir");
             if (baseIcon == null) return;
 
+            DrawnHeirActorIds.Clear();
+            int createdThisFrame = 0;
             foreach (Kingdom kingdom in World.world.kingdoms)
             {
-                if (kingdom == null || !kingdom.isCiv()) continue;
-                foreach (Actor unit in kingdom.getUnits())
+                if (createdThisFrame > 2) break;
+                if (kingdom == null || !kingdom.isCiv() || kingdom.isRekt() || !kingdom.hasCities()) continue;
+                Actor unit = HeirService.PeekStoredHeirForMinimap(kingdom);
+                if (unit == null) continue;
+                bool visibleZone = unit.current_zone != null && unit.current_zone.visible;
+                if (!HeirMinimapVisualRules.ShouldDrawIcon(
+                        markersEnabled,
+                        unit.isAlive(),
+                        unit.isInMagnet(),
+                        unit.current_tile != null,
+                        visibleZone,
+                        unit.isKing(),
+                        unit.isCityLeader()))
+                    continue;
+                if (!MinimapActorMarkerRules.TryReserve(DrawnHeirActorIds, unit.data.id))
+                    continue;
+
+                Kingdom currentKingdom = unit.kingdom;
+                long visualKingdomId = HeirMinimapVisualRules.ResolveVisualKingdomId(
+                    kingdom.id,
+                    currentKingdom?.id ?? -1L);
+                Kingdom visualKingdom = currentKingdom?.id == visualKingdomId
+                    ? currentKingdom
+                    : kingdom.id == visualKingdomId
+                        ? kingdom
+                        : null;
+                if (visualKingdom == null) continue;
+
+                Vector3 pos = unit.current_position;
+                pos.y -= 3f;
+
+                if (!pAsset.group_system.is_within_active_index) createdThisFrame++;
+                QuantumSprite qs = pAsset.group_system.getNext();
+                if (qs == null) continue;
+                City scaleCity = unit.city != null && unit.city.kingdom == visualKingdom
+                    ? unit.city
+                    : visualKingdom.capital;
+                float cameraScale = 1f;
+                if (pAsset.add_camera_zoom_multiplier && MoveCamera.instance?.main_camera != null)
                 {
-                    if (unit == null || !unit.isAlive()) continue;
-                    if (unit.current_tile == null) continue;          // 防 current_position 取空
-                    if (!IsHeirMark(unit)) continue;                  // 仅被标记继承人
-                    if (unit.isKing() || unit.isCityLeader()) continue; // 已是王/城主 → 原版图标表示
-
-                    Vector3 pos = unit.current_position;
-                    pos.y -= 3f;
-
-                    QuantumSprite qs = pAsset.group_system.getNext();
-                    if (qs == null) continue;
-                    qs.set(ref pos, pAsset.base_scale);
-                    Sprite colored = DynamicSprites.getIcon(baseIcon, kingdom.getColor());
-                    qs.setSprite(colored);
+                    cameraScale = Mathf.Clamp(
+                        MoveCamera.instance.main_camera.orthographicSize / 30f,
+                        pAsset.add_camera_zoom_multiplier_min,
+                        pAsset.add_camera_zoom_multiplier_max);
                 }
+                float scale = HeirMinimapScaleRules.Calculate(
+                    pAsset.base_scale,
+                    cameraScale,
+                    pAsset.selected_city_scale,
+                    scaleCity != null,
+                    scaleCity?.mark_scale_effect ?? 1f);
+                qs.set(ref pos, scale);
+                Sprite colored = DynamicSprites.getIcon(baseIcon, visualKingdom.getColor());
+                qs.setSprite(colored);
             }
-        }
-
-        private static bool IsHeirMark(Actor pUnit)
-        {
-            if (pUnit.data == null) return false;
-            pUnit.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
-            return isHeir;
         }
     }
 }

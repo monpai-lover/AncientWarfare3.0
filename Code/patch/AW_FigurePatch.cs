@@ -1,4 +1,5 @@
 using AncientWarfare3.content.figures;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
@@ -35,43 +36,69 @@ namespace AncientWarfare3.patch
             HistoricalFigureService.OnFigureKingBecame(__instance, pActor);
         }
 
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawFavoritesMap")]
-        public static void DrawFavoritesMap_Figure_Postfix(QuantumSpriteAsset pAsset)
+        public static bool DrawFavoritesMap_Figure_Prefix(QuantumSpriteAsset pAsset)
         {
-            if (pAsset?.group_system == null) return;
+            if (pAsset?.group_system == null) return false;
+            bool markersEnabled = PlayerConfig.optionBoolEnabled("marks_favorites");
+            if (!markersEnabled) return false;
 
+            Sprite favoriteIcon = SpriteTextureLoader.getSprite("ui/Icons/iconFavoriteStar_Map");
             Sprite baseIcon = SpriteTextureLoader.getSprite("civ/icons/minimap_figure");
-            if (baseIcon == null) return;
+            if (favoriteIcon == null) return false;
 
-            if (World.world?.units?.visible_units_with_favorite == null) return;
+            if (World.world?.units?.visible_units_with_favorite == null) return false;
             Actor[] visibleFavorites = World.world.units.visible_units_with_favorite.array;
             int count = World.world.units.visible_units_with_favorite.count;
             for (int i = 0; i < count; i++)
             {
                 Actor unit = visibleFavorites[i];
-                if (unit == null || unit.kingdom == null) continue;
+                if (unit == null) continue;
 
                 bool visibleZone = unit.current_zone != null && unit.current_zone.visible;
-                if (!HistoricalFigureMinimapRules.ShouldDrawIcon(
+                bool drawFigure = baseIcon != null && HistoricalFigureMinimapRules.ShouldDrawIcon(
+                        markersEnabled,
                         unit.isAlive(),
                         unit.isInMagnet(),
                         unit.current_tile != null,
                         visibleZone,
                         unit.isKing(),
                         unit.isCityLeader(),
-                        unit.hasTrait(HistoricalFigureService.TRAIT_FIGURE),
-                        unit.hasTrait(HistoricalFigureService.TRAIT_FIRST)))
-                    continue;
+                        unit.data != null &&
+                        FigureStateStore.IndexOfActor(unit.data.id) >= 0);
+
+                Sprite icon = favoriteIcon;
+                City scaleCity = unit.city;
+                if (drawFigure)
+                {
+                    Kingdom currentKingdom = unit.kingdom;
+                    Kingdom cityKingdom = unit.city?.kingdom;
+                    long visualKingdomId = HeirMinimapVisualRules.ResolveVisualKingdomId(
+                        cityKingdom?.id ?? -1L,
+                        currentKingdom?.id ?? -1L);
+                    Kingdom visualKingdom = currentKingdom?.id == visualKingdomId
+                        ? currentKingdom
+                        : cityKingdom?.id == visualKingdomId
+                            ? cityKingdom
+                            : null;
+                    scaleCity = unit.city != null && unit.city.kingdom == visualKingdom
+                        ? unit.city
+                        : visualKingdom?.capital;
+                    icon = visualKingdom == null
+                        ? baseIcon
+                        : DynamicSprites.getIcon(baseIcon, visualKingdom.getColor());
+                }
 
                 Vector3 pos = unit.current_position;
                 pos.y -= 3f;
 
                 QuantumSprite qs = pAsset.group_system.getNext();
                 if (qs == null) continue;
-                qs.set(ref pos, GetMapIconScale(pAsset, unit.city));
-                qs.setSprite(DynamicSprites.getIcon(baseIcon, unit.kingdom.getColor()));
+                qs.set(ref pos, GetMapIconScale(pAsset, scaleCity));
+                qs.setSprite(icon);
             }
+            return false;
         }
 
         private static float GetMapIconScale(QuantumSpriteAsset pAsset, City city)

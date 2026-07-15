@@ -69,8 +69,37 @@ namespace AncientWarfare3.core.lineage
         {
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long oldId, -1L);
             if (oldId < 0) return;
-            var old = World.world.units.get(oldId);
-            SetHeirFlag(old, false);
+            Actor old = World.world?.units?.get(oldId);
+            if (old?.data == null) return;
+            int otherRegistrations = CountOtherLiveHeirRegistrations(oldId, pKingdom);
+            if (HeirRegistrationRules.ShouldClearGlobalFlag(otherRegistrations))
+                SetHeirFlag(old, false);
+        }
+
+        private static int CountOtherLiveHeirRegistrations(long pActorId,
+            Kingdom pExcludedKingdom)
+        {
+            KingdomManager kingdoms = World.world?.kingdoms;
+            if (pActorId < 0 || kingdoms == null) return 0;
+
+            int count = 0;
+            foreach (Kingdom kingdom in kingdoms)
+            {
+                if (kingdom?.data == null) continue;
+                kingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+                bool isRekt = kingdom.isRekt();
+                bool isCivilization = !isRekt && kingdom.isCiv();
+                bool hasCities = isCivilization && kingdom.hasCities();
+                if (HeirRegistrationRules.CountsAsOtherLiveRegistration(
+                        object.ReferenceEquals(kingdom, pExcludedKingdom),
+                        isCivilization,
+                        isRekt,
+                        hasCities,
+                        heirId,
+                        pActorId))
+                    count++;
+            }
+            return count;
         }
 
         /// <summary>
@@ -126,6 +155,17 @@ namespace AncientWarfare3.core.lineage
             if (heirId < 0) return null;
             Actor heir = World.world?.units?.get(heirId);
             return IsRegisteredCandidateEligible(heir, pKingdom) ? heir : null;
+        }
+
+        public static Actor PeekStoredHeirForMinimap(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return null;
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            if (heirId < 0) return null;
+
+            Actor heir = World.world?.units?.get(heirId);
+            if (heir?.data == null || !heir.isAlive()) return null;
+            return heir;
         }
 
         public static Actor FindHeirReadOnly(Kingdom pKingdom)
@@ -333,6 +373,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             Actor heir = pSelection.Actor;
+            FormerHeirService.ClearSnapshot(heir);
             RecallForeignSelectedHeir(pKingdom, heir);
             if (heir?.data != null)
                 LineageService.EnsureRoyalHeirLineage(pKingdom, heir);

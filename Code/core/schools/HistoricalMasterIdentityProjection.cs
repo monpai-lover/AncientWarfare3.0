@@ -66,7 +66,6 @@ namespace AncientWarfare3.core.schools
         {
             pActor.data.sex = pMaster.IsMale ? ActorSex.Male : ActorSex.Female;
             pActor.data.age_overgrowth = pMaster.SpawnAge;
-            pActor.data.favorite = true;
             pActor.data.set(LineageKeys.SCHOOL_MASTER_ID, pMaster.Id);
             pActor.data.set(LineageKeys.GIVEN_NAME, pMaster.CanonicalGivenName);
             pActor.data.set("display_name", pMaster.CanonicalName);
