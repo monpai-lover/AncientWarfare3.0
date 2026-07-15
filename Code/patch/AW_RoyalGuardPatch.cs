@@ -6,12 +6,22 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_RoyalGuardPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.setArmy))]
+        public static bool SetArmy_Prefix(Actor __instance, Army pObject)
+        {
+            return RoyalGuardService.CanAssignArmy(__instance, pObject);
+        }
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.Low)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
+            if (RoyalGuardService.IsRoyalGuard(pActor))
+                RoyalGuardService.DismissGuard(pActor, "became_king");
             RoyalGuardService.OnKingChanged(__instance, pActor);
         }
 

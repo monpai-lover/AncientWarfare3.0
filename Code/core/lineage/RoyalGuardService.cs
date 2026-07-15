@@ -94,6 +94,14 @@ namespace AncientWarfare3.core.lineage
             return IsRoyalGuard(pActor);
         }
 
+        public static bool CanAssignArmy(Actor pActor, Army pTargetArmy)
+        {
+            return RoyalGuardArmyAssignmentRules.CanAssign(
+                actorIsRoyalGuard: IsRoyalGuard(pActor),
+                targetArmyExists: pTargetArmy != null,
+                targetIsRoyalGuardArmy: IsRoyalGuardArmy(pTargetArmy));
+        }
+
         public static void EnsureKingdomGuard(Kingdom pKingdom, bool pForce = false)
         {
             if (pKingdom?.data == null) return;
