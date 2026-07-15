@@ -148,7 +148,7 @@ namespace AncientWarfare3.core.lineage
                     if (!TrySelectHost(pHome, origin, actorId, pExcludeHostId: -1L,
                             out host, out hostCity, out _))
                     {
-                        retained.Add(actorId);
+                        CloseBeforeNomadFallback(actor, pHome);
                         continue;
                     }
                 }
@@ -157,7 +157,7 @@ namespace AncientWarfare3.core.lineage
                         homeRealmAlive: false,
                         hostCityValid: IsLivingCity(hostCity) && hostCity.kingdom == host))
                 {
-                    retained.Add(actorId);
+                    CloseBeforeNomadFallback(actor, pHome);
                     continue;
                 }
                 actor.data.get(LineageKeys.ROYAL_ASYLUM_HOME_KINGDOM_NAME,
@@ -169,12 +169,12 @@ namespace AncientWarfare3.core.lineage
                 }
                 catch
                 {
-                    retained.Add(actorId);
+                    CloseBeforeNomadFallback(actor, pHome);
                     continue;
                 }
                 if (actor.city != hostCity || actor.kingdom != host)
                 {
-                    retained.Add(actorId);
+                    CloseBeforeNomadFallback(actor, pHome);
                     continue;
                 }
                 RoyalAsylumHistoryService.RecordNaturalized(actor, homeName, host, hostCity);
@@ -182,6 +182,14 @@ namespace AncientWarfare3.core.lineage
                 pHome.units.Remove(actor);
             }
             WriteRoster(pHome, retained);
+        }
+
+        private static void CloseBeforeNomadFallback(Actor pActor, Kingdom pHome)
+        {
+            if (pActor?.data == null) return;
+            ClearActorState(pActor, pHome);
+            if (pActor.kingdom != pHome)
+                pHome.units.Remove(pActor);
         }
 
         public static bool TryGetRoamTile(Actor pActor, out WorldTile pTile)

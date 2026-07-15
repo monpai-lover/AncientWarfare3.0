@@ -104,6 +104,7 @@ Require-Present 'archive switch clears royal asylum runtime' 'Code/patch/AW_Save
 Require-Present 'royal asylum extinction naturalization exists' 'Code/core/lineage/RoyalAsylumService.cs' 'public static void NaturalizeBeforeExtinction(Kingdom pHome)'
 Require-Present 'royal asylum extinction uses formal host join' 'Code/core/lineage/RoyalAsylumService.cs' 'actor.joinCity(hostCity);'
 Require-Present 'naturalized refugee leaves extinct kingdom unit cache immediately' 'Code/core/lineage/RoyalAsylumService.cs' 'pHome.units.Remove(actor);'
+Require-Present 'failed extinction asylum cannot survive nomad conversion' 'Code/core/lineage/RoyalAsylumService.cs' 'CloseBeforeNomadFallback(actor, pHome);'
 Require-Present 'kingdom extinction invokes asylum naturalization' 'Code/patch/AW_KingdomExtinctionPatch.cs' 'RoyalAsylumService.NaturalizeBeforeExtinction(__instance);'
 Require-Present 'ordinary enlistment rejects royal refugees' 'Code/patch/AW_EnlistPatch.cs' 'RoyalAsylumService.IsActive(pActor)'
 Require-Present 'direct warrior promotion rejects royal refugees' 'Code/patch/AW_EnlistPatch.cs' 'SetProfession_Asylum_Prefix'
