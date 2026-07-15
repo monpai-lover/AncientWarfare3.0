@@ -1716,29 +1716,6 @@ namespace AncientWarfare3.core.lineage
             return fa != fb; // 同姓 → false(不可)
         }
 
-        public static void OnBecameLovers(Actor pA, Actor pB)
-        {
-            TryApplyMatrilocalInLaw(pA, pB);
-            TryApplyMatrilocalInLaw(pB, pA);
-        }
-
-        private static void TryApplyMatrilocalInLaw(Actor pHusband, Actor pWife)
-        {
-            if (!IsXia(pHusband) || !IsXia(pWife)) return;
-            if (!pHusband.isSexMale() || pWife.isSexMale()) return;
-            if (!HasCompleteLineageData(pWife)) return;
-
-            pHusband.data.get(LineageKeys.LINEAGE_ID, out long husbandLineage, -1L);
-            if (husbandLineage >= 0) return;
-
-            if (!TryInheritLineageFromSource(pHusband, pWife, pRequireClan: true)) return;
-            pHusband.data.set(LineageKeys.MATRILOCAL_IN_LAW, true);
-            pHusband.data.set(LineageKeys.MATRILOCAL_WIFE_ID, pWife.data.id);
-            ApplyDisplayName(pHusband);
-            ArchiveActor(pHusband, pAlive: true);
-            try { pHusband.clearGraphicsFully(); } catch { }
-        }
-
         public static bool CanFallInLoveByXiaHuman(Actor pA, Actor pB)
         {
             if (!IsXiaHumanPair(pA, pB)) return false;
