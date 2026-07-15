@@ -1,0 +1,692 @@
+using AncientWarfare3.content;
+using AncientWarfare3.content.figures;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
+
+static void Equal<T>(T expected, T actual, string name)
+{
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+}
+
+static void True(bool value, string name)
+{
+    if (!value) throw new InvalidOperationException($"{name}: expected true");
+}
+
+static void Near(float expected, float actual, float tolerance, string name)
+{
+    if (MathF.Abs(expected - actual) > tolerance)
+        throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+}
+
+Equal(RoyalLineageSourceKind.Self,
+    RoyalLineageResolutionRules.Resolve(true, true, true, true, true),
+    "self branch wins");
+Equal(RoyalLineageSourceKind.Father,
+    RoyalLineageResolutionRules.Resolve(false, true, true, true, true),
+    "father branch precedes royal and sibling");
+Equal(RoyalLineageSourceKind.CurrentRoyal,
+    RoyalLineageResolutionRules.Resolve(false, false, true, true, true),
+    "related current royal precedes sibling");
+Equal(RoyalLineageSourceKind.Sibling,
+    RoyalLineageResolutionRules.Resolve(false, false, true, false, true),
+    "unrelated current royal is ignored");
+Equal(RoyalLineageSourceKind.Create,
+    RoyalLineageResolutionRules.Resolve(false, false, false, false, false),
+    "new branch is last resort");
+True(RoyalLineageResolutionRules.SharesKnownFather(17, 17),
+    "brothers with the same known father are related");
+Equal(false, RoyalLineageResolutionRules.SharesKnownFather(-1, -1),
+    "unknown parents never create a false sibling relation");
+Equal(false, RoyalLineageResolutionRules.SharesKnownFather(17, 18),
+    "different fathers remain separate");
+
+Equal(false, RoyalGuardArmyAssignmentRules.CanAssign(
+        actorIsRoyalGuard: true,
+        targetArmyExists: true,
+        targetIsRoyalGuardArmy: false),
+    "royal guard cannot be absorbed by an ordinary standing army");
+True(RoyalGuardArmyAssignmentRules.CanAssign(
+        actorIsRoyalGuard: true,
+        targetArmyExists: true,
+        targetIsRoyalGuardArmy: true),
+    "royal guard remains assignable to its dedicated formation");
+True(RoyalGuardArmyAssignmentRules.CanAssign(
+        actorIsRoyalGuard: true,
+        targetArmyExists: false,
+        targetIsRoyalGuardArmy: false),
+    "royal guard can still be removed from an army");
+True(RoyalGuardArmyAssignmentRules.CanAssign(
+        actorIsRoyalGuard: false,
+        targetArmyExists: true,
+        targetIsRoyalGuardArmy: false),
+    "ordinary soldiers retain vanilla army assignment");
+
+Near(0.35625f, HeirMinimapScaleRules.Calculate(
+        baseScale: 0.3f,
+        cameraScale: 2f,
+        selectedCityScale: true,
+        hasScaleCity: true,
+        cityMarkScale: 0.625f),
+    0.00001f,
+    "heir marker size transitions smoothly while the kingdom gains focus");
+Near(0.27f, HeirMinimapScaleRules.Calculate(
+        baseScale: 0.3f,
+        cameraScale: 2f,
+        selectedCityScale: true,
+        hasScaleCity: true,
+        cityMarkScale: 0.5f),
+    0.00001f,
+    "heir marker is slightly smaller than the king while idle");
+Near(0.45f, HeirMinimapScaleRules.Calculate(
+        baseScale: 0.3f,
+        cameraScale: 2f,
+        selectedCityScale: true,
+        hasScaleCity: true,
+        cityMarkScale: 0.75f),
+    0.00001f,
+    "heir marker enlarges with the hovered kingdom");
+Near(0.27f, HeirMinimapScaleRules.Calculate(
+        baseScale: 0.3f,
+        cameraScale: 2f,
+        selectedCityScale: true,
+        hasScaleCity: false,
+        cityMarkScale: 1f),
+    0.00001f,
+    "heir marker keeps the smaller idle scale without a city anchor");
+
+Equal(202L, HeirMinimapVisualRules.ResolveVisualKingdomId(
+        pLegalKingdomId: 101L,
+        pCurrentKingdomId: 202L),
+    "heir marker follows the actor's current kingdom after affiliation changes");
+Equal(101L, HeirMinimapVisualRules.ResolveVisualKingdomId(
+        pLegalKingdomId: 101L,
+        pCurrentKingdomId: -1L),
+    "heir marker falls back to the legal realm while the actor has no kingdom");
+Equal(-1L, HeirMinimapVisualRules.ResolveVisualKingdomId(
+        pLegalKingdomId: -1L,
+        pCurrentKingdomId: -1L),
+    "heir marker rejects a missing legal and current realm");
+
+True(HeirRegistrationRules.ShouldClearGlobalFlag(
+        pOtherLiveRegistrations: 0),
+    "the final legal heir registration clears the actor heir flag");
+Equal(false, HeirRegistrationRules.ShouldClearGlobalFlag(
+        pOtherLiveRegistrations: 1),
+    "clearing one realm preserves an heir registered by another live realm");
+Equal(false, HeirRegistrationRules.ShouldClearGlobalFlag(
+        pOtherLiveRegistrations: 2),
+    "multiple remaining realm registrations preserve the actor heir flag");
+True(HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: false,
+        pIsCivilization: true,
+        pIsRekt: false,
+        pHasCities: true,
+        pRegisteredActorId: 42L,
+        pTargetActorId: 42L),
+    "another live realm registration keeps the actor heir flag");
+Equal(false, HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: true,
+        pIsCivilization: true,
+        pIsRekt: false,
+        pHasCities: true,
+        pRegisteredActorId: 42L,
+        pTargetActorId: 42L),
+    "the realm currently clearing its heir is not counted twice");
+Equal(false, HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: false,
+        pIsCivilization: true,
+        pIsRekt: true,
+        pHasCities: true,
+        pRegisteredActorId: 42L,
+        pTargetActorId: 42L),
+    "a destroyed realm cannot keep a derived heir flag alive");
+Equal(false, HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: false,
+        pIsCivilization: false,
+        pIsRekt: false,
+        pHasCities: true,
+        pRegisteredActorId: 42L,
+        pTargetActorId: 42L),
+    "a non-civilization realm cannot keep a derived heir flag alive");
+Equal(false, HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: false,
+        pIsCivilization: true,
+        pIsRekt: false,
+        pHasCities: false,
+        pRegisteredActorId: 42L,
+        pTargetActorId: 42L),
+    "a cityless realm cannot keep a derived heir flag alive");
+Equal(false, HeirRegistrationRules.CountsAsOtherLiveRegistration(
+        pIsExcludedKingdom: false,
+        pIsCivilization: true,
+        pIsRekt: false,
+        pHasCities: true,
+        pRegisteredActorId: 77L,
+        pTargetActorId: 42L),
+    "a different registered actor does not preserve the target heir flag");
+
+var reservedMinimapActors = new HashSet<long>();
+True(MinimapActorMarkerRules.TryReserve(reservedMinimapActors, 42L),
+    "the first marker reservation for an actor succeeds");
+Equal(false, MinimapActorMarkerRules.TryReserve(reservedMinimapActors, 42L),
+    "the same actor cannot reserve a second marker in one draw pass");
+Equal(false, MinimapActorMarkerRules.TryReserve(reservedMinimapActors, -1L),
+    "an invalid actor id cannot reserve a minimap marker");
+Equal(false, MinimapActorMarkerRules.TryReserve(null, 42L),
+    "a missing draw-pass index cannot reserve a minimap marker");
+
+True(HeirMinimapVisualRules.ShouldDrawIcon(
+        markersEnabled: true,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false),
+    "eligible heir marker follows the king and leader map layer");
+Equal(false, HeirMinimapVisualRules.ShouldDrawIcon(
+        markersEnabled: false,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false),
+    "disabled king and leader map layer hides heir markers");
+Equal(false, HeirMinimapVisualRules.ShouldDrawIcon(
+        markersEnabled: true,
+        isAlive: true,
+        isInMagnet: true,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false),
+    "magnet-held heir has no stale minimap marker");
+Equal(false, HeirMinimapVisualRules.ShouldDrawIcon(
+        markersEnabled: true,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: false,
+        isKing: false,
+        isCityLeader: false),
+    "heir outside visible zones has no minimap marker");
+
+True(HistoricalFigureMinimapRules.ShouldDrawIcon(
+        markersEnabled: true,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false,
+        isRegisteredFigure: true),
+    "historical figure marker draws from its bounded figure index");
+Equal(false, HistoricalFigureMinimapRules.ShouldDrawIcon(
+        markersEnabled: false,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false,
+        isRegisteredFigure: true),
+    "disabled favorite map layer hides historical figure markers");
+Equal(false, HistoricalFigureMinimapRules.ShouldDrawIcon(
+        markersEnabled: true,
+        isAlive: true,
+        isInMagnet: false,
+        hasCurrentTile: true,
+        hasVisibleZone: true,
+        isKing: false,
+        isCityLeader: false,
+        isRegisteredFigure: false),
+    "an unregistered trait lookalike cannot receive a historical figure marker");
+
+True(KingdomExtinctionRules.ShouldDisbandSurvivors(
+        isCivilization: true,
+        cityIndexStable: true,
+        hasCities: false),
+    "cityless civilization disbands survivors without waiting for deaths");
+Equal(false, KingdomExtinctionRules.ShouldDisbandSurvivors(
+        isCivilization: true,
+        cityIndexStable: true,
+        hasCities: true),
+    "kingdom with a city remains alive");
+Equal(false, KingdomExtinctionRules.ShouldDisbandSurvivors(
+        isCivilization: true,
+        cityIndexStable: false,
+        hasCities: false),
+    "dirty city index cannot destroy a newly created kingdom");
+Equal(false, KingdomExtinctionRules.ShouldDisbandSurvivors(
+        isCivilization: false,
+        cityIndexStable: true,
+        hasCities: false),
+    "wild kingdoms keep vanilla removal rules");
+
+True(SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+        sourceIsLiveCivilization: true,
+        cityIndexStable: true,
+        sourceHasCities: false,
+        targetMatchesActorWildKingdom: true),
+    "school member can enter its own wild kingdom when its realm loses every city");
+Equal(false, SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+        sourceIsLiveCivilization: true,
+        cityIndexStable: false,
+        sourceHasCities: false,
+        targetMatchesActorWildKingdom: true),
+    "dirty city index cannot release a school member from a newly forming realm");
+Equal(false, SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+        sourceIsLiveCivilization: true,
+        cityIndexStable: true,
+        sourceHasCities: true,
+        targetMatchesActorWildKingdom: true),
+    "school member remains protected while its realm still owns a city");
+Equal(false, SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+        sourceIsLiveCivilization: false,
+        cityIndexStable: true,
+        sourceHasCities: false,
+        targetMatchesActorWildKingdom: true),
+    "wild source kingdoms do not invoke civilization extinction release");
+Equal(false, SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+        sourceIsLiveCivilization: true,
+        cityIndexStable: true,
+        sourceHasCities: false,
+        targetMatchesActorWildKingdom: false),
+    "extinction release cannot naturalize a school member into a foreign civilization");
+
+True(FormerHeirTitleRules.ShouldSnapshot(
+        kingdomDestroyed: true,
+        registeredHeir: true,
+        heirAlive: true),
+    "a living heir receives a former-heir snapshot when the kingdom falls");
+Equal(false, FormerHeirTitleRules.ShouldSnapshot(
+        kingdomDestroyed: true,
+        registeredHeir: false,
+        heirAlive: true),
+    "an unrelated survivor never receives a former-heir title");
+Equal(false, FormerHeirTitleRules.ShouldSnapshot(
+        kingdomDestroyed: true,
+        registeredHeir: true,
+        heirAlive: false),
+    "a dead registered heir is not projected as a living former heir");
+Equal("前越 世子", FormerHeirTitleRules.BuildFormerTitle("越 世子"),
+    "ordinary fallen heir keeps the old realm in the title");
+Equal("前周 太子", FormerHeirTitleRules.BuildFormerTitle("周 太子"),
+    "fallen mandate heir keeps the crown-prince title");
+Equal("前齐 元老", FormerHeirTitleRules.BuildFormerTitle("齐 元老"),
+    "fallen republic successor keeps the elder title");
+
+True(FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
+        pEndReason: "abdicated",
+        pFormerKingAlive: true),
+    "a living abdicator keeps the evaluated former-ruler title");
+True(FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
+        pEndReason: "replaced",
+        pFormerKingAlive: true),
+    "a living replaced ruler keeps the evaluated former-ruler title");
+Equal(false, FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
+        pEndReason: "died",
+        pFormerKingAlive: true),
+    "death callbacks never project an active former-ruler identity");
+Equal(false, FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
+        pEndReason: "abdicated",
+        pFormerKingAlive: false),
+    "a dead abdicator is not projected as a living former ruler");
+
+True(ArmyRetreatRules.ProtectUncontestedOccupation(
+        attackerIsDominant: true,
+        activeCaptureUnits: true,
+        noDefenders: true,
+        hostileRivalActive: false,
+        ownershipChanged: false),
+    "first capture interval is protected before the city records its capturer");
+Equal(false, ArmyRetreatRules.ProtectUncontestedOccupation(
+        attackerIsDominant: true,
+        activeCaptureUnits: true,
+        noDefenders: true,
+        hostileRivalActive: true,
+        ownershipChanged: false),
+    "an active hostile rival keeps occupation contested");
+Equal(false, ArmyRetreatRules.ProtectUncontestedOccupation(
+        attackerIsDominant: false,
+        activeCaptureUnits: true,
+        noDefenders: true,
+        hostileRivalActive: false,
+        ownershipChanged: false),
+    "a non-dominant force cannot claim occupation protection");
+
+True(CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
+        hasDominantEnemy: true,
+        hasCaptureOwner: false,
+        captureOwnerAlive: false,
+        captureOwnerStillEnemyOfCity: false),
+    "first active enemy becomes the recorded capturer");
+True(CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
+        hasDominantEnemy: true,
+        hasCaptureOwner: true,
+        captureOwnerAlive: true,
+        captureOwnerStillEnemyOfCity: false),
+    "active enemy replaces a stale peacetime capture owner");
+Equal(false, CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
+        hasDominantEnemy: true,
+        hasCaptureOwner: true,
+        captureOwnerAlive: true,
+        captureOwnerStillEnemyOfCity: true),
+    "a valid wartime capture owner keeps its progress");
+Equal(false, CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
+        hasDominantEnemy: false,
+        hasCaptureOwner: true,
+        captureOwnerAlive: false,
+        captureOwnerStillEnemyOfCity: false),
+    "a non-enemy cannot inherit capture progress");
+Equal(false, CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
+        contributorIsCityOwner: true,
+        capturePoints: 10,
+        cityOwnerHasActiveDefenders: false),
+    "empty watchtowers cannot reverse an uncontested occupation");
+True(CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
+        contributorIsCityOwner: true,
+        capturePoints: 10,
+        cityOwnerHasActiveDefenders: true),
+    "watchtowers support defenders who are actually present");
+True(CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
+        contributorIsCityOwner: true,
+        capturePoints: 1,
+        cityOwnerHasActiveDefenders: false),
+    "an actual city-owner unit keeps its normal capture contribution");
+True(CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
+        contributorIsCityOwner: false,
+        capturePoints: 20,
+        cityOwnerHasActiveDefenders: false),
+    "attacker capture contributions are never classified as watchtowers");
+
+True(CityAttackZoneRules.ShouldRepairTargetZone(
+        hasTargetCity: true,
+        targetHasZones: true,
+        hasCurrentZone: true,
+        currentZoneBelongsToTarget: false),
+    "an attack zone pointing back to the source city is repaired");
+True(CityAttackZoneRules.ShouldRepairTargetZone(
+        hasTargetCity: true,
+        targetHasZones: true,
+        hasCurrentZone: false,
+        currentZoneBelongsToTarget: false),
+    "a missing attack zone is repaired from the target city zones");
+Equal(false, CityAttackZoneRules.ShouldRepairTargetZone(
+        hasTargetCity: true,
+        targetHasZones: true,
+        hasCurrentZone: true,
+        currentZoneBelongsToTarget: true),
+    "a valid target attack zone remains unchanged");
+Equal(false, CityAttackZoneRules.ShouldRepairTargetZone(
+        hasTargetCity: true,
+        targetHasZones: false,
+        hasCurrentZone: false,
+        currentZoneBelongsToTarget: false),
+    "a target without zones cannot be repaired");
+
+True(WarGoalControlRules.ShouldResolveTransferredCityGoal(
+        pGoalType: "force_vassal",
+        pTargetCityMatchesGoal: true,
+        pNewOwnerIsWarAttacker: true),
+    "capturing the declared capital immediately wins a vassalization war");
+Equal(false, WarGoalControlRules.ShouldResolveTransferredCityGoal(
+        pGoalType: "force_vassal",
+        pTargetCityMatchesGoal: false,
+        pNewOwnerIsWarAttacker: true),
+    "capturing a non-capital city does not complete a vassalization war");
+
+True(VassalRelationRules.CanEnforceWarVictory(
+        pBasicValid: true,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pCycleDetected: false),
+    "a valid vassal war remains enforceable after the battlefront changes adjacency");
+Equal(false, VassalRelationRules.CanEnforceWarVictory(
+        pBasicValid: false,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pCycleDetected: false),
+    "an extinguished defender cannot become a vassal");
+Equal(false, VassalRelationRules.CanEnforceWarVictory(
+        pBasicValid: true,
+        pVassalIsRebel: false,
+        pSuzerainIsRebel: false,
+        pCycleDetected: true),
+    "war settlement never creates a vassal cycle");
+
+True(FamilyTreeRelationRules.ShouldShowStatusInGenealogy("guest"),
+    "guest office does not hide a blood relative");
+True(FamilyTreeRelationRules.ShouldShowStatusInGenealogy("captured"),
+    "captivity does not hide a blood relative");
+True(FamilyTreeRelationRules.ShouldShowStatusInGenealogy("common_lineage"),
+    "common descendants remain traceable");
+Equal((101L, 102L), FamilyTreeRelationRules.MergeParentSlots(
+        currentSlot1: 101L,
+        currentSlot2: 102L,
+        fallbackSlot1: 201L,
+        fallbackSlot2: 202L),
+    "recorded biological parents survive later family changes");
+
+True(XiaNameRepairRules.IsInvalidGeneratedMetaName("NAME"), "NAME is invalid");
+True(XiaNameRepairRules.IsInvalidGeneratedMetaName("#NO_NAME#"), "#NO_NAME# is invalid");
+True(XiaNameRepairRules.IsInvalidGeneratedMetaName("无名"), "anonymous shi is invalid");
+True(XiaNameRepairRules.IsInvalidGeneratedMetaName("无名氏"), "anonymous clan is invalid");
+Equal(false, XiaNameRepairRules.IsInvalidGeneratedMetaName("孔氏"), "historical clan is valid");
+
+True(HistoricalSchoolActivityQueueRules.CanEnqueue(7, 8, false),
+    "eighth lecture may be queued");
+Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueue(8, 8, false),
+    "ninth lecture is rejected");
+Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueue(1, 8, true),
+    "duplicate operation is rejected");
+True(HistoricalSchoolActivityQueueRules.CanAdvance(0, 0.25, 1.0),
+    "first transition within frame budget advances");
+Equal(false, HistoricalSchoolActivityQueueRules.CanAdvance(1, 0.25, 1.0),
+    "second transition in one frame is rejected");
+Equal(false, HistoricalSchoolActivityQueueRules.CanAdvance(0, 1.0, 1.0),
+    "elapsed frame budget is strict");
+True(HistoricalSchoolActivityQueueRules.CanActivate(3, 4),
+    "debate may start below the concurrent activity limit");
+Equal(false, HistoricalSchoolActivityQueueRules.CanActivate(4, 4),
+    "debate start is deferred at the concurrent activity limit");
+Equal(false,
+    HistoricalSchoolActivityQueueRules.ActorYearKey(10, 42) ==
+    HistoricalSchoolActivityQueueRules.ActorYearKey(11, 42),
+    "debate actor occupancy resets in a new year");
+True(HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(false, false, 121, 120),
+    "interrupted activity is cancelled after its grace period");
+Equal(false, HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(true, false,
+    121, 120), "ready activity waits for persistence rather than cancelling");
+Equal(false, HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(false, true,
+    121, 120), "actor still running its task is not cancelled");
+Equal(false, HistoricalSchoolActivityQueueRules.ShouldFlushForSave(false),
+    "unfinished movement is not forced to settle during save");
+True(HistoricalSchoolActivityQueueRules.ShouldFlushForSave(true),
+    "completed activity is flushed before save");
+Equal(false, HistoricalSchoolActivityQueueRules.IsPersistenceResolved(
+        HistoricalSchoolTeachingPersistenceOutcome.Unknown),
+    "unknown persistence blocks save and remains queued");
+True(HistoricalSchoolActivityQueueRules.IsPersistenceResolved(
+        HistoricalSchoolTeachingPersistenceOutcome.Committed),
+    "new commit resolves pending activity");
+True(HistoricalSchoolActivityQueueRules.IsPersistenceResolved(
+        HistoricalSchoolTeachingPersistenceOutcome.Replayed),
+    "idempotent replay resolves pending activity");
+True(HistoricalSchoolActivityQueueRules.IsPersistenceResolved(
+        HistoricalSchoolTeachingPersistenceOutcome.CleanFailure),
+    "clean failure resolves and clears invalid activity");
+
+var occupiedVenues = new HashSet<int>();
+True(HistoricalSchoolVenueRules.TrySelect(101, 8, occupiedVenues, out int firstVenue),
+    "first venue is selected");
+True(HistoricalSchoolVenueRules.TrySelect(101, 8, new HashSet<int>(),
+    out int repeatedVenue), "stable venue can be selected again");
+Equal(firstVenue, repeatedVenue, "same operation key selects the same free venue");
+occupiedVenues.Add(firstVenue);
+True(HistoricalSchoolVenueRules.TrySelect(101, 8, occupiedVenues, out int secondVenue),
+    "occupied first venue is skipped");
+Equal(false, firstVenue == secondVenue, "venue claims are distinct");
+Equal(false, HistoricalSchoolVenueRules.TrySelect(101, 1,
+    new HashSet<int> { 0 }, out _), "full venue set rejects a claim");
+
+True(HistoricalSchoolVenueRules.RequiresAcademy(
+        HistoricalSchoolVenueKind.Lecture),
+    "a lecture must run in a completed academy");
+True(HistoricalSchoolVenueRules.RequiresAcademy(
+        HistoricalSchoolVenueKind.Debate),
+    "a debate must run in a completed academy");
+Equal(false, HistoricalSchoolVenueRules.RequiresAcademy(
+        HistoricalSchoolVenueKind.TravelArrival),
+    "ordinary scholar arrival retains a bounded outdoor venue");
+Equal(false, HistoricalSchoolVenueRules.RequiresAcademy(
+        HistoricalSchoolVenueKind.IdleRoam),
+    "idle scholar roaming remains outside the academy");
+True(HistoricalSchoolVenueRules.IsAcademyUsable(
+        buildingExists: true,
+        buildingUsable: true,
+        underConstruction: false,
+        attachedToCity: true,
+        belongsToRequestedCity: true),
+    "a completed academy attached to the requested city is usable");
+Equal(false, HistoricalSchoolVenueRules.IsAcademyUsable(
+        buildingExists: true,
+        buildingUsable: true,
+        underConstruction: true,
+        attachedToCity: true,
+        belongsToRequestedCity: true),
+    "an academy under construction cannot host school work");
+Equal(false, HistoricalSchoolVenueRules.IsAcademyUsable(
+        buildingExists: true,
+        buildingUsable: true,
+        underConstruction: false,
+        attachedToCity: true,
+        belongsToRequestedCity: false),
+    "an academy transferred out of the requested city invalidates the activity");
+True(HistoricalSchoolVenueRules.IsDebateLayoutValid(
+        hasAcademy: true,
+        primaryPresent: true,
+        secondaryPresent: true,
+        sameTile: true),
+    "two debaters may share one academy entrance");
+Equal(false, HistoricalSchoolVenueRules.IsDebateLayoutValid(
+        hasAcademy: false,
+        primaryPresent: true,
+        secondaryPresent: true,
+        sameTile: true),
+    "an outdoor debate cannot collapse both actors onto one tile");
+True(HistoricalSchoolVenueRules.CanReserveAcademy(
+        academyUsable: true,
+        occupiedByAnotherActivity: false),
+    "an idle academy accepts one school activity");
+Equal(false, HistoricalSchoolVenueRules.CanReserveAcademy(
+        academyUsable: true,
+        occupiedByAnotherActivity: true),
+    "one academy never hosts two simultaneous activities");
+
+True(SchoolAcademyConstructionRules.ShouldStart(
+        cityValid: true,
+        assetAvailable: true,
+        academyIdAlreadyPresent: false,
+        academyTypeAlreadyPresent: false,
+        placementAvailable: true),
+    "the first committed master descent starts an academy construction site");
+Equal(false, SchoolAcademyConstructionRules.ShouldStart(
+        cityValid: true,
+        assetAvailable: true,
+        academyIdAlreadyPresent: true,
+        academyTypeAlreadyPresent: false,
+        placementAvailable: true),
+    "an academy construction site blocks a duplicate by asset id");
+Equal(false, SchoolAcademyConstructionRules.ShouldStart(
+        cityValid: true,
+        assetAvailable: true,
+        academyIdAlreadyPresent: false,
+        academyTypeAlreadyPresent: true,
+        placementAvailable: true),
+    "an existing academy blocks a duplicate by building type");
+Equal(false, SchoolAcademyConstructionRules.ShouldStart(
+        cityValid: true,
+        assetAvailable: true,
+        academyIdAlreadyPresent: false,
+        academyTypeAlreadyPresent: false,
+        placementAvailable: false),
+    "a crowded young city defers academy construction instead of forcing overlap");
+Equal(0, SchoolAcademyConstructionRules.ZoneStartIndex(
+        zoneCount: 40,
+        attempt: 0,
+        zonesPerAttempt: 24),
+    "first academy placement attempt starts at the first city zone");
+Equal(24, SchoolAcademyConstructionRules.ZoneStartIndex(
+        zoneCount: 40,
+        attempt: 1,
+        zonesPerAttempt: 24),
+    "second academy placement attempt inspects later city zones");
+Equal(8, SchoolAcademyConstructionRules.ZoneStartIndex(
+        zoneCount: 40,
+        attempt: 2,
+        zonesPerAttempt: 24),
+    "academy placement attempts wrap through all city zones");
+Equal(0, SchoolAcademyConstructionRules.ZoneStartIndex(
+        zoneCount: 0,
+        attempt: 3,
+        zonesPerAttempt: 24),
+    "academy placement has a safe start for an empty city");
+
+var slots = new HistoricalSchoolActiveMasterSlots();
+True(slots.TryReserve("ru", "confucius"), "school slot can be reserved");
+Equal(false, slots.TryReserve("ru", "mencius"),
+    "second master in the same school is blocked");
+True(slots.TryActivate("ru", "confucius", 42), "matching reservation activates");
+True(slots.TryAttachActor("ru", "confucius", 42),
+    "reconciliation attachment is idempotent for the active master");
+Equal(false, slots.TryRelease("ru", "mencius", 42),
+    "stale master cannot release an active slot");
+Equal(false, slots.TryRelease("ru", "confucius", 99),
+    "wrong actor cannot release an active slot");
+True(slots.TryRelease("ru", "confucius", 42),
+    "committed matching death releases the school");
+True(slots.TryReserve("ru", "mencius"), "next master may reserve after release");
+
+var pendingSlots = new HistoricalSchoolActiveMasterSlots();
+True(pendingSlots.TryReserve("dao", "laozi"),
+    "pending school master can reserve its school");
+True(pendingSlots.TryAttachActor("dao", "laozi", 77),
+    "created actor attaches to the pending reservation");
+True(pendingSlots.TryRelease("dao", "laozi", 77),
+    "clean descent failure releases the attached reservation");
+
+var restoredSlots = new HistoricalSchoolActiveMasterSlots();
+True(restoredSlots.TryRestoreActive("mo", "mozi", 88),
+    "load reconstructs a persisted living master");
+True(restoredSlots.TryRestoreActive("mo", "mozi", 88),
+    "load reconstruction is idempotent for the same actor");
+Equal(false, restoredSlots.TryRestoreActive("mo", "qinhuazi", 99),
+    "load blocks a second living master in the same school");
+
+float narrowLossDelta = -0.2f;
+float runtimeNarrowLoss = 10f + narrowLossDelta;
+double persistedNarrowLoss = 10d + (double)narrowLossDelta;
+True(SchoolMembershipPersistenceRules.ReputationMatches(
+        persistedNarrowLoss, runtimeNarrowLoss),
+    "SQLite REAL narrow-loss reputation matches runtime float semantics");
+Equal(false, SchoolMembershipPersistenceRules.ReputationMatches(
+        persistedNarrowLoss + 0.01d, runtimeNarrowLoss),
+    "materially different reputation remains a persistence conflict");
+
+True(SchoolMapSelectionRules.CanSelectCity(pCityValid: true, pWindowActive: false),
+    "school map may select a city when no window owns the pointer");
+Equal(false,
+    SchoolMapSelectionRules.CanSelectCity(pCityValid: true, pWindowActive: true),
+    "school map cannot clear actor selection through an open window");
+Equal(false,
+    SchoolMapSelectionRules.CanSelectCity(pCityValid: false, pWindowActive: false),
+    "invalid city cannot be selected by the school map");
+
+SchoolRuntimePerformanceTests.Run();
+
+Console.WriteLine("Rule tests passed.");

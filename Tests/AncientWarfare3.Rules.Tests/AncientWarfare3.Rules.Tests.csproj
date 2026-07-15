@@ -7,6 +7,8 @@
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Program.cs.txt" />
+    <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Reference Include="System.Data.SQLite">
       <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
       <Private>true</Private>
@@ -14,7 +16,23 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirMinimapScaleRules.cs" Link="Production\HeirMinimapScaleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirMinimapVisualRules.cs" Link="Production\HeirMinimapVisualRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomExtinctionRules.cs" Link="Production\KingdomExtinctionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AWArmyRole.cs" Link="Production\AWArmyRole.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityOccupationAccelerationRules.cs" Link="Production\CityOccupationAccelerationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityAttackZoneRules.cs" Link="Production\CityAttackZoneRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarGoalControlRules.cs" Link="Production\WarGoalControlRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalRelationRules.cs" Link="Production\VassalRelationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FormerHeirTitleRules.cs" Link="Production\FormerHeirTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FormerKingTraitRules.cs" Link="Production\FormerKingTraitRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeRelationRules.cs" Link="Production\FamilyTreeRelationRules.cs" />
     <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureMinimapRules.cs" Link="Production\HistoricalFigureMinimapRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolActivityQueueRules.cs" Link="Production\HistoricalSchoolActivityQueueRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceOutcome.cs" Link="Production\HistoricalSchoolTeachingPersistenceOutcome.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolVenueRules.cs" Link="Production\HistoricalSchoolVenueRules.cs" />
@@ -23,6 +41,7 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolRevisionRules.cs" Link="Production\HistoricalSchoolRevisionRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolStandingRules.cs" Link="Production\HistoricalSchoolStandingRules.cs" />
     <Compile Include="..\..\Code\core\schools\FormalAffiliationTransferScope.cs" Link="Production\FormalAffiliationTransferScope.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolAffiliationTransferRules.cs" Link="Production\SchoolAffiliationTransferRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolRuntimeIndex.cs" Link="Production\HistoricalSchoolRuntimeIndex.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTaskLeaseRules.cs" Link="Production\HistoricalSchoolTaskLeaseRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolCacheRules.cs" Link="Production\HistoricalSchoolCacheRules.cs" />
@@ -30,5 +49,8 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolDiagnostics.cs" Link="Production\HistoricalSchoolDiagnostics.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolWriteBuffer.cs" Link="Production\HistoricalSchoolWriteBuffer.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolLedgerDecayRules.cs" Link="Production\HistoricalSchoolLedgerDecayRules.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolMembershipPersistenceRules.cs" Link="Production\SchoolMembershipPersistenceRules.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolAcademyConstructionRules.cs" Link="Production\SchoolAcademyConstructionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\SchoolMapSelectionRules.cs" Link="Production\SchoolMapSelectionRules.cs" />
   </ItemGroup>
 </Project>
