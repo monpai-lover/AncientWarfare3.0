@@ -2465,7 +2465,8 @@ namespace AncientWarfare3.core.schools
                    ValueLong(pReader, 5, -1L) == pExpected.TeacherActorId &&
                    ValueLong(pReader, 6, -1L) == pExpected.CityId &&
                    ValueInt(pReader, 7, -1) == pExpected.Generation &&
-                   ValueDouble(pReader, 8).Equals((double)pExpected.Reputation) &&
+                   SchoolMembershipPersistenceRules.ReputationMatches(
+                       ValueDouble(pReader, 8), pExpected.Reputation) &&
                    ValueInt(pReader, 9, -1) == pExpected.StartYear &&
                    ValueString(pReader, 14) == pExpected.Standing.ToString() &&
                    ValueInt(pReader, 15, int.MinValue) ==
@@ -2625,7 +2626,8 @@ namespace AncientWarfare3.core.schools
                    ValueLong(pReader, 5, -1L) == pExpected.TeacherActorId &&
                    ValueLong(pReader, 6, -1L) == pExpected.CityId &&
                    ValueInt(pReader, 7, -1) == pExpected.Generation &&
-                   ValueDouble(pReader, 8).Equals((double)pExpected.Reputation) &&
+                   SchoolMembershipPersistenceRules.ReputationMatches(
+                       ValueDouble(pReader, 8), pExpected.Reputation) &&
                    ValueInt(pReader, 9, -1) == pExpected.StartYear &&
                    ValueInt(pReader, 10, int.MinValue) == pEndYear &&
                    (ValueInt(pReader, 11, -1) != 0) == pActive &&
