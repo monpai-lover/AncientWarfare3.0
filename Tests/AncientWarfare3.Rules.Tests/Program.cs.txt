@@ -572,6 +572,92 @@ Equal(false, CityOccupationAccelerationRules.ShouldRecordActiveMilitaryPresence(
         true, false, true, true),
     "a dead warrior cannot keep a city defended");
 
+True(RoyalAsylumRules.IsProtectedFamilyCandidate(
+        homeAlive: true,
+        monarchy: true,
+        actorAlive: true,
+        actorBelongsToHome: true,
+        actorIsSlave: false,
+        actorIsForeignKing: false,
+        actorIsKing: false,
+        actorIsCurrentHeir: false,
+        isKingsDirectChild: true,
+        isHeirsDirectChild: false),
+    "a ruler's non-heir child is evacuated");
+True(RoyalAsylumRules.IsProtectedFamilyCandidate(
+        true, true, true, true, false, false, false, false, false, true),
+    "a current heir's child is evacuated");
+Equal(false, RoyalAsylumRules.IsProtectedFamilyCandidate(
+        true, true, true, true, false, false, false, true, true, false),
+    "the current heir remains with the realm");
+Equal(false, RoyalAsylumRules.IsProtectedFamilyCandidate(
+        true, true, true, true, false, false, true, false, true, false),
+    "the current ruler remains with the realm");
+Equal(false, RoyalAsylumRules.IsProtectedFamilyCandidate(
+        true, true, true, true, true, false, false, false, true, false),
+    "an enslaved royal is not silently released into asylum");
+Equal(false, RoyalAsylumRules.IsProtectedFamilyCandidate(
+        true, true, true, false, false, false, false, false, true, false),
+    "a foreign national cannot enter another realm's royal roster");
+
+True(RoyalAsylumRules.IsHostEligible(
+        hostAlive: true,
+        hostCivilization: true,
+        hostIsForeign: true,
+        hostIsNeutral: false,
+        hostIsWild: false,
+        hostHasLivingCity: true,
+        hostAtWar: false,
+        hostIsEnemy: false),
+    "a peaceful foreign civilization can host royal refugees");
+Equal(false, RoyalAsylumRules.IsHostEligible(
+        true, true, true, false, false, true, true, false),
+    "a kingdom at war cannot be an asylum host");
+Equal(false, RoyalAsylumRules.IsHostEligible(
+        true, true, true, false, false, true, false, true),
+    "an enemy kingdom cannot be an asylum host");
+
+var sameIslandHost = new RoyalAsylumHostRank(
+    sameIsland: true, distanceSquared: 900, kingdomId: 8, cityId: 80);
+var nearbyOverseasHost = new RoyalAsylumHostRank(
+    sameIsland: false, distanceSquared: 4, kingdomId: 1, cityId: 10);
+True(sameIslandHost.CompareTo(nearbyOverseasHost) < 0,
+    "same-island refuge ranks ahead of a nearer overseas host");
+var nearerSameIslandHost = new RoyalAsylumHostRank(
+    sameIsland: true, distanceSquared: 100, kingdomId: 9, cityId: 90);
+True(nearerSameIslandHost.CompareTo(sameIslandHost) < 0,
+    "distance orders hosts after island preference");
+var lowerKingdomIdHost = new RoyalAsylumHostRank(
+    sameIsland: true, distanceSquared: 100, kingdomId: 3, cityId: 99);
+True(lowerKingdomIdHost.CompareTo(nearerSameIslandHost) < 0,
+    "kingdom id deterministically breaks equal-distance ties");
+
+True(RoyalAsylumRules.ShouldEvacuate(
+        homeAlive: true, monarchy: true,
+        hasDefensiveWar: true, hostAvailable: true),
+    "a defensive war with a host starts evacuation");
+Equal(false, RoyalAsylumRules.ShouldEvacuate(
+        true, true, false, true),
+    "an offensive-only war does not evacuate the royal family");
+True(RoyalAsylumRules.ShouldReturn(
+        homeRealmAlive: true, hasDefensiveWar: false),
+    "refugees return after the last defensive war");
+Equal(false, RoyalAsylumRules.ShouldReturn(
+        true, true),
+    "an active defensive war delays return");
+True(RoyalAsylumRules.ShouldNaturalize(
+        homeRealmAlive: false, hostCityValid: true),
+    "realm extinction naturalizes a refugee into the host");
+Equal(false, RoyalAsylumRules.ShouldNaturalize(
+        true, true),
+    "a living home realm keeps the refugee's nationality");
+True(RoyalAsylumRules.ShouldRelocate(
+        asylumActive: true, hostKingdomAlive: true,
+        hostCityAlive: true, hostCityStillOwned: true, hostAtWar: true),
+    "a host entering war triggers relocation");
+Equal(false, RoyalAsylumRules.CanPerformProtectedRole(asylumActive: true),
+    "a refugee cannot be enlisted or appointed abroad");
+
 True(CityAttackZoneRules.ShouldRepairTargetZone(
         hasTargetCity: true,
         targetHasZones: true,
