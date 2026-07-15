@@ -26,6 +26,8 @@ namespace AncientWarfare3.core.lineage
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
         public const string VASSAL_RELATION_ID = "aw_vassal_relation_id";
+        public const string VASSAL_INDEPENDENCE_WAR_ID = "aw_vassal_independence_war_id";
+        public const string VASSAL_INDEPENDENCE_SUZERAIN_ID = "aw_vassal_independence_suzerain_id";
         public const string MANDATE_PERIOD_ID = "aw_mandate_period_id";
         public const string MANDATE_VALUE = "aw_mandate_value";
         public const string MANDATE_AUTHORITY = "aw_mandate_authority";

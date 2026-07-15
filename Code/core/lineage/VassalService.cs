@@ -431,6 +431,8 @@ namespace AncientWarfare3.core.lineage
 
             if (type == "independence_war")
             {
+                BeginIndependenceSuspension(pWar, attacker, defender);
+                LeaveSuzerainWarsForIndependence(pWar, attacker, defender);
                 JoinLoyalVassalsToDefenders(pWar, defender, attacker);
                 return;
             }
@@ -449,6 +451,9 @@ namespace AncientWarfare3.core.lineage
             string type = GetWarType(pWar);
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
+
+            if (type == "independence_war")
+                EndIndependenceSuspension(pWar, attacker);
 
             if (type == "vassal_war" && pWinner == WarWinner.Attackers)
             {
@@ -816,11 +821,13 @@ namespace AncientWarfare3.core.lineage
                 bool vassalHelping = suzerainAttacker ? vassalAttacker : vassalDefender;
                 bool vassalOpposes = suzerainAttacker ? vassalDefender : vassalAttacker;
                 bool vassalInWar = vassalAttacker || vassalDefender;
+                bool independenceSuspended = HasActiveIndependenceSuspension(vassal, pSuzerain);
                 if (!VassalWarSupportRules.ShouldPullIntoSuzerainWar(
                         pSuzerainInWar: true,
                         pVassalAlreadyHelping: vassalHelping,
                         pVassalAlreadyInWar: vassalInWar,
-                        pVassalOpposesSuzerain: vassalOpposes))
+                        pVassalOpposesSuzerain: vassalOpposes,
+                        independenceSuspended: independenceSuspended))
                     continue;
 
                 JoinSide(pWar, vassal, suzerainAttacker);
@@ -852,6 +859,95 @@ namespace AncientWarfare3.core.lineage
                 else pWar.joinDefenders(pKingdom);
             }
             catch { }
+        }
+
+        private static void BeginIndependenceSuspension(War pWar, Kingdom pRebel, Kingdom pSuzerain)
+        {
+            if (pWar?.data == null || pRebel?.data == null || pSuzerain?.data == null) return;
+            pRebel.data.set(LineageKeys.VASSAL_INDEPENDENCE_WAR_ID, pWar.data.id);
+            pRebel.data.set(LineageKeys.VASSAL_INDEPENDENCE_SUZERAIN_ID, pSuzerain.id);
+        }
+
+        private static void EndIndependenceSuspension(War pWar, Kingdom pRebel)
+        {
+            if (pWar?.data == null || pRebel?.data == null) return;
+            pRebel.data.get(LineageKeys.VASSAL_INDEPENDENCE_WAR_ID, out long warId, -1L);
+            if (warId != pWar.data.id) return;
+            ClearIndependenceSuspension(pRebel);
+        }
+
+        private static void ClearIndependenceSuspension(Kingdom pRebel)
+        {
+            if (pRebel?.data == null) return;
+            pRebel.data.set(LineageKeys.VASSAL_INDEPENDENCE_WAR_ID, -1L);
+            pRebel.data.set(LineageKeys.VASSAL_INDEPENDENCE_SUZERAIN_ID, -1L);
+        }
+
+        private static void LeaveSuzerainWarsForIndependence(War pIndependenceWar,
+            Kingdom pRebel, Kingdom pSuzerain)
+        {
+            if (pIndependenceWar?.data == null || pRebel?.data == null || pSuzerain?.data == null) return;
+
+            List<War> activeWars;
+            try { activeWars = pRebel.getWars().ToList(); }
+            catch { return; }
+
+            foreach (War war in activeWars)
+            {
+                if (war?.data == null || war.hasEnded()) continue;
+                bool isIndependenceWar = war == pIndependenceWar ||
+                                         war.data.id == pIndependenceWar.data.id;
+                bool rebelInWar = false;
+                bool suzerainInWar = false;
+                bool sameSide = false;
+                try
+                {
+                    rebelInWar = war.hasKingdom(pRebel);
+                    suzerainInWar = war.hasKingdom(pSuzerain);
+                    sameSide = rebelInWar && suzerainInWar && war.onTheSameSide(pRebel, pSuzerain);
+                }
+                catch { }
+
+                if (!VassalWarSupportRules.ShouldLeaveForIndependence(
+                        isIndependenceWar, rebelInWar, suzerainInWar, sameSide))
+                    continue;
+                LeaveWarPeacefully(war, pRebel);
+            }
+        }
+
+        private static bool HasActiveIndependenceSuspension(Kingdom pVassal, Kingdom pSuzerain)
+        {
+            if (pVassal?.data == null || pSuzerain?.data == null) return false;
+            pVassal.data.get(LineageKeys.VASSAL_INDEPENDENCE_WAR_ID, out long warId, -1L);
+            pVassal.data.get(LineageKeys.VASSAL_INDEPENDENCE_SUZERAIN_ID, out long recordedSuzerainId, -1L);
+            if (warId < 0 || recordedSuzerainId < 0) return false;
+
+            War war = null;
+            try { war = World.world?.wars?.get(warId); }
+            catch { }
+            bool warActive = war?.data != null && !war.hasEnded();
+            Kingdom recordedSuzerain = FindKingdom(recordedSuzerainId);
+            bool rebelOpposesRecordedSuzerain = false;
+            if (warActive && recordedSuzerain?.data != null)
+            {
+                try { rebelOpposesRecordedSuzerain = war.isInWarWith(pVassal, recordedSuzerain); }
+                catch { }
+            }
+
+            bool recordedStateActive = VassalWarSupportRules.HasActiveIndependenceSuspension(
+                markerMatches: true,
+                warActive: warActive,
+                rebelOpposesSuzerain: rebelOpposesRecordedSuzerain);
+            if (!recordedStateActive)
+            {
+                ClearIndependenceSuspension(pVassal);
+                return false;
+            }
+
+            return VassalWarSupportRules.HasActiveIndependenceSuspension(
+                markerMatches: recordedSuzerainId == pSuzerain.id,
+                warActive: true,
+                rebelOpposesSuzerain: true);
         }
 
         private static bool WarContainsOnDestroyedSide(War pWar, Kingdom pVassal, WarSideSnapshot pSnapshot)

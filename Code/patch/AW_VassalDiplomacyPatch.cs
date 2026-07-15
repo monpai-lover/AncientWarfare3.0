@@ -6,13 +6,14 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_VassalDiplomacyPatch
     {
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(AllianceManager), nameof(AllianceManager.newAlliance))]
-        public static bool NewAlliance_Prefix(Kingdom pKingdom, Kingdom pKingdom2, ref Alliance __result)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(DiplomacyHelpers), nameof(DiplomacyHelpers.getAllianceTarget))]
+        public static void GetAllianceTarget_Postfix(Kingdom pKingdomStarter, ref Kingdom __result)
         {
-            if (!ShouldBlockAlliance(pKingdom) && !ShouldBlockAlliance(pKingdom2)) return true;
-            __result = null;
-            return false;
+            if (!VassalWarPermissionRules.CanUseAlliancePlot(
+                    initiatorIsVassal: ShouldBlockAlliance(pKingdomStarter),
+                    targetIsVassal: ShouldBlockAlliance(__result)))
+                __result = null;
         }
 
         [HarmonyPrefix]
@@ -35,6 +36,7 @@ namespace AncientWarfare3.patch
 
         private static bool ShouldBlockAlliance(Kingdom pKingdom)
         {
+            if (pKingdom?.data == null) return false;
             return !VassalWarPermissionRules.CanCreateAlliance(VassalService.IsVassalKingdom(pKingdom), out _);
         }
     }
