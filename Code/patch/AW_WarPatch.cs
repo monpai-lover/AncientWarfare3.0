@@ -55,6 +55,7 @@ namespace AncientWarfare3.patch
         public static void EndWar_Postfix(War pWar, WarWinner pWinner)
         {
             if (pWar?.data == null) return;
+            CityOccupationAccelerationService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
             WarTerritoryService.OnWarEnded(pWar, pWinner);
             ApplyDiplomacyWarResult(pWar, pWinner);
