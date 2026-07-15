@@ -33,6 +33,13 @@ namespace AncientWarfare3.patch
             return false;
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CityBehCheckAttackZone), nameof(CityBehCheckAttackZone.execute))]
+        public static void CityCheckAttackZone_Postfix(City pCity)
+        {
+            CityAttackZoneService.RepairAfterTargetSelection(pCity);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Army), nameof(Army.save))]
         public static bool ArmySave_Prefix(Army __instance)

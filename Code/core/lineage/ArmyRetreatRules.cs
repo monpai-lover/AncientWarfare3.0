@@ -33,10 +33,11 @@ namespace AncientWarfare3.core.lineage
             return pCurrentUnits > pStoredBaselineUnits;
         }
 
-        public static bool ProtectUncontestedOccupation(bool sameCapturer, bool activeCaptureUnits,
-            bool noDefenders, bool ownershipChanged)
+        public static bool ProtectUncontestedOccupation(bool attackerIsDominant, bool activeCaptureUnits,
+            bool noDefenders, bool hostileRivalActive, bool ownershipChanged)
         {
-            return sameCapturer && activeCaptureUnits && noDefenders && !ownershipChanged;
+            return attackerIsDominant && activeCaptureUnits && noDefenders &&
+                   !hostileRivalActive && !ownershipChanged;
         }
 
         private static float ThresholdForRole(string pRole, bool pCaptainAlive)

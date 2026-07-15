@@ -55,13 +55,14 @@ namespace AncientWarfare3.core.lineage
             if (pTargetCity?.data == null || pAttacker?.data == null) return false;
             try
             {
-                bool sameCapturer = pTargetCity.being_captured_by == pAttacker;
                 bool activeUnits = pTargetCity.isGettingCapturedBy(pAttacker);
                 bool noDefenders = !CityOccupationAccelerationService.HasActiveDefenders(pTargetCity);
                 bool ownershipChanged = pTargetCity.kingdom == pAttacker ||
                                         !pAttacker.isEnemy(pTargetCity.kingdom);
+                CityOccupationAccelerationService.DescribeCaptureFor(
+                    pTargetCity, pAttacker, out bool attackerIsDominant, out bool hostileRivalActive);
                 return ArmyRetreatRules.ProtectUncontestedOccupation(
-                    sameCapturer, activeUnits, noDefenders, ownershipChanged);
+                    attackerIsDominant, activeUnits, noDefenders, hostileRivalActive, ownershipChanged);
             }
             catch { return false; }
         }

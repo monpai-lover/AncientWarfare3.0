@@ -4,6 +4,20 @@ namespace AncientWarfare3.core.lineage
 {
     public static class CityOccupationAccelerationRules
     {
+        public static bool ShouldAdoptDominantCapturer(bool hasDominantEnemy, bool hasCaptureOwner,
+            bool captureOwnerAlive, bool captureOwnerStillEnemyOfCity)
+        {
+            return hasDominantEnemy &&
+                   (!hasCaptureOwner || !captureOwnerAlive || !captureOwnerStillEnemyOfCity);
+        }
+
+        public static bool ShouldApplyCapturePointContribution(bool contributorIsCityOwner,
+            int capturePoints, bool cityOwnerHasActiveDefenders)
+        {
+            bool passiveWatchtowerContribution = contributorIsCityOwner && capturePoints >= 10;
+            return !passiveWatchtowerContribution || cityOwnerHasActiveDefenders;
+        }
+
         public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasDefenders,
             bool pHasCityControlGoal, int pWatchTowerCount)
         {

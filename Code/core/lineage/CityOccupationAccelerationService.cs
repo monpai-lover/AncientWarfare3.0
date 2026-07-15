@@ -25,8 +25,32 @@ namespace AncientWarfare3.core.lineage
             if (!hasActiveCaptureUnits) return;
 
             Kingdom currentCaptureOwner = pCity.being_captured_by;
-            if (currentCaptureOwner?.data != null && !currentCaptureOwner.isAlive())
-                currentCaptureOwner = null;
+            bool dominantEnemy;
+            try { dominantEnemy = capturer.isEnemy(pCity.kingdom); }
+            catch { dominantEnemy = false; }
+            if (!dominantEnemy) return;
+
+            bool hasCaptureOwner = currentCaptureOwner?.data != null;
+            bool captureOwnerAlive = false;
+            bool captureOwnerStillEnemyOfCity = false;
+            if (hasCaptureOwner)
+            {
+                try { captureOwnerAlive = currentCaptureOwner.isAlive(); }
+                catch { }
+                if (captureOwnerAlive)
+                {
+                    try { captureOwnerStillEnemyOfCity = currentCaptureOwner.isEnemy(pCity.kingdom); }
+                    catch { }
+                }
+            }
+
+            if (CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
+                    dominantEnemy, hasCaptureOwner, captureOwnerAlive, captureOwnerStillEnemyOfCity))
+            {
+                pCity.being_captured_by = capturer;
+                currentCaptureOwner = capturer;
+            }
+
             bool canAdvanceCurrentCapture = currentCaptureOwner == null || currentCaptureOwner == capturer;
             if (!canAdvanceCurrentCapture && currentCaptureOwner?.data != null)
             {
@@ -60,6 +84,29 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.kingdom?.data == null || SafeCountWarriors(pCity) <= 0) return false;
             try { return pCity.isGettingCapturedBy(pCity.kingdom); }
             catch { return false; }
+        }
+
+        internal static void DescribeCaptureFor(City pCity, Kingdom pAttacker,
+            out bool pAttackerIsDominant, out bool pHostileRivalActive)
+        {
+            pAttackerIsDominant = ResolveDominantCapturer(pCity) == pAttacker;
+            pHostileRivalActive = false;
+            if (pCity?.data == null || pAttacker?.data == null) return;
+
+            try
+            {
+                var capturing = CapturingUnitsField?.GetValue(pCity) as IDictionary<Kingdom, int>;
+                if (capturing == null) return;
+                foreach (KeyValuePair<Kingdom, int> item in capturing)
+                {
+                    Kingdom rival = item.Key;
+                    if (rival?.data == null || rival == pAttacker || item.Value <= 0) continue;
+                    if (!rival.isEnemy(pAttacker)) continue;
+                    pHostileRivalActive = true;
+                    return;
+                }
+            }
+            catch { }
         }
 
         private static Kingdom ResolveDominantCapturer(City pCity)
