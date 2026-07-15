@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AristocraticSuccessionRules.cs" Link="Production\AristocraticSuccessionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapScaleRules.cs" Link="Production\HeirMinimapScaleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirMinimapVisualRules.cs" Link="Production\HeirMinimapVisualRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />

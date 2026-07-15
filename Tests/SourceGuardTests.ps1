@@ -92,6 +92,11 @@ Require-Absent 'historical figure minimap cannot trust first trait alone' 'Code/
 Require-Absent 'king is never persisted as a court officer' 'Code/core/court/CourtService.cs' '"king_council"'
 Require-Present 'new king clears prior court office' 'Code/patch/AW_HeirPatch.cs' 'CourtService.ClearOfficeForReignTransition(king, "became_king")'
 Require-Present 'abdication closes prior court office' 'Code/patch/AW_AbdicatePatch.cs' 'CourtService.ClearOfficeForReignTransition(__state, "abdicated")'
+Require-Present 'aristocratic succession service exists' 'Code/core/lineage/AristocraticSuccessionService.cs' 'internal static class AristocraticSuccessionService'
+Require-Present 'vacancy resolver selects a noble house' 'Code/core/lineage/RepublicGovernmentService.cs' 'AristocraticSuccessionService.SelectRuler(pKingdom)'
+Require-Present 'house accession records clan fallback mode' 'Code/core/lineage/RepublicGovernmentService.cs' 'HeirService.MarkClanFallbackSuccession(pKingdom, houseRuler)'
+Require-Present 'royal-clan path uses unified vacancy resolver' 'Code/patch/AW_HeirPatch.cs' 'RepublicGovernmentService.ResolveRulerForVacancy(pKingdom)'
+Require-Absent 'house selection cannot mutate class policy' 'Code/core/lineage/AristocraticSuccessionService.cs' 'POLICY_CLASS_STATE'
 Require-Present 'vassal settlement requires surviving defender cities' 'Code/core/lineage/VassalService.cs' 'pVassal.hasCities()'
 Require-Present 'school extinction transfer rule exists' 'Code/core/schools/SchoolAffiliationTransferRules.cs' 'AllowsExtinctionRelease('
 Require-Present 'school affiliation guard applies extinction release' 'Code/core/schools/HistoricalAffiliationService.cs' 'SchoolAffiliationTransferRules.AllowsExtinctionRelease('
@@ -104,6 +109,13 @@ $newClan = $lineage.IndexOf('newClan(pKing', $branchStart, [System.StringCompari
 $freezeShi = $lineage.IndexOf('GenerateShiName(pKing)', $branchStart, [System.StringComparison]::Ordinal)
 if ($branchStart -lt 0 -or $newClan -lt 0 -or $freezeShi -lt 0 -or $freezeShi -gt $newClan) {
     $failures.Add('king-founded branch must resolve its shi before newClan(pKing)')
+}
+
+$vacancy = Read-Source 'Code/core/lineage/RepublicGovernmentService.cs'
+$houseSelection = $vacancy.IndexOf('AristocraticSuccessionService.SelectRuler(pKingdom)', [System.StringComparison]::Ordinal)
+$setRepublic = $vacancy.IndexOf('SetRepublic(pKingdom)', [System.StringComparison]::Ordinal)
+if ($houseSelection -lt 0 -or $setRepublic -lt 0 -or $houseSelection -gt $setRepublic) {
+    $failures.Add('aristocratic house selection must run before SetRepublic(pKingdom)')
 }
 
 $contentPath = 'Code/content/schools/HistoricalSchoolContent.cs'

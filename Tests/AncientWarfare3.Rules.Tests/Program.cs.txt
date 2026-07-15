@@ -43,6 +43,79 @@ Equal(false, RoyalLineageResolutionRules.SharesKnownFather(-1, -1),
 Equal(false, RoyalLineageResolutionRules.SharesKnownFather(17, 18),
     "different fathers remain separate");
 
+Equal(AristocraticVacancyDecision.InstallHouse,
+    AristocraticSuccessionRules.DecideVacancy(
+        successionPending: false,
+        hasHereditaryHeir: false,
+        hasHouseCandidate: true,
+        electableCount: 8,
+        monarchyEstablished: true),
+    "a surviving noble house precedes republic");
+Equal(AristocraticVacancyDecision.Defer,
+    AristocraticSuccessionRules.DecideVacancy(true, false, true, 8, true),
+    "timer_new_king defers aristocratic fallback");
+Equal(AristocraticVacancyDecision.Defer,
+    AristocraticSuccessionRules.DecideVacancy(false, true, true, 8, true),
+    "a hereditary heir precedes every fallback");
+Equal(AristocraticVacancyDecision.ElectRepublic,
+    AristocraticSuccessionRules.DecideVacancy(false, false, false, 8, true),
+    "republic is allowed only after hereditary and house candidates are exhausted");
+Equal(AristocraticVacancyDecision.Defer,
+    AristocraticSuccessionRules.DecideVacancy(false, false, true, 8, false),
+    "a new kingdom must finish its initial founder accession");
+
+True(AristocraticSuccessionRules.IsEligibleRuler(
+        inLineageSystem: true,
+        hasVisibleClan: true,
+        isMale: true,
+        isAdult: true,
+        isAlive: true,
+        isSlave: false,
+        isKing: false),
+    "living adult male of a visible lineage house is eligible");
+Equal(false, AristocraticSuccessionRules.IsEligibleRuler(
+        true, false, true, true, true, false, false),
+    "a commoner is not promoted into an invented house during vacancy selection");
+Equal(false, AristocraticSuccessionRules.IsEligibleRuler(
+        true, true, true, true, true, true, false),
+    "an enslaved house member cannot take the throne");
+
+var eligibleChief = new AristocraticRulerScore(
+    actorId: 11, isChief: true, diplomacy: 4, warfare: 4, stewardship: 4,
+    level: 2, combatStrength: 10f, age: 30);
+var strongerMember = new AristocraticRulerScore(
+    actorId: 12, isChief: false, diplomacy: 10, warfare: 10, stewardship: 10,
+    level: 8, combatStrength: 90f, age: 40);
+True(AristocraticSuccessionRules.CompareRulers(eligibleChief, strongerMember) < 0,
+    "an eligible house chief precedes an ordinary member");
+
+var lowerActorId = new AristocraticRulerScore(
+    actorId: 20, isChief: false, diplomacy: 6, warfare: 6, stewardship: 6,
+    level: 4, combatStrength: 20f, age: 30);
+var higherActorId = new AristocraticRulerScore(
+    actorId: 21, isChief: false, diplomacy: 6, warfare: 6, stewardship: 6,
+    level: 4, combatStrength: 20f, age: 30);
+True(AristocraticSuccessionRules.CompareRulers(lowerActorId, higherActorId) < 0,
+    "actor ID makes exact house-ruler ties deterministic");
+
+var renownedHouse = new AristocraticHouseScore(
+    clanId: 10, renown: 80, officeHolders: 1, realmMembers: 4,
+    eligibleAdultMales: 2, bestRuler: eligibleChief);
+var numerousHouse = new AristocraticHouseScore(
+    clanId: 11, renown: 40, officeHolders: 4, realmMembers: 12,
+    eligibleAdultMales: 6, bestRuler: strongerMember);
+True(AristocraticSuccessionRules.CompareHouses(renownedHouse, numerousHouse) < 0,
+    "vanilla clan renown is the primary house rank");
+
+var lowClanIdHouse = new AristocraticHouseScore(
+    clanId: 30, renown: 50, officeHolders: 2, realmMembers: 8,
+    eligibleAdultMales: 4, bestRuler: lowerActorId);
+var highClanIdHouse = new AristocraticHouseScore(
+    clanId: 31, renown: 50, officeHolders: 2, realmMembers: 8,
+    eligibleAdultMales: 4, bestRuler: lowerActorId);
+True(AristocraticSuccessionRules.CompareHouses(lowClanIdHouse, highClanIdHouse) < 0,
+    "clan ID makes exact house ties deterministic");
+
 Equal(false, RoyalGuardArmyAssignmentRules.CanAssign(
         actorIsRoyalGuard: true,
         targetArmyExists: true,

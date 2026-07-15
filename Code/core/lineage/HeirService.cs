@@ -369,6 +369,14 @@ namespace AncientWarfare3.core.lineage
                 pLeader?.data == null ? SuccessionMode.NONE : SuccessionMode.LEADER_FALLBACK);
         }
 
+        public static void MarkClanFallbackSuccession(Kingdom pKingdom, Actor pRuler)
+        {
+            if (pKingdom?.data == null) return;
+            ClearHeir(pKingdom);
+            pKingdom.data.set(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                pRuler?.data == null ? SuccessionMode.NONE : SuccessionMode.CLAN_FALLBACK);
+        }
+
         private static void StoreHeirSelection(Kingdom pKingdom, HeirSelection pSelection)
         {
             if (pKingdom?.data == null) return;

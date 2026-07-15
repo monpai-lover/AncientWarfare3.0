@@ -19,7 +19,9 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromRoyalClan_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            __result = HeirService.GetHeir(pKingdom);
+            __result = pKingdom.hasKing()
+                ? HeirService.GetHeir(pKingdom)
+                : RepublicGovernmentService.ResolveRulerForVacancy(pKingdom);
             return false;
         }
 
@@ -28,24 +30,7 @@ namespace AncientWarfare3.patch
         public static bool GetKingFromLeaders_Prefix(Kingdom pKingdom, ref Actor __result)
         {
             if (!UsesManagedSuccession(pKingdom)) return true;
-            Actor heir = HeirService.GetHeir(pKingdom);
-            if (heir != null)
-            {
-                __result = heir;
-                return false;
-            }
-
-            if (SuccessionTransitionRules.ShouldUseInitialFounderFallback(
-                    RepublicGovernmentService.IsRepublic(pKingdom),
-                    RepublicGovernmentService.HasEstablishedMonarchy(pKingdom)))
-            {
-                Actor founder = HeirService.GetLeaderSuccessionCandidate(pKingdom);
-                HeirService.MarkLeaderFallbackSuccession(pKingdom, founder);
-                __result = founder;
-                return false;
-            }
-
-            __result = RepublicGovernmentService.ElectLeaderForVacancy(pKingdom);
+            __result = RepublicGovernmentService.ResolveRulerForVacancy(pKingdom);
             return false;
         }
 

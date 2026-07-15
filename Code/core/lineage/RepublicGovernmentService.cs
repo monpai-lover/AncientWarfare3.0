@@ -56,33 +56,52 @@ namespace AncientWarfare3.core.lineage
             return IsEligibleCandidate(successor, pKingdom) ? successor : null;
         }
 
-        public static Actor ElectLeaderForVacancy(Kingdom pKingdom)
+        public static Actor ResolveRulerForVacancy(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return null;
             bool pending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
+            if (pending) return null;
+
             bool wasRepublic = IsRepublic(pKingdom);
-            Actor registered = wasRepublic ? GetRegisteredSuccessor(pKingdom) : null;
+            if (wasRepublic)
+            {
+                Actor registered = GetRegisteredSuccessor(pKingdom);
+                List<RankedCandidate> republicRanked = RankCandidates(pKingdom, pExclude: null);
+                Actor elected = registered ??
+                                (republicRanked.Count > 0 ? republicRanked[0].Actor : null);
+                return PrepareRepublicLeader(pKingdom, elected);
+            }
+
+            Actor hereditaryHeir = HeirService.ReconcileHeir(pKingdom, pForce: true);
+            if (hereditaryHeir?.data != null) return hereditaryHeir;
+
+            bool monarchyEstablished = HasEstablishedMonarchy(pKingdom);
+            if (!monarchyEstablished)
+            {
+                Actor founder = HeirService.GetLeaderSuccessionCandidate(pKingdom);
+                HeirService.MarkLeaderFallbackSuccession(pKingdom, founder);
+                return founder;
+            }
+
+            Actor houseRuler = AristocraticSuccessionService.SelectRuler(pKingdom);
+            if (houseRuler?.data != null)
+            {
+                HeirService.MarkClanFallbackSuccession(pKingdom, houseRuler);
+                return houseRuler;
+            }
+
             List<RankedCandidate> ranked = RankCandidates(pKingdom, pExclude: null);
+            AristocraticVacancyDecision decision = AristocraticSuccessionRules.DecideVacancy(
+                successionPending: false,
+                hasHereditaryHeir: false,
+                hasHouseCandidate: false,
+                electableCount: ranked.Count,
+                monarchyEstablished: true);
+            if (decision != AristocraticVacancyDecision.ElectRepublic) return null;
 
-            if (!wasRepublic)
-            {
-                bool hasMonarchyHeir = HeirService.FindHeirReadOnly(pKingdom)?.data != null;
-                bool monarchyEstablished = HasEstablishedMonarchy(pKingdom);
-                if (!RepublicGovernmentRules.ShouldEnterRepublic(
-                        pending, hasMonarchyHeir, ranked.Count, monarchyEstablished))
-                    return null;
-                SetRepublic(pKingdom);
-            }
-            else if (pending)
-            {
-                return null;
-            }
-
-            Actor leader = registered ?? (ranked.Count > 0 ? ranked[0].Actor : null);
-            if (leader?.data == null) return null;
-            MarkRepublicLeader(leader);
-            RefreshRepublicSuccessor(pKingdom, leader);
-            return leader;
+            SetRepublic(pKingdom);
+            Actor leader = ranked.Count > 0 ? ranked[0].Actor : null;
+            return PrepareRepublicLeader(pKingdom, leader);
         }
 
         public static void RefreshRepublicSuccessor(Kingdom pKingdom, Actor pCurrentLeader)
@@ -126,9 +145,17 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (MandateRebelService.IsRebelKingdom(pKingdom)) return;
-            Actor leader = ElectLeaderForVacancy(pKingdom);
+            Actor leader = ResolveRulerForVacancy(pKingdom);
             if (leader?.data == null) return;
             MakeKingAndMoveToCapital(pKingdom, leader);
+        }
+
+        private static Actor PrepareRepublicLeader(Kingdom pKingdom, Actor pLeader)
+        {
+            if (pLeader?.data == null) return null;
+            MarkRepublicLeader(pLeader);
+            RefreshRepublicSuccessor(pKingdom, pLeader);
+            return pLeader;
         }
 
         public static void ClearRepublic(Kingdom pKingdom, string pReason)
