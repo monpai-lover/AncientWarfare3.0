@@ -353,6 +353,23 @@ namespace AncientWarfare3.core.schools
                     pTarget?.id ?? -1L)) return true;
             HistoricalSchoolAffiliationSnapshot state = Get(actorId);
             if (state == null || pTarget == null || pTarget == pActor.kingdom) return true;
+
+            Kingdom source = pActor.kingdom;
+            KingdomManager manager = World.world?.kingdoms;
+            bool sourceIsLiveCivilization =
+                source?.data != null && source.asset != null &&
+                !source.isRekt() && source.isCiv();
+            bool cityIndexStable = manager != null && !manager.hasDirtyCities();
+            bool sourceHasCities = sourceIsLiveCivilization && source.hasCities();
+            bool targetMatchesActorWildKingdom =
+                pTarget.asset != null && pActor.asset != null &&
+                pTarget.asset.id == pActor.asset.kingdom_id_wild;
+            if (SchoolAffiliationTransferRules.AllowsExtinctionRelease(
+                    sourceIsLiveCivilization,
+                    cityIndexStable,
+                    sourceHasCities,
+                    targetMatchesActorWildKingdom)) return true;
+
             if (!IsTravelEligible(pActor)) return true;
             Kingdom home = FindKingdom(state.HomeKingdomId);
             if (home?.data == null || home.isRekt()) return true;
