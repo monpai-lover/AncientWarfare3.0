@@ -1,0 +1,21 @@
+{
+    "Default": {
+        "PivotX": 0.5,
+        "PivotY": 0.0,
+        "RectX": 0,
+        "RectY": 0,
+        "PixelsPerUnit": 1
+    },
+    "Specific": [
+        {
+            "Path": "mini_0.png",
+            "PivotX": 0.5,
+            "PivotY": 0.0,
+            "RectX": 0,
+            "RectY": 0,
+            "RectW": 7,
+            "RectH": 6,
+            "PixelsPerUnit": 1
+        }
+    ]
+}

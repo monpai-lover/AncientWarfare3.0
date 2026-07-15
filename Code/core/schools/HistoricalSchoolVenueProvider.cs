@@ -1,13 +1,5 @@
 namespace AncientWarfare3.core.schools
 {
-    internal enum HistoricalSchoolVenueKind
-    {
-        Lecture,
-        Debate,
-        TravelArrival,
-        IdleRoam
-    }
-
     internal interface IHistoricalSchoolVenueSource
     {
         bool TryFind(
@@ -16,7 +8,8 @@ namespace AncientWarfare3.core.schools
             string pSchoolId,
             HistoricalSchoolVenueKind pKind,
             out WorldTile pPrimary,
-            out WorldTile pSecondary);
+            out WorldTile pSecondary,
+            out Building pAcademy);
     }
 
     internal static class HistoricalSchoolVenueProvider
@@ -39,14 +32,20 @@ namespace AncientWarfare3.core.schools
             string pSchoolId,
             HistoricalSchoolVenueKind pKind,
             out WorldTile pPrimary,
-            out WorldTile pSecondary)
+            out WorldTile pSecondary,
+            out Building pAcademy)
         {
+            if (HistoricalSchoolVenueRules.RequiresAcademy(pKind))
+                return Sources[0].TryFind(
+                    pCity, pActor, pSchoolId, pKind,
+                    out pPrimary, out pSecondary, out pAcademy);
             for (int i = 0; i < Sources.Length; i++)
                 if (Sources[i].TryFind(
                         pCity, pActor, pSchoolId, pKind,
-                        out pPrimary, out pSecondary)) return true;
+                        out pPrimary, out pSecondary, out pAcademy)) return true;
             pPrimary = null;
             pSecondary = null;
+            pAcademy = null;
             return false;
         }
 
@@ -58,10 +57,12 @@ namespace AncientWarfare3.core.schools
                 string pSchoolId,
                 HistoricalSchoolVenueKind pKind,
                 out WorldTile pPrimary,
-                out WorldTile pSecondary)
+                out WorldTile pSecondary,
+                out Building pAcademy)
             {
                 pPrimary = null;
                 pSecondary = null;
+                pAcademy = null;
                 return false;
             }
         }
@@ -74,8 +75,10 @@ namespace AncientWarfare3.core.schools
                 string pSchoolId,
                 HistoricalSchoolVenueKind pKind,
                 out WorldTile pPrimary,
-                out WorldTile pSecondary)
+                out WorldTile pSecondary,
+                out Building pAcademy)
             {
+                pAcademy = null;
                 return HistoricalSchoolVenueService.TryFindPublicVenue(
                     pCity, pActor, pSchoolId, pKind,
                     out pPrimary, out pSecondary);
@@ -90,8 +93,10 @@ namespace AncientWarfare3.core.schools
                 string pSchoolId,
                 HistoricalSchoolVenueKind pKind,
                 out WorldTile pPrimary,
-                out WorldTile pSecondary)
+                out WorldTile pSecondary,
+                out Building pAcademy)
             {
+                pAcademy = null;
                 return HistoricalSchoolVenueService.TryFindLocalVenue(
                     pCity, pActor, pSchoolId, pKind,
                     out pPrimary, out pSecondary);

@@ -1,3 +1,4 @@
+using AncientWarfare3.content.schools;
 using UnityEngine;
 
 namespace AncientWarfare3.content
@@ -57,6 +58,7 @@ namespace AncientWarfare3.content
                 }
             }
             GenerateBuildings(Xia);                          // 复刻 initBuildingsFromArchitectures 的建楼
+            SchoolAcademyBuildingContent.Init(Xia);
         }
 
         /// <summary>把 styled order 映射成 *_Xia 建筑 id(照抄 loadAutoBuildingsForAsset 的命名规则)。</summary>

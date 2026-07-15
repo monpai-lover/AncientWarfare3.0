@@ -58,7 +58,11 @@ namespace AncientWarfare3.core.schools
         public static void ClearRuntime()
         {
             foreach (HistoricalSchoolLectureActivity activity in ActiveLectures.Values)
+            {
+                Actor actor = FindActor(activity.Plan.Candidate.ActorId);
+                HistoricalSchoolAcademyService.Exit(actor, activity.Venue?.Academy);
                 HistoricalSchoolVenueService.Release(activity.Plan.OperationKey);
+            }
             PendingLectures.Clear();
             ActiveLectures.Clear();
             ReadyLectureActors.Clear();
@@ -116,9 +120,9 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        public static bool TryPrepareLectureActor(Actor pActor, out WorldTile pTarget)
+        public static bool TryPrepareLectureActor(Actor pActor, out Building pAcademy)
         {
-            pTarget = null;
+            pAcademy = null;
             if (pActor?.data == null ||
                 !ActiveLectures.TryGetValue(pActor.data.id,
                     out HistoricalSchoolLectureActivity activity) ||
@@ -126,8 +130,9 @@ namespace AncientWarfare3.core.schools
                 !HistoricalSchoolTaskLeaseService.IsCurrent(
                     pActor.data.id, activity.Plan.OperationKey,
                     HistoricalSchoolContent.LectureTaskId)) return false;
-            pTarget = activity.Venue?.Primary;
-            return pTarget != null;
+            pAcademy = activity.Venue?.Academy;
+            return HistoricalSchoolAcademyService.IsUsable(
+                pAcademy, FindCity(activity.Plan.Candidate.CityId));
         }
 
         public static bool MarkLectureActorReady(Actor pActor)
@@ -138,7 +143,8 @@ namespace AncientWarfare3.core.schools
                 !IsValidLectureActor(pActor, activity) ||
                 !HistoricalSchoolTaskLeaseService.IsCurrent(
                     pActor.data.id, activity.Plan.OperationKey) ||
-                !AtVenue(pActor, activity.Venue?.Primary)) return false;
+                !HistoricalSchoolAcademyService.IsInside(pActor, activity.Venue?.Academy))
+                return false;
             activity.Ready = true;
             EnqueueReady(activity);
             return true;
@@ -282,6 +288,8 @@ namespace AncientWarfare3.core.schools
         {
             if (pActivity == null) return;
             long actorId = pActivity.Plan.Candidate.ActorId;
+            Actor actor = FindActor(actorId);
+            HistoricalSchoolAcademyService.Exit(actor, pActivity.Venue?.Academy);
             if (ActiveLectures.Remove(actorId)) DecrementYearCount(pActivity.Plan.Year);
             QueuedLectureActors.Remove(actorId);
             pActivity.ReadyQueued = false;
@@ -312,7 +320,9 @@ namespace AncientWarfare3.core.schools
                    HistoricalSchoolRevisionService.IsPresent(affiliation) &&
                    (!pRequireVenue ||
                     pActivity.Venue?.OperationKey == pActivity.Plan.OperationKey &&
-                    pActivity.Venue.Primary != null);
+                    pActivity.Venue.Primary != null &&
+                    HistoricalSchoolAcademyService.IsUsable(
+                        pActivity.Venue.Academy, residence));
         }
 
         private static bool TryProcessValidation()
@@ -360,12 +370,6 @@ namespace AncientWarfare3.core.schools
             if (!QueuedLecturesByYear.TryGetValue(pYear, out int count)) return;
             if (count > 1) QueuedLecturesByYear[pYear] = count - 1;
             else QueuedLecturesByYear.Remove(pYear);
-        }
-
-        private static bool AtVenue(Actor pActor, WorldTile pVenue)
-        {
-            return pActor?.current_tile != null && pVenue != null &&
-                   Toolbox.SquaredDistTile(pActor.current_tile, pVenue) <= 4;
         }
 
         private static bool ShouldCancelLecture(HistoricalSchoolLectureActivity pActivity)

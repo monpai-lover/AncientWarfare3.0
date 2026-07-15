@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.schools
 
         public static void LoadState()
         {
+            HistoricalSchoolAcademyConstructionService.ClearRuntime();
             HistoricalSchoolStore.LoadRuntimeState(
                 out int eligibleYear, out int lastWorldYear);
             HistoricalSchoolScheduler.RestorePersistentState(
@@ -50,6 +51,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolTravelService.ClearRuntime();
             HistoricalSchoolDebateService.ClearRuntime();
             HistoricalSchoolDescentService.ClearRuntime();
+            HistoricalSchoolAcademyConstructionService.ClearRuntime();
             HistoricalSchoolRuntimeIndex.Instance.ClearLivingXiaCities();
             _loaded = false;
         }

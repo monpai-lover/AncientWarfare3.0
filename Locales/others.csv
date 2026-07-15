@@ -1,4 +1,8 @@
 key,cz,en,ch
+academy_Xia,书院,Academy,書院
+building_academy_Xia,书院,Academy,書院
+type_aw_school_academy,书院,Academy,書院
+aw_school_academy,书院,Academy,書院
 aw_dynasty_rule_suffix,统治, rule,統治
 aw_history_age_at_event,时年:,Age:,時年：
 aw_history_role_at_event,当时身份:,Role then:,當時身份：

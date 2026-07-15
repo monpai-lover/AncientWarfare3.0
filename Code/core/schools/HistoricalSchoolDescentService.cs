@@ -499,6 +499,7 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolMasterDefinition pMaster, City pHome)
         {
             if (pActor?.data == null || pMaster == null) return;
+            HistoricalSchoolAcademyConstructionService.TryStart(pHome);
             try
             {
                 if (pActor.isAlive() && !pActor.isRekt())

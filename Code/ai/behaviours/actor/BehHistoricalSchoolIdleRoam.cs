@@ -26,7 +26,7 @@ namespace AncientWarfare3.ai.behaviours.actor
             if (residence?.data == null || residence.isRekt() ||
                 !HistoricalSchoolVenueProvider.TryFind(residence, pActor, schoolId,
                     HistoricalSchoolVenueKind.IdleRoam,
-                    out WorldTile target, out _)) return BehResult.Stop;
+                    out WorldTile target, out _, out _)) return BehResult.Stop;
             pActor.beh_tile_target = target;
             return BehResult.Continue;
         }

@@ -459,7 +459,8 @@ namespace AncientWarfare3.core.schools
             if (!IsLivingCity(pCity) || pActor?.data == null ||
                 string.IsNullOrEmpty(pSchoolId)) return null;
             return HistoricalSchoolVenueProvider.TryFind(pCity, pActor, pSchoolId,
-                HistoricalSchoolVenueKind.TravelArrival, out WorldTile primary, out _)
+                HistoricalSchoolVenueKind.TravelArrival, out WorldTile primary, out _,
+                out _)
                 ? primary
                 : null;
         }

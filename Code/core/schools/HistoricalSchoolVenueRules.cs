@@ -3,6 +3,14 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.schools
 {
+    public enum HistoricalSchoolVenueKind
+    {
+        Lecture,
+        Debate,
+        TravelArrival,
+        IdleRoam
+    }
+
     public enum HistoricalSchoolVenueSourceKind
     {
         None,
@@ -26,6 +34,40 @@ namespace AncientWarfare3.core.schools
             return pLocalAvailable
                 ? HistoricalSchoolVenueSourceKind.Local
                 : HistoricalSchoolVenueSourceKind.None;
+        }
+
+        public static bool RequiresAcademy(HistoricalSchoolVenueKind pKind)
+        {
+            return pKind == HistoricalSchoolVenueKind.Lecture ||
+                   pKind == HistoricalSchoolVenueKind.Debate;
+        }
+
+        public static bool IsAcademyUsable(
+            bool buildingExists,
+            bool buildingUsable,
+            bool underConstruction,
+            bool attachedToCity,
+            bool belongsToRequestedCity)
+        {
+            return buildingExists && buildingUsable && !underConstruction &&
+                   attachedToCity && belongsToRequestedCity;
+        }
+
+        public static bool IsDebateLayoutValid(
+            bool hasAcademy,
+            bool primaryPresent,
+            bool secondaryPresent,
+            bool sameTile)
+        {
+            return primaryPresent && secondaryPresent &&
+                   (hasAcademy ? sameTile : !sameTile);
+        }
+
+        public static bool CanReserveAcademy(
+            bool academyUsable,
+            bool occupiedByAnotherActivity)
+        {
+            return academyUsable && !occupiedByAnotherActivity;
         }
 
         public static bool IsPublicCandidate(

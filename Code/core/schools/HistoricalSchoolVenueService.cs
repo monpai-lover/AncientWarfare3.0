@@ -7,18 +7,20 @@ namespace AncientWarfare3.core.schools
     internal sealed class HistoricalSchoolVenueClaim
     {
         public HistoricalSchoolVenueClaim(string pOperationKey, long pCityId,
-            WorldTile pPrimary, WorldTile pSecondary)
+            WorldTile pPrimary, WorldTile pSecondary, Building pAcademy)
         {
             OperationKey = pOperationKey;
             CityId = pCityId;
             Primary = pPrimary;
             Secondary = pSecondary;
+            Academy = pAcademy;
         }
 
         public string OperationKey { get; }
         public long CityId { get; }
         public WorldTile Primary { get; }
         public WorldTile Secondary { get; }
+        public Building Academy { get; }
     }
 
     internal static class HistoricalSchoolVenueService
@@ -161,25 +163,33 @@ namespace AncientWarfare3.core.schools
             if (ByOperation.TryGet(pOperationKey, out pClaim)) return true;
             if (ByOperation.Count >= MaxActiveClaims) return false;
             if (!HistoricalSchoolVenueProvider.TryFind(pCity, pActor, pSchoolId, pKind,
-                    out WorldTile primary, out WorldTile secondary)) return false;
-            if (!IsVenueCandidate(primary, pCity, pActor, pKind) ||
+                    out WorldTile primary, out WorldTile secondary,
+                    out Building academy)) return false;
+            if (!IsVenueCandidate(primary, pCity, pActor, pKind, academy) ||
                 pKind == HistoricalSchoolVenueKind.Debate &&
-                (!IsVenueCandidate(secondary, pCity, pActor, pKind) || secondary == primary))
+                (!IsVenueCandidate(secondary, pCity, pActor, pKind, academy) ||
+                 !HistoricalSchoolVenueRules.IsDebateLayoutValid(
+                     academy != null, primary != null, secondary != null,
+                     secondary == primary)))
                 return false;
             if (!OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied))
             {
                 occupied = new HashSet<long>();
                 OccupiedByCity[pCity.data.id] = occupied;
             }
+            if (academy != null && !HistoricalSchoolVenueRules.CanReserveAcademy(
+                    HistoricalSchoolAcademyService.IsUsable(academy, pCity),
+                    occupied.Contains(TileKey(primary)))) return false;
             if (!occupied.Add(TileKey(primary))) return false;
-            if (secondary != null && !occupied.Add(TileKey(secondary)))
+            if (secondary != null && secondary != primary &&
+                !occupied.Add(TileKey(secondary)))
             {
                 occupied.Remove(TileKey(primary));
                 if (occupied.Count == 0) OccupiedByCity.Remove(pCity.data.id);
                 return false;
             }
             pClaim = new HistoricalSchoolVenueClaim(pOperationKey, pCity.data.id,
-                primary, secondary);
+                primary, secondary, academy);
             if (!ByOperation.TryAdd(pOperationKey, pClaim))
             {
                 ReleaseOccupied(pClaim);
@@ -256,8 +266,11 @@ namespace AncientWarfare3.core.schools
         }
 
         private static bool IsVenueCandidate(WorldTile pTile, City pCity, Actor pActor,
-            HistoricalSchoolVenueKind pKind)
+            HistoricalSchoolVenueKind pKind, Building pAcademy = null)
         {
+            if (pAcademy != null)
+                return HistoricalSchoolAcademyService.IsUsable(pAcademy, pCity) &&
+                       ReferenceEquals(pTile, pAcademy.current_tile);
             if (!IsPublicCandidate(pTile, pCity)) return false;
             if (pKind != HistoricalSchoolVenueKind.IdleRoam) return true;
             WorldTile origin = pActor?.current_tile;
@@ -325,7 +338,8 @@ namespace AncientWarfare3.core.schools
                 !OccupiedByCity.TryGetValue(pClaim.CityId, out HashSet<long> occupied))
                 return;
             occupied.Remove(TileKey(pClaim.Primary));
-            if (pClaim.Secondary != null) occupied.Remove(TileKey(pClaim.Secondary));
+            if (pClaim.Secondary != null && pClaim.Secondary != pClaim.Primary)
+                occupied.Remove(TileKey(pClaim.Secondary));
             if (occupied.Count == 0) OccupiedByCity.Remove(pClaim.CityId);
         }
 

@@ -7,8 +7,9 @@ namespace AncientWarfare3.ai.behaviours.actor
         public override BehResult execute(Actor pActor)
         {
             if (!core.schools.HistoricalSchoolDebateActivityService.TryPrepareActor(pActor,
-                    out WorldTile target)) return BehResult.Stop;
-            pActor.beh_tile_target = target;
+                    out Building academy)) return BehResult.Stop;
+            pActor.beh_building_target = academy;
+            pActor.beh_tile_target = null;
             return BehResult.Continue;
         }
     }

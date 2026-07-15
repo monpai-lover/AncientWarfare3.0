@@ -45,6 +45,7 @@ namespace AncientWarfare3.content.schools
             RegisterJobs();
             RegisterTasks();
             RegisterWorldLogs();
+            HistoricalSchoolAcademyService.Init();
             HistoricalSchoolRuntime.LoadState();
         }
 
@@ -233,8 +234,8 @@ namespace AncientWarfare3.content.schools
                 });
                 lecture.setIcon("ui/Icons/iconKnowledge");
                 lecture.addBeh(new BehHistoricalSchoolPrepareLecture());
-                lecture.addBeh(new BehGoToTileTarget());
-                lecture.addBeh(new BehRandomWait(4f, 7f));
+                lecture.addBeh(new BehGoToBuildingTarget());
+                lecture.addBeh(new BehStayInBuildingTarget(4f, 7f));
                 lecture.addBeh(new BehHistoricalSchoolCompleteLecture());
             }
 
@@ -250,7 +251,8 @@ namespace AncientWarfare3.content.schools
                 });
                 travel.setIcon("ui/Icons/traits/iconmingjia");
                 travel.addBeh(new BehHistoricalSchoolPrepareDebate());
-                travel.addBeh(new BehGoToTileTarget());
+                travel.addBeh(new BehGoToBuildingTarget());
+                travel.addBeh(new BehStayInBuildingTarget(0f, 0f));
                 travel.addBeh(new BehHistoricalSchoolBeginDebate());
             }
 
@@ -280,8 +282,8 @@ namespace AncientWarfare3.content.schools
                 });
                 receiving.setIcon("ui/Icons/traits/iconmingjia");
                 receiving.addBeh(new BehHistoricalSchoolPrepareDebate());
-                receiving.addBeh(new BehGoToTileTarget());
-                receiving.addBeh(new BehRandomWait(4f, 7f));
+                receiving.addBeh(new BehGoToBuildingTarget());
+                receiving.addBeh(new BehStayInBuildingTarget(4f, 7f));
                 receiving.addBeh(new BehHistoricalSchoolCompleteDebate());
             }
         }
