@@ -18,6 +18,30 @@ namespace AncientWarfare3.core.lineage
             return !passiveWatchtowerContribution || cityOwnerHasActiveDefenders;
         }
 
+        public static bool ShouldCompleteAfterDefenderDefeat(bool enemyCapturer,
+            bool activeCaptureUnits, bool activeDefenders, bool hostileRivalActive,
+            bool ownershipChanged, bool cityManagerLocked)
+        {
+            return enemyCapturer &&
+                   activeCaptureUnits &&
+                   !activeDefenders &&
+                   !hostileRivalActive &&
+                   !ownershipChanged &&
+                   !cityManagerLocked;
+        }
+
+        public static bool ShouldCountMilitaryCapturePresence(bool participantIsCityOwner,
+            bool cityOwnerHasActiveDefenders)
+        {
+            return !participantIsCityOwner || cityOwnerHasActiveDefenders;
+        }
+
+        public static bool ShouldRecordActiveMilitaryPresence(bool isActor,
+            bool actorAlive, bool actorIsWarrior, bool actorHasKingdom)
+        {
+            return isActor && actorAlive && actorIsWarrior && actorHasKingdom;
+        }
+
         public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasDefenders,
             bool pHasCityControlGoal, int pWatchTowerCount)
         {

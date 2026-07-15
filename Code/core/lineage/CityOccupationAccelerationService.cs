@@ -12,6 +12,82 @@ namespace AncientWarfare3.core.lineage
         private static readonly FieldInfo CapturingUnitsField = AccessTools.Field(typeof(City), "_capturing_units");
         private static readonly Dictionary<string, GoalCache> GoalCacheByCityAndAttacker =
             new Dictionary<string, GoalCache>();
+        private static readonly Dictionary<long, HashSet<long>> ActiveMilitaryKingdomsByCity =
+            new Dictionary<long, HashSet<long>>();
+
+        public static void ClearActiveMilitaryPresence(City pCity)
+        {
+            if (pCity?.data == null) return;
+            if (ActiveMilitaryKingdomsByCity.TryGetValue(pCity.id, out HashSet<long> kingdoms))
+                kingdoms.Clear();
+        }
+
+        public static void RecordActiveMilitaryPresence(City pCity, BaseSimObject pObject)
+        {
+            Actor actor = pObject as Actor;
+            bool actorAlive = actor?.data != null && actor.isAlive() && !actor.isRekt();
+            bool actorIsWarrior = false;
+            try { actorIsWarrior = actorAlive && actor.isWarrior(); }
+            catch { }
+            bool actorHasKingdom = actor?.kingdom?.data != null;
+            if (pCity?.data == null ||
+                !CityOccupationAccelerationRules.ShouldRecordActiveMilitaryPresence(
+                    actor != null, actorAlive, actorIsWarrior, actorHasKingdom))
+                return;
+
+            if (!ActiveMilitaryKingdomsByCity.TryGetValue(pCity.id, out HashSet<long> kingdoms))
+            {
+                if (ActiveMilitaryKingdomsByCity.Count > 4096)
+                    ActiveMilitaryKingdomsByCity.Clear();
+                kingdoms = new HashSet<long>();
+                ActiveMilitaryKingdomsByCity[pCity.id] = kingdoms;
+            }
+            kingdoms.Add(actor.kingdom.id);
+        }
+
+        public static bool TryCompleteAfterDefenderDefeat(City pCity)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null) return false;
+            Kingdom oldOwner = pCity.kingdom;
+            Kingdom capturer = ResolveDominantCapturer(pCity);
+            if (capturer?.data == null || capturer == oldOwner || capturer.isRekt()) return false;
+
+            bool enemyCapturer;
+            bool activeCaptureUnits;
+            try
+            {
+                enemyCapturer = capturer.isEnemy(oldOwner);
+                activeCaptureUnits = pCity.isGettingCapturedBy(capturer);
+            }
+            catch { return false; }
+
+            bool activeDefenders = HasActiveDefenders(pCity);
+            DescribeCaptureFor(pCity, capturer,
+                out bool capturerIsDominant, out bool hostileRivalActive);
+            activeCaptureUnits &= capturerIsDominant;
+
+            bool cityManagerLocked = true;
+            try { cityManagerLocked = World.world?.cities == null || World.world.cities.isLocked(); }
+            catch { }
+            bool ownershipChanged = pCity.kingdom == capturer;
+            if (!CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+                    enemyCapturer,
+                    activeCaptureUnits,
+                    activeDefenders,
+                    hostileRivalActive,
+                    ownershipChanged,
+                    cityManagerLocked))
+                return false;
+
+            try { pCity.finishCapture(capturer); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Immediate city capture failed city=" + pCity.id +
+                                    " capturer=" + capturer.id + ": " + e.Message);
+                return false;
+            }
+            return pCity.kingdom != oldOwner;
+        }
 
         public static void BeforeUpdateCapture(City pCity, float pElapsed)
         {
@@ -81,9 +157,16 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool HasActiveDefenders(City pCity)
         {
-            if (pCity?.kingdom?.data == null || SafeCountWarriors(pCity) <= 0) return false;
-            try { return pCity.isGettingCapturedBy(pCity.kingdom); }
-            catch { return false; }
+            return pCity?.kingdom?.data != null &&
+                   HasActiveMilitaryPresence(pCity, pCity.kingdom);
+        }
+
+        private static bool HasActiveMilitaryPresence(City pCity, Kingdom pKingdom)
+        {
+            return pCity?.data != null &&
+                   pKingdom?.data != null &&
+                   ActiveMilitaryKingdomsByCity.TryGetValue(pCity.id, out HashSet<long> kingdoms) &&
+                   kingdoms.Contains(pKingdom.id);
         }
 
         internal static void DescribeCaptureFor(City pCity, Kingdom pAttacker,
@@ -97,10 +180,14 @@ namespace AncientWarfare3.core.lineage
             {
                 var capturing = CapturingUnitsField?.GetValue(pCity) as IDictionary<Kingdom, int>;
                 if (capturing == null) return;
+                bool ownerHasActiveDefenders = HasActiveDefenders(pCity);
                 foreach (KeyValuePair<Kingdom, int> item in capturing)
                 {
                     Kingdom rival = item.Key;
                     if (rival?.data == null || rival == pAttacker || item.Value <= 0) continue;
+                    if (!CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
+                            rival == pCity.kingdom, ownerHasActiveDefenders))
+                        continue;
                     if (!rival.isEnemy(pAttacker)) continue;
                     pHostileRivalActive = true;
                     return;
@@ -116,9 +203,13 @@ namespace AncientWarfare3.core.lineage
                 var capturing = CapturingUnitsField?.GetValue(pCity) as IDictionary<Kingdom, int>;
                 Kingdom best = null;
                 int bestCount = 0;
+                bool ownerHasActiveDefenders = HasActiveDefenders(pCity);
                 if (capturing != null)
                     foreach (KeyValuePair<Kingdom, int> item in capturing)
                     {
+                        if (!CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
+                                item.Key == pCity.kingdom, ownerHasActiveDefenders))
+                            continue;
                         if (item.Key?.data == null || item.Value <= bestCount) continue;
                         best = item.Key;
                         bestCount = item.Value;
@@ -157,12 +248,6 @@ namespace AncientWarfare3.core.lineage
                 CaptureTicksField.SetValue(pCity, Mathf.Min(99.5f, current + pExtra));
             }
             catch { }
-        }
-
-        private static int SafeCountWarriors(City pCity)
-        {
-            try { return pCity.countWarriors(); }
-            catch { return 0; }
         }
 
         private static int SafeCountWatchTowers(City pCity)

@@ -477,6 +477,57 @@ True(CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
         cityOwnerHasActiveDefenders: false),
     "attacker capture contributions are never classified as watchtowers");
 
+True(CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        enemyCapturer: true,
+        activeCaptureUnits: true,
+        activeDefenders: false,
+        hostileRivalActive: false,
+        ownershipChanged: false,
+        cityManagerLocked: false),
+    "uncontested enemy control completes occupation immediately");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, true, true, false, false, false),
+    "active defenders block immediate transfer");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, true, false, true, false, false),
+    "a hostile rival keeps the city contested");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        false, true, false, false, false, false),
+    "a non-enemy cannot receive military occupation");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, false, false, false, false, false),
+    "an absent attacker cannot capture a city");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, true, false, false, true, false),
+    "changed ownership is not transferred twice");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, true, false, false, false, true),
+    "a locked city manager defers transfer");
+Equal(false, CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
+        participantIsCityOwner: true,
+        cityOwnerHasActiveDefenders: false),
+    "owner civilians do not count as military control after defender defeat");
+True(CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
+        participantIsCityOwner: true,
+        cityOwnerHasActiveDefenders: true),
+    "active owner defenders retain military control");
+True(CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
+        participantIsCityOwner: false,
+        cityOwnerHasActiveDefenders: false),
+    "a foreign capture force remains a military participant");
+True(CityOccupationAccelerationRules.ShouldRecordActiveMilitaryPresence(
+        isActor: true,
+        actorAlive: true,
+        actorIsWarrior: true,
+        actorHasKingdom: true),
+    "a living warrior physically scanned in the city records military presence");
+Equal(false, CityOccupationAccelerationRules.ShouldRecordActiveMilitaryPresence(
+        true, true, false, true),
+    "a king or city leader is not treated as an active defending army");
+Equal(false, CityOccupationAccelerationRules.ShouldRecordActiveMilitaryPresence(
+        true, false, true, true),
+    "a dead warrior cannot keep a city defended");
+
 True(CityAttackZoneRules.ShouldRepairTargetZone(
         hasTargetCity: true,
         targetHasZones: true,
