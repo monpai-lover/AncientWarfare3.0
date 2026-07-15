@@ -87,6 +87,10 @@ namespace AncientWarfare3.core.lineage
                 case "mandate_collapse": return T("aw_hist_event_mandate_collapse", pLanguage);
                 case "city_economy_role": return T("aw_hist_event_city_economy_role", pLanguage);
                 case "city_economy_tax": return T("aw_hist_event_city_economy_tax", pLanguage);
+                case "royal_asylum_started": return T("aw_hist_event_royal_asylum_started", pLanguage);
+                case "royal_asylum_relocated": return T("aw_hist_event_royal_asylum_relocated", pLanguage);
+                case "royal_asylum_returned": return T("aw_hist_event_royal_asylum_returned", pLanguage);
+                case "royal_asylum_naturalized": return T("aw_hist_event_royal_asylum_naturalized", pLanguage);
                 default:
                     if (TryWarOrDecisionLabel(pKey, pLanguage, out string label)) return label;
                     return string.IsNullOrEmpty(pKey) ? T("aw_hist_event_unknown", pLanguage) : pKey;

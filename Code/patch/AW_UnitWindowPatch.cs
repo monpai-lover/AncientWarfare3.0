@@ -20,6 +20,14 @@ namespace AncientWarfare3.patch
         {
             var actor = __instance.actor;
             if (actor == null || actor.data == null) return;
+            if (RoyalAsylumService.IsActive(actor))
+            {
+                City hostCity = RoyalAsylumService.ResolveHostCity(actor);
+                string hostName = hostCity?.data?.name;
+                if (string.IsNullOrWhiteSpace(hostName))
+                    hostName = AW_L10n.Text("aw_unknown_city", "Unknown city");
+                ShowRawRow(__instance, "aw_royal_asylum_host", hostName);
+            }
             if (!LineageService.IsXia(actor)) return;
 
             actor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);

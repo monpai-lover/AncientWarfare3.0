@@ -47,6 +47,10 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
         public const string COURT_OFFICER_DISMISSED = "court_officer_dismissed";
         public const string ROYAL_MEDICAL_CURE = "royal_medical_cure";
+        public const string ROYAL_ASYLUM_STARTED = "royal_asylum_started";
+        public const string ROYAL_ASYLUM_RELOCATED = "royal_asylum_relocated";
+        public const string ROYAL_ASYLUM_RETURNED = "royal_asylum_returned";
+        public const string ROYAL_ASYLUM_NATURALIZED = "royal_asylum_naturalized";
     }
 
     internal static class KingdomEvent

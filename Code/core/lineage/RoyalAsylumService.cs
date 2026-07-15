@@ -160,6 +160,8 @@ namespace AncientWarfare3.core.lineage
                     retained.Add(actorId);
                     continue;
                 }
+                actor.data.get(LineageKeys.ROYAL_ASYLUM_HOME_KINGDOM_NAME,
+                    out string homeName, pHome.name ?? "");
                 try
                 {
                     actor.cancelAllBeh();
@@ -175,6 +177,7 @@ namespace AncientWarfare3.core.lineage
                     retained.Add(actorId);
                     continue;
                 }
+                RoyalAsylumHistoryService.RecordNaturalized(actor, homeName, host, hostCity);
                 ClearActorState(actor, pHome);
                 pHome.units.Remove(actor);
             }
@@ -302,6 +305,7 @@ namespace AncientWarfare3.core.lineage
             HomeKingdomByActorId[pActor.data.id] = pHome.id;
             AddToRoster(pHome, pActor.data.id);
             EnsurePresentation(pActor);
+            RoyalAsylumHistoryService.RecordStarted(pActor, pHome, hostCity);
             return true;
         }
 
@@ -334,6 +338,7 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.set(LineageKeys.ROYAL_ASYLUM_LAST_RELOCATION_YEAR,
                     Date.getCurrentYear());
                 EnsurePresentation(pActor);
+                RoyalAsylumHistoryService.RecordRelocated(pActor, pHome, hostCity);
                 return true;
             }
             if (TryReturn(pActor, pHome)) return false;
@@ -352,6 +357,7 @@ namespace AncientWarfare3.core.lineage
             }
             catch { return false; }
             if (pActor.city != destination || pActor.kingdom != pHome) return false;
+            RoyalAsylumHistoryService.RecordReturned(pActor, pHome, destination);
             ClearActorState(pActor, pHome);
             return true;
         }
