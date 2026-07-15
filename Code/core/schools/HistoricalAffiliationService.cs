@@ -335,7 +335,10 @@ namespace AncientWarfare3.core.schools
 
         public static bool CanJoinCity(Actor pActor, City pTarget)
         {
-            HistoricalSchoolAffiliationSnapshot state = Get(pActor?.data?.id ?? -1L);
+            long actorId = pActor?.data?.id ?? -1L;
+            if (FormalAffiliationTransferScope.Allows(actorId,
+                    pTarget?.kingdom?.id ?? -1L, pTarget?.data?.id ?? -1L)) return true;
+            HistoricalSchoolAffiliationSnapshot state = Get(actorId);
             if (state == null || pTarget == null || pTarget == pActor.city) return true;
             if (!IsTravelEligible(pActor)) return true;
             Kingdom home = FindKingdom(state.HomeKingdomId);
@@ -345,7 +348,10 @@ namespace AncientWarfare3.core.schools
 
         public static bool CanJoinKingdom(Actor pActor, Kingdom pTarget)
         {
-            HistoricalSchoolAffiliationSnapshot state = Get(pActor?.data?.id ?? -1L);
+            long actorId = pActor?.data?.id ?? -1L;
+            if (FormalAffiliationTransferScope.AllowsKingdom(actorId,
+                    pTarget?.id ?? -1L)) return true;
+            HistoricalSchoolAffiliationSnapshot state = Get(actorId);
             if (state == null || pTarget == null || pTarget == pActor.kingdom) return true;
             if (!IsTravelEligible(pActor)) return true;
             Kingdom home = FindKingdom(state.HomeKingdomId);

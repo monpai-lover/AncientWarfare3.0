@@ -16,6 +16,16 @@ namespace AncientWarfare3.core.schools
                    pPermitKingdom >= 0 && pPermitKingdom == pKingdom &&
                    pPermitCity >= 0 && pPermitCity == pCity;
         }
+
+        public static bool AllowsKingdom(
+            long pPermitActor,
+            long pPermitKingdom,
+            long pActor,
+            long pKingdom)
+        {
+            return pPermitActor >= 0 && pPermitActor == pActor &&
+                   pPermitKingdom >= 0 && pPermitKingdom == pKingdom;
+        }
     }
 
     internal sealed class FormalAffiliationTransferScope : IDisposable
@@ -60,6 +70,16 @@ namespace AncientWarfare3.core.schools
                 pActorId,
                 pKingdomId,
                 pCityId);
+        }
+
+        public static bool AllowsKingdom(long pActorId, long pKingdomId)
+        {
+            FormalAffiliationTransferScope permit = _current;
+            return permit != null && FormalAffiliationTransferRules.AllowsKingdom(
+                permit.ActorId,
+                permit.KingdomId,
+                pActorId,
+                pKingdomId);
         }
 
         public void Dispose()

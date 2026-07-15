@@ -85,6 +85,14 @@ internal static class SchoolRuntimePerformanceTests
         Equal(false,
             FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 12),
             "another city cannot borrow a permit");
+        True(FormalAffiliationTransferRules.AllowsKingdom(42, 7, 42, 7),
+            "nested kingdom transfer can use the exact city permit");
+        Equal(false,
+            FormalAffiliationTransferRules.AllowsKingdom(42, 7, 43, 7),
+            "nested kingdom transfer rejects another actor");
+        Equal(false,
+            FormalAffiliationTransferRules.AllowsKingdom(42, 7, 42, 8),
+            "nested kingdom transfer rejects another kingdom");
 
         var index = new HistoricalSchoolRuntimeIndex();
         index.Upsert(new HistoricalSchoolIndexEntry(

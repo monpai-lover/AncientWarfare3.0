@@ -452,6 +452,17 @@ namespace AncientWarfare3.core.schools
             {
                 try
                 {
+                    if (actor.city != residence || actor.kingdom != host)
+                    {
+                        using (FormalAffiliationTransferScope.Open(
+                                   actor.data.id, host.id, residence.data.id))
+                        {
+                            if (actor.kingdom != host) actor.joinKingdom(host);
+                            actor.joinCity(residence);
+                        }
+                    }
+                    if (!(actor.city == residence && actor.kingdom == host))
+                        return false;
                     bool applied;
                     if (startResult != null)
                     {
