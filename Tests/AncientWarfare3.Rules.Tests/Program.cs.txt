@@ -532,6 +532,55 @@ Equal(false, VassalRelationRules.CanEnforceWarVictory(
         pCycleDetected: true),
     "war settlement never creates a vassal cycle");
 
+True(VassalWarSupportRules.ShouldLeaveForIndependence(
+        isIndependenceWar: false,
+        rebelInWar: true,
+        suzerainInWar: true,
+        sameSide: true),
+    "independence declaration leaves every shared suzerain war");
+Equal(false, VassalWarSupportRules.ShouldLeaveForIndependence(
+        isIndependenceWar: true,
+        rebelInWar: true,
+        suzerainInWar: true,
+        sameSide: false),
+    "the independence war itself is preserved");
+Equal(false, VassalWarSupportRules.ShouldLeaveForIndependence(
+        isIndependenceWar: false,
+        rebelInWar: true,
+        suzerainInWar: false,
+        sameSide: false),
+    "an unrelated rebel war is preserved");
+True(VassalWarSupportRules.HasActiveIndependenceSuspension(
+        markerMatches: true,
+        warActive: true,
+        rebelOpposesSuzerain: true),
+    "active independence opposition suspends military service");
+Equal(false, VassalWarSupportRules.HasActiveIndependenceSuspension(
+        markerMatches: true,
+        warActive: false,
+        rebelOpposesSuzerain: true),
+    "an ended independence war makes the marker stale");
+Equal(false, VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+        pSuzerainInWar: true,
+        pVassalAlreadyHelping: false,
+        pVassalAlreadyInWar: false,
+        pVassalOpposesSuzerain: false,
+        independenceSuspended: true),
+    "yearly military service cannot rejoin an active rebel");
+
+Equal(false, VassalWarPermissionRules.CanUseAlliancePlot(
+        initiatorIsVassal: true,
+        targetIsVassal: false),
+    "a vassal cannot initiate the vanilla alliance plot");
+Equal(false, VassalWarPermissionRules.CanUseAlliancePlot(
+        initiatorIsVassal: false,
+        targetIsVassal: true),
+    "a vassal cannot be selected by the vanilla alliance plot");
+True(VassalWarPermissionRules.CanUseAlliancePlot(
+        initiatorIsVassal: false,
+        targetIsVassal: false),
+    "independent kingdoms keep the vanilla alliance plot");
+
 True(FamilyTreeRelationRules.ShouldShowStatusInGenealogy("guest"),
     "guest office does not hide a blood relative");
 True(FamilyTreeRelationRules.ShouldShowStatusInGenealogy("captured"),

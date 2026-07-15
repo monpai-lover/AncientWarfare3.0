@@ -38,5 +38,10 @@ namespace AncientWarfare3.core.lineage
             pReason = "vassal_no_alliance";
             return false;
         }
+
+        public static bool CanUseAlliancePlot(bool initiatorIsVassal, bool targetIsVassal)
+        {
+            return !initiatorIsVassal && !targetIsVassal;
+        }
     }
 }

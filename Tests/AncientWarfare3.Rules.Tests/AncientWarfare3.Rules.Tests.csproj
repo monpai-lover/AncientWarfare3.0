@@ -29,6 +29,8 @@
     <Compile Include="..\..\Code\core\lineage\CityAttackZoneRules.cs" Link="Production\CityAttackZoneRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarGoalControlRules.cs" Link="Production\WarGoalControlRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRelationRules.cs" Link="Production\VassalRelationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalWarSupportRules.cs" Link="Production\VassalWarSupportRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalWarPermissionRules.cs" Link="Production\VassalWarPermissionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerHeirTitleRules.cs" Link="Production\FormerHeirTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerKingTraitRules.cs" Link="Production\FormerKingTraitRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeRelationRules.cs" Link="Production\FamilyTreeRelationRules.cs" />
