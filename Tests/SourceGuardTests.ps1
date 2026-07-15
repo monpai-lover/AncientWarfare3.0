@@ -101,6 +101,10 @@ Require-Present 'war start invokes royal asylum' 'Code/patch/AW_WarPatch.cs' 'Ro
 Require-Present 'kingdom year invokes royal asylum' 'Code/patch/AW_KingdomPolicyPatch.cs' 'RoyalAsylumService.OnKingdomYear(__instance);'
 Require-Present 'archive load rebuilds royal asylum runtime' 'Code/patch/AW_SavePatch.cs' 'RoyalAsylumService.LoadRuntimeState();'
 Require-Present 'archive switch clears royal asylum runtime' 'Code/patch/AW_SavePatch.cs' 'RoyalAsylumService.ClearRuntime();'
+Require-Present 'royal asylum extinction naturalization exists' 'Code/core/lineage/RoyalAsylumService.cs' 'public static void NaturalizeBeforeExtinction(Kingdom pHome)'
+Require-Present 'royal asylum extinction uses formal host join' 'Code/core/lineage/RoyalAsylumService.cs' 'actor.joinCity(hostCity);'
+Require-Present 'naturalized refugee leaves extinct kingdom unit cache immediately' 'Code/core/lineage/RoyalAsylumService.cs' 'pHome.units.Remove(actor);'
+Require-Present 'kingdom extinction invokes asylum naturalization' 'Code/patch/AW_KingdomExtinctionPatch.cs' 'RoyalAsylumService.NaturalizeBeforeExtinction(__instance);'
 Require-Present 'empty target city attack uses target zones' 'Code/core/lineage/CityAttackZoneService.cs' 'targetCity.zones.GetRandom()'
 Require-Absent 'empty target city attack cannot use source zones' 'Code/core/lineage/CityAttackZoneService.cs' 'pSourceCity.zones.GetRandom()'
 Require-Absent 'heir minimap cannot scan every kingdom unit' 'Code/patch/AW_HeirMinimapPatch.cs' 'foreach (Actor unit in kingdom.getUnits())'
@@ -376,6 +380,14 @@ Require-Absent 'annual member snapshot debate planner' 'Code/core/schools/Histor
 Require-Absent 'annual active affiliation array' 'Code/core/schools/SchoolGuestOfficeService.cs' 'ActiveSnapshots()'
 Require-Absent 'quarter active affiliation array' 'Code/core/schools/HistoricalSchoolTravelService.cs' 'ActiveSnapshots('
 Require-Absent 'lecture formal-city equality' 'Code/core/schools/HistoricalSchoolActionService.cs' 'pTeacher.city?.data?.id != residence.data.id'
+
+$extinctionPatch = Read-Source 'Code/patch/AW_KingdomExtinctionPatch.cs'
+$asylumNaturalization = $extinctionPatch.IndexOf('RoyalAsylumService.NaturalizeBeforeExtinction(__instance);', [System.StringComparison]::Ordinal)
+$survivorNomadConversion = $extinctionPatch.IndexOf('__instance.makeSurvivorsToNomads();', [System.StringComparison]::Ordinal)
+if ($asylumNaturalization -lt 0 -or $survivorNomadConversion -lt 0 -or
+    $asylumNaturalization -gt $survivorNomadConversion) {
+    $failures.Add('royal asylum naturalization must precede survivor nomad conversion')
+}
 
 $activityQueue = Read-Source 'Code/core/schools/HistoricalSchoolActivityQueue.cs'
 $debateFrame = $activityQueue.IndexOf('if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;', [System.StringComparison]::Ordinal)

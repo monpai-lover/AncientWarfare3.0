@@ -124,6 +124,63 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static void NaturalizeBeforeExtinction(Kingdom pHome)
+        {
+            if (pHome?.data == null) return;
+            List<long> retained = new List<long>();
+            foreach (long actorId in ReadRoster(pHome))
+            {
+                Actor actor = ResolveActor(actorId);
+                if (!IsActiveForHome(actor, pHome))
+                {
+                    HomeKingdomByActorId.Remove(actorId);
+                    continue;
+                }
+
+                City hostCity = ResolveHostCity(actor);
+                Kingdom host = hostCity?.kingdom;
+                bool validRecordedHost = IsLivingKingdom(host) &&
+                                         IsLivingCity(hostCity) &&
+                                         hostCity.kingdom == host && host != pHome;
+                if (!validRecordedHost)
+                {
+                    WorldTile origin = actor.current_tile ?? HomeOriginTile(pHome);
+                    if (!TrySelectHost(pHome, origin, actorId, pExcludeHostId: -1L,
+                            out host, out hostCity, out _))
+                    {
+                        retained.Add(actorId);
+                        continue;
+                    }
+                }
+
+                if (!RoyalAsylumRules.ShouldNaturalize(
+                        homeRealmAlive: false,
+                        hostCityValid: IsLivingCity(hostCity) && hostCity.kingdom == host))
+                {
+                    retained.Add(actorId);
+                    continue;
+                }
+                try
+                {
+                    actor.cancelAllBeh();
+                    actor.joinCity(hostCity);
+                }
+                catch
+                {
+                    retained.Add(actorId);
+                    continue;
+                }
+                if (actor.city != hostCity || actor.kingdom != host)
+                {
+                    retained.Add(actorId);
+                    continue;
+                }
+                ClearActorState(actor, pHome);
+                pHome.units.Remove(actor);
+            }
+            WriteRoster(pHome, retained);
+        }
+
         public static bool TryGetRoamTile(Actor pActor, out WorldTile pTile)
         {
             pTile = null;

@@ -18,6 +18,7 @@ namespace AncientWarfare3.patch
             if (KingdomExtinctionRules.ShouldDisbandSurvivors(
                     __instance.isCiv(), cityIndexStable, hasCities))
             {
+                RoyalAsylumService.NaturalizeBeforeExtinction(__instance);
                 FormerHeirService.ArchiveAndClear(__instance);
                 __instance.makeSurvivorsToNomads();
             }
