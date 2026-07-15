@@ -69,5 +69,11 @@ namespace AncientWarfare3.core.lineage
             pReason = "";
             return true;
         }
+
+        public static bool CanEnforceWarVictory(bool pBasicValid, bool pVassalIsRebel,
+            bool pSuzerainIsRebel, bool pCycleDetected)
+        {
+            return pBasicValid && !pVassalIsRebel && !pSuzerainIsRebel && !pCycleDetected;
+        }
     }
 }

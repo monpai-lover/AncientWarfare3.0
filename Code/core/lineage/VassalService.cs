@@ -251,13 +251,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanSetVassal(Kingdom pVassal, Kingdom pSuzerain)
         {
-            bool basicValid = pVassal?.data != null &&
-                              pSuzerain?.data != null &&
-                              pVassal != pSuzerain &&
-                              !pVassal.isRekt() &&
-                              !pSuzerain.isRekt() &&
-                              pVassal.isCiv() &&
-                              pSuzerain.isCiv();
+            bool basicValid = HasValidVassalParticipants(pVassal, pSuzerain);
             if (!basicValid) return false;
 
             bool titleAbove = KingdomTitleService.GetTitle(pSuzerain) > KingdomTitleService.GetTitle(pVassal);
@@ -271,6 +265,30 @@ namespace AncientWarfare3.core.lineage
                 cycleDetected,
                 directlyAdjacent,
                 out _);
+        }
+
+        private static bool CanEnforceVassalWarVictory(Kingdom pVassal, Kingdom pSuzerain)
+        {
+            bool basicValid = HasValidVassalParticipants(pVassal, pSuzerain);
+            if (!basicValid) return false;
+            bool cycleDetected = basicValid && WouldCreateCycle(pVassal, pSuzerain);
+            return VassalRelationRules.CanEnforceWarVictory(
+                basicValid,
+                MandateRebelService.IsRebelKingdom(pVassal),
+                MandateRebelService.IsRebelKingdom(pSuzerain),
+                cycleDetected);
+        }
+
+        private static bool HasValidVassalParticipants(Kingdom pVassal, Kingdom pSuzerain)
+        {
+            return pVassal?.data != null &&
+                   pSuzerain?.data != null &&
+                   pVassal != pSuzerain &&
+                   !pVassal.isRekt() &&
+                   !pSuzerain.isRekt() &&
+                   pVassal.isCiv() &&
+                   pSuzerain.isCiv() &&
+                   pVassal.hasCities();
         }
 
         private static bool WouldCreateCycle(Kingdom pVassal, Kingdom pSuzerain)
@@ -289,9 +307,13 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        public static bool SetVassal(Kingdom pVassal, Kingdom pSuzerain, string pReason = "manual", long pWarId = -1)
+        public static bool SetVassal(Kingdom pVassal, Kingdom pSuzerain, string pReason = "manual",
+            long pWarId = -1, bool pEnforceWarVictory = false)
         {
-            if (!CanSetVassal(pVassal, pSuzerain)) return false;
+            bool allowed = pEnforceWarVictory
+                ? CanEnforceVassalWarVictory(pVassal, pSuzerain)
+                : CanSetVassal(pVassal, pSuzerain);
+            if (!allowed) return false;
             if (!Ready) return false;
 
             long currentSuzerain = GetSuzerainId(pVassal);
@@ -430,7 +452,8 @@ namespace AncientWarfare3.core.lineage
 
             if (type == "vassal_war" && pWinner == WarWinner.Attackers)
             {
-                SetVassal(defender, attacker, "vassal_war", pWar.data.id);
+                SetVassal(defender, attacker, "vassal_war", pWar.data.id,
+                    pEnforceWarVictory: true);
                 return;
             }
 

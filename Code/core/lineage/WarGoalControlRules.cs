@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.lineage
             return pGoalType == "take_core_city" ||
                    pGoalType == "press_claim_city" ||
                    pGoalType == "mandate_conquest" ||
+                   pGoalType == "force_vassal" ||
                    pGoalType == "restore_kingdom";
         }
     }

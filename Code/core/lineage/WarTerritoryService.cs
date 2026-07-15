@@ -359,7 +359,14 @@ namespace AncientWarfare3.core.lineage
         public static bool TryDeclareVassalWar(Kingdom pAttacker, Kingdom pDefender)
         {
             if (IsVassalDecisionOnlyTarget(pAttacker, pDefender)) return false;
-            var goal = new WarGoalRequest { goal_type = GOAL_FORCE_VASSAL, target_kingdom = pDefender };
+            City targetCapital = pDefender?.capital ?? FindFirstTargetCity(pDefender);
+            if (targetCapital?.data == null) return false;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_FORCE_VASSAL,
+                target_kingdom = pDefender,
+                target_city = targetCapital
+            };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, "vassal_war", "force_vassal");
             if (war?.data == null) return false;
             CreateGoalForWar(war, goal);
@@ -1223,7 +1230,11 @@ namespace AncientWarfare3.core.lineage
                         result = "attacker_goal_enforced";
                         break;
                     case PeaceSettlementAction.ForceVassal:
-                        try { VassalService.SetVassal(defender, attacker, "peace_force_vassal", pWar.data.id); }
+                        try
+                        {
+                            VassalService.SetVassal(defender, attacker, "peace_force_vassal",
+                                pWar.data.id, pEnforceWarVictory: true);
+                        }
                         catch (Exception e) { ModClass.LogWarning("War goal force vassal failed: " + e.Message); }
                         RecordGoalVictory(attacker, defender, targetCity, pGoal);
                         result = "attacker_goal_enforced";
