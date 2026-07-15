@@ -123,7 +123,9 @@ namespace AncientWarfare3.core.policy
 
         public static bool SelectCity(City pCity)
         {
-            if (pCity?.data == null || pCity.isRekt() || !pCity.isAlive()) return false;
+            bool cityValid = pCity?.data != null && !pCity.isRekt() && pCity.isAlive();
+            if (!SchoolMapSelectionRules.CanSelectCity(cityValid,
+                    ScrollWindow.getCurrentWindow() != null)) return false;
             SelectedUnit.clear();
             SelectedMetas.selected_city = pCity;
             SelectedObjects.setNanoObject(pCity);

@@ -277,7 +277,7 @@ namespace AncientWarfare3.ui.items
         {
             Actor resolved = FindActor(pActorId);
             if (resolved?.data == null || !resolved.isAlive() || resolved.isRekt()) return;
-            ActionLibrary.openUnitWindow(resolved);
+            SchoolActorNavigation.Open(resolved);
         }
     }
 }
