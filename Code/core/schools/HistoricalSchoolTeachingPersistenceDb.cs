@@ -21,30 +21,15 @@ namespace AncientWarfare3.core.schools
             try
             {
                 transaction = pDb.BeginTransaction();
-                List<HistoricalSchoolTeachingEventRow> existing = ReadEvents(pDb,
+                HistoricalSchoolTeachingDbResult result = RecordInTransaction(pDb,
                     transaction, pRequest);
-                if (existing.Count != 0)
+                if (result.Outcome == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
                 {
-                    HistoricalSchoolTeachingDbResult replay = ResolveExisting(pRequest,
-                        existing);
-                    transaction.Commit();
-                    return replay;
+                    transaction.Rollback();
+                    return Readback(pDb, pRequest);
                 }
-
-                CaptureLedger(pDb, transaction, pRequest);
-                if (!pRequest.IdsFrozen)
-                {
-                    long firstId = NextEventId(pDb, transaction);
-                    pRequest.FreezeIds(firstId,
-                        pRequest.Plan.IncludePersuasion ? firstId + 1L : -1L);
-                }
-                InsertEvent(pDb, transaction, pRequest.Lecture);
-                if (pRequest.Plan.IncludePersuasion)
-                    InsertEvent(pDb, transaction, pRequest.Persuasion);
-                WriteLedger(pDb, transaction, pRequest.DesiredLedger,
-                    pRequest.OriginalLedger != null);
                 transaction.Commit();
-                return Result(HistoricalSchoolTeachingPersistenceOutcome.Committed);
+                return result;
             }
             catch
             {
@@ -56,6 +41,31 @@ namespace AncientWarfare3.core.schools
             }
 
             return Readback(pDb, pRequest);
+        }
+
+        internal static HistoricalSchoolTeachingDbResult RecordInTransaction(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction,
+            HistoricalSchoolTeachingDbRequest pRequest)
+        {
+            if (pDb == null || pTransaction == null || !Valid(pRequest)) return Result(
+                HistoricalSchoolTeachingPersistenceOutcome.Unknown);
+            List<HistoricalSchoolTeachingEventRow> existing = ReadEvents(pDb,
+                pTransaction, pRequest);
+            if (existing.Count != 0) return ResolveExisting(pRequest, existing);
+
+            CaptureLedger(pDb, pTransaction, pRequest);
+            if (!pRequest.IdsFrozen)
+            {
+                long firstId = NextEventId(pDb, pTransaction);
+                pRequest.FreezeIds(firstId,
+                    pRequest.Plan.IncludePersuasion ? firstId + 1L : -1L);
+            }
+            InsertEvent(pDb, pTransaction, pRequest.Lecture);
+            if (pRequest.Plan.IncludePersuasion)
+                InsertEvent(pDb, pTransaction, pRequest.Persuasion);
+            WriteLedger(pDb, pTransaction, pRequest.DesiredLedger,
+                pRequest.OriginalLedger != null);
+            return Result(HistoricalSchoolTeachingPersistenceOutcome.Committed);
         }
 
         internal static HistoricalSchoolTeachingHistory LoadHistory(SQLiteConnection pDb)
@@ -161,6 +171,17 @@ namespace AncientWarfare3.core.schools
                     LastActiveYear = -1,
                     LastDecayYear = -1
                 };
+            HistoricalSchoolEffectiveLedger effective =
+                HistoricalSchoolLedgerDecayRules.Effective(desired.Tradition,
+                    desired.Membership, desired.Institutions, desired.ActivePresence,
+                    desired.Momentum, desired.LastActiveYear, desired.LastDecayYear,
+                    pRequest.Plan.Year);
+            desired.Tradition = effective.Tradition;
+            desired.Membership = effective.Membership;
+            desired.Institutions = effective.Institutions;
+            desired.ActivePresence = effective.ActivePresence;
+            desired.Momentum = effective.Momentum;
+            desired.LastDecayYear = effective.LastDecayYear;
             double persuasion = pRequest.Plan.IncludePersuasion ? 1d : 0d;
             desired.Tradition = Clamp01(desired.Tradition + 0.005d + 0.003d * persuasion);
             desired.Membership = Clamp01(desired.Membership + 0.01d + 0.01d * persuasion);
@@ -169,6 +190,8 @@ namespace AncientWarfare3.core.schools
             desired.Momentum = Clamp01(desired.Momentum + 0.02d +
                                        0.03d * persuasion);
             desired.LastActiveYear = Math.Max(desired.LastActiveYear,
+                pRequest.Plan.Year);
+            desired.LastDecayYear = Math.Max(desired.LastDecayYear,
                 pRequest.Plan.Year);
             desired.UpdatedTime = pRequest.WorldTime;
             pRequest.OriginalLedger = original;

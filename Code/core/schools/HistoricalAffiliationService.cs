@@ -74,6 +74,32 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
+        internal static HistoricalSchoolAffiliationSnapshot PrepareMemberAffiliation(
+            Actor pActor, long pCityId, int pYear)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                ByActor.ContainsKey(pActor.data.id)) return null;
+            City city = FindCity(pCityId) ?? pActor.city;
+            Kingdom kingdom = city?.kingdom ?? pActor.kingdom;
+            if (city?.data == null || city.isRekt() || kingdom?.data == null ||
+                kingdom.isRekt()) return null;
+            return HistoricalSchoolAffiliationSnapshot.CreateHome(pActor.data.id,
+                kingdom.id, kingdom.name, city.data.id, pYear);
+        }
+
+        internal static bool AdoptCommittedMemberAffiliation(
+            HistoricalSchoolAffiliationSnapshot pCommittedState)
+        {
+            if (pCommittedState == null || pCommittedState.ActorId < 0 ||
+                pCommittedState.LifecycleState == HistoricalSchoolLifecycleState.Dead)
+                return false;
+            HistoricalSchoolAffiliationSnapshot oldState = Get(pCommittedState.ActorId);
+            if (SnapshotExact(oldState, pCommittedState)) return true;
+            if (oldState != null) return false;
+            ApplyCommittedState(null, pCommittedState);
+            return true;
+        }
+
         internal static void EnsureMembershipAffiliations()
         {
             foreach (CourtSchoolDefinition school in CourtSchoolRegistry.All)

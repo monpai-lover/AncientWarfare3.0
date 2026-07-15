@@ -127,7 +127,6 @@ namespace AncientWarfare3.core.schools
                         SchoolGuestOfficeService.ProcessYear(_activeYear);
                         break;
                     case HistoricalSchoolSchedulerStage.ServiceAppointment:
-                        ProcessLedgerDecay();
                         break;
                     case HistoricalSchoolSchedulerStage.Promotion:
                         return SchoolMembershipService.ProcessStandingFrame(_activeYear);
@@ -179,16 +178,6 @@ namespace AncientWarfare3.core.schools
             if (_livingXiaCities.Count > 0)
                 HistoricalSchoolDescentService.ProcessDue(
                     _nextEligibleYear, _livingXiaCities);
-        }
-
-        private static void ProcessLedgerDecay()
-        {
-            HistoricalSchoolStore.ApplyLedgerDecay(
-                _activeYear,
-                World.world?.getCurWorldTime() ?? 0d,
-                out long[] affectedCityIds);
-            foreach (long cityId in affectedCityIds)
-                CitySchoolSnapshotService.MarkDirtyById(cityId);
         }
 
         private static void ProcessLecturePlan()

@@ -161,32 +161,90 @@ namespace AncientWarfare3.core.schools
             return true;
         }
 
-        internal static HistoricalSchoolTeachingPersistenceOutcome CommitQueuedDebate(
+        internal static bool TryQueueDebateCommit(
             HistoricalSchoolDebateActivity pActivity)
         {
             HistoricalSchoolDebateRecord debate = pActivity?.Record;
-            if (debate == null)
-                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            if (debate == null) return false;
             Actor first = FindActor(debate.FirstActorId);
             Actor second = FindActor(debate.SecondActorId);
             City city = FindCity(debate.CityId);
             if (!IsDebateActorValid(first, debate.FirstSchoolId, debate.CityId) ||
                 !IsDebateActorValid(second, debate.SecondSchoolId, debate.CityId) ||
                 city?.data == null || city.isRekt())
-                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
-            double worldTime = World.world?.getCurWorldTime() ?? 0d;
-            HistoricalSchoolTeachingPersistenceOutcome persistence =
-                HistoricalSchoolStore.RecordDebateAndLedger(debate,
-                    pActivity.FirstDelta, pActivity.SecondDelta, worldTime);
-            if (persistence != HistoricalSchoolTeachingPersistenceOutcome.Committed)
-                return persistence;
+                return false;
+            return HistoricalSchoolWriteBufferService.TryEnqueue(
+                new DebateWriteOperation(pActivity,
+                    World.world?.getCurWorldTime() ?? 0d));
+        }
+
+        private static void ApplyCommittedDebateWrite(
+            HistoricalSchoolDebateActivity pActivity, double pWorldTime)
+        {
+            HistoricalSchoolDebateRecord debate = pActivity?.Record;
+            if (debate == null) return;
+            Actor first = FindActor(debate.FirstActorId);
+            Actor second = FindActor(debate.SecondActorId);
+            City city = FindCity(debate.CityId);
+            if (!IsDebateActorValid(first, debate.FirstSchoolId, debate.CityId) ||
+                !IsDebateActorValid(second, debate.SecondSchoolId, debate.CityId) ||
+                city?.data == null || city.isRekt()) return;
             HistoricalSchoolRevisionService.MarkActivity(debate.FirstSchoolId);
             HistoricalSchoolRevisionService.MarkActivity(debate.SecondSchoolId);
             TryFoundInstitutionAfterQueuedDebate(first, second, city, debate.DebateYear,
-                worldTime);
+                pWorldTime);
             ApplyCommittedDebate(first, second, city, debate.Outcome, debate.TopicId,
                 debate.DebateYear);
-            return persistence;
+        }
+
+        private sealed class DebateWriteOperation : IHistoricalSchoolWriteOperation
+        {
+            private readonly HistoricalSchoolDebateActivity _activity;
+            private readonly double _worldTime;
+
+            public DebateWriteOperation(HistoricalSchoolDebateActivity pActivity,
+                double pWorldTime)
+            {
+                _activity = pActivity;
+                _worldTime = pWorldTime;
+            }
+
+            public string OperationKey => _activity?.OperationKey ?? "";
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.RecordDebateAndLedgerInTransaction(pDb,
+                    pTransaction, _activity.Record, _activity.FirstDelta,
+                    _activity.SecondDelta, _worldTime);
+            }
+
+            public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+            {
+                try
+                {
+                    HistoricalSchoolStore.InvalidateDebateCommit(
+                        _activity.Record.CityId);
+                    ApplyCommittedDebateWrite(_activity, _worldTime);
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Historical school debate projection failed: " +
+                                        error.Message);
+                }
+                finally
+                {
+                    HistoricalSchoolDebateActivityService.OnDebateWriteResolved(
+                        _activity, pOutcome);
+                }
+            }
+
+            public void OnCleanFailure()
+            {
+                HistoricalSchoolDebateActivityService.OnDebateWriteResolved(_activity,
+                    HistoricalSchoolTeachingPersistenceOutcome.CleanFailure);
+            }
         }
 
         private static List<DebateCandidateContext> CollectCandidates(City pCity,

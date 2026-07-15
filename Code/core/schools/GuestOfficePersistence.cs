@@ -163,6 +163,16 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        internal static GuestOfficeStartResult StartInTransaction(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, GuestOfficeStartRequest pRequest)
+        {
+            if (pDb == null || pTransaction == null || !Valid(pRequest) ||
+                pRequest.DbRequest == null) return Unknown(pRequest?.OperationKey);
+            GuestOfficeDbStartResult result = GuestOfficePersistenceDb.StartInTransaction(
+                pDb, pTransaction, pRequest.DbRequest);
+            return Project(result, pRequest);
+        }
+
         internal static GuestOfficeRecoveryResult ReadCommittedTuple(long pActorId,
             HistoricalSchoolAffiliationSnapshot pExpected)
         {

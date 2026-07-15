@@ -58,26 +58,16 @@ namespace AncientWarfare3.core.schools
             try
             {
                 transaction = pDb.BeginTransaction();
-                List<GuestOfficeEventRow> existing = ReadEventsByOperationKey(pDb,
-                    transaction, pRequest.OperationKey);
-                if (existing.Count != 0)
+                GuestOfficeDbStartResult result = StartInTransaction(pDb, transaction,
+                    pRequest);
+                if (result.Outcome == GuestOfficePersistenceOutcome.Unknown)
                 {
-                    GuestOfficeDbStartResult replay = ResolveExisting(pDb, transaction,
-                        pRequest, existing);
-                    transaction.Commit();
-                    return replay;
+                    transaction.Rollback();
+                    throw new InvalidOperationException(
+                        "guest start transaction outcome is unknown");
                 }
-
-                RequireFrozenOriginal(pDb, transaction, pRequest);
-                if (!pRequest.IdsFrozen)
-                    pRequest.FreezeIds(NextId(pDb, transaction, CareerTable, "OFFICER_ID"),
-                        NextId(pDb, transaction, EventTable, "EVENT_ID"));
-                StageAffiliation(pDb, transaction, pRequest);
-                InsertCareer(pDb, transaction, pRequest.DesiredCareer);
-                InsertEvent(pDb, transaction, pRequest.DesiredEvent);
                 transaction.Commit();
-                return new GuestOfficeDbStartResult(GuestOfficePersistenceOutcome.Committed,
-                    pRequest, pRecoveredExisting: false);
+                return result;
             }
             catch
             {
@@ -99,6 +89,27 @@ namespace AncientWarfare3.core.schools
             {
                 return Unknown(pRequest);
             }
+        }
+
+        internal static GuestOfficeDbStartResult StartInTransaction(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, GuestOfficeDbStartRequest pRequest)
+        {
+            if (pDb == null || pTransaction == null || !ValidRequest(pRequest))
+                return Unknown(pRequest);
+            List<GuestOfficeEventRow> existing = ReadEventsByOperationKey(pDb,
+                pTransaction, pRequest.OperationKey);
+            if (existing.Count != 0)
+                return ResolveExisting(pDb, pTransaction, pRequest, existing);
+
+            RequireFrozenOriginal(pDb, pTransaction, pRequest);
+            if (!pRequest.IdsFrozen)
+                pRequest.FreezeIds(NextId(pDb, pTransaction, CareerTable, "OFFICER_ID"),
+                    NextId(pDb, pTransaction, EventTable, "EVENT_ID"));
+            StageAffiliation(pDb, pTransaction, pRequest);
+            InsertCareer(pDb, pTransaction, pRequest.DesiredCareer);
+            InsertEvent(pDb, pTransaction, pRequest.DesiredEvent);
+            return new GuestOfficeDbStartResult(GuestOfficePersistenceOutcome.Committed,
+                pRequest, pRecoveredExisting: false);
         }
 
         internal static GuestOfficeDbRecoveryResult ReadCommittedTuple(SQLiteConnection pDb,

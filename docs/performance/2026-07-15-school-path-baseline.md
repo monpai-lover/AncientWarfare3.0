@@ -33,6 +33,20 @@ evidence.
 
 The write benchmark was captured on the same database and machine before enabling WAL.
 
+### Buffered Write Verification
+
+- Capture date: 2026-07-15
+- Provider: `System.Data.SQLite 1.0.99.0` / SQLite `3.9.2`
+- Configuration: `WAL/NORMAL`, two warm-up batches, seven measured batches
+- Workload: one transaction containing 100 parameterized inserts per sample
+- Samples: `0.135`, `0.120`, `0.129`, `0.130`, `0.150`, `0.124`, `0.119` ms
+- Median: `0.129 ms`
+- Maximum: `0.150 ms`
+- Acceptance ceiling: `2.08 ms`
+
+This microbenchmark isolates the SQLite batch boundary. Runtime projection, actor work, and
+UI invalidation remain part of the fresh-world acceptance run rather than this SQL number.
+
 ## School Ecology
 
 The runtime database contains 87 active memberships. Fifty-two members meet the planned

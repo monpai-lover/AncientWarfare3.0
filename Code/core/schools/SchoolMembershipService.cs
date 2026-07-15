@@ -44,6 +44,18 @@ namespace AncientWarfare3.core.schools
             public long ReadyFrame { get; set; }
         }
 
+        private sealed class MembershipWriteEvent
+        {
+            public string EventType;
+            public long TargetActorId;
+            public long CityId;
+            public long KingdomId;
+            public int Year;
+            public string Payload;
+            public int Importance;
+            public double WorldTime;
+        }
+
         private static readonly SchoolMembershipBook Memberships = new SchoolMembershipBook();
         private static readonly Queue<long> PendingDeathRetries = new Queue<long>();
         private static readonly HashSet<long> QueuedDeathRetries = new HashSet<long>();
@@ -59,6 +71,9 @@ namespace AncientWarfare3.core.schools
         private static int _leaderSchoolIndex;
         private static readonly HashSet<string> PendingLeaderSchools =
             new HashSet<string>(StringComparer.Ordinal);
+        private static readonly HashSet<long> PendingMembershipActors =
+            new HashSet<long>();
+        private static long _nextReservedMembershipId = -1L;
 
         public static long Version => Memberships.Version;
 
@@ -94,7 +109,7 @@ namespace AncientWarfare3.core.schools
                 Memberships.GetActive(pActor.data.id) != null) return null;
             if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
                 return null;
-            long membershipId = HistoricalSchoolStore.NextMembershipId();
+            long membershipId = ReserveMembershipId();
             if (membershipId < 0) return null;
             int year = Date.getCurrentYear();
             var record = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
@@ -167,7 +182,7 @@ namespace AncientWarfare3.core.schools
 
             if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
                 return false;
-            long membershipId = HistoricalSchoolStore.NextMembershipId();
+            long membershipId = ReserveMembershipId();
             if (membershipId < 0) return false;
             int year = Date.getCurrentYear();
             var record = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
@@ -209,7 +224,7 @@ namespace AncientWarfare3.core.schools
                 return false;
             if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
                 return false;
-            long membershipId = HistoricalSchoolStore.NextMembershipId();
+            long membershipId = ReserveMembershipId();
             if (membershipId < 0) return false;
             int year = Date.getCurrentYear();
             var replacement = new SchoolMembershipRecord(membershipId, pActor.data.id, pSchoolId,
@@ -227,6 +242,117 @@ namespace AncientWarfare3.core.schools
             RefreshRuntimeIndex(pActor.data.id);
             Project(pActor, pSchoolId);
             return true;
+        }
+
+        internal static bool TryQueueJoin(Actor pActor, string pSchoolId,
+            SchoolMembershipSource pSource, string pSourceId, long pTeacherActorId,
+            long pCityId, int pGeneration, float pInitialReputation,
+            string pEventType, long pEventTargetActorId, long pKingdomId,
+            int pEventYear, string pPayload, int pImportance,
+            Action<bool> pCompletion = null)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                CourtSchoolRegistry.Find(pSchoolId) == null ||
+                string.IsNullOrWhiteSpace(pSourceId) ||
+                string.IsNullOrWhiteSpace(pEventType) ||
+                Memberships.GetActive(pActor.data.id) != null ||
+                !PendingMembershipActors.Add(pActor.data.id)) return false;
+            if (!HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
+            {
+                PendingMembershipActors.Remove(pActor.data.id);
+                return false;
+            }
+            long membershipId = ReserveMembershipId();
+            int year = Date.getCurrentYear();
+            var record = new SchoolMembershipRecord(membershipId, pActor.data.id,
+                pSchoolId, pSource, pSourceId, pTeacherActorId, pCityId, pGeneration,
+                Math.Max(0f, pInitialReputation), year,
+                pLoyaltyUntilYear: LoyaltyUntil(year));
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id) == null &&
+                pSource != SchoolMembershipSource.HistoricalDescent
+                    ? HistoricalAffiliationService.PrepareMemberAffiliation(
+                        pActor, pCityId, year)
+                    : null;
+            if (membershipId < 0 || !record.IsValid ||
+                (pSource != SchoolMembershipSource.HistoricalDescent &&
+                 HistoricalAffiliationService.Get(pActor.data.id) == null &&
+                 affiliation == null))
+            {
+                PendingMembershipActors.Remove(pActor.data.id);
+                return false;
+            }
+            var eventData = new MembershipWriteEvent
+            {
+                EventType = pEventType,
+                TargetActorId = pEventTargetActorId,
+                CityId = pCityId,
+                KingdomId = pKingdomId,
+                Year = pEventYear,
+                Payload = pPayload ?? "",
+                Importance = Math.Max(0, pImportance),
+                WorldTime = WorldTime()
+            };
+            var operation = new MembershipJoinWriteOperation(pActor, record,
+                affiliation, eventData, pCompletion);
+            if (HistoricalSchoolWriteBufferService.TryEnqueue(operation)) return true;
+            PendingMembershipActors.Remove(pActor.data.id);
+            return false;
+        }
+
+        internal static bool TryQueueConversion(Actor pActor, string pSchoolId,
+            string pSourceId, long pCityId, string pEventType,
+            long pEventTargetActorId, long pKingdomId, int pEventYear,
+            string pPayload, int pImportance, Action<bool> pCompletion = null)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                CourtSchoolRegistry.Find(pSchoolId) == null ||
+                string.IsNullOrWhiteSpace(pSourceId) ||
+                string.IsNullOrWhiteSpace(pEventType) ||
+                !PendingMembershipActors.Add(pActor.data.id)) return false;
+            SchoolMembershipRecord current = Memberships.GetActive(pActor.data.id);
+            if (current == null || current.Source ==
+                    SchoolMembershipSource.HistoricalDescent ||
+                current.SchoolId == pSchoolId ||
+                !HistoricalSchoolDescentService.FlushPendingDescentsForSchoolWrite())
+            {
+                PendingMembershipActors.Remove(pActor.data.id);
+                return false;
+            }
+            int year = Date.getCurrentYear();
+            long membershipId = ReserveMembershipId();
+            var replacement = new SchoolMembershipRecord(membershipId,
+                pActor.data.id, pSchoolId, SchoolMembershipSource.ExplicitConversion,
+                pSourceId, -1L, pCityId, 0, current.Reputation, year,
+                pLoyaltyUntilYear: LoyaltyUntil(year));
+            HistoricalSchoolAffiliationSnapshot affiliation =
+                HistoricalAffiliationService.Get(pActor.data.id) == null
+                    ? HistoricalAffiliationService.PrepareMemberAffiliation(
+                        pActor, pCityId, year)
+                    : null;
+            if (membershipId < 0 || !replacement.IsValid ||
+                (HistoricalAffiliationService.Get(pActor.data.id) == null &&
+                 affiliation == null))
+            {
+                PendingMembershipActors.Remove(pActor.data.id);
+                return false;
+            }
+            var eventData = new MembershipWriteEvent
+            {
+                EventType = pEventType,
+                TargetActorId = pEventTargetActorId,
+                CityId = pCityId,
+                KingdomId = pKingdomId,
+                Year = pEventYear,
+                Payload = pPayload ?? "",
+                Importance = Math.Max(0, pImportance),
+                WorldTime = WorldTime()
+            };
+            var operation = new MembershipConversionWriteOperation(pActor, current,
+                replacement, affiliation, eventData, pCompletion);
+            if (HistoricalSchoolWriteBufferService.TryEnqueue(operation)) return true;
+            PendingMembershipActors.Remove(pActor.data.id);
+            return false;
         }
 
         internal static bool RollbackConversion(Actor pActor,
@@ -823,9 +949,262 @@ namespace AncientWarfare3.core.schools
                   HistoricalSchoolStandingRules.TeacherMembershipYears;
         }
 
+        private abstract class MembershipWriteOperation :
+            IHistoricalSchoolWriteOperation
+        {
+            protected MembershipWriteOperation(Actor pActor,
+                HistoricalSchoolAffiliationSnapshot pAffiliation,
+                MembershipWriteEvent pEvent, Action<bool> pCompletion)
+            {
+                Actor = pActor;
+                Affiliation = pAffiliation;
+                Event = pEvent;
+                Completion = pCompletion;
+            }
+
+            protected Actor Actor { get; }
+            protected HistoricalSchoolAffiliationSnapshot Affiliation { get; }
+            protected MembershipWriteEvent Event { get; }
+            private Action<bool> Completion { get; }
+
+            public abstract string OperationKey { get; }
+            public abstract HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction);
+
+            public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+            {
+                try
+                {
+                    HistoricalSchoolStore.InvalidateTeachingCommit(Event.CityId);
+                    if (!Adopt())
+                        throw new InvalidOperationException(
+                            "committed school membership adoption failed");
+                }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("Committed school membership projection failed: " +
+                                        error.Message);
+                    throw;
+                }
+                PendingMembershipActors.Remove(Actor?.data?.id ?? -1L);
+                try { Completion?.Invoke(true); }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("School membership completion failed: " +
+                                        error.Message);
+                }
+            }
+
+            public void OnCleanFailure()
+            {
+                PendingMembershipActors.Remove(Actor?.data?.id ?? -1L);
+                try { Completion?.Invoke(false); }
+                catch (Exception error)
+                {
+                    ModClass.LogWarning("School membership failure callback failed: " +
+                                        error.Message);
+                }
+            }
+
+            protected HistoricalSchoolTeachingPersistenceOutcome PersistAffiliation(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction,
+                HistoricalSchoolTeachingPersistenceOutcome pCurrent)
+            {
+                if (Affiliation == null) return pCurrent;
+                HistoricalSchoolTeachingPersistenceOutcome next =
+                    HistoricalSchoolStore.EnsureMemberAffiliationInTransaction(pDb,
+                        pTransaction, Affiliation, Event.WorldTime);
+                return MergeAfterWrite(pCurrent, next);
+            }
+
+            protected HistoricalSchoolTeachingPersistenceOutcome PersistEvent(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction,
+                SchoolMembershipRecord pMembership,
+                HistoricalSchoolTeachingPersistenceOutcome pCurrent)
+            {
+                HistoricalSchoolTeachingPersistenceOutcome next =
+                    HistoricalSchoolStore.RecordSchoolEventInTransaction(pDb,
+                        pTransaction, "school-membership-event:" + OperationKey,
+                        Event.EventType, pMembership.ActorId, Event.TargetActorId,
+                        pMembership.SchoolId, Event.CityId, Event.KingdomId,
+                        Event.Year, Event.Payload, Event.Importance, Event.WorldTime);
+                return MergeAfterWrite(pCurrent, next);
+            }
+
+            protected bool AdoptAffiliation()
+            {
+                return Affiliation == null ||
+                       HistoricalAffiliationService.AdoptCommittedMemberAffiliation(
+                           Affiliation);
+            }
+
+            protected abstract bool Adopt();
+
+            private static HistoricalSchoolTeachingPersistenceOutcome MergeAfterWrite(
+                HistoricalSchoolTeachingPersistenceOutcome pCurrent,
+                HistoricalSchoolTeachingPersistenceOutcome pNext)
+            {
+                if (pCurrent == HistoricalSchoolTeachingPersistenceOutcome.Unknown ||
+                    pNext == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
+                    return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+                if (pNext == HistoricalSchoolTeachingPersistenceOutcome.CleanFailure)
+                    return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+                return pCurrent == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                       pNext == HistoricalSchoolTeachingPersistenceOutcome.Committed
+                    ? HistoricalSchoolTeachingPersistenceOutcome.Committed
+                    : HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            }
+        }
+
+        private sealed class MembershipJoinWriteOperation : MembershipWriteOperation
+        {
+            private readonly SchoolMembershipRecord _record;
+
+            public MembershipJoinWriteOperation(Actor pActor,
+                SchoolMembershipRecord pRecord,
+                HistoricalSchoolAffiliationSnapshot pAffiliation,
+                MembershipWriteEvent pEvent, Action<bool> pCompletion)
+                : base(pActor, pAffiliation, pEvent, pCompletion)
+            {
+                _record = pRecord;
+            }
+
+            public override string OperationKey => "membership-join:" +
+                _record.ActorId + ":" + _record.SourceId;
+
+            public override HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                HistoricalSchoolTeachingPersistenceOutcome outcome =
+                    HistoricalSchoolStore.InsertMembershipInTransaction(pDb,
+                        pTransaction, _record, Event.WorldTime);
+                if (outcome != HistoricalSchoolTeachingPersistenceOutcome.Committed &&
+                    outcome != HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                    return outcome;
+                outcome = PersistAffiliation(pDb, pTransaction, outcome);
+                if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
+                    return outcome;
+                return PersistEvent(pDb, pTransaction, _record, outcome);
+            }
+
+            protected override bool Adopt()
+            {
+                if (Actor?.data == null || _record.ActorId != Actor.data.id) return false;
+                SchoolMembershipRecord existing = Memberships.GetActive(_record.ActorId);
+                bool added = false;
+                if (existing == null)
+                {
+                    if (!Memberships.TryJoin(_record))
+                    {
+                        LoadIndexes();
+                        existing = Memberships.GetActive(_record.ActorId);
+                    }
+                    else
+                    {
+                        existing = _record;
+                        added = true;
+                    }
+                }
+                if (!SameMembershipRecord(existing, _record) || !AdoptAffiliation())
+                    return false;
+                if (added)
+                    HistoricalSchoolRevisionService.ApplyMembershipChange(null, _record);
+                RefreshRuntimeIndex(_record.ActorId);
+                Project(Actor, _record.SchoolId);
+                return true;
+            }
+        }
+
+        private sealed class MembershipConversionWriteOperation : MembershipWriteOperation
+        {
+            private readonly SchoolMembershipRecord _current;
+            private readonly SchoolMembershipRecord _replacement;
+
+            public MembershipConversionWriteOperation(Actor pActor,
+                SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pReplacement,
+                HistoricalSchoolAffiliationSnapshot pAffiliation,
+                MembershipWriteEvent pEvent, Action<bool> pCompletion)
+                : base(pActor, pAffiliation, pEvent, pCompletion)
+            {
+                _current = pCurrent;
+                _replacement = pReplacement;
+            }
+
+            public override string OperationKey => "membership-convert:" +
+                _replacement.ActorId + ":" + _replacement.SourceId;
+
+            public override HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                HistoricalSchoolTeachingPersistenceOutcome outcome =
+                    HistoricalSchoolStore.ConvertMembershipInTransaction(pDb,
+                        pTransaction, _current, _replacement,
+                        _replacement.StartYear, Event.WorldTime);
+                if (outcome != HistoricalSchoolTeachingPersistenceOutcome.Committed &&
+                    outcome != HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                    return outcome;
+                outcome = PersistAffiliation(pDb, pTransaction, outcome);
+                if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
+                    return outcome;
+                return PersistEvent(pDb, pTransaction, _replacement, outcome);
+            }
+
+            protected override bool Adopt()
+            {
+                if (Actor?.data == null || _replacement.ActorId != Actor.data.id)
+                    return false;
+                SchoolMembershipRecord active = Memberships.GetActive(_replacement.ActorId);
+                bool changed = false;
+                if (!SameMembershipRecord(active, _replacement))
+                {
+                    if (!SameMembershipRecord(active, _current) ||
+                        !Memberships.TryConvert(_replacement.ActorId, _replacement,
+                            _replacement.StartYear, out _))
+                    {
+                        LoadIndexes();
+                        active = Memberships.GetActive(_replacement.ActorId);
+                    }
+                    else
+                    {
+                        active = _replacement;
+                        changed = true;
+                    }
+                }
+                if (!SameMembershipRecord(active, _replacement) || !AdoptAffiliation())
+                    return false;
+                if (changed)
+                    HistoricalSchoolRevisionService.ApplyMembershipChange(_current,
+                        _replacement);
+                RefreshRuntimeIndex(_replacement.ActorId);
+                Project(Actor, _replacement.SchoolId);
+                return true;
+            }
+        }
+
+        private static long ReserveMembershipId()
+        {
+            long databaseNext = HistoricalSchoolStore.NextMembershipId();
+            if (databaseNext < 0) return -1L;
+            if (_nextReservedMembershipId < databaseNext)
+                _nextReservedMembershipId = databaseNext;
+            if (_nextReservedMembershipId == long.MaxValue) return -1L;
+            return _nextReservedMembershipId++;
+        }
+
         public static void LoadIndexes()
         {
             ResetStandingWork();
+            if (HistoricalSchoolWriteBufferService.Count == 0)
+            {
+                PendingMembershipActors.Clear();
+                _nextReservedMembershipId = -1L;
+            }
             Memberships.Clear();
             HistoricalSchoolRuntimeIndex.Instance.ClearMembers();
             HistoricalSchoolRevisionService.Clear();
@@ -862,6 +1241,8 @@ namespace AncientWarfare3.core.schools
         public static void ClearRuntime()
         {
             ResetStandingWork();
+            PendingMembershipActors.Clear();
+            _nextReservedMembershipId = -1L;
             Memberships.Clear();
             HistoricalSchoolRuntimeIndex.Instance.ClearMembers();
             HistoricalSchoolRevisionService.Clear();

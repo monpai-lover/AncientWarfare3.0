@@ -25,10 +25,6 @@ namespace AncientWarfare3.core.schools
 
         private const double MaxLedgerValue = 1d;
         private const double MaxLedgerInstitutions = 100d;
-        private const double LedgerTraditionDecay = 0.995d;
-        private const double LedgerPresenceDecay = 0.97d;
-        private const double LedgerMomentumDecay = 0.85d;
-        private const int TraditionDecayGraceYears = 3;
         private const int LedgerCityQueryChunkSize = 128;
         public static long NextMembershipId()
         {
@@ -74,6 +70,19 @@ namespace AncientWarfare3.core.schools
                 return new HistoricalSchoolTeachingDbResult(
                     HistoricalSchoolTeachingPersistenceOutcome.Unknown);
             }
+        }
+
+        internal static HistoricalSchoolTeachingDbResult RecordTeachingInTransaction(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction,
+            HistoricalSchoolTeachingDbRequest pRequest)
+        {
+            return HistoricalSchoolTeachingPersistenceDb.RecordInTransaction(pDb,
+                pTransaction, pRequest);
+        }
+
+        internal static void InvalidateTeachingCommit(long pCityId)
+        {
+            InvalidateLedgerCaches(pCityId);
         }
 
         public static bool RecordSchoolEvent(string pEventType, long pActorId,
@@ -130,6 +139,78 @@ namespace AncientWarfare3.core.schools
             {
                 try { transaction?.Dispose(); } catch { }
             }
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            RecordSchoolEventInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, string pOperationKey, string pEventType,
+                long pActorId, long pTargetActorId, string pSchoolId, long pCityId,
+                long pKingdomId, int pYear, string pPayload, int pImportance,
+                double pWorldTime)
+        {
+            if (pDb == null || pTransaction == null ||
+                string.IsNullOrWhiteSpace(pOperationKey) ||
+                string.IsNullOrWhiteSpace(pEventType) || pActorId < 0)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            int rows = 0;
+            bool exact = false;
+            using (var read = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                read.CommandText = "SELECT EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
+                    "CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME FROM " +
+                    EventTable + " WHERE OPERATION_KEY=@operation";
+                read.Parameters.AddWithValue("@operation", pOperationKey);
+                using SQLiteDataReader reader = read.ExecuteReader();
+                while (reader.Read())
+                {
+                    rows++;
+                    exact |= ValueString(reader, 0) == pEventType &&
+                             ValueLong(reader, 1, -1L) == pActorId &&
+                             ValueLong(reader, 2, -1L) == pTargetActorId &&
+                             ValueString(reader, 3) == (pSchoolId ?? "") &&
+                             ValueLong(reader, 4, -1L) == pCityId &&
+                             ValueLong(reader, 5, -1L) == pKingdomId &&
+                             ValueInt(reader, 6, -1) == pYear &&
+                             ValueString(reader, 7) == (pPayload ?? "") &&
+                             ValueInt(reader, 8) == Math.Max(0, pImportance) &&
+                             ValueDouble(reader, 9, -1d).Equals(
+                                 FiniteNonNegative(pWorldTime));
+                }
+            }
+            if (rows > 0) return rows == 1 && exact
+                ? HistoricalSchoolTeachingPersistenceOutcome.Replayed
+                : HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+
+            long eventId = NextIdInTransaction(pTransaction, EventTable, "EVENT_ID");
+            using (var command = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                command.CommandText = "INSERT INTO " + EventTable +
+                    " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID," +
+                    "SCHOOL_ID,CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME)" +
+                    " VALUES (@id,@operation,@type,@actor,@target,@school,@city,@kingdom," +
+                    "@year,@payload,@importance,@time)";
+                command.Parameters.AddWithValue("@id", eventId);
+                command.Parameters.AddWithValue("@operation", pOperationKey);
+                command.Parameters.AddWithValue("@type", pEventType);
+                command.Parameters.AddWithValue("@actor", pActorId);
+                command.Parameters.AddWithValue("@target", pTargetActorId);
+                command.Parameters.AddWithValue("@school", pSchoolId ?? "");
+                command.Parameters.AddWithValue("@city", pCityId);
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                command.Parameters.AddWithValue("@year", pYear);
+                command.Parameters.AddWithValue("@payload", pPayload ?? "");
+                command.Parameters.AddWithValue("@importance", Math.Max(0, pImportance));
+                command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
+                if (command.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("school event insert failed");
+            }
+            if (EventLedgerDelta(pEventType, pYear,
+                    out HistoricalSchoolLedgerDelta ledgerDelta,
+                    out double membershipDelta) && pCityId >= 0 &&
+                !string.IsNullOrWhiteSpace(pSchoolId))
+                UpsertLedgerCommand(pTransaction, pCityId, pSchoolId, ledgerDelta,
+                    pWorldTime, membershipDelta);
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
         public static Dictionary<long, long> LoadLineageSuccessors()
@@ -191,6 +272,86 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
                 return false;
             }
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            EnsureMemberAffiliationInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction,
+                HistoricalSchoolAffiliationSnapshot pState, double pTime)
+        {
+            if (pDb == null || pTransaction == null || pState == null ||
+                pState.ActorId < 0 || pState.HomeKingdomId < 0 ||
+                pState.HometownCityId < 0)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            int rows = 0;
+            bool exact = false;
+            using (var read = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                read.CommandText = "SELECT HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
+                    "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
+                    "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
+                    "SERVICE_START_YEAR,SERVICE_END_YEAR,LAST_TRAVEL_YEAR," +
+                    "TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR," +
+                    "TRANSPORT_FAILURES,UPDATED_TIME FROM " + AffiliationTable +
+                    " WHERE ACTOR_ID=@actor";
+                read.Parameters.AddWithValue("@actor", pState.ActorId);
+                using SQLiteDataReader reader = read.ExecuteReader();
+                while (reader.Read())
+                {
+                    rows++;
+                    exact |= ValueLong(reader, 0, -1L) == pState.HomeKingdomId &&
+                             ValueString(reader, 1) == pState.HomeKingdomName &&
+                             ValueLong(reader, 2, -1L) == pState.HometownCityId &&
+                             ValueLong(reader, 3, -1L) == pState.ResidenceCityId &&
+                             ValueLong(reader, 4, -1L) ==
+                             pState.PreviousResidenceCityId &&
+                             ValueLong(reader, 5, -1L) == pState.DestinationCityId &&
+                             ValueLong(reader, 6, -1L) == pState.ServiceKingdomId &&
+                             ValueString(reader, 7) == pState.LifecycleState.ToString() &&
+                             ValueInt(reader, 8, -1) == pState.ServiceStartYear &&
+                             ValueInt(reader, 9, -1) == pState.ServiceEndYear &&
+                             ValueInt(reader, 10, -1) == pState.LastTravelYear &&
+                             ValueInt(reader, 11, -1) == pState.TravelWaitStartYear &&
+                             ValueInt(reader, 12, -1) == pState.VoyageStartYear &&
+                             ValueInt(reader, 13, -1) == pState.VoyageArrivalYear &&
+                             ValueInt(reader, 14) == pState.TransportFailures &&
+                             ValueDouble(reader, 15, -1d).Equals(
+                                 FiniteNonNegative(pTime));
+                }
+            }
+            if (rows > 0) return rows == 1 && exact
+                ? HistoricalSchoolTeachingPersistenceOutcome.Replayed
+                : HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
+            command.CommandText = "INSERT INTO " + AffiliationTable +
+                " (ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID," +
+                "RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID,DESTINATION_CITY_ID," +
+                "SERVICE_KINGDOM_ID,LIFECYCLE_STATE,SERVICE_START_YEAR,SERVICE_END_YEAR," +
+                "LAST_TRAVEL_YEAR,TRAVEL_WAIT_START_YEAR,VOYAGE_START_YEAR," +
+                "VOYAGE_ARRIVAL_YEAR,TRANSPORT_FAILURES,UPDATED_TIME) VALUES " +
+                "(@actor,@home,@homeName,@hometown,@residence,@previous,@destination," +
+                "@service,@state,@serviceStart,@serviceEnd,@lastTravel,@wait,@voyage," +
+                "@arrival,@failures,@time)";
+            command.Parameters.AddWithValue("@actor", pState.ActorId);
+            command.Parameters.AddWithValue("@home", pState.HomeKingdomId);
+            command.Parameters.AddWithValue("@homeName", pState.HomeKingdomName ?? "");
+            command.Parameters.AddWithValue("@hometown", pState.HometownCityId);
+            command.Parameters.AddWithValue("@residence", pState.ResidenceCityId);
+            command.Parameters.AddWithValue("@previous", pState.PreviousResidenceCityId);
+            command.Parameters.AddWithValue("@destination", pState.DestinationCityId);
+            command.Parameters.AddWithValue("@service", pState.ServiceKingdomId);
+            command.Parameters.AddWithValue("@state", pState.LifecycleState.ToString());
+            command.Parameters.AddWithValue("@serviceStart", pState.ServiceStartYear);
+            command.Parameters.AddWithValue("@serviceEnd", pState.ServiceEndYear);
+            command.Parameters.AddWithValue("@lastTravel", pState.LastTravelYear);
+            command.Parameters.AddWithValue("@wait", pState.TravelWaitStartYear);
+            command.Parameters.AddWithValue("@voyage", pState.VoyageStartYear);
+            command.Parameters.AddWithValue("@arrival", pState.VoyageArrivalYear);
+            command.Parameters.AddWithValue("@failures", pState.TransportFailures);
+            command.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("member affiliation insert failed");
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
         public static bool HasPreservedWork(string pWorkKey, string pSchoolId)
@@ -406,6 +567,65 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            RecordDebateAndLedgerInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, HistoricalSchoolDebateRecord pDebate,
+                HistoricalSchoolLedgerDelta pFirstDelta,
+                HistoricalSchoolLedgerDelta pSecondDelta, double pWorldTime)
+        {
+            if (pDb == null || pTransaction == null || pDebate == null ||
+                pFirstDelta == null || pSecondDelta == null || pDebate.CityId < 0 ||
+                pDebate.DebateYear < 0 || pDebate.FirstActorId < 0 ||
+                pDebate.SecondActorId < 0 ||
+                pDebate.FirstActorId == pDebate.SecondActorId ||
+                string.IsNullOrWhiteSpace(pDebate.FirstSchoolId) ||
+                string.IsNullOrWhiteSpace(pDebate.SecondSchoolId) ||
+                string.Equals(pDebate.FirstSchoolId, pDebate.SecondSchoolId,
+                    StringComparison.Ordinal) || string.IsNullOrWhiteSpace(pDebate.TopicId) ||
+                !Enum.IsDefined(typeof(SchoolDebateOutcome), pDebate.Outcome))
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+
+            string firstSchool = ResolveLedgerSchool(pFirstDelta, pDebate.FirstSchoolId);
+            string secondSchool = ResolveLedgerSchool(pSecondDelta, pDebate.SecondSchoolId);
+            if (string.IsNullOrWhiteSpace(firstSchool) ||
+                string.IsNullOrWhiteSpace(secondSchool) ||
+                !string.Equals(firstSchool, pDebate.FirstSchoolId,
+                    StringComparison.Ordinal) ||
+                !string.Equals(secondSchool, pDebate.SecondSchoolId,
+                    StringComparison.Ordinal) ||
+                string.Equals(firstSchool, secondSchool, StringComparison.Ordinal))
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+
+            HistoricalSchoolTeachingPersistenceOutcome existing =
+                ReadExistingDebateOutcome(pTransaction, pDebate, out bool exists);
+            if (exists) return existing;
+
+            long debateId = NextIdInTransaction(pTransaction, DebateTable, "DEBATE_ID");
+            long firstEventId = NextIdInTransaction(pTransaction, EventTable, "EVENT_ID");
+            if (debateId < 0 || firstEventId < 0 || firstEventId >= long.MaxValue - 1L)
+                return HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+            long secondEventId = firstEventId + 1L;
+            InsertDebateCommand(pTransaction, debateId, pDebate);
+            InsertDebateEventCommand(pTransaction, firstEventId, pDebate, firstSchool,
+                pDebate.FirstActorId, pDebate.SecondActorId, pWorldTime);
+            InsertDebateEventCommand(pTransaction, secondEventId, pDebate, secondSchool,
+                pDebate.SecondActorId, pDebate.FirstActorId, pWorldTime);
+            UpsertLedgerCommand(pTransaction, pDebate.CityId, firstSchool, pFirstDelta,
+                pWorldTime);
+            UpsertLedgerCommand(pTransaction, pDebate.CityId, secondSchool, pSecondDelta,
+                pWorldTime);
+            UpdateMembershipReputationCommand(pTransaction, pDebate.FirstActorId,
+                ReputationDelta(pDebate.Outcome, pFirst: true), pWorldTime);
+            UpdateMembershipReputationCommand(pTransaction, pDebate.SecondActorId,
+                ReputationDelta(pDebate.Outcome, pFirst: false), pWorldTime);
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
+        }
+
+        internal static void InvalidateDebateCommit(long pCityId)
+        {
+            InvalidateLedgerCaches(pCityId);
+        }
+
         /// <summary>
         ///     Founds the smallest durable historical institution unit.  Only a canonical
         ///     historical master can found one, and the actor must be a real, living unit
@@ -506,19 +726,21 @@ namespace AncientWarfare3.core.schools
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText = "SELECT SCHOOL_ID,TRADITION,MEMBERSHIP,INSTITUTIONS," +
-                                      "ACTIVE_PRESENCE,MOMENTUM,LAST_ACTIVE_YEAR FROM " + LedgerTable +
+                                      "ACTIVE_PRESENCE,MOMENTUM,LAST_ACTIVE_YEAR," +
+                                      "LAST_DECAY_YEAR FROM " + LedgerTable +
                                       " WHERE CITY_ID=@city AND SCHOOL_ID=@school LIMIT 1";
                 command.Parameters.AddWithValue("@city", pCityId);
                 command.Parameters.AddWithValue("@school", school);
                 using SQLiteDataReader reader = command.ExecuteReader();
                 if (!reader.Read())
                     return new HistoricalSchoolLedgerSnapshot(school, 0f, 0f, 0f, -1);
-                return new HistoricalSchoolLedgerSnapshot(ValueString(reader, 0),
-                    (float)ClampLedger01(ValueDouble(reader, 1)),
-                    (float)ClampLedger01(ValueDouble(reader, 4)),
-                    (float)ClampLedger01(ValueDouble(reader, 5)), ValueInt(reader, 6, -1),
-                    (float)ClampLedger01(ValueDouble(reader, 2)),
-                    (float)ClampLedgerInstitutions(ValueDouble(reader, 3)));
+                HistoricalSchoolEffectiveLedger effective =
+                    HistoricalSchoolLedgerDecayRules.Effective(
+                        ValueDouble(reader, 1), ValueDouble(reader, 2),
+                        ValueDouble(reader, 3), ValueDouble(reader, 4),
+                        ValueDouble(reader, 5), ValueInt(reader, 6, -1),
+                        ValueInt(reader, 7, -1), CurrentLedgerYear());
+                return Snapshot(ValueString(reader, 0), effective);
             }
             catch (Exception error)
             {
@@ -610,7 +832,8 @@ namespace AncientWarfare3.core.schools
                     command.Parameters.AddWithValue(parameterName, pCityIds[pOffset + i]);
                 }
                 command.CommandText = "SELECT CITY_ID,SCHOOL_ID,TRADITION,MEMBERSHIP,INSTITUTIONS," +
-                                      "ACTIVE_PRESENCE,MOMENTUM,LAST_ACTIVE_YEAR FROM " + LedgerTable +
+                                      "ACTIVE_PRESENCE,MOMENTUM,LAST_ACTIVE_YEAR," +
+                                      "LAST_DECAY_YEAR FROM " + LedgerTable +
                                       " WHERE CITY_ID IN (" +
                                       string.Join(",", parameters.ToArray()) + ")";
                 using SQLiteDataReader reader = command.ExecuteReader();
@@ -622,12 +845,13 @@ namespace AncientWarfare3.core.schools
                         !pResult.TryGetValue(cityId,
                             out Dictionary<string, HistoricalSchoolLedgerSnapshot> ledgers))
                         continue;
-                    ledgers[school] = new HistoricalSchoolLedgerSnapshot(school,
-                        (float)ClampLedger01(ValueDouble(reader, 2)),
-                        (float)ClampLedger01(ValueDouble(reader, 5)),
-                        (float)ClampLedger01(ValueDouble(reader, 6)), ValueInt(reader, 7, -1),
-                        (float)ClampLedger01(ValueDouble(reader, 3)),
-                        (float)ClampLedgerInstitutions(ValueDouble(reader, 4)));
+                    HistoricalSchoolEffectiveLedger effective =
+                        HistoricalSchoolLedgerDecayRules.Effective(
+                            ValueDouble(reader, 2), ValueDouble(reader, 3),
+                            ValueDouble(reader, 4), ValueDouble(reader, 5),
+                            ValueDouble(reader, 6), ValueInt(reader, 7, -1),
+                            ValueInt(reader, 8, -1), CurrentLedgerYear());
+                    ledgers[school] = Snapshot(school, effective);
                 }
                 return true;
             }
@@ -636,68 +860,6 @@ namespace AncientWarfare3.core.schools
                 pFailure = "ledger batch chunk failed at offset " + pOffset + ": " +
                            error.GetType().Name + ": " + error.Message;
                 return false;
-            }
-        }
-
-        public static int ApplyLedgerDecay(int pYear, double pWorldTime,
-            out long[] pAffectedCityIds)
-        {
-            pAffectedCityIds = Array.Empty<long>();
-            if (DB == null || pYear < 0) return 0;
-            SQLiteTransaction transaction = null;
-            try
-            {
-                transaction = DB.BeginTransaction();
-                const string decayWhere =
-                    " WHERE COALESCE(LAST_DECAY_YEAR,-1)<@year AND " +
-                    "(TRADITION>0 OR ACTIVE_PRESENCE>0 OR MOMENTUM>0)";
-                var affected = new HashSet<long>();
-                using (var select = new SQLiteCommand(DB) { Transaction = transaction })
-                {
-                    select.CommandText = "SELECT DISTINCT CITY_ID FROM " + LedgerTable +
-                                         decayWhere;
-                    select.Parameters.AddWithValue("@year", pYear);
-                    using SQLiteDataReader reader = select.ExecuteReader();
-                    while (reader.Read())
-                    {
-                        long cityId = ValueLong(reader, 0, -1L);
-                        if (cityId >= 0) affected.Add(cityId);
-                    }
-                }
-
-                int updated;
-                using (var command = new SQLiteCommand(DB) { Transaction = transaction })
-                {
-                    command.CommandText = "UPDATE " + LedgerTable +
-                        " SET TRADITION=CASE WHEN COALESCE(LAST_ACTIVE_YEAR,-1)<=@traditionCutoff " +
-                        "THEN MAX(0,MIN(1,TRADITION*@traditionDecay)) ELSE TRADITION END," +
-                        "ACTIVE_PRESENCE=MAX(0,MIN(1,ACTIVE_PRESENCE*@presenceDecay))," +
-                        "MOMENTUM=MAX(0,MIN(1,MOMENTUM*@momentumDecay))," +
-                        "LAST_DECAY_YEAR=@year,UPDATED_TIME=@time" + decayWhere;
-                    command.Parameters.AddWithValue("@traditionDecay", LedgerTraditionDecay);
-                    command.Parameters.AddWithValue("@traditionCutoff",
-                        pYear - TraditionDecayGraceYears);
-                    command.Parameters.AddWithValue("@presenceDecay", LedgerPresenceDecay);
-                    command.Parameters.AddWithValue("@momentumDecay", LedgerMomentumDecay);
-                    command.Parameters.AddWithValue("@year", pYear);
-                    command.Parameters.AddWithValue("@time", FiniteNonNegative(pWorldTime));
-                    updated = command.ExecuteNonQuery();
-                }
-                transaction.Commit();
-                pAffectedCityIds = new List<long>(affected).ToArray();
-                return updated;
-            }
-            catch (Exception error)
-            {
-                try { transaction?.Rollback(); } catch { }
-                pAffectedCityIds = Array.Empty<long>();
-                ModClass.LogWarning("HistoricalSchoolStore decay ledgers failed: " +
-                                    error.Message);
-                return 0;
-            }
-            finally
-            {
-                try { transaction?.Dispose(); } catch { }
             }
         }
 
@@ -802,26 +964,20 @@ namespace AncientWarfare3.core.schools
         public static bool InsertMembership(SchoolMembershipRecord pRecord, double pTime)
         {
             if (DB == null || pRecord == null || !pRecord.IsValid || !pRecord.Active) return false;
+            SQLiteTransaction transaction = null;
             try
             {
-                DB.Insert(MembershipTable,
-                    ColumnVal.Create("MEMBERSHIP_ID", pRecord.MembershipId),
-                    ColumnVal.Create("ACTOR_ID", pRecord.ActorId),
-                    ColumnVal.Create("SCHOOL_ID", pRecord.SchoolId),
-                    ColumnVal.Create("SOURCE_TYPE", pRecord.Source.ToString()),
-                    ColumnVal.Create("SOURCE_ID", pRecord.SourceId),
-                    ColumnVal.Create("TEACHER_ACTOR_ID", pRecord.TeacherActorId),
-                    ColumnVal.Create("CITY_ID", pRecord.CityId),
-                    ColumnVal.Create("GENERATION", pRecord.Generation),
-                    ColumnVal.Create("REPUTATION", (double)pRecord.Reputation),
-                    ColumnVal.Create("START_YEAR", pRecord.StartYear),
-                    ColumnVal.Create("END_YEAR", -1),
-                    ColumnVal.Create("ACTIVE", 1),
-                    ColumnVal.Create("END_REASON", ""),
-                    ColumnVal.Create("STANDING", pRecord.Standing.ToString()),
-                    ColumnVal.Create("LOYALTY_UNTIL_YEAR", pRecord.LoyaltyUntilYear),
-                    ColumnVal.Create("UPDATED_TIME", pTime));
-                return true;
+                transaction = DB.BeginTransaction();
+                HistoricalSchoolTeachingPersistenceOutcome outcome =
+                    InsertMembershipInTransaction(DB, transaction, pRecord, pTime);
+                if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                    outcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                {
+                    transaction.Commit();
+                    return true;
+                }
+                transaction.Rollback();
+                return false;
             }
             catch (Exception error)
             {
@@ -829,6 +985,41 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
                 return false;
             }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
+            }
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            InsertMembershipInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, SchoolMembershipRecord pRecord,
+                double pTime)
+        {
+            if (pDb == null || pTransaction == null || pRecord == null ||
+                !pRecord.IsValid || !pRecord.Active)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            int rows = 0;
+            bool exact = false;
+            using (var command = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                command.CommandText = MembershipSelect() +
+                    " WHERE MEMBERSHIP_ID=@id OR (ACTOR_ID=@actor AND ACTIVE=1)";
+                command.Parameters.AddWithValue("@id", pRecord.MembershipId);
+                command.Parameters.AddWithValue("@actor", pRecord.ActorId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    rows++;
+                    exact |= MembershipRowMatches(reader, pRecord, pActive: true,
+                        pEndYear: -1, pEndReason: "", pTime, pRequireTime: true);
+                }
+            }
+            if (rows > 0) return rows == 1 && exact
+                ? HistoricalSchoolTeachingPersistenceOutcome.Replayed
+                : HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            InsertMembershipCommand(pRecord, pTime, pTransaction);
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
         public static bool ConvertMembership(SchoolMembershipRecord pCurrent,
@@ -839,11 +1030,17 @@ namespace AncientWarfare3.core.schools
             using SQLiteTransaction transaction = DB.BeginTransaction();
             try
             {
-                CloseMembershipCommand(pCurrent.MembershipId, pYear, "converted", pTime,
-                    transaction);
-                InsertMembershipCommand(pReplacement, pTime, transaction);
-                transaction.Commit();
-                return true;
+                HistoricalSchoolTeachingPersistenceOutcome outcome =
+                    ConvertMembershipInTransaction(DB, transaction, pCurrent,
+                        pReplacement, pYear, pTime);
+                if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                    outcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                {
+                    transaction.Commit();
+                    return true;
+                }
+                transaction.Rollback();
+                return false;
             }
             catch (Exception error)
             {
@@ -852,6 +1049,65 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
                 return false;
             }
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            ConvertMembershipInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, SchoolMembershipRecord pCurrent,
+                SchoolMembershipRecord pReplacement, int pYear, double pTime)
+        {
+            if (pDb == null || pTransaction == null || pCurrent == null ||
+                pReplacement == null || !pCurrent.IsValid || !pReplacement.IsValid ||
+                pCurrent.ActorId != pReplacement.ActorId || pYear < pCurrent.StartYear)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            bool currentActive = false;
+            bool currentClosed = false;
+            bool replacementActive = false;
+            bool conflict = false;
+            using (var command = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                command.CommandText = MembershipSelect() +
+                    " WHERE MEMBERSHIP_ID=@current OR MEMBERSHIP_ID=@replacement" +
+                    " OR (ACTOR_ID=@actor AND ACTIVE=1)";
+                command.Parameters.AddWithValue("@current", pCurrent.MembershipId);
+                command.Parameters.AddWithValue("@replacement", pReplacement.MembershipId);
+                command.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long membershipId = ValueLong(reader, 0, -1L);
+                    if (membershipId == pCurrent.MembershipId)
+                    {
+                        currentActive |= MembershipRowMatches(reader, pCurrent,
+                            pActive: true, pEndYear: -1, pEndReason: "", pTime,
+                            pRequireTime: false);
+                        currentClosed |= MembershipRowMatches(reader, pCurrent,
+                            pActive: false, pEndYear: pYear, pEndReason: "converted",
+                            pTime, pRequireTime: true);
+                        if (!currentActive && !currentClosed) conflict = true;
+                    }
+                    else if (membershipId == pReplacement.MembershipId)
+                    {
+                        bool exact = MembershipRowMatches(reader, pReplacement,
+                            pActive: true, pEndYear: -1, pEndReason: "", pTime,
+                            pRequireTime: true);
+                        replacementActive |= exact;
+                        if (!exact) conflict = true;
+                    }
+                    else
+                    {
+                        conflict = true;
+                    }
+                }
+            }
+            if (currentClosed && replacementActive && !conflict)
+                return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            if (!currentActive || currentClosed || replacementActive || conflict)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            CloseMembershipCommand(pCurrent.MembershipId, pYear, "converted", pTime,
+                pTransaction);
+            InsertMembershipCommand(pReplacement, pTime, pTransaction);
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
         public static bool UpdateMembershipStanding(
@@ -992,10 +1248,21 @@ namespace AncientWarfare3.core.schools
             string pReason, double pTime)
         {
             if (DB == null || pCurrent == null) return false;
+            SQLiteTransaction transaction = null;
             try
             {
-                CloseMembershipCommand(pCurrent.MembershipId, pYear, pReason, pTime, null);
-                return true;
+                transaction = DB.BeginTransaction();
+                HistoricalSchoolTeachingPersistenceOutcome outcome =
+                    CloseMembershipInTransaction(DB, transaction, pCurrent, pYear,
+                        pReason, pTime);
+                if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                    outcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                {
+                    transaction.Commit();
+                    return true;
+                }
+                transaction.Rollback();
+                return false;
             }
             catch (Exception error)
             {
@@ -1003,6 +1270,47 @@ namespace AncientWarfare3.core.schools
                                     error.Message);
                 return false;
             }
+            finally
+            {
+                try { transaction?.Dispose(); } catch { }
+            }
+        }
+
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            CloseMembershipInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction, SchoolMembershipRecord pCurrent,
+                int pYear, string pReason, double pTime)
+        {
+            if (pDb == null || pTransaction == null || pCurrent == null ||
+                !pCurrent.IsValid || pYear < pCurrent.StartYear)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            int rows = 0;
+            bool active = false;
+            bool closed = false;
+            using (var command = new SQLiteCommand(pDb) { Transaction = pTransaction })
+            {
+                command.CommandText = MembershipSelect() +
+                    " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor";
+                command.Parameters.AddWithValue("@id", pCurrent.MembershipId);
+                command.Parameters.AddWithValue("@actor", pCurrent.ActorId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    rows++;
+                    active |= MembershipRowMatches(reader, pCurrent, pActive: true,
+                        pEndYear: -1, pEndReason: "", pTime, pRequireTime: false);
+                    closed |= MembershipRowMatches(reader, pCurrent, pActive: false,
+                        pEndYear: pYear, pEndReason: pReason ?? "", pTime,
+                        pRequireTime: true);
+                }
+            }
+            if (rows != 1)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            if (closed) return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+            if (!active) return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            CloseMembershipCommand(pCurrent.MembershipId, pYear, pReason, pTime,
+                pTransaction);
+            return HistoricalSchoolTeachingPersistenceOutcome.Committed;
         }
 
         public static bool DeleteMembership(SchoolMembershipRecord pCurrent)
@@ -2296,6 +2604,39 @@ namespace AncientWarfare3.core.schools
                 throw new InvalidOperationException("membership insert failed");
         }
 
+        private static string MembershipSelect()
+        {
+            return "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE,SOURCE_ID," +
+                   "TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
+                   "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING," +
+                   "LOYALTY_UNTIL_YEAR FROM " + MembershipTable;
+        }
+
+        private static bool MembershipRowMatches(SQLiteDataReader pReader,
+            SchoolMembershipRecord pExpected, bool pActive, int pEndYear,
+            string pEndReason, double pTime, bool pRequireTime)
+        {
+            return pReader != null && pExpected != null &&
+                   ValueLong(pReader, 0, -1L) == pExpected.MembershipId &&
+                   ValueLong(pReader, 1, -1L) == pExpected.ActorId &&
+                   ValueString(pReader, 2) == pExpected.SchoolId &&
+                   ValueString(pReader, 3) == pExpected.Source.ToString() &&
+                   ValueString(pReader, 4) == pExpected.SourceId &&
+                   ValueLong(pReader, 5, -1L) == pExpected.TeacherActorId &&
+                   ValueLong(pReader, 6, -1L) == pExpected.CityId &&
+                   ValueInt(pReader, 7, -1) == pExpected.Generation &&
+                   ValueDouble(pReader, 8).Equals((double)pExpected.Reputation) &&
+                   ValueInt(pReader, 9, -1) == pExpected.StartYear &&
+                   ValueInt(pReader, 10, int.MinValue) == pEndYear &&
+                   (ValueInt(pReader, 11, -1) != 0) == pActive &&
+                   ValueString(pReader, 12) == (pEndReason ?? "") &&
+                   (!pRequireTime || ValueDouble(pReader, 13, -1d).Equals(
+                       FiniteNonNegative(pTime))) &&
+                   ValueString(pReader, 14) == pExpected.Standing.ToString() &&
+                   ValueInt(pReader, 15, int.MinValue) ==
+                   pExpected.LoyaltyUntilYear;
+        }
+
         private static void CloseMembershipCommand(long pMembershipId, int pYear, string pReason,
             double pTime, SQLiteTransaction pTransaction)
         {
@@ -2516,6 +2857,19 @@ namespace AncientWarfare3.core.schools
                 }
             }
 
+            int effectiveYear = pDelta.LastActiveYear >= 0
+                ? pDelta.LastActiveYear
+                : CurrentLedgerYear();
+            HistoricalSchoolEffectiveLedger effective =
+                HistoricalSchoolLedgerDecayRules.Effective(tradition, membership,
+                    institutions, activePresence, momentum, lastActiveYear,
+                    lastDecayYear, effectiveYear);
+            tradition = effective.Tradition;
+            membership = effective.Membership;
+            institutions = effective.Institutions;
+            activePresence = effective.ActivePresence;
+            momentum = effective.Momentum;
+            lastDecayYear = effective.LastDecayYear;
             tradition = ClampLedger01(tradition + Finite(pDelta.Tradition));
             membership = ClampLedger01(membership + Finite(pMembershipDelta));
             activePresence = ClampLedger01(activePresence + Finite(pDelta.ActivePresence));
@@ -2525,6 +2879,7 @@ namespace AncientWarfare3.core.schools
                                                        Finite(pDelta.Institutions))));
             if (pDelta.LastActiveYear >= 0)
                 lastActiveYear = Math.Max(lastActiveYear, pDelta.LastActiveYear);
+            lastDecayYear = Math.Max(lastDecayYear, effectiveYear);
             double updatedTime = FiniteNonNegative(pWorldTime);
 
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
@@ -2631,6 +2986,16 @@ namespace AncientWarfare3.core.schools
                    (pSchoolId ?? "");
         }
 
+        private static long NextIdInTransaction(SQLiteTransaction pTransaction,
+            string pTable, string pColumn)
+        {
+            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            command.CommandText = "SELECT IFNULL(MAX(" + pColumn + "),0)+1 FROM " +
+                                  pTable;
+            return Convert.ToInt64(command.ExecuteScalar(),
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private static void InvalidateLedgerCaches(long pCityId)
         {
             if (pCityId < 0) return;
@@ -2673,6 +3038,23 @@ namespace AncientWarfare3.core.schools
         private static double ClampLedgerInstitutions(double pValue)
         {
             return Math.Max(0d, Math.Min(MaxLedgerInstitutions, Finite(pValue)));
+        }
+
+        private static HistoricalSchoolLedgerSnapshot Snapshot(string pSchoolId,
+            HistoricalSchoolEffectiveLedger pEffective)
+        {
+            return new HistoricalSchoolLedgerSnapshot(pSchoolId,
+                (float)ClampLedger01(pEffective.Tradition),
+                (float)ClampLedger01(pEffective.ActivePresence),
+                (float)ClampLedger01(pEffective.Momentum), pEffective.LastActiveYear,
+                (float)ClampLedger01(pEffective.Membership),
+                (float)ClampLedgerInstitutions(pEffective.Institutions));
+        }
+
+        private static int CurrentLedgerYear()
+        {
+            try { return Math.Max(0, Date.getCurrentYear()); }
+            catch { return 0; }
         }
 
         private static long ValueLong(SQLiteDataReader pReader, int pIndex, long pFallback = 0L)

@@ -153,25 +153,15 @@ namespace AncientWarfare3.core.schools
             try
             {
                 transaction = pDb.BeginTransaction();
-                GuestOfficePersistenceOutcome before = Readback(pDb, transaction,
-                    pRequest);
-                if (before == GuestOfficePersistenceOutcome.Committed)
+                GuestOfficeEndResult result = EndInTransaction(pDb, transaction, pRequest);
+                if (result.Persistence.Outcome == GuestOfficePersistenceOutcome.Unknown)
                 {
-                    transaction.Commit();
-                    return Project(pRequest, before, pRecoveredExisting: true);
+                    transaction.Rollback();
+                    throw new InvalidOperationException(
+                        "guest end transaction outcome is unknown");
                 }
-                if (before != GuestOfficePersistenceOutcome.CleanFailure)
-                {
-                    transaction.Commit();
-                    return Project(pRequest, before, pRecoveredExisting: false);
-                }
-
-                OfficialCareerPersistence.StageClose(pDb, transaction,
-                    pRequest.CareerToken);
-                StageAffiliation(pDb, transaction, pRequest);
                 transaction.Commit();
-                return Project(pRequest, GuestOfficePersistenceOutcome.Committed,
-                    pRecoveredExisting: false);
+                return result;
             }
             catch (Exception error)
             {
@@ -186,6 +176,24 @@ namespace AncientWarfare3.core.schools
             GuestOfficePersistenceOutcome outcome = Readback(pDb, pRequest);
             return Project(pRequest, outcome,
                 pRecoveredExisting: outcome == GuestOfficePersistenceOutcome.Committed);
+        }
+
+        internal static GuestOfficeEndResult EndInTransaction(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, GuestOfficeEndRequest pRequest)
+        {
+            if (pDb == null || pTransaction == null || !Valid(pRequest))
+                return Unknown(pRequest);
+            GuestOfficePersistenceOutcome before = Readback(pDb, pTransaction, pRequest);
+            if (before == GuestOfficePersistenceOutcome.Committed)
+                return Project(pRequest, before, pRecoveredExisting: true);
+            if (before != GuestOfficePersistenceOutcome.CleanFailure)
+                return Project(pRequest, before, pRecoveredExisting: false);
+
+            OfficialCareerPersistence.StageClose(pDb, pTransaction,
+                pRequest.CareerToken);
+            StageAffiliation(pDb, pTransaction, pRequest);
+            return Project(pRequest, GuestOfficePersistenceOutcome.Committed,
+                pRecoveredExisting: false);
         }
 
         internal static GuestOfficeEndRecoveryResult ReadCommittedEnd(

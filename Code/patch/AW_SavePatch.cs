@@ -31,8 +31,9 @@ namespace AncientWarfare3.patch
             bool runtimeStateResolved = HistoricalSchoolRuntime.FlushPendingStateForSave();
             bool activitiesResolved =
                 HistoricalSchoolActivityQueue.FlushPendingPersistenceForSave();
+            bool writesResolved = HistoricalSchoolWriteBufferService.FlushForSave();
             if (!descentsResolved || !deathsResolved || !runtimeStateResolved ||
-                !activitiesResolved)
+                !activitiesResolved || !writesResolved)
                 throw new InvalidOperationException(
                     "World save blocked: unresolved school persistence");
             if (!LineageArchivePragmaService.CheckpointForSave(

@@ -7,6 +7,12 @@
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="System.Data.SQLite">
+      <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
     <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolActivityQueueRules.cs" Link="Production\HistoricalSchoolActivityQueueRules.cs" />
@@ -21,5 +27,8 @@
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolTaskLeaseRules.cs" Link="Production\HistoricalSchoolTaskLeaseRules.cs" />
     <Compile Include="..\..\Code\core\schools\HistoricalSchoolCacheRules.cs" Link="Production\HistoricalSchoolCacheRules.cs" />
     <Compile Include="..\..\Code\core\court\CitySchoolDirtyQueue.cs" Link="Production\CitySchoolDirtyQueue.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolDiagnostics.cs" Link="Production\HistoricalSchoolDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolWriteBuffer.cs" Link="Production\HistoricalSchoolWriteBuffer.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolLedgerDecayRules.cs" Link="Production\HistoricalSchoolLedgerDecayRules.cs" />
   </ItemGroup>
 </Project>

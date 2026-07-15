@@ -56,8 +56,7 @@ namespace AncientWarfare3.core.schools
         public bool FirstReady { get; set; }
         public bool SecondReady { get; set; }
         public bool ReadyQueued { get; set; }
-        public int Attempts { get; set; }
-        public long RetryFrame { get; set; }
+        public bool PersistenceQueued { get; set; }
         public long StartFrame { get; set; }
         public string OperationKey { get; }
     }
@@ -190,7 +189,7 @@ namespace AncientWarfare3.core.schools
                         out HistoricalSchoolDebateActivity activity) ||
                     !activity.FirstReady || !activity.SecondReady) continue;
                 activity.ReadyQueued = false;
-                if (!ResolveReadyDebate(activity, pScheduleRetry: false)) resolved = false;
+                if (!QueueReadyDebate(activity)) resolved = false;
             }
             return resolved;
         }
@@ -277,32 +276,25 @@ namespace AncientWarfare3.core.schools
             UsedActorYears.Clear();
         }
 
-        private static bool ResolveReadyDebate(HistoricalSchoolDebateActivity pActivity,
-            bool pScheduleRetry)
+        private static bool QueueReadyDebate(HistoricalSchoolDebateActivity pActivity)
         {
-            HistoricalSchoolTeachingPersistenceOutcome outcome;
-            try
+            if (pActivity == null || pActivity.PersistenceQueued) return pActivity != null;
+            if (HistoricalSchoolDebateService.TryQueueDebateCommit(pActivity))
             {
-                outcome = HistoricalSchoolDebateService.CommitQueuedDebate(pActivity);
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school debate commit failed: " + error.Message);
-                outcome = HistoricalSchoolTeachingPersistenceOutcome.Unknown;
-            }
-            if (HistoricalSchoolActivityQueueRules.IsPersistenceResolved(outcome))
-            {
-                Finish(pActivity);
+                pActivity.PersistenceQueued = true;
                 return true;
-            }
-            if (pScheduleRetry)
-            {
-                pActivity.Attempts++;
-                pActivity.RetryFrame = HistoricalSchoolActivityQueue.CurrentFrame + Math.Min(120,
-                    1L << Math.Min(6, pActivity.Attempts));
             }
             EnqueueReady(pActivity);
             return false;
+        }
+
+        internal static void OnDebateWriteResolved(
+            HistoricalSchoolDebateActivity pActivity,
+            HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+        {
+            if (pActivity == null) return;
+            pActivity.PersistenceQueued = false;
+            Finish(pActivity);
         }
 
         private static void Finish(HistoricalSchoolDebateActivity pActivity)
@@ -312,6 +304,7 @@ namespace AncientWarfare3.core.schools
             ByActor.Remove(pActivity.Record.FirstActorId);
             ByActor.Remove(pActivity.Record.SecondActorId);
             pActivity.ReadyQueued = false;
+            pActivity.PersistenceQueued = false;
             DecrementYearCount(pActivity.Record.DebateYear);
             HistoricalSchoolTaskLeaseService.ReleaseExact(
                 pActivity.Record.FirstActorId, pActivity.OperationKey);
@@ -369,12 +362,7 @@ namespace AncientWarfare3.core.schools
                         out HistoricalSchoolDebateActivity activity) ||
                     !activity.FirstReady || !activity.SecondReady) continue;
                 activity.ReadyQueued = false;
-                if (activity.RetryFrame > HistoricalSchoolActivityQueue.CurrentFrame)
-                {
-                    EnqueueReady(activity);
-                    return false;
-                }
-                ResolveReadyDebate(activity, pScheduleRetry: true);
+                QueueReadyDebate(activity);
                 return true;
             }
             return false;

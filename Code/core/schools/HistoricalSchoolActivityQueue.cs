@@ -19,8 +19,7 @@ namespace AncientWarfare3.core.schools
         public HistoricalSchoolVenueClaim Venue { get; set; }
         public bool Ready { get; set; }
         public bool ReadyQueued { get; set; }
-        public int Attempts { get; set; }
-        public long RetryFrame { get; set; }
+        public bool PersistenceQueued { get; set; }
         public long StartFrame { get; set; }
     }
 
@@ -234,7 +233,7 @@ namespace AncientWarfare3.core.schools
                         out HistoricalSchoolLectureActivity lecture) || !lecture.Ready)
                     continue;
                 lecture.ReadyQueued = false;
-                if (!ResolveReadyLecture(lecture, pScheduleRetry: false))
+                if (!QueueReadyLecture(lecture))
                     resolved = false;
             }
             if (!HistoricalSchoolDebateActivityService.FlushPendingPersistenceForSave())
@@ -242,41 +241,34 @@ namespace AncientWarfare3.core.schools
             return resolved;
         }
 
-        private static bool ResolveReadyLecture(HistoricalSchoolLectureActivity pActivity,
-            bool pScheduleRetry)
+        private static bool QueueReadyLecture(HistoricalSchoolLectureActivity pActivity)
         {
-            HistoricalSchoolTeachingPersistenceOutcome outcome;
-            try
+            if (pActivity == null || pActivity.PersistenceQueued) return pActivity != null;
+            if (HistoricalSchoolActionService.TryQueueLectureCommit(pActivity))
             {
-                outcome = HistoricalSchoolActionService.CommitQueuedLecture(pActivity);
+                pActivity.PersistenceQueued = true;
+                return true;
             }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Historical school lecture commit failed: " +
-                                    error.Message);
-                outcome = HistoricalSchoolTeachingPersistenceOutcome.Unknown;
-            }
+            EnqueueReady(pActivity);
+            return false;
+        }
 
-            if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
-                outcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+        internal static void OnLectureWriteResolved(
+            HistoricalSchoolLectureActivity pActivity,
+            HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+        {
+            if (pActivity == null) return;
+            pActivity.PersistenceQueued = false;
+            if (pOutcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                pOutcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
             {
-                _teachingHistory.RecordLecture(pActivity.Plan.Candidate, pActivity.Plan.Year);
+                _teachingHistory.RecordLecture(pActivity.Plan.Candidate,
+                    pActivity.Plan.Year);
                 if (pActivity.Plan.IncludePersuasion)
                     _teachingHistory.RecordPersuasion(pActivity.Plan.Candidate,
                         pActivity.Plan.Year);
             }
-            if (HistoricalSchoolActivityQueueRules.IsPersistenceResolved(outcome))
-            {
-                FinishLecture(pActivity);
-                return true;
-            }
-            if (pScheduleRetry)
-            {
-                pActivity.Attempts++;
-                pActivity.RetryFrame = _frame + RetryDelay(pActivity.Attempts);
-            }
-            EnqueueReady(pActivity);
-            return false;
+            FinishLecture(pActivity);
         }
 
         private static void FinishLecture(HistoricalSchoolLectureActivity pActivity)
@@ -286,6 +278,7 @@ namespace AncientWarfare3.core.schools
             if (ActiveLectures.Remove(actorId)) DecrementYearCount(pActivity.Plan.Year);
             QueuedLectureActors.Remove(actorId);
             pActivity.ReadyQueued = false;
+            pActivity.PersistenceQueued = false;
             if (!HistoricalSchoolTaskLeaseService.ReleaseExact(
                     actorId, pActivity.Plan.OperationKey))
                 HistoricalSchoolVenueService.Release(pActivity.Plan.OperationKey);
@@ -342,12 +335,7 @@ namespace AncientWarfare3.core.schools
                         out HistoricalSchoolLectureActivity activity) || !activity.Ready)
                     continue;
                 activity.ReadyQueued = false;
-                if (activity.RetryFrame > _frame)
-                {
-                    EnqueueReady(activity);
-                    return false;
-                }
-                ResolveReadyLecture(activity, pScheduleRetry: true);
+                QueueReadyLecture(activity);
                 return true;
             }
             return false;
@@ -383,12 +371,6 @@ namespace AncientWarfare3.core.schools
                 actor.isTask(HistoricalSchoolContent.LectureTaskId);
             return HistoricalSchoolActivityQueueRules.ShouldCancelInterrupted(
                 pActivity.Ready, expectedTask, _frame - pActivity.StartFrame, 120L);
-        }
-
-        private static int RetryDelay(int pAttempts)
-        {
-            int shift = Math.Min(8, Math.Max(0, pAttempts - 1));
-            return Math.Min(240, 1 << shift);
         }
 
         private static Actor FindActor(long pActorId)

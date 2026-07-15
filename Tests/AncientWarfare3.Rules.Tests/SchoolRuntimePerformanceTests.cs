@@ -318,6 +318,149 @@ internal static class SchoolRuntimePerformanceTests
             dirtyCities.TryDequeue(out _);
         Equal(0L, GC.GetAllocatedBytesForCurrentThread() - dirtyAllocatedBefore,
             "empty dirty queue allocates zero bytes");
+
+        var writeLog = new List<string>();
+        var writeExecutor = new TestSchoolWriteBatchExecutor(writeLog);
+        var writes = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3, pMaxBatchSize: 2);
+        var firstWrite = new TestSchoolWriteOperation("first", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        var replayedWrite = new TestSchoolWriteOperation("replayed", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Replayed);
+        var cleanWrite = new TestSchoolWriteOperation("clean", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.CleanFailure);
+        True(writes.TryEnqueue(firstWrite, pDurableReady: true),
+            "durable-ready school write enters the buffer");
+        Equal(false, writes.TryEnqueue(firstWrite, pDurableReady: true),
+            "duplicate school operation key is rejected");
+        True(writes.TryEnqueue(replayedWrite, pDurableReady: true),
+            "second school write enters FIFO order");
+        True(writes.TryEnqueue(cleanWrite, pDurableReady: true),
+            "third school write fills the configured capacity");
+        Equal(false, writes.TryEnqueue(
+                new TestSchoolWriteOperation("overflow", writeLog,
+                    HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                pDurableReady: true),
+            "school write buffer rejects entries above capacity");
+        True(writes.ProcessFrame(100, writeExecutor),
+            "first persistence frame executes one bounded batch");
+        Equal("execute:first|execute:replayed|commit|project:first:Committed|" +
+              "project:replayed:Replayed", string.Join("|", writeLog),
+            "write batch commits before ordered runtime projections");
+        Equal(1, writes.Count, "one bounded batch leaves later FIFO work queued");
+        Equal(false, writes.ProcessFrame(100, writeExecutor),
+            "the same frame cannot execute a second database batch");
+        True(writes.ProcessFrame(101, writeExecutor),
+            "the next frame executes the next FIFO batch");
+        Equal("clean:clean", writeLog[writeLog.Count - 1],
+            "clean persistence failure releases its operation");
+        Equal(0, writes.Count, "resolved and clean operations leave the buffer");
+
+        writeLog.Clear();
+        var retryWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3,
+            pMaxBatchSize: 2);
+        var retryWrite = new TestSchoolWriteOperation("retry", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        retryWrites.TryEnqueue(retryWrite, pDurableReady: true);
+        True(retryWrites.ProcessFrame(200, writeExecutor),
+            "unknown persistence outcome consumes one attempt");
+        Equal(1, retryWrites.Count,
+            "unknown persistence outcome retains the exact operation");
+        Equal(false, retryWrites.ProcessFrame(200, writeExecutor),
+            "unknown operation observes same-frame batch gating");
+        True(retryWrites.ProcessFrame(201, writeExecutor),
+            "unknown operation retries after exponential backoff");
+        Equal(0, retryWrites.Count, "successful retry releases the operation");
+        True(ReferenceEquals(retryWrite, writeExecutor.LastOperation),
+            "unknown retry preserves the original operation instance");
+
+        writeLog.Clear();
+        var exponentialRetryWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3,
+            pMaxBatchSize: 2);
+        var twiceUnknownWrite = new TestSchoolWriteOperation("retry-twice", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        exponentialRetryWrites.TryEnqueue(twiceUnknownWrite, pDurableReady: true);
+        True(exponentialRetryWrites.ProcessFrame(300, writeExecutor),
+            "first unknown write attempt is executed immediately");
+        True(exponentialRetryWrites.ProcessFrame(301, writeExecutor),
+            "first unknown retry waits one frame");
+        Equal(false, exponentialRetryWrites.ProcessFrame(302, writeExecutor),
+            "second unknown retry waits two frames");
+        True(exponentialRetryWrites.ProcessFrame(303, writeExecutor),
+            "second unknown retry executes after exponential backoff");
+        Equal(0, exponentialRetryWrites.Count,
+            "successful second retry releases the operation");
+
+        writeLog.Clear();
+        var saveWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 8,
+            pMaxBatchSize: 2);
+        var unfinishedMovement = new TestSchoolWriteOperation("moving", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        Equal(false, saveWrites.TryEnqueue(unfinishedMovement, pDurableReady: false),
+            "unfinished movement never enters the durable write buffer");
+        for (int writeIndex = 0; writeIndex < 5; writeIndex++)
+            True(saveWrites.TryEnqueue(new TestSchoolWriteOperation("save-" + writeIndex,
+                    writeLog, HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                    pDurableReady: true),
+                "save-ready operation enters the durable buffer");
+        int batchesBeforeSave = writeExecutor.BatchCount;
+        True(saveWrites.FlushForSave(writeExecutor),
+            "save flush drains every durable-ready batch");
+        Equal(3, writeExecutor.BatchCount - batchesBeforeSave,
+            "save flush retains the configured transaction batch bound");
+        Equal(0, unfinishedMovement.ExecuteCount,
+            "save flush does not settle unfinished actor movement");
+        Equal(0, saveWrites.Count, "save flush drains committed operations");
+
+        var boundedWrites = new HistoricalSchoolWriteBuffer();
+        for (int writeIndex = 0; writeIndex < HistoricalSchoolWriteBuffer.MaxCapacity;
+             writeIndex++)
+            True(boundedWrites.TryEnqueue(new TestSchoolWriteOperation(
+                    "bounded-" + writeIndex, writeLog,
+                    HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                    pDurableReady: true),
+                "default write buffer accepts entries through its fixed capacity");
+        Equal(false, boundedWrites.TryEnqueue(new TestSchoolWriteOperation(
+                "bounded-overflow", writeLog,
+                HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                pDurableReady: true),
+            "default school write buffer is bounded at 512 operations");
+
+        HistoricalSchoolEffectiveLedger lazyLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 1d, pMembership: 0.6d, pInstitutions: 4d,
+                pActivePresence: 1d, pMomentum: 0.8d,
+                pLastActiveYear: 10, pLastDecayYear: 10, pCurrentYear: 13);
+        Near(0.995d, lazyLedger.Tradition, 0.000000001d,
+            "tradition begins decaying after its three-year grace period");
+        Near(Math.Pow(0.97d, 3d), lazyLedger.ActivePresence, 0.000000001d,
+            "lazy presence decay applies every skipped year arithmetically");
+        Near(0.8d * Math.Pow(0.85d, 3d), lazyLedger.Momentum, 0.000000001d,
+            "lazy momentum decay applies every skipped year arithmetically");
+        Near(0.6d, lazyLedger.Membership, 0.000000001d,
+            "membership influence is not part of annual decay");
+        Near(4d, lazyLedger.Institutions, 0.000000001d,
+            "institution influence is not part of annual decay");
+        Equal(13, lazyLedger.LastDecayYear,
+            "effective ledger advances its decay watermark to the read year");
+        HistoricalSchoolEffectiveLedger graceLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 0.7d, pMembership: 0d, pInstitutions: 0d,
+                pActivePresence: 0d, pMomentum: 0d,
+                pLastActiveYear: 10, pLastDecayYear: 10, pCurrentYear: 12);
+        Near(0.7d, graceLedger.Tradition, 0.000000001d,
+            "tradition remains unchanged inside the grace period");
+        HistoricalSchoolEffectiveLedger futureLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 0.4d, pMembership: 0.3d, pInstitutions: 2d,
+                pActivePresence: 0.2d, pMomentum: 0.1d,
+                pLastActiveYear: 20, pLastDecayYear: 20, pCurrentYear: 19);
+        Equal(20, futureLedger.LastDecayYear,
+            "reading an earlier year never reverses the decay watermark");
+        Near(0.4d, futureLedger.Tradition, 0.000000001d,
+            "reading an earlier year never applies reverse decay");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
@@ -329,6 +472,13 @@ internal static class SchoolRuntimePerformanceTests
     private static void True(bool value, string name)
     {
         if (!value) throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static void Near(double expected, double actual, double epsilon, string name)
+    {
+        if (double.IsNaN(actual) || Math.Abs(expected - actual) > epsilon)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
     }
 
     private sealed class TestSchoolRevisionSource : IHistoricalSchoolRevisionSource
@@ -361,6 +511,73 @@ internal static class SchoolRuntimePerformanceTests
             return pSchoolId != null && _schools.TryGetValue(pSchoolId, out long[] values)
                 ? values[pIndex]
                 : 0L;
+        }
+    }
+
+    private sealed class TestSchoolWriteOperation : IHistoricalSchoolWriteOperation
+    {
+        private readonly List<string> _log;
+        private readonly Queue<HistoricalSchoolTeachingPersistenceOutcome> _outcomes;
+
+        public TestSchoolWriteOperation(string pOperationKey, List<string> pLog,
+            params HistoricalSchoolTeachingPersistenceOutcome[] pOutcomes)
+        {
+            OperationKey = pOperationKey;
+            _log = pLog;
+            _outcomes = new Queue<HistoricalSchoolTeachingPersistenceOutcome>(pOutcomes);
+        }
+
+        public string OperationKey { get; }
+        public int ExecuteCount { get; private set; }
+
+        public HistoricalSchoolTeachingPersistenceOutcome Execute(
+            System.Data.SQLite.SQLiteConnection pDb,
+            System.Data.SQLite.SQLiteTransaction pTransaction)
+        {
+            ExecuteCount++;
+            _log.Add("execute:" + OperationKey);
+            return _outcomes.Count > 0
+                ? _outcomes.Dequeue()
+                : HistoricalSchoolTeachingPersistenceOutcome.Committed;
+        }
+
+        public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+        {
+            _log.Add("project:" + OperationKey + ":" + pOutcome);
+        }
+
+        public void OnCleanFailure()
+        {
+            _log.Add("clean:" + OperationKey);
+        }
+    }
+
+    private sealed class TestSchoolWriteBatchExecutor : IHistoricalSchoolWriteBatchExecutor
+    {
+        private readonly List<string> _log;
+
+        public TestSchoolWriteBatchExecutor(List<string> pLog)
+        {
+            _log = pLog;
+        }
+
+        public int BatchCount { get; private set; }
+        public IHistoricalSchoolWriteOperation LastOperation { get; private set; }
+
+        public HistoricalSchoolWriteBatchResult Execute(
+            IReadOnlyList<IHistoricalSchoolWriteOperation> pOperations)
+        {
+            BatchCount++;
+            var outcomes = new HistoricalSchoolTeachingPersistenceOutcome[pOperations.Count];
+            for (int index = 0; index < pOperations.Count; index++)
+            {
+                LastOperation = pOperations[index];
+                outcomes[index] = pOperations[index].Execute(null, null);
+                if (outcomes[index] == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
+                    return HistoricalSchoolWriteBatchResult.Unknown;
+            }
+            _log.Add("commit");
+            return HistoricalSchoolWriteBatchResult.Committed(outcomes);
         }
     }
 }
