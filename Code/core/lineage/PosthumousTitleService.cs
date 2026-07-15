@@ -114,6 +114,14 @@ namespace AncientWarfare3.core.lineage
 
             if (pReign.IsValid)
                 ReignRecordWriter.SetPosthumous(pReign.ReignId, fullTitle, titleColor);
+            if (FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
+                    pEndReason, IsActorAlive(pKing)))
+                FormerKingService.StoreSnapshot(pKing,
+                    pContext.KingdomId,
+                    pContext.KingdomName,
+                    titleColor,
+                    fullTitle,
+                    mandateKingdom);
             if (mandateKingdom && !useMandateDeposedTitle && pContext.LiveKingdom?.data != null)
                 MandateRulerTitleService.OnMandateReignEnded(pContext.LiveKingdom, pKing, pReign, pEndReason);
 

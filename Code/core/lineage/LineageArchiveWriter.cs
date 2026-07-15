@@ -344,11 +344,27 @@ namespace AncientWarfare3.core.lineage
             catch { }
 
             var roles = new List<string>();
+            string rolesColor = color;
+            try
+            {
+                pActor.data.get(LineageKeys.FORMER_HEIR_TITLE, out string formerHeirTitle, "");
+                if (!string.IsNullOrEmpty(formerHeirTitle))
+                {
+                    roles.Add(formerHeirTitle);
+                    pActor.data.get(LineageKeys.FORMER_HEIR_KINGDOM_COLOR,
+                        out string formerHeirColor, "");
+                    if (!string.IsNullOrEmpty(formerHeirColor)) rolesColor = formerHeirColor;
+                }
+            }
+            catch { }
             try
             {
                 pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
                 if (isHeir || HeirService.IsCurrentHeir(pActor.kingdom, pActor))
+                {
                     roles.Add(HeirTitleRules.BuildSocialTitle(pKingdomName, pActor.kingdom));
+                    rolesColor = color;
+                }
             }
             catch { }
 
@@ -376,7 +392,7 @@ namespace AncientWarfare3.core.lineage
                 roles.Add(AW_L10n.Text("aw_court_office_" + office, office));
 
             string combined = CourtTitleRules.Combine(roles.ToArray());
-            return (combined, string.IsNullOrEmpty(combined) ? "" : color);
+            return (combined, string.IsNullOrEmpty(combined) ? "" : rolesColor);
         }
     }
 }

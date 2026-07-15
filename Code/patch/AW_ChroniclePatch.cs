@@ -31,6 +31,7 @@ namespace AncientWarfare3.patch
             out VassalService.KingdomDestroyWarCleanupState __state)
         {
             __state = VassalService.CaptureKingdomDestroyWarCleanup(pKingdom);
+            FormerHeirService.ArchiveAndClear(pKingdom);
         }
 
         [HarmonyPostfix]

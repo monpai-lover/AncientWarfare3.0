@@ -45,6 +45,32 @@ namespace AncientWarfare3.core.lineage
             LineageService.ArchiveActor(pLastKing, pAlive: true);
         }
 
+        public static void StoreSnapshot(Actor pActor, long pKingdomId, string pKingdomName,
+            string pKingdomColor, string pTitle, bool pWasMandateKingdom)
+        {
+            if (pActor?.data == null || string.IsNullOrEmpty(pTitle)) return;
+            if (!pActor.hasTrait(LineageKeys.TRAIT_FORMER_KING))
+                pActor.addTrait(LineageKeys.TRAIT_FORMER_KING);
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_ID, pKingdomId);
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_NAME, pKingdomName ?? "");
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_COLOR, pKingdomColor ?? "");
+            pActor.data.set(LineageKeys.FORMER_KING_TITLE, pTitle);
+            pActor.data.set(LineageKeys.FORMER_KING_MANDATE, pWasMandateKingdom);
+            LineageService.ArchiveActor(pActor, pAlive: true);
+        }
+
+        public static void ClearSnapshot(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            if (pActor.hasTrait(LineageKeys.TRAIT_FORMER_KING))
+                pActor.removeTrait(LineageKeys.TRAIT_FORMER_KING);
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_ID, -1L);
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_NAME, "");
+            pActor.data.set(LineageKeys.FORMER_KINGDOM_COLOR, "");
+            pActor.data.set(LineageKeys.FORMER_KING_TITLE, "");
+            pActor.data.set(LineageKeys.FORMER_KING_MANDATE, false);
+        }
+
         private static bool IsAlive(Actor pActor)
         {
             try { return pActor?.data != null && !pActor.isRekt() && pActor.isAlive(); }

@@ -13,6 +13,11 @@ namespace AncientWarfare3.core.lineage
             return pIsMandateKingdom && pFormerKingAlive && pEndReason == "kingdom_fell";
         }
 
+        public static bool ShouldSnapshotLivingRulerTitle(string pEndReason, bool pFormerKingAlive)
+        {
+            return pFormerKingAlive && (pEndReason == "abdicated" || pEndReason == "replaced");
+        }
+
         public static string BuildMandateDeposedTitle(string pKingdomName)
         {
             string prefix = string.IsNullOrEmpty(pKingdomName) ? "" : pKingdomName.Substring(0, 1);

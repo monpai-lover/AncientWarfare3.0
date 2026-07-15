@@ -217,6 +217,10 @@ namespace AncientWarfare3.core.lineage
         public const string FORMER_KINGDOM_COLOR = "aw_former_kingdom_color";
         public const string FORMER_KING_TITLE = "aw_former_king_title";
         public const string FORMER_KING_MANDATE = "aw_former_king_mandate";
+        public const string FORMER_HEIR_KINGDOM_ID = "aw_former_heir_kingdom_id";
+        public const string FORMER_HEIR_KINGDOM_NAME = "aw_former_heir_kingdom_name";
+        public const string FORMER_HEIR_KINGDOM_COLOR = "aw_former_heir_kingdom_color";
+        public const string FORMER_HEIR_TITLE = "aw_former_heir_title";
 
         public const int NOBLE_DECAY_DISTANCE = 3;
 

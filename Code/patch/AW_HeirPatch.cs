@@ -78,8 +78,11 @@ namespace AncientWarfare3.patch
 
             Actor king = pActor ?? __instance.king;
             bool setKingSucceeded = king?.data != null &&
-                                    (pActor == null || __instance.king == pActor);
+                                     (pActor == null || __instance.king == pActor);
             if (!setKingSucceeded) return;
+            CourtService.ClearOfficeForReignTransition(king, "became_king");
+            FormerHeirService.ClearSnapshot(king);
+            FormerKingService.ClearSnapshot(king);
             if (SuccessionTransitionRules.ShouldMarkMonarchyEstablished(
                     setKingSucceeded,
                     RepublicGovernmentService.IsRepublic(__instance),

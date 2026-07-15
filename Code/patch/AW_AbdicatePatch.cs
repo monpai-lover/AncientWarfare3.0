@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.court;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -28,6 +29,7 @@ namespace AncientWarfare3.patch
             // 若此 king 正是 Die_Prefix 标记的"正在死亡的王",则跳过(驾崩已记录)。
             if (__state.data.id == AW_ActorDeathPatch.DyingKingActorId) return;
             // 否则视为主动退位。
+            CourtService.ClearOfficeForReignTransition(__state, "abdicated");
             ChronicleEvents.OnAbdicate(__instance, __state);
         }
     }

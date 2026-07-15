@@ -250,7 +250,7 @@ namespace AncientWarfare3.core.court
         {
             if (!HasOfficialCourt(pKingdom) && !HasPrimitiveCourt(pKingdom)) return;
 
-            AssignKingIfEmpty(pKingdom, pOccupiedOffices);
+            EnsureKingProjection(pKingdom);
             if (!HasOfficialCourt(pKingdom)) return;
 
             foreach (string office in CourtTierRules.CentralOfficesForTier(pTier))
@@ -258,24 +258,22 @@ namespace AncientWarfare3.core.court
                     CourtTierRules.PreferredSchoolForOffice(office));
         }
 
-        private static void AssignKingIfEmpty(Kingdom pKingdom, HashSet<string> pOccupiedOffices)
+        private static void EnsureKingProjection(Kingdom pKingdom)
         {
             Actor king = pKingdom.king;
             if (king?.data == null || king.isRekt()) return;
-            king.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
-            if (!string.IsNullOrEmpty(office))
-            {
-                if (office == "king_council" && HasOfficialCourt(pKingdom))
-                {
-                    EnsurePersonalSchool(king);
-                    SyncSchoolTrait(king, active: true);
-                }
-                return;
-            }
-            string initialSchool = SchoolMembershipService.GetSchool(king.data.id);
-            if (SetOfficer(king, pKingdom, CourtOfficeLayer.Primitive,
-                    "king_council", initialSchool, null))
-                pOccupiedOffices?.Add("king_council");
+            ClearOfficeForReignTransition(king, "became_king");
+            EnsurePersonalSchool(king);
+            SyncSchoolTrait(king, active: true);
+        }
+
+        internal static void ClearOfficeForReignTransition(Actor pActor, string pReason)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID, out long courtKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
+            if (courtKingdomId < 0 && string.IsNullOrEmpty(office)) return;
+            ClearOfficer(pActor, pReason ?? "reign_transition");
         }
 
         private static void FillCentralOffice(Kingdom pKingdom, List<Actor> pRoster,

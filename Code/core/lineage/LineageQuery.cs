@@ -1607,11 +1607,21 @@ namespace AncientWarfare3.core.lineage
             }
 
             var roles = new List<string>();
+            string rolesColor = color;
+            pLive.data.get(LineageKeys.FORMER_HEIR_TITLE, out string formerHeirTitle, "");
+            if (!string.IsNullOrEmpty(formerHeirTitle))
+            {
+                roles.Add(formerHeirTitle);
+                pLive.data.get(LineageKeys.FORMER_HEIR_KINGDOM_COLOR,
+                    out string formerHeirColor, "");
+                if (!string.IsNullOrEmpty(formerHeirColor)) rolesColor = formerHeirColor;
+            }
             pLive.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
             if (isHeir || HeirService.IsCurrentHeir(pLive.kingdom, pLive))
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
                 roles.Add(HeirTitleRules.BuildSocialTitle(kingdomName, pLive.kingdom));
+                rolesColor = color;
             }
             if (GeneralService.IsFiefHolder(pLive))
             {
@@ -1642,7 +1652,7 @@ namespace AncientWarfare3.core.lineage
             if (!string.IsNullOrEmpty(combined))
             {
                 pNode.social_title = combined;
-                pNode.social_title_color = color;
+                pNode.social_title_color = rolesColor;
             }
         }
 
