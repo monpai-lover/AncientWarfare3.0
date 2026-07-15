@@ -128,6 +128,16 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_CANDIDATE_SCAN_CURSOR = "aw_royal_guard_candidate_scan_cursor";
         public const string ROYAL_GUARD_GFX_DIRTY = "aw_royal_guard_gfx_dirty";
 
+        public const string ROYAL_ASYLUM_ACTIVE = "aw_royal_asylum_active";
+        public const string ROYAL_ASYLUM_HOME_KINGDOM_ID = "aw_royal_asylum_home_kingdom_id";
+        public const string ROYAL_ASYLUM_HOME_KINGDOM_NAME = "aw_royal_asylum_home_kingdom_name";
+        public const string ROYAL_ASYLUM_FORMER_CITY_ID = "aw_royal_asylum_former_city_id";
+        public const string ROYAL_ASYLUM_HOST_KINGDOM_ID = "aw_royal_asylum_host_kingdom_id";
+        public const string ROYAL_ASYLUM_HOST_CITY_ID = "aw_royal_asylum_host_city_id";
+        public const string ROYAL_ASYLUM_START_YEAR = "aw_royal_asylum_start_year";
+        public const string ROYAL_ASYLUM_LAST_RELOCATION_YEAR = "aw_royal_asylum_last_relocation_year";
+        public const string ROYAL_ASYLUM_ROSTER_IDS = "aw_royal_asylum_roster_ids";
+
         public const string POLICY_CLASS_STATE = "aw_policy_class_state";
         public const string REPUBLIC_LEADER = "aw_republic_leader";
         public const string POLICY_ARMY_STATE = "aw_policy_army_state";

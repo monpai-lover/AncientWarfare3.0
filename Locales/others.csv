@@ -214,6 +214,10 @@ status_title_aw_school_debate,百家论辩,Hundred Schools Debate,百家論辯
 status_description_aw_school_debate,正在与其他学派进行公开论辩,Participating in a formal public debate with another school,正在與其他學派進行公開論辯
 status_title_aw_school_voyage,远洋访学,Scholarly Sea Voyage,遠洋訪學
 status_description_aw_school_voyage,因长期无船而进行有时限的远洋访学,A bounded scholarly voyage used only after prolonged transport failure,因長期無船而進行有時限的遠洋訪學
+status_title_aw_royal_asylum,王族避难,Royal Asylum,王族避難
+status_description_aw_royal_asylum,因本国防御战争暂居和平国家且保留原国籍,Temporarily residing in a peaceful realm during a defensive war while retaining home nationality,因本國防禦戰爭暫居和平國家且保留原國籍
+task_unit_aw_royal_asylum_roam,避难地闲居,Asylum Residence,避難地閒居
+aw_royal_asylum_host,避难城市,Host City,避難城市
 aw_historical_school_scholar,游学先师,Itinerant Master,遊學先師
 task_unit_aw_historical_school_lecture,开坛讲学,Public Lecture,開壇講學
 task_unit_aw_historical_school_debate_travel,赴会论辩,Travel to Debate,赴會論辯

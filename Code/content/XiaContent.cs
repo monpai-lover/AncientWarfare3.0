@@ -30,6 +30,7 @@ namespace AncientWarfare3.content
             SlaveryContent.Init();
             GuardContent.Init();
             BorderGuardContent.Init();
+            RoyalAsylumContent.Init();
             core.lineage.WarPlotRedirectService.Init();
 
             schools.HistoricalSchoolContent.Init();
