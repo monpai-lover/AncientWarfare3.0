@@ -23,6 +23,11 @@ namespace AncientWarfare3.core.schools
                    pActiveCount < pConcurrentLimit;
         }
 
+        public static bool CanEnqueueTotal(int pCurrentCount, int pCapacity)
+        {
+            return pCurrentCount >= 0 && pCapacity > 0 && pCurrentCount < pCapacity;
+        }
+
         public static string ActorYearKey(int pYear, long pActorId)
         {
             return pYear.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +

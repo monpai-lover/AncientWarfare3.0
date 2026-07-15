@@ -70,7 +70,6 @@ namespace AncientWarfare3.patch
         private static void MapBoxClearWorld_Prefix()
         {
             HistoricalSchoolRuntime.ClearRuntime();
-            SchoolMembershipService.ClearRuntime();
         }
 
         [HarmonyPostfix]

@@ -39,6 +39,7 @@ namespace AncientWarfare3.core.schools
         {
             _lastQuarterKey = -1;
             HistoricalSchoolScheduler.Clear();
+            SchoolMembershipService.ClearRuntime();
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();

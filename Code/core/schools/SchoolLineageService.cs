@@ -8,17 +8,19 @@ namespace AncientWarfare3.core.schools
     internal static class SchoolLineageService
     {
         public const int DirectDiscipleCap = 8;
-        private static readonly Dictionary<string, HashSet<long>> ItinerantReservations =
-            new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
+        private static readonly HistoricalSchoolTravelReservationBook
+            ItinerantReservations = new HistoricalSchoolTravelReservationBook(
+                HistoricalSchoolRules.MaxNonHistoricalItinerantsPerSchool);
         private static readonly Dictionary<long, long> SuccessorByTeacher =
             new Dictionary<long, long>();
-        private static readonly HashSet<long> HandledTeacherDeaths = new HashSet<long>();
+        private static readonly HistoricalSchoolTransientIdGate ProcessingTeacherDeaths =
+            new HistoricalSchoolTransientIdGate();
 
         public static void LoadState()
         {
             ItinerantReservations.Clear();
             SuccessorByTeacher.Clear();
-            HandledTeacherDeaths.Clear();
+            ProcessingTeacherDeaths.Clear();
             foreach (KeyValuePair<long, long> item in HistoricalSchoolStore.LoadLineageSuccessors())
                 if (item.Key >= 0 && item.Value >= 0) SuccessorByTeacher[item.Key] = item.Value;
             for (int bucket = 0; bucket < 4; bucket++)
@@ -42,7 +44,7 @@ namespace AncientWarfare3.core.schools
         {
             ItinerantReservations.Clear();
             SuccessorByTeacher.Clear();
-            HandledTeacherDeaths.Clear();
+            ProcessingTeacherDeaths.Clear();
         }
 
         public static bool TryReserveItinerant(Actor pActor, string pSchoolId)
@@ -55,32 +57,18 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord membership = SchoolMembershipService.GetActive(pActor.data.id);
             if (membership == null || !string.Equals(membership.SchoolId, pSchoolId,
                     StringComparison.Ordinal)) return false;
-            if (!ItinerantReservations.TryGetValue(pSchoolId, out HashSet<long> actors))
-            {
-                actors = new HashSet<long>();
-                ItinerantReservations[pSchoolId] = actors;
-            }
-            if (actors.Contains(pActor.data.id)) return true;
-            foreach (KeyValuePair<string, HashSet<long>> item in ItinerantReservations)
-                if (!string.Equals(item.Key, pSchoolId, StringComparison.Ordinal) &&
-                    item.Value.Contains(pActor.data.id)) return false;
-            if (actors.Count >= HistoricalSchoolRules.MaxNonHistoricalItinerantsPerSchool)
-                return false;
-            actors.Add(pActor.data.id);
-            return true;
+            return ItinerantReservations.TryReserve(pSchoolId, pActor.data.id);
         }
 
         public static void ReleaseItinerant(Actor pActor)
         {
             if (pActor?.data == null) return;
-            foreach (HashSet<long> reserved in ItinerantReservations.Values)
-                reserved.Remove(pActor.data.id);
+            ItinerantReservations.Release(pActor.data.id);
         }
 
         public static int ItinerantReservationCount(string pSchoolId)
         {
-            return pSchoolId != null && ItinerantReservations.TryGetValue(pSchoolId,
-                out HashSet<long> actors) ? actors.Count : 0;
+            return ItinerantReservations.CountForSchool(pSchoolId);
         }
 
         public static Actor SuccessorFor(Actor pTeacher)
@@ -168,17 +156,91 @@ namespace AncientWarfare3.core.schools
 
         public static void OnTeacherDeath(Actor pTeacher)
         {
-            if (pTeacher?.data == null || !HandledTeacherDeaths.Add(pTeacher.data.id)) return;
-            ReleaseItinerant(pTeacher);
-            Actor successor = SelectSuccessor(pTeacher);
-            if (successor?.data == null) return;
-            SchoolMembershipRecord membership = SchoolMembershipService.GetActive(successor.data.id);
-            bool recorded = HistoricalSchoolStore.RecordSchoolEvent("lineage_successor",
-                successor.data.id,
-                pTeacher.data.id, membership?.SchoolId ?? "", successor.city?.data?.id ?? -1L,
-                successor.kingdom?.data?.id ?? -1L, Date.getCurrentYear(),
-                successor.data.name ?? "", 3, World.world?.getCurWorldTime() ?? 0d);
-            if (recorded) SuccessorByTeacher[pTeacher.data.id] = successor.data.id;
+            long teacherId = pTeacher?.data?.id ?? -1L;
+            if (teacherId < 0 || SuccessorByTeacher.ContainsKey(teacherId) ||
+                !ProcessingTeacherDeaths.TryBegin(teacherId)) return;
+            bool persistenceQueued = false;
+            try
+            {
+                ReleaseItinerant(pTeacher);
+                Actor successor = SelectSuccessor(pTeacher);
+                if (successor?.data == null) return;
+                SchoolMembershipRecord membership =
+                    SchoolMembershipService.GetActive(successor.data.id);
+                City residence = HistoricalAffiliationService.ResidenceCity(successor) ??
+                                 successor.city;
+                persistenceQueued = HistoricalSchoolWriteBufferService.TryEnqueue(
+                    new LineageSuccessorWriteOperation(teacherId, successor.data.id,
+                        membership?.SchoolId ?? "", residence?.data?.id ?? -1L,
+                        residence?.kingdom?.data?.id ??
+                        successor.kingdom?.data?.id ?? -1L,
+                        Date.getCurrentYear(), successor.data.name ?? "",
+                        World.world?.getCurWorldTime() ?? 0d));
+            }
+            finally
+            {
+                if (!persistenceQueued) ProcessingTeacherDeaths.Complete(teacherId);
+            }
+        }
+
+        private sealed class LineageSuccessorWriteOperation :
+            IHistoricalSchoolWriteOperation
+        {
+            private readonly long _teacherId;
+            private readonly long _successorId;
+            private readonly string _schoolId;
+            private readonly long _cityId;
+            private readonly long _kingdomId;
+            private readonly int _year;
+            private readonly string _successorName;
+            private readonly double _worldTime;
+
+            public LineageSuccessorWriteOperation(long pTeacherId, long pSuccessorId,
+                string pSchoolId, long pCityId, long pKingdomId, int pYear,
+                string pSuccessorName, double pWorldTime)
+            {
+                _teacherId = pTeacherId;
+                _successorId = pSuccessorId;
+                _schoolId = pSchoolId ?? "";
+                _cityId = pCityId;
+                _kingdomId = pKingdomId;
+                _year = pYear;
+                _successorName = pSuccessorName ?? "";
+                _worldTime = pWorldTime;
+                OperationKey = "lineage-successor:v1:teacher:" + _teacherId +
+                               ":successor:" + _successorId;
+            }
+
+            public string OperationKey { get; }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.RecordSchoolEventInTransaction(pDb,
+                    pTransaction, OperationKey, "lineage_successor", _successorId,
+                    _teacherId, _schoolId, _cityId, _kingdomId, _year,
+                    _successorName, 3, _worldTime);
+            }
+
+            public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+            {
+                try
+                {
+                    if (pOutcome == HistoricalSchoolTeachingPersistenceOutcome.Committed ||
+                        pOutcome == HistoricalSchoolTeachingPersistenceOutcome.Replayed)
+                        SuccessorByTeacher[_teacherId] = _successorId;
+                }
+                finally
+                {
+                    ProcessingTeacherDeaths.Complete(_teacherId);
+                }
+            }
+
+            public void OnCleanFailure()
+            {
+                ProcessingTeacherDeaths.Complete(_teacherId);
+            }
         }
 
         private static float SafeLearning(Actor pActor)

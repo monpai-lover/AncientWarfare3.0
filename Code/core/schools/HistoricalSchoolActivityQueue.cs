@@ -26,6 +26,8 @@ namespace AncientWarfare3.core.schools
     internal static class HistoricalSchoolActivityQueue
     {
         private const int MaxQueuedLectures = 8;
+        private const int MaxConcurrentLectures = 8;
+        private const int MaxRetainedLectures = MaxQueuedLectures * 2;
         private const long TaskLeaseFrames = 600L;
         private static readonly Queue<HistoricalSchoolLectureActivity> PendingLectures =
             new Queue<HistoricalSchoolLectureActivity>();
@@ -98,6 +100,9 @@ namespace AncientWarfare3.core.schools
             int pDirectDiscipleCount)
         {
             if (!pPlan.IsValid) return false;
+            if (!HistoricalSchoolActivityQueueRules.CanEnqueueTotal(
+                    PendingLectures.Count + ActiveLectures.Count,
+                    MaxRetainedLectures)) return false;
             QueuedLecturesByYear.TryGetValue(pPlan.Year, out int yearCount);
             bool duplicate = OperationKeys.Contains(pPlan.Year, pPlan.OperationKey);
             if (QueuedLectureActors.Contains(pPlan.Candidate.ActorId)) return false;
@@ -173,7 +178,9 @@ namespace AncientWarfare3.core.schools
 
             if (TryProcessValidation()) return;
             if (TryProcessReadyLecture()) return;
-            if (PendingLectures.Count == 0)
+            if (PendingLectures.Count == 0 ||
+                !HistoricalSchoolActivityQueueRules.CanActivate(
+                    ActiveLectures.Count, MaxConcurrentLectures))
             {
                 if (HistoricalSchoolDebateActivityService.ProcessFrame()) return;
                 HistoricalSchoolActionService.ProcessDeferredFrame();

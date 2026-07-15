@@ -64,6 +64,7 @@ namespace AncientWarfare3.core.schools
     internal static class HistoricalSchoolDebateActivityService
     {
         private const int MaxQueuedPerYear = HistoricalSchoolDebateService.MaxDebatesPerYear;
+        private const int MaxRetainedDebates = MaxQueuedPerYear * 2;
         private const int MaxConcurrentDebates = 4;
         private const long TaskLeaseFrames = 600L;
         private static readonly Queue<HistoricalSchoolDebateCityRequest> PendingCities =
@@ -86,6 +87,9 @@ namespace AncientWarfare3.core.schools
             IEnumerable<HistoricalSchoolDebateActorSeed> pActors)
         {
             var request = new HistoricalSchoolDebateCityRequest(pCityId, pYear, pActors);
+            if (!HistoricalSchoolActivityQueueRules.CanEnqueueTotal(
+                    PendingCities.Count + ActivitiesById.Count,
+                    MaxRetainedDebates)) return false;
             QueuedDebatesByYear.TryGetValue(pYear, out int yearCount);
             if (request.CityId < 0 || request.Year < 0 || request.Actors.Length < 2 ||
                 !HistoricalSchoolActivityQueueRules.CanEnqueue(yearCount,

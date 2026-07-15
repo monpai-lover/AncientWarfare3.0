@@ -90,7 +90,6 @@ namespace AncientWarfare3.patch
             try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
             try { SchoolWindow.ResetWorldCache(); } catch { }
             try { SchoolRosterWindow.ResetWorldCache(); } catch { }
-            try { SchoolMembershipService.ClearRuntime(); } catch { }
             try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }
             try { HistoryListWindow.ResetWorldCache(); } catch { }
             try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }

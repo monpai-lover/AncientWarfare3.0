@@ -207,15 +207,109 @@ internal static class SchoolRuntimePerformanceTests
         for (int i = 0; i < 10_000; i++) leases.TryExpireOne(100, out _);
         Equal(0L, GC.GetAllocatedBytesForCurrentThread() - leaseAllocatedBefore,
             "empty activity scheduler allocates zero bytes");
+        True(HistoricalSchoolActivityQueueRules.CanEnqueueTotal(15, 16),
+            "lecture backlog accepts work below its two-year capacity");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueueTotal(16, 16),
+            "lecture backlog rejects work at its exact global capacity");
+        True(HistoricalSchoolActivityQueueRules.CanActivate(7, 8),
+            "lecture activation remains available below the concurrent limit");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanActivate(8, 8),
+            "lecture activation waits at the exact concurrent limit");
+        True(HistoricalSchoolActivityQueueRules.CanEnqueueTotal(95, 96),
+            "debate backlog accepts work below its two-year capacity");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueueTotal(96, 96),
+            "debate backlog rejects work at its exact global capacity");
+
+        var boundedYearKeys = new HistoricalSchoolBoundedYearKeys();
+        for (int key = 0; key < 10; key++)
+        {
+            True(boundedYearKeys.Add(20, "old-" + key),
+                "old operation key enters the retained two-year window");
+            True(boundedYearKeys.Add(21, "previous-" + key),
+                "previous-year operation key enters the retained window");
+        }
+        Equal(20, boundedYearKeys.Count,
+            "operation keys retain exactly two populated years");
+        for (int key = 0; key < 10; key++)
+            True(boundedYearKeys.Add(22, "current-" + key),
+                "current-year operation key advances the retained window");
+        Equal(20, boundedYearKeys.Count,
+            "advancing a year prunes every key older than the previous year");
+        Equal(false, boundedYearKeys.Contains(20, "old-0"),
+            "operation keys discard the year outside the retained window");
+        True(boundedYearKeys.Contains(21, "previous-0"),
+            "operation keys retain the previous simulation year");
+        True(boundedYearKeys.Contains(22, "current-0"),
+            "operation keys retain the current simulation year");
+        Equal(false, boundedYearKeys.Add(20, "late-old"),
+            "late stale work cannot re-enter a pruned year");
+        boundedYearKeys.Clear();
+        Equal(0, boundedYearKeys.Count, "year-key clear removes every retained key");
 
         var cityCache = new HistoricalSchoolFixedLru<long, int>(128);
+        for (int city = 0; city < 256; city++) cityCache.Set(city, city);
+        Equal(128, cityCache.Count,
+            "city LRU remains exactly at capacity after excess insertions");
+        cityCache.Clear();
         for (int city = 0; city < 128; city++) cityCache.Set(city, city);
         True(cityCache.TryGet(0, out _), "LRU access refreshes oldest city");
         cityCache.Set(128, 128);
         Equal(false, cityCache.ContainsKey(1), "LRU evicts the least recent city");
         True(cityCache.ContainsKey(0), "recently accessed city remains cached");
         True(cityCache.Remove(0), "city destruction removes its cache entry");
-        Equal(127, cityCache.Count, "city cache remains at fixed capacity after removal");
+        Equal(127, cityCache.Count, "city destruction removes only its cache entry");
+        cityCache.Clear();
+        Equal(0, cityCache.Count, "fresh-world clear removes every cached city");
+
+        var venueClaims = new HistoricalSchoolActiveReservationBook<string, int>(12);
+        for (int claim = 0; claim < 12; claim++)
+            True(venueClaims.TryAdd("venue-" + claim, claim),
+                "active venue claim enters through the exact capacity");
+        Equal(false, venueClaims.TryAdd("venue-overflow", 12),
+            "active venue claims reject entries above lecture/debate capacity");
+        Equal(12, venueClaims.Count,
+            "active venue claims remain exactly bounded at twelve");
+        True(venueClaims.TryRemove("venue-0", out int releasedVenue) &&
+             releasedVenue == 0, "terminal activity releases its exact venue claim");
+        Equal(11, venueClaims.Count,
+            "released venue claims leave only active operations");
+        venueClaims.Clear();
+        Equal(0, venueClaims.Count, "fresh-world clear releases every venue claim");
+
+        var travelReservations = new HistoricalSchoolTravelReservationBook(6);
+        for (long actorId = 0; actorId < 6; actorId++)
+            True(travelReservations.TryReserve("ru", actorId),
+                "travel reservation enters through the per-school capacity");
+        Equal(false, travelReservations.TryReserve("ru", 6),
+            "travel reservations reject a seventh itinerant for one school");
+        Equal(6, travelReservations.CountForSchool("ru"),
+            "travel reservations remain exactly bounded at six per school");
+        Equal(false, travelReservations.TryReserve("mo", 0),
+            "one actor cannot reserve travel for two schools");
+        True(travelReservations.Release(0),
+            "travel completion releases the actor reservation");
+        Equal(5, travelReservations.Count,
+            "only active travel reservations remain after completion");
+        travelReservations.Clear();
+        Equal(0, travelReservations.Count,
+            "fresh-world clear removes every travel reservation");
+
+        var processingDeaths = new HistoricalSchoolTransientIdGate();
+        True(processingDeaths.TryBegin(42),
+            "teacher death enters the transient processing gate");
+        Equal(false, processingDeaths.TryBegin(42),
+            "duplicate teacher death cannot run concurrently");
+        Equal(1, processingDeaths.Count,
+            "teacher death gate contains only the operation being handled");
+        True(processingDeaths.Complete(42),
+            "durable death/successor completion releases handled state");
+        Equal(0, processingDeaths.Count,
+            "handled teacher death state is never retained after completion");
+        processingDeaths.TryBegin(43);
+        processingDeaths.TryBegin(44);
+        processingDeaths.Clear();
+        Equal(0, processingDeaths.Count,
+            "fresh-world clear removes every in-flight death gate");
 
         var cityStamp = new HistoricalSchoolCityCacheStamp(
             pIdentityToken: 17, pKingdomId: 4, pZoneCount: 12,

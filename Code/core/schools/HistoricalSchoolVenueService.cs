@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.schools
     internal static class HistoricalSchoolVenueService
     {
         private const int MaxCandidates = 48;
+        private const int MaxActiveClaims = 12;
         private const int LocalDiameter = 37;
         private const int LocalSearchCount = LocalDiameter * LocalDiameter;
         private static readonly List<WorldTile> NoCandidates = new List<WorldTile>(0);
@@ -35,8 +36,10 @@ namespace AncientWarfare3.core.schools
             public List<WorldTile> Tiles;
         }
 
-        private static readonly Dictionary<string, HistoricalSchoolVenueClaim> ByOperation =
-            new Dictionary<string, HistoricalSchoolVenueClaim>(StringComparer.Ordinal);
+        private static readonly
+            HistoricalSchoolActiveReservationBook<string, HistoricalSchoolVenueClaim>
+            ByOperation = new HistoricalSchoolActiveReservationBook<string,
+                HistoricalSchoolVenueClaim>(MaxActiveClaims);
         private static readonly Dictionary<long, HashSet<long>> OccupiedByCity =
             new Dictionary<long, HashSet<long>>();
         private static readonly HistoricalSchoolFixedLru<long, CityVenueCacheEntry>
@@ -60,9 +63,8 @@ namespace AncientWarfare3.core.schools
         public static void Release(string pOperationKey)
         {
             if (string.IsNullOrEmpty(pOperationKey) ||
-                !ByOperation.TryGetValue(pOperationKey, out HistoricalSchoolVenueClaim claim))
+                !ByOperation.TryRemove(pOperationKey, out HistoricalSchoolVenueClaim claim))
                 return;
-            ByOperation.Remove(pOperationKey);
             ReleaseOccupied(claim);
         }
 
@@ -156,7 +158,8 @@ namespace AncientWarfare3.core.schools
             if (pCity?.data == null || pCity.isRekt() || pActor?.data == null ||
                 string.IsNullOrEmpty(pSchoolId) || string.IsNullOrEmpty(pOperationKey))
                 return false;
-            if (ByOperation.TryGetValue(pOperationKey, out pClaim)) return true;
+            if (ByOperation.TryGet(pOperationKey, out pClaim)) return true;
+            if (ByOperation.Count >= MaxActiveClaims) return false;
             if (!HistoricalSchoolVenueProvider.TryFind(pCity, pActor, pSchoolId, pKind,
                     out WorldTile primary, out WorldTile secondary)) return false;
             if (!IsVenueCandidate(primary, pCity, pActor, pKind) ||
@@ -177,7 +180,12 @@ namespace AncientWarfare3.core.schools
             }
             pClaim = new HistoricalSchoolVenueClaim(pOperationKey, pCity.data.id,
                 primary, secondary);
-            ByOperation[pOperationKey] = pClaim;
+            if (!ByOperation.TryAdd(pOperationKey, pClaim))
+            {
+                ReleaseOccupied(pClaim);
+                pClaim = null;
+                return false;
+            }
             return true;
         }
 

@@ -118,4 +118,125 @@ namespace AncientWarfare3.core.schools
             _recency.AddLast(pEntry.Node);
         }
     }
+
+    public sealed class HistoricalSchoolActiveReservationBook<TKey, TValue>
+    {
+        private readonly int _capacity;
+        private readonly Dictionary<TKey, TValue> _values;
+
+        public HistoricalSchoolActiveReservationBook(int pCapacity)
+        {
+            if (pCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(pCapacity));
+            _capacity = pCapacity;
+            _values = new Dictionary<TKey, TValue>(pCapacity);
+        }
+
+        public int Count => _values.Count;
+
+        public bool TryGet(TKey pKey, out TValue pValue)
+        {
+            return _values.TryGetValue(pKey, out pValue);
+        }
+
+        public bool TryAdd(TKey pKey, TValue pValue)
+        {
+            if (_values.ContainsKey(pKey) || _values.Count >= _capacity) return false;
+            _values.Add(pKey, pValue);
+            return true;
+        }
+
+        public bool TryRemove(TKey pKey, out TValue pValue)
+        {
+            if (!_values.TryGetValue(pKey, out pValue)) return false;
+            _values.Remove(pKey);
+            return true;
+        }
+
+        public void Clear()
+        {
+            _values.Clear();
+        }
+    }
+
+    public sealed class HistoricalSchoolTravelReservationBook
+    {
+        private readonly int _capacityPerSchool;
+        private readonly Dictionary<string, HashSet<long>> _actorsBySchool =
+            new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
+        private readonly Dictionary<long, string> _schoolByActor =
+            new Dictionary<long, string>();
+
+        public HistoricalSchoolTravelReservationBook(int pCapacityPerSchool)
+        {
+            if (pCapacityPerSchool <= 0)
+                throw new ArgumentOutOfRangeException(nameof(pCapacityPerSchool));
+            _capacityPerSchool = pCapacityPerSchool;
+        }
+
+        public int Count => _schoolByActor.Count;
+
+        public int CountForSchool(string pSchoolId)
+        {
+            return !string.IsNullOrEmpty(pSchoolId) &&
+                   _actorsBySchool.TryGetValue(pSchoolId, out HashSet<long> actors)
+                ? actors.Count
+                : 0;
+        }
+
+        public bool TryReserve(string pSchoolId, long pActorId)
+        {
+            if (string.IsNullOrEmpty(pSchoolId) || pActorId < 0) return false;
+            if (_schoolByActor.TryGetValue(pActorId, out string existingSchool))
+                return string.Equals(existingSchool, pSchoolId, StringComparison.Ordinal);
+            if (!_actorsBySchool.TryGetValue(pSchoolId, out HashSet<long> actors))
+            {
+                actors = new HashSet<long>();
+                _actorsBySchool.Add(pSchoolId, actors);
+            }
+            if (actors.Count >= _capacityPerSchool) return false;
+            actors.Add(pActorId);
+            _schoolByActor.Add(pActorId, pSchoolId);
+            return true;
+        }
+
+        public bool Release(long pActorId)
+        {
+            if (!_schoolByActor.TryGetValue(pActorId, out string schoolId)) return false;
+            _schoolByActor.Remove(pActorId);
+            if (_actorsBySchool.TryGetValue(schoolId, out HashSet<long> actors))
+            {
+                actors.Remove(pActorId);
+                if (actors.Count == 0) _actorsBySchool.Remove(schoolId);
+            }
+            return true;
+        }
+
+        public void Clear()
+        {
+            _actorsBySchool.Clear();
+            _schoolByActor.Clear();
+        }
+    }
+
+    public sealed class HistoricalSchoolTransientIdGate
+    {
+        private readonly HashSet<long> _ids = new HashSet<long>();
+
+        public int Count => _ids.Count;
+
+        public bool TryBegin(long pId)
+        {
+            return pId >= 0 && _ids.Add(pId);
+        }
+
+        public bool Complete(long pId)
+        {
+            return _ids.Remove(pId);
+        }
+
+        public void Clear()
+        {
+            _ids.Clear();
+        }
+    }
 }
