@@ -477,32 +477,76 @@ True(CityOccupationAccelerationRules.ShouldApplyCapturePointContribution(
         cityOwnerHasActiveDefenders: false),
     "attacker capture contributions are never classified as watchtowers");
 
+True(CityOccupationAccelerationRules.ShouldLatchDefenderEngagement(
+        ownerWarriorPresent: true,
+        attackerWarriorPresent: true,
+        attackerIsEnemy: true),
+    "matched hostile warriors prove a real city battle");
+Equal(false, CityOccupationAccelerationRules.ShouldLatchDefenderEngagement(
+        ownerWarriorPresent: true,
+        attackerWarriorPresent: false,
+        attackerIsEnemy: true),
+    "an empty city cannot manufacture defender engagement");
+Equal(false, CityOccupationAccelerationRules.ShouldLatchDefenderEngagement(
+        ownerWarriorPresent: true,
+        attackerWarriorPresent: true,
+        attackerIsEnemy: false),
+    "friendly military overlap is not defender engagement");
+
 True(CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
         enemyCapturer: true,
         activeCaptureUnits: true,
         activeDefenders: false,
         hostileRivalActive: false,
         ownershipChanged: false,
-        cityManagerLocked: false),
-    "uncontested enemy control completes occupation immediately");
+        cityManagerLocked: false,
+        defenderEngagementObserved: true),
+    "defeating a real garrison completes occupation immediately");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        true, true, true, false, false, false),
+        enemyCapturer: true,
+        activeCaptureUnits: true,
+        activeDefenders: false,
+        hostileRivalActive: false,
+        ownershipChanged: false,
+        cityManagerLocked: false,
+        defenderEngagementObserved: false),
+    "an initially empty city advances capture progress instead of transferring immediately");
+Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
+        true, true, true, false, false, false, true),
     "active defenders block immediate transfer");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        true, true, false, true, false, false),
+        true, true, false, true, false, false, true),
     "a hostile rival keeps the city contested");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        false, true, false, false, false, false),
+        false, true, false, false, false, false, true),
     "a non-enemy cannot receive military occupation");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        true, false, false, false, false, false),
+        true, false, false, false, false, false, true),
     "an absent attacker cannot capture a city");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        true, true, false, false, true, false),
+        true, true, false, false, true, false, true),
     "changed ownership is not transferred twice");
 Equal(false, CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-        true, true, false, false, false, true),
+        true, true, false, false, false, true, true),
     "a locked city manager defers transfer");
+True(CityOccupationAccelerationRules.ShouldRetainDefenderEngagement(
+        ownerMatches: true,
+        attackerMatches: true,
+        attackerStillEnemy: true,
+        attackerPresentInCompletedCycle: true),
+    "a continuing assault retains its combat evidence");
+Equal(false, CityOccupationAccelerationRules.ShouldRetainDefenderEngagement(
+        ownerMatches: true,
+        attackerMatches: false,
+        attackerStillEnemy: true,
+        attackerPresentInCompletedCycle: true),
+    "a replacement attacker cannot inherit combat evidence");
+Equal(false, CityOccupationAccelerationRules.ShouldRetainDefenderEngagement(
+        ownerMatches: true,
+        attackerMatches: true,
+        attackerStillEnemy: true,
+        attackerPresentInCompletedCycle: false),
+    "withdrawal clears combat evidence");
 Equal(false, CityOccupationAccelerationRules.ShouldCountMilitaryCapturePresence(
         participantIsCityOwner: true,
         cityOwnerHasActiveDefenders: false),

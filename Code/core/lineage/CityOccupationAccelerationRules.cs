@@ -18,16 +18,31 @@ namespace AncientWarfare3.core.lineage
             return !passiveWatchtowerContribution || cityOwnerHasActiveDefenders;
         }
 
+        public static bool ShouldLatchDefenderEngagement(bool ownerWarriorPresent,
+            bool attackerWarriorPresent, bool attackerIsEnemy)
+        {
+            return ownerWarriorPresent && attackerWarriorPresent && attackerIsEnemy;
+        }
+
         public static bool ShouldCompleteAfterDefenderDefeat(bool enemyCapturer,
             bool activeCaptureUnits, bool activeDefenders, bool hostileRivalActive,
-            bool ownershipChanged, bool cityManagerLocked)
+            bool ownershipChanged, bool cityManagerLocked, bool defenderEngagementObserved = false)
         {
             return enemyCapturer &&
                    activeCaptureUnits &&
                    !activeDefenders &&
                    !hostileRivalActive &&
                    !ownershipChanged &&
-                   !cityManagerLocked;
+                   !cityManagerLocked &&
+                   defenderEngagementObserved;
+        }
+
+        public static bool ShouldRetainDefenderEngagement(bool ownerMatches,
+            bool attackerMatches, bool attackerStillEnemy,
+            bool attackerPresentInCompletedCycle)
+        {
+            return ownerMatches && attackerMatches && attackerStillEnemy &&
+                   attackerPresentInCompletedCycle;
         }
 
         public static bool ShouldCountMilitaryCapturePresence(bool participantIsCityOwner,
