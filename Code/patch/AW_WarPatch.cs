@@ -40,6 +40,7 @@ namespace AncientWarfare3.patch
             WarRecordWriter.OnWarStart(__result);
             VassalService.OnWarStarted(__result);
             MandateService.OnWarStarted(__result);
+            RoyalAsylumService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -56,6 +57,7 @@ namespace AncientWarfare3.patch
         {
             if (pWar?.data == null) return;
             CityOccupationAccelerationService.OnWarEnded(pWar);
+            RoyalAsylumService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
             WarTerritoryService.OnWarEnded(pWar, pWinner);
             ApplyDiplomacyWarResult(pWar, pWinner);

@@ -456,6 +456,11 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static void SuspendForAsylum(Actor pActor)
+        {
+            if (IsGeneral(pActor)) EndGeneral(pActor, "royal_asylum");
+        }
+
         private static void EndGeneral(Actor pActor, string pReason)
         {
             if (pActor?.data == null) return;

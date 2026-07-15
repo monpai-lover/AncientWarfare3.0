@@ -60,6 +60,7 @@ namespace AncientWarfare3.patch
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
             ResetHistoryWindowsAfterArchiveSwitch();
+            core.lineage.RoyalAsylumService.LoadRuntimeState();
             SchoolMembershipService.LoadIndexes();
             HistoricalSchoolRuntime.LoadState();
             core.lineage.AWArmyService.RepairSpecialArmiesAfterLoad();
@@ -76,6 +77,7 @@ namespace AncientWarfare3.patch
             XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
             ResetHistoryWindowsAfterArchiveSwitch();
+            core.lineage.RoyalAsylumService.LoadRuntimeState();
             SchoolMembershipService.LoadIndexes();
             HistoricalSchoolRuntime.LoadState();
         }
@@ -84,6 +86,7 @@ namespace AncientWarfare3.patch
         {
             try { core.lineage.DeferredRuntimeWorkService.ClearRuntimeState(); } catch { }
             try { core.lineage.CityOccupationAccelerationService.ClearRuntime(); } catch { }
+            try { core.lineage.RoyalAsylumService.ClearRuntime(); } catch { }
             try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
