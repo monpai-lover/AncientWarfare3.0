@@ -225,7 +225,9 @@ namespace AncientWarfare3.core.court
                 if (courtKingdomId != pKingdom.id) continue;
 
                 actor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
-                bool baseValid = CourtRules.CanHoldOffice(
+                bool baseValid = RoyalAsylumRules.CanPerformProtectedRole(
+                                     RoyalAsylumService.IsActive(actor)) &&
+                                 CourtRules.CanHoldOffice(
                     alive: actor.isAlive() && !actor.isRekt(),
                     sameKingdom: CourtAffiliationResolver.CanServe(actor, pKingdom, layer),
                     slave: actor.hasTrait(LineageKeys.TRAIT_SLAVE),
@@ -301,6 +303,8 @@ namespace AncientWarfare3.core.court
             {
                 if (++seen > CandidateLimit * 8) break;
                 if (actor?.data == null || actor.isRekt()) continue;
+                if (!RoyalAsylumRules.CanPerformProtectedRole(
+                        RoyalAsylumService.IsActive(actor))) continue;
                 if (!HistoricalAffiliationService.IsAvailableForOffice(actor)) continue;
                 bool baseEligible = CourtRules.CanHoldOffice(actor.isAlive(), actor.kingdom == pKingdom,
                     actor.hasTrait(LineageKeys.TRAIT_SLAVE), actor.hasTrait("madness"));
@@ -361,6 +365,8 @@ namespace AncientWarfare3.core.court
         internal static bool CanAppointGuestOfficer(Actor pActor, Kingdom pKingdom,
             string pOfficeId, City pCity)
         {
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return false;
             HistoricalSchoolAffiliationSnapshot affiliation =
                 HistoricalAffiliationService.Get(pActor?.data?.id ?? -1L);
             if (pActor?.data == null || pKingdom?.data == null || pCity?.data == null ||
@@ -429,6 +435,8 @@ namespace AncientWarfare3.core.court
         private static bool SetOfficer(Actor pActor, Kingdom pKingdom, string pLayer, string pOfficeId, string pSchoolId, City pCity)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return false;
 
             pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
                 out long runtimePreviousKingdomId, -1L);

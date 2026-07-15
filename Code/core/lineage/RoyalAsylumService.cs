@@ -203,6 +203,16 @@ namespace AncientWarfare3.core.lineage
             return ResolveCity(hostCityId);
         }
 
+        public static bool RecallForSuccession(Actor pActor, Kingdom pHome)
+        {
+            if (!IsActive(pActor)) return true;
+            if (pActor?.data == null || pHome?.data == null) return false;
+            pActor.data.get(LineageKeys.ROYAL_ASYLUM_HOME_KINGDOM_ID,
+                out long homeKingdomId, -1L);
+            if (homeKingdomId != pHome.id || pActor.kingdom != pHome) return false;
+            return TryReturn(pActor, pHome);
+        }
+
         private static List<Actor> CollectProtectedFamily(Kingdom pHome, Actor pKing,
             Actor pHeir)
         {

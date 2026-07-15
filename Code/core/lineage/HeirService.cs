@@ -382,6 +382,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             Actor heir = pSelection.Actor;
             FormerHeirService.ClearSnapshot(heir);
+            RoyalAsylumService.RecallForSuccession(heir, pKingdom);
             RecallForeignSelectedHeir(pKingdom, heir);
             if (heir?.data != null)
                 LineageService.EnsureRoyalHeirLineage(pKingdom, heir);

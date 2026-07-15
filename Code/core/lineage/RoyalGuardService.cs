@@ -941,6 +941,8 @@ namespace AncientWarfare3.core.lineage
         private static bool IsGuardCandidate(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return false;
             if (!HistoricalMasterVocationService.CanEnter(pActor,
                     HistoricalMasterMilitaryContext.RoyalGuard)) return false;
             return RoyalGuardSelectionRules.IsEligibleCore(

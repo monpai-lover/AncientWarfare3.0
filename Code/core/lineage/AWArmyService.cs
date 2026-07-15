@@ -153,6 +153,8 @@ namespace AncientWarfare3.core.lineage
         public static void AddToArmy(Actor pActor, Army pArmy)
         {
             if (pActor?.data == null || pArmy?.data == null) return;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return;
             if (!HistoricalMasterVocationService.CanJoinArmy(pActor, pArmy)) return;
             if (pActor.army == pArmy)
             {

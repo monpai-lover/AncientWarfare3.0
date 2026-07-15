@@ -75,6 +75,8 @@ namespace AncientWarfare3.patch
         public static bool SetKing_MaleOnly_Prefix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (pActor == null) return true;
+            if (RoyalAsylumService.IsActive(pActor) &&
+                !RoyalAsylumService.RecallForSuccession(pActor, __instance)) return false;
             return XiaAuthorityGenderRules.ShouldAllowSetKing(
                 pFromLoad,
                 pCandidateIsMale: pActor.isSexMale(),

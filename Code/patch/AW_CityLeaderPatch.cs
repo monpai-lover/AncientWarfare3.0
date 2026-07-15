@@ -87,6 +87,8 @@ namespace AncientWarfare3.patch
         private static bool IsClanLeaderCandidate(Actor pUnit, long pHeirId)
         {
             if (pUnit?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pUnit))) return false;
             if (pUnit.data.id == pHeirId) return false;
             if (!pUnit.isSexMale()) return false;
             return pUnit.isUnitFitToRule() && !pUnit.isKing() && !pUnit.isCityLeader() && pUnit.hasClan();
@@ -95,6 +97,8 @@ namespace AncientWarfare3.patch
         private static bool IsDirectLeaderCandidate(Actor pUnit, long pHeirId)
         {
             if (pUnit?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pUnit))) return false;
             if (pUnit.data.id == pHeirId) return false;
             if (!pUnit.isSexMale()) return false;
             if (pUnit.isKing() || pUnit.isCityLeader()) return false;

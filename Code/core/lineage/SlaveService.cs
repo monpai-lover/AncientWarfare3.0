@@ -1818,6 +1818,8 @@ namespace AncientWarfare3.core.lineage
             bool pRequireWarrior)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return false;
             if (!HistoricalMasterVocationService.CanEnter(pActor,
                     HistoricalMasterMilitaryContext.SlaveArmyCadre)) return false;
             if (pActor.kingdom != pKingdom || pActor.isRekt() || !pActor.isAdult()) return false;

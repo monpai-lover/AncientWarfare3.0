@@ -336,6 +336,8 @@ namespace AncientWarfare3.core.lineage
         private static bool CanRemainGeneral(Actor pActor, Kingdom pKingdom)
         {
             if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!RoyalAsylumRules.CanPerformProtectedRole(
+                    RoyalAsylumService.IsActive(pActor))) return false;
             if (!HistoricalMasterVocationService.CanEnter(pActor,
                     HistoricalMasterMilitaryContext.General)) return false;
             if (pActor.kingdom != pKingdom) return false;
