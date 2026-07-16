@@ -472,6 +472,7 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, pSourceCoreId);
             pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, pRestorationClaimId);
             pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, pClaimant?.data?.id ?? -1L);
+            WarNoticeService.EnsureCurrentNotice(pKingdom);
             UpsertSnapshot(pKingdom);
             return true;
         }
@@ -648,6 +649,7 @@ namespace AncientWarfare3.core.policy
         private static void ClearDecisionTarget(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            WarNoticeService.OnDecisionClearing(pKingdom);
             pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_ID, -1L);
             pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_NAME, "");
             pKingdom.data.set(LineageKeys.DECISION_PROJECT_TYPE, "");
@@ -661,6 +663,11 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, -1L);
             pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, -1L);
             pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, -1L);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_SIGNATURE, "");
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_YEAR, -1);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR, -1);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_FORCED_YEAR, -1);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_RECORDED, false);
         }
 
         private static void MigrateCurrentCoreDecisionToDedicatedSlot(Kingdom pKingdom)
@@ -1045,11 +1052,23 @@ namespace AncientWarfare3.core.policy
                 return;
             }
 
+            float progress = GetProgress(pKingdom, pKind);
+            bool warDecision = pKind == PolicyNodeKind.Decision && def.Id == "aw_decision_declare_war";
+            if (warDecision)
+            {
+                WarNoticeService.EnsureCurrentNotice(pKingdom);
+                if (progress + 0.001f >= def.Cost)
+                {
+                    if (WarNoticeService.CanCompleteCurrentDeclaration(pKingdom, progress, def.Cost))
+                        Complete(pKingdom, def);
+                    return;
+                }
+            }
+
             string pointKey = pKind == PolicyNodeKind.Tech ? LineageKeys.TECH_POINTS : LineageKeys.POLICY_POINTS;
             pKingdom.data.get(pointKey, out float points, 0f);
             if (points <= 0f) return;
 
-            float progress = GetProgress(pKingdom, pKind);
             float remaining = def.Cost - progress;
             float rawSpend = Mathf.Min(points, MAX_YEARLY_SPEND);
             float progressMultiplier = 1f;
@@ -1069,11 +1088,20 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(ProgressKey(pKind), progress);
 
             if (progress + 0.001f >= def.Cost)
+            {
+                if (warDecision && !WarNoticeService.CanCompleteCurrentDeclaration(pKingdom, progress, def.Cost))
+                    return;
                 Complete(pKingdom, def);
+            }
         }
 
         private static void Complete(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
+            if (pDef?.Id == "aw_decision_declare_war")
+            {
+                CompleteWarDecision(pKingdom, pDef);
+                return;
+            }
             AddCompleted(pKingdom, pDef.Kind, pDef.Id);
             pKingdom.data.set(CurrentKey(pDef.Kind), "");
             pKingdom.data.set(ProgressKey(pDef.Kind), 0f);
@@ -1094,6 +1122,23 @@ namespace AncientWarfare3.core.policy
                 ClearDecisionTarget(pKingdom);
                 StartNextQueuedDecisionIfEmpty(pKingdom);
             }
+            UpsertSnapshot(pKingdom);
+        }
+
+        private static void CompleteWarDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
+        {
+            bool effectApplied = ApplyEffect(pKingdom, pDef);
+            if (effectApplied)
+            {
+                AddCompleted(pKingdom, pDef.Kind, pDef.Id);
+                ApplyPolicyStateEffects(pKingdom, pDef);
+                if (ShouldRecordGenericCompletion(pDef)) RecordCompletion(pKingdom, pDef);
+            }
+
+            pKingdom.data.set(CurrentKey(pDef.Kind), "");
+            pKingdom.data.set(ProgressKey(pDef.Kind), 0f);
+            ClearDecisionTarget(pKingdom);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
             UpsertSnapshot(pKingdom);
         }
 
@@ -1645,6 +1690,11 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.get(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, out item.war_source_core_id, -1L);
             pKingdom.data.get(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, out item.war_restoration_claim_id, -1L);
             pKingdom.data.get(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, out item.war_claimant_actor_id, -1L);
+            pKingdom.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out item.notice_signature, "");
+            pKingdom.data.get(LineageKeys.DECISION_NOTICE_YEAR, out item.notice_year, -1);
+            pKingdom.data.get(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR, out item.earliest_war_year, -1);
+            pKingdom.data.get(LineageKeys.DECISION_NOTICE_FORCED_YEAR, out item.forced_war_year, -1);
+            pKingdom.data.get(LineageKeys.DECISION_NOTICE_RECORDED, out item.notice_recorded, false);
             return item;
         }
 
@@ -1771,6 +1821,12 @@ namespace AncientWarfare3.core.policy
             pKingdom.data.set(LineageKeys.DECISION_WAR_SOURCE_CORE_ID, pItem.war_source_core_id);
             pKingdom.data.set(LineageKeys.DECISION_WAR_RESTORATION_CLAIM_ID, pItem.war_restoration_claim_id);
             pKingdom.data.set(LineageKeys.DECISION_WAR_CLAIMANT_ACTOR_ID, pItem.war_claimant_actor_id);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_SIGNATURE, pItem.notice_signature ?? "");
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_YEAR, pItem.notice_year);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR, pItem.earliest_war_year);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_FORCED_YEAR, pItem.forced_war_year);
+            pKingdom.data.set(LineageKeys.DECISION_NOTICE_RECORDED, pItem.notice_recorded);
+            WarNoticeService.EnsureCurrentNotice(pKingdom);
             UpsertSnapshot(pKingdom);
         }
 

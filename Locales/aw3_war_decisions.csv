@@ -39,3 +39,17 @@ aw_war_target_action_war,宣战,Declare,宣戰
 aw_war_target_city,目标城市：,Target city:,目標城市：
 aw_war_target_selected_kingdom,目标国：,Target realm:,目標國：
 aw_war_target_selected_city,选中城市：,Selected city:,選中城市：
+task_unit_aw_war_deployment,奔赴边境,Deploying to the frontier,奔赴邊境
+aw_war_notice_issued,$attacker$向$defender$发出战书,$attacker$ sent a declaration of war to $defender$,$attacker$向$defender$發出戰書
+aw_hist_war_notice_issued_mid,致战书于, issued a declaration of war to ,致戰書於
+aw_hist_war_notice_received_mid,收到战书，来自, received a declaration of war from ,收到戰書，來自
+aw_hist_temporary_levy_enlisted,奉召临时入伍, was temporarily levied,奉召臨時入伍
+aw_hist_temporary_levy_demobilized,战后解除征召, was released from wartime levy,戰後解除徵召
+aw_hist_temporary_slave_vanguard_demobilized,解散了临时奴隶先锋军, disbanded its temporary slave vanguard,解散了臨時奴隸先鋒軍
+aw_war_preparation,战备,War preparation,戰備
+aw_war_notice_target,战书目标,Notice target,戰書目標
+aw_war_notice_year,下书年份,Notice year,下書年份
+aw_war_notice_window,开战期限,War window,開戰期限
+aw_war_levy_count,征召兵,Levies,徵召兵
+aw_war_deployment_ready,边防就绪,Frontier ready,邊防就緒
+aw_war_deployment_preparing,边防集结中,Frontier assembling,邊防集結中

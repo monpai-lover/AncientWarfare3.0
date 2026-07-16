@@ -22,6 +22,11 @@ namespace AncientWarfare3.core.policy
         public long war_source_core_id = -1;
         public long war_restoration_claim_id = -1;
         public long war_claimant_actor_id = -1;
+        public string notice_signature = "";
+        public int notice_year = -1;
+        public int earliest_war_year = -1;
+        public int forced_war_year = -1;
+        public bool notice_recorded;
     }
 
     internal static class KingdomDecisionQueueCodec
@@ -37,7 +42,7 @@ namespace AncientWarfare3.core.policy
             foreach (string row in rows)
             {
                 string[] parts = row.Split('|');
-                if (parts.Length < 15) continue;
+                if (parts.Length < 20) continue;
                 var item = new KingdomDecisionQueueItem
                 {
                     decision_id = DecodeString(parts[0]),
@@ -54,7 +59,12 @@ namespace AncientWarfare3.core.policy
                     war_source_claim_id = ParseLong(parts[11]),
                     war_source_core_id = ParseLong(parts[12]),
                     war_restoration_claim_id = ParseLong(parts[13]),
-                    war_claimant_actor_id = ParseLong(parts[14])
+                    war_claimant_actor_id = ParseLong(parts[14]),
+                    notice_signature = DecodeString(parts[15]),
+                    notice_year = ParseInt(parts[16]),
+                    earliest_war_year = ParseInt(parts[17]),
+                    forced_war_year = ParseInt(parts[18]),
+                    notice_recorded = parts[19] == "1"
                 };
                 if (!string.IsNullOrEmpty(item.decision_id)) result.Add(item);
             }
@@ -87,7 +97,12 @@ namespace AncientWarfare3.core.policy
                     item.war_source_claim_id.ToString(CultureInfo.InvariantCulture),
                     item.war_source_core_id.ToString(CultureInfo.InvariantCulture),
                     item.war_restoration_claim_id.ToString(CultureInfo.InvariantCulture),
-                    item.war_claimant_actor_id.ToString(CultureInfo.InvariantCulture)
+                    item.war_claimant_actor_id.ToString(CultureInfo.InvariantCulture),
+                    EncodeString(item.notice_signature),
+                    item.notice_year.ToString(CultureInfo.InvariantCulture),
+                    item.earliest_war_year.ToString(CultureInfo.InvariantCulture),
+                    item.forced_war_year.ToString(CultureInfo.InvariantCulture),
+                    item.notice_recorded ? "1" : "0"
                 }));
             }
 
@@ -118,6 +133,13 @@ namespace AncientWarfare3.core.policy
             return float.TryParse(pValue, NumberStyles.Float, CultureInfo.InvariantCulture, out float value)
                 ? value
                 : 0f;
+        }
+
+        private static int ParseInt(string pValue)
+        {
+            return int.TryParse(pValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+                ? value
+                : -1;
         }
     }
 }

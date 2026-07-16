@@ -15,6 +15,12 @@ namespace AncientWarfare3.core.lineage
         private static readonly FieldInfo ArmyKingdomField = typeof(Army).GetField("_kingdom",
             BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly Dictionary<string, long> RoleArmyCache = new Dictionary<string, long>();
+        private static readonly Dictionary<long, HashSet<string>> LookupCacheKeysByArmy =
+            new Dictionary<long, HashSet<string>>();
+        private static readonly Dictionary<string, HashSet<long>> RoleArmyIdsByKingdomRole =
+            new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
+        private static readonly Dictionary<long, string> RoleIndexKeyByArmy =
+            new Dictionary<long, string>();
         private static bool _creatingSpecialArmy;
 
         public static bool IsCreatingSpecialArmy => _creatingSpecialArmy;
@@ -71,7 +77,11 @@ namespace AncientWarfare3.core.lineage
 
             City anchor = pAnchorCity ?? pCaptain.city ?? pKingdom.capital;
             bool detached = pDetached && AWArmyRoleRules.ShouldUseDetachedArmy(pRole);
-            Army army = FindArmy(pKingdom, pAnchorCity, pRole);
+            Army army = null;
+            if (AWArmyRoleRules.MaxArmiesPerKingdom(pRole) == 1)
+                TryGetRoleArmy(pKingdom, pRole, out army);
+            else
+                army = FindArmy(pKingdom, pAnchorCity, pRole);
             bool created = false;
             if (army == null)
             {
@@ -94,7 +104,7 @@ namespace AncientWarfare3.core.lineage
 
         public static Army FindArmy(Kingdom pKingdom, City pAnchorCity, string pRole)
         {
-            if (pKingdom?.data == null || World.world?.armies == null) return null;
+            if (pKingdom?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole)) return null;
             long cityId = pAnchorCity?.id ?? -1L;
             string cacheKey = SpecialArmyLookupCacheRules.BuildKey(pKingdom.id, pRole, cityId);
             if (RoleArmyCache.TryGetValue(cacheKey, out long cachedArmyId))
@@ -112,21 +122,35 @@ namespace AncientWarfare3.core.lineage
                     CityMaintenanceBenchmarkRules.Group);
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyCacheMiss,
                     CityMaintenanceBenchmarkRules.Group);
-                RoleArmyCache.Remove(cacheKey);
+                RemoveLookupCacheKey(cacheKey, cachedArmyId);
             }
 
-            Bench.bench(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
-                CityMaintenanceBenchmarkRules.Group);
-            foreach (Army army in World.world.armies)
+            return TryFindIndexedRoleArmy(pKingdom, cityId, pRole, cacheKey);
+        }
+
+        private static Army TryFindIndexedRoleArmy(Kingdom pKingdom, long pCityId,
+            string pRole, string pCacheKey)
+        {
+            string indexKey = BuildRoleIndexKey(pKingdom.id, pRole);
+            if (!RoleArmyIdsByKingdomRole.TryGetValue(indexKey, out HashSet<long> armyIds)) return null;
+            long staleId = -1L;
+            foreach (long armyId in armyIds)
             {
-                if (!IsValidLookupResult(army, pKingdom, cityId, pRole)) continue;
-                RoleArmyCache[cacheKey] = army.id;
-                Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
-                    CityMaintenanceBenchmarkRules.Group);
+                Army army = GetArmyById(armyId);
+                if (!IsValidLookupResult(army, pKingdom, pCityId, pRole))
+                {
+                    staleId = armyId;
+                    continue;
+                }
+                SetLookupCache(pCacheKey, army.id);
                 return army;
             }
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SpecialArmyGlobalScan,
-                CityMaintenanceBenchmarkRules.Group);
+            if (staleId >= 0)
+            {
+                armyIds.Remove(staleId);
+                RoleIndexKeyByArmy.Remove(staleId);
+                if (armyIds.Count == 0) RoleArmyIdsByKingdomRole.Remove(indexKey);
+            }
             return null;
         }
 
@@ -193,6 +217,15 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
+        public static void RemoveSpecialArmy(Army pArmy)
+        {
+            if (!IsSpecialArmy(pArmy)) return;
+            try { pArmy.setCaptain(null); } catch { }
+            try { pArmy.units.Clear(); } catch { }
+            RemoveArmyFromCache(pArmy);
+            try { World.world?.armies?.removeObject(pArmy); } catch { }
+        }
+
         public static void SetCaptainIfChanged(Army pArmy, Actor pCaptain)
         {
             if (pArmy?.data == null || pCaptain?.data == null || pCaptain.isRekt()) return;
@@ -218,6 +251,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (World.world?.armies == null) return;
             RoleArmyCache.Clear();
+            LookupCacheKeysByArmy.Clear();
+            RoleArmyIdsByKingdomRole.Clear();
+            RoleIndexKeyByArmy.Clear();
             var snapshot = new List<Army>();
             foreach (Army army in World.world.armies)
                 snapshot.Add(army);
@@ -271,17 +307,64 @@ namespace AncientWarfare3.core.lineage
         public static List<Army> GetRoleArmies(Kingdom pKingdom, string pRole)
         {
             var result = new List<Army>();
-            if (pKingdom?.data == null || World.world?.armies == null) return result;
+            if (pKingdom?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole)) return result;
+            string indexKey = BuildRoleIndexKey(pKingdom.id, pRole);
+            if (!RoleArmyIdsByKingdomRole.TryGetValue(indexKey, out HashSet<long> armyIds)) return result;
 
-            foreach (Army army in World.world.armies)
+            var stale = new List<long>();
+            foreach (long armyId in armyIds)
             {
-                if (army?.data == null || !army.isAlive()) continue;
-                if (!IsRoleArmy(army, pRole)) continue;
+                Army army = GetArmyById(armyId);
+                if (army?.data == null || !army.isAlive() || !IsRoleArmy(army, pRole))
+                {
+                    stale.Add(armyId);
+                    continue;
+                }
                 Kingdom kingdom = SafeGetKingdom(army, FindAnchorCity(army));
-                if (kingdom != pKingdom) continue;
+                if (kingdom != pKingdom)
+                {
+                    stale.Add(armyId);
+                    continue;
+                }
                 result.Add(army);
             }
+            foreach (long armyId in stale)
+            {
+                armyIds.Remove(armyId);
+                RoleIndexKeyByArmy.Remove(armyId);
+            }
+            if (armyIds.Count == 0) RoleArmyIdsByKingdomRole.Remove(indexKey);
             return result;
+        }
+
+        public static bool TryGetRoleArmy(Kingdom pKingdom, string pRole, out Army pArmy)
+        {
+            pArmy = null;
+            if (pKingdom?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole)) return false;
+            string indexKey = BuildRoleIndexKey(pKingdom.id, pRole);
+            if (!RoleArmyIdsByKingdomRole.TryGetValue(indexKey, out HashSet<long> armyIds)) return false;
+
+            long staleId = -1L;
+            foreach (long armyId in armyIds)
+            {
+                Army candidate = GetArmyById(armyId);
+                if (candidate?.data == null || !candidate.isAlive() || !IsRoleArmy(candidate, pRole) ||
+                    SafeGetKingdom(candidate, FindAnchorCity(candidate)) != pKingdom)
+                {
+                    staleId = armyId;
+                    continue;
+                }
+                pArmy = candidate;
+                return true;
+            }
+
+            if (staleId >= 0)
+            {
+                armyIds.Remove(staleId);
+                RoleIndexKeyByArmy.Remove(staleId);
+                if (armyIds.Count == 0) RoleArmyIdsByKingdomRole.Remove(indexKey);
+            }
+            return false;
         }
 
         public static void DedupePastCaptains(Army pArmy)
@@ -343,11 +426,11 @@ namespace AncientWarfare3.core.lineage
 
         private static void CleanupDuplicateArmies(Kingdom pKingdom, City pAnchorCity, string pRole, Army pKeeper)
         {
-            if (World.world?.armies == null || pKingdom?.data == null || pKeeper?.data == null) return;
+            if (pKingdom?.data == null || pKeeper?.data == null) return;
 
             var duplicates = new List<Army>();
             long anchorId = pAnchorCity?.id ?? -1L;
-            foreach (Army army in World.world.armies)
+            foreach (Army army in GetRoleArmies(pKingdom, pRole))
             {
                 if (army == pKeeper || army?.data == null || !army.isAlive()) continue;
                 if (!IsRoleArmy(army, pRole)) continue;
@@ -423,18 +506,63 @@ namespace AncientWarfare3.core.lineage
         {
             if (pArmy?.data == null || pKingdom?.data == null || !AWArmyRoleRules.IsSpecialRole(pRole)) return;
             string key = SpecialArmyLookupCacheRules.BuildKey(pKingdom.id, pRole, GetAnchorCityId(pArmy));
-            RoleArmyCache[key] = pArmy.id;
+            SetLookupCache(key, pArmy.id);
+            string roleIndexKey = BuildRoleIndexKey(pKingdom.id, pRole);
+            if (RoleIndexKeyByArmy.TryGetValue(pArmy.id, out string previousKey) && previousKey != roleIndexKey &&
+                RoleArmyIdsByKingdomRole.TryGetValue(previousKey, out HashSet<long> previousIds))
+            {
+                previousIds.Remove(pArmy.id);
+                if (previousIds.Count == 0) RoleArmyIdsByKingdomRole.Remove(previousKey);
+            }
+            if (!RoleArmyIdsByKingdomRole.TryGetValue(roleIndexKey, out HashSet<long> ids))
+            {
+                ids = new HashSet<long>();
+                RoleArmyIdsByKingdomRole[roleIndexKey] = ids;
+            }
+            ids.Add(pArmy.id);
+            RoleIndexKeyByArmy[pArmy.id] = roleIndexKey;
         }
 
         private static void RemoveArmyFromCache(Army pArmy)
         {
-            if (pArmy?.data == null || RoleArmyCache.Count == 0) return;
-            var staleKeys = new List<string>();
-            foreach (KeyValuePair<string, long> entry in RoleArmyCache)
-                if (entry.Value == pArmy.id)
-                    staleKeys.Add(entry.Key);
-            foreach (string key in staleKeys)
-                RoleArmyCache.Remove(key);
+            if (pArmy?.data == null) return;
+            if (LookupCacheKeysByArmy.TryGetValue(pArmy.id, out HashSet<string> lookupKeys))
+            {
+                foreach (string key in lookupKeys) RoleArmyCache.Remove(key);
+                LookupCacheKeysByArmy.Remove(pArmy.id);
+            }
+            if (!RoleIndexKeyByArmy.TryGetValue(pArmy.id, out string roleIndexKey)) return;
+            RoleIndexKeyByArmy.Remove(pArmy.id);
+            if (!RoleArmyIdsByKingdomRole.TryGetValue(roleIndexKey, out HashSet<long> ids)) return;
+            ids.Remove(pArmy.id);
+            if (ids.Count == 0) RoleArmyIdsByKingdomRole.Remove(roleIndexKey);
+        }
+
+        private static void SetLookupCache(string pKey, long pArmyId)
+        {
+            if (string.IsNullOrEmpty(pKey) || pArmyId < 0) return;
+            if (RoleArmyCache.TryGetValue(pKey, out long previousArmyId) && previousArmyId != pArmyId)
+                RemoveLookupCacheKey(pKey, previousArmyId);
+            RoleArmyCache[pKey] = pArmyId;
+            if (!LookupCacheKeysByArmy.TryGetValue(pArmyId, out HashSet<string> keys))
+            {
+                keys = new HashSet<string>(StringComparer.Ordinal);
+                LookupCacheKeysByArmy[pArmyId] = keys;
+            }
+            keys.Add(pKey);
+        }
+
+        private static void RemoveLookupCacheKey(string pKey, long pArmyId)
+        {
+            RoleArmyCache.Remove(pKey);
+            if (!LookupCacheKeysByArmy.TryGetValue(pArmyId, out HashSet<string> keys)) return;
+            keys.Remove(pKey);
+            if (keys.Count == 0) LookupCacheKeysByArmy.Remove(pArmyId);
+        }
+
+        private static string BuildRoleIndexKey(long pKingdomId, string pRole)
+        {
+            return pKingdomId + "|" + (pRole ?? "");
         }
 
         private static City SafeGetCity(Army pArmy)

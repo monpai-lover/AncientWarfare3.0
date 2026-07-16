@@ -31,10 +31,30 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
-        public static void MakeWarrior_Postfix(Actor pActor)
+        public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
             if (pActor?.data == null || !pActor.isWarrior()) return;
+            KingdomMilitaryReadinessService.ObserveCity(__instance);
+            WarNoticeService.QueueArmyChanged(__instance?.kingdom ?? pActor.kingdom,
+                pActor.army, pRosterExpanded: true);
+            if (MilitaryRecruitmentScope.SuppressesPermanentEnlistmentHistory) return;
             ChronicleEvents.OnEnlisted(pActor);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.stopBeingWarrior))]
+        public static void StopBeingWarrior_Prefix(Actor __instance)
+        {
+            if (__instance?.data == null || !__instance.isWarrior() || __instance.army?.data == null) return;
+            WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.stopBeingWarrior))]
+        public static void StopBeingWarrior_Postfix(Actor __instance)
+        {
+            ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
+            KingdomMilitaryReadinessService.ObserveCity(__instance?.city);
         }
 
         [HarmonyPrefix]

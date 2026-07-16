@@ -289,13 +289,25 @@ preparation pass:
 1. identifies ordinary city armies below their full wartime
    `warrior_slots` establishment;
 2. prioritizes threatened frontier cities, then other cities;
-3. visits at most four cities and scans at most 64 residents in total using
-   stable city and actor cursors;
+3. enqueues at most four runtime work items; each item visits one city, scans
+   at most 16 residents, and recruits at most eight actors using stable city
+   and actor cursors;
 4. uses original `City.checkCanMakeWarrior` eligibility plus a strict
    enlistment age below 65;
-5. recruits at most eight temporary levy warriors for the kingdom that year;
+5. scans at most 64 residents and recruits at most 32 temporary levy warriors
+   for the kingdom across the whole year;
 6. never recruits royal refugees, protected historical masters, slaves barred
    from ordinary service, kings, heirs, leaders, or existing special soldiers.
+
+The annual update only publishes these bounded work items. The shared runtime
+queue executes at most one item per frame. Cached threatened-frontier cities
+from the active deployment notice are consumed first; remaining items advance
+the normal city cursor without sorting, copying, or rescanning the city list.
+The kingdom persists the current year, completed work-item count, scanned
+candidate count, recruited actor count, and consumed frontier-city cursor.
+Closing one emergency therefore preserves the unused annual budget for a
+second emergency in the same year, and loading a save resumes only the
+remaining work instead of resetting or discarding the budget.
 
 When a system, rebellion, or joined war starts without advance notice, real
 war start activates the same bounded levy authority for the newly threatened
@@ -560,7 +572,9 @@ or database work.
   once after load; it is cleared on a new world or archive switch.
 - A second bounded index maps notice and war IDs to temporary levy actor IDs;
   enlistment and demobilization update it incrementally. Load reconciliation
-  rebuilds it from affected city armies, not from every world actor.
+  performs one world-unit pass to rebuild persisted levy membership and one
+  kingdom pass to resume active annual plans; neither scan runs during normal
+  yearly or per-frame maintenance.
 - A kingdom-to-slave-army index contains only active military emergencies and
   enforces the one-army-per-kingdom invariant.
 - Mobilization and assignment run at most once per affected kingdom year.
@@ -656,8 +670,9 @@ Source guards require:
 - use of the dedicated deployment task rather than one-time target writes;
 - royal-guard exclusion at assignment and task validation;
 - bounded yearly recruitment and no unconditional per-frame world scans;
-- ordinary mobilization limited to four cities, 64 candidates, and eight
-  recruits per kingdom-year, with eight-actor deferred demobilization;
+- ordinary mobilization limited to four deferred work items, 16 candidates and
+  eight recruits per item, and 64 candidates and 32 recruits per kingdom-year,
+  with eight-actor deferred demobilization;
 - temporary levies and temporary slave soldiers rejected before expensive
   `Actor.updateAge` retirement work, with no per-actor levy demobilization
   database write;

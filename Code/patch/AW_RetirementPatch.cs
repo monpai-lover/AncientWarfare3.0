@@ -16,10 +16,13 @@ namespace AncientWarfare3.patch
         public static void UpdateAge_Postfix(Actor __instance)
         {
             if (__instance?.data == null) return;
-            bool supportedActor = SlaveService.IsSupportedSlaveryActor(__instance);
             bool rekt = __instance.isRekt();
             bool warrior = __instance.isWarrior();
+            if (rekt || !warrior) return;
+            bool supportedActor = SlaveService.IsSupportedSlaveryActor(__instance);
             if (!SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(supportedActor, rekt, warrior)) return;
+            if (TemporaryLevyService.IsTemporaryLevy(__instance) ||
+                TemporarySlaveVanguardService.IsMember(__instance)) return;
 
             long benchmark = UpdateAgeBenchmark.Begin();
             try
@@ -39,10 +42,6 @@ namespace AncientWarfare3.patch
             if (!ShouldRunAwCityArmyMaintenance(pCity)) return;
 
             Bench.bench(CityMaintenanceBenchmarkRules.Total, CityMaintenanceBenchmarkRules.Group);
-            Bench.bench(CityMaintenanceBenchmarkRules.Retirements, CityMaintenanceBenchmarkRules.Group);
-            SlaveService.CheckCityRetirements(pCity);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.Retirements, CityMaintenanceBenchmarkRules.Group);
-
             Bench.bench(CityMaintenanceBenchmarkRules.StandingArmy, CityMaintenanceBenchmarkRules.Group);
             StandingArmyService.MaintainCity(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.StandingArmy, CityMaintenanceBenchmarkRules.Group);
@@ -50,10 +49,6 @@ namespace AncientWarfare3.patch
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
             SlaveService.CheckCitySlaveLabor(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
-
-            Bench.bench(CityMaintenanceBenchmarkRules.SlaveArmy, CityMaintenanceBenchmarkRules.Group);
-            SlaveService.EnsureSlaveArmy(pCity);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveArmy, CityMaintenanceBenchmarkRules.Group);
 
             if (ShouldRunRoyalGuardMaintenance(pCity))
             {
@@ -79,10 +74,6 @@ namespace AncientWarfare3.patch
                 Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveCaptain, CityMaintenanceBenchmarkRules.Group);
                 SlaveService.EnsureNonSlaveCaptain(pCity.getArmy());
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveCaptain, CityMaintenanceBenchmarkRules.Group);
-
-                Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveName, CityMaintenanceBenchmarkRules.Group);
-                SlaveService.RenameArmyIfSlaveArmy(pCity.getArmy());
-                Bench.benchEnd(CityMaintenanceBenchmarkRules.ArmyCleanupSlaveName, CityMaintenanceBenchmarkRules.Group);
 
                 Bench.bench(CityMaintenanceBenchmarkRules.ArmyCleanupFiefName, CityMaintenanceBenchmarkRules.Group);
                 FiefMilitaryService.RefreshArmyName(pCity.getArmy());

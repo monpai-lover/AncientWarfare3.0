@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.lineage
     public static class StandingArmyRules
     {
         public const int MaxCandidateScan = 64;
+        public const int MaxStandingScanPerPass = 64;
         public const int MaxAppointmentsPerPass = 2;
         public const int MaxReductionsPerPass = 2;
         public const int MaxReplacementsPerPass = 1;
@@ -15,6 +16,11 @@ namespace AncientWarfare3.core.lineage
             return pWarriorSlots <= 0
                 ? 0
                 : Math.Max(1, (int)Math.Ceiling(pWarriorSlots * 0.30d));
+        }
+
+        public static bool ShouldMaintainPeacetime(bool militaryEmergency, bool temporaryLeviesActive)
+        {
+            return !militaryEmergency && !temporaryLeviesActive;
         }
 
         public static float MilitaryScore(float damage, float warfare, float health, float armor, float speed)

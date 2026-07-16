@@ -13,31 +13,81 @@ namespace AncientWarfare3.core.lineage
             public float Score;
         }
 
+        private sealed class StandingSnapshot
+        {
+            public int Count;
+            public readonly List<Actor> Weakest = new List<Actor>(
+                System.Math.Max(StandingArmyRules.MaxReductionsPerPass,
+                    StandingArmyRules.MaxReplacementsPerPass));
+        }
+
         public static void MaintainCity(City pCity)
         {
             if (!IsValidCity(pCity)) return;
-            int core = StandingArmyRules.PeacetimeCore(pCity.status.warrior_slots);
-            List<Actor> standing = CollectOrdinaryStanding(pCity);
-
-            if (standing.Count > core)
+            try
             {
-                ReduceSurplus(standing, standing.Count - core);
-                return;
-            }
+                Kingdom kingdom = pCity.kingdom;
+                if (!StandingArmyRules.ShouldMaintainPeacetime(
+                        MilitaryEmergencyService.HasAny(kingdom),
+                        TemporaryLevyService.HasActivePool(kingdom))) return;
 
-            List<Candidate> candidates = CollectCandidates(pCity);
-            if (standing.Count < core)
+                int core = StandingArmyRules.PeacetimeCore(pCity.status.warrior_slots);
+                int standingCount = CountNormalArmyUnits(pCity);
+
+                if (standingCount < core)
+                {
+                    AppointCandidates(pCity, CollectCandidates(pCity), core - standingCount);
+                    return;
+                }
+
+                if (standingCount <= 0) return;
+                StandingSnapshot standing = CollectOrdinaryStanding(pCity, standingCount);
+
+                if (standing.Count > core)
+                {
+                    ReduceSurplus(standing.Weakest, standing.Count - core);
+                    return;
+                }
+
+                ReplaceWeakestIfBetter(pCity, standing.Weakest, CollectCandidates(pCity));
+            }
+            finally
             {
-                AppointCandidates(pCity, candidates, core - standing.Count);
-                return;
+                KingdomMilitaryReadinessService.ObserveCity(pCity);
             }
-
-            ReplaceWeakestIfBetter(pCity, standing, candidates);
         }
 
         public static int CountOrdinaryStanding(City pCity)
         {
-            return CollectOrdinaryStanding(pCity).Count;
+            return CountNormalArmyUnits(pCity);
+        }
+
+        public static int CountOrdinaryStandingFast(City pCity)
+        {
+            return CountNormalArmyUnits(pCity);
+        }
+
+        public static int CountOrdinaryMilitary(City pCity)
+        {
+            return CountNormalArmyUnits(pCity);
+        }
+
+        private static int CountNormalArmyUnits(City pCity)
+        {
+            if (pCity?.data == null || !pCity.hasArmy()) return 0;
+            Army army = pCity.getArmy();
+            if (army?.data == null || !army.isAlive() || AWArmyService.IsSpecialArmy(army)) return 0;
+            try { return System.Math.Max(0, army.countUnits()); }
+            catch { return 0; }
+        }
+
+        public static bool ShouldKeepWithinOriginalArmyLimit(City pCity, Actor pActor)
+        {
+            if (pCity?.data == null || pActor?.data == null || !pCity.hasArmy()) return false;
+            Army army = pCity.getArmy();
+            return army?.data != null && !AWArmyService.IsSpecialArmy(army) &&
+                   pActor.army == army && pActor.isWarrior() &&
+                   !SlaveService.IsSlave(pActor) && pCity.hasEnoughFoodForArmy();
         }
 
         private static bool IsValidCity(City pCity)
@@ -47,21 +97,34 @@ namespace AncientWarfare3.core.lineage
                    kingdom?.data != null && !kingdom.isRekt() && !kingdom.isNeutral();
         }
 
-        private static List<Actor> CollectOrdinaryStanding(City pCity)
+        private static StandingSnapshot CollectOrdinaryStanding(City pCity, int pCount)
         {
-            var result = new List<Actor>();
+            var result = new StandingSnapshot { Count = pCount };
             if (pCity?.data == null || !pCity.hasArmy()) return result;
             Army army = pCity.getArmy();
             if (army?.data == null || AWArmyService.IsSpecialArmy(army)) return result;
 
-            foreach (Actor actor in army.getUnits())
+            pCity.data.get(LineageKeys.STANDING_ARMY_ROSTER_SCAN_CURSOR, out int cursor, 0);
+            if (cursor < 0) cursor = 0;
+            int unitCount = army.units.Count;
+            if (cursor >= unitCount) cursor = 0;
+            int scanned = System.Math.Min(StandingArmyRules.MaxStandingScanPerPass,
+                System.Math.Max(0, unitCount - cursor));
+            for (int i = 0; i < scanned; i++)
             {
+                Actor actor = army.units[cursor + i];
                 if (actor?.data == null || actor.isRekt() || !actor.isAlive()) continue;
                 if (!actor.isWarrior() || actor.army != army) continue;
                 actor.data.get(LineageKeys.TEMPORARY_LEVY, out bool levy, false);
                 if (levy || RoyalGuardService.IsRoyalGuard(actor) || SlaveService.IsSlave(actor)) continue;
-                result.Add(actor);
+                AddBoundedWeakest(result.Weakest, actor,
+                    System.Math.Max(StandingArmyRules.MaxReductionsPerPass,
+                        StandingArmyRules.MaxReplacementsPerPass));
             }
+            bool complete = cursor + scanned >= unitCount;
+            pCity.data.set(LineageKeys.STANDING_ARMY_ROSTER_SCAN_CURSOR,
+                complete ? 0 : cursor + scanned);
+            result.Weakest.Sort(CompareWeakestFirst);
             return result;
         }
 
@@ -71,23 +134,19 @@ namespace AncientWarfare3.core.lineage
             pCity.data.get(LineageKeys.STANDING_ARMY_SCAN_CURSOR, out int cursor, 0);
             if (cursor < 0) cursor = 0;
 
-            int skipped = 0;
-            int scanned = 0;
-            bool complete = true;
-            foreach (Actor actor in pCity.getUnits())
+            int unitCount = pCity.units.Count;
+            if (cursor >= unitCount) cursor = 0;
+            int scanned = System.Math.Min(StandingArmyRules.MaxCandidateScan,
+                System.Math.Max(0, unitCount - cursor));
+            for (int i = 0; i < scanned; i++)
             {
-                if (skipped++ < cursor) continue;
-                if (scanned >= StandingArmyRules.MaxCandidateScan)
-                {
-                    complete = false;
-                    break;
-                }
-                scanned++;
+                Actor actor = pCity.units[cursor + i];
                 if (!IsCandidate(pCity, actor)) continue;
                 AddBoundedBest(result, new Candidate { Actor = actor, Score = Score(actor) },
                     StandingArmyRules.MaxAppointmentsPerPass + StandingArmyRules.MaxReplacementsPerPass);
             }
 
+            bool complete = cursor + scanned >= unitCount;
             pCity.data.set(LineageKeys.STANDING_ARMY_SCAN_CURSOR, complete ? 0 : cursor + scanned);
             result.Sort(CompareBestFirst);
             return result;
@@ -116,7 +175,6 @@ namespace AncientWarfare3.core.lineage
 
         private static void ReduceSurplus(List<Actor> pStanding, int pSurplus)
         {
-            pStanding.Sort(CompareWeakestFirst);
             int count = System.Math.Min(System.Math.Min(pSurplus, pStanding.Count),
                 StandingArmyRules.MaxReductionsPerPass);
             for (int i = 0; i < count; i++) DemoteWithoutRetirement(pStanding[i]);
@@ -134,7 +192,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (pStanding.Count == 0 || pCandidates.Count == 0 ||
                 StandingArmyRules.MaxReplacementsPerPass <= 0) return;
-            pStanding.Sort(CompareWeakestFirst);
             Actor weakest = pStanding[0];
             Candidate strongest = pCandidates[0];
             float weakestScore = Score(weakest);
@@ -177,6 +234,23 @@ namespace AncientWarfare3.core.lineage
                     weakest = i;
             if (CompareBestFirst(pCandidate, pCandidates[weakest]) < 0)
                 pCandidates[weakest] = pCandidate;
+        }
+
+        private static void AddBoundedWeakest(List<Actor> pActors, Actor pActor, int pLimit)
+        {
+            if (pActor?.data == null || pLimit <= 0) return;
+            if (pActors.Count < pLimit)
+            {
+                pActors.Add(pActor);
+                return;
+            }
+
+            int strongest = 0;
+            for (int i = 1; i < pActors.Count; i++)
+                if (CompareWeakestFirst(pActors[strongest], pActors[i]) < 0)
+                    strongest = i;
+            if (CompareWeakestFirst(pActor, pActors[strongest]) < 0)
+                pActors[strongest] = pActor;
         }
 
         private static int CompareBestFirst(Candidate pLeft, Candidate pRight)

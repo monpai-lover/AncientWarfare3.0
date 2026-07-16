@@ -28,7 +28,13 @@ namespace AncientWarfare3.patch
                 return false;
             }
 
-            if (!ArmyRetreatService.ShouldStopAttack(pActor)) return true;
+            if (ArmyRetreatService.ShouldStopAttack(pActor))
+            {
+                __result = BehResult.Stop;
+                return false;
+            }
+
+            if (!TemporarySlaveVanguardService.ShouldDelayBehindVanguard(pActor)) return true;
             __result = BehResult.Stop;
             return false;
         }

@@ -41,6 +41,10 @@ namespace AncientWarfare3.patch
             VassalService.OnWarStarted(__result);
             MandateService.OnWarStarted(__result);
             RoyalAsylumService.OnWarStarted(__result);
+            MilitaryEmergencyService.OnWarStarted(__result);
+            TemporaryLevyService.OnWarStarted(__result, WarNoticeService.FindSignatureForWar(__result));
+            TemporarySlaveVanguardService.OnWarStarted(__result);
+            WarNoticeService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -51,6 +55,74 @@ namespace AncientWarfare3.patch
                 ChronicleEvents.OnWarStart(def, atk, atk?.name ?? "未知", warTypeName);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.joinAttackers))]
+        public static void JoinAttackers_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        {
+            __state = __instance?.data != null && pKingdom?.data != null &&
+                      !__instance.isAttacker(pKingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.joinAttackers))]
+        public static void JoinAttackers_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        {
+            if (!__state || __instance?.data == null || pKingdom?.data == null ||
+                !__instance.isAttacker(pKingdom)) return;
+            OnKingdomJoinedWar(__instance, pKingdom, pDefender: false);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.joinDefenders))]
+        public static void JoinDefenders_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        {
+            __state = __instance?.data != null && pKingdom?.data != null &&
+                      !__instance.isDefender(pKingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.joinDefenders))]
+        public static void JoinDefenders_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        {
+            if (!__state || __instance?.data == null || pKingdom?.data == null ||
+                !__instance.isDefender(pKingdom)) return;
+            OnKingdomJoinedWar(__instance, pKingdom, pDefender: true);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.removeAttacker))]
+        public static void RemoveAttacker_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        {
+            __state = __instance?.data != null && pKingdom?.data != null &&
+                      __instance.isAttacker(pKingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.removeAttacker))]
+        public static void RemoveAttacker_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        {
+            if (!__state || __instance?.data == null || pKingdom?.data == null ||
+                __instance.isAttacker(pKingdom)) return;
+            OnKingdomLeftWar(__instance, pKingdom);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.removeDefender))]
+        public static void RemoveDefender_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        {
+            __state = __instance?.data != null && pKingdom?.data != null &&
+                      __instance.isDefender(pKingdom);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.removeDefender))]
+        public static void RemoveDefender_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        {
+            if (!__state || __instance?.data == null || pKingdom?.data == null ||
+                __instance.isDefender(pKingdom)) return;
+            OnKingdomLeftWar(__instance, pKingdom);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.endWar))]
         public static void EndWar_Postfix(War pWar, WarWinner pWinner)
@@ -58,6 +130,9 @@ namespace AncientWarfare3.patch
             if (pWar?.data == null) return;
             CityOccupationAccelerationService.OnWarEnded(pWar);
             RoyalAsylumService.OnWarEnded(pWar);
+            MilitaryEmergencyService.OnWarEnded(pWar);
+            TemporaryLevyService.OnWarEnded(pWar);
+            TemporarySlaveVanguardService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
             WarTerritoryService.OnWarEnded(pWar, pWinner);
             ApplyDiplomacyWarResult(pWar, pWinner);
@@ -72,6 +147,20 @@ namespace AncientWarfare3.patch
                 ChronicleEvents.OnWarEnd(atk, def, def?.name ?? "未知", result);
             if (def?.data != null)
                 ChronicleEvents.OnWarEnd(def, atk, atk?.name ?? "未知", result);
+        }
+
+        private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
+        {
+            MilitaryEmergencyService.OnKingdomJoinedWar(pWar, pKingdom, pDefender);
+            TemporaryLevyService.OnEmergencyChanged(pKingdom);
+            TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
+        }
+
+        private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
+        {
+            MilitaryEmergencyService.OnKingdomLeftWar(pWar, pKingdom);
+            TemporaryLevyService.OnEmergencyChanged(pKingdom);
+            TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
         }
 
         private static void ApplyDiplomacyWarResult(War pWar, WarWinner pWinner)

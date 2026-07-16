@@ -34,6 +34,7 @@ namespace AncientWarfare3.ui.windows
         private const float CONTENT_PAD_X = 14f;
         private const float CONTENT_PAD_BOTTOM = 22f;
         private const float SUMMARY_H = 34f;
+        private const float PREPARATION_H = 24f;
         private const float SECTION_TITLE_H = 18f;
         private const float PROGRESS_H = 30f;
         private const float DECISION_SIDEBAR_W = 74f;
@@ -295,6 +296,7 @@ namespace AncientWarfare3.ui.windows
 
             KingdomPolicyService.EnsureInitialized(kingdom);
             float y = BuildSummary(kingdom, 0f);
+            y = BuildWarPreparationStatus(kingdom, y);
             if (_mode == PolicyPanelMode.ClassState)
             {
                 y = BuildClassStateChooser(kingdom, y + 8f);
@@ -444,6 +446,90 @@ namespace AncientWarfare3.ui.windows
             return pY + SUMMARY_H;
         }
 
+        private float BuildWarPreparationStatus(Kingdom pKingdom, float pY)
+        {
+            if (!WarNoticeService.TryGetPreparationSummary(
+                    pKingdom, out WarPreparationSummary summary)) return pY;
+
+            float y = pY + 6f;
+            float width = Mathf.Max(1f, _contentWidth - CONTENT_PAD_X * 2f);
+            var obj = new GameObject("WarPreparationStatus", typeof(RectTransform),
+                typeof(Image), typeof(Button), typeof(TipButton));
+            obj.transform.SetParent(ContentTransform, false);
+            _created.Add(obj);
+
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.sizeDelta = new Vector2(width, PREPARATION_H);
+            rect.anchoredPosition = TopLeft(CONTENT_PAD_X, y);
+
+            var image = obj.GetComponent<Image>();
+            AW_UIStyle.ApplyPanel(image, 0.96f);
+            image.color = summary.DeploymentReady
+                ? new Color(0.18f, 0.34f, 0.23f, 0.96f)
+                : new Color(0.38f, 0.27f, 0.13f, 0.96f);
+            var button = obj.GetComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            var tip = obj.GetComponent<TipButton>();
+            tip.showOnClick = false;
+
+            Text text = CreateTextObject("Text", obj.transform,
+                BuildWarPreparationLine(summary), new Vector2(7f, 1f),
+                new Vector2(-7f, -1f), TextAnchor.MiddleLeft, 9, Color.white);
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 6;
+            text.resizeTextMaxSize = 9;
+            SetTip(obj, AW_L10n.Text("aw_war_preparation", "\u6218\u5907"),
+                BuildWarPreparationTooltip(summary));
+            return y + PREPARATION_H;
+        }
+
+        private static string BuildWarPreparationLine(WarPreparationSummary pSummary)
+        {
+            string deployment = AW_L10n.Text(
+                pSummary.DeploymentReady
+                    ? "aw_war_deployment_ready"
+                    : "aw_war_deployment_preparing",
+                pSummary.DeploymentReady ? "\u8FB9\u9632\u5C31\u7EEA" : "\u8FB9\u9632\u96C6\u7ED3\u4E2D");
+            return AW_L10n.Text("aw_war_preparation", "\u6218\u5907") + "  " +
+                   AW_L10n.Text("aw_war_notice_target", "\u6218\u4E66\u76EE\u6807") + ": " +
+                   WarPreparationTargetName(pSummary.TargetKingdomId) + "  " +
+                   AW_L10n.Text("aw_war_notice_window", "\u5F00\u6218\u671F\u9650") + ": " +
+                   pSummary.EarliestWarYear + "-" + pSummary.ForcedWarYear + "  " +
+                   AW_L10n.Text("aw_war_levy_count", "\u5F81\u53EC\u5175") + ": " +
+                   pSummary.LevyCount + "  " + deployment;
+        }
+
+        private static string BuildWarPreparationTooltip(WarPreparationSummary pSummary)
+        {
+            string deployment = AW_L10n.Text(
+                pSummary.DeploymentReady
+                    ? "aw_war_deployment_ready"
+                    : "aw_war_deployment_preparing",
+                pSummary.DeploymentReady ? "\u8FB9\u9632\u5C31\u7EEA" : "\u8FB9\u9632\u96C6\u7ED3\u4E2D");
+            return AW_L10n.Text("aw_war_notice_target", "\u6218\u4E66\u76EE\u6807") + ": " +
+                   WarPreparationTargetName(pSummary.TargetKingdomId) + "\n" +
+                   AW_L10n.Text("aw_war_notice_year", "\u4E0B\u4E66\u5E74\u4EFD") + ": " +
+                   pSummary.NoticeYear + "\n" +
+                   AW_L10n.Text("aw_war_notice_window", "\u5F00\u6218\u671F\u9650") + ": " +
+                   pSummary.EarliestWarYear + "-" + pSummary.ForcedWarYear + "\n" +
+                   AW_L10n.Text("aw_war_levy_count", "\u5F81\u53EC\u5175") + ": " +
+                   pSummary.LevyCount + "\n" + deployment;
+        }
+
+        private static string WarPreparationTargetName(long pKingdomId)
+        {
+            try
+            {
+                Kingdom target = pKingdomId >= 0 ? World.world?.kingdoms?.get(pKingdomId) : null;
+                return target?.data == null || string.IsNullOrEmpty(target.name) ? "?" : target.name;
+            }
+            catch { return "?"; }
+        }
+
         private float BuildProgressOverview(Kingdom pKingdom, float pY)
         {
             KingdomPolicyDef current = GetDisplayedCurrent(pKingdom);
@@ -463,6 +549,7 @@ namespace AncientWarfare3.ui.windows
                          "CurrentResearch",
                          "CurrentDecision",
                          "PolicyAI",
+                         "WarPreparationStatus",
                          "CurrentExecutionSlot",
                          "DecisionResearchProgress"
                      })

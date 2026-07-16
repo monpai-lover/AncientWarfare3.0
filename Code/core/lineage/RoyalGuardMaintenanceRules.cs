@@ -143,12 +143,12 @@ namespace AncientWarfare3.core.lineage
             return pProcessed >= limit;
         }
 
-        public static bool ShouldClearGuardHintAfterFallbackScan(
-            bool pScanComplete,
-            int pActiveGuardCount,
-            bool pFoundGuardArmy)
+        public static bool ShouldClearStaleGuardStateWithoutRoster(
+            bool pGuardArmyFound,
+            bool pHasRoster,
+            bool pHasGuardStateHint)
         {
-            return pScanComplete && pActiveGuardCount <= 0 && !pFoundGuardArmy;
+            return !pGuardArmyFound && !pHasRoster && pHasGuardStateHint;
         }
 
         public static bool ShouldKeepExistingCaptain(bool pExistingCaptainValid, bool pExistingCaptainNoble)
@@ -210,11 +210,6 @@ namespace AncientWarfare3.core.lineage
             if (pWasCaptain != pCaptain) return true;
             if (pMissingTrait) return true;
             return pKingdomChanged;
-        }
-
-        public static bool ShouldFallbackToKingdomScanForActiveGuards(bool pGuardArmyFound, bool pHasGuardStateHint)
-        {
-            return !pGuardArmyFound && pHasGuardStateHint;
         }
 
         public static bool ShouldKeepBoundedCandidate(int pCurrentCount, int pLimit,

@@ -56,6 +56,7 @@ namespace AncientWarfare3.patch
         {
             if (string.IsNullOrEmpty(pPath)) return;
             LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
+            core.lineage.MandateService.RebuildRuntimeMarkerProjection();
             XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
@@ -64,6 +65,11 @@ namespace AncientWarfare3.patch
             SchoolMembershipService.LoadIndexes();
             HistoricalSchoolRuntime.LoadState();
             core.lineage.AWArmyService.RepairSpecialArmiesAfterLoad();
+            core.lineage.KingdomMilitaryReadinessService.RebuildRuntime();
+            core.lineage.MilitaryEmergencyService.RebuildRuntime();
+            core.lineage.WarNoticeService.RebuildRuntime();
+            core.lineage.TemporaryLevyService.RebuildRuntime();
+            core.lineage.TemporarySlaveVanguardService.RebuildRuntime();
             core.lineage.WarPlotRedirectService.SweepExistingPlots();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
         }
@@ -73,6 +79,7 @@ namespace AncientWarfare3.patch
         public static void GenerateNewMap_Postfix()
         {
             LineageArchiveManager.Instance.CreateDataBase();
+            core.lineage.MandateService.RebuildRuntimeMarkerProjection();
             core.lineage.WarPlotRedirectService.SweepExistingPlots();
             XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
@@ -85,7 +92,13 @@ namespace AncientWarfare3.patch
         private static void ResetHistoryWindowsAfterArchiveSwitch()
         {
             try { core.lineage.DeferredRuntimeWorkService.ClearRuntimeState(); } catch { }
+            try { core.lineage.WarNoticeService.ClearRuntime(); } catch { }
+            try { core.lineage.MilitaryEmergencyService.ClearRuntime(); } catch { }
+            try { core.lineage.TemporaryLevyService.ClearRuntime(); } catch { }
+            try { core.lineage.TemporarySlaveVanguardService.ClearRuntime(); } catch { }
+            try { core.lineage.KingdomMilitaryReadinessService.ClearRuntime(); } catch { }
             try { core.lineage.CityOccupationAccelerationService.ClearRuntime(); } catch { }
+            try { core.lineage.ArmyRetreatService.ClearRuntime(); } catch { }
             try { core.lineage.RoyalAsylumService.ClearRuntime(); } catch { }
             try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }

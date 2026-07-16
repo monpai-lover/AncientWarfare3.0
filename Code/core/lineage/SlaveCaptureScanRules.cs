@@ -2,6 +2,8 @@ namespace AncientWarfare3.core.lineage
 {
     public static class SlaveCaptureScanRules
     {
+        public const int MaxWaiterNotificationsPerWorkItem = 4;
+
         public static int ChunkRadius(int pTileRadius, int pChunkSize)
         {
             int chunkSize = System.Math.Max(1, pChunkSize);

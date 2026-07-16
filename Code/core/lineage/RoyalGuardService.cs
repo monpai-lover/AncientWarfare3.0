@@ -20,7 +20,6 @@ namespace AncientWarfare3.core.lineage
         private const int DISMISS_BATCH_LIMIT = 2;
         private const int STALE_GUARD_ARMY_CLEANUP_LIMIT = 4;
         private const int DISMISS_SCAN_LIMIT = 64;
-        private const int ACTIVE_FALLBACK_SCAN_LIMIT = 64;
         private const int CANDIDATE_POOL_LIMIT = 16;
         private const int NOBLE_CANDIDATE_POOL_LIMIT = 8;
         private const int CANDIDATE_SCAN_LIMIT = 64;
@@ -145,14 +144,12 @@ namespace AncientWarfare3.core.lineage
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardValidate, CityMaintenanceBenchmarkRules.Group);
-            List<Actor> active = CollectActiveGuards(pKingdom,
-                out bool activeFallbackUsed, out bool activeFallbackComplete);
+            List<Actor> active = CollectActiveGuards(pKingdom);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardValidate, CityMaintenanceBenchmarkRules.Group);
-            if (activeFallbackUsed && !activeFallbackComplete)
-                return;
 
-            bool standingCoreReady = KingdomMilitaryReadinessService.HasReadyStandingCore(pKingdom);
             bool militaryEmergency = MilitaryEmergencyService.HasAny(pKingdom);
+            bool standingCoreReady = !militaryEmergency &&
+                                     KingdomMilitaryReadinessService.HasReadyStandingCore(pKingdom);
             if (!StandingArmyRules.ShouldAllowGuardMaintenance(
                     active.Count > 0, standingCoreReady, militaryEmergency))
                 return;
@@ -300,8 +297,12 @@ namespace AncientWarfare3.core.lineage
             if (!RoyalGuardMaintenanceRules.ShouldInspectNormalArmyForGuards(
                     guardArmy, HasKingdomGuardStateHint(kingdom))) return;
 
-            foreach (Actor unit in new List<Actor>(pArmy.getUnits()))
+            List<long> rosterIds = ReadGuardRosterIds(kingdom);
+            int rosterCount = Math.Min(rosterIds.Count, MAX_GUARDS_PER_KINGDOM);
+            for (int i = 0; i < rosterCount; i++)
             {
+                Actor unit = GetActorById(rosterIds[i]);
+                if (unit?.army != pArmy) continue;
                 if (!IsRoyalGuard(unit)) continue;
                 RemoveFromNormalArmy(unit);
             }
@@ -520,12 +521,9 @@ namespace AncientWarfare3.core.lineage
                 ActorAiSearchThrottleRules.NextAllowedAfterMiss(LineageService.CurTime(), THREAT_SEARCH_MISS_COOLDOWN);
         }
 
-        private static List<Actor> CollectActiveGuards(Kingdom pKingdom,
-            out bool pFallbackUsed, out bool pFallbackComplete)
+        private static List<Actor> CollectActiveGuards(Kingdom pKingdom)
         {
             var active = new List<Actor>();
-            pFallbackUsed = false;
-            pFallbackComplete = true;
             bool hasHint = HasKingdomGuardStateHint(pKingdom);
             Army guardArmy = hasHint ? FindGuardArmy(pKingdom) : null;
             if (RoyalGuardMaintenanceRules.ShouldUseArmyFastPathForActiveGuards(
@@ -550,22 +548,11 @@ namespace AncientWarfare3.core.lineage
                 return active;
             }
 
-            if (!RoyalGuardMaintenanceRules.ShouldFallbackToKingdomScanForActiveGuards(
+            if (RoyalGuardMaintenanceRules.ShouldClearStaleGuardStateWithoutRoster(
                     pGuardArmyFound: guardArmy != null,
+                    pHasRoster: rosterIds.Count > 0,
                     pHasGuardStateHint: hasHint))
-                return active;
-
-            Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
-                CityMaintenanceBenchmarkRules.Group);
-            pFallbackUsed = true;
-            pFallbackComplete = CollectActiveGuardsFallbackBounded(pKingdom, active);
-            Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardActiveFallbackScan,
-                CityMaintenanceBenchmarkRules.Group);
-            if (RoyalGuardMaintenanceRules.ShouldClearGuardHintAfterFallbackScan(
-                    pFallbackComplete, active.Count, pFoundGuardArmy: false))
                 ClearKingdomGuardStateHints(pKingdom);
-            else if (pFallbackComplete)
-                WriteGuardRoster(pKingdom, active);
             return active;
         }
 
@@ -593,41 +580,6 @@ namespace AncientWarfare3.core.lineage
             }
 
             WriteGuardRoster(pKingdom, clean);
-        }
-
-        private static bool CollectActiveGuardsFallbackBounded(Kingdom pKingdom, List<Actor> pActive)
-        {
-            if (pKingdom?.data == null || pActive == null) return true;
-
-            pKingdom.data.get(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, out int cursor, 0);
-            if (cursor < 0) cursor = 0;
-
-            int scanned = 0;
-            int processed = 0;
-            foreach (Actor unit in pKingdom.getUnits())
-            {
-                if (scanned++ < cursor) continue;
-                if (RoyalGuardMaintenanceRules.ShouldStopBoundedDismissScan(
-                        processed, ACTIVE_FALLBACK_SCAN_LIMIT))
-                {
-                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, scanned - 1);
-                    return false;
-                }
-
-                processed++;
-                if (!IsRoyalGuard(unit)) continue;
-                if (!IsStillValidGuard(unit, pKingdom))
-                {
-                    DismissGuard(unit, "invalid", pRecord: true, pKeepTrait: false, pUpdateRoster: false);
-                    continue;
-                }
-                pActive.Add(unit);
-                RemoveFromNormalArmy(unit);
-                if (pActive.Count >= MAX_GUARDS_PER_KINGDOM) break;
-            }
-
-            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, 0);
-            return true;
         }
 
         private static void CollectActiveGuardsFromArmy(Army pGuardArmy, Kingdom pKingdom, List<Actor> pActive)
@@ -862,18 +814,13 @@ namespace AncientWarfare3.core.lineage
             Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScore, CityMaintenanceBenchmarkRules.Group);
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_CANDIDATE_SCAN_CURSOR, out int cursor, 0);
             if (cursor < 0) cursor = 0;
-            int scanned = 0;
-            int skipped = 0;
-            bool complete = true;
-            foreach (Actor unit in pKingdom.getUnits())
+            List<Actor> units = pKingdom.units;
+            int unitCount = units.Count;
+            if (cursor >= unitCount) cursor = 0;
+            int scanned = Math.Min(CANDIDATE_SCAN_LIMIT, Math.Max(0, unitCount - cursor));
+            for (int i = 0; i < scanned; i++)
             {
-                if (skipped++ < cursor) continue;
-                if (RoyalGuardMaintenanceRules.ShouldStopCandidateScan(scanned, CANDIDATE_SCAN_LIMIT))
-                {
-                    complete = false;
-                    break;
-                }
-                scanned++;
+                Actor unit = units[cursor + i];
                 if (unit?.data == null || activeIds.Contains(unit.data.id)) continue;
                 if (!IsGuardCandidate(unit, pKingdom)) continue;
                 float score = CombatScore(unit);
@@ -887,6 +834,7 @@ namespace AncientWarfare3.core.lineage
                 AddBoundedCandidate(candidate.noble ? nobles : common, candidate,
                     candidate.noble ? NOBLE_CANDIDATE_POOL_LIMIT : CANDIDATE_POOL_LIMIT);
             }
+            bool complete = cursor + scanned >= unitCount;
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_CANDIDATE_SCAN_CURSOR,
                 RoyalGuardMaintenanceRules.NextBoundedScanCursor(cursor, scanned, complete));
             Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuardCandidateScore, CityMaintenanceBenchmarkRules.Group);
@@ -1221,27 +1169,20 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, out int cursor, 0);
             if (cursor < 0) cursor = 0;
 
-            int scanned = 0;
-            int processed = 0;
             var toDismiss = new List<Actor>(DISMISS_BATCH_LIMIT);
-            foreach (Actor unit in pKingdom.getUnits())
+            List<Actor> units = pKingdom.units;
+            int unitCount = units.Count;
+            if (cursor >= unitCount) cursor = 0;
+            int end = Math.Min(unitCount, cursor + DISMISS_SCAN_LIMIT);
+            for (int i = cursor; i < end; i++)
             {
-                if (scanned++ < cursor) continue;
-                if (RoyalGuardMaintenanceRules.ShouldStopBoundedDismissScan(processed, DISMISS_SCAN_LIMIT))
-                {
-                    pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, scanned - 1);
-                    foreach (Actor guard in toDismiss)
-                        DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
-                    return false;
-                }
-
-                processed++;
+                Actor unit = units[i];
                 if (IsRoyalGuard(unit))
                 {
                     toDismiss.Add(unit);
                     if (toDismiss.Count >= DISMISS_BATCH_LIMIT)
                     {
-                        pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, scanned);
+                        pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, i + 1);
                         foreach (Actor guard in toDismiss)
                             DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false,
                                 pUpdateRoster: false);
@@ -1251,8 +1192,13 @@ namespace AncientWarfare3.core.lineage
             }
 
             foreach (Actor guard in toDismiss)
-                DismissGuard(guard, pReason);
+                DismissGuard(guard, pReason, pRecord: true, pKeepTrait: false, pUpdateRoster: false);
 
+            if (end < unitCount)
+            {
+                pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, end);
+                return false;
+            }
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
             return true;
         }
@@ -1273,7 +1219,6 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ARMY_ID, -1L);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_ROSTER_IDS, "");
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_DISMISS_CURSOR, 0);
-            pKingdom.data.set(LineageKeys.ROYAL_GUARD_ACTIVE_SCAN_CURSOR, 0);
             pKingdom.data.set(LineageKeys.ROYAL_GUARD_CANDIDATE_SCAN_CURSOR, 0);
         }
 

@@ -11,7 +11,7 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ShouldUseDetachedArmy(string pRole)
         {
-            return pRole == AWArmyRole.RoyalGuard;
+            return pRole == AWArmyRole.RoyalGuard || pRole == AWArmyRole.SlaveArmy;
         }
 
         public static int MaxArmiesPerCity(string pRole)
@@ -21,7 +21,7 @@ namespace AncientWarfare3.core.lineage
 
         public static int MaxArmiesPerKingdom(string pRole)
         {
-            if (pRole == AWArmyRole.RoyalGuard) return 1;
+            if (pRole == AWArmyRole.RoyalGuard || pRole == AWArmyRole.SlaveArmy) return 1;
             return pRole == AWArmyRole.BorderArmy ? 3 : int.MaxValue;
         }
 

@@ -58,6 +58,8 @@ namespace AncientWarfare3.patch
         public static void CitySetKingdom_Postfix(City __instance, Kingdom pKingdom, bool pFromLoad, Kingdom __state)
         {
             if (pFromLoad) return;
+            KingdomMilitaryReadinessService.OnCityKingdomChanged(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             KingdomArchiveWriter.Upsert(__state);
             KingdomArchiveWriter.Upsert(__instance?.kingdom ?? pKingdom);
             CityTechService.OnCityChangedKingdom(__instance, __instance?.kingdom ?? pKingdom);
@@ -84,6 +86,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.newCityEvent))]
         public static void NewCityEvent_Postfix(City __instance)
         {
+            KingdomMilitaryReadinessService.OnCityKingdomChanged(
+                __instance, null, __instance?.kingdom);
             ChronicleEvents.OnCityFounded(__instance);
             CityTechService.OnCityFounded(__instance);
         }

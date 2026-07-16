@@ -322,6 +322,8 @@ namespace AncientWarfare3.core.lineage
                 }
                 changed++;
             }
+            if (changed > 0 && borderArmy?.data != null)
+                WarNoticeService.OnArmyChanged(owner, borderArmy);
             return changed;
         }
 
@@ -552,6 +554,12 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.MANDATE_BORDER_GUARD, out bool flag, false);
             if (flag) return true;
             return AWArmyService.IsRoleArmy(pActor.army, AWArmyRole.BorderArmy);
+        }
+
+        public static void ReleaseBorderGuard(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
         }
 
         public static Actor FindThreatNearBorderGuard(Actor pActor)

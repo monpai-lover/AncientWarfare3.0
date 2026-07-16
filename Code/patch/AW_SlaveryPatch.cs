@@ -12,14 +12,46 @@ namespace AncientWarfare3.patch
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
             if (pActor?.data == null || !pActor.isWarrior()) return;
-            SlaveService.OnMadeWarrior(__instance, pActor);
+            if (!MilitaryRecruitmentScope.SuppressesPermanentEnlistmentHistory)
+                SlaveService.OnMadeWarrior(__instance, pActor);
             RoyalGuardService.StripActorFromNormalArmy(pActor);
-            if (SlaveService.IsFillingSlaveArmy) return;
             if (__instance != null && __instance.hasArmy())
             {
                 SlaveService.RenameArmyIfSlaveArmy(__instance.getArmy());
                 FiefMilitaryService.RefreshArmyName(__instance.getArmy());
             }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
+        public static void SetKingdom_Prefix(Actor __instance, out Kingdom __state)
+        {
+            __state = __instance?.kingdom;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
+        public static void SetKingdom_Postfix(Actor __instance, Kingdom __state)
+        {
+            if (__instance?.kingdom == __state) return;
+            WarNoticeService.QueueArmyChanged(__state, __instance.army);
+            ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
+            TemporarySlaveVanguardService.OnActorKingdomChanged(__instance, __state);
+            TemporaryLevyService.OnActorInvalidated(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.joinCity))]
+        public static void JoinCity_Postfix(Actor __instance)
+        {
+            SlavePopulationIndexService.OnActorCityChanged(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.stopBeingWarrior))]
+        public static void StopBeingWarrior_Postfix(Actor __instance)
+        {
+            TemporarySlaveVanguardService.OnWarriorStatusLost(__instance);
         }
 
         [HarmonyPostfix]
@@ -89,7 +121,6 @@ namespace AncientWarfare3.patch
         public static bool NewArmy_Prefix(ref Actor pActor, City pCity, ref Army __result)
         {
             RoyalGuardService.PrepareArmyCaptain(ref pActor, pCity);
-            SlaveService.PrepareArmyCaptain(ref pActor, pCity);
             if (!RoyalGuardService.ShouldBlockNormalArmy(pActor) && !SlaveService.IsSlave(pActor)) return true;
 
             __result = null;

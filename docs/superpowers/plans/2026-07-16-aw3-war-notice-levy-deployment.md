@@ -21,7 +21,7 @@
 
 - [ ] **Step 1: Add failing assertions**
 
-Cover Xia/Xia-rites applicability, excluded independence/rebellion/system/joined wars, `issue+1` earliest year, `issue+3` forced year, full-progress hold behavior, four-city/64-candidate/eight-recruit limits, enlistment age `<65`, 70-percent ordinary-army readiness, empty-army non-blocking, and guard exclusion.
+Cover Xia/Xia-rites applicability, excluded independence/rebellion/system/joined wars, `issue+1` earliest year, `issue+3` forced year, full-progress hold behavior, four-work-item/16-candidate-per-item/eight-recruit-per-item and 64-candidate/32-recruit annual limits, enlistment age `<65`, 70-percent ordinary-army readiness, empty-army non-blocking, and guard exclusion.
 
 - [ ] **Step 2: Run rule tests and verify RED**
 
@@ -84,13 +84,13 @@ git commit -m "feat: persist Xia rites war notices"
 
 - [ ] **Step 1: Add failing source guards for bounded work and retirement isolation**
 
-Require four-city, 64-resident, eight-enlistment limits; require `Actor.updateAge` to exit before benchmark/database retirement work for a levy; forbid whole-kingdom actor scans and levy calls to permanent enlistment/retirement history.
+Require four deferred work items, 16 resident checks and eight enlistments per item, and 64 resident checks and 32 enlistments per year. Require `Actor.updateAge` to exit before benchmark/database retirement work for a levy; forbid whole-kingdom actor scans and levy calls to permanent enlistment/retirement history.
 
 - [ ] **Step 2: Run source guards and verify RED**
 
 - [ ] **Step 3: Implement kingdom-year mobilization**
 
-Prioritize threatened frontier cities, then other cities. Resume stable city and resident cursors. Use original eligibility plus age below 65 and AW3 identity exclusions. Stop at each city's full `warrior_slots`, recruit at most eight actors, and persist flag, mobilizing kingdom, notice signature, original city, and eventual war ID.
+The kingdom-year hook only schedules work. Process at most one city per shared runtime-queue item, prioritize cached threatened-frontier cities, then resume stable city and resident cursors. Each item scans at most 16 candidates and recruits at most eight actors; all four items together scan at most 64 and recruit at most 32. Persist consumed work items, candidate checks, recruits, and the frontier cursor so same-year emergency changes and save/load resume the remaining budget. Use original eligibility plus age below 65 and AW3 identity exclusions. Stop at each city's full `warrior_slots`, and persist flag, mobilizing kingdom, notice signature, original city, and eventual war ID.
 
 - [ ] **Step 4: Isolate retirement and permanent service side effects**
 
@@ -163,7 +163,7 @@ On war start: transfer notice levy records to war ID, activate sudden-war mobili
 
 - [ ] **Step 3: Rebuild runtime state after load**
 
-Clear transient indexes on new map/archive switch and rebuild notices, levy pools, and deployment assignments from current kingdom decision fields. Old row compatibility is deliberately omitted.
+Clear transient indexes on new map/archive switch and rebuild notices, levy pools, annual levy plans, and deployment assignments from current persisted fields. Load-time world-unit and kingdom passes are permitted; normal runtime work remains indexed and bounded. Old row compatibility is deliberately omitted.
 
 - [ ] **Step 4: Show current preparation state**
 

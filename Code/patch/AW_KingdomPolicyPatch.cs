@@ -16,6 +16,8 @@ namespace AncientWarfare3.patch
 
             HeirService.OnKingdomYear(__instance);
             RoyalAsylumService.OnKingdomYear(__instance);
+            TemporaryLevyService.OnKingdomYear(__instance);
+            WarNoticeService.OnKingdomYear(__instance);
 
             long benchmark = UpdateAgeBenchmark.Begin();
             try

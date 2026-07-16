@@ -18,9 +18,7 @@ namespace AncientWarfare3.core.lineage
 
         public static MilitaryRecruitmentKind Current => _current;
         public static bool AllowsVanillaTryToMakeWarrior => _current != MilitaryRecruitmentKind.None;
-        public static bool BypassesWarriorCapacity =>
-            _current == MilitaryRecruitmentKind.SlaveVanguard ||
-            _current == MilitaryRecruitmentKind.ExistingSpecialArmy;
+        public static bool BypassesWarriorCapacity => _current != MilitaryRecruitmentKind.None;
         public static bool SuppressesPermanentEnlistmentHistory =>
             _current == MilitaryRecruitmentKind.TemporaryLevy ||
             _current == MilitaryRecruitmentKind.SlaveVanguard;

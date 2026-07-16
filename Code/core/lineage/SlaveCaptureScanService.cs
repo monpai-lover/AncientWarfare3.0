@@ -20,7 +20,8 @@ namespace AncientWarfare3.core.lineage
         private const double MillisecondBudget = 1.0;
         private const double HitTtl = 2.0;
         private const double MissTtl = 5.0;
-        private const int PruneThreshold = 256;
+        private const int MaxStates = 256;
+        private const int MaxEvictionsPerRequest = 8;
 
         private sealed class ScanState
         {
@@ -37,12 +38,15 @@ namespace AncientWarfare3.core.lineage
             public int bestDistance = int.MaxValue;
             public bool complete;
             public double expiresAt;
-            public readonly HashSet<long> waitingCityIds = new HashSet<long>();
+            public HashSet<long> waitingCityIds = new HashSet<long>();
+            public readonly long[] waiterBuffer =
+                new long[SlaveCaptureScanRules.MaxWaiterNotificationsPerWorkItem];
         }
 
         private static readonly Dictionary<string, ScanState> States =
             new Dictionary<string, ScanState>(StringComparer.Ordinal);
         private static readonly Queue<string> PendingKeys = new Queue<string>();
+        private static readonly Queue<string> CompletedKeys = new Queue<string>();
 
         internal static CaptureTargetSearchState FindOrRequest(Kingdom pKingdom, WorldTile pOrigin,
             out Actor pTarget, long pWaitingCityId = -1L)
@@ -57,7 +61,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (!state.complete)
                 {
-                    if (pWaitingCityId >= 0) state.waitingCityIds.Add(pWaitingCityId);
+                    if (pWaitingCityId >= 0) state.waitingCityIds?.Add(pWaitingCityId);
                     return CaptureTargetSearchState.Pending;
                 }
 
@@ -83,6 +87,9 @@ namespace AncientWarfare3.core.lineage
                 States.Remove(key);
             }
 
+            EvictCompleted(now);
+            if (States.Count >= MaxStates) return CaptureTargetSearchState.Miss;
+
             var created = new ScanState
             {
                 key = key,
@@ -96,7 +103,6 @@ namespace AncientWarfare3.core.lineage
             if (pWaitingCityId >= 0) created.waitingCityIds.Add(pWaitingCityId);
             States[key] = created;
             PendingKeys.Enqueue(key);
-            if (States.Count > PruneThreshold) PruneExpired(now);
             return CaptureTargetSearchState.Pending;
         }
 
@@ -125,6 +131,7 @@ namespace AncientWarfare3.core.lineage
         {
             States.Clear();
             PendingKeys.Clear();
+            CompletedKeys.Clear();
         }
 
         private static void Advance(ScanState pState, long pStart, long pTickBudget, ref int pCheckedUnits)
@@ -180,19 +187,64 @@ namespace AncientWarfare3.core.lineage
         {
             pState.expiresAt = LineageService.CurTime() +
                                (pState.bestActorId >= 0 ? HitTtl : MissTtl);
-            if (pState.bestActorId >= 0)
-                foreach (long cityId in pState.waitingCityIds)
-                    SlaveService.AssignSlaveCatcherAfterScan(cityId, pState.kingdomId);
-            pState.waitingCityIds.Clear();
+            CompletedKeys.Enqueue(pState.key);
+            if (pState.bestActorId >= 0 && pState.waitingCityIds?.Count > 0)
+                ScheduleWaitingCityPublication(pState);
+            else
+                pState.waitingCityIds = null;
         }
 
-        private static void PruneExpired(double pNow)
+        private static void ScheduleWaitingCityPublication(ScanState pState)
         {
-            var expired = new List<string>();
-            foreach (KeyValuePair<string, ScanState> entry in States)
-                if (entry.Value.complete && entry.Value.expiresAt <= pNow)
-                    expired.Add(entry.Key);
-            foreach (string key in expired) States.Remove(key);
+            if (pState == null || pState.waitingCityIds == null || pState.waitingCityIds.Count == 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "slave_capture_waiters:" + pState.key,
+                DeferredWorkClass.Runtime, () => PublishWaitingCities(pState.key));
+        }
+
+        private static void PublishWaitingCities(string pKey)
+        {
+            if (string.IsNullOrEmpty(pKey) || !States.TryGetValue(pKey, out ScanState state) ||
+                !state.complete || state.bestActorId < 0 || state.waitingCityIds == null) return;
+
+            int count = 0;
+            foreach (long waitingCityId in state.waitingCityIds)
+            {
+                state.waiterBuffer[count++] = waitingCityId;
+                if (count >= state.waiterBuffer.Length) break;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                long cityId = state.waiterBuffer[i];
+                state.waitingCityIds.Remove(cityId);
+                SlaveService.AssignSlaveCatcherAfterScan(cityId, state.kingdomId);
+            }
+
+            if (state.waitingCityIds.Count > 0)
+                ScheduleWaitingCityPublication(state);
+            else
+                state.waitingCityIds = null;
+        }
+
+        private static void EvictCompleted(double pNow)
+        {
+            int checks = Math.Min(MaxEvictionsPerRequest, CompletedKeys.Count);
+            for (int i = 0; i < checks; i++)
+            {
+                string key = CompletedKeys.Dequeue();
+                if (!States.TryGetValue(key, out ScanState state) || !state.complete) continue;
+                if (state.waitingCityIds?.Count > 0)
+                {
+                    CompletedKeys.Enqueue(key);
+                    continue;
+                }
+                if (state.expiresAt <= pNow || States.Count >= MaxStates)
+                {
+                    States.Remove(key);
+                    continue;
+                }
+                CompletedKeys.Enqueue(key);
+            }
         }
 
         private static void RecordCacheHit()

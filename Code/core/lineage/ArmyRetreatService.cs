@@ -1,11 +1,20 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class ArmyRetreatService
     {
+        private const int CaptainMutationBudget = 1;
+
+        private sealed class RetreatState
+        {
+            public long TargetCityId = -1L;
+        }
+
+        private static readonly Dictionary<long, RetreatState> RetreatStates =
+            new Dictionary<long, RetreatState>();
+
         public static bool ShouldStopAttack(Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt()) return false;
@@ -18,7 +27,8 @@ namespace AncientWarfare3.core.lineage
             army.data.get(LineageKeys.AW_ARMY_RETREAT_UNTIL_YEAR, out int retreatUntil, -1);
             if (ArmyRetreatRules.ShouldSkipAttackWhileRetreating(retreatUntil, year))
             {
-                SendArmyToRetreatCity(army, FindRetreatCity(army, pActor.kingdom, sourceCity, targetCity));
+                ScheduleArmyRetreat(army,
+                    FindRetreatCity(army, pActor.kingdom, sourceCity, targetCity));
                 return true;
             }
 
@@ -76,33 +86,59 @@ namespace AncientWarfare3.core.lineage
             pArmy.data.set(LineageKeys.AW_ARMY_RETREAT_BASELINE, 0);
             pArmy.data.set(LineageKeys.AW_ARMY_RETREAT_TARGET_CITY_ID, -1L);
 
-            if (pSourceCity?.data != null && (pSourceCity.target_attack_city == pTargetCity ||
-                                              pSourceCity.target_attack_zone?.city == pTargetCity))
-            {
-                pSourceCity.target_attack_city = null;
-                pSourceCity.target_attack_zone = null;
-            }
-
-            SendArmyToRetreatCity(pArmy, retreatCity);
+            ScheduleArmyRetreat(pArmy, retreatCity);
         }
 
-        private static void SendArmyToRetreatCity(Army pArmy, City pRetreatCity)
+        public static void ClearRuntime()
+        {
+            RetreatStates.Clear();
+        }
+
+        private static void ScheduleArmyRetreat(Army pArmy, City pRetreatCity)
         {
             if (pArmy?.data == null || pRetreatCity?.data == null) return;
-            WorldTile tile = SafeCityTile(pRetreatCity);
-            if (tile == null) return;
-
-            foreach (Actor unit in SafeUnits(pArmy))
+            if (!RetreatStates.TryGetValue(pArmy.id, out RetreatState state))
             {
-                if (unit?.data == null || unit.isRekt()) continue;
-                try
-                {
-                    if (unit.current_tile != null && !tile.isSameIsland(unit.current_tile)) continue;
-                    unit.beh_tile_target = tile;
-                    unit.makeWait(0.2f);
-                }
-                catch { }
+                state = new RetreatState();
+                RetreatStates[pArmy.id] = state;
             }
+            if (state.TargetCityId != pRetreatCity.id)
+                state.TargetCityId = pRetreatCity.id;
+            EnqueueRetreatBatch(pArmy.id);
+        }
+
+        private static void EnqueueRetreatBatch(long pArmyId)
+        {
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey("army_retreat", pArmyId),
+                DeferredWorkClass.Runtime,
+                () => ProcessRetreatBatch(pArmyId));
+        }
+
+        private static void ProcessRetreatBatch(long pArmyId)
+        {
+            if (!RetreatStates.TryGetValue(pArmyId, out RetreatState state)) return;
+            Army army = ResolveArmy(pArmyId);
+            City retreatCity = ResolveCity(state.TargetCityId);
+            WorldTile tile = SafeCityTile(retreatCity);
+            if (army?.data == null || tile == null)
+            {
+                RetreatStates.Remove(pArmyId);
+                return;
+            }
+            Actor captain = SafeCaptain(army);
+            if (captain?.current_tile == null)
+            {
+                RetreatStates.Remove(pArmyId);
+                return;
+            }
+            try
+            {
+                if (CaptainMutationBudget > 0 && tile.isSameIsland(captain.current_tile))
+                    captain.goTo(tile, pLimitPathfindingRegions: 6);
+            }
+            catch { }
+            RetreatStates.Remove(pArmyId);
         }
 
         private static City FindRetreatCity(Army pArmy, Kingdom pKingdom, City pSourceCity, City pTargetCity)
@@ -110,41 +146,26 @@ namespace AncientWarfare3.core.lineage
             Kingdom kingdom = pKingdom?.data != null ? pKingdom : SafeKingdom(pArmy, pSourceCity);
             City fallback = pSourceCity?.kingdom == kingdom ? pSourceCity : kingdom?.capital;
             if (kingdom?.data == null) return fallback;
-
-            City best = null;
-            float bestScore = float.MaxValue;
-            Vector2 origin = pTargetCity?.city_center ?? pSourceCity?.city_center ?? Vector2.zero;
-            try
-            {
-                foreach (City city in kingdom.getCities())
-                {
-                    if (city?.data == null || city.isRekt() || city == pTargetCity) continue;
-                    float score = (city.city_center - origin).sqrMagnitude;
-                    if (score >= bestScore) continue;
-                    bestScore = score;
-                    best = city;
-                }
-            }
-            catch { }
-
-            return best ?? fallback;
+            if (IsValidRetreatCity(fallback, kingdom, pTargetCity)) return fallback;
+            City anchor = null;
+            try { anchor = AWArmyService.FindAnchorCity(pArmy); } catch { }
+            if (IsValidRetreatCity(anchor, kingdom, pTargetCity)) return anchor;
+            if (IsValidRetreatCity(kingdom.capital, kingdom, pTargetCity)) return kingdom.capital;
+            City first = kingdom.cities.Count > 0 ? kingdom.cities[0] : null;
+            return IsValidRetreatCity(first, kingdom, pTargetCity) ? first : fallback;
         }
 
         private static int CountAliveUnits(Army pArmy)
         {
-            int count = 0;
-            try
-            {
-                foreach (Actor unit in pArmy.getUnits())
-                    if (unit?.data != null && !unit.isRekt())
-                        count++;
-                return count;
-            }
-            catch
-            {
-                try { return pArmy.countUnits(); }
-                catch { return 0; }
-            }
+            if (pArmy?.data == null) return 0;
+            try { return Math.Max(0, pArmy.countUnits()); }
+            catch { return 0; }
+        }
+
+        private static bool IsValidRetreatCity(City pCity, Kingdom pKingdom, City pTargetCity)
+        {
+            return pCity?.data != null && !pCity.isRekt() && pCity != pTargetCity &&
+                   pCity.kingdom == pKingdom;
         }
 
         private static Actor SafeCaptain(Army pArmy)
@@ -174,10 +195,16 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
-        private static List<Actor> SafeUnits(Army pArmy)
+        private static Army ResolveArmy(long pId)
         {
-            try { return new List<Actor>(pArmy.getUnits()); }
-            catch { return new List<Actor>(); }
+            try { return pId >= 0 ? World.world?.armies?.get(pId) : null; }
+            catch { return null; }
+        }
+
+        private static City ResolveCity(long pId)
+        {
+            try { return pId >= 0 ? World.world?.cities?.get(pId) : null; }
+            catch { return null; }
         }
     }
 }

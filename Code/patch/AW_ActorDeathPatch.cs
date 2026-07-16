@@ -16,6 +16,12 @@ namespace AncientWarfare3.patch
             if (__instance?.data == null) return;
             if (!__instance.isAlive()) return;
 
+            KingdomMilitaryReadinessService.MarkOrdinaryArmyActorDirty(__instance);
+            WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
+            TemporaryLevyService.OnActorInvalidated(__instance);
+            TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
+            SlavePopulationIndexService.Deactivate(__instance);
+
             TryRunDeathStage(__instance, "death cause", () =>
                 EnsureDeathCause(__instance, pType));
             TryRunDeathStage(__instance, "historical figure death", () =>
