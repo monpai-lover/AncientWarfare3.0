@@ -348,8 +348,16 @@ namespace AncientWarfare3.core.policy
         {
             if (pCity?.data == null || pCity.kingdom?.data == null) return null;
             CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(pCity);
+            return GetSchoolIdentityMetaForCity(pCity, snapshot);
+        }
+
+        internal static AWMapModeMetaObject GetSchoolIdentityMetaForCity(City pCity, CitySchoolSnapshot pSnapshot)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null) return null;
+            CitySchoolSnapshot snapshot = pSnapshot;
             CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot?.DominantSchool);
-            if (definition == null || snapshot.TotalScore <= 0f) return null;
+            if (!SchoolNameplateRenderRules.CanRender(snapshot?.DominantSchool,
+                    snapshot?.TotalScore ?? 0f, definition != null)) return null;
 
             string displayName = SchoolMapModeService.GetSchoolDisplayName(definition.Id);
             AWMapModeMetaObject meta = GetMeta(AWMapModeMetaTypes.School, "school:" + definition.Id,

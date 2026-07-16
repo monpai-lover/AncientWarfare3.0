@@ -173,8 +173,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return -1L;
             pKingdom.data.get(LineageKeys.VASSAL_SUZERAIN_ID, out long dataId, -1L);
-            if (dataId >= 0) return dataId;
-            return ReadActiveSuzerainId(pKingdom.id);
+            return dataId;
         }
 
         public static Kingdom GetSuzerain(Kingdom pKingdom)

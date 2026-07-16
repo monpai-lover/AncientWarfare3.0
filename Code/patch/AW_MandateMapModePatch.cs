@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 
@@ -6,6 +7,9 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_MandateMapModePatch
     {
+        private static readonly HashSet<string> AvailableMarkerPaths = new HashSet<string>();
+        private static readonly HashSet<string> MissingMarkerPaths = new HashSet<string>();
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Zones), nameof(Zones.getMapMetaAsset))]
         public static void ZonesGetMapMetaAsset_Postfix(ref MetaTypeAsset __result)
@@ -36,11 +40,31 @@ namespace AncientWarfare3.patch
             if (__instance.name == MandateCoreMapModeService.POWER_ID) MandateCoreMapModeService.DirtyMap();
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(NameplateText), "showTextKingdom")]
-        public static void NameplateTextKingdom_Postfix(NameplateText __instance, Kingdom pMetaObject)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(NameplateText), "showSpecies", new[] { typeof(string) })]
+        public static void NameplateTextShowSpecies_Prefix(NameplateText __instance, ref string pPath)
         {
-            MandateMapMarkerService.ApplyNameplate(__instance, pMetaObject);
+            if (__instance == null || __instance.is_mini ||
+                !(__instance.nano_object is Kingdom kingdom)) return;
+
+            string markerPath = MandateMapMarkerService.GetMarkerIcon(kingdom);
+            if (!string.IsNullOrEmpty(markerPath) && IsMarkerAvailable(markerPath))
+                pPath = markerPath;
+        }
+
+        private static bool IsMarkerAvailable(string pPath)
+        {
+            if (AvailableMarkerPaths.Contains(pPath)) return true;
+            if (MissingMarkerPaths.Contains(pPath)) return false;
+
+            if (SpriteTextureLoader.getSprite(pPath) != null)
+            {
+                AvailableMarkerPaths.Add(pPath);
+                return true;
+            }
+
+            MissingMarkerPaths.Add(pPath);
+            return false;
         }
     }
 }

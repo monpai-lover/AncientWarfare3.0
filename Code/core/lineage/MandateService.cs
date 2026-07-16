@@ -52,6 +52,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool _cacheDirty = true;
         private static MandateReport _cachedReport;
+        private static long _runtimeMarkerKingdomId = -1L;
+        private static string _runtimeMarkerKind = "";
         private static HashSet<long> _coreCityIds = new HashSet<long>();
         private static ColorAsset _coreControlledColor;
         private static ColorAsset _coreVassalColor;
@@ -68,6 +70,25 @@ namespace AncientWarfare3.core.lineage
         public static bool IsMandateKingdom(Kingdom pKingdom)
         {
             return pKingdom?.data != null && GetCurrentMandateKingdom()?.id == pKingdom.id;
+        }
+
+        public static bool IsRuntimeMandateKingdom(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null && pKingdom.id == _runtimeMarkerKingdomId;
+        }
+
+        public static bool TryGetRuntimeMarkerKind(long pKingdomId, out string pMarkerKind)
+        {
+            pMarkerKind = "";
+            if (pKingdomId < 0 || pKingdomId != _runtimeMarkerKingdomId) return false;
+            pMarkerKind = _runtimeMarkerKind;
+            return true;
+        }
+
+        public static void RebuildRuntimeMarkerProjection()
+        {
+            _cacheDirty = true;
+            ReadReport();
         }
 
         public static Kingdom GetCurrentMandateKingdom()
@@ -93,6 +114,8 @@ namespace AncientWarfare3.core.lineage
             _cachedReport = ReadReportFromDb();
             RebuildCoreCache(_cachedReport.period_id);
             _cacheDirty = false;
+            PublishRuntimeMarkerProjection(_cachedReport.active, _cachedReport.kingdom_id,
+                _cachedReport.map_marker_kind);
             return _cachedReport;
         }
 
@@ -512,6 +535,8 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("ACTIVE", 0),
                 ColumnVal.Create("UPDATED_TIME", now),
                 ColumnVal.Create("CRISIS_LEVEL", "ended"));
+
+            PublishRuntimeMarkerProjection(false, -1L, "");
 
             if (current?.king != null && current.king.hasTrait(TRAIT_TIANMING))
                 current.king.removeTrait(TRAIT_TIANMING);
@@ -1125,7 +1150,15 @@ namespace AncientWarfare3.core.lineage
                 insert.AddRange(values);
                 DB.Insert(table, insert.ToArray());
             }
+            PublishRuntimeMarkerProjection(true, pKingdom.id, markerKind);
             MarkDirty();
+        }
+
+        private static void PublishRuntimeMarkerProjection(bool pActive, long pKingdomId,
+            string pMarkerKind)
+        {
+            _runtimeMarkerKingdomId = pActive && pKingdomId >= 0 ? pKingdomId : -1L;
+            _runtimeMarkerKind = _runtimeMarkerKingdomId >= 0 ? pMarkerKind ?? "" : "";
         }
 
         private static void UpdateState(Kingdom pKingdom, long pPeriodId, int pMandate, int pAuthority, int pPrestige,

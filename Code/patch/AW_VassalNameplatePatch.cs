@@ -7,6 +7,13 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_VassalNameplatePatch
     {
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(NameplateText), nameof(NameplateText.newNameplate))]
+        public static void NameplateTextNewNameplate_Postfix(NameplateText __instance)
+        {
+            VassalNameplateSuzerainFlag.Attach(__instance);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(NameplateText), nameof(NameplateText.prepare))]
         public static void NameplateTextPrepare_Prefix(NameplateText __instance)

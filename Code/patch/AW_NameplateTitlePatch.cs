@@ -1,32 +1,27 @@
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
-using UnityEngine;
 
 namespace AncientWarfare3.patch
 {
     [HarmonyPatch]
     public static class AW_NameplateTitlePatch
     {
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(NameplateText), "showTextKingdom")]
-        public static void ShowTextKingdom_Postfix(NameplateText __instance, Kingdom pMetaObject, Vector2 pPosition)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(NameplateText), "getStringForNameplate")]
+        public static void GetStringForNameplate_Prefix(NameplateText __instance, ref string pName)
         {
-            if (pMetaObject?.data == null) return;
+            if (__instance == null || __instance.is_mini ||
+                !(__instance.nano_object is Kingdom kingdom) || kingdom.data == null) return;
 
-            bool isRebel = MandateRebelService.IsRebelKingdom(pMetaObject);
-            bool isRepublic = RepublicGovernmentService.IsRepublic(pMetaObject);
-            if (pMetaObject.data.original_actor_asset != LineageService.XIA_ASSET_ID && !isRebel && !isRepublic) return;
-            if (!__instance.is_full) return;
+            bool rebel = MandateRebelService.IsRebelKingdom(kingdom);
+            bool republic = RepublicGovernmentService.IsRepublic(kingdom);
+            if (kingdom.data.original_actor_asset != LineageService.XIA_ASSET_ID &&
+                !rebel && !republic) return;
 
-            var title = KingdomTitleService.GetTitle(pMetaObject);
-            bool isMandate = MandateService.IsMandateKingdom(pMetaObject);
-            string titleSuffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix((int)title, isMandate, isRebel,
-                isRepublic);
-            if (string.IsNullOrEmpty(titleSuffix)) return;
-
-            int pop = pMetaObject.getPopulationPeople();
-            string baseStr = __instance.getStringForNameplate(pMetaObject.name + titleSuffix, pop);
-            __instance.setText(baseStr, pPosition);
+            string suffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix(
+                (int)KingdomTitleService.GetTitle(kingdom),
+                MandateService.IsRuntimeMandateKingdom(kingdom), rebel, republic);
+            if (!string.IsNullOrEmpty(suffix)) pName += suffix;
         }
     }
 }

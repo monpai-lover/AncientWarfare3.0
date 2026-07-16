@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -13,6 +14,9 @@ namespace AncientWarfare3.content
         public const string VASSAL_REMOVE = "aw_vassal_remove";
 
         private static Kingdom _pendingVassal;
+        private static readonly List<City> SchoolNameplateCandidates = new List<City>();
+        private static readonly HashSet<long> SchoolNameplateCandidateIds = new HashSet<long>();
+        private static readonly Comparison<City> SchoolNameplateCityOrder = CompareSchoolNameplateCities;
 
         public static void Init()
         {
@@ -354,16 +358,30 @@ namespace AncientWarfare3.content
 
         private static void DrawSchoolNameplates(NameplateManager pManager, NameplateAsset pAsset)
         {
-            if (pManager == null || pAsset == null || World.world?.cities == null) return;
+            if (pManager == null || pAsset == null || World.world?.zone_camera == null) return;
+
+            SchoolNameplateCandidates.Clear();
+            SchoolNameplateCandidateIds.Clear();
+            List<TileZone> visibleZones = World.world.zone_camera.getVisibleZones();
+            for (int i = 0; i < visibleZones.Count; i++)
+            {
+                City city = visibleZones[i]?.city;
+                if (city?.data == null || city.isRekt() || !city.isAlive()) continue;
+                if (SchoolNameplateCandidateIds.Add(city.data.id))
+                    SchoolNameplateCandidates.Add(city);
+            }
+            SchoolNameplateCandidates.Sort(SchoolNameplateCityOrder);
 
             int count = 0;
-            foreach (City city in World.world.cities)
+            for (int i = 0; i < SchoolNameplateCandidates.Count; i++)
             {
                 if (count >= pAsset.max_nameplate_count) break;
-                if (city?.data == null || city.isRekt() || !city.isAlive() ||
-                    !World.world.move_camera.isWithinCameraViewNotPowerBar(city.city_center)) continue;
+                City city = SchoolNameplateCandidates[i];
+                if (!World.world.move_camera.isWithinCameraViewNotPowerBar(city.city_center)) continue;
 
-                AWMapModeMetaObject meta = AWMapModeMetaLibrary.GetSchoolIdentityMetaForCity(city);
+                CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
+                AWMapModeMetaObject meta =
+                    AWMapModeMetaLibrary.GetSchoolIdentityMetaForCity(city, snapshot);
                 if (meta == null) continue;
 
                 NameplateText text = pManager.prepareNext(pAsset, city);
@@ -371,11 +389,18 @@ namespace AncientWarfare3.content
                 text.setText(meta.data.name, city.city_center);
                 text.setPriority(city.getPopulationPeople());
 
-                CitySchoolSnapshot snapshot = CitySchoolSnapshotService.GetSnapshot(city);
-                CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot?.DominantSchool);
+                CourtSchoolDefinition definition = CourtSchoolRegistry.Find(snapshot.DominantSchool);
                 if (definition != null) text.showSpecial(definition.IconPath);
                 count++;
             }
+        }
+
+        private static int CompareSchoolNameplateCities(City pLeft, City pRight)
+        {
+            if (ReferenceEquals(pLeft, pRight)) return 0;
+            long leftId = pLeft?.data?.id ?? long.MaxValue;
+            long rightId = pRight?.data?.id ?? long.MaxValue;
+            return leftId.CompareTo(rightId);
         }
 
         private static void ConfigureMapModePower(GodPower pPower, string pPowerId, Action pDirtyAction)

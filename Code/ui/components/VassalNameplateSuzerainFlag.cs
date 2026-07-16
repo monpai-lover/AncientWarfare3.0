@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
@@ -11,48 +12,82 @@ namespace AncientWarfare3.ui.components
         private static readonly FieldInfo NameTextField =
             AccessTools.Field(typeof(NameplateText), "_text_name");
 
+        private static readonly Dictionary<NameplateText, VassalNameplateSuzerainFlag> Instances =
+            new Dictionary<NameplateText, VassalNameplateSuzerainFlag>();
+
         private GameObject _root;
-        private RectTransform _rect;
         private Image _background;
         private Image _icon;
-        private LayoutElement _layout;
         private NameplateText _nameplate;
+        private Text _nameText;
         private long _shownSuzerainId = -1L;
+        private bool _hasRenderableFlag;
+
+        public static void Attach(NameplateText pNameplate)
+        {
+            if (pNameplate == null || Instances.ContainsKey(pNameplate)) return;
+
+            VassalNameplateSuzerainFlag marker =
+                pNameplate.gameObject.AddComponent<VassalNameplateSuzerainFlag>();
+            marker.Initialize(pNameplate);
+            Instances[pNameplate] = marker;
+        }
 
         public static void Apply(NameplateText pNameplate, Kingdom pKingdom)
         {
-            if (pNameplate == null) return;
+            if (pNameplate == null ||
+                !Instances.TryGetValue(pNameplate, out VassalNameplateSuzerainFlag marker)) return;
 
-            Kingdom suzerain = VassalService.GetSuzerain(pKingdom);
-            if (!ShouldShow(pNameplate, pKingdom, suzerain))
+            long suzerainId = VassalService.GetSuzerainId(pKingdom);
+            Kingdom suzerain = null;
+            if (suzerainId >= 0)
             {
-                Hide(pNameplate);
-                return;
+                try { suzerain = World.world?.kingdoms?.get(suzerainId); }
+                catch { suzerain = null; }
             }
 
-            var marker = pNameplate.GetComponent<VassalNameplateSuzerainFlag>();
-            if (marker == null) marker = pNameplate.gameObject.AddComponent<VassalNameplateSuzerainFlag>();
-            marker.Show(pNameplate, suzerain);
+            bool kingdomValid = pKingdom?.data != null && !pKingdom.isRekt();
+            bool suzerainValid = suzerain?.data != null && !suzerain.isRekt();
+            VassalNameplateFlagAction action = VassalNameplateFlagStateRules.Resolve(
+                pNameplate.is_full, kingdomValid, pKingdom?.id ?? -1L, suzerainId,
+                suzerainValid, marker._shownSuzerainId);
+
+            switch (action)
+            {
+                case VassalNameplateFlagAction.Reload:
+                    marker.Reload(suzerain);
+                    break;
+                case VassalNameplateFlagAction.ShowCached:
+                    marker.ShowCached();
+                    break;
+                default:
+                    marker.Hide();
+                    break;
+            }
         }
 
         public static void Hide(NameplateText pNameplate)
         {
-            var marker = pNameplate != null ? pNameplate.GetComponent<VassalNameplateSuzerainFlag>() : null;
-            if (marker != null) marker.Hide();
+            if (pNameplate != null &&
+                Instances.TryGetValue(pNameplate, out VassalNameplateSuzerainFlag marker))
+                marker.Hide();
         }
 
-        private static bool ShouldShow(NameplateText pNameplate, Kingdom pKingdom, Kingdom pSuzerain)
+        private void Initialize(NameplateText pNameplate)
         {
-            return pNameplate != null &&
-                   pNameplate.is_full &&
-                   pKingdom?.data != null &&
-                   pSuzerain?.data != null &&
-                   pKingdom != pSuzerain &&
-                   !pKingdom.isRekt() &&
-                   !pSuzerain.isRekt();
+            _nameplate = pNameplate;
+            _nameText = NameTextField?.GetValue(pNameplate) as Text;
         }
 
-        private void Show(NameplateText pNameplate, Kingdom pSuzerain)
+        private void OnDestroy()
+        {
+            if (_nameplate != null &&
+                Instances.TryGetValue(_nameplate, out VassalNameplateSuzerainFlag marker) &&
+                ReferenceEquals(marker, this))
+                Instances.Remove(_nameplate);
+        }
+
+        private void Reload(Kingdom pSuzerain)
         {
             if (pSuzerain?.data == null)
             {
@@ -60,18 +95,24 @@ namespace AncientWarfare3.ui.components
                 return;
             }
 
-            EnsureCreated(pNameplate);
+            EnsureCreated();
             if (_root == null || _background == null || _icon == null)
             {
                 Hide();
                 return;
             }
 
-            MoveBeforeNameText();
-            if (_shownSuzerainId != pSuzerain.id)
+            _shownSuzerainId = pSuzerain.id;
+            LoadFlag(pSuzerain);
+            ShowCached();
+        }
+
+        private void ShowCached()
+        {
+            if (!_hasRenderableFlag || _root == null)
             {
-                _shownSuzerainId = pSuzerain.id;
-                LoadFlag(pSuzerain);
+                Hide();
+                return;
             }
 
             if (!_root.activeSelf) _root.SetActive(true);
@@ -79,51 +120,49 @@ namespace AncientWarfare3.ui.components
 
         private void Hide()
         {
-            _shownSuzerainId = -1L;
             if (_root != null && _root.activeSelf) _root.SetActive(false);
         }
 
-        private void EnsureCreated(NameplateText pNameplate)
+        private void EnsureCreated()
         {
-            _nameplate = pNameplate;
-            if (_root != null) return;
+            if (_root != null || _nameplate == null || _nameText == null) return;
 
-            Transform parent = pNameplate.layout_group != null
-                ? pNameplate.layout_group.transform
-                : pNameplate.transform;
+            Transform parent = _nameplate.layout_group != null
+                ? _nameplate.layout_group.transform
+                : _nameplate.transform;
 
-            _root = new GameObject("aw_suzerain_flag", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            _root = new GameObject("aw_suzerain_flag", typeof(RectTransform));
             _root.transform.SetParent(parent, false);
             _root.SetActive(false);
 
-            _rect = _root.GetComponent<RectTransform>();
+            var rect = (RectTransform)_root.transform;
             float flagSize = VassalNameplateFlagLayoutRules.FlagSize;
-            _rect.sizeDelta = new Vector2(flagSize, flagSize);
-            _rect.anchorMin = new Vector2(0.5f, 0.5f);
-            _rect.anchorMax = new Vector2(0.5f, 0.5f);
-            _rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(flagSize, flagSize);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
 
-            _layout = _root.GetComponent<LayoutElement>();
-            _layout.minWidth = flagSize;
-            _layout.minHeight = flagSize;
-            _layout.preferredWidth = flagSize;
-            _layout.preferredHeight = flagSize;
-            _layout.flexibleWidth = 0f;
-            _layout.flexibleHeight = 0f;
+            var layout = _root.AddComponent<LayoutElement>();
+            layout.minWidth = flagSize;
+            layout.minHeight = flagSize;
+            layout.preferredWidth = flagSize;
+            layout.preferredHeight = flagSize;
+            layout.flexibleWidth = 0f;
+            layout.flexibleHeight = 0f;
 
-            _background = _root.GetComponent<Image>();
+            _background = _root.AddComponent<Image>();
             _background.raycastTarget = false;
 
-            var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-            iconObj.transform.SetParent(_root.transform, false);
-            var iconRect = iconObj.GetComponent<RectTransform>();
+            var iconObject = new GameObject("Icon", typeof(RectTransform));
+            iconObject.transform.SetParent(_root.transform, false);
+            var iconRect = (RectTransform)iconObject.transform;
             iconRect.anchorMin = Vector2.zero;
             iconRect.anchorMax = Vector2.one;
             float iconInset = VassalNameplateFlagLayoutRules.IconInset;
             iconRect.offsetMin = new Vector2(iconInset, iconInset);
             iconRect.offsetMax = new Vector2(-iconInset, -iconInset);
 
-            _icon = iconObj.GetComponent<Image>();
+            _icon = iconObject.AddComponent<Image>();
             _icon.raycastTarget = false;
 
             MoveBeforeNameText();
@@ -131,17 +170,11 @@ namespace AncientWarfare3.ui.components
 
         private void MoveBeforeNameText()
         {
-            if (_root == null || _nameplate == null) return;
+            if (_root == null || _nameText == null) return;
 
-            var text = NameTextField?.GetValue(_nameplate) as Text;
             Transform parent = _root.transform.parent;
-            if (text == null || text.transform.parent != parent) return;
-
-            int textIndex = text.transform.GetSiblingIndex();
-            int rootIndex = _root.transform.GetSiblingIndex();
-            int targetIndex = rootIndex < textIndex ? textIndex - 1 : textIndex;
-            if (rootIndex == targetIndex) return;
-            _root.transform.SetSiblingIndex(Mathf.Max(0, targetIndex));
+            if (_nameText.transform.parent != parent) return;
+            _root.transform.SetSiblingIndex(Mathf.Max(0, _nameText.transform.GetSiblingIndex()));
         }
 
         private void LoadFlag(Kingdom pSuzerain)
@@ -162,7 +195,7 @@ namespace AncientWarfare3.ui.components
             _icon.sprite = icon;
             if (color != null) _icon.color = color.getColorBanner();
 
-            if (background == null && icon == null) Hide();
+            _hasRenderableFlag = background != null || icon != null;
         }
 
         private static ColorAsset GetDirectKingdomColor(Kingdom pKingdom)
