@@ -1,0 +1,101 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingPerformanceTests
+{
+    public static void Run()
+    {
+        RequestKeysMatchWithoutAllocating();
+        LatestActorSlotKeepsOneQueuedNode();
+        RecoveryUsesCultiwayReasonResetAndBackoff();
+        PathStreamUsesCultiwayLifecycle();
+    }
+
+    private static void RequestKeysMatchWithoutAllocating()
+    {
+        var key = new AWPathRequestKey(91, true, false, true, -4);
+        Assert(key.RegionLimit == 0, "request key clamps a negative region limit");
+        Assert(key.Matches(91, true, false, true, 0),
+            "request key matches the same normalized inputs");
+        Assert(!key.Matches(92, true, false, true, 0),
+            "request key rejects another target");
+
+        for (int i = 0; i < 128; i++)
+            _ = key.Matches(91, true, false, true, 0);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        bool allMatched = true;
+        for (int i = 0; i < 10_000; i++)
+            allMatched &= key.Matches(91, true, false, true, 0);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert(allMatched && allocated == 0,
+            "10,000 warmed request-key matches allocate zero bytes");
+    }
+
+    private static void LatestActorSlotKeepsOneQueuedNode()
+    {
+        var rules = new AWLatestPathSlotRules();
+        Assert(rules.Submit(pHasPending: false, pHasRunning: false) ==
+               AWPathSlotAction.Enqueue,
+            "the first actor request enqueues one actor ID");
+        Assert(rules.Submit(pHasPending: true, pHasRunning: false) ==
+               AWPathSlotAction.ReplacePending,
+            "retargeting a queued actor replaces pending work");
+        rules.WorkerStarted();
+        Assert(rules.Submit(pHasPending: false, pHasRunning: true) ==
+               AWPathSlotAction.StoreAfterRunning,
+            "retargeting a running actor stores only the latest pending task");
+        Assert(rules.WorkerFinished(),
+            "a worker requeues the actor once when newer work exists");
+        Assert(rules.MaximumQueuedNodes == 1,
+            "one actor slot never owns more than one queued node");
+    }
+
+    private static void RecoveryUsesCultiwayReasonResetAndBackoff()
+    {
+        Assert(AWPathLifecycleRules.RetryLimit(AWPathFailureReason.StepBlocked) == 4,
+            "blocked steps receive four retries");
+        Assert(AWPathLifecycleRules.RetryLimit(AWPathFailureReason.TransportFailed) == 2,
+            "transport failures receive two retries");
+        Assert(AWPathLifecycleRules.AcceptWorldGeneration(7, 7) &&
+               !AWPathLifecycleRules.AcceptWorldGeneration(7, 8),
+            "stale world output is rejected");
+
+        var recovery = new AWPathRecoveryManager();
+        AWPathRetryDecision first = recovery.OnFailure(1,
+            AWPathFailureReason.StepBlocked, 10d);
+        AWPathRetryDecision second = recovery.OnFailure(1,
+            AWPathFailureReason.StepBlocked, 10d);
+        AWPathRetryDecision reset = recovery.OnFailure(1,
+            AWPathFailureReason.GeneratorException, 10d);
+        Assert(first.Attempt == 1 && Near(first.DelaySeconds, 0.3f),
+            "first recovery delay is 0.3 seconds");
+        Assert(second.Attempt == 2 && Near(second.DelaySeconds, 0.6f),
+            "second recovery delay is 0.6 seconds");
+        Assert(reset.Attempt == 1 && Near(reset.DelaySeconds, 0.3f),
+            "a changed failure reason resets the retry series");
+    }
+
+    private static void PathStreamUsesCultiwayLifecycle()
+    {
+        var stream = new AWPathStream();
+        Assert(stream.State == AWPathRequestState.Pending,
+            "an empty unfinished stream is pending");
+        Assert(stream.AddStep(new AWPathStep(5, AWMovementMethod.Walk)),
+            "an unfinished stream accepts a path step");
+        Assert(stream.State == AWPathRequestState.Streaming,
+            "a stream with a pending step is streaming");
+        stream.EnsureCompleted();
+        Assert(stream.State == AWPathRequestState.Succeeded,
+            "ensuring completion finalizes the stream successfully");
+        Assert(stream.TryTake(out AWPathStep step) && step.TileId == 5,
+            "the completed stream retains its queued step");
+        Assert(stream.State == AWPathRequestState.Succeeded && stream.Count == 0,
+            "the successful terminal state remains after consumption");
+    }
+
+    private static bool Near(float left, float right) => Math.Abs(left - right) < 0.0001f;
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

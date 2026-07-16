@@ -1,0 +1,77 @@
+using System.Data.SQLite;
+
+internal static class CourtReplacementSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE CourtOfficer (" +
+                    "OFFICER_ID INTEGER PRIMARY KEY," +
+                    "KINGDOM_ID INTEGER NOT NULL," +
+                    "ACTOR_ID INTEGER NOT NULL," +
+                    "LAYER TEXT NOT NULL," +
+                    "OFFICE_ID TEXT NOT NULL," +
+                    "ACTIVE INTEGER NOT NULL)");
+        Execute(db, "CREATE UNIQUE INDEX idx_court_office_active " +
+                    "ON CourtOfficer(KINGDOM_ID,LAYER,OFFICE_ID) " +
+                    "WHERE ACTIVE=1 AND LAYER='central'");
+        Execute(db, "INSERT INTO CourtOfficer VALUES " +
+                    "(1,7,101,'central','chancellor',1)");
+
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            Execute(db, transaction,
+                "UPDATE CourtOfficer SET ACTIVE=0 WHERE OFFICER_ID=1 AND ACTIVE=1");
+            Execute(db, transaction,
+                "INSERT INTO CourtOfficer VALUES " +
+                "(2,7,202,'central','chancellor',1)");
+            transaction.Commit();
+        }
+        Assert(Scalar(db, "SELECT ACTOR_ID FROM CourtOfficer WHERE ACTIVE=1") == 202,
+            "atomic replacement leaves only the successor active");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE ACTIVE=1") == 1,
+            "the central-office unique index remains satisfied");
+
+        try
+        {
+            using SQLiteTransaction transaction = db.BeginTransaction();
+            Execute(db, transaction,
+                "UPDATE CourtOfficer SET ACTIVE=0 WHERE OFFICER_ID=2 AND ACTIVE=1");
+            Execute(db, transaction,
+                "INSERT INTO CourtOfficer VALUES " +
+                "(3,7,303,'central','chancellor',1)");
+            Execute(db, transaction, "INSERT INTO MissingTable VALUES (1)");
+            transaction.Commit();
+        }
+        catch (SQLiteException)
+        {
+        }
+        Assert(Scalar(db, "SELECT ACTOR_ID FROM CourtOfficer WHERE ACTIVE=1") == 202,
+            "a failed replacement rolls both close and appointment back");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection db, SQLiteTransaction transaction,
+        string sql)
+    {
+        using var command = new SQLiteCommand(sql, db, transaction);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

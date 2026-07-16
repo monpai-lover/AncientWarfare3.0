@@ -1,0 +1,66 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingCursorTests
+{
+    public static void Run()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1, new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+
+        var request = new AWPathRequest(77, 0, 0, AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f), generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "cursor test request is accepted once");
+        Assert(SpinUntil(() => request.Stream.Count == 2),
+            "cursor test generator publishes both steps");
+
+        AWPathPollResult first = finder.OpenReadyCursor(77, out var cursor);
+        Assert(first.Kind == AWPathPollKind.StepReady && cursor.IsValid,
+            "one actor lookup opens a valid ready cursor");
+        Assert(first.Step.TileId == 10, "cursor exposes the first step");
+
+        cursor.Consume();
+        AWPathPollResult second = cursor.Poll();
+        Assert(second.Kind == AWPathPollKind.StepReady && second.Step.TileId == 11,
+            "the retained cursor exposes the second step without reopening");
+
+        cursor.Consume();
+        Assert(cursor.Poll().Kind == AWPathPollKind.Completed,
+            "the retained cursor observes the terminal state");
+        Assert(finder.ActiveCount == 0,
+            "consuming the final step removes the owned actor request");
+        finder.StopAndDrain();
+    }
+
+    private static bool SpinUntil(Func<bool> condition)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (timeout.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            if (condition()) return true;
+            Thread.Sleep(1);
+        }
+        return false;
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private sealed class TwoStepGenerator : IAWPathGenerator
+    {
+        public void Generate(AWPathRequest request, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.AddStep(new AWPathStep(10, AWMovementMethod.Walk,
+                AWTraversalEstimate.Direct));
+            request.Stream.AddStep(new AWPathStep(11, AWMovementMethod.Walk,
+                AWTraversalEstimate.Direct));
+            request.Stream.Complete();
+        }
+    }
+}

@@ -9,6 +9,9 @@
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
+    <Compile Include="PathfindingCursorTests.cs.txt" />
+    <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="CourtReplacementSqlTests.cs.txt" />
     <Reference Include="System.Data.SQLite">
       <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
       <Private>true</Private>
@@ -25,8 +28,20 @@
     <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AWArmyRole.cs" Link="Production\AWArmyRole.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtManualAppointmentRules.cs" Link="Production\CourtManualAppointmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs" Link="Production\RoyalGuardMaintenanceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessRules.cs" Link="Production\KingdomMilitaryReadinessRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessIndex.cs" Link="Production\KingdomMilitaryReadinessIndex.cs" />
     <Compile Include="..\..\Code\content\XiaFertilityRules.cs" Link="Production\XiaFertilityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarNoticeRules.cs" Link="Production\WarNoticeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\TemporaryLevyRules.cs" Link="Production\TemporaryLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyDeploymentRules.cs" Link="Production\ArmyDeploymentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveArmyFormationRules.cs" Link="Production\SlaveArmyFormationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveVanguardAssaultRules.cs" Link="Production\SlaveVanguardAssaultRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveCaptureScanRules.cs" Link="Production\SlaveCaptureScanRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AWArmyRoleRules.cs" Link="Production\AWArmyRoleRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomDecisionQueueCodec.cs" Link="Production\KingdomDecisionQueueCodec.cs" />
     <Compile Include="..\..\Code\core\lineage\CityOccupationAccelerationRules.cs" Link="Production\CityOccupationAccelerationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalAsylumRules.cs" Link="Production\RoyalAsylumRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityAttackZoneRules.cs" Link="Production\CityAttackZoneRules.cs" />
@@ -34,6 +49,7 @@
     <Compile Include="..\..\Code\core\lineage\VassalRelationRules.cs" Link="Production\VassalRelationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalWarSupportRules.cs" Link="Production\VassalWarSupportRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalWarPermissionRules.cs" Link="Production\VassalWarPermissionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalNameplateFlagStateRules.cs" Link="Production\VassalNameplateFlagStateRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerHeirTitleRules.cs" Link="Production\FormerHeirTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FormerKingTraitRules.cs" Link="Production\FormerKingTraitRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeRelationRules.cs" Link="Production\FamilyTreeRelationRules.cs" />
@@ -58,5 +74,15 @@
     <Compile Include="..\..\Code\core\schools\SchoolMembershipPersistenceRules.cs" Link="Production\SchoolMembershipPersistenceRules.cs" />
     <Compile Include="..\..\Code\core\schools\SchoolAcademyConstructionRules.cs" Link="Production\SchoolAcademyConstructionRules.cs" />
     <Compile Include="..\..\Code\core\policy\SchoolMapSelectionRules.cs" Link="Production\SchoolMapSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\MandateMapMarkerRules.cs" Link="Production\MandateMapMarkerRules.cs" />
+    <Compile Include="..\..\Code\core\policy\SchoolNameplateRenderRules.cs" Link="Production\SchoolNameplateRenderRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathStream.cs" Link="Production\AWPathStream.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWTraversalSnapshot.cs" Link="Production\AWTraversalSnapshot.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathRequest.cs" Link="Production\AWPathRequest.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathDiagnostics.cs" Link="Production\AWPathDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathFinder.cs" Link="Production\AWPathFinder.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathRecoveryManager.cs" Link="Production\AWPathRecoveryManager.cs" />
   </ItemGroup>
 </Project>
