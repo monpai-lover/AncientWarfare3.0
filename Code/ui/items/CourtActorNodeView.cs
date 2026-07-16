@@ -24,6 +24,10 @@ namespace AncientWarfare3.ui.items
         private Text _roles;
         private Button _button;
         private TipButton _tip;
+        private GameObject _manageOfficeObject;
+        private Button _manageOfficeButton;
+        private Text _manageOfficeText;
+        private TipButton _manageOfficeTip;
 
         public static CourtActorNodeView Create(Transform pParent)
         {
@@ -81,8 +85,53 @@ namespace AncientWarfare3.ui.items
             _roles.text = RoleLine(pNode, pKingdom);
 
             _button.onClick.RemoveAllListeners();
-            _button.interactable = live;
-            if (live) _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
+            bool canAppoint = pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId);
+            _button.interactable = live || canAppoint;
+            if (live)
+                _button.onClick.AddListener(() => ActionLibrary.openUnitWindow(actor));
+            else if (canAppoint)
+                _button.onClick.AddListener(() =>
+                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId));
+
+            long incumbentActorId = live && !pNode.IsVacancy
+                ? actor.data.id
+                : -1L;
+            CourtManualOfficeAction officeAction =
+                CourtManualAppointmentRules.ResolveOfficeAction(
+                    CourtService.IsManualOfficeInCurrentTier(
+                        pKingdom, pNode.OfficeId), incumbentActorId);
+            bool canManageOffice = officeAction != CourtManualOfficeAction.None;
+            _manageOfficeObject.SetActive(canManageOffice);
+            _roles.rectTransform.sizeDelta = new Vector2(
+                canManageOffice ? Width - 56f : Width - 8f, 22f);
+            _manageOfficeButton.onClick.RemoveAllListeners();
+            if (canManageOffice)
+            {
+                bool replacing = officeAction == CourtManualOfficeAction.Replace;
+                _manageOfficeText.text = replacing
+                    ? AW_L10n.Text("aw_court_replace_officer", "Replace")
+                    : AW_L10n.Text("aw_court_select_officer", "Select");
+                _manageOfficeButton.onClick.AddListener(() =>
+                    CourtAppointmentWindow.Open(pKingdom.id, pNode.OfficeId, incumbentActorId));
+                string tipDescription = replacing
+                    ? AW_L10n.Text("aw_court_replace_officer_desc",
+                        "Choose a new actor to replace the current officer.")
+                    : AW_L10n.Text("aw_court_select_officer_desc",
+                        "Choose an actor for this vacant office.");
+                _manageOfficeTip.enabled = true;
+                _manageOfficeTip.type = AW_RawTooltip.TYPE;
+                _manageOfficeTip.hoverAction = () => Tooltip.show(
+                    _manageOfficeObject, AW_RawTooltip.TYPE, new TooltipData
+                    {
+                        tip_name = _manageOfficeText.text,
+                        tip_description = tipDescription
+                    });
+            }
+            else
+            {
+                _manageOfficeTip.enabled = false;
+                _manageOfficeTip.hoverAction = null;
+            }
             SetTip(pNode, actor, pKingdom);
         }
 
@@ -140,6 +189,41 @@ namespace AncientWarfare3.ui.items
             _roles = CreateText("Roles", new Vector2(4f, -79f), new Vector2(Width - 8f, 22f),
                 8, TextAnchor.UpperCenter);
             _roles.color = new Color(0.95f, 0.86f, 0.58f, 1f);
+
+            _manageOfficeObject = new GameObject("ManageOffice", typeof(RectTransform),
+                typeof(Image), typeof(Button), typeof(TipButton));
+            _manageOfficeObject.transform.SetParent(transform, false);
+            RectTransform manageRect =
+                _manageOfficeObject.GetComponent<RectTransform>();
+            manageRect.anchorMin = new Vector2(1f, 0f);
+            manageRect.anchorMax = new Vector2(1f, 0f);
+            manageRect.pivot = new Vector2(1f, 0f);
+            manageRect.anchoredPosition = new Vector2(-5f, 5f);
+            manageRect.sizeDelta = new Vector2(42f, 16f);
+            AW_UIStyle.ApplyButton(_manageOfficeObject.GetComponent<Image>(), 0.96f);
+            _manageOfficeButton = _manageOfficeObject.GetComponent<Button>();
+            _manageOfficeTip = _manageOfficeObject.GetComponent<TipButton>();
+            _manageOfficeTip.showOnClick = false;
+
+            var manageTextObject = new GameObject("Text", typeof(RectTransform),
+                typeof(Text));
+            manageTextObject.transform.SetParent(_manageOfficeObject.transform, false);
+            RectTransform manageTextRect =
+                manageTextObject.GetComponent<RectTransform>();
+            manageTextRect.anchorMin = Vector2.zero;
+            manageTextRect.anchorMax = Vector2.one;
+            manageTextRect.offsetMin = Vector2.zero;
+            manageTextRect.offsetMax = Vector2.zero;
+            _manageOfficeText = manageTextObject.GetComponent<Text>();
+            _manageOfficeText.font = LocalizedTextManager.current_font;
+            _manageOfficeText.fontSize = 7;
+            _manageOfficeText.alignment = TextAnchor.MiddleCenter;
+            _manageOfficeText.color = Color.white;
+            _manageOfficeText.raycastTarget = false;
+            _manageOfficeText.resizeTextForBestFit = true;
+            _manageOfficeText.resizeTextMinSize = 6;
+            _manageOfficeText.resizeTextMaxSize = 7;
+            _manageOfficeObject.SetActive(false);
         }
 
         private Text CreateText(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize,
@@ -178,6 +262,9 @@ namespace AncientWarfare3.ui.items
             var lines = new List<string>();
             lines.Add(AW_L10n.Text("aw_court_roles", "Roles") + ": " + RoleLine(pNode, pKingdom));
             lines.Add(AW_L10n.Text("aw_court_school", "School") + ": " + SchoolName(pNode.SchoolId));
+            if (pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId))
+                lines.Add(AW_L10n.Text("aw_court_vacancy_click",
+                    "Click to appoint an eligible actor"));
             if (pNode.AppointmentYear >= 0)
                 lines.Add(AW_L10n.Text("aw_court_appointed_year", "Appointed") + ": " + pNode.AppointmentYear);
             if (!string.IsNullOrEmpty(pNode.CityName))

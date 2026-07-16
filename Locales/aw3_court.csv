@@ -127,3 +127,32 @@ aw_court_school_syncretist_description,汇通诸家并依现实选择治国方�
 aw_court_school_merchant_description,以贸易市场和财用推动国家繁荣,Builds prosperity through trade markets and finance,以貿易市場和財用推動國家繁榮
 aw_court_school_craftsman_description,以营造器械和水利改进生产能力,Improves production through engineering tools and irrigation,以營造器械和水利改進生產能力
 aw_court_school_historian_description,记录制度得失并以历史经验辅政,Advises government through records and historical precedent,記錄制度得失並以歷史經驗輔政
+aw_court_appointment,手动任命,Manual Appointment,手動任命
+aw_court_appointment_title,任命官员,Appoint Officer,任命官員
+aw_court_replacement_title,更换官员,Replace Officer,更換官員
+aw_court_select_officer,选择,Select,選擇
+aw_court_select_officer_desc,为当前空缺官职选择人物,Choose an actor for this vacant office.,為當前空缺官職選擇人物
+aw_court_replace_officer,更换,Replace,更換
+aw_court_replace_officer_desc,选择新人物接替当前官员,Choose a new actor to replace the current officer.,選擇新人物接替當前官員
+aw_court_appointment_instruction,选择任意符合资格的人物 学派不是任职门槛,Choose any eligible actor. School is not a requirement.,選擇任意符合資格的人物 學派不是任職門檻
+aw_court_appointment_action,任命,Appoint,任命
+aw_court_appointment_action_desc,将此人任命至当前空缺官职,Appoint this actor to the vacant office.,將此人任命至當前空缺官職
+aw_court_appointment_empty,当前没有符合资格的人物,No eligible actors are available.,當前沒有符合資格的人物
+aw_court_appointment_invalid_kingdom,该王国已不存在,The kingdom no longer exists.,該王國已不存在
+aw_court_appointment_invalid_office,该官职已不属于当前官制,This office is no longer part of the current court.,該官職已不屬於當前官制
+aw_court_appointment_occupied,该官职已被任命,This office has already been filled.,該官職已被任命
+aw_court_appointment_office_changed,当前官员已经变化 请重新打开官场,The incumbent has changed. Reopen the court.,當前官員已經變化 請重新打開官場
+aw_court_appointment_invalid_actor,该人物已不存在或无法任命,This actor is no longer available.,該人物已不存在或無法任命
+aw_court_appointment_ineligible,该人物已不再符合任职资格,This actor no longer meets the office requirements.,該人物已不再符合任職資格
+aw_court_appointment_failed,任命事务写入失败,The appointment could not be committed.,任命事務寫入失敗
+aw_court_appointment_success,任命完成,Appointment completed.,任命完成
+aw_court_candidate_city_leader,城主,City Leader,城主
+aw_court_candidate_subject,国人,Subject,國人
+aw_court_candidate_age_short,{0}岁,{0}y,{0}歲
+aw_court_candidate_stats_compact,治{0} 外{1} 武{2} 学{3},Gov {0} Dip {1} War {2} Int {3},治{0} 外{1} 武{2} 學{3}
+aw_court_candidate_score,任命评分,Appointment score,任命評分
+aw_court_vacancy_click,点击选择人物并手动任命,Click to appoint an eligible actor,點擊選擇人物並手動任命
+aw_court_appointment_loading,正在筛选 {0} 名国人...,Reviewing {0} subjects...,正在篩選 {0} 名國人...
+aw_court_appointment_page,第 {0}/{1} 页 · 共 {2} 名合格者,Page {0}/{1} - {2} eligible,第 {0}/{1} 頁 · 共 {2} 名合格者
+aw_court_appointment_previous,上一页,Previous page,上一頁
+aw_court_appointment_next,下一页,Next page,下一頁

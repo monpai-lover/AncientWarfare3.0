@@ -14,6 +14,7 @@ namespace AncientWarfare3.ui
         public const string VASSAL_RELATIONS = "aw_vassal_relations";
         public const string WAR_TARGETS = "aw_war_targets";
         public const string COURT = "aw_court";
+        public const string COURT_APPOINTMENT = "aw_court_appointment";
         public const string SCHOOL = "aw_school_browser";
         public const string SCHOOL_ROSTER = "aw_school_roster";
 

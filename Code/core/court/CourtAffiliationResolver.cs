@@ -5,6 +5,17 @@ namespace AncientWarfare3.core.court
 {
     internal static class CourtAffiliationResolver
     {
+        public static bool IsDomestic(Actor pActor, Kingdom pHost)
+        {
+            if (pActor?.data == null || pHost?.data == null || pHost.isRekt())
+                return false;
+            HistoricalSchoolAffiliationSnapshot state = HistoricalAffiliationService.Get(
+                pActor.data.id);
+            return state != null
+                ? state.HomeKingdomId == pHost.id
+                : pActor.kingdom == pHost;
+        }
+
         public static bool IsValidGuestService(Actor pActor, Kingdom pHost)
         {
             if (pActor?.data == null || pHost?.data == null || pHost.isRekt() ||
@@ -26,13 +37,12 @@ namespace AncientWarfare3.core.court
             // The persisted home kingdom is the nationality authority.  Engine pointers
             // may be repaired after the original kingdom is destroyed and must not turn a
             // foreign scholar into a domestic officer by accident.
-            if (state != null && state.HomeKingdomId != pHost.id)
+            if (!IsDomestic(pActor, pHost))
             {
                 if (!IsValidGuestService(pActor, pHost)) return false;
                 return pLayer != CourtOfficeLayer.Central || pActor.isSexMale();
             }
-            if (state != null && state.HomeKingdomId == pHost.id) return true;
-            return pActor.kingdom == pHost;
+            return true;
         }
     }
 }
