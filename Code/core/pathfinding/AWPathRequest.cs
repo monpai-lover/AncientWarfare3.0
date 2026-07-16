@@ -60,6 +60,9 @@ namespace AncientWarfare3.core.pathfinding
             StartTileId = pStartTileId;
             TargetTileId = pTargetTileId;
             Options = pOptions;
+            Key = new AWPathRequestKey(pTargetTileId, pOptions.PathOnWater,
+                pOptions.WalkOnBlocks, pOptions.WalkOnLava,
+                pOptions.LimitPathfindingRegions);
             Profile = pProfile;
             Generation = pGeneration?.Retain() ?? throw new ArgumentNullException(nameof(pGeneration));
             CreatedTime = pCreatedTime;
@@ -71,15 +74,18 @@ namespace AncientWarfare3.core.pathfinding
         public int StartTileId { get; }
         public int TargetTileId { get; }
         public AWPathRequestOptions Options { get; }
+        public AWPathRequestKey Key { get; }
         public AWActorTraversalProfile Profile { get; }
         public AWTraversalGeneration Generation { get; }
+        public int WorldGeneration => Generation.Id;
         public double CreatedTime { get; }
         public CancellationTokenSource Cancellation { get; }
         public AWPathStream Stream { get; }
 
         public bool Matches(int pTargetTileId, AWPathRequestOptions pOptions)
         {
-            return TargetTileId == pTargetTileId && Options.Equals(pOptions) &&
+            return Key.Matches(pTargetTileId, pOptions.PathOnWater, pOptions.WalkOnBlocks,
+                       pOptions.WalkOnLava, pOptions.LimitPathfindingRegions) &&
                    Volatile.Read(ref _disposed) == 0;
         }
 

@@ -61,35 +61,53 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyTranspiler]
+        [HarmonyBefore("inmny.cultiway")]
         [HarmonyPatch(typeof(Actor), nameof(Actor.u10_checkSmoothMovement))]
         private static IEnumerable<CodeInstruction> SmoothMovement_Transpiler(
             IEnumerable<CodeInstruction> pInstructions)
         {
-            var original = AccessTools.Method(typeof(Actor), "checkCalibrateTargetPosition");
-            var safe = AccessTools.Method(typeof(AW_GlobalPathfindingPatch),
+            var checkCalibrate = AccessTools.Method(typeof(Actor), "checkCalibrateTargetPosition");
+            var updateMovement = AccessTools.Method(typeof(Actor), "updateMovement",
+                new[] { typeof(float), typeof(float) });
+            var safeCalibration = AccessTools.Method(typeof(AW_GlobalPathfindingPatch),
                 nameof(CheckCalibrateTargetPositionSafe));
-            if (original == null || safe == null)
-                throw new MissingMethodException("Actor target calibration method missing");
+            var directMovement = AccessTools.Method(typeof(AW_GlobalPathfindingPatch),
+                nameof(UpdateMovementDirect));
+            if (checkCalibrate == null || updateMovement == null || safeCalibration == null ||
+                directMovement == null)
+                throw new MissingMethodException("Actor smooth movement method missing");
 
-            int matches = 0;
+            int calibrationMatches = 0;
+            int movementMatches = 0;
             foreach (CodeInstruction instruction in pInstructions)
             {
-                if (!instruction.Calls(original))
+                if (instruction.Calls(checkCalibrate))
                 {
-                    yield return instruction;
+                    calibrationMatches++;
+                    var replacement = new CodeInstruction(OpCodes.Call, safeCalibration);
+                    replacement.labels.AddRange(instruction.labels);
+                    replacement.blocks.AddRange(instruction.blocks);
+                    yield return replacement;
                     continue;
                 }
 
-                matches++;
-                var replacement = new CodeInstruction(OpCodes.Call, safe);
-                replacement.labels.AddRange(instruction.labels);
-                replacement.blocks.AddRange(instruction.blocks);
-                yield return replacement;
+                if (instruction.Calls(updateMovement))
+                {
+                    movementMatches++;
+                    var replacement = new CodeInstruction(OpCodes.Call, directMovement);
+                    replacement.labels.AddRange(instruction.labels);
+                    replacement.blocks.AddRange(instruction.blocks);
+                    yield return replacement;
+                    continue;
+                }
+
+                yield return instruction;
             }
 
-            if (matches != 1)
+            if (calibrationMatches != 1 || movementMatches != 1)
                 throw new InvalidOperationException(
-                    "Actor target calibration call pattern changed: " + matches);
+                    "Actor smooth movement call pattern changed: calibration=" +
+                    calibrationMatches + ", movement=" + movementMatches);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -144,8 +162,21 @@ namespace AncientWarfare3.patch
             float pWalkedDistance = 0f)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
-            AWPathMovementBridge.UpdateSmoothMovement(__instance, pElapsed, pWalkedDistance);
+            UpdateMovementDirect(__instance, pElapsed, pWalkedDistance);
             return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void UpdateMovementDirect(Actor pActor, float pElapsed,
+            float pWalkedDistance)
+        {
+            if (PathfindingOwnershipService.ShouldIntercept)
+            {
+                AWPathMovementBridge.UpdateSmoothMovement(pActor, pElapsed, pWalkedDistance);
+                return;
+            }
+
+            pActor.updateMovement(pElapsed, pWalkedDistance);
         }
 
         [HarmonyPostfix]

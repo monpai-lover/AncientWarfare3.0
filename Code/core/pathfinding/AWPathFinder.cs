@@ -110,27 +110,27 @@ namespace AncientWarfare3.core.pathfinding
         {
             if (!_active.TryGetValue(pActorId, out PathfindingTask task))
                 return new AWPathPollResult(AWPathPollKind.NoRequest);
-            AWPathPollResult result = task.Request.Stream.Poll();
-            if ((result.Kind == AWPathPollKind.Completed || result.Kind == AWPathPollKind.Failed ||
-                 result.Kind == AWPathPollKind.Cancelled) && task.Request.Stream.Count == 0)
-            {
-                lock (_requestGate)
-                {
-                    if (_active.TryGetValue(pActorId, out PathfindingTask current) &&
-                        ReferenceEquals(current, task))
-                    {
-                        _active.TryRemove(pActorId, out _);
-                        task.ReleaseOwner();
-                    }
-                }
-            }
+            return PollOwned(pActorId, task);
+        }
+
+        public AWPathPollResult OpenReadyCursor(long pActorId, out ReadyPathCursor pCursor)
+        {
+            pCursor = default;
+            if (!_active.TryGetValue(pActorId, out PathfindingTask task))
+                return new AWPathPollResult(AWPathPollKind.NoRequest);
+
+            AWPathPollResult result = PollOwned(pActorId, task);
+            if (result.Kind == AWPathPollKind.StepReady)
+                pCursor = new ReadyPathCursor(this, pActorId, task);
             return result;
         }
 
         public bool Consume(long pActorId)
         {
-            return _active.TryGetValue(pActorId, out PathfindingTask task) &&
-                   task.Request.Stream.TryTake(out _);
+            if (!_active.TryGetValue(pActorId, out PathfindingTask task) ||
+                !task.Request.Stream.TryTake(out _)) return false;
+            CleanupConsumedTerminal(pActorId, task);
+            return true;
         }
 
         public void Cancel(long pActorId, AWPathFailureReason pReason)
@@ -193,7 +193,8 @@ namespace AncientWarfare3.core.pathfinding
                             task.Request.Stream.Fail(AWPathFailureReason.GeneratorException,
                                 error);
                         }
-                        if (task.Request.Stream.State == AWPathRequestState.Completed)
+                        task.Request.Stream.EnsureCompleted();
+                        if (task.Request.Stream.State == AWPathRequestState.Succeeded)
                             _diagnostics?.OnCompleted();
                         else if (task.Request.Stream.State == AWPathRequestState.Failed)
                         {
@@ -226,14 +227,75 @@ namespace AncientWarfare3.core.pathfinding
             pTask.ReleaseOwner();
         }
 
+        private AWPathPollResult PollOwned(long pActorId, PathfindingTask pTask)
+        {
+            AWPathPollResult result = pTask.Request.Stream.Poll();
+            if (IsTerminal(result.Kind) && pTask.Request.Stream.Count == 0)
+                CleanupOwned(pActorId, pTask);
+            return result;
+        }
+
+        private void CleanupConsumedTerminal(long pActorId, PathfindingTask pTask)
+        {
+            if (pTask.Request.Stream.Count != 0 ||
+                !IsTerminal(pTask.Request.Stream.State)) return;
+            CleanupOwned(pActorId, pTask);
+        }
+
+        private void CleanupOwned(long pActorId, PathfindingTask pTask)
+        {
+            lock (_requestGate)
+            {
+                if (!_active.TryGetValue(pActorId, out PathfindingTask current) ||
+                    !ReferenceEquals(current, pTask)) return;
+                _active.TryRemove(pActorId, out _);
+                pTask.ReleaseOwner();
+            }
+        }
+
+        private static bool IsTerminal(AWPathPollKind pKind)
+        {
+            return pKind == AWPathPollKind.Completed || pKind == AWPathPollKind.Failed ||
+                   pKind == AWPathPollKind.Cancelled;
+        }
+
         private static bool IsTerminal(AWPathRequestState pState)
         {
-            return pState == AWPathRequestState.Completed ||
+            return pState == AWPathRequestState.Succeeded ||
                    pState == AWPathRequestState.Failed ||
                    pState == AWPathRequestState.Cancelled;
         }
 
-        private sealed class PathfindingTask
+        public readonly struct ReadyPathCursor
+        {
+            private readonly AWPathFinder _owner;
+            private readonly long _actorId;
+            private readonly PathfindingTask _task;
+
+            internal ReadyPathCursor(AWPathFinder pOwner, long pActorId, PathfindingTask pTask)
+            {
+                _owner = pOwner;
+                _actorId = pActorId;
+                _task = pTask;
+            }
+
+            public bool IsValid => _owner != null && _task != null;
+
+            public AWPathPollResult Poll()
+            {
+                return IsValid
+                    ? _owner.PollOwned(_actorId, _task)
+                    : new AWPathPollResult(AWPathPollKind.NoRequest);
+            }
+
+            public void Consume()
+            {
+                if (!IsValid || !_task.Request.Stream.TryTake(out _)) return;
+                _owner.CleanupConsumedTerminal(_actorId, _task);
+            }
+        }
+
+        internal sealed class PathfindingTask
         {
             private int _references = 2;
 

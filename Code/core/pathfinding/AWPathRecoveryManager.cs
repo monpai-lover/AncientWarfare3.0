@@ -28,20 +28,7 @@ namespace AncientWarfare3.core.pathfinding
 
         public static int RetryLimit(AWPathFailureReason pReason)
         {
-            switch (pReason)
-            {
-                case AWPathFailureReason.StepBlocked:
-                case AWPathFailureReason.UnsafeStep:
-                    return 4;
-                case AWPathFailureReason.PortalUnavailable:
-                case AWPathFailureReason.TransportFailed:
-                case AWPathFailureReason.Timeout:
-                    return 2;
-                case AWPathFailureReason.GeneratorException:
-                    return 1;
-                default:
-                    return 0;
-            }
+            return AWPathLifecycleRules.RetryLimit(pReason);
         }
 
         public AWPathRetryDecision OnFailure(long pActorId, AWPathFailureReason pReason, double now)
@@ -53,14 +40,15 @@ namespace AncientWarfare3.core.pathfinding
                 return default;
             }
             _states.TryGetValue(pActorId, out RecoveryState state);
+            if (state.Reason != pReason) state = new RecoveryState(pReason, 0, 0d);
             int attempt = state.Attempt + 1;
             if (attempt > limit)
             {
                 _states.Remove(pActorId);
                 return new AWPathRetryDecision(false, attempt, 0f, now);
             }
-            float delay = Delay(attempt);
-            _states[pActorId] = new RecoveryState(attempt, now + delay);
+            float delay = AWPathLifecycleRules.RetryDelay(attempt);
+            _states[pActorId] = new RecoveryState(pReason, attempt, now + delay);
             return new AWPathRetryDecision(true, attempt, delay, now + delay);
         }
 
@@ -73,25 +61,16 @@ namespace AncientWarfare3.core.pathfinding
         public void Clear(long pActorId) => _states.Remove(pActorId);
         public void Clear() => _states.Clear();
 
-        private static float Delay(int pAttempt)
-        {
-            switch (pAttempt)
-            {
-                case 1: return 0.1f;
-                case 2: return 0.25f;
-                case 3: return 0.5f;
-                default: return 1f;
-            }
-        }
-
         private readonly struct RecoveryState
         {
-            public RecoveryState(int pAttempt, double pDueTime)
+            public RecoveryState(AWPathFailureReason pReason, int pAttempt, double pDueTime)
             {
+                Reason = pReason;
                 Attempt = pAttempt;
                 DueTime = pDueTime;
             }
 
+            public AWPathFailureReason Reason { get; }
             public int Attempt { get; }
             public double DueTime { get; }
         }

@@ -84,46 +84,83 @@ namespace AncientWarfare3.core.pathfinding
                 ProcessTransport(pActor);
                 return;
             }
+            AWPathFinder.ReadyPathCursor cursor = default;
             AWPathPollResult poll;
             if (TerminalPolls.TryGetValue(pActor.data.id, out poll))
                 TerminalPolls.Remove(pActor.data.id);
             else
-                poll = finder.Poll(pActor.data.id);
-            switch (poll.Kind)
+                poll = finder.OpenReadyCursor(pActor.data.id, out cursor);
+            HandlePoll(pActor, poll, ref cursor, pHandleNoRequest: true);
+        }
+
+        private static bool HandlePoll(Actor pActor, AWPathPollResult pPoll,
+            ref AWPathFinder.ReadyPathCursor pCursor, bool pHandleNoRequest)
+        {
+            AWPathFinder finder = AWPathfindingBootstrap.Finder;
+            if (finder == null || pActor?.data == null) return false;
+            if (pPoll.Kind == AWPathPollKind.StepReady)
             {
-                case AWPathPollKind.StepReady:
-                    if (!TryMove(pActor, poll.Step))
-                    {
-                        finder.Cancel(pActor.data.id, AWPathFailureReason.UnsafeStep);
-                        pActor.cancelAllBeh();
-                        return;
-                    }
-                    finder.Consume(pActor.data.id);
+                if (TryMove(pActor, pPoll.Step))
+                {
+                    if (pCursor.IsValid) pCursor.Consume();
+                    else finder.Consume(pActor.data.id);
                     MarkRetryProgress(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
-                    return;
+                }
+                else
+                {
+                    AWPathfindingBootstrap.PathDiagnostics.OnStaleStep();
+                    finder.Cancel(pActor.data.id, AWPathFailureReason.UnsafeStep);
+                    pCursor = default;
+                    HandleFailure(pActor, AWPathFailureReason.UnsafeStep);
+                }
+
+                if (pActor.tile_target == null)
+                {
+                    finder.Cancel(pActor.data.id, AWPathFailureReason.CancelledByNewRequest);
+                    pCursor = default;
+                    pActor.stopMovement();
+                    AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
+                }
+                return true;
+            }
+
+            if (!pHandleNoRequest)
+            {
+                if (pPoll.Kind != AWPathPollKind.Waiting) return false;
+                SetWaiting(pActor);
+                return true;
+            }
+
+            switch (pPoll.Kind)
+            {
                 case AWPathPollKind.Waiting:
-                    pActor.setNotMoving();
-                    pActor.next_step_position = pActor.current_tile?.posV3 ?? pActor.next_step_position;
-                    pActor.timer_action = 0.05f;
-                    return;
+                    SetWaiting(pActor);
+                    return true;
                 case AWPathPollKind.Completed:
                     pActor.stopMovement();
                     RetryContexts.Remove(pActor.data.id);
                     AWPathfindingBootstrap.RecoveryManager.OnProgress(pActor.data.id);
-                    return;
+                    return true;
                 case AWPathPollKind.Failed:
                     pActor.setNotMoving();
-                    HandleFailure(pActor, poll.FailureReason);
-                    return;
+                    HandleFailure(pActor, pPoll.FailureReason);
+                    return true;
                 case AWPathPollKind.Cancelled:
                     pActor.setNotMoving();
                     AWPathfindingBootstrap.RecoveryManager.Clear(pActor.data.id);
-                    return;
+                    return true;
                 default:
                     if (!TryStartDueRetry(pActor)) pActor.setNotMoving();
-                    return;
+                    return true;
             }
+        }
+
+        private static void SetWaiting(Actor pActor)
+        {
+            pActor.setNotMoving();
+            pActor.next_step_position = pActor.current_tile?.posV3 ?? pActor.next_step_position;
+            pActor.timer_action = 0.05f;
         }
 
         public static bool IsUsing(Actor pActor)
@@ -190,6 +227,7 @@ namespace AncientWarfare3.core.pathfinding
             if (pActor?.asset == null) return;
             float movementBudget = pActor._current_combined_movement_speed * pElapsed;
             bool canFlip = pActor.asset.can_flip && pActor.checkFlip();
+            AWPathFinder.ReadyPathCursor customPathCursor = default;
             for (int i = 0; i < 256; i++)
             {
                 Vector2 current = pActor.current_position;
@@ -212,15 +250,39 @@ namespace AncientWarfare3.core.pathfinding
 
                 pActor.current_position = target;
                 float walked = BoundaryDistance(distanceSquared);
-                if (pActor.isFollowingLocalPath() || pActor.current_path_global != null)
-                    pActor.updatePathMovement();
-                else if (pActor.tile_target != null)
-                    Update(pActor);
-                else
-                    pActor.stopMovement();
+                ContinuePathMovementFromSmooth(pActor, ref customPathCursor);
                 if (!pActor.is_moving) return;
                 pWalkedDistance += walked;
             }
+        }
+
+        private static void ContinuePathMovementFromSmooth(Actor pActor,
+            ref AWPathFinder.ReadyPathCursor pCustomPathCursor)
+        {
+            if (pActor.isFollowingLocalPath() || pActor.current_path_global != null)
+            {
+                pActor.updatePathMovement();
+                return;
+            }
+
+            if (pActor.tile_target != null)
+            {
+                AWPathPollResult poll;
+                if (pCustomPathCursor.IsValid)
+                    poll = pCustomPathCursor.Poll();
+                else
+                {
+                    AWPathFinder finder = AWPathfindingBootstrap.Finder;
+                    poll = finder == null
+                        ? new AWPathPollResult(AWPathPollKind.NoRequest)
+                        : finder.OpenReadyCursor(pActor.data.id, out pCustomPathCursor);
+                }
+
+                if (HandlePoll(pActor, poll, ref pCustomPathCursor,
+                        pHandleNoRequest: false)) return;
+            }
+
+            pActor.stopMovement();
         }
 
         private static bool TryMove(Actor pActor, AWPathStep pStep)
@@ -237,8 +299,154 @@ namespace AncientWarfare3.core.pathfinding
             if (tile.Type.block && !pActor.ignoresBlocks()) return false;
             if (tile.Type.lava && pActor.asset.die_in_lava && !pActor.isImmuneToFire()) return false;
             if (tile.Type.ocean && pActor.isDamagedByOcean() && !pActor.isInLiquid()) return false;
-            pActor.moveTo(tile);
+
+            if (tile.Type.damaged_when_walked) pActor.current_tile.tryToBreak();
+
+            bool adjacentStep = (pStep.Hazards & AWHazardFlags.Direct) == 0;
+            bool plannedFire = (pStep.Hazards & AWHazardFlags.Fire) != 0;
+            SlowMoveReason slowMoveReason = pActor.asset.is_boat
+                ? SlowMoveReason.Boat
+                : SlowMoveReason.None;
+            bool useFastMove = false;
+            if (!pActor.asset.is_boat)
+            {
+                if (plannedFire)
+                    useFastMove = true;
+                else
+                {
+                    slowMoveReason = GetFastMoveBlockReason(tile);
+                    useFastMove = slowMoveReason == SlowMoveReason.None;
+                }
+            }
+
+            if (useFastMove)
+            {
+                FastMoveTo(pActor, tile, adjacentStep);
+                AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
+            }
+            else if (CanReplayMoveToSideEffects(slowMoveReason))
+            {
+                FastMoveToWithMoveToSideEffects(pActor, tile, adjacentStep);
+                AWPathfindingBootstrap.PathDiagnostics.OnFastStep();
+            }
+            else
+            {
+                pActor.moveTo(tile);
+                AWPathfindingBootstrap.PathDiagnostics.OnVanillaStep();
+            }
             return true;
+        }
+
+        private static SlowMoveReason GetFastMoveBlockReason(WorldTile pTile)
+        {
+            if (pTile.Type.step_action != null) return SlowMoveReason.TileStepAction;
+            Building building = pTile.building;
+            if (building?.asset == null || !building.asset.flora) return SlowMoveReason.None;
+
+            BuildingAsset asset = building.asset;
+            switch (asset.flora_type)
+            {
+                case FloraType.Fungi:
+                    return WorldLawLibrary.world_law_exploding_mushrooms.isEnabled()
+                        ? SlowMoveReason.FungiLaw
+                        : SlowMoveReason.None;
+                case FloraType.Plant:
+                    if (asset.type == "type_flower" &&
+                        WorldLawLibrary.world_law_nectar_nap.isEnabled())
+                        return SlowMoveReason.FlowerNectarLaw;
+                    return WorldLawLibrary.world_law_plants_tickles.isEnabled() ||
+                           WorldLawLibrary.world_law_root_pranks.isEnabled()
+                        ? SlowMoveReason.PlantLaw
+                        : SlowMoveReason.None;
+                default:
+                    return SlowMoveReason.None;
+            }
+        }
+
+        private static void FastMoveTo(Actor pActor, WorldTile pTile, bool pAdjacentStep)
+        {
+            SetMoveStepTile(pActor, pTile, pAdjacentStep);
+            pActor.next_step_position = new Vector2(pTile.posV3.x, pTile.posV3.y);
+        }
+
+        private static void FastMoveToWithMoveToSideEffects(Actor pActor, WorldTile pTile,
+            bool pAdjacentStep)
+        {
+            if (!pActor.has_attack_target && pActor.current_tile != null && pTile.isOnFire() &&
+                !pActor.current_tile.isOnFire() && !pActor.isImmuneToFire())
+            {
+                pActor.cancelAllBeh();
+                return;
+            }
+
+            SetMoveStepTile(pActor, pTile, pAdjacentStep);
+            ApplyStepActionForCurrentTile(pActor);
+            pActor.next_step_position = new Vector2(pTile.posV3.x, pTile.posV3.y);
+        }
+
+        private static void SetMoveStepTile(Actor pActor, WorldTile pTile, bool pAdjacentStep)
+        {
+            if (!pActor._is_moving)
+            {
+                pActor._is_moving = true;
+                pActor.batch.c_update_movement.Add(pActor);
+            }
+
+            pActor._next_step_tile = pTile;
+            if (pAdjacentStep)
+                pActor.current_tile = pTile;
+            else if (Toolbox.SquaredDistTile(pActor.current_tile, pTile) > 4f)
+                pActor.dirty_current_tile = true;
+            else
+                pActor.current_tile = pTile;
+        }
+
+        private static void ApplyStepActionForCurrentTile(Actor pActor)
+        {
+            WorldTile currentTile = pActor.current_tile;
+            var tileType = currentTile?.Type;
+            if (tileType == null) return;
+
+            if (tileType.step_action != null && Randy.randomChance(tileType.step_action_chance))
+                tileType.step_action(currentTile, pActor);
+
+            Building building = currentTile.building;
+            if (building?.asset == null || !building.asset.flora) return;
+            BuildingAsset asset = building.asset;
+            switch (asset.flora_type)
+            {
+                case FloraType.Fungi:
+                    if (WorldLawLibrary.world_law_exploding_mushrooms.isEnabled())
+                    {
+                        MapAction.damageWorld(currentTile, 5, AssetManager.terraform.get("grenade"));
+                        EffectsLibrary.spawnAtTileRandomScale("fx_explosion_small", currentTile,
+                            0.1f, 0.15f);
+                    }
+                    break;
+                case FloraType.Plant:
+                    if (asset.type == "type_flower" &&
+                        WorldLawLibrary.world_law_nectar_nap.isEnabled() &&
+                        Randy.randomChance(0.1f))
+                    {
+                        pActor.makeSleep(10f);
+                        break;
+                    }
+                    if (WorldLawLibrary.world_law_plants_tickles.isEnabled() &&
+                        Randy.randomChance(0.3f))
+                        pActor.tryToGetSurprised(currentTile);
+                    if (WorldLawLibrary.world_law_root_pranks.isEnabled() &&
+                        Randy.randomChance(0.2f))
+                        pActor.makeStunned();
+                    break;
+            }
+        }
+
+        private static bool CanReplayMoveToSideEffects(SlowMoveReason pReason)
+        {
+            return pReason == SlowMoveReason.TileStepAction ||
+                   pReason == SlowMoveReason.FungiLaw ||
+                   pReason == SlowMoveReason.FlowerNectarLaw ||
+                   pReason == SlowMoveReason.PlantLaw;
         }
 
         private static bool StartTransport(Actor pActor, WorldTile pTarget)
@@ -341,6 +549,7 @@ namespace AncientWarfare3.core.pathfinding
 
         private static void HandleFailure(Actor pActor, AWPathFailureReason pReason)
         {
+            pActor.setNotMoving();
             double now = World.world?.getCurSessionTime() ?? 0d;
             AWPathRetryDecision retry = AWPathfindingBootstrap.RecoveryManager.OnFailure(
                 pActor.data.id, pReason, now);
@@ -412,6 +621,16 @@ namespace AncientWarfare3.core.pathfinding
                 pActor.getHealth(), pActor.getMaxHealth(), pActor.getStamina(),
                 pActor.getMaxStamina(), pActor.stats?["speed"] ?? 5f,
                 pActor.getWaterDamage() * 3.333f, staminaRegen);
+        }
+
+        private enum SlowMoveReason
+        {
+            None,
+            Boat,
+            TileStepAction,
+            FungiLaw,
+            FlowerNectarLaw,
+            PlantLaw
         }
 
         private readonly struct RetryContext

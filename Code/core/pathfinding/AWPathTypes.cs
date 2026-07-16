@@ -7,7 +7,7 @@ namespace AncientWarfare3.core.pathfinding
     {
         Pending,
         Streaming,
-        Completed,
+        Succeeded,
         Failed,
         Cancelled
     }
