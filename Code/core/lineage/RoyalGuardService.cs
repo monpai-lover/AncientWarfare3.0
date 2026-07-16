@@ -151,6 +151,14 @@ namespace AncientWarfare3.core.lineage
             if (activeFallbackUsed && !activeFallbackComplete)
                 return;
 
+            bool standingCoreReady = KingdomMilitaryReadinessService.HasReadyStandingCore(pKingdom);
+            bool militaryEmergency = MilitaryEmergencyService.HasAny(pKingdom);
+            if (!StandingArmyRules.ShouldAllowGuardMaintenance(
+                    active.Count > 0, standingCoreReady, militaryEmergency))
+                return;
+            bool allowRecruitment = StandingArmyRules.ShouldAllowGuardRecruitment(
+                standingCoreReady, militaryEmergency);
+
             string guardName = BuildGuardName(pKingdom);
             int dismissalsThisPass = TrimExcessGuards(active, MAX_GUARDS_PER_KINGDOM,
                 DISMISS_BATCH_LIMIT);
@@ -159,7 +167,7 @@ namespace AncientWarfare3.core.lineage
             int targetNobles = Math.Max(1, (int)Math.Ceiling(MAX_GUARDS_PER_KINGDOM * MIN_NOBLE_RATIO));
             int activeNobles = CountNobles(active);
             Actor captain = PickCaptain(active);
-            if (RoyalGuardMaintenanceRules.ShouldSearchCandidates(active.Count, activeNobles, targetNobles,
+            if (allowRecruitment && RoyalGuardMaintenanceRules.ShouldSearchCandidates(active.Count, activeNobles, targetNobles,
                     captain != null, REFILL_SEARCH_THRESHOLD))
             {
                 Bench.bench(CityMaintenanceBenchmarkRules.RoyalGuardAverage, CityMaintenanceBenchmarkRules.Group);

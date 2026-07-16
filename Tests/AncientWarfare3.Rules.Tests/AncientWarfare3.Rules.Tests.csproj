@@ -25,6 +25,8 @@
     <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AWArmyRole.cs" Link="Production\AWArmyRole.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
+    <Compile Include="..\..\Code\content\XiaFertilityRules.cs" Link="Production\XiaFertilityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityOccupationAccelerationRules.cs" Link="Production\CityOccupationAccelerationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalAsylumRules.cs" Link="Production\RoyalAsylumRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityAttackZoneRules.cs" Link="Production\CityAttackZoneRules.cs" />

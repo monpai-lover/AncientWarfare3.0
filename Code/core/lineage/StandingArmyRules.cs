@@ -1,0 +1,52 @@
+using System;
+using System.Collections.Generic;
+
+namespace AncientWarfare3.core.lineage
+{
+    public static class StandingArmyRules
+    {
+        public const int MaxCandidateScan = 64;
+        public const int MaxAppointmentsPerPass = 2;
+        public const int MaxReductionsPerPass = 2;
+        public const int MaxReplacementsPerPass = 1;
+
+        public static int PeacetimeCore(int pWarriorSlots)
+        {
+            return pWarriorSlots <= 0
+                ? 0
+                : Math.Max(1, (int)Math.Ceiling(pWarriorSlots * 0.30d));
+        }
+
+        public static float MilitaryScore(float damage, float warfare, float health, float armor, float speed)
+        {
+            return damage + warfare * 2f + health * 0.1f + armor * 2f + speed * 0.25f;
+        }
+
+        public static bool IsKingdomReady(IReadOnlyList<int> pRequired, IReadOnlyList<int> pFilled)
+        {
+            if (pRequired == null || pFilled == null || pRequired.Count != pFilled.Count) return false;
+
+            bool hasPositiveCore = false;
+            for (int i = 0; i < pRequired.Count; i++)
+            {
+                int required = Math.Max(0, pRequired[i]);
+                if (required <= 0) continue;
+                hasPositiveCore = true;
+                if (Math.Min(required, Math.Max(0, pFilled[i])) < required) return false;
+            }
+
+            return hasPositiveCore;
+        }
+
+        public static bool ShouldAllowGuardMaintenance(bool hasExistingGuards, bool standingCoreReady,
+            bool militaryEmergency)
+        {
+            return hasExistingGuards || standingCoreReady && !militaryEmergency;
+        }
+
+        public static bool ShouldAllowGuardRecruitment(bool standingCoreReady, bool militaryEmergency)
+        {
+            return standingCoreReady && !militaryEmergency;
+        }
+    }
+}

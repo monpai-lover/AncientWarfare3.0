@@ -96,6 +96,8 @@ namespace AncientWarfare3.core.lineage
         public const string CAPTURED_RULER_TITLE = "aw_captured_ruler_title";
         public const string SLAVE_SOLDIER = "aw_slave_soldier";
         public const string SOLDIER_SERVICE_START_TIME = "aw_soldier_service_start_time";
+        public const string STANDING_ARMY_SCAN_CURSOR = "aw_standing_army_scan_cursor";
+        public const string TEMPORARY_LEVY = "aw_temporary_levy";
         public const string SLAVE_MERIT = "aw_slave_merit";
         public const string FREEDMAN = "aw_freedman";
         public const string CAPTIVE_NOBLE_TITLE = "aw_captive_noble_title";

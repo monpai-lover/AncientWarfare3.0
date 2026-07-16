@@ -7,6 +7,7 @@ namespace AncientWarfare3.core.policy
         public const string Group = "game_total";
         public const string Total = "aw3_city_army_maint_total";
         public const string Retirements = "aw3_city_retirements";
+        public const string StandingArmy = "aw3_city_standing_army";
         public const string SlaveLabor = "aw3_city_slave_labor";
         public const string SlaveCatchers = "aw3_city_slave_catchers";
         public const string SlaveArmy = "aw3_city_slave_army";
@@ -70,6 +71,7 @@ namespace AncientWarfare3.core.policy
         {
             Total,
             Retirements,
+            StandingArmy,
             SlaveLabor,
             SlaveCatchers,
             SlaveArmy,

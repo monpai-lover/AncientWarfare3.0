@@ -88,18 +88,18 @@ namespace AncientWarfare3.content
 
             // —— 基因(genome):继承 human 后只追加相对 human 的差额 ——
             // addGenome 对同名基因是累加,所以这里不能再写一整套最终值。
-            // 目标最终值大致为:health130/stamina120/lifespan90/damage20/speed16/offspring6,
-            // 外加 Xia 明确的 birth_rate=4 和治理/军略/智力 +2。
+            // Human offspring 5 + Xia delta 5 = 10.
+            // Human birth_rate 3 + Xia delta 4 = 7.
             Xia.addGenome(
                 ("health", 30f),        // human 100 -> Xia 130
                 ("stamina", 20f),       // human 100 -> Xia 120
                 ("lifespan", 20f),      // human 70 -> Xia 90
                 ("damage", 5f),         // human 15 -> Xia 20
                 ("speed", 1f),          // human 15 -> Xia 16
-                ("offspring", 1f),      // human 5 -> Xia 6
+                ("offspring", XiaFertilityRules.XiaOffspringDelta),
                 // ⚠ birth_rate 必须显式给(每帧繁殖 BabyMaker.cs:123 用 (int)stats["birth_rate"] 决定额外子女数)。
                 //   human 基线没有稳定显式值;Xia 仍单独给 4,避免贵族/平民生育被取整成 0。
-                ("birth_rate", 4f),     // Xia 明确生育率
+                ("birth_rate", XiaFertilityRules.XiaBirthRateDelta),
                 ("diplomacy", 2f),      // human 3 -> Xia 5
                 ("warfare", 2f),        // human 3 -> Xia 5
                 ("stewardship", 2f),    // human 3 -> Xia 5

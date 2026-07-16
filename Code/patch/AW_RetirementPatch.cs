@@ -43,6 +43,10 @@ namespace AncientWarfare3.patch
             SlaveService.CheckCityRetirements(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.Retirements, CityMaintenanceBenchmarkRules.Group);
 
+            Bench.bench(CityMaintenanceBenchmarkRules.StandingArmy, CityMaintenanceBenchmarkRules.Group);
+            StandingArmyService.MaintainCity(pCity);
+            Bench.benchEnd(CityMaintenanceBenchmarkRules.StandingArmy, CityMaintenanceBenchmarkRules.Group);
+
             Bench.bench(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);
             SlaveService.CheckCitySlaveLabor(pCity);
             Bench.benchEnd(CityMaintenanceBenchmarkRules.SlaveLabor, CityMaintenanceBenchmarkRules.Group);

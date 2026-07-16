@@ -990,6 +990,54 @@ Equal(false,
     SchoolMapSelectionRules.CanSelectCity(pCityValid: false, pWindowActive: false),
     "invalid city cannot be selected by the school map");
 
+Equal(0, StandingArmyRules.PeacetimeCore(0),
+    "zero establishment has no standing core");
+Equal(1, StandingArmyRules.PeacetimeCore(1),
+    "positive establishment keeps one regular");
+Equal(3, StandingArmyRules.PeacetimeCore(10),
+    "standing core rounds 30 percent upward");
+Equal(4, StandingArmyRules.PeacetimeCore(11),
+    "standing core uses ceiling");
+True(StandingArmyRules.IsKingdomReady(new[] { 1, 3 }, new[] { 1, 9 }),
+    "surplus in a filled city is clamped to its own requirement");
+Equal(false, StandingArmyRules.IsKingdomReady(new[] { 1, 3 }, new[] { 2, 2 }),
+    "surplus cannot hide another city's shortage");
+Equal(false, StandingArmyRules.IsKingdomReady(Array.Empty<int>(), Array.Empty<int>()),
+    "a realm with no positive core cannot form guards");
+Near(31f, StandingArmyRules.MilitaryScore(
+        damage: 10f,
+        warfare: 5f,
+        health: 50f,
+        armor: 2f,
+        speed: 8f),
+    0.00001f,
+    "military score follows the approved weights");
+True(StandingArmyRules.ShouldAllowGuardMaintenance(
+        hasExistingGuards: true,
+        standingCoreReady: false,
+        militaryEmergency: true),
+    "existing guards retain identity maintenance during an emergency");
+Equal(false, StandingArmyRules.ShouldAllowGuardRecruitment(
+        standingCoreReady: false,
+        militaryEmergency: false),
+    "an understrength ordinary army blocks guard recruitment");
+Equal(false, StandingArmyRules.ShouldAllowGuardRecruitment(
+        standingCoreReady: true,
+        militaryEmergency: true),
+    "mobilization suspends guard recruitment");
+Equal(5, XiaFertilityRules.HumanOffspring,
+    "human offspring baseline remains five");
+Equal(5, XiaFertilityRules.XiaOffspringDelta,
+    "Xia adds five offspring capacity");
+Equal(10, XiaFertilityRules.XiaOffspring,
+    "Xia long-term offspring capacity is twice human");
+Equal(3, XiaFertilityRules.HumanBirthRate,
+    "sexual reproduction contributes three birth-rate attempts");
+Equal(4, XiaFertilityRules.XiaBirthRateDelta,
+    "Xia keeps its four-attempt genome delta");
+Equal(7, XiaFertilityRules.XiaBirthRate,
+    "Xia effective birth rate includes the inherited human baseline");
+
 SchoolRuntimePerformanceTests.Run();
 
 Console.WriteLine("Rule tests passed.");
