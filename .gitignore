@@ -1,16 +1,48 @@
-# —— 编译产物 ——
-bin/
-obj/
-Tests/**/bin/
-Tests/**/obj/
-*.user
-.worktrees/
+# Build outputs
+/bin/
+/obj/
+/artifacts/
+/TestResults/
+/coverage/
+*.pdb
+*.trx
+*.coverage
+*.coveragexml
 
-# —— IDE ——
-.vs/
-.idea/
+# Local tests and internal development notes
+/Tests/
+/docs/
+/HANDOFF.md
+/.agents/
+/.codex/
+/.worktrees/
+
+# Runtime data, logs, and temporary files
+/.runtime/
+*.log
+*.tmp
+*.bak
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# IDE files
+/.vs/
+/.idea/
+*.user
 *.suo
 
-# —— 系统 ——
+# Tool caches
+/.cache/
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Operating-system files
 Thumbs.db
 desktop.ini
+.DS_Store
