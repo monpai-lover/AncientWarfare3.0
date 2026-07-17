@@ -174,6 +174,15 @@ namespace AncientWarfare3.core.lineage
         public static bool TryDeclareMandate(Kingdom pKingdom, string pReason = "decision",
             string pOriginType = "native", string pClaimantKind = "orthodox", Kingdom pRebelOrigin = null)
         {
+            if (pKingdom?.data != null)
+            {
+                pKingdom.data.get(LineageKeys.RESTORATION_COMPLETED,
+                    out bool restorationCompleted, false);
+                pKingdom.data.get(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE,
+                    out bool refounderEligible, false);
+                pOriginType = MandateStartRecordRules.ResolveOrigin(
+                    pOriginType, restorationCompleted, refounderEligible);
+            }
             NormalizeForeignMandateOrigin(pKingdom, pReason, ref pOriginType, ref pClaimantKind);
             if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
             if (!Ready) return false;
@@ -220,6 +229,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE, pOriginType ?? "native");
             pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, pClaimantKind ?? "orthodox");
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, MarkerKind(pOriginType, pClaimantKind));
+            if (pOriginType == "self_restoration")
+                pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
             if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
@@ -891,6 +902,7 @@ namespace AncientWarfare3.core.lineage
             {
                 case "rebel": return WarDisplayLabelRules.EventLabel("mandate_declared_rebel");
                 case "pseudo_foreign": return WarDisplayLabelRules.EventLabel("mandate_declared_foreign_pseudo");
+                case "self_restoration": return WarDisplayLabelRules.EventLabel("mandate_declared_refounder");
                 default: return WarDisplayLabelRules.EventLabel("mandate_declared_orthodox");
             }
         }

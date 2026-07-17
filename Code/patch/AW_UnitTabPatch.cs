@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
 using UnityEngine;
@@ -12,6 +13,7 @@ namespace AncientWarfare3.patch
         private const string BTN_NAME = "AW_FamilyTreeTabButton";
         private const string BIO_BTN_NAME = "AW_BiographyTabButton";
         private const string ANCESTRY_BTN_NAME = "AW_AncestryTabButton";
+        private const string RESTORE_BTN_NAME = "AW_RestorationButton";
         private const int SIZE = 40;
 
         [HarmonyPostfix]
@@ -27,10 +29,15 @@ namespace AncientWarfare3.patch
             bool showFamily = hasActor && LineageService.HasTraceableFamily(actor);
             bool showBio = showFamily;
             bool showAncestry = hasActor && AncestryAnalysisService.HasAnalyzableAncestry(actor);
+            long restorationClaimId = hasActor
+                ? RoyalClaimService.FindBestDormantClaimIdForActor(actor.data.id)
+                : -1L;
+            bool showRestoration = restorationClaimId >= 0;
 
             SetButtonActive(rail, BTN_NAME, showFamily);
             SetButtonActive(rail, BIO_BTN_NAME, showBio);
             SetButtonActive(rail, ANCESTRY_BTN_NAME, showAncestry);
+            SetButtonActive(rail, RESTORE_BTN_NAME, showRestoration);
             if (!hasActor) return;
 
             long centerId = actor.data.id;
@@ -56,6 +63,23 @@ namespace AncientWarfare3.patch
                 Button ancestryBtn = GetOrCreateButton(rail, ANCESTRY_BTN_NAME, BuildAncestryButton);
                 ancestryBtn.onClick.RemoveAllListeners();
                 ancestryBtn.onClick.AddListener(() => AncestryAnalysisWindow.Open(centerId));
+            }
+
+            if (showRestoration)
+            {
+                Button restoreBtn = GetOrCreateButton(rail, RESTORE_BTN_NAME,
+                    BuildRestorationButton);
+                restoreBtn.onClick.RemoveAllListeners();
+                restoreBtn.onClick.AddListener(() =>
+                {
+                    bool started = AutonomousRestorationService.TryStartSelfRestoration(
+                        restorationClaimId, pPlayerRequested: true, out string error);
+                    string message = started
+                        ? AW_L10n.Text("aw_restoration_started", "Restoration begun")
+                        : RestorationFailureText(error);
+                    WorldTip.showNow(message, pTranslate: false, "top");
+                    if (started) restoreBtn.gameObject.SetActive(false);
+                });
             }
         }
 
@@ -110,6 +134,37 @@ namespace AncientWarfare3.patch
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconXias"),
                 "aw_ancestry_entry",
                 "aw_view_ancestry");
+        }
+
+        private static Button BuildRestorationButton(Transform pRail)
+        {
+            return BuildIconButton(
+                pRail,
+                RESTORE_BTN_NAME,
+                SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
+                ?? SpriteTextureLoader.getSprite("ui/Icons/iconWar")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"),
+                "aw_restoration_button",
+                "aw_restoration_button_desc");
+        }
+
+        private static string RestorationFailureText(string pError)
+        {
+            switch (pError ?? "")
+            {
+                case "restoration_cooldown":
+                    return AW_L10n.Text("aw_restoration_error_cooldown", "Restoration is on cooldown");
+                case "restoration_kingdom_alive":
+                    return AW_L10n.Text("aw_restoration_error_alive", "The old kingdom already exists");
+                case "restoration_no_eligible_core":
+                case "restoration_no_living_core":
+                    return AW_L10n.Text("aw_restoration_error_no_core", "No eligible old core can support an uprising");
+                case "restoration_claimant_invalid":
+                case "restoration_claimant_unavailable":
+                    return AW_L10n.Text("aw_restoration_error_claimant", "The claimant is no longer eligible");
+                default:
+                    return AW_L10n.Text("aw_restoration_error_generic", "Restoration could not begin");
+            }
         }
 
         private static Button BuildIconButton(Transform pRail, string pName, Sprite pIcon,

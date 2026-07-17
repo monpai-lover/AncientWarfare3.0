@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
         public static string SelectTempleName(bool founder, bool lowOrigin, bool refounder,
             int conquestScore, int reformScore, int reignIndex)
         {
+            if (founder && refounder) return "\u4e16\u7956";
             if (founder && lowOrigin) return "\u9ad8\u7956";
             if (founder && conquestScore >= 70) return "\u592a\u7956";
             if (founder) return "\u9ad8\u7956";
@@ -51,9 +52,11 @@ namespace AncientWarfare3.core.lineage
             return "";
         }
 
-        public static bool IsTempleNameValidForMandatePosition(string pTemple, bool pFounder)
+        public static bool IsTempleNameValidForMandatePosition(string pTemple,
+            bool pFounder, bool pRefounder = false)
         {
             if (string.IsNullOrEmpty(pTemple)) return false;
+            if (pFounder && pRefounder) return pTemple == "\u4e16\u7956";
             if (pFounder) return pTemple == "\u592a\u7956" || pTemple == "\u9ad8\u7956";
             return pTemple.EndsWith("\u5b97");
         }

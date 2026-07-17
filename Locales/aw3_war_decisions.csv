@@ -53,3 +53,11 @@ aw_war_notice_window,开战期限,War window,開戰期限
 aw_war_levy_count,征召兵,Levies,徵召兵
 aw_war_deployment_ready,边防就绪,Frontier ready,邊防就緒
 aw_war_deployment_preparing,边防集结中,Frontier assembling,邊防集結中
+aw_restoration_button,复国,Restore Realm,復國
+aw_restoration_button_desc,以王室宣称在旧国核心举兵复国,Raise a restoration army from an eligible old core,以王室宣稱在舊國核心舉兵復國
+aw_restoration_started,已举兵复国,Restoration begun,已舉兵復國
+aw_restoration_error_cooldown,复国准备尚在冷却,Restoration is still on cooldown,復國準備尚在冷卻
+aw_restoration_error_alive,旧国已经恢复,The old realm already exists,舊國已經恢復
+aw_restoration_error_no_core,没有可用于起兵的旧国核心,No eligible old core can support an uprising,沒有可用於起兵的舊國核心
+aw_restoration_error_claimant,宣称人已不再符合复国条件,The claimant is no longer eligible,宣稱人已不再符合復國條件
+aw_restoration_error_generic,当前无法举兵复国,Restoration cannot begin now,目前無法舉兵復國

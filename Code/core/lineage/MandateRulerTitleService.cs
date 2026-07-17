@@ -30,7 +30,7 @@ namespace AncientWarfare3.core.lineage
                 pReign.ReignIndex, CountPriorTitles(periodId, pReign.ReignId));
             bool founder = MandateRulerTitleRules.IsMandateFounderReign(
                 pKing.data.id, context.FounderActorId, reignIndex);
-            bool refounder = context.OriginType == "restoration";
+            bool refounder = context.OriginType == "self_restoration";
             bool lowOrigin = context.OriginType == "rebel" || context.ClaimantKind == "rebel";
 
             int conquestScore = Math.Min(100,
@@ -129,14 +129,15 @@ namespace AncientWarfare3.core.lineage
                 int reignIndex = i + 1;
                 bool founder = MandateRulerTitleRules.IsMandateFounderReign(
                     row.ActorId, context.FounderActorId, reignIndex);
-                if (MandateRulerTitleRules.IsTempleNameValidForMandatePosition(row.TempleName, founder))
+                bool refounder = context.OriginType == "self_restoration";
+                if (MandateRulerTitleRules.IsTempleNameValidForMandatePosition(
+                        row.TempleName, founder, refounder))
                 {
                     usedTemples.Add(row.TempleName);
                     if (!string.IsNullOrEmpty(row.DoublePosthumous)) usedPairs.Add(row.DoublePosthumous);
                     continue;
                 }
 
-                bool refounder = context.OriginType == "restoration";
                 bool lowOrigin = context.OriginType == "rebel" || context.ClaimantKind == "rebel";
                 int conquestScore = Math.Min(100,
                     row.WarWins * 25 + Math.Max(0, row.EndCityCount - row.StartCityCount) * 12);
