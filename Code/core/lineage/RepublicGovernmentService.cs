@@ -171,6 +171,7 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pKingdom));
             if (KingdomTitleService.IsEmperor(pKingdom) && pKingdom.king?.data != null)
                 YearNameService.TryStartRestoredMonarchyEra(pKingdom, pKingdom.king);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static void SetRepublic(Kingdom pKingdom)
@@ -183,6 +184,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRepublic);
             YearNameService.EndMonarchicalChronology(pKingdom);
             HeirService.ClearHeir(pKingdom);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static void MakeKingAndMoveToCapital(Kingdom pKingdom, Actor pLeader)

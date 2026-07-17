@@ -1,0 +1,56 @@
+key,cz,en,ch
+aw_title_era_window,改元,Change Era,改元
+aw_title_preview,最终称呼,Appellation Preview,最終稱呼
+aw_title_era_candidates,未用历史年号：{0},Unused historical eras: {0},未用歷史年號：{0}
+aw_title_era_input,年号,Era name,年號
+aw_title_era_placeholder,输入二至四个汉字,Enter 2-4 Han characters,輸入二至四個漢字
+aw_title_era_cost,政治点 30 / 当前 {0},Political points 30 / Current {0},政治點 30 / 目前 {0}
+aw_title_confirm,确认改元,Confirm,確認改元
+aw_title_cancel,取消,Cancel,取消
+aw_title_committing,正在颁诏,Committing,正在頒詔
+aw_ruler_appellation,礼制称呼,Ritual Appellation,禮制稱呼
+aw_ruler_real_name,君主本名,Ruler Name,君主本名
+aw_title_rank_bo,伯,Count,伯
+aw_title_rank_hou,侯,Marquis,侯
+aw_title_rank_gong,公,Duke,公
+aw_title_rank_king,王,King,王
+aw_title_rank_emperor,皇帝,Emperor,皇帝
+aw_title_rank_republic,元首,Head of State,元首
+aw_parent_shi_label,父氏支：,Parent Shi: ,父氏支：
+aw_root_shi_label,本家：,Root Shi: ,本家：
+aw_shi_origin_city_label,发祥城：,Origin city: ,發祥城：
+aw_state_name_label,国号：,State name: ,國號：
+aw_retrospective_relation_label,追尊关系：,Retrospective relation: ,追尊關係：
+aw_retrospective_father,父亲,Father,父親
+aw_retrospective_paternal_grandfather,父系祖父,Paternal grandfather,父系祖父
+aw_title_error_not_hereditary_emperor,仅世袭皇帝可以主动改元,Only a hereditary emperor may change the era,僅世襲皇帝可以主動改元
+aw_title_error_below_empire_rank,君主尚未达到皇帝爵位,The ruler has not reached imperial rank,君主尚未達到皇帝爵位
+aw_title_error_not_independent,附庸奉宗主正朔不能自行改元,A vassal follows the suzerain chronology,附庸奉宗主正朔不能自行改元
+aw_title_error_at_war,战争期间不得主动改元,The era cannot be changed during war,戰爭期間不得主動改元
+aw_title_error_cooldown,主动改元需间隔十年,Ten years must pass between voluntary era changes,主動改元需間隔十年
+aw_title_error_insufficient_points,主动改元需要三十政治点,Thirty political points are required,主動改元需要三十政治點
+aw_title_error_invalid_name,年号必须是二至四个汉字,Enter 2-4 Han characters,年號必須是二至四個漢字
+aw_title_error_duplicate_name,本氏已经使用过这个年号,This Shi has already used that era name,本氏已經使用過這個年號
+aw_title_error_archive_unavailable,谱牒档案尚不可用,The lineage archive is unavailable,譜牒檔案尚不可用
+aw_title_error_missing_shi,君主没有有效氏支身份,The ruler has no valid Shi identity,君主沒有有效氏支身份
+aw_title_error_missing_reign,没有有效的在位记录,No active reign record exists,沒有有效的在位記錄
+aw_title_error_persistence_failed,改元诏令未能写入档案,The era could not be committed,改元詔令未能寫入檔案
+aw_title_error_unknown,当前不能改元,The era cannot be changed,目前不能改元
+aw_hist_title_awarded,{0}获赐称号{1},{0} received the title {1},{0}獲賜稱號{1}
+aw_hist_title_accession_era,{0}即位并建元{1}称{2},{0} acceded and proclaimed the {1} era as {2},{0}即位並建元{1}稱{2}
+aw_hist_title_voluntary_era,{0}以{1}改元{2},{0} changed the era to {2} because of {1},{0}以{1}改元{2}
+aw_hist_title_state_name,{0}立国号为{1},{0} established the state name {1},{0}立國號為{1}
+aw_hist_title_retrospective,{0}追尊{1}为{2},{0} retrospectively honored {1} as {2},{0}追尊{1}為{2}
+aw_hist_title_shi_branch,{0}由{1}分出{2},{0} founded {2} from {1},{0}由{1}分出{2}
+aw_title_reason_accession,即位,accession,即位
+aw_title_reason_restored_mandate,重受天命,restoration of the Mandate,重受天命
+aw_title_reason_autonomous_restoration,自主复国,autonomous restoration,自主復國
+aw_title_reason_major_victory,大胜,a major victory,大勝
+aw_title_reason_capital_recovered,收复国都,recovery of the capital,收復國都
+aw_title_reason_legal_core_recovered,恢复法理故土,recovery of legal core lands,恢復法理故土
+aw_title_reason_entered_revival,中兴,a dynastic revival,中興
+aw_title_reason_central_reform,整饬中枢,central reform,整飭中樞
+aw_title_reason_capital_relocated,迁都,relocation of the capital,遷都
+aw_title_reason_grand_sacrifice_blessing,大祭获吉,an auspicious grand sacrifice,大祭獲吉
+aw_title_reason_player_requested,诏令,imperial decree,詔令
+aw_title_reason_none,即位,accession,即位

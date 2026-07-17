@@ -180,6 +180,7 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.setName(pStateName, pTrack: false);
             pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
             KingdomArchiveWriter.Upsert(pKingdom);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static bool TryReadBranchSeed(long pShiId, out BranchSeed pSeed)
@@ -253,15 +254,19 @@ namespace AncientWarfare3.core.lineage
             string color = HistoryColors.FromKingdom(pKingdom);
             string founderName = pFounder?.getName() ?? "";
             long founderId = pFounder?.data?.id ?? -1L;
-            string content = string.IsNullOrEmpty(founderName)
-                ? "氏支建国立号，国号曰" + pStateName
-                : founderName + "建国立号，国号曰" + pStateName;
-            HistoryText richContent = string.IsNullOrEmpty(founderName)
-                ? HistoryText.PlainText("氏支建国立号，国号曰") +
-                  HistoryText.Colored(pStateName, color)
-                : HistoryText.Actor(pFounder, founderName) +
-                  HistoryText.PlainText("建国立号，国号曰") +
-                  HistoryText.Colored(pStateName, color);
+            string subject = string.IsNullOrEmpty(founderName) ? "氏支" : founderName;
+            string content = string.Format(
+                HistoryLocalizationRules.Text("aw_hist_title_state_name"),
+                subject, pStateName);
+            string template = HistoryLocalizationRules.Text(
+                "aw_hist_title_state_name");
+            HistoryText founderText = string.IsNullOrEmpty(founderName)
+                ? HistoryText.PlainText(subject)
+                : HistoryText.Actor(pFounder, founderName);
+            string rich = string.Format(template, founderText.Rich,
+                HistoryText.Colored(pStateName, color).Rich);
+            HistoryText richContent = new HistoryText(content, rich,
+                founderText.TargetType, founderText.TargetId);
             string year = HistoryWriter.BuildYearPrefix(pTime, pKingdom);
             string yearRich = HistoryWriter.BuildYearPrefixRich(pTime, pKingdom);
 

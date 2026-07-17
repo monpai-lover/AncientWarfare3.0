@@ -6,10 +6,10 @@ using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
+using AncientWarfare3.ui.components;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace AncientWarfare3.ui.windows
@@ -45,7 +45,7 @@ namespace AncientWarfare3.ui.windows
         private Text _centralSectionLabel;
         private Text _localSectionLabel;
         private Image _localSectionDivider;
-        private RectTransform _resizeHandle;
+        private WideWindowChrome _windowChrome;
         private long _displayedKingdomId = -1L;
         private Coroutine _renderCoroutine;
         private int _renderVersion;
@@ -211,47 +211,21 @@ namespace AncientWarfare3.ui.windows
                 surface.sizeDelta = new Vector2(pContentWidth,
                     Mathf.Max(1f, pViewportHeight - SummaryHeight));
             }
-            if (_resizeHandle != null)
-                _resizeHandle.anchoredPosition = new Vector2(-2f, 2f);
+            _windowChrome?.RepositionResizeHandle();
         }
 
         private void InstallWindowHandlers()
         {
-            RectTransform root = BackgroundTransform?.parent?.GetComponent<RectTransform>() ??
-                                 GetComponent<RectTransform>();
-            Transform title = BackgroundTransform?.Find("TitleBackground");
-            if (title != null && root != null)
-            {
-                Image titleImage = title.GetComponent<Image>();
-                if (titleImage != null) titleImage.raycastTarget = true;
-                CourtWindowDragHandler drag = title.GetComponent<CourtWindowDragHandler>() ??
-                                              title.gameObject.AddComponent<CourtWindowDragHandler>();
-                drag.Setup(root);
-            }
-
-            Transform existing = BackgroundTransform?.Find("CourtResizeHandle");
-            GameObject handle = existing != null
-                ? existing.gameObject
-                : new GameObject("CourtResizeHandle", typeof(RectTransform), typeof(Image),
-                    typeof(CourtWindowResizeHandler));
-            if (existing == null) handle.transform.SetParent(BackgroundTransform, false);
-            _resizeHandle = handle.GetComponent<RectTransform>();
-            _resizeHandle.anchorMin = new Vector2(1f, 0f);
-            _resizeHandle.anchorMax = new Vector2(1f, 0f);
-            _resizeHandle.pivot = new Vector2(1f, 0f);
-            _resizeHandle.sizeDelta = new Vector2(18f, 18f);
-            _resizeHandle.anchoredPosition = new Vector2(-2f, 2f);
-            Image image = handle.GetComponent<Image>();
-            image.sprite = WhiteSprite();
-            image.color = new Color(0.84f, 0.68f, 0.34f, 0.72f);
-            CourtWindowResizeHandler resize = handle.GetComponent<CourtWindowResizeHandler>();
-            resize.Setup(() => _windowSize, size =>
-            {
-                _windowSize = new Vector2(
-                    Mathf.Clamp(size.x, MinWidth, MaxWidth),
-                    Mathf.Clamp(size.y, MinHeight, MaxHeight));
-                ApplyWindowLayout();
-            });
+            _windowChrome = WideWindowChrome.Attach(BackgroundTransform,
+                () => _windowSize,
+                size =>
+                {
+                    _windowSize = size;
+                    ApplyWindowLayout();
+                },
+                new Vector2(DefaultWidth, DefaultHeight),
+                new Vector2(MinWidth, MinHeight),
+                new Vector2(MaxWidth, MaxHeight));
         }
 
         private void Refresh()
@@ -646,52 +620,5 @@ namespace AncientWarfare3.ui.windows
             return _whiteSprite;
         }
 
-        private sealed class CourtWindowDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
-        {
-            private RectTransform _target;
-            private Vector2 _startPointer;
-            private Vector2 _startPosition;
-
-            public void Setup(RectTransform pTarget) { _target = pTarget; }
-
-            public void OnBeginDrag(PointerEventData pEventData)
-            {
-                if (_target == null) return;
-                _startPointer = pEventData.position;
-                _startPosition = _target.anchoredPosition;
-            }
-
-            public void OnDrag(PointerEventData pEventData)
-            {
-                if (_target == null) return;
-                _target.anchoredPosition = _startPosition + pEventData.position - _startPointer;
-            }
-        }
-
-        private sealed class CourtWindowResizeHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
-        {
-            private Func<Vector2> _getSize;
-            private Action<Vector2> _setSize;
-            private Vector2 _startPointer;
-            private Vector2 _startSize;
-
-            public void Setup(Func<Vector2> pGetSize, Action<Vector2> pSetSize)
-            {
-                _getSize = pGetSize;
-                _setSize = pSetSize;
-            }
-
-            public void OnBeginDrag(PointerEventData pEventData)
-            {
-                _startPointer = pEventData.position;
-                _startSize = _getSize?.Invoke() ?? new Vector2(DefaultWidth, DefaultHeight);
-            }
-
-            public void OnDrag(PointerEventData pEventData)
-            {
-                Vector2 delta = pEventData.position - _startPointer;
-                _setSize?.Invoke(new Vector2(_startSize.x + delta.x, _startSize.y - delta.y));
-            }
-        }
     }
 }

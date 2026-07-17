@@ -1791,6 +1791,37 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("ORIGIN_ORIGINAL_CLAN_ID", pFounder.clan?.data?.id ?? -1),
                 ColumnVal.Create("CREATED_TIME", CurTime()),
                 ColumnVal.Create("IS_EXTINCT", 0));
+            if (pParentShiId >= 0)
+                RecordCadetBranchHistory(pFounder, pClanName, pShiId);
+        }
+
+        private static void RecordCadetBranchHistory(Actor pFounder,
+            string pNewClanName, long pNewShiId)
+        {
+            if (pFounder?.data == null || string.IsNullOrEmpty(pNewClanName)) return;
+            pFounder.data.get(LineageKeys.CLAN_NAME, out string parentClanName, "");
+            string parentDisplay = ShiBranchRules.BuildDisplayName("", parentClanName);
+            string originCity = pFounder.city?.data?.name ?? "";
+            string branchDisplay = ShiBranchRules.BuildDisplayName(originCity, pNewClanName);
+            string template = HistoryLocalizationRules.Text(
+                "aw_hist_title_shi_branch");
+            string plain = string.Format(template,
+                pFounder.getName(), parentDisplay, branchDisplay);
+            HistoryText founderText = HistoryText.Actor(pFounder);
+            string rich = string.Format(template, founderText.Rich,
+                HistoryText.ClanName(parentDisplay, pFounder.clan,
+                    pFounder.kingdom).Rich,
+                HistoryText.ClanName(branchDisplay, pFounder.clan,
+                    pFounder.kingdom).Rich);
+            HistoryText history = new HistoryText(plain, rich,
+                founderText.TargetType, founderText.TargetId);
+            Kingdom kingdom = pFounder.kingdom;
+            HistoryWriter.RecordPerson(pFounder.data.id, kingdom,
+                pFounder.getName(), "shi_cadet_branch", history,
+                ChronicleCategory.HONOR, HistoryTarget.From("shi", pNewShiId));
+            if (kingdom?.data != null)
+                HistoryWriter.RecordKingdom(kingdom, "shi_cadet_branch", history,
+                    HistoryTarget.Actor(pFounder));
         }
 
         private static (long kingdomId, long cityId) ResolveOriginIds(Actor pFounder)

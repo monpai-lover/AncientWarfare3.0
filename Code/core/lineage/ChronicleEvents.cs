@@ -47,6 +47,7 @@ namespace AncientWarfare3.core.lineage
             if (KingdomTitleService.IsEmperor(pKingdom) &&
                 !RepublicGovernmentService.IsRepublic(pKingdom))
                 YearNameService.TryStartAccessionEra(pKingdom, pNewKing);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static bool BindStateNameForRuler(Kingdom pKingdom, Actor pRuler)
@@ -273,6 +274,7 @@ namespace AncientWarfare3.core.lineage
             FormerKingService.OnKingdomDestroyed(pKingdom, king, wasMandateKingdom);
             KingdomArchiveWriter.EnsureRow(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
+            RulerAppellationService.RemoveKingdom(pKingdom.id);
             VassalService.OnKingdomDestroyed(pKingdom);
             MandateService.OnKingdomDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）

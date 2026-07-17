@@ -105,6 +105,8 @@ namespace AncientWarfare3.core.lineage
 
             RulerTitleCommitResult result = RulerTitleCommitService.Commit(decision);
             if (!result.Success) return;
+            RulerAppellationService.ProjectCommittedTitle(
+                pContext.LiveKingdom, pKing, result);
             if (FormerKingTraitRules.ShouldSnapshotLivingRulerTitle(
                     pEndReason, IsActorAlive(pKing)))
             {
@@ -334,10 +336,16 @@ namespace AncientWarfare3.core.lineage
                 : pEndReason == "abdicated"
                     ? T("aw_hist_posthumous_title_abdicated")
                     : T("aw_hist_posthumous_title_normal");
-            return HistoryText.Actor(pKing, pKing.getName()) +
-                   HistoryText.PlainText(verb + label) +
-                   HistoryText.Colored(pFullTitle, pTitleColor) +
-                   HistoryText.PlainText("（" + pReason + "）");
+            HistoryText actor = HistoryText.Actor(pKing, pKing?.getName() ?? "");
+            HistoryText title = HistoryText.Colored(pFullTitle, pTitleColor);
+            string template = T("aw_hist_title_awarded");
+            string suffix = "（" + verb + "；" + label.Trim('，', ' ', ':') +
+                            "；" + pReason + "）";
+            string plain = string.Format(template,
+                pKing?.getName() ?? "", pFullTitle) + suffix;
+            string rich = string.Format(template, actor.Rich, title.Rich) +
+                          HistoryColors.EscapeRich(suffix);
+            return new HistoryText(plain, rich, actor.TargetType, actor.TargetId);
         }
 
         private static string BuildReason(RulerTitleFacts pFacts,

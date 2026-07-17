@@ -20,6 +20,16 @@ namespace AncientWarfare3.patch
         {
             var actor = __instance.actor;
             if (actor == null || actor.data == null) return;
+            string appellation = "";
+            Kingdom actorKingdom = actor.kingdom;
+            if (actorKingdom?.data != null && actorKingdom.king == actor)
+                appellation = RulerAppellationService.GetFullLivingAppellation(
+                    actorKingdom);
+            else
+                appellation = RulerAppellationService.GetPosthumousAppellation(
+                    actor.data.id);
+            if (!string.IsNullOrEmpty(appellation))
+                ShowRawRow(__instance, "aw_ruler_appellation", appellation);
             if (RoyalAsylumService.IsActive(actor))
             {
                 City hostCity = RoyalAsylumService.ResolveHostCity(actor);

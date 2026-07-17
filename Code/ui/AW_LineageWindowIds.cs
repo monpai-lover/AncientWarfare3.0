@@ -17,6 +17,7 @@ namespace AncientWarfare3.ui
         public const string COURT_APPOINTMENT = "aw_court_appointment";
         public const string SCHOOL = "aw_school_browser";
         public const string SCHOOL_ROSTER = "aw_school_roster";
+        public const string NAME_DECISION = "aw_name_decision";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {

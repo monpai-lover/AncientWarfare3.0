@@ -720,12 +720,32 @@ namespace AncientWarfare3.ui.items
             if (!string.IsNullOrEmpty(pNode.clan_name))
                 sb.AppendLine(AW_L10n.Text("aw_shi_label", "氏:") + pNode.clan_name);
 
-            if (!string.IsNullOrEmpty(pNode.branch_home_display))
+            if (!string.IsNullOrEmpty(pNode.ritual_appellation))
+                sb.AppendLine(AW_L10n.Text("aw_ruler_appellation", "礼制称呼:") +
+                              pNode.ritual_appellation);
+
+            if (!string.IsNullOrEmpty(pNode.branch_home_display) &&
+                string.IsNullOrEmpty(pNode.parent_shi_display))
                 sb.AppendLine(AW_L10n.Text("aw_home_shi_label", "本家:") +
                               pNode.branch_home_display);
             if (!string.IsNullOrEmpty(pNode.branch_display))
                 sb.AppendLine(AW_L10n.Text("aw_branch_shi_label", "分支:") +
                               pNode.branch_display);
+            if (!string.IsNullOrEmpty(pNode.parent_shi_display))
+                sb.AppendLine(AW_L10n.Text("aw_parent_shi_label", "父氏支:") +
+                              pNode.parent_shi_display);
+            if (!string.IsNullOrEmpty(pNode.root_shi_display))
+                sb.AppendLine(AW_L10n.Text("aw_root_shi_label", "本家:") +
+                              pNode.root_shi_display);
+            if (!string.IsNullOrEmpty(pNode.origin_city_name))
+                sb.AppendLine(AW_L10n.Text("aw_shi_origin_city_label", "发祥城:") +
+                              pNode.origin_city_name);
+            if (!string.IsNullOrEmpty(pNode.state_name))
+                sb.AppendLine(AW_L10n.Text("aw_state_name_label", "国号:") +
+                              pNode.state_name);
+            if (!string.IsNullOrEmpty(pNode.retrospective_relation))
+                sb.AppendLine(AW_L10n.Text("aw_retrospective_relation_label", "追尊:") +
+                              RetrospectiveRelationLabel(pNode.retrospective_relation));
 
             // 行3:国 · 城
             string kc = JoinNonEmpty("  ",
@@ -765,6 +785,13 @@ namespace AncientWarfare3.ui.items
                       AW_L10n.Text("aw_noble_distance_suffix", " 代"));
 
             return sb.ToString().TrimEnd('\n', '\r');
+        }
+
+        private static string RetrospectiveRelationLabel(string pRelation)
+        {
+            return pRelation == "paternal_grandfather"
+                ? AW_L10n.Text("aw_retrospective_paternal_grandfather", "父系祖父")
+                : AW_L10n.Text("aw_retrospective_father", "父亲");
         }
 
         private static int CalculateAge(FamilyTreeNode pNode)

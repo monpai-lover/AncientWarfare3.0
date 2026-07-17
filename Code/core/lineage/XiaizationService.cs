@@ -330,6 +330,7 @@ namespace AncientWarfare3.core.lineage
                 ReadStableYears(pKingdom));
             if (pLevel >= LevelXiaizedDynasty)
                 XiaNamingRepair.TryApplyFullyXiaizedKingdomName(pKingdom);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
 
             if (pRecord)
             {

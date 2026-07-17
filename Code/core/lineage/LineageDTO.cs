@@ -235,6 +235,12 @@ namespace AncientWarfare3.core.lineage
         public string relation_label = "";
         public string branch_home_display = "";
         public string branch_display = "";
+        public string parent_shi_display = "";
+        public string root_shi_display = "";
+        public string origin_city_name = "";
+        public string state_name = "";
+        public string ritual_appellation = "";
+        public string retrospective_relation = "";
 
         public List<FamilyTreeNode> parents = new();
         public List<FamilyTreeNode> children = new();

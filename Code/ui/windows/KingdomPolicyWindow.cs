@@ -1177,6 +1177,11 @@ namespace AncientWarfare3.ui.windows
             var box = CreateButtonBox("Node_" + pDef.Id, name, pPos, new Vector2(NODE_W, NODE_H),
                 NodeTextColor(status), () =>
                 {
+                    if (pDef.Id == "aw_decision_year_name")
+                    {
+                        NameDecisionWindow.Open(pKingdom.id);
+                        return;
+                    }
                     bool changed = forceMode
                         ? KingdomPolicyService.ForceStartResearch(pKingdom, pDef.Id)
                         : KingdomPolicyService.StartResearch(pKingdom, pDef.Id);

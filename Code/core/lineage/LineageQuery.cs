@@ -1394,6 +1394,7 @@ namespace AncientWarfare3.core.lineage
                 ApplyLiveSocialTitle(node, live);
                 FillKingdomFlagSnapshot(node);
                 FillLiveClanFlagSnapshot(node, live.clan);
+                RulerAppellationService.EnrichFamilyTreeNode(node);
                 return node;
             }
 
@@ -1435,6 +1436,7 @@ namespace AncientWarfare3.core.lineage
             ApplyFoundedBranchDisplay(archived, null);
             ApplyArchivedSocialTitle(archived);
             FillKingdomFlagSnapshot(archived);
+            RulerAppellationService.EnrichFamilyTreeNode(archived);
             return archived;
         }
 
@@ -1472,6 +1474,7 @@ namespace AncientWarfare3.core.lineage
             ApplyLiveSocialTitle(node, live);
             FillKingdomFlagSnapshot(node);
             FillLiveClanFlagSnapshot(node, live.clan);
+            RulerAppellationService.EnrichFamilyTreeNode(node);
             return node;
         }
 

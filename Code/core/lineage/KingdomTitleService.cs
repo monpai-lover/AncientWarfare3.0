@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             KingdomTitle previous = GetTitle(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_TITLE, (int)pTitle);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
             if (previous >= KingdomTitle.Emperor || pTitle != KingdomTitle.Emperor ||
                 pKingdom.king?.data == null) return;
 

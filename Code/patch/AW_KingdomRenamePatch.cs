@@ -19,6 +19,7 @@ namespace AncientWarfare3.patch
         {
             if (__instance is not Kingdom kingdom) return;
             KingdomRenameSyncService.OnKingdomNameChanged(kingdom, __state, pName, pTrack);
+            RulerAppellationService.RefreshLivingProjection(kingdom);
         }
     }
 }

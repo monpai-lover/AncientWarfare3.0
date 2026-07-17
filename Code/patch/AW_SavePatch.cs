@@ -61,6 +61,7 @@ namespace AncientWarfare3.patch
             XiaSubspeciesRepair.EnsureWorldTraits();
             FigureStateStore.Load();
             core.lineage.KingdomArchiveWriter.BackfillAll();
+            core.lineage.RulerAppellationService.RebuildLivingCache();
             ResetHistoryWindowsAfterArchiveSwitch();
             MandatePhaseService.RebuildRuntime();
             core.lineage.RoyalAsylumService.LoadRuntimeState();
@@ -106,6 +107,7 @@ namespace AncientWarfare3.patch
             try { MandatePhaseService.ClearRuntime(); } catch { }
             try { core.lineage.ArmyRetreatService.ClearRuntime(); } catch { }
             try { core.lineage.RoyalAsylumService.ClearRuntime(); } catch { }
+            try { core.lineage.RulerAppellationService.ClearRuntime(); } catch { }
             try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
             try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
             try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }

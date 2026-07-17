@@ -48,7 +48,8 @@ namespace AncientWarfare3.patch
         // 用 KingdomWindow(继承未 override)会解析 null 致 PatchAll 失败(见记忆 aw3-harmony-inherited-method-pitfall)。
         [HarmonyPrefix]
         [HarmonyPatch(typeof(StatsWindow), "tryToShowActor")]
-        public static bool TryToShowActor_Prefix(ref string pTitle, long pID, Actor pObject)
+        public static bool TryToShowActor_Prefix(StatsWindow __instance,
+            ref string pTitle, long pID, Actor pObject)
         {
             if (pTitle == "king")
             {
@@ -58,7 +59,22 @@ namespace AncientWarfare3.patch
                     try { ruler = World.world?.units?.get(pID); }
                     catch { ruler = null; }
                 }
-                if (ruler?.kingdom?.data != null && RepublicGovernmentService.IsRepublic(ruler.kingdom))
+                if (__instance is KingdomWindow && ruler?.data != null &&
+                    ruler.kingdom?.data != null)
+                {
+                    string appellation =
+                        RulerAppellationService.GetFullLivingAppellation(ruler.kingdom);
+                    if (!string.IsNullOrEmpty(appellation))
+                    {
+                        __instance.showStatRow("aw_ruler_appellation", appellation);
+                        __instance.showStatRow("aw_ruler_real_name", ruler.getName(),
+                            ruler.kingdom.getColor().color_text, MetaType.Unit,
+                            ruler.data.id, false, "iconKings");
+                        return false;
+                    }
+                }
+                if (ruler?.kingdom?.data != null &&
+                    RepublicGovernmentService.IsRepublic(ruler.kingdom))
                     pTitle = GovernmentTitleRules.RepublicHeadKey;
                 return true;
             }

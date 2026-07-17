@@ -191,6 +191,7 @@ namespace AncientWarfare3.core.lineage
                 king.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.COMMON);
                 try { king.clearGraphicsFully(); } catch { }
             }
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static void TryClaimMandate(Kingdom pKingdom)
@@ -258,6 +259,7 @@ namespace AncientWarfare3.core.lineage
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
                 HistoryText.Kingdom(pKingdom) + " \u4E49\u519B\u6218\u4E8B\u7ED3\u675F\uFF0C\u6062\u590D\u666E\u901A\u653F\u4F53",
                 HistoryTarget.Kingdom(pKingdom));
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         private static List<City> PickCollapseCities(Kingdom pMandateKingdom)

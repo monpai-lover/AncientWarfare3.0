@@ -6,9 +6,24 @@ using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal sealed class EraDecisionSnapshot
+    {
+        public string StateName = "";
+        public string InitialEra = "";
+        public int PoliticalPoints;
+        public readonly HashSet<string> UsedNames =
+            new HashSet<string>(StringComparer.Ordinal);
+        public readonly List<string> AvailableHistoricalNames =
+            new List<string>();
+        public EraChangeBlockReason BlockReason;
+    }
+
     internal static class YearNameService
     {
         public const int VoluntaryChangeCost = 30;
+
+        private static string T(string pKey) =>
+            HistoryLocalizationRules.Text(pKey);
 
         private static SQLiteConnection DB =>
             LineageArchiveManager.Instance?.OperatingDB;
@@ -33,6 +48,120 @@ namespace AncientWarfare3.core.lineage
                 : "monarchy_restored:" + reignId + ":" + Date.getCurrentYear();
             return TryChangeEra(pKingdom, pEmperor, "", EraChangeKind.Accession,
                 EraChangeReason.Accession, sourceEventId);
+        }
+
+        public static EraDecisionSnapshot PrepareVoluntaryDecision(
+            Kingdom pKingdom)
+        {
+            var snapshot = new EraDecisionSnapshot();
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                pKingdom.king?.data == null)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.NotHereditaryEmperor;
+                return snapshot;
+            }
+
+            Actor emperor = pKingdom.king;
+            snapshot.StateName = StateNameService.GetBoundOrCurrentName(pKingdom);
+            snapshot.PoliticalPoints = Math.Max(0, (int)Math.Floor(
+                KingdomPolicyService.GetPoliticalPoints(pKingdom)));
+
+            bool hereditary = !RepublicGovernmentService.IsRepublic(pKingdom) &&
+                              !RepublicGovernmentService.IsRepublicLeader(emperor) &&
+                              RepublicGovernmentService.HasEstablishedMonarchy(pKingdom) &&
+                              (LineageService.IsXiaKingdom(pKingdom) ||
+                               XiaizationService.UsesXiaizedInstitutionSystem(pKingdom));
+            if (!hereditary)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.NotHereditaryEmperor;
+                return snapshot;
+            }
+            if (!KingdomTitleService.IsEmperor(pKingdom))
+            {
+                snapshot.BlockReason = EraChangeBlockReason.BelowEmpireRank;
+                return snapshot;
+            }
+            if (VassalService.GetSuzerain(pKingdom) != null)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.NotIndependent;
+                return snapshot;
+            }
+            if (!Ready)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.ArchiveUnavailable;
+                return snapshot;
+            }
+
+            emperor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.MissingLineageIdentity;
+                return snapshot;
+            }
+            if (ReignRecordWriter.FindOpenReignId(pKingdom.id) < 0)
+            {
+                snapshot.BlockReason = EraChangeBlockReason.MissingReign;
+                return snapshot;
+            }
+
+            int yearsSinceChange;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    "SELECT TITLE_VALUE FROM " +
+                    DynastyTitleRegistryTableItem.GetTableName() +
+                    " WHERE SHI_ID=@shi AND TITLE_TYPE='era' AND CYCLE_NO=0;" +
+                    "SELECT MAX(START_YEAR) FROM " +
+                    EraPeriodTableItem.GetTableName() +
+                    " WHERE KINGDOM_ID=@kingdom AND " +
+                    "CHANGE_KIND IN ('voluntary','ai_major_event')";
+                command.Parameters.AddWithValue("@shi", shiId);
+                command.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    string value = reader.IsDBNull(0) ? "" : reader.GetString(0);
+                    if (!string.IsNullOrEmpty(value)) snapshot.UsedNames.Add(value);
+                }
+                object lastYear = null;
+                if (reader.NextResult() && reader.Read() && !reader.IsDBNull(0))
+                    lastYear = reader.GetValue(0);
+                yearsSinceChange = lastYear == null
+                    ? int.MaxValue
+                    : Math.Max(0, Date.getCurrentYear() - Convert.ToInt32(lastYear));
+            }
+            catch
+            {
+                snapshot.BlockReason = EraChangeBlockReason.ArchiveUnavailable;
+                return snapshot;
+            }
+
+            foreach (string candidate in EraNameRules.HistoricalSlots)
+            {
+                if (!EraNameRules.IsValidCustom(candidate) ||
+                    snapshot.UsedNames.Contains(candidate) ||
+                    snapshot.AvailableHistoricalNames.Contains(candidate)) continue;
+                snapshot.AvailableHistoricalNames.Add(candidate);
+            }
+            snapshot.InitialEra = snapshot.AvailableHistoricalNames.Count > 0
+                ? snapshot.AvailableHistoricalNames[0]
+                : EraNameRules.SelectAutomatic(shiId, emperor.data.id,
+                    Date.getCurrentYear(), snapshot.UsedNames);
+
+            snapshot.BlockReason = EraNameRules.ValidateVoluntaryChange(
+                new EraChangeContext
+                {
+                    IsHereditaryEmperor = true,
+                    IsEmpireRank = true,
+                    IsIndependent = true,
+                    AtWar = IsAtWar(pKingdom),
+                    PoliticalPoints = snapshot.PoliticalPoints,
+                    YearsSinceVoluntaryChange = yearsSinceChange,
+                    Candidate = snapshot.InitialEra,
+                    UsedNames = snapshot.UsedNames
+                });
+            return snapshot;
         }
 
         public static EraChangeResult TryChangeEra(Kingdom pKingdom,
@@ -102,7 +231,7 @@ namespace AncientWarfare3.core.lineage
 
             double now = LineageService.CurTime();
             string stateName = StateNameService.GetBoundOrCurrentName(pKingdom, shiId);
-            string history = BuildHistory(pKind, pReason, pEmperor,
+            HistoryText history = BuildHistory(pKind, pReason, pEmperor,
                 stateName, GetLocalEraName(pKingdom), candidate);
             var request = new EraAtomicCommitRequest
             {
@@ -121,8 +250,8 @@ namespace AncientWarfare3.core.lineage
                 YearPrefixRich = HistoryWriter.BuildYearPrefixRich(now, pKingdom),
                 StateName = stateName,
                 ActorName = pEmperor.getName() ?? "",
-                HistoryContent = history,
-                HistoryContentRich = HistoryColors.EscapeRich(history),
+                HistoryContent = history.Plain,
+                HistoryContentRich = history.Rich,
                 BiographyCategory = ChronicleCategory.HONOR,
                 BiographyRole = "king",
                 BiographyRoleLabel = "皇帝",
@@ -181,6 +310,7 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_NAME, "");
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_START, -1f);
             EraChangeTriggerService.Clear(pKingdom);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
         public static string GetYearName(Kingdom pKingdom)
@@ -229,6 +359,7 @@ namespace AncientWarfare3.core.lineage
             {
                 pKingdom.data.set(LineageKeys.KINGDOM_YEAR_NAME, pEraName);
                 pKingdom.data.set(LineageKeys.KINGDOM_YEAR_START, (float)pStartTime);
+                RulerAppellationService.RefreshLivingProjection(pKingdom);
                 return true;
             }
             catch (Exception error)
@@ -252,16 +383,34 @@ namespace AncientWarfare3.core.lineage
             };
         }
 
-        private static string BuildHistory(EraChangeKind pKind,
+        private static HistoryText BuildHistory(EraChangeKind pKind,
             EraChangeReason pReason, Actor pEmperor, string pStateName,
             string pOldEra, string pNewEra)
         {
             string imperialState = ImperialStateName(pStateName);
+            string color = HistoryColors.FromActor(pEmperor);
             if (pKind == EraChangeKind.Accession)
-                return (pEmperor?.getName() ?? "") + "践祚，建元" + pNewEra +
-                       "，称" + imperialState + pNewEra + "皇帝。";
+            {
+                string title = RulerAppellationRules.LivingEmperor(
+                    pStateName, pNewEra);
+                HistoryText actor = HistoryText.Actor(pEmperor);
+                HistoryText era = HistoryText.Colored(pNewEra, color);
+                HistoryText appellation = HistoryText.Colored(title, color);
+                string template = T("aw_hist_title_accession_era");
+                return new HistoryText(
+                    string.Format(template, pEmperor?.getName() ?? "", pNewEra, title),
+                    string.Format(template, actor.Rich, era.Rich, appellation.Rich),
+                    actor.TargetType, actor.TargetId);
+            }
             string oldTitle = imperialState + (pOldEra ?? "") + "皇帝";
-            return oldTitle + "以" + ReasonLabel(pReason) + "，改元" + pNewEra + "。";
+            string reason = ReasonLabel(pReason);
+            string voluntaryTemplate = T("aw_hist_title_voluntary_era");
+            return new HistoryText(
+                string.Format(voluntaryTemplate, oldTitle, reason, pNewEra),
+                string.Format(voluntaryTemplate,
+                    HistoryText.Colored(oldTitle, color).Rich,
+                    HistoryColors.EscapeRich(reason),
+                    HistoryText.Colored(pNewEra, color).Rich));
         }
 
         private static string ImperialStateName(string pStateName)
@@ -272,20 +421,7 @@ namespace AncientWarfare3.core.lineage
 
         private static string ReasonLabel(EraChangeReason pReason)
         {
-            return pReason switch
-            {
-                EraChangeReason.RestoredMandate => "重受天命",
-                EraChangeReason.AutonomousRestoration => "自主复国",
-                EraChangeReason.MajorVictory => "大胜",
-                EraChangeReason.CapitalRecovered => "收复国都",
-                EraChangeReason.LegalCoreRecovered => "恢复法理故土",
-                EraChangeReason.EnteredRevival => "中兴",
-                EraChangeReason.CentralReform => "整饬中枢",
-                EraChangeReason.CapitalRelocated => "迁都",
-                EraChangeReason.GrandSacrificeBlessing => "大祭获吉",
-                EraChangeReason.PlayerRequested => "诏令",
-                _ => "即位"
-            };
+            return T("aw_title_reason_" + ReasonId(pReason));
         }
 
         private static string ReasonId(EraChangeReason pReason)

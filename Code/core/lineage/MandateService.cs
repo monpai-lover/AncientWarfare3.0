@@ -245,6 +245,7 @@ namespace AncientWarfare3.core.lineage
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
             if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
             if (wasAlreadyEmperor &&
                 (hadPreviousMandate || pOriginType == "self_restoration"))
@@ -596,6 +597,8 @@ namespace AncientWarfare3.core.lineage
                     current.name + T("aw_hist_mandate_lost_prefix") + EndReasonLabel(pReason) +
                     T("aw_hist_paren_close"));
             }
+
+            RulerAppellationService.RefreshLivingProjection(current);
 
             MarkDirty();
             DirtyAllMaps();

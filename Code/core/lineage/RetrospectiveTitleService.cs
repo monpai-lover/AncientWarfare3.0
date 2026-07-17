@@ -95,17 +95,29 @@ namespace AncientWarfare3.core.lineage
             };
             RulerTitleDecision decision = RulerTitleDecision.ForRetrospective(
                 facts, temple, cycleNo, pRelation);
-            HistoryText history = HistoryText.Actor(pEmperor) +
-                                  HistoryText.PlainText("追尊" + RelationLabel(pRelation) +
-                                                        ancestor.Name + "为") +
-                                  HistoryText.Colored(temple, facts.KingdomColor);
+            string template = HistoryLocalizationRules.Text(
+                "aw_hist_title_retrospective");
+            HistoryText emperorText = HistoryText.Actor(pEmperor);
+            HistoryText ancestorText = HistoryText.Colored(
+                ancestor.Name, ancestor.Color);
+            HistoryText templeText = HistoryText.Colored(
+                temple, facts.KingdomColor);
+            string plainHistory = string.Format(template,
+                pEmperor.getName(), ancestor.Name, temple);
+            string richHistory = string.Format(template, emperorText.Rich,
+                ancestorText.Rich, templeText.Rich);
+            HistoryText history = new HistoryText(plainHistory, richHistory,
+                emperorText.TargetType, emperorText.TargetId);
             double now = LineageService.CurTime();
             decision.HistoryPlain = history.Plain;
             decision.HistoryRich = history.Rich;
             decision.YearPrefix = HistoryWriter.BuildYearPrefix(now, pKingdom);
             decision.YearPrefixRich = HistoryWriter.BuildYearPrefixRich(now, pKingdom);
             decision.Reason = "retrospective_relation=" + pRelation;
-            RulerTitleCommitService.Commit(decision);
+            RulerTitleCommitResult committed =
+                RulerTitleCommitService.Commit(decision);
+            RulerAppellationService.ProjectCommittedTitle(
+                pActorId, committed, pRelation);
         }
 
         private static long ResolveMaleParent(long pChildId)
