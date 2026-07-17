@@ -246,6 +246,7 @@ namespace AncientWarfare3.core.lineage
             City pCity, Actor pRecruit)
         {
             Army army = ResolveArmy(pState.ArmyId);
+            if (army?.data != null && !IsArmyOwnedBy(army, pKingdom)) army = null;
             if (army?.data == null)
             {
                 try
@@ -253,7 +254,8 @@ namespace AncientWarfare3.core.lineage
                     if (pCity.hasArmy())
                     {
                         Army existing = pCity.getArmy();
-                        if (existing?.data != null && !AWArmyService.IsSpecialArmy(existing))
+                        if (existing?.data != null && !AWArmyService.IsSpecialArmy(existing) &&
+                            IsArmyOwnedBy(existing, pKingdom))
                             army = existing;
                     }
                 }
@@ -264,7 +266,7 @@ namespace AncientWarfare3.core.lineage
                 try { army = World.world?.armies?.newArmy(pRecruit, pCity); }
                 catch { army = null; }
             }
-            if (army?.data == null) return null;
+            if (army?.data == null || !IsArmyOwnedBy(army, pKingdom)) return null;
 
             army.data.set(LineageKeys.RESTORATION_UPRISING_ARMY, true);
             army.data.set(LineageKeys.RESTORATION_UPRISING_CAMPAIGN_ID, pState.CampaignId);
@@ -273,6 +275,13 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, army.id);
             if (pRecruit.army != army) AWArmyService.AddToArmy(pRecruit, army);
             return pRecruit.army == army ? army : null;
+        }
+
+        private static bool IsArmyOwnedBy(Army pArmy, Kingdom pKingdom)
+        {
+            if (pArmy?.data == null || pKingdom?.data == null) return false;
+            try { return pArmy.getKingdom() == pKingdom; }
+            catch { return false; }
         }
 
         private static bool IsProtectedIdentity(Kingdom pKingdom, Actor pActor)
