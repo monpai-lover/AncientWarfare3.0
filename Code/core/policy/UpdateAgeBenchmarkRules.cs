@@ -16,43 +16,44 @@ namespace AncientWarfare3.core.policy
         public const int KingdomPolicyIndex = 4;
         public const int KingdomCityTechIndex = 5;
         public const int KingdomCityEconomyIndex = 6;
-        public const int KingdomWarTerritoryIndex = 7;
-        public const int KingdomMandateIndex = 8;
-        public const int KingdomMandateDecisionIndex = 9;
-        public const int KingdomMandateRebelIndex = 10;
-        public const int KingdomForeignOccupationIndex = 11;
-        public const int KingdomHeavyScheduleIndex = 12;
-        public const int KingdomWarPlotIndex = 13;
-        public const int KingdomWarAiIndex = 14;
-        public const int KingdomVassalAiIndex = 15;
-        public const int KingdomGeneralScheduleIndex = 16;
-        public const int KingdomGeneralIndex = 17;
-        public const int TopLevelEntryCount = 18;
-        public const int KingdomPolicyPointsIndex = 18;
-        public const int KingdomPolicyAiIndex = 19;
-        public const int KingdomPolicyAdvanceTechIndex = 20;
-        public const int KingdomPolicyAdvanceSocialIndex = 21;
-        public const int KingdomPolicyAdvanceDecisionIndex = 22;
-        public const int KingdomPolicySnapshotIndex = 23;
-        public const int KingdomPolicyMapDirtyIndex = 24;
-        public const int KingdomCourtYearTickIndex = 25;
-        public const int KingdomCourtCandidateRefreshIndex = 26;
-        public const int KingdomCourtOfficerValidateIndex = 27;
-        public const int KingdomCourtFactionRecalcIndex = 28;
-        public const int KingdomCourtAiBiasIndex = 29;
-        public const int KingdomCourtUiBuildIndex = 30;
-        public const int KingdomCityBureauRefreshIndex = 31;
-        public const int CityTechSpreadCompletedIndex = 32;
-        public const int CityTechNeighborExposureIndex = 33;
-        public const int CityTechNeighborInfluenceIndex = 34;
-        public const int CityEconomyUpdateCitiesIndex = 35;
-        public const int CityEconomyMapDirtyIndex = 36;
-        public const int CityEconomyTechReportIndex = 37;
-        public const int CityEconomySlaveCountIndex = 38;
-        public const int CityEconomyDbUpsertIndex = 39;
-        public const int ActorFullWallIndex = 40;
-        public const int CityFullWallIndex = 41;
-        public const int KingdomFullWallIndex = 42;
+        public const int KingdomVassalTributeIndex = 7;
+        public const int KingdomWarTerritoryIndex = 8;
+        public const int KingdomMandateIndex = 9;
+        public const int KingdomMandateDecisionIndex = 10;
+        public const int KingdomMandateRebelIndex = 11;
+        public const int KingdomForeignOccupationIndex = 12;
+        public const int KingdomHeavyScheduleIndex = 13;
+        public const int KingdomWarPlotIndex = 14;
+        public const int KingdomWarAiIndex = 15;
+        public const int KingdomVassalAiIndex = 16;
+        public const int KingdomGeneralScheduleIndex = 17;
+        public const int KingdomGeneralIndex = 18;
+        public const int TopLevelEntryCount = 19;
+        public const int KingdomPolicyPointsIndex = 19;
+        public const int KingdomPolicyAiIndex = 20;
+        public const int KingdomPolicyAdvanceTechIndex = 21;
+        public const int KingdomPolicyAdvanceSocialIndex = 22;
+        public const int KingdomPolicyAdvanceDecisionIndex = 23;
+        public const int KingdomPolicySnapshotIndex = 24;
+        public const int KingdomPolicyMapDirtyIndex = 25;
+        public const int KingdomCourtYearTickIndex = 26;
+        public const int KingdomCourtCandidateRefreshIndex = 27;
+        public const int KingdomCourtOfficerValidateIndex = 28;
+        public const int KingdomCourtFactionRecalcIndex = 29;
+        public const int KingdomCourtAiBiasIndex = 30;
+        public const int KingdomCourtUiBuildIndex = 31;
+        public const int KingdomCityBureauRefreshIndex = 32;
+        public const int CityTechSpreadCompletedIndex = 33;
+        public const int CityTechNeighborExposureIndex = 34;
+        public const int CityTechNeighborInfluenceIndex = 35;
+        public const int CityEconomyUpdateCitiesIndex = 36;
+        public const int CityEconomyMapDirtyIndex = 37;
+        public const int CityEconomyTechReportIndex = 38;
+        public const int CityEconomySlaveCountIndex = 39;
+        public const int CityEconomyDbUpsertIndex = 40;
+        public const int ActorFullWallIndex = 41;
+        public const int CityFullWallIndex = 42;
+        public const int KingdomFullWallIndex = 43;
 
         public const string ActorRetirement = "aw3_actor_update_age_retirement";
         public const string ActorOldHead = "aw3_actor_update_age_old_head";
@@ -61,6 +62,7 @@ namespace AncientWarfare3.core.policy
         public const string KingdomPolicy = "aw3_kingdom_update_age_policy";
         public const string KingdomCityTech = "aw3_kingdom_update_age_city_tech";
         public const string KingdomCityEconomy = "aw3_kingdom_update_age_city_economy";
+        public const string KingdomVassalTribute = "aw3_kingdom_update_age_vassal_tribute";
         public const string KingdomWarTerritory = "aw3_kingdom_update_age_war_territory";
         public const string KingdomMandate = "aw3_kingdom_update_age_mandate";
         public const string KingdomMandateDecision = "aw3_kingdom_update_age_mandate_decision";
@@ -107,6 +109,7 @@ namespace AncientWarfare3.core.policy
             KingdomPolicy,
             KingdomCityTech,
             KingdomCityEconomy,
+            KingdomVassalTribute,
             KingdomWarTerritory,
             KingdomMandate,
             KingdomMandateDecision,

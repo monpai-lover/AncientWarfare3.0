@@ -122,6 +122,38 @@ namespace AncientWarfare3.core.lineage
         public string absorb_reason = "";
     }
 
+    internal sealed class CentralPowerVassalInfo
+    {
+        public long relation_id = -1;
+        public long kingdom_id = -1;
+        public string kingdom_name = "";
+        public string kingdom_color = "";
+        public int color_id = -1;
+        public int banner_icon_id;
+        public int banner_background_id;
+        public string banner_id = "";
+        public string relation_type = "";
+        public int base_autonomy;
+        public int base_tribute_rate;
+        public int base_military_obligation;
+        public int effective_autonomy;
+        public int effective_tribute_rate;
+        public int effective_military_obligation;
+        public float annual_tax;
+        public float forecast_political_tribute;
+        public int forecast_gold_tribute;
+    }
+
+    internal sealed class CentralPowerVassalSummary
+    {
+        public int direct_vassal_count;
+        public float forecast_political_tribute;
+        public int forecast_gold_tribute;
+        public float average_effective_autonomy;
+        public float average_effective_military_obligation;
+        public readonly List<CentralPowerVassalInfo> vassals = new List<CentralPowerVassalInfo>();
+    }
+
     /// <summary>
     ///     一个"时期"分段(历史分段折叠用),两用:
     ///     - 国家史:一段朝代。有王=一个王统治期(king_name=王名);无王=空位期(按时间区间)。

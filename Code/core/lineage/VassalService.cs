@@ -34,6 +34,9 @@ namespace AncientWarfare3.core.lineage
 
         private sealed class ActiveRelationDetails
         {
+            public long relation_id = -1;
+            public long vassal_id = -1;
+            public Kingdom vassal;
             public string relation_type = "";
             public int autonomy = 50;
             public int tribute_rate = 10;
@@ -51,7 +54,14 @@ namespace AncientWarfare3.core.lineage
 
         public static bool IsSuzerain(Kingdom pKingdom)
         {
-            return GetVassals(pKingdom).Count > 0;
+            return GetDirectVassalCount(pKingdom) > 0;
+        }
+
+        public static int GetDirectVassalCount(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0;
+            pKingdom.data.get(LineageKeys.VASSAL_DIRECT_COUNT, out int count, 0);
+            return Math.Max(0, count);
         }
 
         public static string GetStatusShort(Kingdom pKingdom)
@@ -342,6 +352,7 @@ namespace AncientWarfare3.core.lineage
 
             pVassal.data.set(LineageKeys.VASSAL_SUZERAIN_ID, pSuzerain.id);
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, relationId);
+            AdjustDirectVassalCount(pSuzerain, 1);
             RecordVassalSet(pVassal, pSuzerain, pReason);
             DirtyVassalMap();
             PullVassalIntoSuzerainWars(pVassal, pSuzerain);
@@ -357,7 +368,7 @@ namespace AncientWarfare3.core.lineage
             if (relationId < 0) relationId = ReadActiveRelationId(pVassal.id);
             if (relationId < 0) return false;
 
-            CloseRelation(relationId, pReason ?? "ended", absorbed: false);
+            if (!CloseRelation(relationId, pReason ?? "ended", absorbed: false)) return false;
             pVassal.data.set(LineageKeys.VASSAL_SUZERAIN_ID, -1L);
             pVassal.data.set(LineageKeys.VASSAL_RELATION_ID, -1L);
             RecordVassalEnd(pVassal, suzerain, pReason);
@@ -486,6 +497,97 @@ namespace AncientWarfare3.core.lineage
             {
                 ModClass.LogWarning("VassalService.OnKingdomYear: " + e.Message);
             }
+        }
+
+        public static void SettleAnnualTribute(Kingdom pSuzerain)
+        {
+            if (pSuzerain?.data == null || pSuzerain.isRekt() || !Ready) return;
+            if (GetDirectVassalCount(pSuzerain) <= 0) return;
+
+            int year = Date.getCurrentYear();
+            pSuzerain.data.get(LineageKeys.VASSAL_TRIBUTE_LAST_YEAR, out int lastYear, int.MinValue);
+            if (lastYear == year) return;
+            pSuzerain.data.set(LineageKeys.VASSAL_TRIBUTE_LAST_YEAR, year);
+
+            List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain);
+            if (relations.Count == 0) return;
+            CentralizationEffects effects = CentralizationService.ReadSnapshot(pSuzerain).effects;
+            float politicalTransferred = 0f;
+            int goldTransferred = 0;
+
+            foreach (ActiveRelationDetails relation in relations)
+            {
+                Kingdom vassal = relation.vassal;
+                if (vassal?.data == null || vassal.isRekt()) continue;
+                VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                CityEconomyService.TryGetLatestCachedTaxContribution(vassal, out float annualTax);
+                float requestedPolitical = VassalFiscalRules.PoliticalTribute(annualTax,
+                    terms.TributeRate, KingdomPolicyService.GetPoliticalPoints(vassal),
+                    KingdomPolicyService.GetPoliticalPoints(pSuzerain),
+                    VassalFiscalRules.MaximumPoliticalBalance);
+                politicalTransferred += KingdomPolicyService.TransferPoliticalPoints(
+                    vassal, pSuzerain, requestedPolitical);
+
+                int availableGold = GetCapitalGold(vassal);
+                int requestedGold = VassalFiscalRules.GoldTribute(
+                    annualTax, terms.TributeRate, availableGold);
+                goldTransferred += TransferCapitalGold(vassal, pSuzerain, requestedGold);
+            }
+
+            if (politicalTransferred <= 0f && goldTransferred <= 0) return;
+            HistoryWriter.RecordKingdom(pSuzerain, "vassal_tribute",
+                KingdomLabel(pSuzerain) + H("aw_hist_vassal_tribute_text") +
+                HistoryText.PlainText(Math.Round(politicalTransferred, 1) + " / " + goldTransferred));
+        }
+
+        public static VassalEffectiveTerms GetEffectiveRelationTerms(Kingdom pVassal)
+        {
+            ActiveRelationDetails relation = ReadActiveRelationDetails(pVassal?.id ?? -1L);
+            Kingdom suzerain = FindKingdom(relation?.suzerain_id ?? -1L);
+            CentralizationEffects effects = CentralizationService.ReadSnapshot(suzerain).effects;
+            return relation == null
+                ? VassalFiscalRules.EffectiveTerms(100, 0, 0, effects)
+                : GetEffectiveRelationTerms(relation, effects);
+        }
+
+        public static CentralPowerVassalSummary ReadCentralPowerSummary(Kingdom pSuzerain)
+        {
+            var summary = new CentralPowerVassalSummary();
+            if (pSuzerain?.data == null || pSuzerain.isRekt() || !Ready) return summary;
+            List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain);
+            CentralizationEffects effects = CentralizationService.ReadSnapshot(pSuzerain).effects;
+            float projectedSuzerainPoints = KingdomPolicyService.GetPoliticalPoints(pSuzerain);
+            float autonomyTotal = 0f;
+            float obligationTotal = 0f;
+
+            foreach (ActiveRelationDetails relation in relations)
+            {
+                Kingdom vassal = relation.vassal;
+                if (vassal?.data == null || vassal.isRekt()) continue;
+                VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                CityEconomyService.TryGetLatestCachedTaxContribution(vassal, out float annualTax);
+                float political = VassalFiscalRules.PoliticalTribute(annualTax,
+                    terms.TributeRate, KingdomPolicyService.GetPoliticalPoints(vassal),
+                    projectedSuzerainPoints, VassalFiscalRules.MaximumPoliticalBalance);
+                int gold = VassalFiscalRules.GoldTribute(
+                    annualTax, terms.TributeRate, GetCapitalGold(vassal));
+                projectedSuzerainPoints += political;
+
+                summary.vassals.Add(BuildCentralPowerVassalInfo(
+                    relation, terms, annualTax, political, gold));
+                summary.forecast_political_tribute += political;
+                summary.forecast_gold_tribute += gold;
+                autonomyTotal += terms.Autonomy;
+                obligationTotal += terms.MilitaryObligation;
+            }
+
+            summary.direct_vassal_count = summary.vassals.Count;
+            if (summary.direct_vassal_count > 0)
+            {
+                summary.average_effective_autonomy = autonomyTotal / summary.direct_vassal_count;
+                summary.average_effective_military_obligation = obligationTotal / summary.direct_vassal_count;
+            }
+            return summary;
         }
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
@@ -706,14 +808,17 @@ namespace AncientWarfare3.core.lineage
             ActiveRelationDetails relation = ReadActiveRelationDetails(relationKingdom?.id ?? -1);
             if (relation != null)
             {
+                CentralizationEffects effects = CentralizationService.ReadSnapshot(
+                    FindKingdom(relation.suzerain_id)).effects;
+                VassalEffectiveTerms effective = GetEffectiveRelationTerms(relation, effects);
                 row.suzerain_id = relation.suzerain_id;
                 row.suzerain_name = relation.suzerain_name;
                 row.suzerain_color = relation.suzerain_color;
                 row.relation_type = relation.relation_type;
                 row.relation_reason_label = VassalGetReasonLabel(relation.relation_type);
-                row.autonomy = relation.autonomy;
-                row.tribute_rate = relation.tribute_rate;
-                row.military_obligation = relation.military_obligation;
+                row.autonomy = effective.Autonomy;
+                row.tribute_rate = effective.TributeRate;
+                row.military_obligation = effective.MilitaryObligation;
                 row.start_time = relation.start_time;
                 row.years = YearsSince(relation.start_time);
                 row.relation_subject_name = relationKingdom?.name ?? "";
@@ -742,6 +847,85 @@ namespace AncientWarfare3.core.lineage
             return "\u72EC\u7ACB\u56FD\u5BB6";
         }
 
+        private static List<ActiveRelationDetails> ReadDirectRelations(Kingdom pSuzerain)
+        {
+            var result = new List<ActiveRelationDetails>();
+            if (!Ready || pSuzerain?.data == null) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT RELATION_ID,VASSAL_ID,RELATION_TYPE,AUTONOMY,TRIBUTE_RATE," +
+                    $"MILITARY_OBLIGATION,START_TIME,SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
+                    $"FROM {VassalRelationTableItem.GetTableName()} " +
+                    "WHERE SUZERAIN_ID=@s AND ACTIVE=1 AND END_TIME<0 ORDER BY START_TIME";
+                cmd.Parameters.AddWithValue("@s", pSuzerain.id);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long vassalId = reader.IsDBNull(1) ? -1L : reader.GetInt64(1);
+                    Kingdom vassal = FindKingdom(vassalId);
+                    if (vassal?.data == null || vassal.isRekt()) continue;
+                    result.Add(new ActiveRelationDetails
+                    {
+                        relation_id = reader.IsDBNull(0) ? -1L : reader.GetInt64(0),
+                        vassal_id = vassalId,
+                        vassal = vassal,
+                        relation_type = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                        autonomy = reader.IsDBNull(3) ? 50 : (int)reader.GetInt64(3),
+                        tribute_rate = reader.IsDBNull(4) ? 10 : (int)reader.GetInt64(4),
+                        military_obligation = reader.IsDBNull(5) ? 50 : (int)reader.GetInt64(5),
+                        start_time = reader.IsDBNull(6) ? -1 : reader.GetDouble(6),
+                        suzerain_id = reader.IsDBNull(7) ? -1L : reader.GetInt64(7),
+                        suzerain_name = reader.IsDBNull(8) ? "" : reader.GetString(8),
+                        suzerain_color = reader.IsDBNull(9) ? "" : reader.GetString(9)
+                    });
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.ReadDirectRelations: " + e.Message);
+            }
+            return result;
+        }
+
+        private static VassalEffectiveTerms GetEffectiveRelationTerms(
+            ActiveRelationDetails pRelation, CentralizationEffects pEffects)
+        {
+            return pRelation == null
+                ? VassalFiscalRules.EffectiveTerms(100, 0, 0, pEffects)
+                : VassalFiscalRules.EffectiveTerms(pRelation.autonomy, pRelation.tribute_rate,
+                    pRelation.military_obligation, pEffects);
+        }
+
+        private static CentralPowerVassalInfo BuildCentralPowerVassalInfo(
+            ActiveRelationDetails pRelation, VassalEffectiveTerms pTerms, float pAnnualTax,
+            float pPolitical, int pGold)
+        {
+            Kingdom vassal = pRelation?.vassal;
+            return new CentralPowerVassalInfo
+            {
+                relation_id = pRelation?.relation_id ?? -1L,
+                kingdom_id = vassal?.id ?? -1L,
+                kingdom_name = vassal?.name ?? "",
+                kingdom_color = HistoryColors.FromKingdom(vassal),
+                color_id = vassal?.data?.color_id ?? -1,
+                banner_icon_id = vassal?.data?.banner_icon_id ?? 0,
+                banner_background_id = vassal?.data?.banner_background_id ?? 0,
+                banner_id = vassal?.getActorAsset()?.banner_id ?? "",
+                relation_type = pRelation?.relation_type ?? "",
+                base_autonomy = pRelation?.autonomy ?? 0,
+                base_tribute_rate = pRelation?.tribute_rate ?? 0,
+                base_military_obligation = pRelation?.military_obligation ?? 0,
+                effective_autonomy = pTerms.Autonomy,
+                effective_tribute_rate = pTerms.TributeRate,
+                effective_military_obligation = pTerms.MilitaryObligation,
+                annual_tax = pAnnualTax,
+                forecast_political_tribute = pPolitical,
+                forecast_gold_tribute = pGold
+            };
+        }
+
         private static ActiveRelationDetails ReadActiveRelationDetails(long pVassalId)
         {
             if (!Ready || pVassalId < 0) return null;
@@ -757,6 +941,8 @@ namespace AncientWarfare3.core.lineage
                 if (!reader.Read()) return null;
                 return new ActiveRelationDetails
                 {
+                    vassal_id = pVassalId,
+                    vassal = FindKingdom(pVassalId),
                     relation_type = reader.IsDBNull(0) ? "" : reader.GetString(0),
                     autonomy = reader.IsDBNull(1) ? 50 : (int)reader.GetInt64(1),
                     tribute_rate = reader.IsDBNull(2) ? 10 : (int)reader.GetInt64(2),
@@ -1092,14 +1278,72 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void CloseRelation(long pRelationId, string pReason, bool absorbed)
+        private static bool CloseRelation(long pRelationId, string pReason, bool absorbed)
         {
+            long suzerainId = ReadRelationSuzerainIfActive(pRelationId);
+            if (suzerainId < 0) return false;
             DB.UpdateValue(VassalRelationTableItem.GetTableName(),
                 new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("RELATION_ID", pRelationId) },
                 ColumnVal.Create("END_TIME", LineageService.CurTime()),
                 ColumnVal.Create("ACTIVE", 0),
                 ColumnVal.Create("ABSORBED", absorbed ? 1 : 0),
                 ColumnVal.Create("END_REASON", pReason ?? ""));
+            AdjustDirectVassalCount(FindKingdom(suzerainId), -1);
+            return true;
+        }
+
+        private static long ReadRelationSuzerainIfActive(long pRelationId)
+        {
+            if (!Ready || pRelationId < 0) return -1L;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = $"SELECT SUZERAIN_ID FROM {VassalRelationTableItem.GetTableName()} " +
+                                  "WHERE RELATION_ID=@r AND ACTIVE=1 AND END_TIME<0 LIMIT 1";
+                cmd.Parameters.AddWithValue("@r", pRelationId);
+                object value = cmd.ExecuteScalar();
+                return value == null || value == DBNull.Value ? -1L : Convert.ToInt64(value);
+            }
+            catch
+            {
+                return -1L;
+            }
+        }
+
+        private static void AdjustDirectVassalCount(Kingdom pSuzerain, int pDelta)
+        {
+            if (pSuzerain?.data == null || pDelta == 0) return;
+            int current = GetDirectVassalCount(pSuzerain);
+            pSuzerain.data.set(LineageKeys.VASSAL_DIRECT_COUNT, Math.Max(0, current + pDelta));
+        }
+
+        private static int GetCapitalGold(Kingdom pKingdom)
+        {
+            try
+            {
+                return Math.Max(0, pKingdom?.capital?.getResourcesAmount("gold") ?? 0);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static int TransferCapitalGold(Kingdom pSource, Kingdom pTarget, int pRequested)
+        {
+            if (pRequested <= 0 || pSource?.capital == null || pTarget?.capital == null) return 0;
+            try
+            {
+                int actual = Math.Min(pRequested, GetCapitalGold(pSource));
+                if (actual <= 0) return 0;
+                pSource.capital.takeResource("gold", actual);
+                pTarget.capital.addResourcesToRandomStockpile("gold", actual);
+                return actual;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         private static long GetRelationId(Kingdom pKingdom)

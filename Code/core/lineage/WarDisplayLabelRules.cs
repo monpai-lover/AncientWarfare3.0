@@ -90,6 +90,7 @@ namespace AncientWarfare3.core.lineage
                 case "mandate_collapse": return T("aw_hist_event_mandate_collapse", pLanguage);
                 case "centralization_reformed": return T("aw_hist_event_centralization_reformed", pLanguage);
                 case "centralization_chaos_downgrade": return T("aw_hist_event_centralization_chaos_downgrade", pLanguage);
+                case "vassal_tribute": return T("aw_hist_event_vassal_tribute", pLanguage);
                 case "city_economy_role": return T("aw_hist_event_city_economy_role", pLanguage);
                 case "city_economy_tax": return T("aw_hist_event_city_economy_tax", pLanguage);
                 case "royal_asylum_started": return T("aw_hist_event_royal_asylum_started", pLanguage);

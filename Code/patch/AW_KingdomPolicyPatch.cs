@@ -45,6 +45,10 @@ namespace AncientWarfare3.patch
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCityEconomyIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();
+            try { VassalService.SettleAnnualTribute(__instance); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomVassalTributeIndex, benchmark); }
+
+            benchmark = UpdateAgeBenchmark.Begin();
             try { WarTerritoryService.OnKingdomYear(__instance); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarTerritoryIndex, benchmark); }
 

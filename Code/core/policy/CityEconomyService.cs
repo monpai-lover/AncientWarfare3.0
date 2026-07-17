@@ -99,6 +99,16 @@ namespace AncientWarfare3.core.policy
             return GetContributionSums(pKingdom).tax_value;
         }
 
+        public static bool TryGetLatestCachedTaxContribution(Kingdom pKingdom, out float pTaxValue)
+        {
+            pTaxValue = 0f;
+            if (pKingdom?.data == null ||
+                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached))
+                return false;
+            pTaxValue = cached.tax_value;
+            return true;
+        }
+
         public static bool HasForeignLandBorder(Kingdom pKingdom)
         {
             return GetContributionSums(pKingdom).has_foreign_land_border;
