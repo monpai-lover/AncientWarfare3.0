@@ -16,7 +16,6 @@ namespace AncientWarfare3.core.lineage
         public int reform_ready_year;
         public int current_year;
         public string required_tech_id = "";
-        public float political_points;
         public bool can_reform;
         public string block_reason = "";
         public CentralizationEffects effects;
@@ -28,36 +27,33 @@ namespace AncientWarfare3.core.lineage
         {
             CentralizationSnapshot snapshot = BuildSnapshot(pKingdom);
             snapshot.can_reform = ValidateReform(pKingdom, snapshot,
-                out string reason);
+                snapshot.next_target_level, out string reason);
             snapshot.block_reason = reason;
             return snapshot;
         }
 
-        public static bool CanReform(Kingdom pKingdom, out string pReason)
+        public static bool CanStartMandateReform(Kingdom pKingdom,
+            int pTargetLevel, out string pReason)
         {
-            return ValidateReform(pKingdom, BuildSnapshot(pKingdom), out pReason);
+            return ValidateReform(pKingdom, BuildSnapshot(pKingdom),
+                pTargetLevel, out pReason);
         }
 
-        public static bool TryReform(Kingdom pKingdom, out string pReason)
+        public static bool TryCompleteMandateReform(Kingdom pKingdom,
+            int pTargetLevel, out string pReason)
         {
             CentralizationSnapshot snapshot = BuildSnapshot(pKingdom);
-            if (!ValidateReform(pKingdom, snapshot, out pReason)) return false;
-            if (!KingdomPolicyService.TrySpendPoliticalPoints(pKingdom,
-                    snapshot.reform_cost))
-            {
-                pReason = "insufficient_points";
+            if (!ValidateReform(pKingdom, snapshot, pTargetLevel, out pReason))
                 return false;
-            }
 
-            int target = snapshot.next_target_level;
             int readyYear = snapshot.current_year +
-                            CentralizationRules.ReformCooldownYears(target);
-            pKingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, target);
+                            CentralizationRules.ReformCooldownYears(pTargetLevel);
+            pKingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, pTargetLevel);
             pKingdom.data.set(LineageKeys.CENTRALIZATION_REFORM_READY_YEAR,
                 readyYear);
             HistoryWriter.RecordKingdom(pKingdom, "centralization_reformed",
                 HistoryLocalizationRules.Text("aw_hist_centralization_reformed_text") +
-                target);
+                pTargetLevel);
             pReason = "";
             return true;
         }
@@ -65,53 +61,29 @@ namespace AncientWarfare3.core.lineage
         public static void OnPhaseChanged(MandatePhase pPrevious,
             MandatePhase pNext, int pPhaseSinceYear)
         {
-            if (pNext != MandatePhase.Chaos || World.world?.kingdoms == null) return;
-            foreach (Kingdom kingdom in World.world.kingdoms)
-            {
-                if (!IsSupportedLivingKingdom(kingdom)) continue;
-                kingdom.data.get(LineageKeys.CENTRALIZATION_LAST_CHAOS_EPOCH,
-                    out int lastEpoch, int.MinValue);
-                if (!CentralizationRules.ShouldApplyChaosDowngrade(pNext,
-                        pPhaseSinceYear, lastEpoch)) continue;
+            if (pNext != MandatePhase.Chaos) return;
+            Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
+            if (!IsCurrentMandateKingdom(kingdom)) return;
+            kingdom.data.get(LineageKeys.CENTRALIZATION_LAST_CHAOS_EPOCH,
+                out int lastEpoch, int.MinValue);
+            if (!CentralizationRules.ShouldApplyChaosDowngrade(pNext,
+                    pPhaseSinceYear, lastEpoch)) return;
 
-                kingdom.data.get(LineageKeys.CENTRALIZATION_LEVEL,
-                    out int storedLevel, 0);
-                int oldLevel = CentralizationRules.NormalizeLevel(storedLevel);
-                int nextLevel = Math.Max(0, oldLevel - 1);
-                kingdom.data.set(LineageKeys.CENTRALIZATION_LAST_CHAOS_EPOCH,
-                    pPhaseSinceYear);
-                kingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, nextLevel);
-                kingdom.data.set(LineageKeys.CENTRALIZATION_REFORM_READY_YEAR,
-                    pPhaseSinceYear);
-                if (nextLevel == oldLevel) continue;
-
-                HistoryWriter.RecordKingdom(kingdom,
-                    "centralization_chaos_downgrade",
-                    HistoryLocalizationRules.Text(
-                        "aw_hist_centralization_chaos_downgrade_text") + nextLevel);
-            }
-        }
-
-        public static void OnKingdomYear(Kingdom pKingdom)
-        {
-            if (!IsSupportedLivingKingdom(pKingdom)) return;
-            pKingdom.data.get(LineageKeys.CENTRALIZATION_LEVEL,
+            kingdom.data.get(LineageKeys.CENTRALIZATION_LEVEL,
                 out int storedLevel, 0);
-            int normalized = CentralizationRules.NormalizeLevel(storedLevel);
-            if (normalized != storedLevel)
-                pKingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, normalized);
-            if (!KingdomPolicyService.IsPolicyAIEnabled(pKingdom)) return;
-            CentralizationSnapshot snapshot = BuildSnapshot(pKingdom);
-            bool baseAllowed = ValidateReform(pKingdom, snapshot, out _);
-            CityEconomyService.TryGetLatestCachedForeignLandBorder(
-                pKingdom, out bool foreignLandBorder);
-            int score = CentralizationRules.AiScore(
-                VassalService.GetDirectVassalCount(pKingdom), foreignLandBorder, snapshot.phase);
-            int roll = CentralizationRules.AiPercentage(
-                pKingdom.id, snapshot.current_year, snapshot.next_target_level);
-            if (!CentralizationRules.CanAiReform(baseAllowed, snapshot.political_points,
-                    snapshot.reform_cost, roll, score)) return;
-            TryReform(pKingdom, out _);
+            int oldLevel = CentralizationRules.NormalizeLevel(storedLevel);
+            int nextLevel = Math.Max(0, oldLevel - 1);
+            kingdom.data.set(LineageKeys.CENTRALIZATION_LAST_CHAOS_EPOCH,
+                pPhaseSinceYear);
+            kingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, nextLevel);
+            kingdom.data.set(LineageKeys.CENTRALIZATION_REFORM_READY_YEAR,
+                pPhaseSinceYear);
+            if (nextLevel == oldLevel) return;
+
+            HistoryWriter.RecordKingdom(kingdom,
+                "centralization_chaos_downgrade",
+                HistoryLocalizationRules.Text(
+                    "aw_hist_centralization_chaos_downgrade_text") + nextLevel);
         }
 
         private static CentralizationSnapshot BuildSnapshot(Kingdom pKingdom)
@@ -122,10 +94,16 @@ namespace AncientWarfare3.core.lineage
                 phase = MandatePhaseService.CurrentPhase
             };
             snapshot.phase_cap = MandatePhaseRules.MaxCentralization(snapshot.phase);
-            snapshot.supported = IsSupportedLivingKingdom(pKingdom);
+            snapshot.supported = IsCurrentMandateKingdom(pKingdom);
             if (pKingdom?.data == null)
             {
                 snapshot.block_reason = "invalid_kingdom";
+                snapshot.effects = CentralizationRules.Effects(0);
+                return snapshot;
+            }
+            if (!snapshot.supported)
+            {
+                snapshot.phase_cap = 0;
                 snapshot.effects = CentralizationRules.Effects(0);
                 return snapshot;
             }
@@ -136,7 +114,7 @@ namespace AncientWarfare3.core.lineage
                 out snapshot.reform_ready_year, 0);
             snapshot.nominal_level = CentralizationRules.NormalizeLevel(storedLevel);
             snapshot.effective_level = CentralizationRules.EffectiveLevel(
-                snapshot.nominal_level, snapshot.phase);
+                snapshot.nominal_level, snapshot.phase, snapshot.supported);
             snapshot.next_target_level = snapshot.nominal_level <
                                          CentralizationRules.MaximumLevel
                 ? snapshot.nominal_level + 1
@@ -145,13 +123,12 @@ namespace AncientWarfare3.core.lineage
                 snapshot.next_target_level);
             snapshot.required_tech_id = CentralizationRules.RequiredTechId(
                 snapshot.next_target_level);
-            snapshot.political_points = KingdomPolicyService.GetPoliticalPoints(pKingdom);
             snapshot.effects = CentralizationRules.Effects(snapshot.effective_level);
             return snapshot;
         }
 
         private static bool ValidateReform(Kingdom pKingdom,
-            CentralizationSnapshot pSnapshot, out string pReason)
+            CentralizationSnapshot pSnapshot, int pTargetLevel, out string pReason)
         {
             if (pKingdom?.data == null || pKingdom.isRekt())
             {
@@ -160,7 +137,13 @@ namespace AncientWarfare3.core.lineage
             }
             if (!pSnapshot.supported)
             {
-                pReason = "unsupported_kingdom";
+                pReason = "not_mandate";
+                return false;
+            }
+            if (pTargetLevel != pSnapshot.next_target_level ||
+                pTargetLevel < 1 || pTargetLevel > CentralizationRules.MaximumLevel)
+            {
+                pReason = "invalid_target";
                 return false;
             }
             if (pSnapshot.nominal_level >= CentralizationRules.MaximumLevel)
@@ -190,21 +173,17 @@ namespace AncientWarfare3.core.lineage
                 pReason = "requires_tech";
                 return false;
             }
-            if (pSnapshot.political_points + 0.001f < pSnapshot.reform_cost)
-            {
-                pReason = "insufficient_points";
-                return false;
-            }
-
             pReason = "";
             return true;
         }
 
-        private static bool IsSupportedLivingKingdom(Kingdom pKingdom)
+        private static bool IsCurrentMandateKingdom(Kingdom pKingdom)
         {
-            return pKingdom?.data != null && !pKingdom.isRekt() &&
-                   pKingdom.isCiv() && !pKingdom.isNeutral() &&
-                   XiaizationService.CanUsePolicySystem(pKingdom);
+            bool valid = pKingdom?.data != null && !pKingdom.isRekt() &&
+                         pKingdom.isCiv() && !pKingdom.isNeutral();
+            Kingdom mandate = valid ? MandateService.GetCurrentMandateKingdom() : null;
+            return CentralizationRules.CanParticipate(valid,
+                mandate?.id == pKingdom?.id);
         }
 
         private static bool IsAtWar(Kingdom pKingdom)

@@ -5,6 +5,9 @@ aw_central_tab_rites,礼制,Rites,禮制
 aw_central_tab_vassals,藩属,Vassals,藩屬
 aw_central_reform,整饬中央,Central Reform,整飭中央
 aw_central_reform_success,中央改革完成,Central reform completed,中央改革完成
+aw_central_reform_queued,已列入天朝决议,Central reform queued as a Mandate decision,已列入天朝決議
+aw_central_mandate_progress,天朝决议进度,Mandate decision progress,天朝決議進度
+aw_central_mandate_only,仅当前天命国可以使用集权与中央权力,Only the current Mandate realm can use central authority,僅當前天命國可以使用集權與中央權力
 aw_central_unavailable,当前国家不可用,Unavailable for this realm,當前國家不可用
 aw_central_nominal,名义集权,Nominal centralization,名義集權
 aw_central_phase_cap,治乱阶段上限,Phase cap,治亂階段上限
@@ -21,6 +24,8 @@ aw_central_tribute,贡赋,Tribute,貢賦
 aw_central_autonomy,自治,Autonomy,自治
 aw_central_obligation,军事义务,Military obligation,軍事義務
 aw_central_reason_invalid_kingdom,国家无效,Invalid realm,國家無效
+aw_central_reason_not_mandate,当前国家不是天命国,The realm does not hold the Mandate,當前國家不是天命國
+aw_central_reason_invalid_target,集权改革等级无效,Invalid centralization reform level,集權改革等級無效
 aw_central_reason_unsupported_kingdom,当前国家不支持国策,Policy system unsupported,當前國家不支援國策
 aw_central_reason_maximum_level,已经达到最高集权,Maximum centralization reached,已經達到最高集權
 aw_central_reason_phase_cap,当前治乱阶段限制改革,Current phase blocks reform,當前治亂階段限制改革
@@ -29,6 +34,12 @@ aw_central_reason_cooldown,改革冷却尚未结束,Reform cooldown active,改�
 aw_central_reason_requires_tech,缺少所需科技,Required technology missing,缺少所需科技
 aw_central_reason_insufficient_points,政治点不足,Insufficient political points,政治點不足
 aw_central_reason_unknown,目前不能改革,Reform unavailable,目前不能改革
+aw_mandate_decision_centralize_1,整饬郡县,Consolidate the Commanderies,整飭郡縣
+aw_mandate_decision_centralize_1_desc,建立初级中央行政，将集权提升至一级。,Establish basic central administration and raise centralization to level one.,建立初級中央行政，將集權提升至一級。
+aw_mandate_decision_centralize_2,完备官制,Complete the Imperial Administration,完備官制
+aw_mandate_decision_centralize_2_desc,扩充朝廷官制与地方控制，将集权提升至二级。,Expand the imperial bureaucracy and provincial control to raise centralization to level two.,擴充朝廷官制與地方控制，將集權提升至二級。
+aw_mandate_decision_centralize_3,总揽朝纲,Concentrate Imperial Authority,總攬朝綱
+aw_mandate_decision_centralize_3_desc,完成天朝中央集权，将集权提升至三级。,Complete imperial centralization and raise centralization to level three.,完成天朝中央集權，將集權提升至三級。
 aw_hist_event_vassal_tribute,岁贡入朝,Annual Vassal Tribute,歲貢入朝
 aw_hist_vassal_tribute_text,收取直属附庸岁贡（政治点 / 黄金）：, received annual direct-vassal tribute (political points / gold): ,收取直屬附庸歲貢（政治點 / 黃金）：
 aw_hist_event_centralization_reformed,整饬中央,Central Reform,整飭中央

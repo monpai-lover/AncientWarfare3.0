@@ -47,9 +47,6 @@ namespace AncientWarfare3.ui.windows
         private Text _courtText;
         private Image _courtIcon;
         private TipButton _courtTip;
-        private Text _centralPowerText;
-        private Image _centralPowerIcon;
-        private TipButton _centralPowerTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -119,10 +116,6 @@ namespace AncientWarfare3.ui.windows
             middleBar.AddChild(BuildPolicyIconButton("CourtStatus",
                 new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
                 "ui/icons/iconDiplomacy", out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow));
-            middleBar.AddChild(BuildPolicyIconButton("CentralPowerStatus",
-                new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
-                "ui/icons/iconKingdomList", out _centralPowerText, out _centralPowerIcon,
-                out _centralPowerTip, OpenCentralPowerWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
@@ -217,20 +210,6 @@ namespace AncientWarfare3.ui.windows
             else
             {
                 CachePolicyBox(court, out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow);
-            }
-            Transform centralPower = middle.transform.FindRecursive("CentralPowerStatus");
-            if (centralPower == null && middleBar != null)
-            {
-                GameObject obj = BuildPolicyIconButton("CentralPowerStatus",
-                    new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
-                    "ui/icons/iconKingdomList", out _centralPowerText, out _centralPowerIcon,
-                    out _centralPowerTip, OpenCentralPowerWindow);
-                obj.transform.SetParent(middleBar, false);
-            }
-            else if (centralPower != null)
-            {
-                CachePolicyBox(centralPower, out _centralPowerText, out _centralPowerIcon,
-                    out _centralPowerTip, OpenCentralPowerWindow);
             }
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
@@ -480,13 +459,6 @@ namespace AncientWarfare3.ui.windows
             CourtWindow.Open(kingdom.id);
         }
 
-        private void OpenCentralPowerWindow()
-        {
-            Kingdom kingdom = _window != null ? _window.meta_object : null;
-            if (kingdom == null || kingdom.isRekt()) return;
-            CentralPowerWindow.Open(kingdom.id);
-        }
-
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
 
         private void RefreshPolicyBoxes(Kingdom pKingdom)
@@ -609,19 +581,6 @@ namespace AncientWarfare3.ui.windows
             }
 
             SetPolicyTip(_courtTip, title, desc);
-        }
-
-        private void RefreshCentralPowerButton(Kingdom pKingdom)
-        {
-            if (pKingdom?.data == null) return;
-            CentralizationSnapshot snapshot = CentralizationService.ReadSnapshot(pKingdom);
-            string title = AW_L10n.Text("aw_central_power_entry", "Central Power") +
-                           " · " + snapshot.effective_level + "/3";
-            if (_centralPowerText != null) _centralPowerText.text = title;
-            SetPolicyIcon(_centralPowerIcon, "ui/icons/iconKingdomList");
-            SetPolicyTip(_centralPowerTip, title,
-                AW_L10n.Text("aw_central_nominal", "Nominal") + ": " + snapshot.nominal_level +
-                "\n" + AW_L10n.Text("aw_central_phase_cap", "Phase cap") + ": " + snapshot.phase_cap);
         }
 
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
@@ -768,7 +727,6 @@ namespace AncientWarfare3.ui.windows
             // 国王列(头像 + "国王"标签):有王整列显示,无王整列隐藏。
             RefreshPolicyBoxes(kingdom);
             RefreshCourtButton(kingdom);
-            RefreshCentralPowerButton(kingdom);
             RefreshVassalButton(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {

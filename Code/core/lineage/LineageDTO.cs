@@ -190,6 +190,7 @@ namespace AncientWarfare3.core.lineage
         public int    dynasty_index = -1;
         public long   action_actor_id = -1;
         public string action_kind = "";
+        public string filter_key = "";
         public string target_type = "";
         public long   target_id = -1;
         public string tooltip_title = "";

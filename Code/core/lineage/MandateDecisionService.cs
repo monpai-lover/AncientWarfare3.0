@@ -14,12 +14,46 @@ namespace AncientWarfare3.core.lineage
         public string IconPath;
         public float Cost;
         public MandateSacrificeLevel? SacrificeLevel;
+        public int CentralizationTargetLevel;
     }
 
     internal static class MandateDecisionService
     {
         private static readonly MandateDecisionDef[] _all =
         {
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_centralize_1",
+                NameKey = "aw_mandate_decision_centralize_1",
+                DescKey = "aw_mandate_decision_centralize_1_desc",
+                FallbackName = "Establish Central Administration",
+                FallbackDesc = "Build the first level of central administration for the Mandate realm.",
+                IconPath = "ui/icons/iconKingdomList",
+                Cost = 45f,
+                CentralizationTargetLevel = 1
+            },
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_centralize_2",
+                NameKey = "aw_mandate_decision_centralize_2",
+                DescKey = "aw_mandate_decision_centralize_2_desc",
+                FallbackName = "Consolidate Central Authority",
+                FallbackDesc = "Advance the Mandate realm to the second level of central administration.",
+                IconPath = "ui/icons/iconKingdomList",
+                Cost = 75f,
+                CentralizationTargetLevel = 2
+            },
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_centralize_3",
+                NameKey = "aw_mandate_decision_centralize_3",
+                DescKey = "aw_mandate_decision_centralize_3_desc",
+                FallbackName = "Perfect Central Authority",
+                FallbackDesc = "Complete the highest level of central administration for the Mandate realm.",
+                IconPath = "ui/icons/iconKingdomList",
+                Cost = 110f,
+                CentralizationTargetLevel = 3
+            },
             new MandateDecisionDef
             {
                 Id = "aw_mandate_decision_border_defense",
@@ -152,6 +186,9 @@ namespace AncientWarfare3.core.lineage
             if (!pKingdom.hasKing()) return false;
             if (pDef.SacrificeLevel.HasValue)
                 return MandateSacrificeService.CanExecute(pKingdom);
+            if (pDef.CentralizationTargetLevel > 0)
+                return CentralizationService.CanStartMandateReform(pKingdom,
+                    pDef.CentralizationTargetLevel, out _);
 
             switch (pDef.Id)
             {
@@ -244,6 +281,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pDef.SacrificeLevel.HasValue)
                 return MandateSacrificeService.Execute(pKingdom, pDef.SacrificeLevel.Value);
+            if (pDef.CentralizationTargetLevel > 0)
+                return CentralizationService.TryCompleteMandateReform(pKingdom,
+                    pDef.CentralizationTargetLevel, out _);
 
             switch (pDef.Id)
             {

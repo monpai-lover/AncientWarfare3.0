@@ -32,6 +32,7 @@ namespace AncientWarfare3.ui.items
         private int  _dynastyIndex = -1;
         private long _actionActorId = -1;
         private string _actionKind = "";
+        private string _filterKey = "";
         private string _targetType = "";
         private long _targetId = -1;
         private bool _isHeader;
@@ -49,6 +50,7 @@ namespace AncientWarfare3.ui.items
             _dynastyIndex = pObject.dynasty_index;
             _actionActorId = pObject.action_actor_id;
             _actionKind = pObject.action_kind ?? "";
+            _filterKey = pObject.filter_key ?? "";
             _targetType = pObject.target_type ?? "";
             _targetId = pObject.target_id;
             SetTip(pObject.tooltip_title, pObject.tooltip_desc);
@@ -201,7 +203,13 @@ namespace AncientWarfare3.ui.items
 
         private void OnClick()
         {
-            if (_isFilter) { OnFilterToggle?.Invoke(ExtractClickedCategory()); return; }
+            if (_isFilter)
+            {
+                OnFilterToggle?.Invoke(string.IsNullOrEmpty(_filterKey)
+                    ? ExtractClickedCategory()
+                    : _filterKey);
+                return;
+            }
             if (_isAction)
             {
                 if (_actionKind == "family_tree") OnActorFamilyTree?.Invoke(_actionActorId);

@@ -44,6 +44,18 @@ namespace AncientWarfare3.core.lineage
                 MandatePhaseRules.MaxCentralization(pPhase));
         }
 
+        public static int EffectiveLevel(int pNominalLevel, MandatePhase pPhase,
+            bool pCanParticipate)
+        {
+            return pCanParticipate ? EffectiveLevel(pNominalLevel, pPhase) : 0;
+        }
+
+        public static bool CanParticipate(bool pValidCivilizedKingdom,
+            bool pIsCurrentMandateKingdom)
+        {
+            return pValidCivilizedKingdom && pIsCurrentMandateKingdom;
+        }
+
         public static int ReformCost(int pTargetLevel)
         {
             return pTargetLevel switch
@@ -53,6 +65,29 @@ namespace AncientWarfare3.core.lineage
                 3 => 110,
                 _ => 0
             };
+        }
+
+        public static string DecisionIdForTargetLevel(int pTargetLevel)
+        {
+            return pTargetLevel >= 1 && pTargetLevel <= MaximumLevel
+                ? "aw_mandate_decision_centralize_" + pTargetLevel
+                : "";
+        }
+
+        public static int TargetLevelForDecisionId(string pDecisionId)
+        {
+            const string prefix = "aw_mandate_decision_centralize_";
+            if (string.IsNullOrEmpty(pDecisionId) ||
+                !pDecisionId.StartsWith(prefix, StringComparison.Ordinal))
+                return 0;
+            return int.TryParse(pDecisionId.Substring(prefix.Length), out int level)
+                ? NormalizeDecisionTarget(level)
+                : 0;
+        }
+
+        private static int NormalizeDecisionTarget(int pLevel)
+        {
+            return pLevel >= 1 && pLevel <= MaximumLevel ? pLevel : 0;
         }
 
         public static int ReformCooldownYears(int pTargetLevel)

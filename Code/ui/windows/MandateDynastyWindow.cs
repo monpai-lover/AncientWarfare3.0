@@ -47,11 +47,14 @@ namespace AncientWarfare3.ui.windows
                 else Instance._expandedReigns.Add(idx);
                 Instance.Refresh();
             };
-            HistoryListItem.OnFilterToggle = _ =>
+            HistoryListItem.OnFilterToggle = key =>
             {
                 Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
                 if (kingdom?.data == null) return;
-                MandateDecisionWindow.Open(kingdom.id);
+                if (key == "central_power")
+                    CentralPowerWindow.Open(kingdom.id);
+                else
+                    MandateDecisionWindow.Open(kingdom.id);
             };
             HistoryListItem.OnActorBiography = actorId =>
             {
@@ -73,7 +76,12 @@ namespace AncientWarfare3.ui.windows
             MandatePeriodView currentPeriod = FindPeriod(periods, report.period_id);
 
             AddStatusRows(report, currentPeriod);
-            if (report.active) AddDecisionRow(MandateService.GetCurrentMandateKingdom());
+            if (report.active)
+            {
+                Kingdom mandate = MandateService.GetCurrentMandateKingdom();
+                AddCentralPowerRow(mandate);
+                AddDecisionRow(mandate);
+            }
             else AddPlain(AW_L10n.Text("aw_mandate_none_desc",
                 "\u6700\u5F3A\u72EC\u7ACB\u738B\u56FD\u3001\u5386\u53F2\u4EBA\u7269\u738B\u56FD\u6216\u63A7\u5236\u65E7\u5929\u547D\u6CD5\u7406\u6838\u5FC3\u7684\u56FD\u5BB6\u53EF\u4EE5\u53D7\u547D\u79F0\u5E1D\u3002"));
 
@@ -134,9 +142,30 @@ namespace AncientWarfare3.ui.windows
             {
                 width = ROW_WIDTH,
                 is_filter = true,
+                filter_key = "mandate_decisions",
                 text = title + ": " + name + "  " + Mathf.FloorToInt(fraction * 100f) + "%",
                 tooltip_title = title,
                 tooltip_desc = BuildDecisionTooltip(pKingdom, def)
+            });
+        }
+
+        private void AddCentralPowerRow(Kingdom pKingdom)
+        {
+            CentralizationSnapshot snapshot = CentralizationService.ReadSnapshot(pKingdom);
+            string title = AW_L10n.Text("aw_central_power_entry", "Central Power");
+            AddItemToList(new HistoryRow
+            {
+                width = ROW_WIDTH,
+                is_filter = true,
+                filter_key = "central_power",
+                text = title + " · " + snapshot.effective_level + "/3",
+                tooltip_title = title,
+                tooltip_desc = AW_L10n.Text("aw_central_mandate_only",
+                    "Only the Mandate realm can use central authority") +
+                               "\n" + AW_L10n.Text("aw_central_nominal", "Nominal") +
+                               ": " + snapshot.nominal_level +
+                               "\n" + AW_L10n.Text("aw_central_phase_cap", "Phase cap") +
+                               ": " + snapshot.phase_cap
             });
         }
 

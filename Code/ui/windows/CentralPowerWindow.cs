@@ -26,7 +26,9 @@ namespace AncientWarfare3.ui.windows
 
         public static void Open(long pKingdomId)
         {
-            _kingdomId = pKingdomId;
+            Kingdom mandate = MandateService.GetCurrentMandateKingdom();
+            if (mandate?.data == null || mandate.id != pKingdomId) return;
+            _kingdomId = mandate.id;
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.CENTRAL_POWER);
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.CENTRAL_POWER,
                 () => Instance?.Refresh());
@@ -72,7 +74,8 @@ namespace AncientWarfare3.ui.windows
         {
             EnsureUi();
             ApplyLayout();
-            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
+            _kingdomId = kingdom?.id ?? -1L;
             foreach (CentralPowerVassalRowView row in _rowPool) row.gameObject.SetActive(false);
             _rows.gameObject.SetActive(_tab == 2);
             _reform.gameObject.SetActive(_tab == 0);
@@ -85,22 +88,26 @@ namespace AncientWarfare3.ui.windows
         private void RenderCentral(Kingdom pKingdom)
         {
             CentralizationSnapshot snapshot = CentralizationService.ReadSnapshot(pKingdom);
+            string decisionId = CentralizationRules.DecisionIdForTargetLevel(
+                snapshot.next_target_level);
+            bool queued = MandateDecisionService.GetCurrent(pKingdom) == decisionId;
+            float progress = queued ? MandateDecisionService.GetProgress(pKingdom) : 0f;
             _status.text = pKingdom.name + "  |  " + snapshot.effective_level + "/3";
             _body.text = AW_L10n.Text("aw_central_nominal", "Nominal") + ": " + snapshot.nominal_level +
                          "\n" + AW_L10n.Text("aw_central_phase_cap", "Phase cap") + ": " + snapshot.phase_cap +
                          "\n" + AW_L10n.Text("aw_central_tax_effect", "Tax") + ": x" + snapshot.effects.TaxMultiplier.ToString("0.00") +
                          "\n" + AW_L10n.Text("aw_central_manpower_effect", "Manpower") + ": x" + snapshot.effects.ManpowerMultiplier.ToString("0.00") +
                          "\n" + AW_L10n.Text("aw_central_unrest_effect", "Unrest reduction") + ": " + snapshot.effects.UnrestReduction +
-                         "\n" + AW_L10n.Text("aw_central_reform_cost", "Reform cost") + ": " + snapshot.reform_cost +
-                         "\n" + AW_L10n.Text("aw_policy_points", "Political points") + ": " + snapshot.political_points.ToString("0.0") +
+                         "\n" + AW_L10n.Text("aw_central_mandate_progress", "Mandate decision progress") + ": " +
+                         progress.ToString("0.0") + "/" + snapshot.reform_cost +
                          (snapshot.can_reform ? "" : "\n" + Reason(snapshot.block_reason));
-            _reform.interactable = snapshot.can_reform;
+            _reform.interactable = snapshot.can_reform && !queued;
             string tooltip = AW_L10n.Text("aw_central_reform_cost", "Reform cost") + ": " + snapshot.reform_cost +
                              "\n" + AW_L10n.Text("aw_central_required_tech", "Required technology") + ": " +
                              (string.IsNullOrEmpty(snapshot.required_tech_id) ? "-" : snapshot.required_tech_id) +
                              "\n" + AW_L10n.Text("aw_central_ready_year", "Ready year") + ": " + snapshot.reform_ready_year +
                              "\n" + AW_L10n.Text("aw_central_phase_cap", "Phase cap") + ": " + snapshot.phase_cap +
-                             "\n" + AW_L10n.Text("aw_policy_points", "Political points") + ": " + snapshot.political_points.ToString("0.0");
+                             "\n" + AW_L10n.Text("aw_central_mandate_only", "Only the Mandate realm can centralize");
             _reformTip.hoverAction = () => Tooltip.show(_reformTip.gameObject, AW_RawTooltip.TYPE,
                 new TooltipData { tip_name = AW_L10n.Text("aw_central_reform", "Reform"), tip_description = tooltip });
         }
@@ -133,9 +140,15 @@ namespace AncientWarfare3.ui.windows
 
         private void Reform()
         {
-            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
-            CentralizationService.TryReform(kingdom, out string reason);
-            _status.text = string.IsNullOrEmpty(reason) ? AW_L10n.Text("aw_central_reform_success", "Reform completed") : Reason(reason);
+            Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
+            CentralizationSnapshot snapshot = CentralizationService.ReadSnapshot(kingdom);
+            string decisionId = CentralizationRules.DecisionIdForTargetLevel(
+                snapshot.next_target_level);
+            bool queued = !string.IsNullOrEmpty(decisionId) &&
+                          MandateDecisionService.ForceStart(kingdom, decisionId);
+            _status.text = queued
+                ? AW_L10n.Text("aw_central_reform_queued", "Central reform queued as a Mandate decision")
+                : Reason(snapshot.block_reason);
             Refresh();
         }
 
