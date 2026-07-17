@@ -6,6 +6,7 @@ namespace AncientWarfare3.content
     {
         public static void Init()
         {
+            RitualDiplomacyOpinionService.RegisterAssets();
             AddWarNameTemplate("war_reclaim", "收复战争,收复旧土之战");
             AddWarNameTemplate("war_restoration", "复国战争,恢复旧统之战");
             AddWarNameTemplate("war_tributary", "叩关战争,入贡之战");

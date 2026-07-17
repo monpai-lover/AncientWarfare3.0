@@ -56,6 +56,12 @@ namespace AncientWarfare3.core.lineage
         public const string VASSAL_TRIBUTE_LAST_YEAR = "aw_vassal_tribute_last_year";
         public const string VASSAL_DIRECT_COUNT = "aw_vassal_direct_count";
         public const string TRIBUTARY_DIRECT_COUNT = "aw_tributary_direct_count";
+        public const string DIPLOMACY_SNAPSHOT_LAST_YEAR = "aw_diplomacy_snapshot_last_year";
+        public const string DIPLOMACY_ROOT_SUZERAIN_ID = "aw_diplomacy_root_suzerain_id";
+        public const string DIPLOMACY_XIA_LEVEL = "aw_diplomacy_xia_level";
+        public const string DIPLOMACY_RITES_SCORE = "aw_diplomacy_rites_score";
+        public const string DIPLOMACY_TITLE_RANK = "aw_diplomacy_title_rank";
+        public const string DIPLOMACY_IS_MANDATE = "aw_diplomacy_is_mandate";
         public const string VASSAL_OBLIGATION_DECISIONS = "aw_vassal_obligation_decisions";
         public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
         public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";

@@ -61,7 +61,11 @@ namespace AncientWarfare3.patch
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomWarTerritoryIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();
-            try { MandateService.OnKingdomYear(__instance); }
+            try
+            {
+                MandateService.OnKingdomYear(__instance);
+                RitualDiplomacyOpinionService.OnKingdomYear(__instance);
+            }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomMandateIndex, benchmark); }
 
             benchmark = UpdateAgeBenchmark.Begin();

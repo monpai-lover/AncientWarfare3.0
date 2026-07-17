@@ -111,6 +111,11 @@ aw_vassal_contract_inner,内藩,Inner Vassal,內藩
 aw_vassal_contract_outer,外藩,Outer Vassal,外藩
 aw_vassal_contract_jimi,羁縻,Jimi Subject,羈縻
 aw_vassal_contract_tributary,朝贡国,Tributary,朝貢國
+opinion_aw_zhengshuo,奉行同一正朔,Observes the same calendar,奉行同一正朔
+opinion_aw_rites,礼制相合,Ritual institutions align,禮制相合
+opinion_aw_rites_negative,礼制疏异,Ritual institutions diverge,禮制疏異
+opinion_aw_usurpation,名位相称,Legitimate imperial dignity,名位相稱
+opinion_aw_usurpation_negative,僭越帝号,Usurped imperial title,僭越帝號
 aw_click_to_inspect_kingdom,点击跳转该国,Click to inspect this kingdom,點擊跳轉該國
 aw_city_history_entry,城市历史,City History,城市歷史
 aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史
