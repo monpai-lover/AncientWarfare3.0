@@ -443,7 +443,11 @@ namespace AncientWarfare3.core.lineage
             {
                 BeginIndependenceSuspension(pWar, attacker, defender);
                 LeaveSuzerainWarsForIndependence(pWar, attacker, defender);
-                JoinLoyalVassalsToDefenders(pWar, defender, attacker);
+                Dictionary<long, List<ActiveRelationDetails>> independenceRelations =
+                    BuildRelationAdjacency(ReadAllActiveRelations());
+                JoinObligatedNetwork(pWar, GetRootSuzerain(defender) ?? defender,
+                    defender, attacker, attackers: false, independenceRelations,
+                    pAllowNewDecisions: true);
                 return;
             }
 
@@ -451,8 +455,12 @@ namespace AncientWarfare3.core.lineage
             Kingdom defenderRoot = GetRootSuzerain(defender);
             if (attackerRoot != null && defenderRoot != null && attackerRoot == defenderRoot) return;
 
-            JoinNetwork(pWar, attackerRoot ?? attacker, attacker, defender, attackers: true);
-            JoinNetwork(pWar, defenderRoot ?? defender, defender, attacker, attackers: false);
+            Dictionary<long, List<ActiveRelationDetails>> relations =
+                BuildRelationAdjacency(ReadAllActiveRelations());
+            JoinObligatedNetwork(pWar, attackerRoot ?? attacker, attacker, defender,
+                attackers: true, relations, pAllowNewDecisions: true);
+            JoinObligatedNetwork(pWar, defenderRoot ?? defender, defender, attacker,
+                attackers: false, relations, pAllowNewDecisions: true);
         }
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
@@ -487,11 +495,11 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral()) return;
             try
             {
-                List<Kingdom> vassals = GetVassals(pKingdom, pRecursive: true);
-                if (vassals.Count == 0) return;
-
+                if (GetRootSuzerain(pKingdom) != pKingdom || GetDirectVassalCount(pKingdom) <= 0) return;
+                Dictionary<long, List<ActiveRelationDetails>> relations =
+                    BuildRelationAdjacency(ReadAllActiveRelations());
                 foreach (War war in pKingdom.getWars())
-                    PullVassalsIntoSuzerainWar(war, pKingdom, vassals);
+                    RepairObligatedNetwork(war, pKingdom, relations);
             }
             catch (Exception e)
             {
@@ -889,6 +897,65 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        private static List<ActiveRelationDetails> ReadAllActiveRelations()
+        {
+            var result = new List<ActiveRelationDetails>();
+            if (!Ready) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT RELATION_ID,VASSAL_ID,RELATION_TYPE,AUTONOMY,TRIBUTE_RATE," +
+                    $"MILITARY_OBLIGATION,START_TIME,SUZERAIN_ID,SUZERAIN_NAME,SUZERAIN_COLOR " +
+                    $"FROM {VassalRelationTableItem.GetTableName()} " +
+                    "WHERE ACTIVE=1 AND END_TIME<0 ORDER BY SUZERAIN_ID,START_TIME";
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long vassalId = reader.IsDBNull(1) ? -1L : reader.GetInt64(1);
+                    Kingdom vassal = FindKingdom(vassalId);
+                    if (vassal?.data == null || vassal.isRekt()) continue;
+                    result.Add(new ActiveRelationDetails
+                    {
+                        relation_id = reader.IsDBNull(0) ? -1L : reader.GetInt64(0),
+                        vassal_id = vassalId,
+                        vassal = vassal,
+                        relation_type = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                        autonomy = reader.IsDBNull(3) ? 50 : (int)reader.GetInt64(3),
+                        tribute_rate = reader.IsDBNull(4) ? 10 : (int)reader.GetInt64(4),
+                        military_obligation = reader.IsDBNull(5) ? 50 : (int)reader.GetInt64(5),
+                        start_time = reader.IsDBNull(6) ? -1 : reader.GetDouble(6),
+                        suzerain_id = reader.IsDBNull(7) ? -1L : reader.GetInt64(7),
+                        suzerain_name = reader.IsDBNull(8) ? "" : reader.GetString(8),
+                        suzerain_color = reader.IsDBNull(9) ? "" : reader.GetString(9)
+                    });
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("VassalService.ReadAllActiveRelations: " + e.Message);
+            }
+            return result;
+        }
+
+        private static Dictionary<long, List<ActiveRelationDetails>> BuildRelationAdjacency(
+            List<ActiveRelationDetails> pRelations)
+        {
+            var result = new Dictionary<long, List<ActiveRelationDetails>>();
+            if (pRelations == null) return result;
+            foreach (ActiveRelationDetails relation in pRelations)
+            {
+                if (relation == null || relation.suzerain_id < 0 || relation.vassal?.data == null) continue;
+                if (!result.TryGetValue(relation.suzerain_id, out List<ActiveRelationDetails> children))
+                {
+                    children = new List<ActiveRelationDetails>();
+                    result[relation.suzerain_id] = children;
+                }
+                children.Add(relation);
+            }
+            return result;
+        }
+
         private static VassalEffectiveTerms GetEffectiveRelationTerms(
             ActiveRelationDetails pRelation, CentralizationEffects pEffects)
         {
@@ -963,60 +1030,105 @@ namespace AncientWarfare3.core.lineage
             catch { return -1; }
         }
 
-        private static void JoinLoyalVassalsToDefenders(War pWar, Kingdom pSuzerain, Kingdom pRebel)
+        private static void JoinObligatedNetwork(War pWar, Kingdom pRoot, Kingdom pMain,
+            Kingdom pEnemy, bool attackers,
+            Dictionary<long, List<ActiveRelationDetails>> pRelations,
+            bool pAllowNewDecisions)
         {
-            foreach (Kingdom vassal in GetVassals(pSuzerain))
-            {
-                if (vassal == null || vassal == pRebel || vassal.isRekt() || vassal.hasEnemies()) continue;
-                if (Opinion(vassal, pSuzerain) < -50) continue;
-                JoinSide(pWar, vassal, attackers: false);
-            }
-        }
-
-        private static void JoinNetwork(War pWar, Kingdom pRoot, Kingdom pMain, Kingdom pEnemy, bool attackers)
-        {
-            if (pRoot?.data == null) return;
+            if (pWar?.data == null || pWar.hasEnded() || pRoot?.data == null || pRelations == null) return;
             if (pRoot != pMain && pRoot != pEnemy) JoinSide(pWar, pRoot, attackers);
-            foreach (Kingdom vassal in GetVassals(pRoot, pRecursive: true))
+
+            pWar.data.get(LineageKeys.VASSAL_OBLIGATION_DECISIONS,
+                out string decisions, "");
+            string initialDecisions = decisions;
+            var effectsBySuzerain = new Dictionary<long, CentralizationEffects>();
+            var queue = new Queue<Kingdom>();
+            var visited = new HashSet<long>();
+            if (IsOnWarSide(pWar, pRoot, attackers)) queue.Enqueue(pRoot);
+            if (pMain?.data != null && pMain != pRoot && IsOnWarSide(pWar, pMain, attackers))
+                queue.Enqueue(pMain);
+
+            while (queue.Count > 0)
             {
-                if (vassal == pMain || vassal == pEnemy || vassal.isRekt()) continue;
-                JoinSide(pWar, vassal, attackers);
+                Kingdom suzerain = queue.Dequeue();
+                if (suzerain?.data == null || !visited.Add(suzerain.id)) continue;
+                if (!pRelations.TryGetValue(suzerain.id,
+                        out List<ActiveRelationDetails> children)) continue;
+
+                if (!effectsBySuzerain.TryGetValue(suzerain.id,
+                        out CentralizationEffects effects))
+                {
+                    effects = CentralizationService.ReadSnapshot(suzerain).effects;
+                    effectsBySuzerain[suzerain.id] = effects;
+                }
+
+                foreach (ActiveRelationDetails relation in children)
+                {
+                    Kingdom vassal = relation?.vassal;
+                    if (vassal?.data == null || vassal.isRekt() || vassal == pEnemy) continue;
+                    bool helping = IsOnWarSide(pWar, vassal, attackers);
+                    bool opposing = IsOnWarSide(pWar, vassal, !attackers);
+                    bool suspended = HasActiveIndependenceSuspension(vassal, suzerain);
+                    if (suspended)
+                    {
+                        if (helping) LeaveWarPeacefully(pWar, vassal);
+                        continue;
+                    }
+                    if (vassal == pMain || helping)
+                    {
+                        queue.Enqueue(vassal);
+                        continue;
+                    }
+
+                    bool accepted;
+                    if (pAllowNewDecisions)
+                    {
+                        VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                        VassalObligationDecisionCodec.Resolve(decisions, pWar.data.id,
+                            suzerain.id, vassal.id, terms.MilitaryObligation,
+                            out accepted, out decisions);
+                    }
+                    else if (!VassalObligationDecisionCodec.TryGet(decisions,
+                                 suzerain.id, vassal.id, out accepted))
+                    {
+                        continue;
+                    }
+
+                    if (!VassalWarSupportRules.ShouldPullIntoSuzerainWar(
+                            pSuzerainInWar: true,
+                            pVassalAlreadyHelping: false,
+                            pVassalAlreadyInWar: opposing,
+                            pVassalOpposesSuzerain: opposing,
+                            independenceSuspended: false,
+                            pObligationAccepted: accepted))
+                        continue;
+                    JoinSide(pWar, vassal, attackers);
+                    if (IsOnWarSide(pWar, vassal, attackers)) queue.Enqueue(vassal);
+                }
             }
+
+            if (!string.Equals(initialDecisions, decisions, StringComparison.Ordinal))
+                pWar.data.set(LineageKeys.VASSAL_OBLIGATION_DECISIONS, decisions);
         }
 
-        private static void PullVassalsIntoSuzerainWar(War pWar, Kingdom pSuzerain, List<Kingdom> pVassals)
+        private static void RepairObligatedNetwork(War pWar, Kingdom pRoot,
+            Dictionary<long, List<ActiveRelationDetails>> pRelations)
         {
-            if (pWar?.data == null || pWar.hasEnded() || pSuzerain?.data == null || pVassals == null) return;
+            if (pWar?.data == null || pWar.hasEnded() || pRoot?.data == null) return;
+            bool attackers = IsOnWarSide(pWar, pRoot, true);
+            bool defenders = IsOnWarSide(pWar, pRoot, false);
+            if (!attackers && !defenders) return;
+            Kingdom main = attackers ? pWar.getMainAttacker() : pWar.getMainDefender();
+            Kingdom enemy = attackers ? pWar.getMainDefender() : pWar.getMainAttacker();
+            JoinObligatedNetwork(pWar, pRoot, main, enemy, attackers, pRelations,
+                pAllowNewDecisions: false);
+        }
 
-            bool suzerainAttacker = false;
-            bool suzerainDefender = false;
-            try { suzerainAttacker = pWar.isAttacker(pSuzerain); } catch { }
-            try { suzerainDefender = pWar.isDefender(pSuzerain); } catch { }
-            if (!suzerainAttacker && !suzerainDefender) return;
-
-            foreach (Kingdom vassal in pVassals)
-            {
-                if (vassal?.data == null || vassal == pSuzerain || vassal.isRekt()) continue;
-
-                bool vassalAttacker = false;
-                bool vassalDefender = false;
-                try { vassalAttacker = pWar.isAttacker(vassal); } catch { }
-                try { vassalDefender = pWar.isDefender(vassal); } catch { }
-
-                bool vassalHelping = suzerainAttacker ? vassalAttacker : vassalDefender;
-                bool vassalOpposes = suzerainAttacker ? vassalDefender : vassalAttacker;
-                bool vassalInWar = vassalAttacker || vassalDefender;
-                bool independenceSuspended = HasActiveIndependenceSuspension(vassal, pSuzerain);
-                if (!VassalWarSupportRules.ShouldPullIntoSuzerainWar(
-                        pSuzerainInWar: true,
-                        pVassalAlreadyHelping: vassalHelping,
-                        pVassalAlreadyInWar: vassalInWar,
-                        pVassalOpposesSuzerain: vassalOpposes,
-                        independenceSuspended: independenceSuspended))
-                    continue;
-
-                JoinSide(pWar, vassal, suzerainAttacker);
-            }
+        private static bool IsOnWarSide(War pWar, Kingdom pKingdom, bool attackers)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return false;
+            try { return attackers ? pWar.isAttacker(pKingdom) : pWar.isDefender(pKingdom); }
+            catch { return false; }
         }
 
         private static void PullVassalIntoSuzerainWars(Kingdom pVassal, Kingdom pSuzerain)
@@ -1024,9 +1136,19 @@ namespace AncientWarfare3.core.lineage
             if (pVassal?.data == null || pSuzerain?.data == null || pSuzerain.isRekt()) return;
             try
             {
-                var vassals = new List<Kingdom> { pVassal };
+                Dictionary<long, List<ActiveRelationDetails>> relations =
+                    BuildRelationAdjacency(ReadAllActiveRelations());
+                Kingdom root = GetRootSuzerain(pSuzerain) ?? pSuzerain;
                 foreach (War war in pSuzerain.getWars())
-                    PullVassalsIntoSuzerainWar(war, pSuzerain, vassals);
+                {
+                    bool attackers = IsOnWarSide(war, pSuzerain, true);
+                    bool defenders = IsOnWarSide(war, pSuzerain, false);
+                    if (!attackers && !defenders) continue;
+                    Kingdom main = attackers ? war.getMainAttacker() : war.getMainDefender();
+                    Kingdom enemy = attackers ? war.getMainDefender() : war.getMainAttacker();
+                    JoinObligatedNetwork(war, root, main, enemy, attackers, relations,
+                        pAllowNewDecisions: true);
+                }
             }
             catch (Exception e)
             {

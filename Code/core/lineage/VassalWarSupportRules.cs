@@ -6,9 +6,11 @@ namespace AncientWarfare3.core.lineage
             bool pVassalAlreadyHelping,
             bool pVassalAlreadyInWar,
             bool pVassalOpposesSuzerain,
-            bool independenceSuspended = false)
+            bool independenceSuspended = false,
+            bool pObligationAccepted = true)
         {
             if (independenceSuspended) return false;
+            if (!pObligationAccepted) return false;
             if (!pSuzerainInWar) return false;
             if (pVassalAlreadyHelping) return false;
             if (pVassalOpposesSuzerain) return false;

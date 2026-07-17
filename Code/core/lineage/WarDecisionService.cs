@@ -252,13 +252,17 @@ namespace AncientWarfare3.core.lineage
             out string pReason)
         {
             Kingdom attackerSuzerain = VassalService.GetSuzerain(pAttacker);
-            Kingdom defenderSuzerain = VassalService.GetSuzerain(pDefender);
             bool attackerIsVassal = attackerSuzerain?.data != null && !attackerSuzerain.isRekt();
             bool defenderIsSuzerain = attackerSuzerain != null && attackerSuzerain == pDefender;
-            bool sameSuzerain = attackerSuzerain != null && defenderSuzerain != null &&
-                                attackerSuzerain == defenderSuzerain;
+            Kingdom attackerRoot = attackerIsVassal ? VassalService.GetRootSuzerain(pAttacker) : null;
+            Kingdom defenderRoot = VassalService.GetRootSuzerain(pDefender);
+            bool sameRootSuzerain = attackerRoot?.data != null && defenderRoot?.data != null &&
+                                     attackerRoot == defenderRoot;
+            bool blockInternalWar = sameRootSuzerain &&
+                                    CentralizationService.ReadSnapshot(attackerRoot)
+                                        .effects.BlocksInternalVassalWar;
             return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal, defenderIsSuzerain,
-                sameSuzerain, pWarType, out pReason);
+                sameRootSuzerain, blockInternalWar, pWarType, out pReason);
         }
 
         private static bool CanPassAllianceWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,

@@ -3,7 +3,7 @@ namespace AncientWarfare3.core.lineage
     public static class VassalWarPermissionRules
     {
         public static bool CanDeclareWar(bool pAttackerIsVassal, bool pDefenderIsSuzerain,
-            bool pSameSuzerain, string pWarType, out string pReason)
+            bool pSameRootSuzerain, bool pBlockInternalWar, string pWarType, out string pReason)
         {
             if (!pAttackerIsVassal)
             {
@@ -17,7 +17,13 @@ namespace AncientWarfare3.core.lineage
                 return true;
             }
 
-            if (pSameSuzerain)
+            if (pSameRootSuzerain && pBlockInternalWar)
+            {
+                pReason = "centralization_internal_war_blocked";
+                return false;
+            }
+
+            if (pSameRootSuzerain)
             {
                 pReason = "";
                 return true;
