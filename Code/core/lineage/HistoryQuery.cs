@@ -504,9 +504,14 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText =
-                    $"SELECT KING_ACTOR_ID, KING_NAME, KING_COLOR, START_TIME, END_TIME, " +
-                    $"YEAR_NAME_STEM, YEAR_NAME_COLOR, POSTHUMOUS_TITLE, POSTHUMOUS_COLOR " +
-                    $"FROM {KingdomReignTableItem.GetTableName()} WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
+                    $"SELECT reign.KING_ACTOR_ID,reign.KING_NAME,reign.KING_COLOR," +
+                    $"reign.START_TIME,reign.END_TIME,reign.YEAR_NAME_STEM," +
+                    $"reign.YEAR_NAME_COLOR,IFNULL(title.FULL_TITLE,'')," +
+                    $"IFNULL(title.FULL_TITLE_COLOR,'') FROM " +
+                    $"{KingdomReignTableItem.GetTableName()} reign LEFT JOIN " +
+                    $"{PosthumousTitleTableItem.GetTableName()} title ON " +
+                    $"title.REIGN_ID=reign.REIGN_ID AND title.IS_RETROSPECTIVE=0 " +
+                    $"WHERE reign.KINGDOM_ID=@kid ORDER BY reign.START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
                 while (r.Read())
@@ -552,22 +557,6 @@ namespace AncientWarfare3.core.lineage
                         period.start_time, period.end_time, pPeriods[i + 1].start_time);
                 else
                     period.end_time = HistoryPeriodRules.NormalizeEndTime(period.start_time, period.end_time);
-            }
-            RepairOrdinaryFirstEmperorDisplayTitles(pPeriods);
-        }
-
-        private static void RepairOrdinaryFirstEmperorDisplayTitles(List<ReignPeriod> pPeriods)
-        {
-            if (pPeriods == null || pPeriods.Count == 0) return;
-            bool hasPriorOrdinaryEmperorTitle = false;
-            foreach (ReignPeriod period in pPeriods)
-            {
-                if (period == null || string.IsNullOrEmpty(period.posthumous_title)) continue;
-                if (!PosthumousTitleRules.IsCompactOrdinaryEmperorTitle(period.posthumous_title)) continue;
-                period.posthumous_title = PosthumousTitleRules.RepairFirstOrdinaryEmperorDisplayTitle(
-                    period.posthumous_title,
-                    hasPriorOrdinaryEmperorTitle);
-                hasPriorOrdinaryEmperorTitle = true;
             }
         }
 
@@ -786,7 +775,7 @@ namespace AncientWarfare3.core.lineage
             catch { return -1; }
         }
 
-        // 查 KingdomReign 表给各 ReignPeriod 补 king_actor_id / posthumous_title
+        // KingdomReign supplies reign identity; PosthumousTitle supplies the committed title.
         private static void EnrichPosthumous(long pKingdomId, List<ReignPeriod> pReigns)
         {
             var db = DB;
@@ -796,9 +785,13 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText =
-                    $"SELECT KING_ACTOR_ID, KING_NAME, KING_COLOR, START_TIME, POSTHUMOUS_TITLE, POSTHUMOUS_COLOR " +
-                    $"FROM {KingdomReignTableItem.GetTableName()} " +
-                    $"WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
+                    $"SELECT reign.KING_ACTOR_ID,reign.KING_NAME,reign.KING_COLOR," +
+                    $"reign.START_TIME,IFNULL(title.FULL_TITLE,'')," +
+                    $"IFNULL(title.FULL_TITLE_COLOR,'') FROM " +
+                    $"{KingdomReignTableItem.GetTableName()} reign LEFT JOIN " +
+                    $"{PosthumousTitleTableItem.GetTableName()} title ON " +
+                    $"title.REIGN_ID=reign.REIGN_ID AND title.IS_RETROSPECTIVE=0 " +
+                    $"WHERE reign.KINGDOM_ID=@kid ORDER BY reign.START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
                 var rows = new System.Collections.Generic.List<(long actorId, string kingName, string kingColor, double startTime, string title, string titleColor)>();
@@ -825,7 +818,6 @@ namespace AncientWarfare3.core.lineage
                     if (!string.IsNullOrEmpty(best.title)) reign.posthumous_title = best.title;
                     if (!string.IsNullOrEmpty(best.titleColor)) reign.posthumous_color = best.titleColor;
                 }
-                RepairOrdinaryFirstEmperorDisplayTitles(pReigns);
             }
             catch { }
         }

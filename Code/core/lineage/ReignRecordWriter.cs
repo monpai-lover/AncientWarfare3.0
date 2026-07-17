@@ -9,7 +9,7 @@ namespace AncientWarfare3.core.lineage
     /// <summary>
     ///     君主世系写入。OnKingChanged→OpenReign(新)+CloseOpenReign(旧)；
     ///     OnKingDied/OnAbdicate→CloseOpenReign(已在各 On 方法调过)。
-    ///     亡国→CloseOpenReign("kingdom_fell")。谥号→SetPosthumous。
+    ///     亡国→CloseOpenReign("kingdom_fell")。谥号只写入 PosthumousTitle。
     /// </summary>
     internal static class ReignRecordWriter
     {
@@ -93,8 +93,6 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("END_TIME",           -1.0),
                     ColumnVal.Create("YEAR_NAME_STEM",     stem ?? ""),
                     ColumnVal.Create("YEAR_NAME_COLOR",    kingdomColor),
-                    ColumnVal.Create("POSTHUMOUS_TITLE",   ""),
-                    ColumnVal.Create("POSTHUMOUS_COLOR",   ""),
                     ColumnVal.Create("END_REASON",         ""),
                     ColumnVal.Create("START_POPULATION",   pop),
                     ColumnVal.Create("START_CITY_COUNT",   cities),
@@ -182,33 +180,6 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        /// <summary>回填谥号到 KingdomReign 行。</summary>
-        public static void SetPosthumous(long pReignId, string pFullTitle)
-        {
-            SetPosthumous(pReignId, pFullTitle, "");
-        }
-
-        public static void SetPosthumous(long pReignId, string pFullTitle, string pColor)
-        {
-            if (!Ready || pReignId < 0) return;
-            try
-            {
-                DB.UpdateValue(TABLE,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("REIGN_ID", pReignId) },
-                    ColumnVal.Create("POSTHUMOUS_TITLE", pFullTitle ?? ""),
-                    ColumnVal.Create("POSTHUMOUS_COLOR", HistoryColors.Normalize(pColor)));
-            }
-            catch { }
-        }
-
-        public static void SetPosthumous(long pKingdomId, long pActorId, string pFullTitle)
-        {
-            if (!Ready) return;
-            long id = FindReignByActor(pKingdomId, pActorId);
-            if (id < 0) return;
-            SetPosthumous(id, pFullTitle);
-        }
-
         /// <summary>读当前开着的 reign 行（end=-1），供谥号评定读取起始国力。</summary>
         public static (long reignId, int startPop, int startCities, double startTime)
             ReadOpenReign(long pKingdomId)
@@ -267,8 +238,10 @@ namespace AncientWarfare3.core.lineage
                     $"END_POPULATION, END_CITY_COUNT, END_ARMY_COUNT, WAR_WINS, WAR_LOSSES, LOST_CAPITAL, IFNULL(DEATH_CAUSE, ''), " +
                     $"IFNULL(SHI_ID, -1), IFNULL(DYNASTY_ID, -1), IFNULL(MANDATE_PERIOD_ID, -1), " +
                     $"IFNULL(HIGHEST_TITLE, 0), IFNULL(STATE_NAME_SNAPSHOT, '') " +
-                    $"FROM {TABLE} WHERE KING_ACTOR_ID=@aid AND END_TIME>=0 " +
-                    $"AND IFNULL(POSTHUMOUS_TITLE, '')='' ORDER BY END_TIME DESC LIMIT 1";
+                    $"FROM {TABLE} reign WHERE reign.KING_ACTOR_ID=@aid AND reign.END_TIME>=0 " +
+                    $"AND NOT EXISTS (SELECT 1 FROM {PosthumousTitleTableItem.GetTableName()} title " +
+                    $"WHERE title.REIGN_ID=reign.REIGN_ID) " +
+                    $"ORDER BY reign.END_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@aid", pActorId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
                 if (!r.Read()) return ReignInfo.Empty;
@@ -313,22 +286,6 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText = $"SELECT REIGN_ID FROM {TABLE} " +
                                   $"WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
-                object v = cmd.ExecuteScalar();
-                return (v == null || v == DBNull.Value) ? -1L : Convert.ToInt64(v);
-            }
-            catch { return -1; }
-        }
-
-        private static long FindReignByActor(long pKingdomId, long pActorId)
-        {
-            if (!Ready) return -1;
-            try
-            {
-                using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = $"SELECT REIGN_ID FROM {TABLE} " +
-                                  $"WHERE KINGDOM_ID=@kid AND KING_ACTOR_ID=@aid ORDER BY START_TIME DESC LIMIT 1";
-                cmd.Parameters.AddWithValue("@kid", pKingdomId);
-                cmd.Parameters.AddWithValue("@aid", pActorId);
                 object v = cmd.ExecuteScalar();
                 return (v == null || v == DBNull.Value) ? -1L : Convert.ToInt64(v);
             }

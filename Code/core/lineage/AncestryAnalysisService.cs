@@ -669,23 +669,7 @@ namespace AncientWarfare3.core.lineage
                 }
             }
             catch { }
-
-            try
-            {
-                using var cmd = new SQLiteCommand(db);
-                cmd.CommandText =
-                    $"SELECT IFNULL(POSTHUMOUS_TITLE, ''), IFNULL(POSTHUMOUS_COLOR, '') " +
-                    $"FROM {KingdomReignTableItem.GetTableName()} " +
-                    $"WHERE KING_ACTOR_ID=@id AND IFNULL(POSTHUMOUS_TITLE, '')<>'' " +
-                    $"ORDER BY END_TIME DESC, START_TIME DESC LIMIT 1";
-                cmd.Parameters.AddWithValue("@id", pActorId);
-                using var r = (SQLiteDataReader)cmd.ExecuteReader();
-                if (!r.Read()) return false;
-                pTitle = SafeStr(r, 0);
-                pColor = SafeStr(r, 1);
-                return !string.IsNullOrEmpty(pTitle);
-            }
-            catch { return false; }
+            return false;
         }
 
         private static bool IsNobleEvidence(Actor pActor, ActorArchiveTableItem pRow)

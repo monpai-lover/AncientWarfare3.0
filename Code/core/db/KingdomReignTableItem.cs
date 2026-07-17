@@ -23,8 +23,6 @@ namespace AncientWarfare3.core.db
         [TableItemDef(pDefaultValue: "-1")] public double end_time;
         public string year_name_stem = "";       // 开始时年号词干快照
         public string year_name_color = "";
-        public string posthumous_title = "";     // 谥号（OnKingDied/OnAbdicate 后填）
-        public string posthumous_color = "";
         public string end_reason     = "";       // died / abdicated / deposed / kingdom_fell
         public int    start_population = 0;      // 开始时王国人口（综合国力谥号基准）
         public int    start_city_count = 0;      // 开始时城池数（综合国力谥号基准）

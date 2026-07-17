@@ -158,10 +158,14 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
-                    "SELECT KING_ACTOR_ID,KING_NAME,KING_COLOR,START_TIME,END_TIME,YEAR_NAME_STEM,YEAR_NAME_COLOR," +
-                    "POSTHUMOUS_TITLE,POSTHUMOUS_COLOR " +
-                    "FROM " + KingdomReignTableItem.GetTableName() +
-                    " WHERE KINGDOM_ID=@kid ORDER BY START_TIME ASC";
+                    "SELECT reign.KING_ACTOR_ID,reign.KING_NAME,reign.KING_COLOR," +
+                    "reign.START_TIME,reign.END_TIME,reign.YEAR_NAME_STEM," +
+                    "reign.YEAR_NAME_COLOR,IFNULL(title.FULL_TITLE,'')," +
+                    "IFNULL(title.FULL_TITLE_COLOR,'') FROM " +
+                    KingdomReignTableItem.GetTableName() + " reign LEFT JOIN " +
+                    PosthumousTitleTableItem.GetTableName() + " title ON " +
+                    "title.REIGN_ID=reign.REIGN_ID AND title.IS_RETROSPECTIVE=0 " +
+                    "WHERE reign.KINGDOM_ID=@kid ORDER BY reign.START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pPeriod.kingdom_id);
                 using SQLiteDataReader r = cmd.ExecuteReader();
                 while (r.Read())

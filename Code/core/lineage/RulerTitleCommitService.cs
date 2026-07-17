@@ -178,8 +178,8 @@ namespace AncientWarfare3.core.lineage
                     PosthumousTitleTableItem.GetTableName(), "RECORD_ID");
                 InsertTitle(transaction, recordId, pDecision, time);
                 if (facts.ReignId >= 0)
-                    UpdateReign(transaction, facts.ReignId, pDecision.DisplayTitle,
-                        facts.KingdomColor, facts.HighestTitle);
+                    UpdateReignHighestTitle(transaction, facts.ReignId,
+                        facts.HighestTitle);
                 if (!string.IsNullOrEmpty(pDecision.HistoryPlain))
                     InsertHistory(transaction, pDecision, time);
                 transaction.Commit();
@@ -248,16 +248,13 @@ namespace AncientWarfare3.core.lineage
             command.ExecuteNonQuery();
         }
 
-        private static void UpdateReign(SQLiteTransaction pTransaction, long pReignId,
-            string pDisplayTitle, string pColor, int pHighestTitle)
+        private static void UpdateReignHighestTitle(SQLiteTransaction pTransaction,
+            long pReignId, int pHighestTitle)
         {
             using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
             command.CommandText = "UPDATE " + KingdomReignTableItem.GetTableName() +
-                                  " SET POSTHUMOUS_TITLE=@title,POSTHUMOUS_COLOR=@color," +
-                                  "HIGHEST_TITLE=CASE WHEN HIGHEST_TITLE<@highest " +
+                                  " SET HIGHEST_TITLE=CASE WHEN HIGHEST_TITLE<@highest " +
                                   "THEN @highest ELSE HIGHEST_TITLE END WHERE REIGN_ID=@reign";
-            command.Parameters.AddWithValue("@title", pDisplayTitle ?? "");
-            command.Parameters.AddWithValue("@color", pColor ?? "");
             command.Parameters.AddWithValue("@highest", pHighestTitle);
             command.Parameters.AddWithValue("@reign", pReignId);
             if (command.ExecuteNonQuery() != 1)
