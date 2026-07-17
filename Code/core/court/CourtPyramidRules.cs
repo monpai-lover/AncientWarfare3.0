@@ -79,6 +79,12 @@ namespace AncientWarfare3.core.court
         public float Influence;
         public int Merit;
         public int Rank;
+        public int OfficialRank;
+        public int OfficialTrack = -1;
+        public float OfficialMerit;
+        public int OfficialMeritCap = 1;
+        public int OfficialLastEvaluation = -1;
+        public int OfficialTermEndYear = -1;
         public int StableOrder;
         public bool IsVacancy;
         public float X;
@@ -108,6 +114,12 @@ namespace AncientWarfare3.core.court
                 AppointmentYear = AppointmentYear,
                 Influence = Influence,
                 Merit = Merit,
+                OfficialRank = OfficialRank,
+                OfficialTrack = OfficialTrack,
+                OfficialMerit = OfficialMerit,
+                OfficialMeritCap = OfficialMeritCap,
+                OfficialLastEvaluation = OfficialLastEvaluation,
+                OfficialTermEndYear = OfficialTermEndYear,
                 X = X,
                 Y = Y,
                 Roles = new List<string>(Roles)
@@ -177,6 +189,15 @@ namespace AncientWarfare3.core.court
                         merged.AppointmentYear = item.AppointmentYear;
                     merged.Influence = Math.Max(merged.Influence, item.Influence);
                     merged.Merit = Math.Max(merged.Merit, item.Merit);
+                    if (item.OfficialRank > 0)
+                    {
+                        merged.OfficialRank = item.OfficialRank;
+                        merged.OfficialTrack = item.OfficialTrack;
+                        merged.OfficialMerit = item.OfficialMerit;
+                        merged.OfficialMeritCap = item.OfficialMeritCap;
+                        merged.OfficialLastEvaluation = item.OfficialLastEvaluation;
+                        merged.OfficialTermEndYear = item.OfficialTermEndYear;
+                    }
                 }
                 result.Add(merged);
             }

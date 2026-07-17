@@ -72,7 +72,9 @@ namespace AncientWarfare3.core.court
                 OfficeId = pOfficeId ?? "",
                 SchoolId = pSchoolId ?? "",
                 Influence = CourtInfluenceRules.InfluenceWeight(pLayer,
-                    ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor)),
+                    ChronicleGate.IsImportant(pActor),
+                    OfficialCareerStateService.ReadMeritFast(pActor),
+                    OfficialCareerStateService.ReadRankFast(pActor)),
                 AppointedYear = pAppointedYear,
                 AppointedTime = pAppointedTime
             };

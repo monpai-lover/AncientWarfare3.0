@@ -27,6 +27,8 @@ namespace AncientWarfare3.core.court
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
                 seeds, HorizontalSpacing, VerticalSpacing);
             AddCachedHeirRole(result, pKingdom);
+            ApplyCareerStates(result,
+                OfficialCareerStateService.LoadKingdomStates(pKingdom.id));
             return result;
         }
 
@@ -182,6 +184,24 @@ namespace AncientWarfare3.core.court
             CourtPyramidNodeModel node = pNodes.FirstOrDefault(p => p.ActorId == heirId);
             if (node != null && !node.Roles.Contains(CourtPyramidRoleId.Heir))
                 node.Roles.Insert(0, CourtPyramidRoleId.Heir);
+        }
+
+        private static void ApplyCareerStates(List<CourtPyramidNodeModel> pNodes,
+            Dictionary<long, OfficialCareerStateView> pStates)
+        {
+            if (pNodes == null || pStates == null || pStates.Count == 0) return;
+            foreach (CourtPyramidNodeModel node in pNodes)
+            {
+                if (node == null || node.ActorId < 0 ||
+                    !pStates.TryGetValue(node.ActorId, out OfficialCareerStateView state))
+                    continue;
+                node.OfficialRank = state.Rank;
+                node.OfficialTrack = state.Track;
+                node.OfficialMerit = state.Merit;
+                node.OfficialMeritCap = state.MeritCap;
+                node.OfficialLastEvaluation = state.LastEvaluation;
+                node.OfficialTermEndYear = state.TermEndYear;
+            }
         }
 
         private static string ActorSchool(Actor pActor, string pFallback)

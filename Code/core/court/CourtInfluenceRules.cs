@@ -6,7 +6,8 @@ namespace AncientWarfare3.core.court
 {
     public static class CourtInfluenceRules
     {
-        public static float InfluenceWeight(string layer, bool importantActor, int merit)
+        public static float InfluenceWeight(string layer, bool importantActor,
+            float merit, int rank = 1)
         {
             float baseWeight = layer switch
             {
@@ -19,7 +20,7 @@ namespace AncientWarfare3.core.court
             };
             if (importantActor) baseWeight += 1.5f;
             if (merit > 0) baseWeight += Math.Min(2f, merit / 25f);
-            return baseWeight;
+            return baseWeight * OfficialCareerRankRules.InfluenceMultiplier(rank);
         }
 
         public static float Concentration(float dominantInfluence, float totalInfluence)

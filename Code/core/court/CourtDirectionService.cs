@@ -79,7 +79,9 @@ namespace AncientWarfare3.core.court
                 string school = ResolveSchool(actor);
                 if (!string.IsNullOrEmpty(school))
                     result.Add(new CourtInfluenceContribution(actor.data.id, school,
-                        4f, OfficeRank(office), isKing: false));
+                        4f * OfficialCareerRankRules.InfluenceMultiplier(
+                            OfficialCareerStateService.ReadRankFast(actor)),
+                        OfficeRank(office), isKing: false));
             }
 
             foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(

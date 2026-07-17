@@ -400,10 +400,6 @@ namespace AncientWarfare3.core.court
             {
                 if (++seen > CandidateLimit * 8) break;
                 if (!IsManualCentralCandidateEligible(actor, pKingdom)) continue;
-                string school = SchoolMembershipService.GetSchool(actor.data.id);
-                if (!CourtManualAppointmentRules.IsSchoolEligible(school,
-                        pPreferredSchool)) continue;
-
                 float score = ScoreCandidate(actor, pOfficeId, pPreferredSchool);
                 if (score <= bestScore) continue;
                 best = actor;
@@ -428,6 +424,9 @@ namespace AncientWarfare3.core.court
             if (pOfficeId == CourtOfficeId.ImperialAstrologer)
                 score += intelligence * 2f + diplomacy * 1.5f;
             if (ChronicleGate.IsNobleActor(pActor)) score += 4f;
+            score += OfficialCareerRankRules.OfficeRankMatchScore(
+                OfficialCareerStateService.ReadRankFast(pActor),
+                OfficialCareerStateService.OfficeGradeForOffice(pOfficeId));
 
             string naturalSchool = SchoolMembershipService.GetSchool(pActor.data.id);
             return CourtManualAppointmentRules.CandidateScore(score,
@@ -487,8 +486,6 @@ namespace AncientWarfare3.core.court
             if (!IsManualCentralCandidateEligible(actor, kingdom)) return false;
 
             string school = SchoolMembershipService.GetSchool(actorId);
-            if (!CourtManualAppointmentRules.IsSchoolEligible(school,
-                    pScan.preferred_school_id)) return false;
             pCandidate = new CourtAppointmentCandidateView
             {
                 actor_id = actorId,
@@ -802,6 +799,8 @@ namespace AncientWarfare3.core.court
             pActor.data.set(LineageKeys.COURT_OFFICE_ID, pOfficeId ?? "");
             pActor.data.set(LineageKeys.COURT_SCHOOL, pSchoolId ?? "");
             pActor.data.set(LineageKeys.COURT_CITY_ID, pCity?.data?.id ?? -1L);
+            OfficialCareerStateService.ProjectAppointment(pActor, pKingdom,
+                pLayer, pOfficeId, pCity);
             if (targetIsPhysician)
                 pKingdom.data.set(LineageKeys.COURT_IMPERIAL_PHYSICIAN_ID, pActor.data.id);
             CourtOfficerMilitaryTransitionService.ReleaseAfterCommittedAppointment(
@@ -861,6 +860,7 @@ namespace AncientWarfare3.core.court
 
             if (pPersistCareer)
                 OfficialCareerService.End(pActor, layer, office, pReason ?? "");
+            OfficialCareerStateService.ClearCurrentOffice(pActor, courtKingdomId, office);
             if (pRecordHistory && courtKingdom != null && !string.IsNullOrEmpty(office))
                 ChronicleEvents.OnCourtOfficerDismissed(pActor, courtKingdom, office, pReason ?? "");
             if (alive && pArchive) LineageService.ArchiveActor(pActor, pAlive: true);
@@ -980,7 +980,9 @@ namespace AncientWarfare3.core.court
             string school = SchoolMembershipService.GetSchool(pActor.data.id);
             if (string.IsNullOrEmpty(school)) return;
             float influence = CourtInfluenceRules.InfluenceWeight(layer,
-                ChronicleGate.IsImportant(pActor), GeneralService.GetMerit(pActor));
+                ChronicleGate.IsImportant(pActor),
+                OfficialCareerStateService.ReadMeritFast(pActor),
+                OfficialCareerStateService.ReadRankFast(pActor));
             pValues.TryGetValue(school, out float old);
             pValues[school] = old + influence;
         }

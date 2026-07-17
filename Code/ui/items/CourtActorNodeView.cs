@@ -82,7 +82,11 @@ namespace AncientWarfare3.ui.items
             _name.text = pNode.IsVacancy
                 ? OfficeName(pNode.OfficeId) + " - " + AW_L10n.Text("aw_court_no_officer", "Vacant")
                 : pNode.ActorName;
-            _roles.text = RoleLine(pNode, pKingdom);
+            string roleLine = RoleLine(pNode, pKingdom);
+            string officialGrade = OfficialGradeShort(pNode);
+            _roles.text = string.IsNullOrEmpty(officialGrade)
+                ? roleLine
+                : roleLine + "\n" + officialGrade;
 
             _button.onClick.RemoveAllListeners();
             bool canAppoint = pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId);
@@ -271,6 +275,20 @@ namespace AncientWarfare3.ui.items
                 lines.Add(AW_L10n.Text("aw_court_city", "City") + ": " + pNode.CityName);
             if (pNode.Merit > 0)
                 lines.Add(AW_L10n.Text("aw_general_merit", "Merit") + ": " + pNode.Merit);
+            if (pNode.OfficialRank > 0)
+            {
+                lines.Add(AW_L10n.Text("aw_court_official_rank", "Official rank") + ": " +
+                          pNode.OfficialRank + "/18");
+                lines.Add(AW_L10n.Text("aw_court_official_track", "Career track") + ": " +
+                          OfficialTrackName(pNode.OfficialTrack));
+                lines.Add(AW_L10n.Text("aw_court_official_merit", "Career merit") + ": " +
+                          pNode.OfficialMerit.ToString("0.00") + "/" + pNode.OfficialMeritCap);
+                lines.Add(AW_L10n.Text("aw_court_official_kaoke", "Last evaluation") + ": " +
+                          OfficialEvaluationName(pNode.OfficialLastEvaluation));
+                if (pNode.OfficialTermEndYear >= 0)
+                    lines.Add(AW_L10n.Text("aw_court_official_term_end", "Term review year") + ": " +
+                              pNode.OfficialTermEndYear);
+            }
             if (pActor?.data != null)
             {
                 lines.Add(AW_L10n.Text("aw_court_age", "Age") + ": " + SafeAge(pActor));
@@ -284,6 +302,27 @@ namespace AncientWarfare3.ui.items
                           SafeStat(pActor, "intelligence").ToString("0"));
             }
             return string.Join("\n", lines.ToArray());
+        }
+
+        private static string OfficialGradeShort(CourtPyramidNodeModel pNode)
+        {
+            if (pNode == null || pNode.OfficialRank <= 0) return "";
+            return string.Format(AW_L10n.Text("aw_court_official_rank_short", "{0} rank {1}"),
+                OfficialTrackName(pNode.OfficialTrack), pNode.OfficialRank);
+        }
+
+        private static string OfficialTrackName(int pTrack)
+        {
+            return pTrack == OfficialCareerRankRules.MilitaryTrack
+                ? AW_L10n.Text("aw_court_official_track_military", "Military")
+                : AW_L10n.Text("aw_court_official_track_civil", "Civil");
+        }
+
+        private static string OfficialEvaluationName(int pGrade)
+        {
+            if (pGrade < 0 || pGrade > 4)
+                return AW_L10n.Text("aw_court_official_kaoke_none", "Not evaluated");
+            return AW_L10n.Text("aw_court_official_kaoke_" + pGrade, pGrade.ToString());
         }
 
         private static string RoleLine(CourtPyramidNodeModel pNode, Kingdom pKingdom)

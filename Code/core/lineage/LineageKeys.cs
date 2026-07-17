@@ -260,6 +260,16 @@ namespace AncientWarfare3.core.lineage
         public const string SCHOOL_TEACHER_GONE_YEAR = "aw_school_teacher_gone_year";
         public const string COURT_KINGDOM_ID = "aw_court_kingdom_id";
         public const string COURT_CITY_ID = "aw_court_city_id";
+        public const string OFFICER_RANK = "aw_officer_rank";
+        public const string OFFICER_TRACK = "aw_officer_track";
+        public const string OFFICER_MERIT = "aw_officer_merit";
+        public const string OFFICER_MERIT_CAP = "aw_officer_merit_cap";
+        public const string OFFICER_TERM_END_YEAR = "aw_officer_term_end_year";
+        public const string OFFICER_LAST_KAOKE = "aw_officer_last_kaoke";
+        public const string OFFICER_KAOKE_MOD_UNTIL = "aw_officer_kaoke_mod_until";
+        public const string OFFICER_SENIORITY = "aw_officer_seniority";
+        public const string OFFICER_LAST_POP_SNAPSHOT = "aw_officer_last_pop_snapshot";
+        public const string OFFICIAL_CAREER_LAST_YEAR = "aw_official_career_last_year";
         public const string COURT_IMPERIAL_PHYSICIAN_ID = "aw_court_imperial_physician_id";
         public const string COURT_MEDICAL_KING_ID = "aw_court_medical_king_id";
         public const string COURT_MEDICAL_HEIR_ID = "aw_court_medical_heir_id";

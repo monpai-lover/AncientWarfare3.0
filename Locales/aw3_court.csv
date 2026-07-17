@@ -156,3 +156,17 @@ aw_court_appointment_loading,正在筛选 {0} 名国人...,Reviewing {0} subject
 aw_court_appointment_page,第 {0}/{1} 页 · 共 {2} 名合格者,Page {0}/{1} - {2} eligible,第 {0}/{1} 頁 · 共 {2} 名合格者
 aw_court_appointment_previous,上一页,Previous page,上一頁
 aw_court_appointment_next,下一页,Next page,下一頁
+aw_court_official_rank,官阶,Official rank,官階
+aw_court_official_rank_short,{0}·{1}阶,{0} rank {1},{0}·{1}階
+aw_court_official_track,文武轨,Career track,文武軌
+aw_court_official_track_civil,文,Civil,文
+aw_court_official_track_military,武,Military,武
+aw_court_official_merit,仕途功勋,Career merit,仕途功勳
+aw_court_official_kaoke,上次考课,Last evaluation,上次考課
+aw_court_official_kaoke_none,未考课,Not evaluated,未考課
+aw_court_official_kaoke_0,上考,Upper,上考
+aw_court_official_kaoke_1,中上,Middle-upper,中上
+aw_court_official_kaoke_2,中中,Middle,中中
+aw_court_official_kaoke_3,中下,Middle-lower,中下
+aw_court_official_kaoke_4,下考,Lower,下考
+aw_court_official_term_end,下次考课年,Term review year,下次考課年
