@@ -330,6 +330,13 @@ namespace AncientWarfare3.core.lineage
             RestorationUprisingMobilizationService.ClearRuntime();
         }
 
+        public static void RebuildRuntime()
+        {
+            _lastWorldYear = -1;
+            CoreIdsByCampaign.Clear();
+            RestorationUprisingMobilizationService.RebuildRuntime();
+        }
+
         private static void MaintainCampaign(CampaignRow pCampaign, int pYear)
         {
             Kingdom restored = FindKingdom(pCampaign.originalKingdomId);

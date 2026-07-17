@@ -3,6 +3,7 @@ using AncientWarfare3.core.db;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.content;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
@@ -70,6 +71,7 @@ namespace AncientWarfare3.patch
             core.lineage.WarNoticeService.RebuildRuntime();
             core.lineage.TemporaryLevyService.RebuildRuntime();
             core.lineage.TemporarySlaveVanguardService.RebuildRuntime();
+            AutonomousRestorationService.RebuildRuntime();
             core.lineage.WarPlotRedirectService.SweepExistingPlots();
             core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
         }
@@ -96,6 +98,7 @@ namespace AncientWarfare3.patch
             try { core.lineage.MilitaryEmergencyService.ClearRuntime(); } catch { }
             try { core.lineage.TemporaryLevyService.ClearRuntime(); } catch { }
             try { core.lineage.TemporarySlaveVanguardService.ClearRuntime(); } catch { }
+            try { AutonomousRestorationService.ClearRuntime(); } catch { }
             try { core.lineage.KingdomMilitaryReadinessService.ClearRuntime(); } catch { }
             try { core.lineage.CityOccupationAccelerationService.ClearRuntime(); } catch { }
             try { core.lineage.ArmyRetreatService.ClearRuntime(); } catch { }

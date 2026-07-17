@@ -58,6 +58,7 @@ aw_restoration_button_desc,以王室宣称在旧国核心举兵复国,Raise a re
 aw_restoration_started,已举兵复国,Restoration begun,已舉兵復國
 aw_restoration_error_cooldown,复国准备尚在冷却,Restoration is still on cooldown,復國準備尚在冷卻
 aw_restoration_error_alive,旧国已经恢复,The old realm already exists,舊國已經恢復
+aw_restoration_error_mandate_order,天下尚有受命王朝，自主复国只能在天命空位的乱世发动,An autonomous restoration can rise only during a Mandate vacancy,天下尚有受命王朝，自主復國只能在天命空位的亂世發動
 aw_restoration_error_no_core,没有可用于起兵的旧国核心,No eligible old core can support an uprising,沒有可用於起兵的舊國核心
 aw_restoration_error_claimant,宣称人已不再符合复国条件,The claimant is no longer eligible,宣稱人已不再符合復國條件
 aw_restoration_error_generic,当前无法举兵复国,Restoration cannot begin now,目前無法舉兵復國
