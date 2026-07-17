@@ -125,6 +125,8 @@ namespace AncientWarfare3.core.lineage
 
             if (!Exists)
             {
+                MandatePhaseService.EvaluateVacantWorldYear(
+                    ReadReport(), Date.getCurrentYear());
                 if (MandateRebelService.HasActiveRebelClaimants()) return;
                 TryAutoDeclareMandate(pKingdom);
                 return;
@@ -151,6 +153,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_VALUE, nextValue);
             pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, authority);
             pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, prestige);
+            MandatePhaseService.EvaluateActiveMandateYear(
+                ReadReport(), currentYear, nextValue, authority, delta);
 
             if (Mathf.Abs(delta) >= 5 || crisis == "collapse" || crisis == "lost")
                 RecordEvent("mandate_yearly", pKingdom, pKingdom.king, null, delta, nextValue,
@@ -188,6 +192,7 @@ namespace AncientWarfare3.core.lineage
             if (!Ready) return false;
 
             MandateReport previousReport = ReadReport();
+            bool hadPreviousMandate = previousReport.period_id >= 0;
             if (!MandateDeclarationRules.CanCreateNewPeriod(
                     previousReport.active, previousReport.kingdom_id, pKingdom.id))
                 return false;
@@ -229,6 +234,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_ORIGIN_TYPE, pOriginType ?? "native");
             pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, pClaimantKind ?? "orthodox");
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, MarkerKind(pOriginType, pClaimantKind));
+            MandatePhaseService.OnMandateEstablished(
+                hadPreviousMandate, Date.getCurrentYear());
             if (pOriginType == "self_restoration")
                 pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
             if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
@@ -570,6 +577,7 @@ namespace AncientWarfare3.core.lineage
         public static void CollapseMandate(Kingdom pKingdom, string pReason)
         {
             if (pKingdom?.data == null) return;
+            MandatePhaseService.ForceChaos("mandate_collapse");
             HistoryWriter.RecordKingdom(pKingdom, "mandate_collapse",
                 HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_collapse"),
                 HistoryTarget.Kingdom(pKingdom));
@@ -626,7 +634,10 @@ namespace AncientWarfare3.core.lineage
         {
             Kingdom mandate = GetCurrentMandateKingdom();
             if (mandate != null && pKingdom == mandate)
+            {
+                MandatePhaseService.ForceChaos("mandate_kingdom_fell");
                 ClearMandate("kingdom_fell");
+            }
         }
 
         public static void NormalizeMapMarkerAfterRebelSettlement(Kingdom pKingdom)
@@ -1042,6 +1053,8 @@ namespace AncientWarfare3.core.lineage
         {
             MandateReport r = ReadReport();
             if (!r.active || pKingdom?.data == null || pKingdom.id != r.kingdom_id) return;
+            MandatePhaseService.AdjustCatalyst(
+                MandatePhaseRules.CatalystDeltaForMandateChange(pDelta), pEventType);
             int next = Mathf.Clamp(r.mandate_value + pDelta, MIN_VALUE, MAX_VALUE);
             UpdateState(pKingdom, r.period_id, next, r.imperial_authority, r.dynasty_prestige, r.core_control,
                 r.vassal_loyalty, CrisisLevel(next), Date.getCurrentYear());
