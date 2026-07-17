@@ -50,6 +50,8 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("Autonomous restoration campaign update failed: " + e.Message);
             }
 
+            if (MandateService.Exists) return;
+
             try
             {
                 int starts = 0;
