@@ -157,34 +157,18 @@ namespace AncientWarfare3.core.lineage
         private static void ReanchorBorderArmies(Kingdom pMandate, List<City> pBorderCities)
         {
             if (pMandate?.data == null || pBorderCities == null) return;
-            List<Army> armies = GetMandateBorderArmies(pMandate);
-            var used = new HashSet<long>();
+            var allowedOwners = new HashSet<long> { pMandate.id };
+            foreach (Kingdom vassal in VassalService.GetVassals(pMandate, true))
+                if (vassal?.data != null) allowedOwners.Add(vassal.id);
+            BorderArmyReanchorService.ReanchorExistingArmies(pBorderCities, allowedOwners,
+                city => PickBorderTile(city, pMandate), PrepareExistingBorderActor);
+        }
 
-            foreach (City city in pBorderCities)
-            {
-                if (city?.data == null || city.kingdom?.data == null) continue;
-                Army existing = AWArmyService.FindArmy(city.kingdom, city, AWArmyRole.BorderArmy);
-                if (existing != null)
-                {
-                    used.Add(existing.id);
-                    continue;
-                }
-
-                Army candidate = PickReusableBorderArmy(armies, used, city.kingdom);
-                if (candidate == null) continue;
-                AWArmyService.ReanchorArmy(candidate, city.kingdom, city, AWArmyRole.BorderArmy,
-                    BuildBorderArmyName(city.kingdom, city));
-                MoveBorderArmyToPatrol(candidate, city, pMandate);
-                used.Add(candidate.id);
-            }
-
-            foreach (Army army in armies)
-            {
-                if (army?.data == null || used.Contains(army.id)) continue;
-                City anchor = AWArmyService.FindAnchorCity(army);
-                if (anchor?.data != null && pBorderCities.Contains(anchor)) continue;
-                ReleaseBorderArmy(army);
-            }
+        private static void PrepareExistingBorderActor(Actor pActor)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.set(LineageKeys.MANDATE_BORDER_GUARD, true);
+            AssignBorderGuardJob(pActor);
         }
 
         private static List<Army> GetMandateBorderArmies(Kingdom pMandate)

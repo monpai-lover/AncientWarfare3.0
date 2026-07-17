@@ -39,6 +39,7 @@ namespace AncientWarfare3.patch
             if (__result?.data == null) return;
             WarRecordWriter.OnWarStart(__result);
             VassalService.OnWarStarted(__result);
+            CentralizationBorderDeploymentService.OnWarStarted(__result);
             MandateService.OnWarStarted(__result);
             RoyalAsylumService.OnWarStarted(__result);
             MilitaryEmergencyService.OnWarStarted(__result);
