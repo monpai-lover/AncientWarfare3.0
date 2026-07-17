@@ -137,5 +137,17 @@ namespace AncientWarfare3.core.lineage
         {
             return pPhase == MandatePhase.Chaos;
         }
+
+        public static int MaxCentralization(MandatePhase pPhase)
+        {
+            return pPhase switch
+            {
+                MandatePhase.Golden => 3,
+                MandatePhase.Decline => 2,
+                MandatePhase.Chaos => 0,
+                MandatePhase.Renewal => 1,
+                _ => 0
+            };
+        }
     }
 }
