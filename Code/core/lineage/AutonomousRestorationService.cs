@@ -255,9 +255,17 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(restored));
 
             CampaignRow started = ReadActiveCampaignById(campaignId);
-            if (started.campaignId >= 0 && !RoyalRestorationRules.HasRecoveredCoreThreshold(
-                    started.controlledCoreCount, started.totalCoreCount))
-                TryStartNextCoreWar(started, restored, year, seedOwner?.id ?? -1L);
+            if (started.campaignId >= 0)
+            {
+                bool coreWarStarted = false;
+                if (!RoyalRestorationRules.HasRecoveredCoreThreshold(
+                        started.controlledCoreCount, started.totalCoreCount))
+                    coreWarStarted = TryStartNextCoreWar(
+                        started, restored, year, seedOwner?.id ?? -1L);
+                if (!coreWarStarted)
+                    TryStartFormerOwnerWar(
+                        started, restored, seedOwner, seed, year);
+            }
             return true;
         }
 
@@ -480,6 +488,21 @@ namespace AncientWarfare3.core.lineage
                 pCampaign.coreCursor, inspected, cores.Count);
             UpdateCampaignCursor(pCampaign.campaignId, nextCursor, pYear);
             return false;
+        }
+
+        private static bool TryStartFormerOwnerWar(CampaignRow pCampaign,
+            Kingdom pRestored, Kingdom pFormerOwner, City pSeed, int pYear)
+        {
+            if (!IsLiveKingdom(pRestored) || !IsLiveKingdom(pFormerOwner) ||
+                pFormerOwner == pRestored || pSeed?.data == null ||
+                HasActiveWar(pRestored)) return false;
+            War war = WarDecisionService.TryStartSystemWar(
+                pRestored, pFormerOwner, WarDecisionService.WAR_RESTORATION,
+                "self_restoration_uprising");
+            if (war?.data == null) return false;
+            UpdateCampaignWar(pCampaign.campaignId, war.data.id,
+                pSeed.id, pFormerOwner.id, pCampaign.coreCursor, pYear);
+            return true;
         }
 
         private static void CompleteCampaign(CampaignRow pCampaign, Kingdom pRestored)
