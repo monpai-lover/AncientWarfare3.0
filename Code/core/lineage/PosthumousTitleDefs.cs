@@ -1,6 +1,6 @@
 namespace AncientWarfare3.core.lineage
 {
-    internal enum PosthumousDimension
+    public enum PosthumousDimension
     {
         Civil,
         Territory,
@@ -10,7 +10,7 @@ namespace AncientWarfare3.core.lineage
         Balanced
     }
 
-    internal enum PosthumousGrade
+    public enum PosthumousGrade
     {
         PraiseHigh,
         Praise,
@@ -19,7 +19,7 @@ namespace AncientWarfare3.core.lineage
         BlameHigh
     }
 
-    internal readonly struct PosthumousTitleChar
+    public readonly struct PosthumousTitleChar
     {
         public readonly string Char;
         public readonly PosthumousDimension Dimension;
@@ -33,7 +33,7 @@ namespace AncientWarfare3.core.lineage
         }
     }
 
-    internal static class PosthumousTitleDefs
+    public static class PosthumousTitleDefs
     {
         public static readonly PosthumousTitleChar[] Pool =
         {
@@ -52,8 +52,11 @@ namespace AncientWarfare3.core.lineage
             new PosthumousTitleChar("端", PosthumousDimension.Civil, PosthumousGrade.Praise),
             new PosthumousTitleChar("恪", PosthumousDimension.Civil, PosthumousGrade.Praise),
             new PosthumousTitleChar("勤", PosthumousDimension.Civil, PosthumousGrade.Praise),
+            new PosthumousTitleChar("宪", PosthumousDimension.Civil, PosthumousGrade.Praise),
+            new PosthumousTitleChar("敏", PosthumousDimension.Civil, PosthumousGrade.Praise),
 
             new PosthumousTitleChar("成", PosthumousDimension.Territory, PosthumousGrade.PraiseHigh),
+            new PosthumousTitleChar("元", PosthumousDimension.Territory, PosthumousGrade.Praise),
             new PosthumousTitleChar("定", PosthumousDimension.Territory, PosthumousGrade.Praise),
             new PosthumousTitleChar("襄", PosthumousDimension.Territory, PosthumousGrade.Praise),
             new PosthumousTitleChar("献", PosthumousDimension.Territory, PosthumousGrade.Praise),
@@ -63,6 +66,7 @@ namespace AncientWarfare3.core.lineage
             new PosthumousTitleChar("靖", PosthumousDimension.Territory, PosthumousGrade.Praise),
             new PosthumousTitleChar("宁", PosthumousDimension.Territory, PosthumousGrade.Praise),
             new PosthumousTitleChar("绥", PosthumousDimension.Territory, PosthumousGrade.Praise),
+            new PosthumousTitleChar("贞", PosthumousDimension.Order, PosthumousGrade.Praise),
 
             new PosthumousTitleChar("武", PosthumousDimension.War, PosthumousGrade.PraiseHigh),
             new PosthumousTitleChar("桓", PosthumousDimension.War, PosthumousGrade.Praise),
@@ -85,6 +89,8 @@ namespace AncientWarfare3.core.lineage
             new PosthumousTitleChar("和", PosthumousDimension.Order, PosthumousGrade.Neutral),
             new PosthumousTitleChar("质", PosthumousDimension.Order, PosthumousGrade.Neutral),
             new PosthumousTitleChar("隐", PosthumousDimension.Order, PosthumousGrade.Neutral),
+            new PosthumousTitleChar("僖", PosthumousDimension.Order, PosthumousGrade.Neutral),
+            new PosthumousTitleChar("节", PosthumousDimension.Order, PosthumousGrade.Praise),
 
             new PosthumousTitleChar("哀", PosthumousDimension.Ending, PosthumousGrade.Blame),
             new PosthumousTitleChar("闵", PosthumousDimension.Ending, PosthumousGrade.Blame),
@@ -93,6 +99,7 @@ namespace AncientWarfare3.core.lineage
             new PosthumousTitleChar("殇", PosthumousDimension.Ending, PosthumousGrade.Blame),
             new PosthumousTitleChar("冲", PosthumousDimension.Ending, PosthumousGrade.Blame),
             new PosthumousTitleChar("愍", PosthumousDimension.Ending, PosthumousGrade.Blame),
+            new PosthumousTitleChar("思", PosthumousDimension.Ending, PosthumousGrade.Neutral),
 
             new PosthumousTitleChar("厉", PosthumousDimension.Balanced, PosthumousGrade.BlameHigh),
             new PosthumousTitleChar("幽", PosthumousDimension.Balanced, PosthumousGrade.BlameHigh),

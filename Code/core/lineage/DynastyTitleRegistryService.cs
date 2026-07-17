@@ -10,6 +10,22 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
+        public static int ReadLatestCycle(long pShiId, string pTitleType)
+        {
+            if (!Ready || pShiId < 0 || string.IsNullOrWhiteSpace(pTitleType)) return 0;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT IFNULL(MAX(CYCLE_NO),0) FROM " +
+                                      DynastyTitleRegistryTableItem.GetTableName() +
+                                      " WHERE SHI_ID=@shi AND TITLE_TYPE=@kind";
+                command.Parameters.AddWithValue("@shi", pShiId);
+                command.Parameters.AddWithValue("@kind", pTitleType.Trim());
+                return Math.Max(0, Convert.ToInt32(command.ExecuteScalar()));
+            }
+            catch { return 0; }
+        }
+
         public static HashSet<string> ReadUsed(long pShiId, string pTitleType, int pCycleNo)
         {
             var result = new HashSet<string>(StringComparer.Ordinal);

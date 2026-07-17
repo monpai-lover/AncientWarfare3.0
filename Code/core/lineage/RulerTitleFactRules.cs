@@ -13,6 +13,11 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(0, pTotal - Math.Max(0, pExcludedBonus));
         }
 
+        public static bool CanBuildReignSnapshot(long pReignId, long pKingdomId)
+        {
+            return pReignId >= 0 || pKingdomId >= 0;
+        }
+
         public static RulerTitleDerivedFacts Derive(RulerTitleFacts pFacts)
         {
             if (pFacts == null) return new RulerTitleDerivedFacts();

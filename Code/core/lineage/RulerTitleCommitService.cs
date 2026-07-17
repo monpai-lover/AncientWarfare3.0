@@ -37,6 +37,49 @@ namespace AncientWarfare3.core.lineage
         public int AgeAtEvent = -1;
         public bool IsRetrospective;
         public string RetrospectiveRelation = "";
+
+        public static RulerTitleDecision ForPosthumous(RulerTitleFacts pFacts,
+            PosthumousTitleDecision pPosthumous, string pTitleKind = "posthumous")
+        {
+            string grade = pPosthumous.GradeKey ?? "";
+            string evaluation = grade.StartsWith("praise", StringComparison.Ordinal)
+                ? "good"
+                : grade.StartsWith("blame", StringComparison.Ordinal) ? "bad" : "neutral";
+            int highestTitle = pFacts?.HighestTitle ?? 0;
+            string suffix = highestTitle switch
+            {
+                0 => "伯",
+                1 => "侯",
+                2 => "公",
+                3 => "王",
+                4 => "帝",
+                _ => "君"
+            };
+            return new RulerTitleDecision
+            {
+                Facts = pFacts,
+                PosthumousName = pPosthumous.Name,
+                DisplayTitle = PosthumousTitleRules.BuildRankedAppellation(
+                    pFacts?.StateName, pPosthumous.Name, highestTitle),
+                PosthumousQualificationKey = pPosthumous.QualificationKey,
+                PosthumousCycleNo = pPosthumous.CycleNo,
+                TitleKind = string.IsNullOrWhiteSpace(pTitleKind)
+                    ? "posthumous"
+                    : pTitleKind.Trim(),
+                TitleSuffix = suffix,
+                Evaluation = evaluation,
+                Grade = grade,
+                DominantDimension = pPosthumous.DominantKey,
+                CivilScore = pPosthumous.Civil,
+                TerritoryScore = pPosthumous.Territory,
+                WarScore = pPosthumous.War,
+                OrderScore = pPosthumous.Order,
+                EndingScore = pPosthumous.Ending,
+                TotalScore = pPosthumous.Total,
+                Reason = pPosthumous.Reason,
+                AgeAtEvent = pFacts?.Age ?? -1
+            };
+        }
     }
 
     public readonly struct RulerTitleCommitResult

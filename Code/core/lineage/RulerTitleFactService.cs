@@ -71,10 +71,11 @@ namespace AncientWarfare3.core.lineage
             ReignRecordWriter.ReignInfo pReign, string pEndReason)
         {
             var facts = new RulerTitleFacts();
-            if (pActor?.data == null || !pReign.IsValid) return facts;
+            if (pActor?.data == null ||
+                !RulerTitleFactRules.CanBuildReignSnapshot(
+                    pReign.ReignId, pReign.KingdomId)) return facts;
 
             double endTime = pReign.EndTime > 0 ? pReign.EndTime : LineageService.CurTime();
-            string mandateOrigin = ReadMandateOrigin(pReign.MandatePeriodId);
             facts.ActorId = pActor.data.id;
             facts.KingdomId = pReign.KingdomId >= 0 ? pReign.KingdomId : pKingdom?.id ?? -1L;
             facts.ReignId = pReign.ReignId;
@@ -83,6 +84,10 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.get(LineageKeys.SHI_ID, out facts.ShiId, -1L);
             facts.DynastyId = pReign.DynastyId;
             facts.MandatePeriodId = pReign.MandatePeriodId;
+            if (facts.MandatePeriodId < 0 && pKingdom?.data != null)
+                pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID,
+                    out facts.MandatePeriodId, -1L);
+            string mandateOrigin = ReadMandateOrigin(facts.MandatePeriodId);
             facts.ActorName = pActor.getName() ?? "";
             facts.StateName = string.IsNullOrEmpty(pReign.StateNameSnapshot)
                 ? pKingdom?.name ?? ""
@@ -90,7 +95,8 @@ namespace AncientWarfare3.core.lineage
             facts.KingdomColor = HistoryColors.FromKingdom(pKingdom);
             facts.EndReason = pEndReason ?? pReign.EndReason ?? "";
             facts.DeathCause = pReign.DeathCause ?? "";
-            facts.HighestTitle = pReign.HighestTitle;
+            facts.HighestTitle = Math.Max(pReign.HighestTitle,
+                pKingdom?.data == null ? 0 : (int)KingdomTitleService.GetTitle(pKingdom));
             facts.Age = SafeAge(pActor);
             facts.StartYear = Date.getYear(pReign.StartTime);
             facts.EndYear = Date.getYear(endTime);
@@ -111,7 +117,7 @@ namespace AncientWarfare3.core.lineage
             facts.OffensiveWars = Math.Max(0, pReign.WarWins + pReign.WarLosses);
             facts.MajorReforms = CountReformEvents(facts.KingdomId, pReign.StartTime, endTime);
             facts.OrderDelta = pReign.LostCapital != 0 || facts.EndReason == "kingdom_fell" ? -1 : 0;
-            facts.IsMandate = pReign.MandatePeriodId >= 0;
+            facts.IsMandate = facts.MandatePeriodId >= 0;
             facts.IsFounder = pReign.IsFounder != 0;
             facts.IsLowOrigin = mandateOrigin == "rebel";
             facts.IsAutonomousRefounder = mandateOrigin == "self_restoration";
