@@ -24,6 +24,8 @@ namespace AncientWarfare3.core.policy
         public int year = int.MinValue;
         public float policy_points;
         public float tech_points;
+        public float tax_value;
+        public bool has_foreign_land_border;
     }
 
     internal static class CityEconomyService
@@ -59,8 +61,21 @@ namespace AncientWarfare3.core.policy
                         : null;
                 bool slaveryEnabled = SlaveService.IsSlaveryEnabled(pKingdom);
                 int cityCount = cities.Count;
+                CentralizationEffects effects = CentralizationService.ReadSnapshot(pKingdom).effects;
+                var sums = new CityEconomyContributionSums { year = year };
                 foreach (City city in cities)
-                    UpdateCity(pKingdom, city, year, cityCount, slaveryEnabled, techReports, storedStates);
+                {
+                    if (HasForeignLandNeighbour(pKingdom, city))
+                        sums.has_foreign_land_border = true;
+                    if (!UpdateCity(pKingdom, city, year, cityCount, slaveryEnabled, techReports,
+                            storedStates, effects.TaxMultiplier, effects.ManpowerMultiplier,
+                            effects.UnrestReduction, out CityEconomyContribution contribution))
+                        continue;
+                    sums.policy_points += contribution.PolicyPoints;
+                    sums.tech_points += contribution.TechPoints;
+                    sums.tax_value += contribution.TaxValue;
+                }
+                ContributionCache[pKingdom.id] = sums;
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyUpdateCitiesIndex, benchmark); }
 
@@ -77,6 +92,16 @@ namespace AncientWarfare3.core.policy
         public static float GetTechContribution(Kingdom pKingdom)
         {
             return GetContributionSums(pKingdom).tech_points;
+        }
+
+        public static float GetTaxContribution(Kingdom pKingdom)
+        {
+            return GetContributionSums(pKingdom).tax_value;
+        }
+
+        public static bool HasForeignLandBorder(Kingdom pKingdom)
+        {
+            return GetContributionSums(pKingdom).has_foreign_land_border;
         }
 
         public static CityEconomySnapshot GetSnapshot(City pCity)
@@ -105,11 +130,14 @@ namespace AncientWarfare3.core.policy
             return snapshot;
         }
 
-        private static void UpdateCity(Kingdom pKingdom, City pCity, int pYear, int pCityCount,
+        private static bool UpdateCity(Kingdom pKingdom, City pCity, int pYear, int pCityCount,
             bool pSlaveryEnabled, Dictionary<long, CityTechReport> pTechReports,
-            Dictionary<long, CityEconomyStoredState> pStoredStates)
+            Dictionary<long, CityEconomyStoredState> pStoredStates, float pTaxMultiplier,
+            float pManpowerMultiplier, float pUnrestReduction,
+            out CityEconomyContribution pContribution)
         {
-            if (pCity?.data == null || pCity.isRekt()) return;
+            pContribution = default;
+            if (pCity?.data == null || pCity.isRekt()) return false;
             bool activeFief = FiefService.IsActiveFief(pCity);
             long benchmark = UpdateAgeBenchmark.Begin();
             CityTechReport tech = null;
@@ -135,7 +163,8 @@ namespace AncientWarfare3.core.policy
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomySlaveCountIndex, benchmark); }
             CityEconomyContribution contribution = CityEconomyRules.CalculateContribution(role, population,
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
-                slavePopulation, nonCore, activeFief);
+                slavePopulation, nonCore, activeFief, pTaxMultiplier, pManpowerMultiplier,
+                pUnrestReduction);
             benchmark = UpdateAgeBenchmark.Begin();
             try
             {
@@ -144,6 +173,8 @@ namespace AncientWarfare3.core.policy
                 Upsert(pKingdom, pCity, role, contribution, pYear, previous);
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyDbUpsertIndex, benchmark); }
+            pContribution = contribution;
+            return true;
         }
 
         private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief,
@@ -326,7 +357,7 @@ namespace AncientWarfare3.core.policy
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT SUM(POLICY_POINTS),SUM(TECH_POINTS) FROM " +
+                cmd.CommandText = "SELECT SUM(POLICY_POINTS),SUM(TECH_POINTS),SUM(TAX_VALUE) FROM " +
                                   CityEconomyStateTableItem.GetTableName() + " WHERE KINGDOM_ID=@kingdom";
                 cmd.Parameters.AddWithValue("@kingdom", pKingdom.id);
                 using SQLiteDataReader reader = cmd.ExecuteReader();
@@ -334,6 +365,7 @@ namespace AncientWarfare3.core.policy
                 {
                     sums.policy_points = reader.IsDBNull(0) ? 0f : Convert.ToSingle(reader.GetValue(0));
                     sums.tech_points = reader.IsDBNull(1) ? 0f : Convert.ToSingle(reader.GetValue(1));
+                    sums.tax_value = reader.IsDBNull(2) ? 0f : Convert.ToSingle(reader.GetValue(2));
                 }
             }
             catch
@@ -409,6 +441,23 @@ namespace AncientWarfare3.core.policy
         private static bool IsBorderCity(Kingdom pKingdom, City pCity, int pCityCount)
         {
             return pKingdom?.capital != pCity && pCityCount > 1;
+        }
+
+        private static bool HasForeignLandNeighbour(Kingdom pKingdom, City pCity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null) return false;
+            try
+            {
+                foreach (Kingdom neighbour in pCity.neighbours_kingdoms)
+                {
+                    if (neighbour?.data == null || neighbour == pKingdom || neighbour.isRekt()) continue;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
         }
 
         private static bool IsNonCore(Kingdom pKingdom, City pCity)
