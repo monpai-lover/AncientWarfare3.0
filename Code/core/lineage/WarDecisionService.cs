@@ -126,6 +126,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender)) return false;
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (type == MandateService.WAR_TIANMING && !MandatePhaseService.CanContestMandate)
+                return false;
             if (HasActiveClaim(pAttacker.id, pDefender.id, type)) return true;
             if (type == WAR_NORMAL && WarTerritoryService.HasClaimLikeCasusBelli(pAttacker, pDefender))
                 return true;
@@ -213,6 +215,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) || pAttacker == pDefender) return null;
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (type == MandateService.WAR_TIANMING && !MandatePhaseService.CanContestMandate)
+                return null;
             WarTypeAsset asset = AssetManager.war_types_library.get(type);
             if (asset == null) return null;
 
