@@ -105,6 +105,7 @@ namespace AncientWarfare3.ui.windows
                 tooltip_desc = BuildStatusTooltip(pReport)
             });
 
+            AddPlain(BuildPhaseSummary("  "));
             if (!pReport.active) return;
             AddPlain(
                 AW_L10n.Text("aw_mandate_kingdom", "\u5929\u547D\u56FD") + ": " + RichName(pReport.kingdom_name, color) +
@@ -250,7 +251,10 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildStatusTooltip(MandateReport pReport)
         {
-            if (!pReport.active) return AW_L10n.Text("aw_mandate_none", "\u5F53\u524D\u6CA1\u6709\u5929\u547D\u738B\u671D");
+            string phaseSummary = BuildPhaseSummary("\n");
+            if (!pReport.active)
+                return AW_L10n.Text("aw_mandate_none", "\u5F53\u524D\u6CA1\u6709\u5929\u547D\u738B\u671D") +
+                       "\n" + phaseSummary;
             return AW_L10n.Text("aw_mandate_kingdom", "\u5929\u547D\u56FD") + ": " + pReport.kingdom_name +
                    "\n" + AW_L10n.Text("aw_mandate_emperor", "\u5929\u547D\u7687\u5E1D") + ": " + pReport.emperor_name +
                    "\n" + AW_L10n.Text("aw_mandate_value", "\u5929\u547D\u503C") + ": " + pReport.mandate_value +
@@ -260,7 +264,18 @@ namespace AncientWarfare3.ui.windows
                    pReport.controlled_core_count + "/" + pReport.core_count +
                    "\n" + AW_L10n.Text("aw_mandate_vassals", "\u5929\u547D\u9644\u5EB8") + ": " + pReport.vassal_count +
                    "\n" + AW_L10n.Text("aw_mandate_origin", "\u6765\u6E90") + ": " + OriginText(pReport.origin_type) +
-                   "\n" + AW_L10n.Text("aw_mandate_claimant", "\u5BA3\u79F0") + ": " + ClaimantText(pReport.claimant_kind);
+                   "\n" + AW_L10n.Text("aw_mandate_claimant", "\u5BA3\u79F0") + ": " + ClaimantText(pReport.claimant_kind) +
+                   "\n" + phaseSummary;
+        }
+
+        private static string BuildPhaseSummary(string pSeparator)
+        {
+            MandatePhase phase = MandatePhaseService.CurrentPhase;
+            return AW_L10n.Text("aw_mandate_phase", "\u6CBB\u4E71\u9636\u6BB5") + ": " + PhaseText(phase) +
+                   pSeparator + AW_L10n.Text("aw_mandate_phase_since", "\u9636\u6BB5\u8D77\u59CB") + ": " +
+                   MandatePhaseService.PhaseSinceYear +
+                   pSeparator + AW_L10n.Text("aw_mandate_catalyst", "\u4E71\u4E16\u50AC\u5316") + ": " +
+                   MandatePhaseService.CatalystScore;
         }
 
         private static string BuildDecisionTooltip(Kingdom pKingdom, MandateDecisionDef pDef)
@@ -363,6 +378,21 @@ namespace AncientWarfare3.ui.windows
                 case "lost": return AW_L10n.Text("aw_mandate_crisis_lost", "\u5931\u5FB7");
                 case "collapse": return AW_L10n.Text("aw_mandate_crisis_collapse", "\u5D29\u89E3");
                 default: return string.IsNullOrEmpty(pLevel) ? AW_L10n.Text("aw_mandate_crisis_unknown", "\u672A\u77E5") : pLevel;
+            }
+        }
+
+        private static string PhaseText(MandatePhase pPhase)
+        {
+            switch (pPhase)
+            {
+                case MandatePhase.Decline:
+                    return AW_L10n.Text("aw_mandate_phase_decline", "\u8870\u4E16");
+                case MandatePhase.Chaos:
+                    return AW_L10n.Text("aw_mandate_phase_chaos", "\u4E71\u4E16");
+                case MandatePhase.Renewal:
+                    return AW_L10n.Text("aw_mandate_phase_renewal", "\u65B0\u671D");
+                default:
+                    return AW_L10n.Text("aw_mandate_phase_golden", "\u6CBB\u4E16");
             }
         }
 

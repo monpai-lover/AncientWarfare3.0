@@ -28,6 +28,13 @@ aw_mandate_crisis_shaken,动摇,Shaken,动摇
 aw_mandate_crisis_lost,失德,Discredited,失德
 aw_mandate_crisis_collapse,崩解,Collapse,崩解
 aw_mandate_crisis_unknown,未知,Unknown,未知
+aw_mandate_phase,治乱阶段,Dynastic Cycle,治亂階段
+aw_mandate_phase_golden,治世,Golden Age,治世
+aw_mandate_phase_decline,衰世,Decline,衰世
+aw_mandate_phase_chaos,乱世,Chaos,亂世
+aw_mandate_phase_renewal,新朝,Renewal,新朝
+aw_mandate_phase_since,阶段起始,Phase Since,階段起始
+aw_mandate_catalyst,乱世催化,Chaos Catalyst,亂世催化
 aw_policy_mandate_rites,天命礼制,Mandate Rites,天命礼制
 aw_policy_mandate_rites_desc,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。,Formalize Mandate rites sacrifices and era changes as a legitimacy framework,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。
 aw_policy_imperial_court,王朝朝廷,Imperial Court,王朝朝廷
