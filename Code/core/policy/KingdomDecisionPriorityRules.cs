@@ -20,7 +20,7 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     return pSlaveryEnabled ? 680 : 420;
                 case "aw_decision_year_name":
-                    return pMissingYearName ? 620 : 220;
+                    return 0;
                 case "aw_decision_appease_xia_cities":
                     return pXiaizationScore;
                 default:

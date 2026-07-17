@@ -243,9 +243,13 @@ namespace AncientWarfare3.core.lineage
             }
             if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
+            bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
             if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
-            YearNameService.ChangeYearName(pKingdom);
+            if (wasAlreadyEmperor &&
+                (hadPreviousMandate || pOriginType == "self_restoration"))
+                EraChangeTriggerService.Mark(pKingdom,
+                    EraChangeReason.RestoredMandate, "mandate:" + periodId);
             CreateLegalCores(pKingdom, periodId, previousPeriodId);
             UpdateOriginalCoreCount(periodId);
 

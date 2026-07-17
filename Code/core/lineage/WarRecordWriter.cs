@@ -150,6 +150,16 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("WarRecordWriter.OnWarEnd 失败:" + e.Message);
             }
 
+            Kingdom winner = pWinner switch
+            {
+                WarWinner.Attackers => pWar.getMainAttacker(),
+                WarWinner.Defenders => pWar.getMainDefender(),
+                _ => null
+            };
+            if (winner?.data != null && !winner.isRekt())
+                EraChangeTriggerService.Mark(winner,
+                    EraChangeReason.MajorVictory, "war:" + warId);
+
             _active.Remove(pWar);
         }
 

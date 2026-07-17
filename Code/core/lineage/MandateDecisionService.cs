@@ -62,16 +62,6 @@ namespace AncientWarfare3.core.lineage
                 IconPath = "ui/Icons/traits/iconTianming",
                 Cost = MandateSacrificeService.GetCost(MandateSacrificeLevel.Conservative),
                 SacrificeLevel = MandateSacrificeLevel.Conservative
-            },
-            new MandateDecisionDef
-            {
-                Id = "aw_mandate_decision_year_name",
-                NameKey = "aw_mandate_decision_year_name",
-                DescKey = "aw_mandate_decision_year_name_desc",
-                FallbackName = "\u6539\u5143",
-                FallbackDesc = "\u5728\u5927\u4E8B\u540E\u9881\u5E03\u65B0\u5E74\u53F7\uFF0C\u5E76\u5199\u5165\u5929\u547D\u53F2\u548C\u56FD\u53F2\u3002",
-                IconPath = "ui/policy/change_name",
-                Cost = 25f
             }
         };
 
@@ -165,8 +155,6 @@ namespace AncientWarfare3.core.lineage
 
             switch (pDef.Id)
             {
-                case "aw_mandate_decision_year_name":
-                    return true;
                 case "aw_mandate_decision_border_defense":
                     return true;
                 default:
@@ -261,12 +249,6 @@ namespace AncientWarfare3.core.lineage
             {
                 case "aw_mandate_decision_border_defense":
                     return MandateBorderDefenseService.ExecuteDecision(pKingdom);
-                case "aw_mandate_decision_year_name":
-                    YearNameService.ChangeYearName(pKingdom);
-                    MandateReport report = MandateService.ReadReport();
-                    MandateService.RecordMandateEvent("mandate_year_name", pKingdom, pKingdom.king, null,
-                        0, report.mandate_value, (pKingdom.name ?? "") + " \u6539\u5143");
-                    return true;
                 default:
                     return false;
             }

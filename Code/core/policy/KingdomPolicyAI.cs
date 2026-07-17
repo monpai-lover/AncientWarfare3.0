@@ -114,7 +114,6 @@ namespace AncientWarfare3.core.policy
 
         private static int ScoreDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
-            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
             int cities = CountCities(pKingdom);
             int baseScore = KingdomDecisionPriorityRules.ScoreDecision(
                 pDef.Id,
@@ -122,7 +121,7 @@ namespace AncientWarfare3.core.policy
                 cities,
                 SlaveService.IsSlaveryEnabled(pKingdom),
                 XiaizationService.ScoreResearch(pKingdom, pDef),
-                string.IsNullOrEmpty(yearName));
+                false);
 
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
             long benchmark = UpdateAgeBenchmark.Begin();
@@ -161,17 +160,10 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_fabricate_core":
                     return WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom)?.data != null;
                 case "aw_decision_year_name":
-                    pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
-                    return string.IsNullOrEmpty(yearName);
+                    return false;
                 default:
                     return false;
             }
-        }
-
-        private static int ScoreYearNameDecision(Kingdom pKingdom)
-        {
-            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME, out string yearName, "");
-            return string.IsNullOrEmpty(yearName) ? 620 : 220;
         }
 
         private static int ScoreResearch(Kingdom pKingdom, KingdomPolicyDef pDef)

@@ -155,6 +155,10 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.PlainText(historyContent), HistoryTarget.Actor(emperor));
             PersistRecord(pKingdom, emperor, report, pLevel, qualified, roll,
                 outcome, effects, buffUntilYear, ritualCompleteness);
+            if (outcome == MandateSacrificeOutcome.Auspicious)
+                EraChangeTriggerService.Mark(pKingdom,
+                    EraChangeReason.GrandSacrificeBlessing,
+                    "sacrifice:" + (report?.period_id ?? -1L) + ":" + year);
             return true;
         }
 

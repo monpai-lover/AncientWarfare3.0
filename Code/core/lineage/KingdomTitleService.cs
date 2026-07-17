@@ -32,6 +32,7 @@ namespace AncientWarfare3.core.lineage
             RetrospectiveTitleService.TryAwardFirstImperialAncestors(
                 pKingdom, pKingdom.king, shiId,
                 DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id));
+            YearNameService.TryStartAccessionEra(pKingdom, pKingdom.king);
         }
 
         public static void PromoteTitle(Kingdom pKingdom)

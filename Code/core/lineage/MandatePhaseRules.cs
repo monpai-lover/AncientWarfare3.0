@@ -85,6 +85,13 @@ namespace AncientWarfare3.core.lineage
                 : MandatePhase.Decline;
         }
 
+        public static bool IsRevivalTransition(MandatePhase pPrevious,
+            MandatePhase pNext)
+        {
+            return pPrevious == MandatePhase.Decline &&
+                   pNext == MandatePhase.Golden;
+        }
+
         public static int AdjustCatalyst(int pCurrent, int pDelta)
         {
             return Math.Max(0, Math.Min(100, pCurrent + pDelta));

@@ -150,6 +150,8 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null || pNewKingdom?.data == null || !Ready) return;
             try
             {
+                EraChangeTriggerService.MarkTerritoryRecovery(
+                    pCity, pOldKingdom, pNewKingdom);
                 foreach (War war in GetCandidateWarsForTransferredCity(pCity, pNewKingdom))
                     if (TryResolveTransferredCityGoal(pCity, pNewKingdom, war))
                         return;

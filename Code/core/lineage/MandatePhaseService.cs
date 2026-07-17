@@ -134,8 +134,15 @@ namespace AncientWarfare3.core.lineage
                 activeClaimants,
                 _catalystScore,
                 _stableYears);
+            MandatePhase previous = _phase;
             MandatePhase next = MandatePhaseRules.Evaluate(facts);
             SetPhase(next, pYear);
+            if (MandatePhaseRules.IsRevivalTransition(previous, next))
+            {
+                Kingdom mandate = MandateService.GetCurrentMandateKingdom();
+                EraChangeTriggerService.Mark(mandate,
+                    EraChangeReason.EnteredRevival, "phase:revival:" + pYear);
+            }
             Persist(pReason);
         }
 

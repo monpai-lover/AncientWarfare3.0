@@ -80,7 +80,6 @@ namespace AncientWarfare3.patch
             HeirService.ClearHeir(__instance);
             HeirService.RefreshHeir(__instance);
             CourtDirectionService.MarkDirty(__instance);
-            YearNameService.OnNewKing(__instance);
         }
 
         private static bool UsesManagedSuccession(Kingdom pKingdom)

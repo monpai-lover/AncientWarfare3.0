@@ -44,6 +44,9 @@ namespace AncientWarfare3.core.lineage
             ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
             DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
             ReignRecordWriter.OpenReign(pKingdom, pNewKing);
+            if (KingdomTitleService.IsEmperor(pKingdom) &&
+                !RepublicGovernmentService.IsRepublic(pKingdom))
+                YearNameService.TryStartAccessionEra(pKingdom, pNewKing);
         }
 
         private static bool BindStateNameForRuler(Kingdom pKingdom, Actor pRuler)

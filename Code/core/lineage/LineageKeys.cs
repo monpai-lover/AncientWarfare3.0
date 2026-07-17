@@ -303,6 +303,9 @@ namespace AncientWarfare3.core.lineage
         public const string COLLATERAL_NONAGNATIC = "aw_collateral_nonagnatic";
         public const string KINGDOM_YEAR_NAME = "aw_year_name";
         public const string KINGDOM_YEAR_START = "aw_year_start";
+        public const string KINGDOM_ERA_CHANGE_REASON = "aw_era_change_reason";
+        public const string KINGDOM_ERA_SOURCE_EVENT_ID = "aw_era_source_event_id";
+        public const string KINGDOM_ERA_LAST_AI_CHECK_YEAR = "aw_era_last_ai_check_year";
         public const string KINGDOM_TITLE = "aw_title";
     }
 

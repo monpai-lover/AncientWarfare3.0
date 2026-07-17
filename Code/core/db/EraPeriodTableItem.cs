@@ -8,12 +8,19 @@ namespace AncientWarfare3.core.db
     {
         [TableItemDef(pIsPrimary: true)] public long era_id;
 
-        public long   kingdom_id  = -1;
+        public long kingdom_id = -1;
         public string kingdom_color = "";
-        public string era_stem    = "";   // 年号词干（如"周伯发"或"远景"）
-        public string era_color   = "";
+        [TableItemDef(pDefaultValue: "-1")] public long shi_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long actor_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long reign_id = -1;
+        public string era_stem = "";
+        public string era_color = "";
+        public string change_kind = "";
+        public string change_reason = "";
+        public string source_event_id = "";
+        public double decided_time;
         public double start_time;
         [TableItemDef(pDefaultValue: "-1")] public double end_time;
-        public int    start_year  = 0;    // 对应 Date.getYear(start_time)
+        public int start_year;
     }
 }

@@ -568,7 +568,7 @@ namespace AncientWarfare3.content.policies
                 FallbackName = "\u6539\u5143",
                 FallbackDesc = "\u91CD\u65B0\u9881\u5E03\u5E74\u53F7\uFF0C\u8BB0\u5165\u56FD\u53F2\u548C\u5F53\u4EE3\u7EAA\u5E74\u3002",
                 IconPath = "ui/policy/change_name",
-                Cost = 18f,
+                Cost = YearNameService.VoluntaryChangeCost,
                 Repeatable = true,
                 Column = 0,
                 Row = 0

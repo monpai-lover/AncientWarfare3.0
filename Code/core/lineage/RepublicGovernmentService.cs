@@ -163,22 +163,26 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || !IsRepublic(pKingdom)) return;
             ClearRepublicLeader(pKingdom.king);
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassDefault);
+            MarkMonarchyEstablished(pKingdom);
             HeirService.ClearHeir(pKingdom);
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,
                 HistoryText.Kingdom(pKingdom) +
                 HistoryText.PlainText(" \u91cd\u65b0\u62e5\u7acb\u541b\u4e3b\uff0c\u7ed3\u675f\u5171\u548c\u653f\u4f53"),
                 HistoryTarget.Kingdom(pKingdom));
+            if (KingdomTitleService.IsEmperor(pKingdom) && pKingdom.king?.data != null)
+                YearNameService.TryStartRestoredMonarchyEra(pKingdom, pKingdom.king);
         }
 
         private static void SetRepublic(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || IsRepublic(pKingdom)) return;
-            pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRepublic);
-            HeirService.ClearHeir(pKingdom);
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,
                 HistoryText.Kingdom(pKingdom) +
                 HistoryText.PlainText(" \u5df2\u65e0\u53ef\u7acb\u4e4b\u541b\uff0c\u6539\u4e3a\u5171\u548c\u653f\u4f53"),
                 HistoryTarget.Kingdom(pKingdom));
+            pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRepublic);
+            YearNameService.EndMonarchicalChronology(pKingdom);
+            HeirService.ClearHeir(pKingdom);
         }
 
         private static void MakeKingAndMoveToCapital(Kingdom pKingdom, Actor pLeader)

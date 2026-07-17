@@ -81,6 +81,8 @@ namespace AncientWarfare3.core.policy
             try { AddYearlyPoints(pKingdom); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyPointsIndex, benchmark); }
 
+            EraChangeTriggerService.TryProcessAnnualAi(pKingdom);
+
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
             benchmark = UpdateAgeBenchmark.Begin();
@@ -281,6 +283,8 @@ namespace AncientWarfare3.core.policy
             if (def.Kind == PolicyNodeKind.Decision &&
                 TitleUpgradeDecisionRules.ShouldCompleteImmediately(def.Id, HasValidSuzerain(pKingdom)))
                 return CompleteImmediateDecision(pKingdom, def);
+            if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_year_name")
+                return CompleteImmediateDecision(pKingdom, def);
 
             if (def.Kind == PolicyNodeKind.Decision &&
                 DecisionQueueRules.ShouldQueueDecisionWhenBusy(GetCurrent(pKingdom, PolicyNodeKind.Decision), def.Id))
@@ -320,6 +324,8 @@ namespace AncientWarfare3.core.policy
 
             if (def.Kind == PolicyNodeKind.Decision &&
                 TitleUpgradeDecisionRules.ShouldCompleteImmediately(def.Id, HasValidSuzerain(pKingdom)))
+                return CompleteImmediateDecision(pKingdom, def);
+            if (def.Kind == PolicyNodeKind.Decision && def.Id == "aw_decision_year_name")
                 return CompleteImmediateDecision(pKingdom, def);
 
             pKingdom.data.set(CurrentKey(def.Kind), def.Id);
@@ -1216,6 +1222,10 @@ namespace AncientWarfare3.core.policy
             bool effectApplied = ApplyEffect(pKingdom, pDef);
             if (pDef.Kind == PolicyNodeKind.Tech)
                 CityTechService.OnNationalTechCompleted(pKingdom, pDef);
+            if (effectApplied && EraNameRules.IsCentralReform(pDef.Id))
+                EraChangeTriggerService.Mark(pKingdom,
+                    EraChangeReason.CentralReform,
+                    "reform:" + pDef.Id + ":" + Date.getCurrentYear());
             if (effectApplied && ShouldRecordGenericCompletion(pDef))
                 RecordCompletion(pKingdom, pDef);
             if (pDef.Kind == PolicyNodeKind.Decision)
@@ -1307,14 +1317,14 @@ namespace AncientWarfare3.core.policy
                     return true;
                 case "aw_decision_year_name":
                     if (!pKingdom.hasKing()) return false;
-                    YearNameService.ChangeYearName(pKingdom);
-                    return true;
+                    return YearNameService.TryChangeEra(pKingdom, pKingdom.king,
+                        "", EraChangeKind.Voluntary,
+                        EraChangeReason.PlayerRequested).Success;
                 case "aw_decision_claim_mandate":
                     return MandateService.TryDeclareMandate(pKingdom, "decision");
                 case "aw_decision_title_upgrade":
                     if (!CanPromoteTitle(pKingdom)) return false;
                     KingdomTitleService.PromoteTitle(pKingdom);
-                    YearNameService.ChangeYearName(pKingdom);
                     return true;
                 case "aw_decision_royal_expansion":
                     if (!RoyalExpansionDecisionService.Execute(pKingdom)) return false;
@@ -1451,7 +1461,12 @@ namespace AncientWarfare3.core.policy
             switch (pDef.Id)
             {
                 case "aw_decision_year_name":
-                    return pKingdom.hasKing();
+                    return pKingdom.hasKing() &&
+                           KingdomTitleService.IsEmperor(pKingdom) &&
+                           !RepublicGovernmentService.IsRepublic(pKingdom) &&
+                           VassalService.GetSuzerain(pKingdom) == null &&
+                           KingdomPolicyService.GetPoliticalPoints(pKingdom) >=
+                           YearNameService.VoluntaryChangeCost;
                 case "aw_decision_claim_mandate":
                     return MandateService.CanDeclareMandate(pKingdom, out _);
                 case "aw_decision_title_upgrade":
@@ -2066,6 +2081,9 @@ namespace AncientWarfare3.core.policy
                 HistoryText.Kingdom(pKingdom) + " \u8FC1\u90FD\uFF0C\u7531" +
                 HistoryText.PlainText(oldName) + "\u8FC1\u5F80" + HistoryText.PlainText(newName),
                 HistoryTarget.Kingdom(pKingdom));
+            EraChangeTriggerService.Mark(pKingdom,
+                EraChangeReason.CapitalRelocated,
+                "capital:" + next.data.id + ":" + Date.getCurrentYear());
             return true;
         }
 
