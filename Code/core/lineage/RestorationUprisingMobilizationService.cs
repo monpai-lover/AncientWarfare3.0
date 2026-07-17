@@ -294,9 +294,8 @@ namespace AncientWarfare3.core.lineage
                 RoyalAsylumService.IsActive(pActor) ||
                 SlaveService.IsSlave(pActor) || SlaveService.IsRetiredSoldier(pActor)) return true;
             if (pActor.army != null && AWArmyService.IsSpecialArmy(pActor.army)) return true;
-            if (pActor.hasTrait("figure") || pActor.hasTrait("first")) return true;
             if (!HistoricalMasterVocationService.CanEnter(pActor,
-                    HistoricalMasterMilitaryContext.RebelLevy)) return true;
+                    HistoricalMasterMilitaryContext.OrdinaryWarrior)) return true;
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             return !string.IsNullOrEmpty(office);
         }
