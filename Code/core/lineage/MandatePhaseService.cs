@@ -149,9 +149,11 @@ namespace AncientWarfare3.core.lineage
         private static void SetPhase(MandatePhase pPhase, int pYear)
         {
             if (_phase == pPhase && _phaseSinceYear > UNSET_YEAR) return;
+            MandatePhase previous = _phase;
             _phase = pPhase;
             _phaseSinceYear = pYear;
             _stableYears = 0;
+            CentralizationService.OnPhaseChanged(previous, pPhase, pYear);
         }
 
         private static bool EnsureLoaded()

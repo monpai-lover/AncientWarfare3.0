@@ -127,6 +127,8 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_event_succession_collateral_restore", "恢复宗统", "Lineal Restoration", "恢復宗統"),
             new Entry("aw_hist_event_person_collateral_restore", "恢复宗统", "Lineal Restoration", "恢復宗統"),
             new Entry("aw_hist_event_mandate_collapse", "天命崩解", "Mandate Collapse", "天命崩解"),
+            new Entry("aw_hist_event_centralization_reformed", "整饬中央", "Central Reform", "整飭中央"),
+            new Entry("aw_hist_event_centralization_chaos_downgrade", "乱世失权", "Central Power Lost", "亂世失權"),
             new Entry("aw_hist_event_city_economy_role", "城市经济定位", "City Economic Role", "城市經濟定位"),
             new Entry("aw_hist_event_city_economy_tax", "城市税收", "City Tax", "城市稅收"),
             new Entry("aw_hist_event_court_founded", "官场建立", "Court Founded", "官場建立"),
@@ -135,6 +137,9 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_event_court_faction_dominant", "学派主导", "Faction Dominance", "學派主導"),
             new Entry("aw_hist_event_court_city_bureau", "地方官署", "City Bureau", "地方官署"),
             new Entry("aw_hist_event_unknown", "未记录", "Unrecorded", "未記錄"),
+
+            new Entry("aw_hist_centralization_reformed_text", "整饬中央，名义集权升至", "Central administration reformed; nominal centralization rose to ", "整飭中央，名義集權升至"),
+            new Entry("aw_hist_centralization_chaos_downgrade_text", "乱世失权，名义集权降至", "Chaos weakened central authority; nominal centralization fell to ", "亂世失權，名義集權降至"),
 
             // Dynamic history text fragments
             new Entry("aw_unknown_kingdom", "\u672a\u77e5\u56fd\u5bb6", "unknown realm", "\u672a\u77e5\u570b\u5bb6"),

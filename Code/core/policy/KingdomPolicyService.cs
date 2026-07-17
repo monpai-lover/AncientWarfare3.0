@@ -781,6 +781,34 @@ namespace AncientWarfare3.core.policy
             return value;
         }
 
+        public static bool TrySpendPoliticalPoints(Kingdom pKingdom, float pCost,
+            float pReserve = 0f)
+        {
+            if (pKingdom?.data == null || pCost < 0f || pReserve < 0f) return false;
+            float current = Mathf.Clamp(GetPoliticalPoints(pKingdom), 0f, MAX_POINTS);
+            if (current + 0.001f < pCost + pReserve) return false;
+            pKingdom.data.set(LineageKeys.POLICY_POINTS,
+                Mathf.Clamp(current - pCost, 0f, MAX_POINTS));
+            UpsertSnapshot(pKingdom);
+            return true;
+        }
+
+        public static float TransferPoliticalPoints(Kingdom pSource, Kingdom pTarget,
+            float pRequested)
+        {
+            if (pSource?.data == null || pTarget?.data == null ||
+                pSource == pTarget || pRequested <= 0f) return 0f;
+            float sourcePoints = Mathf.Clamp(GetPoliticalPoints(pSource), 0f, MAX_POINTS);
+            float targetPoints = Mathf.Clamp(GetPoliticalPoints(pTarget), 0f, MAX_POINTS);
+            float actual = Mathf.Min(pRequested, sourcePoints, MAX_POINTS - targetPoints);
+            if (actual <= 0f) return 0f;
+            pSource.data.set(LineageKeys.POLICY_POINTS, sourcePoints - actual);
+            pTarget.data.set(LineageKeys.POLICY_POINTS, targetPoints + actual);
+            UpsertSnapshot(pSource);
+            UpsertSnapshot(pTarget);
+            return actual;
+        }
+
         public static float GetTechPoints(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0f;

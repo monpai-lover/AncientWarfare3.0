@@ -47,6 +47,12 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_SACRIFICE_BUFF_UNTIL = "aw_mandate_sacrifice_buff_until";
         public const string MANDATE_SACRIFICE_BUFF_DELTA = "aw_mandate_sacrifice_buff_delta";
         public const string MANDATE_RITUAL_COMPLETENESS = "aw_mandate_ritual_completeness";
+        public const string CENTRALIZATION_LEVEL = "aw_centralization_level";
+        public const string CENTRALIZATION_REFORM_READY_YEAR = "aw_centralization_reform_ready_year";
+        public const string CENTRALIZATION_LAST_CHAOS_EPOCH = "aw_centralization_last_chaos_epoch";
+        public const string VASSAL_TRIBUTE_LAST_YEAR = "aw_vassal_tribute_last_year";
+        public const string VASSAL_DIRECT_COUNT = "aw_vassal_direct_count";
+        public const string VASSAL_OBLIGATION_DECISIONS = "aw_vassal_obligation_decisions";
         public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
         public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";
         public const string RESTORATION_CLAIM_ID = "aw_restoration_claim_id";
