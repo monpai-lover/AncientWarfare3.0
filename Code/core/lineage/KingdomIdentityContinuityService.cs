@@ -204,8 +204,9 @@ namespace AncientWarfare3.core.lineage
             }
 
             ContinuitySnapshot continuity = ReadContinuity(pRequest.original_kingdom_id);
+            Kingdom previousHost = PrepareClaimantForRestorationAccession(
+                pClaimant, out bool clearedHostHeir);
             PrepareClaimantLineage(pClaimant, pRequest);
-            if (pClaimant.hasArmy()) pClaimant.removeFromArmy();
             Kingdom targetOwner = pTargetCity.kingdom;
             try
             {
@@ -215,9 +216,11 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
+                RefreshPreviousHostHeir(previousHost, clearedHostHeir);
                 pError = "claimant_move_failed:" + e.Message;
                 return null;
             }
+            RefreshPreviousHostHeir(previousHost, clearedHostHeir);
 
             KingdomData deadStats = DetachDeadStatsRow(pRequest.original_kingdom_id);
             ClearDeadKingdomCache(pRequest.original_kingdom_id);
@@ -273,6 +276,39 @@ namespace AncientWarfare3.core.lineage
                 pError = "identity_recovery_partial:" + e.Message;
             }
             return restored;
+        }
+
+        private static Kingdom PrepareClaimantForRestorationAccession(
+            Actor pClaimant, out bool pClearedHostHeir)
+        {
+            pClearedHostHeir = false;
+            if (pClaimant?.data == null) return null;
+            Kingdom previousHost = pClaimant.kingdom;
+            if (RoyalGuardService.IsRoyalGuard(pClaimant))
+                RoyalGuardService.DismissGuard(pClaimant, "restoration_accession");
+            if (GeneralService.IsGeneral(pClaimant) ||
+                FiefService.GetFiefCityId(pClaimant) >= 0)
+                GeneralService.RetireForSuccession(pClaimant);
+            CourtService.ClearOfficeForReignTransition(
+                pClaimant, "restoration_accession");
+            if (HeirService.IsCurrentHeir(previousHost, pClaimant))
+            {
+                HeirService.ClearHeir(previousHost);
+                pClearedHostHeir = true;
+            }
+            City previousCity = pClaimant.city;
+            if (previousCity?.leader == pClaimant) previousCity.removeLeader();
+            if (pClaimant.hasArmy()) pClaimant.removeFromArmy();
+            return previousHost;
+        }
+
+        private static void RefreshPreviousHostHeir(Kingdom pPreviousHost,
+            bool pClearedHostHeir)
+        {
+            if (!pClearedHostHeir || pPreviousHost?.data == null ||
+                pPreviousHost.isRekt()) return;
+            try { HeirService.RefreshHeir(pPreviousHost); }
+            catch { }
         }
 
         private static void PrepareClaimantLineage(Actor pClaimant, KingdomRestorationRequest pRequest)
