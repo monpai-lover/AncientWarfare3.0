@@ -437,6 +437,13 @@ namespace AncientWarfare3.ui.windows
 
         private void OnBack()
         {
+            if (_mode == Mode.BigTree)
+            {
+                long parentShi = LineageQuery.GetParentShiId(_backShiId);
+                if (parentShi >= 0) OpenBigTree(parentShi);
+                return;
+            }
+
             long currentShi = LineageQuery.GetActorShiId(_centerActorId);
             if (currentShi < 0) currentShi = _backShiId;
             if (currentShi >= 0) OpenBigTreeLocate(_centerActorId, currentShi);
@@ -543,12 +550,15 @@ namespace AncientWarfare3.ui.windows
             _locateTarget = Vector2.zero;
             if (!preservePan)
                 _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
-            _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
             bool showTreeTools = _mode == Mode.BigTree;
+            long parentShiId = _mode == Mode.BigTree ? LineageQuery.GetParentShiId(_backShiId) : -1;
             if (_backButton != null)
-                _backButton.gameObject.SetActive(_mode == Mode.Family && _backShiId >= 0);
+                _backButton.gameObject.SetActive(
+                    (_mode == Mode.Family && _backShiId >= 0) || parentShiId >= 0);
             if (_backText != null)
-                _backText.text = AW_L10n.Text("aw_locate_clan_tree", "\u5B9A\u4F4D\u6C0F\u65CF\u5927\u6811");
+                _backText.text = _mode == Mode.BigTree
+                    ? AW_L10n.Text("aw_return_home_shi", "← 返回本家")
+                    : AW_L10n.Text("aw_locate_clan_tree", "\u5B9A\u4F4D\u6C0F\u65CF\u5927\u6811");
             if (_expandButton != null) _expandButton.gameObject.SetActive(showTreeTools);
             if (_collapseButton != null) _collapseButton.gameObject.SetActive(showTreeTools);
             if (_halfSiblingButton != null) _halfSiblingButton.gameObject.SetActive(_mode == Mode.Family);
@@ -1032,6 +1042,22 @@ namespace AncientWarfare3.ui.windows
         private void SpawnNode(TreeLayoutNode pNode)
         {
             var view = AcquireNode();
+            if (_mode == Mode.BigTree && pNode.data.id == _rootActorId)
+            {
+                ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(_backShiId);
+                if (branch != null)
+                {
+                    pNode.data.branch_display = ShiBranchRules.BuildDisplayName(
+                        branch.origin_city_name, branch.clan_name);
+                    if (branch.parent_shi_id >= 0)
+                    {
+                        ShiBranchInfo parent = LineageQuery.GetShiBranchInfo(branch.parent_shi_id);
+                        if (parent != null)
+                            pNode.data.branch_home_display = ShiBranchRules.BuildDisplayName(
+                                parent.origin_city_name, parent.clan_name);
+                    }
+                }
+            }
             if (_mode == Mode.BigTree && _locateActorId >= 0 && pNode.data.id == _locateActorId)
             {
                 pNode.data.relation_label = AW_L10n.Text("aw_tree_locate_target", "\u76EE\u6807");

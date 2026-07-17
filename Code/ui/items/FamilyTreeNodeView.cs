@@ -287,15 +287,12 @@ namespace AncientWarfare3.ui.items
                 _branchBadge.SetActive(false);
                 return;
             }
-            string clanName = info != null && !string.IsNullOrEmpty(info.clan_name)
-                ? info.clan_name
-                : AW_L10n.Text("aw_new_branch", "新支");
-            string cityName = info != null && !string.IsNullOrEmpty(info.origin_city_name) ? info.origin_city_name : "";
             string prefix = AW_L10n.Text("aw_branch_badge_prefix", "▸建支:");
-            string suffix = AW_L10n.Text("aw_shi_suffix", "氏");
-            _branchBadgeText.text = string.IsNullOrEmpty(cityName)
-                ? prefix + clanName + suffix
-                : prefix + cityName + " " + clanName + suffix;
+            string displayName = ShiBranchRules.BuildDisplayName(
+                info.origin_city_name, info.clan_name);
+            if (string.IsNullOrEmpty(displayName))
+                displayName = AW_L10n.Text("aw_new_branch", "新支");
+            _branchBadgeText.text = prefix + displayName;
             _branchBadge.SetActive(true);
             _branchBadgeButton.onClick.AddListener(() =>
                 AncientWarfare3.ui.windows.FamilyTreeWindow.OpenBigTree(branchShi));
@@ -722,6 +719,13 @@ namespace AncientWarfare3.ui.items
             // 行2:氏(clan_name)
             if (!string.IsNullOrEmpty(pNode.clan_name))
                 sb.AppendLine(AW_L10n.Text("aw_shi_label", "氏:") + pNode.clan_name);
+
+            if (!string.IsNullOrEmpty(pNode.branch_home_display))
+                sb.AppendLine(AW_L10n.Text("aw_home_shi_label", "本家:") +
+                              pNode.branch_home_display);
+            if (!string.IsNullOrEmpty(pNode.branch_display))
+                sb.AppendLine(AW_L10n.Text("aw_branch_shi_label", "分支:") +
+                              pNode.branch_display);
 
             // 行3:国 · 城
             string kc = JoinNonEmpty("  ",

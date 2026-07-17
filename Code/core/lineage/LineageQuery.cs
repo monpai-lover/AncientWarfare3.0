@@ -380,7 +380,9 @@ namespace AncientWarfare3.core.lineage
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
-                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
+                $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
                 $"FROM {shiTable} WHERE LINEAGE_ID IN " +
                 $"(SELECT LINEAGE_ID FROM {lineageTable} WHERE FAMILY_NAME=@f) " +
                 $"ORDER BY CREATED_TIME ASC";
@@ -390,17 +392,7 @@ namespace AncientWarfare3.core.lineage
             {
                 while (reader.Read())
                 {
-                    result.Add(new ShiBranchInfo
-                    {
-                        shi_id = reader.GetInt64(0),
-                        lineage_id = reader.GetInt64(1),
-                        clan_name = SafeStr(reader, 2),
-                        source_type = SafeStr(reader, 3),
-                        created_time = reader.GetDouble(4),
-                        founder_actor_id = reader.GetInt64(5),
-                        origin_kingdom_id = ToLong(reader, 6, -1),
-                        origin_city_id = ToLong(reader, 7, -1)
-                    });
+                    result.Add(ReadShiBranchInfo(reader));
                 }
             }
 
@@ -728,7 +720,9 @@ namespace AncientWarfare3.core.lineage
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
-                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
+                $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
                 $"FROM {ShiBranchTableItem.GetTableName()} WHERE SHI_ID=@s LIMIT 1";
             cmd.Parameters.AddWithValue("@s", pShiId);
             ShiBranchInfo info = null;
@@ -736,17 +730,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (reader.Read())
                 {
-                    info = new ShiBranchInfo
-                    {
-                        shi_id = reader.GetInt64(0),
-                        lineage_id = reader.GetInt64(1),
-                        clan_name = SafeStr(reader, 2),
-                        source_type = SafeStr(reader, 3),
-                        created_time = reader.GetDouble(4),
-                        founder_actor_id = reader.GetInt64(5),
-                        origin_kingdom_id = ToLong(reader, 6, -1),
-                        origin_city_id = ToLong(reader, 7, -1)
-                    };
+                    info = ReadShiBranchInfo(reader);
                 }
             }
             if (info != null)
@@ -757,6 +741,31 @@ namespace AncientWarfare3.core.lineage
             return info;
         }
 
+        public static long GetParentShiId(long pShiId)
+        {
+            var db = DB;
+            if (db == null || pShiId < 0) return -1;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText =
+                $"SELECT IFNULL(PARENT_SHI_ID, -1) FROM {ShiBranchTableItem.GetTableName()} " +
+                "WHERE SHI_ID=@s LIMIT 1";
+            cmd.Parameters.AddWithValue("@s", pShiId);
+            object value = cmd.ExecuteScalar();
+            return value == null || value == System.DBNull.Value ? -1 : System.Convert.ToInt64(value);
+        }
+
+        public static List<ShiBranchInfo> GetShiParentChain(long pShiId, int pMaxDepth = 64)
+        {
+            long[] parentIds = ShiBranchRules.TraceParents(pShiId, GetParentShiId, pMaxDepth);
+            var result = new List<ShiBranchInfo>(parentIds.Length);
+            foreach (long parentId in parentIds)
+            {
+                ShiBranchInfo parent = GetShiBranchInfo(parentId);
+                if (parent != null) result.Add(parent);
+            }
+            return result;
+        }
+
         public static ShiBranchInfo GetRootShiBranchInfo(long pLineageId)
         {
             var db = DB;
@@ -764,7 +773,9 @@ namespace AncientWarfare3.core.lineage
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
-                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
+                $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
                 $"FROM {ShiBranchTableItem.GetTableName()} WHERE LINEAGE_ID=@l " +
                 $"ORDER BY CREATED_TIME ASC, SHI_ID ASC LIMIT 1";
             cmd.Parameters.AddWithValue("@l", pLineageId);
@@ -773,17 +784,7 @@ namespace AncientWarfare3.core.lineage
             {
                 if (reader.Read())
                 {
-                    info = new ShiBranchInfo
-                    {
-                        shi_id = reader.GetInt64(0),
-                        lineage_id = reader.GetInt64(1),
-                        clan_name = SafeStr(reader, 2),
-                        source_type = SafeStr(reader, 3),
-                        created_time = reader.GetDouble(4),
-                        founder_actor_id = reader.GetInt64(5),
-                        origin_kingdom_id = ToLong(reader, 6, -1),
-                        origin_city_id = ToLong(reader, 7, -1)
-                    };
+                    info = ReadShiBranchInfo(reader);
                 }
             }
             if (info != null)
@@ -858,7 +859,9 @@ namespace AncientWarfare3.core.lineage
             using var cmd = new SQLiteCommand(db);
             cmd.CommandText =
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
-                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1) " +
+                $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
+                $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
                 $"FROM {ShiBranchTableItem.GetTableName()} " +
                 pWhereSql +
                 $" ORDER BY CREATED_TIME ASC, SHI_ID ASC";
@@ -866,19 +869,28 @@ namespace AncientWarfare3.core.lineage
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
             while (reader.Read())
             {
-                result.Add(new ShiBranchInfo
-                {
-                    shi_id = reader.GetInt64(0),
-                    lineage_id = reader.GetInt64(1),
-                    clan_name = SafeStr(reader, 2),
-                    source_type = SafeStr(reader, 3),
-                    created_time = reader.GetDouble(4),
-                    founder_actor_id = reader.GetInt64(5),
-                    origin_kingdom_id = ToLong(reader, 6, -1),
-                    origin_city_id = ToLong(reader, 7, -1)
-                });
+                result.Add(ReadShiBranchInfo(reader));
             }
             return result;
+        }
+
+        private static ShiBranchInfo ReadShiBranchInfo(SQLiteDataReader pReader)
+        {
+            return new ShiBranchInfo
+            {
+                shi_id = pReader.GetInt64(0),
+                lineage_id = pReader.GetInt64(1),
+                clan_name = SafeStr(pReader, 2),
+                source_type = SafeStr(pReader, 3),
+                created_time = ToDouble(pReader, 4),
+                founder_actor_id = ToLong(pReader, 5, -1),
+                origin_kingdom_id = ToLong(pReader, 6, -1),
+                origin_city_id = ToLong(pReader, 7, -1),
+                parent_shi_id = ToLong(pReader, 8, -1),
+                state_name = SafeStr(pReader, 9),
+                state_name_source = SafeStr(pReader, 10),
+                state_name_decided_time = ToDouble(pReader, 11, -1)
+            };
         }
 
         private static void BackfillShiOrigin(ShiBranchInfo pShi)

@@ -20,8 +20,10 @@ namespace AncientWarfare3.ui.items
             EnsureUi();
             _shiId = pObject.shi_id;
             int years = Date.getYearsSince(pObject.created_time);
+            string displayName = ShiBranchRules.BuildDisplayName(
+                pObject.origin_city_name, pObject.clan_name);
             _label.text =
-                $"{pObject.clan_name}   {AW_L10n.Text("aw_total", "\u603B")}{pObject.total} {AW_L10n.Text("aw_alive_short", "\u6D3B")}{pObject.alive} {AW_L10n.Text("aw_established_short", "\u7ACB")}{years}{AW_L10n.Text("aw_year_suffix", "\u5E74")} {AW_L10n.Text("aw_noble_short", "\u8D35")}{pObject.noble}" +
+                $"{displayName}   {AW_L10n.Text("aw_total", "\u603B")}{pObject.total} {AW_L10n.Text("aw_alive_short", "\u6D3B")}{pObject.alive} {AW_L10n.Text("aw_established_short", "\u7ACB")}{years}{AW_L10n.Text("aw_year_suffix", "\u5E74")} {AW_L10n.Text("aw_noble_short", "\u8D35")}{pObject.noble}" +
                 BuildOriginText(pObject);
             SetTip(pObject);
         }
@@ -81,7 +83,10 @@ namespace AncientWarfare3.ui.items
             if (_tip == null) return;
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
-            string title = string.IsNullOrEmpty(pObject.clan_name) ? AW_L10n.Text("aw_shi_branch", "\u6C0F\u652F") : pObject.clan_name + AW_L10n.Text("aw_shi_suffix", "\u6C0F");
+            string title = ShiBranchRules.BuildDisplayName(
+                pObject.origin_city_name, pObject.clan_name);
+            if (string.IsNullOrEmpty(title))
+                title = AW_L10n.Text("aw_shi_branch", "\u6C0F\u652F");
             string desc = BuildTip(pObject);
             _tip.hoverAction = () =>
                 Tooltip.show(gameObject, AW_RawTooltip.TYPE,

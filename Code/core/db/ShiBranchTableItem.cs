@@ -16,6 +16,10 @@ namespace AncientWarfare3.core.db
 
         public long   lineage_id = -1;    // 所属姓族
         public string clan_name;          // 氏(如 夏后/有扈/斟鄩)
+        public long   parent_shi_id = -1;
+        public string state_name = "";
+        public string state_name_source = "";
+        [TableItemDef(pDefaultValue: "-1")] public double state_name_decided_time = -1;
         public long   founder_actor_id = -1;
         public string source_type;        // enfeoffed/inherited/random/integration/special_figure
         public long   origin_kingdom_id = -1;

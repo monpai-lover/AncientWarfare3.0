@@ -34,6 +34,10 @@ namespace AncientWarfare3.core.lineage
         public long shi_id;
         public long lineage_id;
         public string clan_name;
+        public long parent_shi_id = -1;
+        public string state_name = "";
+        public string state_name_source = "";
+        public double state_name_decided_time = -1;
         public string source_type;
         public int total;
         public int alive;
@@ -229,6 +233,8 @@ namespace AncientWarfare3.core.lineage
         public string death_cause = "";
         public int    tree_generation = 0;
         public string relation_label = "";
+        public string branch_home_display = "";
+        public string branch_display = "";
 
         public List<FamilyTreeNode> parents = new();
         public List<FamilyTreeNode> children = new();

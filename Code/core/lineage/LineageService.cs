@@ -898,14 +898,21 @@ namespace AncientWarfare3.core.lineage
 
             if (IsEnfeoffmentCandidate(pChild))
             {
-                // 从父姓族分出新氏支(同姓不同氏)
-                (string clanName, string sourceType) = GenerateShiName(pChild);
+                pChild.data.get(LineageKeys.CLAN_NAME, out string currentClanName, "");
+                ShiBranchSeed seed = ShiBranchRules.ResolveSeed(previousShiId, currentClanName, "");
+                if (seed.RequiresGeneratedClanName)
+                {
+                    (string generated, _) = GenerateShiName(pChild);
+                    seed = ShiBranchRules.ResolveSeed(previousShiId, currentClanName, generated);
+                }
                 long shiId = LineageIdAllocator.NextShiId();
-                InsertShiBranch(shiId, lineageId, clanName, pChild, sourceType);
+                if (shiId < 0 || string.IsNullOrEmpty(seed.ClanName)) return;
+                InsertShiBranch(shiId, lineageId, seed.ClanName, pChild,
+                    ShiSourceType.ENFEOFFED, seed.ParentShiId);
 
                 pChild.data.set(LineageKeys.SHI_ID, shiId);
-                pChild.data.set(LineageKeys.CLAN_NAME, clanName);
-                MoveExistingDescendantsToBranch(pChild, lineageId, previousShiId, shiId, clanName);
+                pChild.data.set(LineageKeys.CLAN_NAME, seed.ClanName);
+                MoveExistingDescendantsToBranch(pChild, lineageId, previousShiId, shiId, seed.ClanName);
             }
 
             // 无论是否分封,城主本人都是当代贵族:距离归零、加 guizu。
@@ -996,14 +1003,21 @@ namespace AncientWarfare3.core.lineage
                 minCadetDistanceForBranch: MIN_CADET_DISTANCE_FOR_NEW_BRANCH);
             if (!shouldFound) return;
 
-            // Freeze the branch before vanilla creates/names the visible Clan.
-            (string clanName, _) = GenerateShiName(pKing);
+            // Resolve the cadet branch before vanilla creates and names its visible Clan.
+            pKing.data.get(LineageKeys.CLAN_NAME, out string currentClanName, "");
+            ShiBranchSeed seed = ShiBranchRules.ResolveSeed(curShiId, currentClanName, "");
+            if (seed.RequiresGeneratedClanName)
+            {
+                (string generated, _) = GenerateShiName(pKing);
+                seed = ShiBranchRules.ResolveSeed(curShiId, currentClanName, generated);
+            }
             long newShiId = LineageIdAllocator.NextShiId();
-            if (newShiId < 0 || string.IsNullOrEmpty(clanName)) return;
-            InsertShiBranch(newShiId, lineageId, clanName, pKing, ShiSourceType.KING_FOUNDED);
+            if (newShiId < 0 || string.IsNullOrEmpty(seed.ClanName)) return;
+            InsertShiBranch(newShiId, lineageId, seed.ClanName, pKing,
+                ShiSourceType.KING_FOUNDED, seed.ParentShiId);
 
             pKing.data.set(LineageKeys.SHI_ID, newShiId);
-            pKing.data.set(LineageKeys.CLAN_NAME, clanName);
+            pKing.data.set(LineageKeys.CLAN_NAME, seed.ClanName);
             pKing.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pKing.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
             if (!pKing.hasTrait(LineageKeys.TRAIT_GUIZU)) pKing.addTrait(LineageKeys.TRAIT_GUIZU);
@@ -1016,12 +1030,13 @@ namespace AncientWarfare3.core.lineage
             ApplyDisplayName(pKing);          // 氏变 → 重拼显示名
             ArchiveActor(pKing, pAlive: true);
             pKing.clearGraphicsFully();
-            int movedDescendants = MoveExistingDescendantsToBranch(pKing, lineageId, curShiId, newShiId, clanName);
+            int movedDescendants = MoveExistingDescendantsToBranch(
+                pKing, lineageId, curShiId, newShiId, seed.ClanName);
             SyncExistingChildrenAfterLineageChange(pKing);
             if (movedDescendants > 0)
                 ModClass.LogInfo($"Moved {movedDescendants} existing descendants to shi={newShiId}.");
 
-            ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{clanName}」(shi={newShiId},脱离旧支 {curShiId})。");
+            ModClass.LogInfo($"称王分封:{pKing.getName()} 在 {pKingdom.name}(id={pKingdom.id})建立新氏支「{seed.ClanName}」(shi={newShiId},本家 {seed.ParentShiId})。");
         }
 
         private static void ApplyCollateralRestoration(Kingdom pKingdom, Actor pKing, Actor pPreviousKing)
@@ -1518,10 +1533,8 @@ namespace AncientWarfare3.core.lineage
         // ──────────────────────────── 原版 clan 命名 ────────────────────────────
 
         /// <summary>
-        ///     按领袖身份重命名一个原版 Clan 的显示名(覆盖游戏默认随机名):
-        ///     - 领袖是国王 → 国名(全名) + 氏 + "氏"(如"周幸氏")。
-        ///     - 领袖非国王 → 城市名(全名) + 氏 + "氏"(如"某城幸氏")。
-        ///     氏取领袖的 CLAN_NAME 字段;地名取领袖当前 kingdom/city 全名。
+        ///     按氏支发祥城重命名原版 Clan，格式为“发祥城+氏+氏”。
+        ///     发祥城缺失时才回退领袖当前城或国家首都。
         ///     领袖不属于 Xia 制度、或氏/地名任一取不到 → 不改名(保留原版名,避免拼出残缺名)。
         ///     幂等:同名不重复 setName。
         /// </summary>
@@ -1541,15 +1554,21 @@ namespace AncientWarfare3.core.lineage
             }
 
             pLeader.data.get(LineageKeys.CLAN_NAME, out string shi, "");
-            bool isKing = pLeader.isKing();
-            string place = isKing ? pLeader.kingdom?.name : pLeader.city?.data?.name;
+            pLeader.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+            string place = branch?.origin_city_name;
+            if (string.IsNullOrEmpty(place))
+                place = pLeader.city?.data?.name ?? pLeader.kingdom?.capital?.data?.name;
             bool institutional = XiaizationService.UsesXiaizedInstitutionSystem(pLeader.kingdom);
             if (!ForeignPseudoLineageRules.ShouldRenameInstitutionalClan(
                     leaderIsXia: IsXia(pLeader), kingdomUsesXiaizedInstitutions: institutional,
                     hasClan: true, hasBranch: !string.IsNullOrEmpty(shi),
                     hasPlace: !string.IsNullOrEmpty(place))) return;
 
-            string newName = place + shi + "氏";
+            string newName = branch != null
+                ? ShiBranchRules.BuildDisplayName(branch.origin_city_name, branch.clan_name)
+                : ShiBranchRules.BuildDisplayName(place, shi);
+            if (string.IsNullOrEmpty(newName)) return;
             if (pClan.data.name == newName) return;   // 幂等
             try { pClan.setName(newName); } catch { /* 改名失败不致命 */ }
         }
@@ -1751,7 +1770,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         internal static void InsertShiBranch(long pShiId, long pLineageId, string pClanName, Actor pFounder,
-            string pSourceType)
+            string pSourceType, long pParentShiId = -1, string pStateName = "",
+            string pStateNameSource = "")
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
@@ -1760,6 +1780,10 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("SHI_ID", pShiId),
                 ColumnVal.Create("LINEAGE_ID", pLineageId),
                 ColumnVal.Create("CLAN_NAME", pClanName),
+                ColumnVal.Create("PARENT_SHI_ID", pParentShiId),
+                ColumnVal.Create("STATE_NAME", pStateName ?? ""),
+                ColumnVal.Create("STATE_NAME_SOURCE", pStateNameSource ?? ""),
+                ColumnVal.Create("STATE_NAME_DECIDED_TIME", -1),
                 ColumnVal.Create("FOUNDER_ACTOR_ID", pFounder.data.id),
                 ColumnVal.Create("SOURCE_TYPE", pSourceType),
                 ColumnVal.Create("ORIGIN_KINGDOM_ID", origin.kingdomId),

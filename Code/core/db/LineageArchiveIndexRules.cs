@@ -52,6 +52,10 @@ namespace AncientWarfare3.core.db
                     "FOUNDER_ACTOR_ID, SHI_ID"),
                 Index("idx_ShiBranch_origin_city", ShiBranchTableItem.GetTableName(),
                     "ORIGIN_CITY_ID, CREATED_TIME, SHI_ID"),
+                Index("idx_ShiBranch_parent", ShiBranchTableItem.GetTableName(),
+                    "PARENT_SHI_ID, CREATED_TIME, SHI_ID"),
+                Index("idx_ShiBranch_state_name", ShiBranchTableItem.GetTableName(),
+                    "STATE_NAME, SHI_ID"),
 
                 Index("idx_KingdomArchive_kingdom", KingdomArchiveTableItem.GetTableName(),
                     "KINGDOM_ID"),
