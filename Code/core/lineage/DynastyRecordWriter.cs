@@ -158,6 +158,22 @@ namespace AncientWarfare3.core.lineage
             catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.CloseOpenDynasty: " + e.Message); }
         }
 
+        public static long GetCurrentDynastyId(long pKingdomId)
+        {
+            if (!Ready) return -1;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = $"SELECT DYNASTY_ID FROM {TABLE} " +
+                                  "WHERE KINGDOM_ID=@kid AND END_TIME=-1 " +
+                                  "ORDER BY START_TIME DESC LIMIT 1";
+                cmd.Parameters.AddWithValue("@kid", pKingdomId);
+                object value = cmd.ExecuteScalar();
+                return value == null || value == DBNull.Value ? -1L : Convert.ToInt64(value);
+            }
+            catch { return -1; }
+        }
+
         // 查当前朝代的 shi_id（end=-1 行），-1=无
         private static long GetCurrentDynastyShiId(long pKingdomId)
         {

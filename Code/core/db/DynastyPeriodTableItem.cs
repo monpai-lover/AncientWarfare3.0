@@ -17,6 +17,7 @@ namespace AncientWarfare3.core.db
         public string dynasty_name        = "";   // 朝代名（随机雅字/氏名）
         public string dynasty_color       = "";
         public string original_kingdom_name = "";
+        public string state_name = "";
         public double start_time;
         [TableItemDef(pDefaultValue: "-1")] public double end_time;
         public string end_reason          = "";

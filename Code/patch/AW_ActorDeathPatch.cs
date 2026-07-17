@@ -24,6 +24,8 @@ namespace AncientWarfare3.patch
 
             TryRunDeathStage(__instance, "death cause", () =>
                 EnsureDeathCause(__instance, pType));
+            TryRunDeathStage(__instance, "ruler fact snapshot", () =>
+                RulerTitleFactService.ArchivePersonalSnapshot(__instance));
             TryRunDeathStage(__instance, "historical figure death", () =>
             {
                 if (__instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIRST) ||

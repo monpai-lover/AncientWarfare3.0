@@ -18,6 +18,11 @@ namespace AncientWarfare3.core.lineage
             public long ReignId;
             public long KingdomId;
             public long KingActorId;
+            public long ShiId;
+            public long DynastyId;
+            public long MandatePeriodId;
+            public int HighestTitle;
+            public string StateNameSnapshot;
             public int StartPopulation;
             public int StartCityCount;
             public int StartArmyCount;
@@ -64,6 +69,14 @@ namespace AncientWarfare3.core.lineage
             int isFounder = idx == 1 ? 1 : 0;
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string kingColor = HistoryColors.FromActor(pNewKing);
+            pNewKing.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            long dynastyId = DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id);
+            pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long mandatePeriodId, -1L);
+            int highestTitle = (int)KingdomTitleService.GetTitle(pKingdom);
+            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+            string stateName = string.IsNullOrEmpty(branch?.state_name)
+                ? pKingdom.name ?? ""
+                : branch.state_name;
             try
             {
                 DB.Insert(TABLE,
@@ -71,6 +84,11 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("KINGDOM_ID",         pKingdom.id),
                     ColumnVal.Create("KINGDOM_COLOR",      kingdomColor),
                     ColumnVal.Create("KING_ACTOR_ID",      pNewKing.data.id),
+                    ColumnVal.Create("SHI_ID",             shiId),
+                    ColumnVal.Create("DYNASTY_ID",         dynastyId),
+                    ColumnVal.Create("MANDATE_PERIOD_ID",  mandatePeriodId),
+                    ColumnVal.Create("HIGHEST_TITLE",      highestTitle),
+                    ColumnVal.Create("STATE_NAME_SNAPSHOT", stateName),
                     ColumnVal.Create("KING_NAME",          pNewKing.getName()),
                     ColumnVal.Create("KING_COLOR",         string.IsNullOrEmpty(kingColor) ? kingdomColor : kingColor),
                     ColumnVal.Create("REIGN_INDEX",        idx),
@@ -110,6 +128,8 @@ namespace AncientWarfare3.core.lineage
             var (wins, losses) = WarRecordWriter.GetWarRecord(pKingdom.id, open.StartTime, endTime);
             string deathCause = ReadDeathCause(pKing);
             int lostCapital = pReason == "kingdom_fell" ? 1 : 0;
+            int highestTitle = Math.Max(open.HighestTitle,
+                (int)KingdomTitleService.GetTitle(pKingdom));
 
             try
             {
@@ -123,6 +143,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("WAR_WINS", wins),
                     ColumnVal.Create("WAR_LOSSES", losses),
                     ColumnVal.Create("LOST_CAPITAL", lostCapital),
+                    ColumnVal.Create("HIGHEST_TITLE", highestTitle),
                     ColumnVal.Create("DEATH_CAUSE", deathCause));
             }
             catch (Exception e)
@@ -137,6 +158,7 @@ namespace AncientWarfare3.core.lineage
             open.WarWins = wins;
             open.WarLosses = losses;
             open.LostCapital = lostCapital;
+            open.HighestTitle = highestTitle;
             open.DeathCause = deathCause;
             open.EndTime = endTime;
             return open;
@@ -207,7 +229,9 @@ namespace AncientWarfare3.core.lineage
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
                     $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME, " +
-                    $"START_ARMY_COUNT, IS_FOUNDER, REIGN_INDEX, END_TIME " +
+                    $"START_ARMY_COUNT, IS_FOUNDER, REIGN_INDEX, END_TIME, " +
+                    $"IFNULL(SHI_ID, -1), IFNULL(DYNASTY_ID, -1), IFNULL(MANDATE_PERIOD_ID, -1), " +
+                    $"IFNULL(HIGHEST_TITLE, 0), IFNULL(STATE_NAME_SNAPSHOT, '') " +
                     $"FROM {TABLE} WHERE KINGDOM_ID=@kid AND END_TIME=-1 ORDER BY START_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
@@ -223,7 +247,12 @@ namespace AncientWarfare3.core.lineage
                     StartArmyCount = SafeInt64(r, 6),
                     IsFounder = SafeInt64(r, 7),
                     ReignIndex = SafeInt64(r, 8),
-                    EndTime = SafeDouble(r, 9)
+                    EndTime = SafeDouble(r, 9),
+                    ShiId = SafeLong(r, 10, -1),
+                    DynastyId = SafeLong(r, 11, -1),
+                    MandatePeriodId = SafeLong(r, 12, -1),
+                    HighestTitle = SafeInt64(r, 13),
+                    StateNameSnapshot = SafeString(r, 14)
                 };
             }
             catch { return ReignInfo.Empty; }
@@ -238,7 +267,9 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText =
                     $"SELECT REIGN_ID, KINGDOM_ID, KING_ACTOR_ID, START_POPULATION, START_CITY_COUNT, START_TIME, " +
                     $"START_ARMY_COUNT, IS_FOUNDER, REIGN_INDEX, END_TIME, IFNULL(END_REASON, ''), " +
-                    $"END_POPULATION, END_CITY_COUNT, END_ARMY_COUNT, WAR_WINS, WAR_LOSSES, LOST_CAPITAL, IFNULL(DEATH_CAUSE, '') " +
+                    $"END_POPULATION, END_CITY_COUNT, END_ARMY_COUNT, WAR_WINS, WAR_LOSSES, LOST_CAPITAL, IFNULL(DEATH_CAUSE, ''), " +
+                    $"IFNULL(SHI_ID, -1), IFNULL(DYNASTY_ID, -1), IFNULL(MANDATE_PERIOD_ID, -1), " +
+                    $"IFNULL(HIGHEST_TITLE, 0), IFNULL(STATE_NAME_SNAPSHOT, '') " +
                     $"FROM {TABLE} WHERE KING_ACTOR_ID=@aid AND END_TIME>=0 " +
                     $"AND IFNULL(POSTHUMOUS_TITLE, '')='' ORDER BY END_TIME DESC LIMIT 1";
                 cmd.Parameters.AddWithValue("@aid", pActorId);
@@ -263,7 +294,12 @@ namespace AncientWarfare3.core.lineage
                     WarWins = SafeInt64(r, 14),
                     WarLosses = SafeInt64(r, 15),
                     LostCapital = SafeInt64(r, 16),
-                    DeathCause = SafeString(r, 17)
+                    DeathCause = SafeString(r, 17),
+                    ShiId = SafeLong(r, 18, -1),
+                    DynastyId = SafeLong(r, 19, -1),
+                    MandatePeriodId = SafeLong(r, 20, -1),
+                    HighestTitle = SafeInt64(r, 21),
+                    StateNameSnapshot = SafeString(r, 22)
                 };
             }
             catch { return ReignInfo.Empty; }
@@ -331,13 +367,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 if (k?.data == null) return 0;
-                int count = 0;
-                foreach (Actor unit in k.getUnits())
-                {
-                    if (unit?.data == null || unit.isRekt()) continue;
-                    if (unit.isWarrior()) count++;
-                }
-                return count;
+                int cityContribution = Math.Max(0, k.cities?.Count ?? 0) * 5 + 1;
+                return Math.Max(0, (k.power - cityContribution) / 2);
             }
             catch { return 0; }
         }
@@ -353,6 +384,12 @@ namespace AncientWarfare3.core.lineage
         {
             try { return pReader.IsDBNull(pIndex) ? 0 : (int)pReader.GetInt64(pIndex); }
             catch { return 0; }
+        }
+
+        private static long SafeLong(SQLiteDataReader pReader, int pIndex, long pDefault = 0)
+        {
+            try { return pReader.IsDBNull(pIndex) ? pDefault : Convert.ToInt64(pReader.GetValue(pIndex)); }
+            catch { return pDefault; }
         }
 
         private static double SafeDouble(SQLiteDataReader pReader, int pIndex)

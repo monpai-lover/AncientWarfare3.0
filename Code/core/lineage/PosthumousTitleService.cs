@@ -774,13 +774,8 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 if (k?.data == null) return 0;
-                int count = 0;
-                foreach (Actor unit in k.getUnits())
-                {
-                    if (unit?.data == null || unit.isRekt()) continue;
-                    if (unit.isWarrior()) count++;
-                }
-                return count;
+                int cityContribution = Math.Max(0, k.cities?.Count ?? 0) * 5 + 1;
+                return Math.Max(0, (k.power - cityContribution) / 2);
             }
             catch { return 0; }
         }

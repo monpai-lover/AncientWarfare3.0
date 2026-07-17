@@ -11,6 +11,11 @@ namespace AncientWarfare3.core.db
         public long   kingdom_id     = -1;
         public string kingdom_color   = "";
         public long   king_actor_id  = -1;
+        public long   shi_id = -1;
+        public long   dynasty_id = -1;
+        public long   mandate_period_id = -1;
+        public int    highest_title;
+        public string state_name_snapshot = "";
         public string king_name      = "";
         public string king_color     = "";
         public int    reign_index    = 0;        // 该国第几任君主（1起）
