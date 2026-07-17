@@ -186,11 +186,15 @@ namespace AncientWarfare3.core.lineage
             string table = WarRecordTableItem.GetTableName();
             try
             {
-                string endCond = pEnd > 0 ? $"AND START_TIME < {pEnd}" : "";
                 string sql =
                     $"SELECT ATTACKER_KINGDOM_ID, DEFENDER_KINGDOM_ID, WINNER " +
-                    $"FROM {table} WHERE START_TIME >= {pStart} {endCond} AND END_TIME >= 0";
+                    $"FROM {table} WHERE START_TIME>=@start AND START_TIME<@end " +
+                    "AND END_TIME>=0 AND " +
+                    "(ATTACKER_KINGDOM_ID=@kingdom OR DEFENDER_KINGDOM_ID=@kingdom)";
                 using var cmd = new SQLiteCommand(sql, DB);
+                cmd.Parameters.AddWithValue("@start", pStart);
+                cmd.Parameters.AddWithValue("@end", pEnd > 0 ? pEnd : double.MaxValue);
+                cmd.Parameters.AddWithValue("@kingdom", pKingdomId);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
                 while (reader.Read())
                 {
@@ -209,6 +213,23 @@ namespace AncientWarfare3.core.lineage
             }
             catch { /* 查不到不崩 */ }
             return (wins, losses);
+        }
+
+        public static int GetOffensiveWarCount(long pKingdomId, double pStart, double pEnd)
+        {
+            if (!Ready || pKingdomId < 0) return 0;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT COUNT(*) FROM " + WarRecordTableItem.GetTableName() +
+                                      " WHERE ATTACKER_KINGDOM_ID=@kingdom " +
+                                      "AND START_TIME>=@start AND START_TIME<@end AND END_TIME>=0";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                command.Parameters.AddWithValue("@start", pStart);
+                command.Parameters.AddWithValue("@end", pEnd > 0 ? pEnd : double.MaxValue);
+                return Convert.ToInt32(command.ExecuteScalar());
+            }
+            catch { return 0; }
         }
 
         // ──────────────── 内部辅助 ────────────────

@@ -26,6 +26,23 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        public static string ReadLatestValue(long pShiId, string pTitleType)
+        {
+            if (!Ready || pShiId < 0 || string.IsNullOrWhiteSpace(pTitleType)) return "";
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT IFNULL(TITLE_VALUE,'') FROM " +
+                                      DynastyTitleRegistryTableItem.GetTableName() +
+                                      " WHERE SHI_ID=@shi AND TITLE_TYPE=@kind " +
+                                      "ORDER BY USED_TIME DESC,REGISTRY_ID DESC LIMIT 1";
+                command.Parameters.AddWithValue("@shi", pShiId);
+                command.Parameters.AddWithValue("@kind", pTitleType.Trim());
+                return Convert.ToString(command.ExecuteScalar()) ?? "";
+            }
+            catch { return ""; }
+        }
+
         public static HashSet<string> ReadUsed(long pShiId, string pTitleType, int pCycleNo)
         {
             var result = new HashSet<string>(StringComparer.Ordinal);

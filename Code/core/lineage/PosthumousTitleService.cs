@@ -70,11 +70,30 @@ namespace AncientWarfare3.core.lineage
                     used.Contains("废") ? cycleNo + 1 : cycleNo);
             }
 
+            TempleTitleDecision temple = default;
+            if (facts.HighestTitle >= (int)KingdomTitle.Emperor)
+            {
+                int templeCycle = DynastyTitleRegistryService.ReadLatestCycle(
+                    facts.ShiId, "temple");
+                HashSet<string> usedTemples = DynastyTitleRegistryService.ReadUsed(
+                    facts.ShiId, "temple", templeCycle);
+                string previousTemple = DynastyTitleRegistryService.ReadLatestValue(
+                    facts.ShiId, "temple");
+                temple = TempleTitleRules.Select(facts, derived, usedTemples,
+                    templeCycle, previousTemple);
+            }
+
             string titleKind = useMandateDeposedTitle
                 ? "deposed"
                 : pEndReason == "abdicated" ? "abdication" : "posthumous";
-            RulerTitleDecision decision = RulerTitleDecision.ForPosthumous(
-                facts, posthumous, titleKind);
+            RulerTitleDecision decision = RulerTitleDecision.ForReignEnd(
+                facts, posthumous, temple, titleKind);
+            if (useMandateDeposedTitle)
+            {
+                decision.DisplayTitle = FormerKingTraitRules.BuildMandateDeposedTitle(
+                    facts.StateName);
+                decision.TitleSuffix = "帝";
+            }
             decision.Reason = BuildReason(facts, posthumous);
             HistoryText titleEvent = BuildTitleEventText(pKing, pEndReason,
                 decision.DisplayTitle, facts.KingdomColor, decision.Reason, titleKind);

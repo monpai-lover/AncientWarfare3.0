@@ -533,6 +533,7 @@ namespace AncientWarfare3.core.lineage
             pRestored.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE,
                 pCampaign.originalMandatePeriodId >= 0);
             pRestored.data.set(LineageKeys.RESTORATION_LAST_YEAR, Date.getCurrentYear());
+            RulerTitleRestorationStateService.MarkAutonomousRestorationCompleted(pRestored);
             CoreIdsByCampaign.Remove(pCampaign.campaignId);
 
             Actor ruler = pRestored.king;

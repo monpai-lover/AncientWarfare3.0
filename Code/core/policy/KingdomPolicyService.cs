@@ -2062,7 +2062,7 @@ namespace AncientWarfare3.core.policy
 
             string oldName = old?.data?.name ?? "";
             string newName = next.data?.name ?? "";
-            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.POLICY_COMPLETED,
+            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.CAPITAL_MOVED,
                 HistoryText.Kingdom(pKingdom) + " \u8FC1\u90FD\uFF0C\u7531" +
                 HistoryText.PlainText(oldName) + "\u8FC1\u5F80" + HistoryText.PlainText(newName),
                 HistoryTarget.Kingdom(pKingdom));

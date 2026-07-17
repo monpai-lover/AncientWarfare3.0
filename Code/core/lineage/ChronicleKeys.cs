@@ -84,6 +84,7 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_GUARD_APPOINTED = "royal_guard_appointed";
         public const string ROYAL_GUARD_DISMISSED = "royal_guard_dismissed";
         public const string POLICY_COMPLETED = "policy_completed";
+        public const string CAPITAL_MOVED = "capital_moved";
         public const string TECH_COMPLETED = "tech_completed";
         public const string MANDATE_REBELLION = "mandate_rebellion";
         public const string MANDATE_CLAIMED = "mandate_claimed";

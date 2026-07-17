@@ -237,7 +237,10 @@ namespace AncientWarfare3.core.lineage
             MandatePhaseService.OnMandateEstablished(
                 hadPreviousMandate, Date.getCurrentYear());
             if (pOriginType == "self_restoration")
+            {
                 pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
+                RulerTitleRestorationStateService.MarkMandateRegained(pKingdom);
+            }
             if (pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo")
                 XiaizationService.OnPseudoMandateDeclared(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
@@ -559,6 +562,8 @@ namespace AncientWarfare3.core.lineage
             MandateReport report = ReadReport();
             if (!Ready || !report.active) return;
 
+            RulerTitleRestorationStateService.MarkMandateLost(current);
+
             double now = LineageService.CurTime();
             DB.UpdateValue(MandatePeriodTableItem.GetTableName(),
                 new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("PERIOD_ID", report.period_id) },
@@ -653,6 +658,7 @@ namespace AncientWarfare3.core.lineage
             Kingdom mandate = GetCurrentMandateKingdom();
             if (mandate != null && pKingdom == mandate)
             {
+                RulerTitleRestorationStateService.MarkMandateLost(pKingdom);
                 MandatePhaseService.ForceChaos("mandate_kingdom_fell");
                 ClearMandate("kingdom_fell");
             }

@@ -20,6 +20,12 @@ namespace AncientWarfare3.core.db
         public string state_name = "";
         public string state_name_source = "";
         [TableItemDef(pDefaultValue: "-1")] public double state_name_decided_time = -1;
+        public int    was_former_mandate;
+        public int    restored_pending;
+        public int    self_restoration_completed;
+        public int    regained_mandate;
+        public long   self_restoration_actor_id = -1;
+        public long   regained_mandate_actor_id = -1;
         public long   founder_actor_id = -1;
         public string source_type;        // enfeoffed/inherited/random/integration/special_figure
         public long   origin_kingdom_id = -1;

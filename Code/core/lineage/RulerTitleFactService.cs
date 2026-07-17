@@ -114,21 +114,32 @@ namespace AncientWarfare3.core.lineage
             facts.CityDelta = pReign.EndCityCount - pReign.StartCityCount;
             facts.WarWins = pReign.WarWins;
             facts.WarLosses = pReign.WarLosses;
-            facts.OffensiveWars = Math.Max(0, pReign.WarWins + pReign.WarLosses);
+            facts.OffensiveWars = WarRecordWriter.GetOffensiveWarCount(
+                facts.KingdomId, pReign.StartTime, endTime);
             facts.MajorReforms = CountReformEvents(facts.KingdomId, pReign.StartTime, endTime);
+            facts.CapitalMoves = CountCapitalMoveEvents(
+                facts.KingdomId, pReign.StartTime, endTime);
             facts.OrderDelta = pReign.LostCapital != 0 || facts.EndReason == "kingdom_fell" ? -1 : 0;
             facts.IsMandate = facts.MandatePeriodId >= 0;
-            facts.IsFounder = pReign.IsFounder != 0;
+            facts.IsFounder = pReign.IsFounder != 0 ||
+                              IsDynastyFounder(facts.DynastyId, facts.ActorId);
             facts.IsLowOrigin = mandateOrigin == "rebel";
-            facts.IsAutonomousRefounder = mandateOrigin == "self_restoration";
-            facts.WasFormerMandateShi = facts.IsAutonomousRefounder;
-            facts.RegainedMandate = facts.IsAutonomousRefounder && facts.IsMandate;
+            RulerTitleRestorationState restoration =
+                RulerTitleRestorationStateService.Read(facts.ShiId);
+            facts.IsAutonomousRefounder =
+                restoration.SelfRestorationActorId == facts.ActorId;
+            facts.WasFormerMandateShi = restoration.WasFormerMandateShi;
+            facts.RegainedMandate = restoration.RegainedMandate && facts.IsMandate &&
+                                    restoration.RegainedMandateActorId == facts.ActorId;
+            facts.RestoredLegalCore = restoration.SelfRestorationActorId == facts.ActorId;
             facts.IsFounderDirectHeir = IsDirectHeirOfPreviousRuler(pActor, pReign);
             facts.LostCapital = pReign.LostCapital != 0;
             facts.HasBiologicalChildren = LineageQuery.GetChildIds(pActor.data.id).Count > 0;
             facts.HasKnownPatriline = pActor.data.parent_id_1 >= 0;
             facts.HasSchoolIdentity = SchoolMembershipService.GetActive(pActor.data.id) != null;
             pActor.data.get(LineageKeys.COLLATERAL_NONAGNATIC, out facts.ForeignLineAdoption, false);
+            pActor.data.get(LineageKeys.RESTORED_SHI_ID, out long restoredShiId, -1L);
+            facts.CollateralSuccession = restoredShiId >= 0;
             pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedShiId, -1L);
             facts.FoundedCadetBranch = foundedShiId >= 0;
             facts.Traits = ReadTraits(pActor);
@@ -312,6 +323,25 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        private static int CountCapitalMoveEvents(long pKingdomId, double pStart, double pEnd)
+        {
+            if (!Ready || pKingdomId < 0) return 0;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT COUNT(*) FROM " +
+                                      KingdomHistoryTableItem.GetTableName() +
+                                      " WHERE KINGDOM_ID=@kingdom AND WORLD_TIME>=@start " +
+                                      "AND WORLD_TIME<=@end AND EVENT_TYPE=@event";
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                command.Parameters.AddWithValue("@start", pStart);
+                command.Parameters.AddWithValue("@end", pEnd);
+                command.Parameters.AddWithValue("@event", KingdomEvent.CAPITAL_MOVED);
+                return Convert.ToInt32(command.ExecuteScalar());
+            }
+            catch { return 0; }
+        }
+
         private static string ReadMandateOrigin(long pPeriodId)
         {
             if (!Ready || pPeriodId < 0) return "";
@@ -325,6 +355,22 @@ namespace AncientWarfare3.core.lineage
                 return Convert.ToString(cmd.ExecuteScalar()) ?? "";
             }
             catch { return ""; }
+        }
+
+        private static bool IsDynastyFounder(long pDynastyId, long pActorId)
+        {
+            if (!Ready || pDynastyId < 0 || pActorId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT 1 FROM " + DynastyPeriodTableItem.GetTableName() +
+                                      " WHERE DYNASTY_ID=@dynasty " +
+                                      "AND FOUNDER_KING_ACTOR_ID=@actor LIMIT 1";
+                command.Parameters.AddWithValue("@dynasty", pDynastyId);
+                command.Parameters.AddWithValue("@actor", pActorId);
+                return command.ExecuteScalar() != null;
+            }
+            catch { return false; }
         }
 
         private static bool IsDirectHeirOfPreviousRuler(Actor pActor,

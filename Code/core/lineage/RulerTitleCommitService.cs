@@ -41,6 +41,13 @@ namespace AncientWarfare3.core.lineage
         public static RulerTitleDecision ForPosthumous(RulerTitleFacts pFacts,
             PosthumousTitleDecision pPosthumous, string pTitleKind = "posthumous")
         {
+            return ForReignEnd(pFacts, pPosthumous, default, pTitleKind);
+        }
+
+        public static RulerTitleDecision ForReignEnd(RulerTitleFacts pFacts,
+            PosthumousTitleDecision pPosthumous, TempleTitleDecision pTemple,
+            string pTitleKind = "posthumous")
+        {
             string grade = pPosthumous.GradeKey ?? "";
             string evaluation = grade.StartsWith("praise", StringComparison.Ordinal)
                 ? "good"
@@ -52,17 +59,24 @@ namespace AncientWarfare3.core.lineage
                 1 => "侯",
                 2 => "公",
                 3 => "王",
-                4 => "帝",
+                4 => string.IsNullOrEmpty(pTemple.Name) ? "帝" : "皇帝",
                 _ => "君"
             };
+            string displayTitle = highestTitle >= 4 && !string.IsNullOrEmpty(pTemple.Name)
+                ? TempleTitleRules.BuildImperialAppellation(
+                    pTemple.Name, pPosthumous.Name)
+                : PosthumousTitleRules.BuildRankedAppellation(
+                    pFacts?.StateName, pPosthumous.Name, highestTitle);
             return new RulerTitleDecision
             {
                 Facts = pFacts,
                 PosthumousName = pPosthumous.Name,
-                DisplayTitle = PosthumousTitleRules.BuildRankedAppellation(
-                    pFacts?.StateName, pPosthumous.Name, highestTitle),
+                TempleName = pTemple.Name,
+                DisplayTitle = displayTitle,
                 PosthumousQualificationKey = pPosthumous.QualificationKey,
+                TempleQualificationKey = pTemple.QualificationKey,
                 PosthumousCycleNo = pPosthumous.CycleNo,
+                TempleCycleNo = pTemple.CycleNo,
                 TitleKind = string.IsNullOrWhiteSpace(pTitleKind)
                     ? "posthumous"
                     : pTitleKind.Trim(),
@@ -77,6 +91,28 @@ namespace AncientWarfare3.core.lineage
                 EndingScore = pPosthumous.Ending,
                 TotalScore = pPosthumous.Total,
                 Reason = pPosthumous.Reason,
+                AgeAtEvent = pFacts?.Age ?? -1
+            };
+        }
+
+        public static RulerTitleDecision ForRetrospective(RulerTitleFacts pFacts,
+            string pTempleName, int pTempleCycleNo, string pRelation)
+        {
+            string temple = (pTempleName ?? "").Trim();
+            return new RulerTitleDecision
+            {
+                Facts = pFacts,
+                TempleName = temple,
+                DisplayTitle = temple,
+                TempleQualificationKey = "retrospective_" + (pRelation ?? ""),
+                TempleCycleNo = Math.Max(0, pTempleCycleNo),
+                TitleKind = "retrospective",
+                Evaluation = "neutral",
+                Grade = "neutral",
+                DominantDimension = "balanced",
+                IsRetrospective = true,
+                RetrospectiveRelation = pRelation ?? "",
+                BiographyRole = "imperial_ancestor",
                 AgeAtEvent = pFacts?.Age ?? -1
             };
         }
@@ -112,8 +148,11 @@ namespace AncientWarfare3.core.lineage
         public static RulerTitleCommitResult Commit(RulerTitleDecision pDecision)
         {
             RulerTitleFacts facts = pDecision?.Facts;
+            bool retrospective = pDecision?.IsRetrospective == true &&
+                                 !string.IsNullOrWhiteSpace(pDecision.TempleName) &&
+                                 string.IsNullOrWhiteSpace(pDecision.PosthumousName);
             if (!Ready || facts == null || facts.ActorId < 0 || facts.ShiId < 0 ||
-                string.IsNullOrWhiteSpace(pDecision.PosthumousName) ||
+                (!retrospective && string.IsNullOrWhiteSpace(pDecision.PosthumousName)) ||
                 string.IsNullOrWhiteSpace(pDecision.DisplayTitle))
                 return RulerTitleCommitResult.Failed;
 
@@ -124,7 +163,8 @@ namespace AncientWarfare3.core.lineage
             {
                 using SQLiteTransaction transaction = DB.BeginTransaction();
                 double time = LineageService.CurTime();
-                if (!DynastyTitleRegistryService.TryReserve(DB, transaction, facts.ShiId,
+                if (!string.IsNullOrWhiteSpace(pDecision.PosthumousName) &&
+                    !DynastyTitleRegistryService.TryReserve(DB, transaction, facts.ShiId,
                         "posthumous", pDecision.PosthumousName,
                         pDecision.PosthumousCycleNo, facts.ActorId, facts.ReignId, time))
                     return RulerTitleCommitResult.Failed;
@@ -191,7 +231,7 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@retrospective", pDecision.IsRetrospective ? 1 : 0);
             command.Parameters.AddWithValue("@relation", pDecision.RetrospectiveRelation ?? "");
             command.Parameters.AddWithValue("@qualification",
-                pDecision.PosthumousQualificationKey ?? "");
+                QualificationSnapshot(pDecision));
             command.Parameters.AddWithValue("@facts", JsonConvert.SerializeObject(facts));
             command.Parameters.AddWithValue("@eval", pDecision.Evaluation ?? "");
             command.Parameters.AddWithValue("@scoreDetail", pDecision.Reason ?? "");
@@ -319,6 +359,14 @@ namespace AncientWarfare3.core.lineage
         private static string ValueString(SQLiteDataReader pReader, int pIndex)
         {
             return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? "";
+        }
+
+        private static string QualificationSnapshot(RulerTitleDecision pDecision)
+        {
+            string posthumous = pDecision?.PosthumousQualificationKey ?? "";
+            string temple = pDecision?.TempleQualificationKey ?? "";
+            if (string.IsNullOrEmpty(posthumous)) return temple;
+            return string.IsNullOrEmpty(temple) ? posthumous : posthumous + "|" + temple;
         }
     }
 }

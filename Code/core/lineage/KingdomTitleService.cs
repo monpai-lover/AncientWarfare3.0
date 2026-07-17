@@ -21,7 +21,17 @@ namespace AncientWarfare3.core.lineage
 
         public static void SetTitle(Kingdom pKingdom, KingdomTitle pTitle)
         {
-            pKingdom?.data?.set(LineageKeys.KINGDOM_TITLE, (int)pTitle);
+            if (pKingdom?.data == null) return;
+            KingdomTitle previous = GetTitle(pKingdom);
+            pKingdom.data.set(LineageKeys.KINGDOM_TITLE, (int)pTitle);
+            if (previous >= KingdomTitle.Emperor || pTitle != KingdomTitle.Emperor ||
+                pKingdom.king?.data == null) return;
+
+            pKingdom.king.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0) return;
+            RetrospectiveTitleService.TryAwardFirstImperialAncestors(
+                pKingdom, pKingdom.king, shiId,
+                DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id));
         }
 
         public static void PromoteTitle(Kingdom pKingdom)
