@@ -33,7 +33,7 @@ namespace AncientWarfare3.core.policy
             if (pFallen == null) return null;
             return new RestorationInstitutionState
             {
-                classState = pFallen.classState ?? "",
+                classState = SanitizeClassStateForRevival(pFallen.classState),
                 armyState = pFallen.armyState ?? "",
                 nameState = pFallen.nameState ?? "",
                 enfeoffmentState = pFallen.enfeoffmentState ?? "",
@@ -55,6 +55,13 @@ namespace AncientWarfare3.core.policy
                 coreFabricationProgress = 0f,
                 coreFabricationQueue = ""
             };
+        }
+
+        public static string SanitizeClassStateForRevival(string pClassState)
+        {
+            if (pClassState == "republic" || pClassState == "peasant_rebel")
+                return "default";
+            return pClassState ?? "";
         }
 
         private static float NonNegative(float pValue)
