@@ -17,12 +17,22 @@ namespace AncientWarfare3.core.policy
 
         public static void RememberSplitSource(Actor pFounder, Kingdom pSource)
         {
+            if (KingdomIdentityContinuityService.IsCreatingRestoration)
+            {
+                if (pFounder?.data != null) PendingSourceByActor.Remove(pFounder.data.id);
+                return;
+            }
             if (pFounder?.data == null || pSource?.data == null || pSource.isRekt()) return;
             PendingSourceByActor[pFounder.data.id] = pSource.id;
         }
 
         public static void InheritForNewKingdom(Kingdom pNewKingdom, Actor pFounder)
         {
+            if (KingdomIdentityContinuityService.IsCreatingRestoration)
+            {
+                if (pFounder?.data != null) PendingSourceByActor.Remove(pFounder.data.id);
+                return;
+            }
             if (pNewKingdom?.data == null || pNewKingdom.isRekt()) return;
             if (InheritedKingdoms.Contains(pNewKingdom.id)) return;
             if (!KingdomPolicyService.CanUsePolicySystem(pNewKingdom)) return;
@@ -61,6 +71,12 @@ namespace AncientWarfare3.core.policy
             SynchronizeInheritedNameIntegration(pNewKingdom, dst);
             InheritedKingdoms.Add(pNewKingdom.id);
             ModClass.LogInfo("[policy inheritance] " + pNewKingdom.name + " inherited policy state from " + source.name);
+        }
+
+        public static void PrepareForIdentityRestoration(long pKingdomId, long pFounderActorId)
+        {
+            if (pKingdomId >= 0) InheritedKingdoms.Remove(pKingdomId);
+            if (pFounderActorId >= 0) PendingSourceByActor.Remove(pFounderActorId);
         }
 
         private static void SynchronizeInheritedNameIntegration(Kingdom pNewKingdom, KingdomPolicySnapshot pSnapshot)

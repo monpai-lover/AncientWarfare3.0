@@ -76,6 +76,19 @@ namespace AncientWarfare3.core.lineage
         {
             return total > 0 && controlled >= 0 && controlled * 100 >= total * 65;
         }
+
+        public static bool CanLeaseOriginalKingdomId(long originalKingdomId,
+            bool liveKingdomExists, bool archiveMarkedDead)
+        {
+            return originalKingdomId >= 0 && !liveKingdomExists && archiveMarkedDead;
+        }
+
+        public static bool ShouldSuppressNewKingdomEffects(bool restorationCreationActive,
+            long requestedKingdomId, long actualKingdomId)
+        {
+            return restorationCreationActive && requestedKingdomId >= 0 &&
+                   requestedKingdomId == actualKingdomId;
+        }
     }
 
     public sealed class RestorationKingdomIdLease : IDisposable

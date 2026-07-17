@@ -122,7 +122,8 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText = $"SELECT COUNT(*) FROM {RoyalClaimTableItem.GetTableName()} " +
-                                  "WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1";
+                                  "WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1 " +
+                                  "AND RESTORATION_STATE='dormant' AND IFNULL(RESTORE_MODE,'')=''";
                 cmd.Parameters.AddWithValue("@h", pHost.id);
                 object value = cmd.ExecuteScalar();
                 return value == null || value == DBNull.Value ? 0 : Convert.ToInt32(value);
@@ -158,7 +159,8 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText =
                     $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
                     $"ORIGINAL_KINGDOM_NAME, CLAIM_STRENGTH FROM {RoyalClaimTableItem.GetTableName()} " +
-                    "WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1 ORDER BY CLAIM_STRENGTH DESC, CREATED_TIME ASC";
+                    "WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1 AND RESTORATION_STATE='dormant' " +
+                    "AND IFNULL(RESTORE_MODE,'')='' ORDER BY CLAIM_STRENGTH DESC, CREATED_TIME ASC";
                 cmd.Parameters.AddWithValue("@h", pHost.id);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
                 while (reader.Read())
@@ -211,6 +213,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             Kingdom restored = TryRestoreKingdomForClaim(pHost, claimant, claim, pTargetCity, pWarId);
+            if (restored?.data == null) return;
             HistoryText text = HistoryText.Kingdom(pHost) + " \u4ee5" +
                                HistoryText.Actor(claimant, claim.claimantName) +
                                " \u7684\u65e7\u56fd\u8840\u7edf\u53d1\u8d77\u590d\u56fd\u6218\u4e89\uff0c\u5ba3\u79f0\u6062\u590d " +
@@ -234,34 +237,24 @@ namespace AncientWarfare3.core.lineage
             if (pHost?.data == null || !IsEligibleRestorationClaimant(pClaimant)) return null;
             if (pTargetCity?.data == null || pTargetCity.isRekt()) return null;
 
-            Kingdom restored = null;
-            try
+            var request = new KingdomRestorationRequest
             {
-                if (pClaimant.hasArmy()) pClaimant.removeFromArmy();
-                bool claimantInTargetCity = pClaimant.city == pTargetCity;
-                if (RestorationSettlementRules.ShouldMoveClaimantToTargetCityBeforeKingdomCreation(
-                        claimantInTargetCity))
-                    pClaimant.joinCity(pTargetCity);
-                restored = pTargetCity.makeOwnKingdom(pClaimant, pRebellion: true, pFellApart: false);
-            }
-            catch (Exception e)
+                claim_id = pClaim.claimId,
+                original_kingdom_id = pClaim.originalKingdomId,
+                original_kingdom_name = pClaim.originalKingdomName,
+                original_capital_city_id = pClaim.originalCapitalCityId,
+                original_mandate_period_id = pClaim.originalMandatePeriodId,
+                lineage_id = pClaim.lineageId,
+                shi_id = pClaim.shiId,
+                clan_name = pClaim.clanName,
+                mode = "hosted_restoration"
+            };
+            Kingdom restored = KingdomIdentityContinuityService.RestoreFromCity(
+                pTargetCity, pClaimant, request, out string error);
+            if (restored?.data == null)
             {
-                ModClass.LogWarning("RoyalClaimService restore makeOwnKingdom failed: " + e.Message);
+                ModClass.LogWarning("RoyalClaimService hosted identity restoration failed: " + error);
                 return null;
-            }
-
-            if (restored?.data == null) return null;
-            try
-            {
-                if (!string.IsNullOrEmpty(pClaim.originalKingdomName))
-                    restored.setName(pClaim.originalKingdomName);
-                if (pClaimant.city != pTargetCity)
-                    pClaimant.joinCity(pTargetCity);
-                pTargetCity.setLeader(pClaimant, pNew: true);
-            }
-            catch (Exception e)
-            {
-                ModClass.LogWarning("RoyalClaimService restore settlement failed: " + e.Message);
             }
 
             try { VassalService.SetVassal(restored, pHost, "restoration_war", pWarId); }
@@ -468,19 +461,13 @@ namespace AncientWarfare3.core.lineage
             var result = new ClaimRow { claimId = -1 };
             using var cmd = new SQLiteCommand(DB);
             cmd.CommandText =
-                $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
-                $"ORIGINAL_KINGDOM_NAME, CLAIM_STRENGTH FROM {RoyalClaimTableItem.GetTableName()} " +
-                "WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1 ORDER BY CLAIM_STRENGTH DESC, CREATED_TIME ASC LIMIT 1";
+                FullClaimSelect() +
+                " WHERE HOST_KINGDOM_ID=@h AND ACTIVE=1 AND RESTORATION_STATE='dormant' " +
+                "AND IFNULL(RESTORE_MODE,'')='' ORDER BY CLAIM_STRENGTH DESC, CREATED_TIME ASC LIMIT 1";
             cmd.Parameters.AddWithValue("@h", pHostKingdomId);
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
             if (!reader.Read()) return result;
-            result.claimId = reader.GetInt64(0);
-            result.claimantId = reader.GetInt64(1);
-            result.claimantName = reader.IsDBNull(2) ? "" : reader.GetString(2);
-            result.originalKingdomId = reader.GetInt64(3);
-            result.originalKingdomName = reader.IsDBNull(4) ? "" : reader.GetString(4);
-            result.strength = reader.GetInt32(5);
-            return result;
+            return ReadFullClaimRow(reader);
         }
 
         private static ClaimRow FindClaimById(long pClaimId)
@@ -489,19 +476,21 @@ namespace AncientWarfare3.core.lineage
             if (pClaimId < 0) return result;
             using var cmd = new SQLiteCommand(DB);
             cmd.CommandText =
-                $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
-                $"ORIGINAL_KINGDOM_NAME, CLAIM_STRENGTH FROM {RoyalClaimTableItem.GetTableName()} " +
-                "WHERE CLAIM_ID=@c AND ACTIVE=1 LIMIT 1";
+                FullClaimSelect() +
+                " WHERE CLAIM_ID=@c AND ACTIVE=1 AND RESTORATION_STATE='dormant' LIMIT 1";
             cmd.Parameters.AddWithValue("@c", pClaimId);
             using var reader = (SQLiteDataReader)cmd.ExecuteReader();
             if (!reader.Read()) return result;
-            result.claimId = reader.GetInt64(0);
-            result.claimantId = reader.GetInt64(1);
-            result.claimantName = reader.IsDBNull(2) ? "" : reader.GetString(2);
-            result.originalKingdomId = reader.GetInt64(3);
-            result.originalKingdomName = reader.IsDBNull(4) ? "" : reader.GetString(4);
-            result.strength = reader.GetInt32(5);
-            return result;
+            return ReadFullClaimRow(reader);
+        }
+
+        private static string FullClaimSelect()
+        {
+            return $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
+                   $"ORIGINAL_KINGDOM_NAME, ORIGINAL_KINGDOM_COLOR, LINEAGE_ID, SHI_ID, CLAN_NAME, " +
+                   $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, ORIGINAL_CAPITAL_CITY_ID, " +
+                   $"ORIGINAL_MANDATE_PERIOD_ID, CLAIM_STRENGTH, RESTORE_MODE, RESTORATION_STATE " +
+                   $"FROM {RoyalClaimTableItem.GetTableName()}";
         }
 
         private static void RefreshActiveClaimHosts()

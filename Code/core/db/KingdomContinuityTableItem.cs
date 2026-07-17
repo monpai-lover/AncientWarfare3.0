@@ -21,7 +21,7 @@ namespace AncientWarfare3.core.db
         public string last_king_name = "";
         public long legitimate_lineage_id = -1;
         public long legitimate_shi_id = -1;
-        public string kingdom_title = "";
+        public int kingdom_title = 0;
         public int name_integrated = 0;
         public int was_mandate = 0;
         public long mandate_period_id = -1;

@@ -45,6 +45,12 @@
 		<Reference Include="0Harmony">
 			<HintPath>$(NewModDir)\0Harmony.dll</HintPath>
 		</Reference>
+		<Reference Include="SQLite">
+			<HintPath>$(WorldBoxManaged)\SQLite.dll</HintPath>
+		</Reference>
+		<Reference Include="db.tables">
+			<HintPath>$(WorldBoxManaged)\db.tables.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 
 	<!-- 一米_中文名 (Chinese_Name): 编译期引用; 运行时靠 NML 源码加载 -->

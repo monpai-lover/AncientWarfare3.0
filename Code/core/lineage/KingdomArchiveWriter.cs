@@ -30,6 +30,7 @@ namespace AncientWarfare3.core.lineage
         public static void Upsert(Kingdom pKingdom)
         {
             if (!IsArchivable(pKingdom)) return;
+            if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(pKingdom)) return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
 
@@ -209,6 +210,44 @@ namespace AncientWarfare3.core.lineage
             catch (Exception e)
             {
                 ModClass.LogWarning("KingdomArchiveWriter.MarkDestroyed 失败:" + e.Message);
+            }
+        }
+
+        public static void ReviveContinuity(Kingdom pKingdom)
+        {
+            if (!IsArchivable(pKingdom)) return;
+            var db = LineageArchiveManager.Instance.OperatingDB;
+            if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
+            string table = KingdomArchiveTableItem.GetTableName();
+            City capital = ResolveCapital(pKingdom);
+            try
+            {
+                if (!db.CheckKeyExist(table,
+                        SimpleColumnConstraint.CreateEq("KINGDOM_ID", pKingdom.id)))
+                {
+                    Upsert(pKingdom);
+                    return;
+                }
+
+                db.UpdateValue(table,
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("KINGDOM_ID", pKingdom.id)
+                    },
+                    ColumnVal.Create("KINGDOM_NAME", pKingdom.name ?? ""),
+                    ColumnVal.Create("COLOR_TEXT", pKingdom.getColor()?.color_text ?? ""),
+                    ColumnVal.Create("COLOR_ID", pKingdom.data.color_id),
+                    ColumnVal.Create("BANNER_ICON_ID", pKingdom.data.banner_icon_id),
+                    ColumnVal.Create("BANNER_BACKGROUND_ID", pKingdom.data.banner_background_id),
+                    ColumnVal.Create("BANNER_ID", pKingdom.getActorAsset()?.banner_id ?? ""),
+                    ColumnVal.Create("CAPITAL_CITY_ID", capital?.data?.id ?? -1L),
+                    ColumnVal.Create("CAPITAL_CITY_NAME", capital?.data?.name ?? ""),
+                    ColumnVal.Create("IS_ALIVE", 1),
+                    ColumnVal.Create("DESTROYED_TIME", -1.0));
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("KingdomArchiveWriter.ReviveContinuity failed: " + e.Message);
             }
         }
     }

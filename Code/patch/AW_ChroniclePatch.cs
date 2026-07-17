@@ -21,6 +21,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(KingdomManager), nameof(KingdomManager.makeNewCivKingdom))]
         public static void MakeNewCivKingdom_Postfix(Kingdom __result)
         {
+            if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(__result)) return;
             ChronicleEvents.OnKingdomFounded(__result);
         }
 
@@ -31,6 +32,9 @@ namespace AncientWarfare3.patch
             out VassalService.KingdomDestroyWarCleanupState __state)
         {
             __state = VassalService.CaptureKingdomDestroyWarCleanup(pKingdom);
+            KingdomArchiveWriter.EnsureRow(pKingdom);
+            try { KingdomIdentityContinuityService.CaptureBeforeDestruction(pKingdom); }
+            catch (System.Exception e) { ModClass.LogWarning("Kingdom continuity capture failed: " + e.Message); }
             try { RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom); }
             catch (System.Exception e) { ModClass.LogWarning("Fallen kingdom claim capture failed: " + e.Message); }
             FormerHeirService.ArchiveAndClear(pKingdom);
@@ -78,6 +82,7 @@ namespace AncientWarfare3.patch
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
+            if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(__instance)) return;
             ChronicleEvents.OnKingChanged(__instance, pActor);
             CitySchoolSnapshotService.MarkKingdomDirty(__instance);
         }
