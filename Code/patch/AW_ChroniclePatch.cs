@@ -31,6 +31,8 @@ namespace AncientWarfare3.patch
             out VassalService.KingdomDestroyWarCleanupState __state)
         {
             __state = VassalService.CaptureKingdomDestroyWarCleanup(pKingdom);
+            try { RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom); }
+            catch (System.Exception e) { ModClass.LogWarning("Fallen kingdom claim capture failed: " + e.Message); }
             FormerHeirService.ArchiveAndClear(pKingdom);
         }
 

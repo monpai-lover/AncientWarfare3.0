@@ -254,7 +254,6 @@ namespace AncientWarfare3.core.lineage
             bool wasMandateKingdom = MandateService.IsMandateKingdom(pKingdom);
             FormerKingService.OnKingdomDestroyed(pKingdom, king, wasMandateKingdom);
             KingdomArchiveWriter.EnsureRow(pKingdom);
-            RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
             VassalService.OnKingdomDestroyed(pKingdom);
             MandateService.OnKingdomDestroyed(pKingdom);

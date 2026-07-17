@@ -28,41 +28,84 @@ namespace AncientWarfare3.core.lineage
             public string claimantName;
             public long originalKingdomId;
             public string originalKingdomName;
+            public string originalKingdomColor;
+            public long lineageId;
+            public long shiId;
+            public string clanName;
+            public long anchorActorId;
+            public long parentClaimId;
+            public int generation;
+            public long originalCapitalCityId;
+            public long originalMandatePeriodId;
             public int strength;
+            public string restoreMode;
+            public string restorationState;
         }
 
         public static void CreateClaimsFromFallenKingdom(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || !Ready) return;
-            var candidates = new HashSet<long>();
-            if (pKingdom.king?.data != null) candidates.Add(pKingdom.king.data.id);
+            long anchorId = ResolveFallenKingAnchor(pKingdom);
+            if (anchorId < 0) return;
 
-            try
-            {
-                Actor heir = HeirService.FindHeirReadOnly(pKingdom);
-                if (heir?.data != null) candidates.Add(heir.data.id);
-            }
-            catch { }
+            pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
+            long capitalId = ResolveOriginalCapitalId(pKingdom);
+            long mandatePeriodId = ResolveOriginalMandatePeriodId(pKingdom);
+            var frontier = new List<long> { anchorId };
+            var visited = new HashSet<long> { anchorId };
+            int inspected = 0;
 
-            try
+            for (int generation = 0;
+                 generation <= RoyalRestorationRules.MaxClaimGeneration && frontier.Count > 0;
+                 generation++)
             {
-                if (pKingdom.data.royal_clan_id.hasValue())
+                var next = new List<long>();
+                foreach (long actorId in frontier)
                 {
-                    Clan clan = World.world?.clans?.get(pKingdom.data.royal_clan_id);
-                    if (clan != null)
+                    if (++inspected > RoyalRestorationRules.MaxInitialDescendants) return;
+                    Actor actor = World.world?.units?.get(actorId);
+                    if (IsEligibleRestorationClaimant(actor))
                     {
-                        foreach (Actor unit in clan.units)
-                            if (unit?.data != null) candidates.Add(unit.data.id);
+                        int strength = actorId == anchorId
+                            ? 100
+                            : actorId == heirId
+                                ? 85
+                                : RoyalRestorationRules.InheritedClaimStrength(85, generation);
+                        CreateClaim(actor, pKingdom, anchorId, -1L, generation,
+                            "kingdom_fall", capitalId, mandatePeriodId, strength);
+                    }
+
+                    if (generation >= RoyalRestorationRules.MaxClaimGeneration) continue;
+                    foreach (long childId in LineageQuery.GetChildIds(actorId))
+                    {
+                        if (childId < 0 || !visited.Add(childId)) continue;
+                        if (LineageQuery.GetFatherId(childId) != actorId) continue;
+                        next.Add(childId);
+                        if (visited.Count >= RoyalRestorationRules.MaxInitialDescendants) break;
                     }
                 }
+                frontier = next;
             }
-            catch { }
+        }
 
-            foreach (long actorId in candidates)
+        public static void OnActorBornWithParents(Actor pBaby, Actor pParent1, Actor pParent2)
+        {
+            if (pBaby?.data == null || !pBaby.isSexMale() || !IsEligibleRestorationClaimant(pBaby) || !Ready)
+                return;
+            Actor father = PickFather(pParent1, pParent2);
+            if (father?.data == null) return;
+
+            foreach (ClaimRow claim in ReadTransferableClaims(father.data.id,
+                         RoyalRestorationRules.MaxAnnualCandidates))
             {
-                Actor actor = World.world?.units?.get(actorId);
-                if (!IsEligibleRestorationClaimant(actor)) continue;
-                CreateClaim(actor, pKingdom);
+                if (!RoyalRestorationRules.CanInheritClaim(claim.generation, true,
+                        childMale: true, childValid: true))
+                    continue;
+                int generation = RoyalRestorationRules.NextGeneration(claim.generation);
+                if (!RoyalRestorationRules.ShouldCreateClaim(
+                        HasActiveClaim(pBaby.data.id, claim.originalKingdomId), true, generation))
+                    continue;
+                CreateInheritedClaim(pBaby, claim, generation);
             }
         }
 
@@ -226,16 +269,19 @@ namespace AncientWarfare3.core.lineage
             return restored;
         }
 
-        private static void CreateClaim(Actor pClaimant, Kingdom pOriginalKingdom)
+        private static long CreateClaim(Actor pClaimant, Kingdom pOriginalKingdom,
+            long pAnchorActorId, long pParentClaimId, int pGeneration, string pOrigin,
+            long pOriginalCapitalCityId, long pOriginalMandatePeriodId, int pStrength)
         {
-            if (pClaimant?.data == null || pOriginalKingdom?.data == null) return;
-            if (!IsEligibleRestorationClaimant(pClaimant)) return;
-            if (HasActiveClaim(pClaimant.data.id, pOriginalKingdom.id)) return;
+            if (pClaimant?.data == null || pOriginalKingdom?.data == null) return -1L;
+            bool duplicate = HasActiveClaim(pClaimant.data.id, pOriginalKingdom.id);
+            if (!RoyalRestorationRules.ShouldCreateClaim(
+                    duplicate, IsEligibleRestorationClaimant(pClaimant), pGeneration))
+                return -1L;
 
             pClaimant.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             pClaimant.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             pClaimant.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
-            int strength = ClaimStrength(pClaimant, pOriginalKingdom);
             long claimId = TableIdAllocator.Next(DB, RoyalClaimTableItem.GetTableName(), "CLAIM_ID");
 
             DB.Insert(RoyalClaimTableItem.GetTableName(),
@@ -250,7 +296,18 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("LINEAGE_ID", lineageId),
                 ColumnVal.Create("SHI_ID", shiId),
                 ColumnVal.Create("CLAN_NAME", clanName ?? ""),
-                ColumnVal.Create("CLAIM_STRENGTH", strength),
+                ColumnVal.Create("ANCHOR_ACTOR_ID", pAnchorActorId),
+                ColumnVal.Create("PARENT_CLAIM_ID", pParentClaimId),
+                ColumnVal.Create("CLAIM_GENERATION", pGeneration),
+                ColumnVal.Create("CLAIM_ORIGIN", pOrigin ?? ""),
+                ColumnVal.Create("ORIGINAL_CAPITAL_CITY_ID", pOriginalCapitalCityId),
+                ColumnVal.Create("ORIGINAL_MANDATE_PERIOD_ID", pOriginalMandatePeriodId),
+                ColumnVal.Create("CLAIM_STRENGTH", pStrength),
+                ColumnVal.Create("RESTORE_MODE", ""),
+                ColumnVal.Create("RESTORATION_STATE", "dormant"),
+                ColumnVal.Create("RESTORED_KINGDOM_ID", -1L),
+                ColumnVal.Create("UPRISING_YEAR", -1),
+                ColumnVal.Create("LAST_ATTEMPT_YEAR", -1),
                 ColumnVal.Create("ACTIVE", 1),
                 ColumnVal.Create("CREATED_TIME", LineageService.CurTime()),
                 ColumnVal.Create("RESOLVED_TIME", -1.0),
@@ -260,20 +317,138 @@ namespace AncientWarfare3.core.lineage
                 HistoryText.Actor(pClaimant) + " \u83b7\u5f97 " + HistoryText.Kingdom(pOriginalKingdom) +
                 " \u590d\u56fd\u5ba3\u79f0",
                 ChronicleCategory.HONOR, HistoryTarget.Kingdom(pOriginalKingdom));
+            return claimId;
         }
 
-        private static int ClaimStrength(Actor pActor, Kingdom pOriginalKingdom)
+        private static void CreateInheritedClaim(Actor pBaby, ClaimRow pParentClaim, int pGeneration)
         {
-            if (pActor == pOriginalKingdom.king) return 100;
+            if (pBaby?.data == null || pParentClaim.claimId < 0) return;
+            pBaby.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
+            pBaby.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            pBaby.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
+            if (lineageId < 0) lineageId = pParentClaim.lineageId;
+            if (shiId < 0) shiId = pParentClaim.shiId;
+            if (string.IsNullOrEmpty(clanName)) clanName = pParentClaim.clanName;
+
+            long claimId = TableIdAllocator.Next(DB, RoyalClaimTableItem.GetTableName(), "CLAIM_ID");
+            int strength = RoyalRestorationRules.InheritFromParentStrength(pParentClaim.strength);
+            DB.Insert(RoyalClaimTableItem.GetTableName(),
+                ColumnVal.Create("CLAIM_ID", claimId),
+                ColumnVal.Create("CLAIMANT_ACTOR_ID", pBaby.data.id),
+                ColumnVal.Create("CLAIMANT_NAME", pBaby.getName() ?? ""),
+                ColumnVal.Create("ORIGINAL_KINGDOM_ID", pParentClaim.originalKingdomId),
+                ColumnVal.Create("ORIGINAL_KINGDOM_NAME", pParentClaim.originalKingdomName ?? ""),
+                ColumnVal.Create("ORIGINAL_KINGDOM_COLOR", pParentClaim.originalKingdomColor ?? ""),
+                ColumnVal.Create("HOST_KINGDOM_ID", pBaby.kingdom?.id ?? -1L),
+                ColumnVal.Create("HOST_KINGDOM_NAME", pBaby.kingdom?.name ?? ""),
+                ColumnVal.Create("LINEAGE_ID", lineageId),
+                ColumnVal.Create("SHI_ID", shiId),
+                ColumnVal.Create("CLAN_NAME", clanName ?? ""),
+                ColumnVal.Create("ANCHOR_ACTOR_ID", pParentClaim.anchorActorId),
+                ColumnVal.Create("PARENT_CLAIM_ID", pParentClaim.claimId),
+                ColumnVal.Create("CLAIM_GENERATION", pGeneration),
+                ColumnVal.Create("CLAIM_ORIGIN", "birth_inheritance"),
+                ColumnVal.Create("ORIGINAL_CAPITAL_CITY_ID", pParentClaim.originalCapitalCityId),
+                ColumnVal.Create("ORIGINAL_MANDATE_PERIOD_ID", pParentClaim.originalMandatePeriodId),
+                ColumnVal.Create("CLAIM_STRENGTH", strength),
+                ColumnVal.Create("RESTORE_MODE", ""),
+                ColumnVal.Create("RESTORATION_STATE", "dormant"),
+                ColumnVal.Create("RESTORED_KINGDOM_ID", -1L),
+                ColumnVal.Create("UPRISING_YEAR", -1),
+                ColumnVal.Create("LAST_ATTEMPT_YEAR", -1),
+                ColumnVal.Create("ACTIVE", 1),
+                ColumnVal.Create("CREATED_TIME", LineageService.CurTime()),
+                ColumnVal.Create("RESOLVED_TIME", -1.0),
+                ColumnVal.Create("RESOLVED_REASON", ""));
+
+            HistoryText text = HistoryText.Actor(pBaby) + " \u627f\u7eed " +
+                               HistoryText.Colored(pParentClaim.originalKingdomName,
+                                   pParentClaim.originalKingdomColor) + " \u590d\u56fd\u5ba3\u79f0";
+            HistoryWriter.RecordPerson(pBaby.data.id, pBaby.kingdom, pBaby.getName(), "royal_claim_inherited",
+                text, ChronicleCategory.HONOR,
+                HistoryTarget.From("kingdom", pParentClaim.originalKingdomId));
+        }
+
+        private static List<ClaimRow> ReadTransferableClaims(long pFatherActorId, int pLimit)
+        {
+            var result = new List<ClaimRow>();
+            if (!Ready || pFatherActorId < 0 || pLimit <= 0) return result;
             try
             {
-                Actor heir = HeirService.FindHeirReadOnly(pOriginalKingdom);
-                if (heir?.data != null && heir.data.id == pActor.data.id) return 85;
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
+                    $"ORIGINAL_KINGDOM_NAME, ORIGINAL_KINGDOM_COLOR, LINEAGE_ID, SHI_ID, CLAN_NAME, " +
+                    $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, ORIGINAL_CAPITAL_CITY_ID, " +
+                    $"ORIGINAL_MANDATE_PERIOD_ID, CLAIM_STRENGTH, RESTORE_MODE, RESTORATION_STATE " +
+                    $"FROM {RoyalClaimTableItem.GetTableName()} " +
+                    "WHERE CLAIMANT_ACTOR_ID=@a AND ACTIVE=1 AND CLAIM_GENERATION<@max " +
+                    "ORDER BY CLAIM_GENERATION ASC, CLAIM_STRENGTH DESC, CLAIM_ID ASC LIMIT @lim";
+                cmd.Parameters.AddWithValue("@a", pFatherActorId);
+                cmd.Parameters.AddWithValue("@max", RoyalRestorationRules.MaxClaimGeneration);
+                cmd.Parameters.AddWithValue("@lim", pLimit);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read()) result.Add(ReadFullClaimRow(reader));
             }
-            catch { }
-            if (pActor.isCityLeader()) return 60;
-            if (pActor.hasTrait(LineageKeys.TRAIT_GUIZU)) return 45;
-            return 25;
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Royal claim inheritance read failed: " + e.Message);
+            }
+            return result;
+        }
+
+        private static ClaimRow ReadFullClaimRow(SQLiteDataReader pReader)
+        {
+            return new ClaimRow
+            {
+                claimId = pReader.GetInt64(0),
+                claimantId = pReader.GetInt64(1),
+                claimantName = pReader.IsDBNull(2) ? "" : pReader.GetString(2),
+                originalKingdomId = pReader.GetInt64(3),
+                originalKingdomName = pReader.IsDBNull(4) ? "" : pReader.GetString(4),
+                originalKingdomColor = pReader.IsDBNull(5) ? "" : pReader.GetString(5),
+                lineageId = pReader.IsDBNull(6) ? -1L : pReader.GetInt64(6),
+                shiId = pReader.IsDBNull(7) ? -1L : pReader.GetInt64(7),
+                clanName = pReader.IsDBNull(8) ? "" : pReader.GetString(8),
+                anchorActorId = pReader.IsDBNull(9) ? -1L : pReader.GetInt64(9),
+                parentClaimId = pReader.IsDBNull(10) ? -1L : pReader.GetInt64(10),
+                generation = pReader.IsDBNull(11) ? 0 : pReader.GetInt32(11),
+                originalCapitalCityId = pReader.IsDBNull(12) ? -1L : pReader.GetInt64(12),
+                originalMandatePeriodId = pReader.IsDBNull(13) ? -1L : pReader.GetInt64(13),
+                strength = pReader.IsDBNull(14) ? 0 : pReader.GetInt32(14),
+                restoreMode = pReader.IsDBNull(15) ? "" : pReader.GetString(15),
+                restorationState = pReader.IsDBNull(16) ? "dormant" : pReader.GetString(16)
+            };
+        }
+
+        private static long ResolveFallenKingAnchor(Kingdom pKingdom)
+        {
+            if (pKingdom?.king?.data != null) return pKingdom.king.data.id;
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long actorId, -1L);
+            return actorId;
+        }
+
+        private static long ResolveOriginalCapitalId(Kingdom pKingdom)
+        {
+            if (pKingdom?.capital?.data != null) return pKingdom.capital.data.id;
+            if (pKingdom?.data == null) return -1L;
+            if (pKingdom.data.last_capital_id >= 0) return pKingdom.data.last_capital_id;
+            return pKingdom.data.capitalID;
+        }
+
+        private static long ResolveOriginalMandatePeriodId(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || !MandateService.IsMandateKingdom(pKingdom)) return -1L;
+            pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long periodId, -1L);
+            return periodId;
+        }
+
+        private static Actor PickFather(Actor pParent1, Actor pParent2)
+        {
+            if (pParent1?.data != null && pParent1.isSexMale()) return pParent1;
+            if (pParent2?.data != null && pParent2.isSexMale()) return pParent2;
+            return null;
         }
 
         private static bool HasActiveClaim(long pActorId, long pKingdomId)

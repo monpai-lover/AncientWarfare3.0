@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
         public const int MaxAnnualStarts = 1;
         public const int MaxCampaignsPerYear = 4;
         public const int MaxCoreCandidates = 16;
+        public const int MaxInitialDescendants = 128;
         public const int AiMinimumClaimStrength = 85;
         public const int MinimumInheritedClaimStrength = 40;
 
@@ -30,6 +31,32 @@ namespace AncientWarfare3.core.lineage
         {
             if (generation < 1 || generation > MaxClaimGeneration) return 0;
             return Math.Max(MinimumInheritedClaimStrength, anchorStrength - generation * 15);
+        }
+
+        public static int InheritFromParentStrength(int parentStrength)
+        {
+            return Math.Max(MinimumInheritedClaimStrength, parentStrength - 15);
+        }
+
+        public static int ResolveAgnaticGeneration(long anchorActorId, long candidateActorId,
+            Func<long, long> pFatherOf)
+        {
+            if (anchorActorId < 0 || candidateActorId < 0 || pFatherOf == null) return -1;
+            long current = candidateActorId;
+            for (int generation = 0; generation <= MaxClaimGeneration; generation++)
+            {
+                if (current == anchorActorId) return generation;
+                current = pFatherOf(current);
+                if (current < 0) return -1;
+            }
+            return -1;
+        }
+
+        public static bool ShouldCreateClaim(bool activeDuplicate, bool claimantEligible,
+            int generation)
+        {
+            return !activeDuplicate && claimantEligible &&
+                   generation >= 0 && generation <= MaxClaimGeneration;
         }
 
         public static bool ShouldStartAiCampaign(int claimStrength, bool claimantValid,

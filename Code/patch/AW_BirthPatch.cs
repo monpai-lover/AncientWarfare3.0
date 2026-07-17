@@ -37,6 +37,8 @@ namespace AncientWarfare3.patch
         {
             if (pBaby?.data == null) return;
             LineageService.OnActorBornWithParents(pBaby, pParent1, pParent2);
+            try { RoyalClaimService.OnActorBornWithParents(pBaby, pParent1, pParent2); }
+            catch (System.Exception e) { ModClass.LogWarning("Royal claim birth inheritance failed: " + e.Message); }
 
             // 编年史:给贵族父/母各记一条"喜得子/女"(谱系继承已在上一步完成,名字已就绪)。
             ChronicleEvents.OnHadChild(pParent1, pParent2, pBaby);
