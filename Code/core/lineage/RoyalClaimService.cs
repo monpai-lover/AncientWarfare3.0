@@ -259,6 +259,9 @@ namespace AncientWarfare3.core.lineage
                 lineage_id = pClaim.lineageId,
                 shi_id = pClaim.shiId,
                 clan_name = pClaim.clanName,
+                state_name = pClaim.shiId >= 0
+                    ? StateNameService.GetBoundStateName(pClaim.shiId)
+                    : "",
                 mode = "hosted_restoration"
             };
             Kingdom restored = KingdomIdentityContinuityService.RestoreFromCity(

@@ -35,10 +35,8 @@ namespace AncientWarfare3.core.lineage
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             string newClanName = ResolveDynastyClanName(pNewKing, newShiId);
             long curShiId = GetCurrentDynastyShiId(pKingdom.id);
-            string curClanName = GetCurrentDynastyClanName(pKingdom.id);
 
-            // 同一氏连续统治不切段；同氏新分支仍属于同一个“X氏统治”时期。
-            if (IsSameDynastyFamily(curShiId, curClanName, newShiId, newClanName)) return;
+            if (StateNameRules.IsSameShiContinuity(curShiId, newShiId)) return;
 
             // 关旧朝代
             string closeReason = (newShiId < 0 || !LineageService.IsXia(pNewKing))
@@ -49,6 +47,7 @@ namespace AncientWarfare3.core.lineage
 
             // 开新朝代
             string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, newClanName);
+            string stateName = StateNameService.GetBoundOrCurrentName(pKingdom, newShiId);
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string dynastyColor = HistoryColors.FromClan(pNewKing.clan, pKingdom);
             if (string.IsNullOrEmpty(dynastyColor)) dynastyColor = kingdomColor;
@@ -70,6 +69,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("DYNASTY_NAME",            dynastyName),
                     ColumnVal.Create("DYNASTY_COLOR",           dynastyColor),
                     ColumnVal.Create("ORIGINAL_KINGDOM_NAME",   pKingdom.name ?? ""),
+                    ColumnVal.Create("STATE_NAME",              stateName),
                     ColumnVal.Create("START_TIME",              now),
                     ColumnVal.Create("END_TIME",                -1.0),
                     ColumnVal.Create("END_REASON",              ""));
@@ -77,18 +77,6 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.Colored(dynastyName, dynastyColor) + " \u5F00\u59CB");
             }
             catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " + e.Message); }
-        }
-
-        private static bool IsSameDynastyFamily(long pCurrentShiId, string pCurrentClanName,
-            long pNewShiId, string pNewClanName)
-        {
-            if (pCurrentShiId >= 0 && pCurrentShiId == pNewShiId) return true;
-            if (string.IsNullOrEmpty(pCurrentClanName) || string.IsNullOrEmpty(pNewClanName)) return false;
-            if (!string.Equals(pCurrentClanName, pNewClanName, StringComparison.Ordinal)) return false;
-
-            long currentLineage = GetShiLineageId(pCurrentShiId);
-            long newLineage = GetShiLineageId(pNewShiId);
-            return currentLineage < 0 || newLineage < 0 || currentLineage == newLineage;
         }
 
         private static string ResolveDynastyClanName(Actor pKing, long pShiId)
@@ -100,13 +88,6 @@ namespace AncientWarfare3.core.lineage
 
             var shi = LineageQuery.GetShiBranchInfo(pShiId);
             return shi?.clan_name ?? "";
-        }
-
-        private static long GetShiLineageId(long pShiId)
-        {
-            if (pShiId < 0) return -1;
-            var shi = LineageQuery.GetShiBranchInfo(pShiId);
-            return shi?.lineage_id ?? -1;
         }
 
         private static string BuildRulePeriodName(Actor pKing, Kingdom pKingdom, long pShiId, string pClanName)

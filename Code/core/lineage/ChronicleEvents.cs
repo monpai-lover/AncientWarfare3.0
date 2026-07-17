@@ -18,6 +18,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pNewKing?.data == null) return;
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
+            if (!BindStateNameForRuler(pKingdom, pNewKing)) return;
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
@@ -43,6 +44,20 @@ namespace AncientWarfare3.core.lineage
             ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
             DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
             ReignRecordWriter.OpenReign(pKingdom, pNewKing);
+        }
+
+        private static bool BindStateNameForRuler(Kingdom pKingdom, Actor pRuler)
+        {
+            if (!LineageService.IsXiaKingdom(pKingdom) &&
+                !XiaizationService.UsesXiaizedInstitutionSystem(pKingdom)) return true;
+            pRuler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0) return true;
+            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+            StateNameCommitResult committed = StateNameService.EnsureBoundStateName(
+                pKingdom, pRuler, shiId, -1L,
+                branch?.origin_kingdom_id ?? pKingdom.id);
+            return committed.Success &&
+                   StateNameService.ProjectCommittedStateName(pKingdom, committed);
         }
 
         private static void RecordPreviousKingLostThrone(Kingdom pKingdom, long pPreviousKingId, long pNewKingId)

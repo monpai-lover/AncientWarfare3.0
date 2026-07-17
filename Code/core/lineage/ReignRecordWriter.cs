@@ -73,10 +73,7 @@ namespace AncientWarfare3.core.lineage
             long dynastyId = DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id);
             pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long mandatePeriodId, -1L);
             int highestTitle = (int)KingdomTitleService.GetTitle(pKingdom);
-            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
-            string stateName = string.IsNullOrEmpty(branch?.state_name)
-                ? pKingdom.name ?? ""
-                : branch.state_name;
+            string stateName = StateNameService.GetBoundOrCurrentName(pKingdom, shiId);
             try
             {
                 DB.Insert(TABLE,

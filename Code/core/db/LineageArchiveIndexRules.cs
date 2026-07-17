@@ -59,6 +59,8 @@ namespace AncientWarfare3.core.db
 
                 Index("idx_KingdomArchive_kingdom", KingdomArchiveTableItem.GetTableName(),
                     "KINGDOM_ID"),
+                Index("idx_KingdomArchive_alive_name", KingdomArchiveTableItem.GetTableName(),
+                    "IS_ALIVE, KINGDOM_NAME"),
                 Index("idx_KingdomHistory_kingdom_time", KingdomHistoryTableItem.GetTableName(),
                     "KINGDOM_ID, WORLD_TIME, EVENT_ID"),
                 Index("idx_CityHistory_city_time", CityHistoryTableItem.GetTableName(),
@@ -74,6 +76,8 @@ namespace AncientWarfare3.core.db
                     "KINGDOM_ID, START_TIME, REIGN_ID"),
                 Index("idx_KingdomReign_king_actor_end", KingdomReignTableItem.GetTableName(),
                     "KING_ACTOR_ID, END_TIME, START_TIME"),
+                Index("idx_DynastyPeriod_shi_active_state", DynastyPeriodTableItem.GetTableName(),
+                    "END_TIME, SHI_ID, STATE_NAME"),
                 Index("idx_PosthumousTitle_actor_time", PosthumousTitleTableItem.GetTableName(),
                     "ACTOR_ID, DECIDED_TIME, RECORD_ID"),
                 Index("idx_WarRecord_attacker_start", WarRecordTableItem.GetTableName(),

@@ -30,6 +30,22 @@ namespace AncientWarfare3.content
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             if (!IsXiaKingdom(pKingdom, pActor)) return false;
+
+            Actor ruler = pKingdom.king;
+            if (ruler?.data != null)
+            {
+                ruler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+                if (shiId >= 0)
+                {
+                    ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+                    StateNameCommitResult committed = StateNameService.EnsureBoundStateName(
+                        pKingdom, ruler, shiId,
+                        DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id),
+                        branch?.origin_kingdom_id ?? pKingdom.id);
+                    return committed.Success &&
+                           StateNameService.ProjectCommittedStateName(pKingdom, committed);
+                }
+            }
             if (!pForce && !XiaNameRepairRules.IsInvalidGeneratedMetaName(pKingdom?.data?.name)) return false;
 
             string name = GenerateKingdomName(pKingdom);

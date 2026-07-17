@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.lineage
         public long lineage_id = -1;
         public long shi_id = -1;
         public string clan_name = "";
+        public string state_name = "";
         public string mode = "";
     }
 
@@ -328,7 +329,10 @@ namespace AncientWarfare3.core.lineage
             ContinuitySnapshot pContinuity, KingdomData pDeadStats)
         {
             MergeVanillaHistory(pKingdom.data, pDeadStats);
-            string name = pArchive?.name;
+            string name = StateNameRules.ResolveRestorationStateName(
+                StateNameService.GetBoundStateName(pRequest.shi_id),
+                pRequest.state_name);
+            if (string.IsNullOrEmpty(name)) name = pArchive?.name;
             if (string.IsNullOrEmpty(name)) name = pContinuity?.name;
             if (string.IsNullOrEmpty(name)) name = pRequest.original_kingdom_name;
             if (!string.IsNullOrEmpty(name)) pKingdom.setName(name, pTrack: false);
