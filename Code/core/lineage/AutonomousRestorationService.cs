@@ -51,6 +51,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (MandateService.Exists) return;
+            if (!MandatePhaseService.CanLaunchAutonomousRestoration) return;
 
             try
             {
@@ -88,6 +89,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (!Ready || World.world == null || pClaimId < 0 || MandateService.Exists)
                 return false;
+            if (!MandatePhaseService.CanLaunchAutonomousRestoration) return false;
             try
             {
                 RoyalClaimService.ClaimRow claim =
@@ -109,6 +111,7 @@ namespace AncientWarfare3.core.lineage
                     : null;
                 return RoyalRestorationRules.CanStartAutonomousCampaign(
                     mandateExists: false,
+                    chaosPhase: MandatePhaseService.CanLaunchAutonomousRestoration,
                     playerRequested: false,
                     claimStrength: claim.strength,
                     claimantValid,
@@ -142,6 +145,11 @@ namespace AncientWarfare3.core.lineage
             if (MandateService.Exists)
             {
                 pError = "restoration_mandate_order";
+                return false;
+            }
+            if (!MandatePhaseService.CanLaunchAutonomousRestoration)
+            {
+                pError = "restoration_phase_order";
                 return false;
             }
 
@@ -181,6 +189,7 @@ namespace AncientWarfare3.core.lineage
             bool hasSeed = seed?.data != null;
             if (!RoyalRestorationRules.CanStartAutonomousCampaign(
                     mandateExists: false,
+                    chaosPhase: MandatePhaseService.CanLaunchAutonomousRestoration,
                     playerRequested: pPlayerRequested,
                     claimStrength: claim.strength,
                     claimantValid: true,

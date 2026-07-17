@@ -192,7 +192,8 @@ namespace AncientWarfare3.core.lineage
                 canAdvanceCurrentCapture,
                 hasDefenders,
                 hasGoal,
-                towers);
+                towers,
+                MandatePhaseService.OccupationMultiplier);
             if (extra <= 0f) return;
 
             AddCaptureTicks(pCity, extra * Mathf.Max(0.25f, pElapsed * 10f));

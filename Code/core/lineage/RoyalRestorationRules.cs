@@ -66,18 +66,18 @@ namespace AncientWarfare3.core.lineage
                 : "dormant";
         }
 
-        public static bool ShouldStartAiCampaign(int claimStrength, bool claimantValid,
+        public static bool ShouldStartAiCampaign(bool chaosPhase, int claimStrength, bool claimantValid,
             bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
         {
-            return CanStartAutonomousCampaign(false, false, claimStrength,
+            return CanStartAutonomousCampaign(false, chaosPhase, false, claimStrength,
                 claimantValid, oldKingdomDead, hasEligibleSeed, cooldownReady);
         }
 
         public static bool CanStartAutonomousCampaign(bool mandateExists,
-            bool playerRequested, int claimStrength, bool claimantValid,
+            bool chaosPhase, bool playerRequested, int claimStrength, bool claimantValid,
             bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
         {
-            return !mandateExists && claimantValid && oldKingdomDead &&
+            return !mandateExists && chaosPhase && claimantValid && oldKingdomDead &&
                    hasEligibleSeed && cooldownReady &&
                    (playerRequested || claimStrength >= AiMinimumClaimStrength);
         }

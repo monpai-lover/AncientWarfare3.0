@@ -508,6 +508,7 @@ namespace AncientWarfare3.core.lineage
         public static bool TryDeclareMandateWar(Kingdom pAttacker, Kingdom pDefender)
         {
             if (IsVassalDecisionOnlyTarget(pAttacker, pDefender)) return false;
+            if (!MandatePhaseService.CanContestMandate) return false;
             if (MandateService.GetCurrentMandateKingdom() != pDefender) return false;
             var goal = new WarGoalRequest
             {

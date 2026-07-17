@@ -159,6 +159,9 @@ namespace AncientWarfare3.patch
                 case "restoration_mandate_order":
                     return AW_L10n.Text("aw_restoration_error_mandate_order",
                         "Autonomous restoration is available only during a Mandate vacancy");
+                case "restoration_phase_order":
+                    return AW_L10n.Text("aw_restoration_error_phase_order",
+                        "Autonomous restoration requires a chaotic Mandate vacancy");
                 case "restoration_no_eligible_core":
                 case "restoration_no_living_core":
                     return AW_L10n.Text("aw_restoration_error_no_core", "No eligible old core can support an uprising");

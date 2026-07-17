@@ -295,7 +295,8 @@ namespace AncientWarfare3.core.lineage
                 case WAR_NORMAL:
                     return WarTerritoryService.CanUseMandateConquest(pAttacker, pDefender);
                 case MandateService.WAR_TIANMING:
-                    return MandateService.GetCurrentMandateKingdom() == pDefender;
+                    return MandatePhaseService.CanContestMandate &&
+                           MandateService.GetCurrentMandateKingdom() == pDefender;
                 case MandateService.WAR_TIANMING_REBEL:
                 case GeneralRebellionService.WAR_GENERAL_REBELLION:
                 case GeneralRebellionService.WAR_FIEF_INDEPENDENCE:

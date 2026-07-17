@@ -73,7 +73,7 @@ namespace AncientWarfare3.core.lineage
 
         public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasActiveCaptureUnits,
             bool pCanAdvanceCurrentCapture, bool pHasDefenders, bool pHasCityControlGoal,
-            int pWatchTowerCount)
+            int pWatchTowerCount, float pPhaseMultiplier = 1f)
         {
             if (!pIsBeingCapturedByEnemy) return 0f;
             if (!pHasActiveCaptureUnits) return 0f;
@@ -82,7 +82,7 @@ namespace AncientWarfare3.core.lineage
 
             float bonus = pHasCityControlGoal ? 1.55f : 0.45f;
             bonus -= Math.Max(0, pWatchTowerCount) * 0.35f;
-            return Math.Max(0f, bonus);
+            return Math.Max(0f, bonus) * Math.Max(0f, pPhaseMultiplier);
         }
     }
 }
