@@ -60,5 +60,27 @@ namespace AncientWarfare3.core.lineage
             pReason = "";
             return true;
         }
+
+        public static bool CanPlayerGrant(bool pValidTarget, bool pHasKing,
+            bool pSameHolder, out string pReason)
+        {
+            if (!pValidTarget)
+            {
+                pReason = "invalid";
+                return false;
+            }
+            if (!pHasKing)
+            {
+                pReason = "no_king";
+                return false;
+            }
+            if (pSameHolder)
+            {
+                pReason = "already_holder";
+                return false;
+            }
+            pReason = "";
+            return true;
+        }
     }
 }

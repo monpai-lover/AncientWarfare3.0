@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.lineage
 
         public static string EventType(string pOriginType, string pClaimantKind)
         {
+            if (pOriginType == "player_grant") return "mandate_declared_player_grant";
             if (pOriginType == "self_restoration") return "mandate_declared_refounder";
             if (IsForeignPseudo(pOriginType, pClaimantKind)) return "mandate_declared_foreign_pseudo";
             if (IsRebel(pOriginType, pClaimantKind)) return "mandate_declared_rebel";

@@ -92,6 +92,13 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
             if (mandateMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateMapButton);
 
+            PowerButton grantMandateButton = PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.GRANT_MANDATE,
+                SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
+                ?? SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
+            if (grantMandateButton != null)
+                tab.AddPowerButton(GROUP_LINEAGE, grantMandateButton);
+
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")

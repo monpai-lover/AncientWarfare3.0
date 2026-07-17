@@ -8,7 +8,8 @@ namespace AncientWarfare3.core.lineage
         MandateWarVictory,
         MandateRebel,
         ForeignPseudoDynasty,
-        AutonomousRestoration
+        AutonomousRestoration,
+        PlayerGrant
     }
 
     public static class MandateRitesRules
@@ -64,6 +65,9 @@ namespace AncientWarfare3.core.lineage
                 return MandateDeclarationSource.ForeignPseudoDynasty;
             if (reason == "self_restoration" || origin == "self_restoration")
                 return MandateDeclarationSource.AutonomousRestoration;
+            if (reason == "player_grant" || origin == "player_grant" ||
+                claimant == "player_grant")
+                return MandateDeclarationSource.PlayerGrant;
             return MandateDeclarationSource.Ordinary;
         }
 

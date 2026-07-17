@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 
 namespace AncientWarfare3.content
@@ -12,6 +13,7 @@ namespace AncientWarfare3.content
         public const string SPAWN_XIA = XiaRace.ID;
         public const string VASSAL_SET = "aw_vassal_set";
         public const string VASSAL_REMOVE = "aw_vassal_remove";
+        public const string GRANT_MANDATE = "aw_grant_mandate";
 
         private static Kingdom _pendingVassal;
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
@@ -30,6 +32,7 @@ namespace AncientWarfare3.content
             AWMapModeMetaLibrary.Init();
             RegisterMapModeNameplates();
             RegisterVassalPowers();
+            RegisterMandateGrantPower();
         }
 
         private static void RegisterSpawnXia()
@@ -463,6 +466,36 @@ namespace AncientWarfare3.content
                     click_special_action = new PowerActionWithID(VassalRemoveClick)
                 });
             }
+        }
+
+        private static void RegisterMandateGrantPower()
+        {
+            if (AssetManager.powers.get(GRANT_MANDATE) != null) return;
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = GRANT_MANDATE,
+                name = GRANT_MANDATE,
+                path_icon = "ui/Icons/traits/iconTianming",
+                force_map_mode = MetaType.Kingdom,
+                unselect_when_window = true,
+                allow_unit_selection = false,
+                click_special_action = new PowerActionWithID(GrantMandateClick)
+            });
+        }
+
+        private static bool GrantMandateClick(WorldTile pTile, string pPowerID)
+        {
+            Kingdom target = GetTileKingdom(pTile);
+            if (!MandateService.TryGrantMandateByPlayer(target, out string reason))
+            {
+                Tip(AW_L10n.Text("aw_grant_mandate_error_" + reason, reason));
+                return false;
+            }
+
+            Tip(AW_L10n.Text("aw_grant_mandate_success", "Mandate granted") +
+                ": " + target.name);
+            return true;
         }
 
         private static bool VassalSetClick(WorldTile pTile, string pPowerID)

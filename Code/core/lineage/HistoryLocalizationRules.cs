@@ -101,6 +101,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_event_mandate_declared_rebel", "义军受命", "Rebel Mandate", "義軍受命"),
             new Entry("aw_hist_event_mandate_declared_foreign_pseudo", "外族伪朝", "Foreign Pseudo-Dynasty", "外族偽朝"),
             new Entry("aw_hist_event_mandate_declared_refounder", "\u590d\u56fd\u53d7\u547d", "Restored Mandate", "\u5fa9\u570b\u53d7\u547d"),
+            new Entry("aw_hist_event_mandate_declared_player_grant", "\u73a9\u5bb6\u6388\u547d", "Player-Granted Mandate", "\u73a9\u5bb6\u6388\u547d"),
             new Entry("aw_hist_event_royal_claim", "\u590d\u56fd\u5ba3\u79f0", "Restoration Claim", "\u5fa9\u570b\u5ba3\u7a31"),
             new Entry("aw_hist_event_royal_claim_inherited", "\u627f\u7eed\u590d\u56fd\u5ba3\u79f0", "Restoration Claim Inherited", "\u627f\u7e8c\u5fa9\u570b\u5ba3\u7a31"),
             new Entry("aw_hist_event_restoration_kingdom_restored", "\u6276\u6301\u590d\u56fd", "Hosted Restoration", "\u6276\u6301\u5fa9\u570b"),
@@ -431,6 +432,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_mandate_end_war_lost", "天命战争失败", "lost Mandate war", "天命戰爭失敗"),
             new Entry("aw_hist_mandate_end_kingdom_fell", "王朝灭亡", "dynasty destroyed", "王朝滅亡"),
             new Entry("aw_hist_mandate_end_replaced", "改朝换代", "dynasty replaced", "改朝換代"),
+            new Entry("aw_hist_mandate_end_player_grant", "\u73a9\u5bb6\u8f6c\u6388\u5929\u547d", "Mandate transferred by player", "\u73a9\u5bb6\u8f49\u6388\u5929\u547d"),
             new Entry("aw_hist_mandate_end_generic", "结束", "ended", "結束"),
 
             // Ruler names and title-system event templates

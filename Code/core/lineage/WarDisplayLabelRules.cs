@@ -72,6 +72,7 @@ namespace AncientWarfare3.core.lineage
                 case "mandate_declared_orthodox": return T("aw_hist_event_mandate_declared_orthodox", pLanguage);
                 case "mandate_declared_rebel": return T("aw_hist_event_mandate_declared_rebel", pLanguage);
                 case "mandate_declared_foreign_pseudo": return T("aw_hist_event_mandate_declared_foreign_pseudo", pLanguage);
+                case "mandate_declared_player_grant": return T("aw_hist_event_mandate_declared_player_grant", pLanguage);
                 case "mandate_end": return T("aw_hist_event_mandate_end", pLanguage);
                 case "mandate_yearly": return T("aw_hist_event_mandate_yearly", pLanguage);
                 case "mandate_war_start": return T("aw_hist_event_mandate_war_start", pLanguage);

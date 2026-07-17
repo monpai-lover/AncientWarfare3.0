@@ -188,8 +188,8 @@ namespace AncientWarfare3.core.lineage
                     pOriginType, restorationCompleted, refounderEligible);
             }
             NormalizeForeignMandateOrigin(pKingdom, pReason, ref pOriginType, ref pClaimantKind);
-            if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
             if (!Ready) return false;
+            if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
 
             MandateReport previousReport = ReadReport();
             bool hadPreviousMandate = previousReport.period_id >= 0;
@@ -197,9 +197,10 @@ namespace AncientWarfare3.core.lineage
                     previousReport.active, previousReport.kingdom_id, pKingdom.id))
                 return false;
             long previousPeriodId = previousReport.active ? previousReport.period_id : -1L;
-            Kingdom old = GetCurrentMandateKingdom();
-            if (old?.data != null && old != pKingdom)
-                ClearMandate("replaced");
+            if (previousReport.active && previousReport.kingdom_id != pKingdom.id)
+                ClearMandate(pReason == "player_grant"
+                    ? "player_grant_replaced"
+                    : "replaced");
 
             long periodId = TableIdAllocator.Next(DB, MandatePeriodTableItem.GetTableName(), "PERIOD_ID");
             double now = LineageService.CurTime();
@@ -267,6 +268,32 @@ namespace AncientWarfare3.core.lineage
 
             DirtyAllMaps();
             return true;
+        }
+
+        public static bool TryGrantMandateByPlayer(Kingdom pTarget, out string pReason)
+        {
+            pReason = "";
+            bool validTarget = pTarget?.data != null && !pTarget.isRekt() &&
+                               pTarget.isCiv() && !pTarget.isNeutral();
+            if (!Ready)
+            {
+                pReason = "database_not_ready";
+                return false;
+            }
+
+            Kingdom current = GetCurrentMandateKingdom();
+            if (!MandateDeclarationRules.CanPlayerGrant(
+                    validTarget,
+                    pTarget?.king?.data != null && pTarget.hasKing(),
+                    current?.id == pTarget?.id,
+                    out pReason))
+                return false;
+
+            if (TryDeclareMandate(pTarget, "player_grant", "player_grant", "player_grant"))
+                return true;
+
+            pReason = "grant_failed";
+            return false;
         }
 
         public static bool CanDeclareMandate(Kingdom pKingdom, out string pReason)
@@ -349,6 +376,16 @@ namespace AncientWarfare3.core.lineage
             bool rebelOrigin = source == MandateDeclarationSource.MandateRebel;
             bool foreignPseudo = source == MandateDeclarationSource.ForeignPseudoDynasty;
             bool successfulOrdinaryWar = source == MandateDeclarationSource.MandateWarVictory;
+            if (source == MandateDeclarationSource.PlayerGrant)
+            {
+                Kingdom current = GetCurrentMandateKingdom();
+                return MandateDeclarationRules.CanPlayerGrant(
+                    pKingdom?.data != null && !pKingdom.isRekt() &&
+                    pKingdom.isCiv() && !pKingdom.isNeutral(),
+                    pKingdom?.king?.data != null && pKingdom.hasKing(),
+                    current?.id == pKingdom?.id,
+                    out pReason);
+            }
             if (successfulOrdinaryWar)
             {
                 pReason = "";
@@ -1661,6 +1698,7 @@ namespace AncientWarfare3.core.lineage
                 case "war_lost": return T("aw_hist_mandate_end_war_lost");
                 case "kingdom_fell": return T("aw_hist_mandate_end_kingdom_fell");
                 case "replaced": return T("aw_hist_mandate_end_replaced");
+                case "player_grant_replaced": return T("aw_hist_mandate_end_player_grant");
                 default: return string.IsNullOrEmpty(pReason) ? T("aw_hist_mandate_end_generic") : pReason;
             }
         }
