@@ -194,11 +194,24 @@ namespace AncientWarfare3.core.lineage
                 int index = PositiveModulo(cursor + i, currentCount);
                 Actor actor = pSeed.units[index];
                 pScanned++;
-                if (!CanEnlist(pState, pKingdom, pSeed, actor)) continue;
-                if (Enlist(pState, pKingdom, pSeed, actor)) pRecruited++;
+                if (TryEnlistCandidate(pState, pKingdom, pSeed, actor)) pRecruited++;
             }
             pState.ActorCursor = PositiveModulo(cursor + pScanned,
                 Math.Max(1, pSeed.units?.Count ?? unitCount));
+        }
+
+        private static bool TryEnlistCandidate(CampaignState pState,
+            Kingdom pKingdom, City pSeed, Actor pActor)
+        {
+            try
+            {
+                return CanEnlist(pState, pKingdom, pSeed, pActor) &&
+                       Enlist(pState, pKingdom, pSeed, pActor);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool CanEnlist(CampaignState pState, Kingdom pKingdom,
@@ -246,7 +259,8 @@ namespace AncientWarfare3.core.lineage
         {
             Army army = ResolveArmy(pState?.ArmyId ?? -1L);
             if (!IsArmyOwnedBy(army, pKingdom)) return;
-            WarNoticeService.QueueArmyChanged(pKingdom, army, pRosterExpanded: true);
+            try { WarNoticeService.QueueArmyChanged(pKingdom, army, pRosterExpanded: true); }
+            catch { }
         }
 
         private static Army EnsureArmy(CampaignState pState, Kingdom pKingdom,
@@ -363,7 +377,7 @@ namespace AncientWarfare3.core.lineage
             {
                 long actorId = state.MutationBuffer[i];
                 Actor actor = ResolveActor(actorId);
-                if (actor?.data != null) DemobilizeActor(state, kingdom, actor);
+                if (actor?.data != null) CleanupMemberSafely(state, kingdom, actor);
                 state.MemberIds.Remove(actorId);
             }
             if (state.MemberIds.Count == 0)
@@ -373,6 +387,13 @@ namespace AncientWarfare3.core.lineage
             }
             PersistRoster(kingdom, state);
             ScheduleCleanup(state);
+        }
+
+        private static void CleanupMemberSafely(CampaignState pState,
+            Kingdom pKingdom, Actor pActor)
+        {
+            try { DemobilizeActor(pState, pKingdom, pActor); }
+            catch { ClearActorFieldsForCampaign(pActor, pState.CampaignId); }
         }
 
         private static void DemobilizeActor(CampaignState pState, Kingdom pKingdom,
