@@ -561,21 +561,6 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
-                Id = "aw_decision_mandate_ritual",
-                Kind = PolicyNodeKind.Decision,
-                NameKey = "aw_decision_mandate_ritual",
-                DescKey = "aw_decision_mandate_ritual_desc",
-                FallbackName = "\u796D\u5929\u6574\u987F",
-                FallbackDesc = "\u6D88\u8017\u653F\u6CBB\u70B9\u6570\u5F3A\u5316\u5929\u547D\uFF0C\u5C0F\u5E45\u63D0\u5347\u7687\u6743\u548C\u738B\u671D\u5A01\u671B\u3002",
-                IconPath = "ui/Icons/traits/iconTianming",
-                Cost = 55f,
-                RequiredPolicies = new[] { "aw_policy_mandate_rites" },
-                Repeatable = true,
-                Column = 1,
-                Row = 1
-            },
-            new KingdomPolicyDef
-            {
                 Id = "aw_decision_year_name",
                 Kind = PolicyNodeKind.Decision,
                 NameKey = "aw_decision_year_name",

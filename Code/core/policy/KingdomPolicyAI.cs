@@ -118,7 +118,6 @@ namespace AncientWarfare3.core.policy
             int cities = CountCities(pKingdom);
             int baseScore = KingdomDecisionPriorityRules.ScoreDecision(
                 pDef.Id,
-                MandateService.CanStabilizeMandate(pKingdom),
                 RoyalExpansionDecisionService.CanExecute(pKingdom),
                 cities,
                 SlaveService.IsSlaveryEnabled(pKingdom),
@@ -145,8 +144,6 @@ namespace AncientWarfare3.core.policy
             {
                 case "aw_decision_claim_mandate":
                     return !MandateService.Exists && MandateService.CanDeclareMandate(pKingdom, out _);
-                case "aw_decision_mandate_ritual":
-                    return MandateService.CanStabilizeMandate(pKingdom);
                 case "aw_decision_title_upgrade":
                     return YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_PROMOTION_YEAR, -99999) >= 10;
                 case "aw_decision_royal_expansion":

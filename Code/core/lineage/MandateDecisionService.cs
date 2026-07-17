@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
         public string FallbackDesc;
         public string IconPath;
         public float Cost;
+        public MandateSacrificeLevel? SacrificeLevel;
     }
 
     internal static class MandateDecisionService
@@ -31,13 +32,36 @@ namespace AncientWarfare3.core.lineage
             },
             new MandateDecisionDef
             {
-                Id = "aw_mandate_decision_ritual",
-                NameKey = "aw_mandate_decision_ritual",
-                DescKey = "aw_mandate_decision_ritual_desc",
-                FallbackName = "\u796D\u5929\u6574\u987F",
-                FallbackDesc = "\u7531\u5929\u5B50\u4E3B\u6301\u796D\u5929\u548C\u671D\u5EF7\u6574\u987F\uFF0C\u5C0F\u5E45\u6062\u590D\u5929\u547D\u3001\u7687\u6743\u4E0E\u738B\u671D\u5A01\u671B\u3002",
+                Id = "aw_mandate_decision_sacrifice_gamble",
+                NameKey = "aw_mandate_decision_sacrifice_gamble",
+                DescKey = "aw_mandate_decision_sacrifice_gamble_desc",
+                FallbackName = "\u8D4C\u5927\u658B\u6212",
+                FallbackDesc = "A high-risk grand sacrifice with the greatest upside and a chance of an ominous result.",
                 IconPath = "ui/Icons/traits/iconTianming",
-                Cost = 55f
+                Cost = MandateSacrificeService.GetCost(MandateSacrificeLevel.Gamble),
+                SacrificeLevel = MandateSacrificeLevel.Gamble
+            },
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_sacrifice_moderate",
+                NameKey = "aw_mandate_decision_sacrifice_moderate",
+                DescKey = "aw_mandate_decision_sacrifice_moderate_desc",
+                FallbackName = "\u4E2D\u5EB8\u658B\u6212",
+                FallbackDesc = "A lower-cost grand sacrifice with restrained gains and manageable risk.",
+                IconPath = "ui/Icons/traits/iconTianming",
+                Cost = MandateSacrificeService.GetCost(MandateSacrificeLevel.Moderate),
+                SacrificeLevel = MandateSacrificeLevel.Moderate
+            },
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_sacrifice_conservative",
+                NameKey = "aw_mandate_decision_sacrifice_conservative",
+                DescKey = "aw_mandate_decision_sacrifice_conservative_desc",
+                FallbackName = "\u4FDD\u5B88\u658B\u6212",
+                FallbackDesc = "A costly and cautious grand sacrifice that cannot produce an ominous result.",
+                IconPath = "ui/Icons/traits/iconTianming",
+                Cost = MandateSacrificeService.GetCost(MandateSacrificeLevel.Conservative),
+                SacrificeLevel = MandateSacrificeLevel.Conservative
             },
             new MandateDecisionDef
             {
@@ -136,11 +160,11 @@ namespace AncientWarfare3.core.lineage
             Kingdom mandate = MandateService.GetCurrentMandateKingdom();
             if (pKingdom?.data == null || pDef == null || mandate != pKingdom) return false;
             if (!pKingdom.hasKing()) return false;
+            if (pDef.SacrificeLevel.HasValue)
+                return MandateSacrificeService.CanExecute(pKingdom);
 
             switch (pDef.Id)
             {
-                case "aw_mandate_decision_ritual":
-                    return MandateService.CanStabilizeMandate(pKingdom);
                 case "aw_mandate_decision_year_name":
                     return true;
                 case "aw_mandate_decision_border_defense":
@@ -162,8 +186,18 @@ namespace AncientWarfare3.core.lineage
 
         private static void AutoSelect(Kingdom pKingdom)
         {
+            string preferredId =
+                MandateSacrificeService.PreferredAiDecisionId(pKingdom);
+            MandateDecisionDef preferred = Get(preferredId);
+            if (preferred != null && CanRun(pKingdom, preferred))
+            {
+                ForceStart(pKingdom, preferred.Id);
+                return;
+            }
+
             foreach (MandateDecisionDef def in _all)
             {
+                if (def.SacrificeLevel.HasValue) continue;
                 if (!CanRun(pKingdom, def)) continue;
                 ForceStart(pKingdom, def.Id);
                 return;
@@ -181,7 +215,23 @@ namespace AncientWarfare3.core.lineage
             }
             if (!CanRun(pKingdom, def)) return;
 
-            float progress = Mathf.Min(def.Cost, GetProgress(pKingdom) + EstimateYearlyGain(pKingdom));
+            float progress;
+            if (def.SacrificeLevel.HasValue)
+            {
+                float currentProgress = GetProgress(pKingdom);
+                float politicalPoints = KingdomPolicyService.GetPoliticalPoints(pKingdom);
+                float spend = MandateSacrificeRules.SpendForYear(
+                    politicalPoints, def.Cost - currentProgress,
+                    KingdomPolicyService.MAX_YEARLY_SPEND);
+                if (spend <= 0f) return;
+                progress = Mathf.Min(def.Cost, currentProgress + spend);
+                pKingdom.data.set(LineageKeys.POLICY_POINTS, politicalPoints - spend);
+            }
+            else
+            {
+                progress = Mathf.Min(def.Cost,
+                    GetProgress(pKingdom) + EstimateYearlyGain(pKingdom));
+            }
             pKingdom.data.set(LineageKeys.MANDATE_DECISION_PROGRESS, progress);
             if (progress + 0.001f < def.Cost) return;
 
@@ -193,14 +243,13 @@ namespace AncientWarfare3.core.lineage
 
         private static bool ApplyEffect(Kingdom pKingdom, MandateDecisionDef pDef)
         {
+            if (pDef.SacrificeLevel.HasValue)
+                return MandateSacrificeService.Execute(pKingdom, pDef.SacrificeLevel.Value);
+
             switch (pDef.Id)
             {
                 case "aw_mandate_decision_border_defense":
                     return MandateBorderDefenseService.ExecuteDecision(pKingdom);
-                case "aw_mandate_decision_ritual":
-                    return MandateService.ApplySacrificeOutcome(pKingdom,
-                        new MandateSacrificeEffects(8, 4, 3, 0),
-                        "mandate_ritual");
                 case "aw_mandate_decision_year_name":
                     YearNameService.ChangeYearName(pKingdom);
                     MandateReport report = MandateService.ReadReport();

@@ -68,7 +68,7 @@ namespace AncientWarfare3.core.court
                     break;
                 case CourtSchoolId.Ru:
                 case CourtSchoolId.YinYang:
-                    if (decisionId == "aw_decision_claim_mandate" || decisionId == "aw_decision_mandate_ritual") score += 85;
+                    if (decisionId == "aw_decision_claim_mandate") score += 85;
                     break;
                 case CourtSchoolId.Dao:
                     if (decisionId == "aw_decision_declare_war") score -= 60;

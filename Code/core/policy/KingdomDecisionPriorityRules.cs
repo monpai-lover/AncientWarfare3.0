@@ -2,7 +2,7 @@ namespace AncientWarfare3.core.policy
 {
     public static class KingdomDecisionPriorityRules
     {
-        public static int ScoreDecision(string pDecisionId, bool pCanStabilizeMandate, bool pCanRoyalExpansion,
+        public static int ScoreDecision(string pDecisionId, bool pCanRoyalExpansion,
             int pCityCount, bool pSlaveryEnabled, int pXiaizationScore, bool pMissingYearName)
         {
             switch (pDecisionId ?? "")
@@ -15,8 +15,6 @@ namespace AncientWarfare3.core.policy
                     return 1000;
                 case "aw_decision_royal_expansion":
                     return pCanRoyalExpansion ? 900 : 0;
-                case "aw_decision_mandate_ritual":
-                    return pCanStabilizeMandate ? 860 : 0;
                 case "aw_decision_change_capital":
                     return pCityCount >= 2 ? 760 : 0;
                 case "aw_decision_control_slaves":
