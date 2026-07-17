@@ -82,6 +82,44 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool ShouldPreferSelfRestoration(long pClaimId)
+        {
+            if (!Ready || World.world == null || pClaimId < 0 || MandateService.Exists)
+                return false;
+            try
+            {
+                RoyalClaimService.ClaimRow claim =
+                    RoyalClaimService.FindDormantClaim(pClaimId);
+                if (claim.claimId < 0) return false;
+                int year = Date.getCurrentYear();
+                bool cooldownReady = RestorationCampaignRules.CooldownReady(
+                    year, ReadClaimLastAttemptYear(claim.claimId),
+                    playerRequested: false);
+                Actor claimant = FindActor(claim.claimantId);
+                bool claimantValid =
+                    RoyalClaimService.IsAvailableRestorationLeader(claimant);
+                bool oldKingdomDead =
+                    !IsLiveKingdom(FindKingdom(claim.originalKingdomId));
+                City seed = claimantValid && oldKingdomDead
+                    ? FindSeedCity(claimant,
+                        ReadOldCoreIds(claim, RoyalRestorationRules.MaxCoreCandidates),
+                        claim.originalCapitalCityId)
+                    : null;
+                return RoyalRestorationRules.CanStartAutonomousCampaign(
+                    mandateExists: false,
+                    playerRequested: false,
+                    claimStrength: claim.strength,
+                    claimantValid,
+                    oldKingdomDead,
+                    hasEligibleSeed: seed?.data != null,
+                    cooldownReady);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool TryStartSelfRestorationCore(long pClaimId,
             bool pPlayerRequested, out string pError)
         {

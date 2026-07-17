@@ -195,6 +195,9 @@ namespace AncientWarfare3.core.lineage
             foreach (WarTerritoryService.WarTargetOption option in WarTerritoryService.BuildTargetOptions(pKingdom, pTarget))
             {
                 if (option == null || option.goal_type == WarTerritoryService.GOAL_NO_CB) continue;
+                if (option.goal_type == WarTerritoryService.GOAL_RESTORE_KINGDOM &&
+                    AutonomousRestorationService.ShouldPreferSelfRestoration(
+                        option.restoration_claim_id)) continue;
                 if (best == null || option.score > best.score) best = option;
             }
             return best;
