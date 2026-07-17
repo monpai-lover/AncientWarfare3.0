@@ -22,5 +22,11 @@ namespace AncientWarfare3.core.lineage
         {
             return pHasClaim && pHasEligibleClaimant && pHasTargetCity;
         }
+
+        public static bool CanLeadRestoration(bool pClaimantEligible,
+            bool pAlreadyReigning)
+        {
+            return pClaimantEligible && !pAlreadyReigning;
+        }
     }
 }

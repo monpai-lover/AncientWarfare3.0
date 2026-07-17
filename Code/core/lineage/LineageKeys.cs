@@ -43,6 +43,14 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
         public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
         public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
+        public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
+        public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";
+        public const string RESTORATION_CLAIM_ID = "aw_restoration_claim_id";
+        public const string RESTORATION_MODE = "aw_restoration_mode";
+        public const string RESTORATION_ORIGINAL_MANDATE_PERIOD_ID = "aw_restoration_original_mandate_period_id";
+        public const string RESTORATION_COMPLETED = "aw_restoration_completed";
+        public const string RESTORATION_REFUNDER_ELIGIBLE = "aw_restoration_refounder_eligible";
+        public const string RESTORATION_LAST_YEAR = "aw_restoration_last_year";
         public const string AW_ARMY_ROLE = "aw_army_role";
         public const string AW_ARMY_CITY_ID = "aw_army_city_id";
         public const string AW_ARMY_ANCHOR_X = "aw_army_anchor_x";

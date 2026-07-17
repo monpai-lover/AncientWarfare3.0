@@ -471,6 +471,29 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static War TryDeclareAutonomousRestorationCoreWar(Kingdom pAttacker,
+            City pTargetCity, long pClaimId, Actor pClaimant)
+        {
+            Kingdom defender = pTargetCity?.kingdom;
+            if (!IsCivil(pAttacker) || !IsCivil(defender) || pAttacker == defender) return null;
+            if (pTargetCity?.data == null || pTargetCity.isRekt()) return null;
+            if (IsAlreadyAtWar(pAttacker, defender)) return null;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_TAKE_CORE_CITY,
+                target_city = pTargetCity,
+                target_kingdom = defender,
+                source_claim_id = pClaimId,
+                source_core_id = FindCoreId(pAttacker.id, pTargetCity.data.id),
+                claimant = pClaimant
+            };
+            War war = WarDecisionService.TryStartSystemWar(pAttacker, defender,
+                WarDecisionService.WAR_RESTORATION, "self_restoration_core");
+            if (war?.data == null) return null;
+            CreateGoalForWar(war, goal);
+            return war;
+        }
+
         public static bool TryDeclareNoCbWar(Kingdom pAttacker, Kingdom pDefender)
         {
             if (IsVassalDecisionOnlyTarget(pAttacker, pDefender)) return false;
@@ -1687,7 +1710,7 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pSource?.data == null || pDefender?.data == null) return null;
             foreach (RoyalClaimService.RoyalClaimInfo claim in RoyalClaimService.GetHostedClaims(pSource))
             {
-                if (!RoyalClaimService.IsEligibleRestorationClaimant(FindActor(claim.claimant_actor_id))) continue;
+                if (!RoyalClaimService.IsAvailableRestorationLeader(FindActor(claim.claimant_actor_id))) continue;
                 City city = FindBestCoreTargetCity(claim.original_kingdom_id, pDefender, out _);
                 if (city?.data == null) continue;
                 pTargetCity = city;
@@ -1782,7 +1805,7 @@ namespace AncientWarfare3.core.lineage
             foreach (RoyalClaimService.RoyalClaimInfo claim in pClaims)
             {
                 if (claim == null || claim.claim_id < 0) continue;
-                if (!RoyalClaimService.IsEligibleRestorationClaimant(FindActor(claim.claimant_actor_id))) continue;
+                if (!RoyalClaimService.IsAvailableRestorationLeader(FindActor(claim.claimant_actor_id))) continue;
                 if (CountCoreTargets(claim.original_kingdom_id, pTarget.id) > 0) count++;
             }
             return count;

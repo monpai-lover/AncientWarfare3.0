@@ -59,6 +59,13 @@ namespace AncientWarfare3.core.lineage
                    generation >= 0 && generation <= MaxClaimGeneration;
         }
 
+        public static string InheritedRestorationState(string pParentState)
+        {
+            return pParentState == "campaign" || pParentState == "suspended"
+                ? "suspended"
+                : "dormant";
+        }
+
         public static bool ShouldStartAiCampaign(int claimStrength, bool claimantValid,
             bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
         {

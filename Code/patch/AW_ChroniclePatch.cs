@@ -35,8 +35,18 @@ namespace AncientWarfare3.patch
             KingdomArchiveWriter.EnsureRow(pKingdom);
             try { KingdomIdentityContinuityService.CaptureBeforeDestruction(pKingdom); }
             catch (System.Exception e) { ModClass.LogWarning("Kingdom continuity capture failed: " + e.Message); }
-            try { RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom); }
-            catch (System.Exception e) { ModClass.LogWarning("Fallen kingdom claim capture failed: " + e.Message); }
+            bool restorationCampaign = false;
+            try { restorationCampaign = AutonomousRestorationService.OnKingdomDestroying(pKingdom); }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Restoration campaign fall failed: " + e.Message);
+                restorationCampaign = AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom);
+            }
+            if (!restorationCampaign)
+            {
+                try { RoyalClaimService.CreateClaimsFromFallenKingdom(pKingdom); }
+                catch (System.Exception e) { ModClass.LogWarning("Fallen kingdom claim capture failed: " + e.Message); }
+            }
             FormerHeirService.ArchiveAndClear(pKingdom);
         }
 
@@ -72,6 +82,8 @@ namespace AncientWarfare3.patch
             ForeignOccupationService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             GeneralService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
             WarTerritoryService.OnCityTransferred(__instance, __state, __instance?.kingdom ?? pKingdom);
+            AutonomousRestorationService.OnCityTransferred(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             MandateService.OnCityTransferred(__instance);
             CitySchoolSnapshotService.MarkDirty(__instance);
         }

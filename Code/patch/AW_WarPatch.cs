@@ -135,6 +135,7 @@ namespace AncientWarfare3.patch
             TemporarySlaveVanguardService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
             WarTerritoryService.OnWarEnded(pWar, pWinner);
+            AutonomousRestorationService.OnWarEnded(pWar);
             ApplyDiplomacyWarResult(pWar, pWinner);
             MandateService.OnWarEnded(pWar, pWinner);
             MandateRebelService.OnWarEnded(pWar, pWinner);

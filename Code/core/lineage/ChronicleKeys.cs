@@ -51,6 +51,8 @@ namespace AncientWarfare3.core.lineage
         public const string ROYAL_ASYLUM_RELOCATED = "royal_asylum_relocated";
         public const string ROYAL_ASYLUM_RETURNED = "royal_asylum_returned";
         public const string ROYAL_ASYLUM_NATURALIZED = "royal_asylum_naturalized";
+        public const string RESTORATION_UPRISING = "restoration_uprising";
+        public const string RESTORATION_COMPLETED = "restoration_completed";
     }
 
     internal static class KingdomEvent
@@ -101,6 +103,9 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_REFORM_EVENT = "court_reform_event";
         public const string COURT_CITY_BUREAU = "court_city_bureau";
         public const string COURT_TIER_UPGRADED = "court_tier_upgraded";
+        public const string RESTORATION_UPRISING = "restoration_uprising";
+        public const string RESTORATION_COMPLETED = "restoration_completed";
+        public const string RESTORATION_FAILED = "restoration_failed";
     }
 
     internal static class CityEvent

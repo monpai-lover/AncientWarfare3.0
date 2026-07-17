@@ -118,7 +118,12 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.SLAVE_ARMY_ENABLED, out bool slaveArmyEnabled, false);
             pKingdom.data.get(LineageKeys.XIA_CONTACT_PROGRESS, out float xiaContactProgress, 0f);
             pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long mandatePeriodId, -1L);
-            bool wasMandate = MandateService.IsMandateKingdom(pKingdom);
+            pKingdom.data.get(LineageKeys.RESTORATION_ORIGINAL_MANDATE_PERIOD_ID,
+                out long restorationMandatePeriodId, -1L);
+            bool wasMandate = MandateService.IsMandateKingdom(pKingdom) ||
+                              restorationMandatePeriodId >= 0;
+            if (mandatePeriodId < 0 && restorationMandatePeriodId >= 0)
+                mandatePeriodId = restorationMandatePeriodId;
             City capital = pKingdom.capital;
             long capitalId = capital?.data?.id ??
                              (pKingdom.data.last_capital_id >= 0
