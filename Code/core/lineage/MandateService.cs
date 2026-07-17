@@ -271,6 +271,13 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanDeclareMandate(Kingdom pKingdom, out string pReason)
         {
+            return CanDeclareMandateForSource(pKingdom,
+                MandateDeclarationSource.Ordinary, out pReason);
+        }
+
+        private static bool CanDeclareMandateForSource(Kingdom pKingdom,
+            MandateDeclarationSource pSource, out string pReason)
+        {
             pReason = "";
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
             {
@@ -283,10 +290,12 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             MandateReport last = ReadReport();
-            bool mandateRitesCompleted = KingdomPolicyService.IsCompleted(
-                pKingdom, PolicyNodeKind.Social, "aw_policy_mandate_rites");
-            if (!MandateDeclarationRules.CanStartOrdinaryDeclaration(
-                    last.active, mandateRitesCompleted, out pReason))
+            if (last.active)
+            {
+                pReason = "already_exists";
+                return false;
+            }
+            if (!MandateRitesService.CanDeclare(pKingdom, pSource, out pReason))
                 return false;
             if (VassalService.IsVassalKingdom(pKingdom))
             {
@@ -335,9 +344,11 @@ namespace AncientWarfare3.core.lineage
         private static bool CanDeclareMandateForOrigin(Kingdom pKingdom, string pDeclarationReason,
             string pOriginType, string pClaimantKind, out string pReason)
         {
-            bool rebelOrigin = pOriginType == "rebel" || pClaimantKind == "rebel";
-            bool foreignPseudo = pOriginType == "pseudo_foreign" || pClaimantKind == "foreign_pseudo";
-            bool successfulOrdinaryWar = pDeclarationReason == "tianming_war";
+            MandateDeclarationSource source = MandateRitesRules.ResolveSource(
+                pDeclarationReason, pOriginType, pClaimantKind);
+            bool rebelOrigin = source == MandateDeclarationSource.MandateRebel;
+            bool foreignPseudo = source == MandateDeclarationSource.ForeignPseudoDynasty;
+            bool successfulOrdinaryWar = source == MandateDeclarationSource.MandateWarVictory;
             if (successfulOrdinaryWar)
             {
                 pReason = "";
@@ -398,7 +409,7 @@ namespace AncientWarfare3.core.lineage
                 return true;
             }
 
-            return CanDeclareMandate(pKingdom, out pReason);
+            return CanDeclareMandateForSource(pKingdom, source, out pReason);
         }
 
         private static bool IsMandateWarDeclarationReason(string pReason)

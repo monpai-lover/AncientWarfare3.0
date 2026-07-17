@@ -1453,9 +1453,58 @@ namespace AncientWarfare3.ui.windows
 
         private static void AddSpecialRequirementTooltipLines(List<string> pLines, Kingdom pKingdom, KingdomPolicyDef pDef)
         {
-            if (pDef?.Id != "aw_decision_claim_mandate") return;
-            if (MandateService.CanDeclareMandate(pKingdom, out string reason)) return;
-            pLines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") + ": " + MandateRequirementReason(reason));
+            if (pDef?.Id == "aw_decision_claim_mandate")
+            {
+                MandateRitesSnapshot rites = MandateRitesService.ReadSnapshot(pKingdom);
+                if (MandateService.CanDeclareMandate(pKingdom, out string reason)) return;
+                string detail = reason == "ritual_completeness_missing"
+                    ? RitualCompletenessRequirement(rites)
+                    : MandateRequirementReason(reason);
+                pLines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") +
+                           ": " + detail);
+                return;
+            }
+            if (pDef?.Id != "aw_decision_title_upgrade") return;
+            if (KingdomPolicyService.CanPromoteTitle(pKingdom, out string promotionReason))
+                return;
+            pLines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") +
+                       ": " + PromotionRequirementReason(promotionReason));
+        }
+
+        private static string RitualCompletenessRequirement(MandateRitesSnapshot pRites)
+        {
+            var parts = new List<string>
+            {
+                AW_L10n.Text("aw_ritual_completeness_missing", "礼制完备度不足") +
+                " " + pRites.total_points + "/" + pRites.ordinary_required
+            };
+            if (pRites.policy_points == 0)
+                parts.Add(AW_L10n.Text("aw_ritual_policy_source", "天命礼制政策"));
+            if (pRites.temple_points == 0)
+                parts.Add(AW_L10n.Text("aw_ritual_capital_temple_source", "首都太庙"));
+            parts.Add(AW_L10n.Text("aw_ritual_sacrifice_source", "大祭永久点") +
+                      ": " + pRites.permanent_points);
+            return string.Join(" · ", parts.ToArray());
+        }
+
+        private static string PromotionRequirementReason(string pReason)
+        {
+            return pReason switch
+            {
+                "requires_ancestral_rites" => AW_L10n.Text(
+                    "aw_requires_ancestral_rites", "需要完成宗庙礼制"),
+                "requires_rites_music" => AW_L10n.Text(
+                    "aw_requires_rites_music", "需要完成礼乐科技"),
+                "requires_overlord_approval" => AW_L10n.Text(
+                    "aw_title_upgrade_overlord", "需要宗主批准"),
+                "maximum_title" => AW_L10n.Text(
+                    "aw_title_upgrade_maximum", "已达最高爵位"),
+                "territory_requirement" => AW_L10n.Text(
+                    "aw_title_upgrade_territory", "领土规模不足"),
+                _ => string.IsNullOrEmpty(pReason)
+                    ? AW_L10n.Text("aw_mandate_req_unknown", "条件不足")
+                    : pReason
+            };
         }
 
         private static string MandateRequirementReason(string pReason)
@@ -1470,6 +1519,7 @@ namespace AncientWarfare3.ui.windows
                 case "too_small": return AW_L10n.Text("aw_mandate_req_too_small", "\u56FD\u5BB6\u8FC7\u5C0F");
                 case "core_control": return AW_L10n.Text("aw_mandate_req_core_control", "\u6CD5\u7406\u63A7\u5236\u4E0D\u8DB3");
                 case "not_strongest": return AW_L10n.Text("aw_mandate_req_not_strongest", "\u4E0D\u662F\u6700\u5F3A\u72EC\u7ACB\u56FD");
+                case "ritual_completeness_missing": return AW_L10n.Text("aw_ritual_completeness_missing", "礼制完备度不足");
                 default: return string.IsNullOrEmpty(pReason) ? AW_L10n.Text("aw_mandate_req_unknown", "\u6761\u4EF6\u4E0D\u8DB3") : pReason;
             }
         }

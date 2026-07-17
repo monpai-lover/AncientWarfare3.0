@@ -3,3 +3,13 @@ aw_hist_event_centralization_reformed,整饬中央,Central Reform,整飭中央
 aw_hist_event_centralization_chaos_downgrade,乱世失权,Central Power Lost,亂世失權
 aw_hist_centralization_reformed_text,整饬中央；名义集权升至,Central administration reformed; nominal centralization rose to ,整飭中央；名義集權升至
 aw_hist_centralization_chaos_downgrade_text,乱世失权；名义集权降至,Chaos weakened central authority; nominal centralization fell to ,亂世失權；名義集權降至
+aw_ritual_total,礼制完备度,Ritual completeness,禮制完備度
+aw_ritual_completeness_missing,礼制完备度不足,Insufficient ritual completeness,禮制完備度不足
+aw_ritual_policy_source,天命礼制政策,Mandate rites policy,天命禮制政策
+aw_ritual_capital_temple_source,首都太庙,Capital ancestral temple,首都太廟
+aw_ritual_sacrifice_source,大祭永久点,Permanent grand-sacrifice points,大祭永久點
+aw_requires_ancestral_rites,需要完成宗庙礼制,Requires ancestral rites policy,需要完成宗廟禮制
+aw_requires_rites_music,需要完成礼乐科技,Requires rites and music technology,需要完成禮樂科技
+aw_title_upgrade_overlord,需要宗主批准,Requires suzerain approval,需要宗主批准
+aw_title_upgrade_maximum,已达最高爵位,Already at the highest title,已達最高爵位
+aw_title_upgrade_territory,领土规模不足,Insufficient realm size,領土規模不足

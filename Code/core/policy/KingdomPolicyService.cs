@@ -2004,26 +2004,45 @@ namespace AncientWarfare3.core.policy
 
         private static bool CanPromoteTitle(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return false;
-            if (IsVassalKingdom(pKingdom) && !HasOverlordApprovalForTitleUpgrade(pKingdom)) return false;
+            return CanPromoteTitle(pKingdom, out _);
+        }
+
+        public static bool CanPromoteTitle(Kingdom pKingdom, out string pReason)
+        {
+            pReason = "";
+            if (pKingdom?.data == null)
+            {
+                pReason = "invalid_kingdom";
+                return false;
+            }
+            if (IsVassalKingdom(pKingdom) && !HasOverlordApprovalForTitleUpgrade(pKingdom))
+            {
+                pReason = "requires_overlord_approval";
+                return false;
+            }
             KingdomTitle title = KingdomTitleService.GetTitle(pKingdom);
-            if (title >= KingdomTitle.Emperor) return false;
+            if (title >= KingdomTitle.Emperor)
+            {
+                pReason = "maximum_title";
+                return false;
+            }
+            if (title == KingdomTitle.King &&
+                !MandateRitesService.CanPromoteToEmperor(pKingdom, out pReason))
+                return false;
 
             int cities = pKingdom.countCities();
             int zones = pKingdom.countZones();
-            switch (title)
+            bool eligible = title switch
             {
-                case KingdomTitle.Baron:
-                    return cities >= 2 || zones > 300;
-                case KingdomTitle.Marquis:
-                    return cities >= 4 || zones > 800;
-                case KingdomTitle.Duke:
-                    return cities >= 6 || zones > 1300;
-                case KingdomTitle.King:
-                    return cities >= 10 || zones > 2000;
-                default:
-                    return false;
-            }
+                KingdomTitle.Baron => cities >= 2 || zones > 300,
+                KingdomTitle.Marquis => cities >= 4 || zones > 800,
+                KingdomTitle.Duke => cities >= 6 || zones > 1300,
+                KingdomTitle.King => cities >= 10 || zones > 2000,
+                _ => false
+            };
+            if (eligible) return true;
+            pReason = "territory_requirement";
+            return false;
         }
 
         private static int YearsSince(Kingdom pKingdom, string pKey, int pFallback)

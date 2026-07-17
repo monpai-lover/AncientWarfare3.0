@@ -284,8 +284,7 @@ namespace AncientWarfare3.ui.windows
         {
             Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
             if (kingdom?.data == null) return "";
-            kingdom.data.get(LineageKeys.MANDATE_RITUAL_COMPLETENESS,
-                out int completeness, 0);
+            MandateRitesSnapshot rites = MandateRitesService.ReadSnapshot(kingdom);
             kingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_UNTIL,
                 out int buffUntil, int.MinValue);
             kingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_DELTA,
@@ -293,9 +292,14 @@ namespace AncientWarfare3.ui.windows
             int currentYear = Date.getCurrentYear();
             int annualDelta = MandateSacrificeRules.ActiveAnnualDelta(
                 currentYear, buffUntil, storedDelta);
-            string summary = AW_L10n.Text("aw_mandate_ritual_completeness",
-                                 "\u793C\u5236\u5B8C\u6574\u5EA6") + ": " +
-                             Mathf.Clamp(completeness, 0, 10) + "/10" +
+            string summary = AW_L10n.Text("aw_ritual_total", "礼制完备度") + ": " +
+                             rites.total_points + "/" + rites.ordinary_required +
+                             pSeparator + AW_L10n.Text("aw_ritual_policy_source",
+                                 "天命礼制政策") + ": " + rites.policy_points +
+                             pSeparator + AW_L10n.Text("aw_ritual_capital_temple_source",
+                                 "首都太庙") + ": " + rites.temple_points +
+                             pSeparator + AW_L10n.Text("aw_ritual_sacrifice_source",
+                                 "大祭永久点") + ": " + rites.permanent_points + "/10" +
                              pSeparator +
                              AW_L10n.Text("aw_mandate_sacrifice_annual_effect",
                                  "\u5927\u7940\u5E74\u6548") + ": " + Signed(annualDelta);

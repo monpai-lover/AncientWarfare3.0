@@ -97,22 +97,7 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
-            City capital = pKingdom.capital;
-            if (capital?.data == null || capital.isRekt() || capital.buildings == null)
-                return false;
-            try
-            {
-                foreach (Building building in capital.buildings)
-                {
-                    if (building?.asset == null ||
-                        !building.asset.id.StartsWith("temple_", StringComparison.Ordinal))
-                        continue;
-                    if (building.isUsable() && !building.isAbandoned() &&
-                        !building.isUnderConstruction()) return true;
-                }
-            }
-            catch { }
-            return false;
+            return MandateRitesService.HasUsableCapitalTemple(pKingdom);
         }
 
         public static bool Execute(Kingdom pKingdom, MandateSacrificeLevel pLevel)

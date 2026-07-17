@@ -34,6 +34,20 @@ namespace AncientWarfare3.core.lineage
             return pSource == MandateDeclarationSource.Ordinary;
         }
 
+        public static bool CanDeclare(int pTotalCompleteness,
+            MandateDeclarationSource pSource, out string pReason)
+        {
+            if (RequiresOrdinaryGate(pSource) &&
+                Math.Max(0, pTotalCompleteness) < OrdinaryRequirement)
+            {
+                pReason = "ritual_completeness_missing";
+                return false;
+            }
+
+            pReason = "";
+            return true;
+        }
+
         public static MandateDeclarationSource ResolveSource(string pDeclarationReason,
             string pOriginType, string pClaimantKind)
         {
