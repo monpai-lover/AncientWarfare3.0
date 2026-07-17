@@ -184,6 +184,17 @@ namespace AncientWarfare3.core.lineage
             return Mathf.Clamp(baseGain, 1f, KingdomPolicyService.MAX_YEARLY_SPEND);
         }
 
+        public static float EstimateYearlyGain(Kingdom pKingdom, MandateDecisionDef pDef)
+        {
+            if (pDef?.SacrificeLevel == null) return EstimateYearlyGain(pKingdom);
+            float progress = GetCurrent(pKingdom) == pDef.Id
+                ? GetProgress(pKingdom)
+                : 0f;
+            return MandateSacrificeRules.SpendForYear(
+                KingdomPolicyService.GetPoliticalPoints(pKingdom),
+                pDef.Cost - progress, KingdomPolicyService.MAX_YEARLY_SPEND);
+        }
+
         private static void AutoSelect(Kingdom pKingdom)
         {
             string preferredId =

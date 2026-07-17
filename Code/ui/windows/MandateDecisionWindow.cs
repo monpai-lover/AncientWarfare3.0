@@ -42,11 +42,17 @@ namespace AncientWarfare3.ui.windows
                 AW_L10n.Text("aw_mandate_decisions_title", "\u5929\u671D\u51B3\u8BAE"),
                 AW_L10n.Text("aw_mandate_decisions_desc", "\u9009\u62E9\u5929\u547D\u738B\u671D\u72EC\u7ACB\u63A8\u8FDB\u7684\u51B3\u8BAE\u3002"));
 
+            bool? sacrificeQualified = null;
             foreach (MandateDecisionDef def in MandateDecisionService.All)
-                AddDecisionRow(kingdom, def);
+            {
+                if (def.SacrificeLevel.HasValue && !sacrificeQualified.HasValue)
+                    sacrificeQualified = MandateSacrificeService.IsQualified(kingdom);
+                AddDecisionRow(kingdom, def, sacrificeQualified);
+            }
         }
 
-        private void AddDecisionRow(Kingdom pKingdom, MandateDecisionDef pDef)
+        private void AddDecisionRow(Kingdom pKingdom, MandateDecisionDef pDef,
+            bool? pSacrificeQualified)
         {
             bool current = MandateDecisionService.GetCurrent(pKingdom) == pDef.Id;
             bool canRun = MandateDecisionService.CanRun(pKingdom, pDef);
@@ -58,6 +64,19 @@ namespace AncientWarfare3.ui.windows
                     : (canRun ? AW_L10n.Text("aw_policy_available", "\u53EF\u7814\u53D1") : AW_L10n.Text("aw_policy_locked", "\u672A\u89E3\u9501"))) +
                 "  " + AW_L10n.Text("aw_policy_progress", "\u8FDB\u5EA6") + ": " +
                 Mathf.FloorToInt(progress) + "/" + Mathf.CeilToInt(pDef.Cost);
+            string qualification = "";
+            if (pDef.SacrificeLevel.HasValue)
+            {
+                string qualificationValue = pSacrificeQualified == true
+                    ? AW_L10n.Text("aw_mandate_sacrifice_qualified", "\u5408\u683C")
+                    : AW_L10n.Text("aw_mandate_sacrifice_unqualified", "\u4E0D\u5408\u683C");
+                qualification = "\n" +
+                    AW_L10n.Text("aw_mandate_sacrifice_qualification", "\u793C\u5B98\u8D44\u683C") +
+                    ": " + qualificationValue;
+            }
+            string yearlyLabel = pDef.SacrificeLevel.HasValue
+                ? AW_L10n.Text("aw_mandate_sacrifice_yearly_spend", "\u672C\u5E74\u6295\u5165")
+                : AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F");
 
             AddItemToList(new WarDecisionTargetRow
             {
@@ -69,8 +88,9 @@ namespace AncientWarfare3.ui.windows
                 tooltip_title = name,
                 tooltip_desc = desc + "\n" +
                                AW_L10n.Text("aw_policy_cost", "\u9700\u6C42") + ": " + Mathf.CeilToInt(pDef.Cost) +
-                               "\n" + AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F") + ": " +
-                               MandateDecisionService.EstimateYearlyGain(pKingdom).ToString("0.0"),
+                               "\n" + yearlyLabel + ": " +
+                               MandateDecisionService.EstimateYearlyGain(pKingdom, pDef).ToString("0.0") +
+                               qualification,
                 action = () =>
                 {
                     MandateDecisionService.ForceStart(pKingdom, pDef.Id);

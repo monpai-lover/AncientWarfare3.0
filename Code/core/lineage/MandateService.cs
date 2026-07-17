@@ -426,8 +426,9 @@ namespace AncientWarfare3.core.lineage
             MandateSacrificeEffects pEffects, string pReason, string pContent)
         {
             if (!CanStabilizeMandate(pKingdom)) return false;
+            string eventType = pReason ?? "mandate_sacrifice";
             ChangeMandate(pKingdom, pEffects.MandateDelta,
-                pReason ?? "mandate_sacrifice", pContent);
+                eventType, pContent, pRecordEvent: false);
             MandateReport r = ReadReport();
             int authority = Mathf.Clamp(
                 r.imperial_authority + pEffects.AuthorityDelta, 0, 100);
@@ -438,6 +439,13 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_VALUE, r.mandate_value);
             pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, authority);
             pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, prestige);
+            string content = string.IsNullOrEmpty(pContent)
+                ? pKingdom.name + T("aw_hist_mandate_changed_mid") +
+                  Signed(pEffects.MandateDelta) +
+                  T("aw_hist_mandate_current") + r.mandate_value
+                : pContent;
+            RecordEvent(eventType, pKingdom, pKingdom.king, null,
+                pEffects.MandateDelta, r.mandate_value, content);
             return true;
         }
 
@@ -1065,7 +1073,8 @@ namespace AncientWarfare3.core.lineage
             return Mathf.Clamp(Mathf.RoundToInt(score), 0, 100);
         }
 
-        private static void ChangeMandate(Kingdom pKingdom, int pDelta, string pEventType, string pContent = null)
+        private static void ChangeMandate(Kingdom pKingdom, int pDelta,
+            string pEventType, string pContent = null, bool pRecordEvent = true)
         {
             MandateReport r = ReadReport();
             if (!r.active || pKingdom?.data == null || pKingdom.id != r.kingdom_id) return;
@@ -1074,6 +1083,7 @@ namespace AncientWarfare3.core.lineage
             int next = Mathf.Clamp(r.mandate_value + pDelta, MIN_VALUE, MAX_VALUE);
             UpdateState(pKingdom, r.period_id, next, r.imperial_authority, r.dynasty_prestige, r.core_control,
                 r.vassal_loyalty, CrisisLevel(next), Date.getCurrentYear());
+            if (!pRecordEvent) return;
             if (!string.IsNullOrEmpty(pContent))
             {
                 RecordEvent(pEventType, pKingdom, pKingdom.king, null, pDelta, next, pContent);

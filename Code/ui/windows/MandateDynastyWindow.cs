@@ -107,6 +107,7 @@ namespace AncientWarfare3.ui.windows
 
             AddPlain(BuildPhaseSummary("  "));
             if (!pReport.active) return;
+            AddPlain(BuildSacrificeSummary("  "));
             AddPlain(
                 AW_L10n.Text("aw_mandate_kingdom", "\u5929\u547D\u56FD") + ": " + RichName(pReport.kingdom_name, color) +
                 "  " + AW_L10n.Text("aw_mandate_emperor", "\u5929\u547D\u7687\u5E1D") + ": " + pReport.emperor_name);
@@ -265,7 +266,8 @@ namespace AncientWarfare3.ui.windows
                    "\n" + AW_L10n.Text("aw_mandate_vassals", "\u5929\u547D\u9644\u5EB8") + ": " + pReport.vassal_count +
                    "\n" + AW_L10n.Text("aw_mandate_origin", "\u6765\u6E90") + ": " + OriginText(pReport.origin_type) +
                    "\n" + AW_L10n.Text("aw_mandate_claimant", "\u5BA3\u79F0") + ": " + ClaimantText(pReport.claimant_kind) +
-                   "\n" + phaseSummary;
+                   "\n" + phaseSummary +
+                   "\n" + BuildSacrificeSummary("\n");
         }
 
         private static string BuildPhaseSummary(string pSeparator)
@@ -278,18 +280,57 @@ namespace AncientWarfare3.ui.windows
                    MandatePhaseService.CatalystScore;
         }
 
+        private static string BuildSacrificeSummary(string pSeparator)
+        {
+            Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
+            if (kingdom?.data == null) return "";
+            kingdom.data.get(LineageKeys.MANDATE_RITUAL_COMPLETENESS,
+                out int completeness, 0);
+            kingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_UNTIL,
+                out int buffUntil, int.MinValue);
+            kingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_DELTA,
+                out int storedDelta, 0);
+            int currentYear = Date.getCurrentYear();
+            int annualDelta = MandateSacrificeRules.ActiveAnnualDelta(
+                currentYear, buffUntil, storedDelta);
+            string summary = AW_L10n.Text("aw_mandate_ritual_completeness",
+                                 "\u793C\u5236\u5B8C\u6574\u5EA6") + ": " +
+                             Mathf.Clamp(completeness, 0, 10) + "/10" +
+                             pSeparator +
+                             AW_L10n.Text("aw_mandate_sacrifice_annual_effect",
+                                 "\u5927\u7940\u5E74\u6548") + ": " + Signed(annualDelta);
+            if (buffUntil >= currentYear)
+                summary += "  " + AW_L10n.Text("aw_mandate_sacrifice_buff_until",
+                    "\u81F3\u5E74") + ": " + buffUntil;
+            return summary;
+        }
+
         private static string BuildDecisionTooltip(Kingdom pKingdom, MandateDecisionDef pDef)
         {
             if (pDef == null)
                 return AW_L10n.Text("aw_mandate_decision_idle_desc", "\u70B9\u51FB\u5207\u6362\u4E3A\u53EF\u6267\u884C\u7684\u5929\u671D\u51B3\u8BAE\u3002");
             float progress = MandateDecisionService.GetProgress(pKingdom);
             float remaining = Mathf.Max(0f, pDef.Cost - progress);
+            string yearlyLabel = pDef.SacrificeLevel.HasValue
+                ? AW_L10n.Text("aw_mandate_sacrifice_yearly_spend", "\u672C\u5E74\u6295\u5165")
+                : AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F");
+            string qualification = "";
+            if (pDef.SacrificeLevel.HasValue)
+            {
+                string value = MandateSacrificeService.IsQualified(pKingdom)
+                    ? AW_L10n.Text("aw_mandate_sacrifice_qualified", "\u5408\u683C")
+                    : AW_L10n.Text("aw_mandate_sacrifice_unqualified", "\u4E0D\u5408\u683C");
+                qualification = "\n" +
+                    AW_L10n.Text("aw_mandate_sacrifice_qualification", "\u793C\u5B98\u8D44\u683C") +
+                    ": " + value;
+            }
             return AW_L10n.Text(pDef.DescKey, pDef.FallbackDesc) +
                    "\n" + AW_L10n.Text("aw_policy_progress", "\u8FDB\u5EA6") + ": " +
                    Mathf.FloorToInt(progress) + "/" + Mathf.CeilToInt(pDef.Cost) +
                    "\n" + AW_L10n.Text("aw_policy_remaining", "\u5269\u4F59") + ": " + Mathf.CeilToInt(remaining) +
-                   "\n" + AW_L10n.Text("aw_policy_yearly_gain", "\u5E74\u589E\u957F") + ": " +
-                   MandateDecisionService.EstimateYearlyGain(pKingdom).ToString("0.0") +
+                   "\n" + yearlyLabel + ": " +
+                   MandateDecisionService.EstimateYearlyGain(pKingdom, pDef).ToString("0.0") +
+                   qualification +
                    "\n" + AW_L10n.Text("aw_mandate_decision_click_cycle", "\u70B9\u51FB\u5207\u6362\u5929\u671D\u51B3\u8BAE");
         }
 

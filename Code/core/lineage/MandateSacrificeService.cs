@@ -220,11 +220,31 @@ namespace AncientWarfare3.core.lineage
             MandateSacrificeLevel pLevel, bool pQualified,
             MandateSacrificeOutcome pOutcome, MandateSacrificeEffects pEffects)
         {
-            return (pKingdom?.name ?? "") + " grand sacrifice " +
-                   pLevel.ToString().ToLowerInvariant() + " / " +
-                   (pQualified ? "qualified" : "unqualified") + " / " +
-                   pOutcome.ToString().ToLowerInvariant() + " / Mandate " +
+            string qualificationKey = pQualified
+                ? "aw_mandate_sacrifice_qualified"
+                : "aw_mandate_sacrifice_unqualified";
+            return (pKingdom?.name ?? "") +
+                   HistoryLocalizationRules.Text("aw_hist_sacrifice_performed") +
+                   HistoryLocalizationRules.Text(GetDecisionId(pLevel)) +
+                   HistoryLocalizationRules.Text("aw_hist_sacrifice_qualification_mid") +
+                   HistoryLocalizationRules.Text(qualificationKey) +
+                   HistoryLocalizationRules.Text("aw_hist_sacrifice_result_mid") +
+                   HistoryLocalizationRules.Text(OutcomeLocalizationKey(pOutcome)) +
+                   HistoryLocalizationRules.Text("aw_hist_sacrifice_mandate_mid") +
                    Signed(pEffects.MandateDelta);
+        }
+
+        private static string OutcomeLocalizationKey(
+            MandateSacrificeOutcome pOutcome)
+        {
+            return pOutcome switch
+            {
+                MandateSacrificeOutcome.Auspicious =>
+                    "aw_mandate_sacrifice_outcome_auspicious",
+                MandateSacrificeOutcome.Ominous =>
+                    "aw_mandate_sacrifice_outcome_ominous",
+                _ => "aw_mandate_sacrifice_outcome_neutral"
+            };
         }
 
         private static string Signed(int pValue)

@@ -41,8 +41,6 @@ aw_policy_imperial_court,王朝朝廷,Imperial Court,王朝朝廷
 aw_policy_imperial_court_desc,建立面向诸侯和附庸的朝廷秩序，提高天命国的皇权与附庸控制能力。,Build an imperial court order for vassals and lords to strengthen authority,建立面向诸侯和附庸的朝廷秩序，提高天命国的皇权与附庸控制能力。
 aw_decision_claim_mandate,受命称帝,Claim Mandate,受命称帝
 aw_decision_claim_mandate_desc,当国力、爵位或历史人物条件达标时，宣布建立天命王朝。,Claim the Mandate when power rank title or historical figure conditions are met,当国力、爵位或历史人物条件达标时，宣布建立天命王朝。
-aw_decision_mandate_ritual,祭天整顿,Mandate Ritual,祭天整顿
-aw_decision_mandate_ritual_desc,消耗政治点数强化天命，小幅提升皇权和王朝威望。,Spend political points to reinforce Mandate authority and dynasty prestige,消耗政治点数强化天命，小幅提升皇权和王朝威望。
 aw_mandate_req_invalid,无效国家,Invalid realm,無效國家
 aw_mandate_req_no_king,没有在位君主,No reigning ruler,沒有在位君主
 aw_mandate_req_already_exists,当前已有天命王朝,A Mandate dynasty already exists,當前已有天命王朝
@@ -71,8 +69,25 @@ aw_mandate_decision_idle_desc,点击切换为可执行的天朝决议,Click to s
 aw_mandate_decision_click_cycle,点击切换天朝决议,Click to cycle Mandate decision,点击切换天朝决议
 aw_mandate_decision_border_defense,整备边防,Reinforce Border Defense,整备边防
 aw_mandate_decision_border_defense_desc,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军,Prepare legal frontiers by building border walls and assigning border troops when manpower is sufficient,以天朝决议整备法理边界，修筑边墙并在兵力充足时抽调边军
-aw_mandate_decision_ritual,祭天整顿,Mandate Ritual,祭天整顿
-aw_mandate_decision_ritual_desc,由天子主持祭天和朝廷整顿，小幅恢复天命、皇权与王朝威望,The emperor conducts rites and court reforms to restore Mandate authority and prestige,由天子主持祭天和朝廷整顿，小幅恢复天命、皇权与王朝威望
+aw_mandate_decision_sacrifice_gamble,赌大斋戒,Gamble Grand Sacrifice,賭大齋戒
+aw_mandate_decision_sacrifice_gamble_desc,高风险大祭。合格时吉39% 平60% 凶1%；不合格时吉25% 平65% 凶10%。吉兆天命+12 皇权+6 威望+8且五年每年+2；凶兆效果相反。,High risk rite. Qualified odds are 39% auspicious / 60% neutral / 1% ominous; unqualified odds are 25% / 65% / 10%. An auspicious result grants Mandate +12 Authority +6 Prestige +8 and +2 yearly for five years; an ominous result reverses these effects.,高風險大祭。合格時吉39% 平60% 兇1%；不合格時吉25% 平65% 兇10%。吉兆天命+12 皇權+6 威望+8且五年每年+2；兇兆效果相反。
+aw_mandate_decision_sacrifice_moderate,中庸斋戒,Moderate Grand Sacrifice,中庸齋戒
+aw_mandate_decision_sacrifice_moderate_desc,低成本常礼。合格时吉15% 平75% 凶10%；不合格时吉5% 平70% 凶25%。吉兆天命+8 皇权+4 威望+5且五年每年+1；凶兆天命-8 皇权-4 威望-4且五年每年-1。,Lower cost rite. Qualified odds are 15% auspicious / 75% neutral / 10% ominous; unqualified odds are 5% / 70% / 25%. An auspicious result grants Mandate +8 Authority +4 Prestige +5 and +1 yearly for five years; an ominous result applies Mandate -8 Authority -4 Prestige -4 and -1 yearly.,低成本常禮。合格時吉15% 平75% 兇10%；不合格時吉5% 平70% 兇25%。吉兆天命+8 皇權+4 威望+5且五年每年+1；兇兆天命-8 皇權-4 威望-4且五年每年-1。
+aw_mandate_decision_sacrifice_conservative,保守斋戒,Conservative Grand Sacrifice,保守齋戒
+aw_mandate_decision_sacrifice_conservative_desc,高投入谨慎行礼且不会出现凶兆。合格时吉50% 平50%；不合格时吉40% 平60%。吉兆天命+6 皇权+3 威望+4且五年每年+1；平兆天命+2 皇权+1 威望+1。,Costly cautious rite with no ominous outcome. Qualified odds are 50% auspicious / 50% neutral; unqualified odds are 40% / 60%. An auspicious result grants Mandate +6 Authority +3 Prestige +4 and +1 yearly for five years; a neutral result grants Mandate +2 Authority +1 Prestige +1.,高投入謹慎行禮且不會出現兇兆。合格時吉50% 平50%；不合格時吉40% 平60%。吉兆天命+6 皇權+3 威望+4且五年每年+1；平兆天命+2 皇權+1 威望+1。
+aw_mandate_sacrifice_qualification,礼官资格,Ritual Qualification,禮官資格
+aw_mandate_sacrifice_qualified,合格,Qualified,合格
+aw_mandate_sacrifice_unqualified,不合格,Unqualified,不合格
+aw_mandate_sacrifice_outcome_auspicious,吉兆,Auspicious,吉兆
+aw_mandate_sacrifice_outcome_neutral,平兆,Neutral,平兆
+aw_mandate_sacrifice_outcome_ominous,凶兆,Ominous,兇兆
+aw_mandate_sacrifice_yearly_spend,本年政治点投入,Political Points This Year,本年政治點投入
+aw_mandate_ritual_completeness,礼制完整度,Ritual Completeness,禮制完整度
+aw_mandate_sacrifice_annual_effect,大祀天命年效,Annual Sacrifice Mandate,大祀天命年效
+aw_mandate_sacrifice_buff_until,余泽持续至,Effect Until,餘澤持續至
+aw_hist_event_mandate_sacrifice_auspicious,大祀获吉,Auspicious Grand Sacrifice,大祀獲吉
+aw_hist_event_mandate_sacrifice_neutral,大祀平兆,Neutral Grand Sacrifice,大祀平兆
+aw_hist_event_mandate_sacrifice_ominous,大祀逢凶,Ominous Grand Sacrifice,大祀逢凶
 aw_mandate_decision_year_name,改元,Change Era Name,改元
 aw_mandate_decision_year_name_desc,在大事后颁布新年号，并写入天命史和国史,Issue a new era name after major events and record it in Mandate and kingdom history,在大事后颁布新年号，并写入天命史和国史
 aw_mandate_core_count,法理核心,Legal Cores,法理核心

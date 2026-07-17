@@ -77,6 +77,9 @@ namespace AncientWarfare3.core.lineage
                 case "mandate_war_start": return T("aw_hist_event_mandate_war_start", pLanguage);
                 case "mandate_war_won": return T("aw_hist_event_mandate_war_won", pLanguage);
                 case "mandate_ritual": return T("aw_hist_event_mandate_ritual", pLanguage);
+                case "mandate_sacrifice_auspicious": return T("aw_hist_event_mandate_sacrifice_auspicious", pLanguage);
+                case "mandate_sacrifice_neutral": return T("aw_hist_event_mandate_sacrifice_neutral", pLanguage);
+                case "mandate_sacrifice_ominous": return T("aw_hist_event_mandate_sacrifice_ominous", pLanguage);
                 case "mandate_year_name": return T("aw_hist_event_mandate_year_name", pLanguage);
                 case "mandate_ruler_title": return T("aw_hist_event_mandate_ruler_title", pLanguage);
                 case "former_king": return T("aw_hist_event_former_king", pLanguage);
