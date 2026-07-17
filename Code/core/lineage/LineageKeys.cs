@@ -43,6 +43,10 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
         public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
         public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
+        public const string MANDATE_SACRIFICE_LAST_YEAR = "aw_mandate_sacrifice_last_year";
+        public const string MANDATE_SACRIFICE_BUFF_UNTIL = "aw_mandate_sacrifice_buff_until";
+        public const string MANDATE_SACRIFICE_BUFF_DELTA = "aw_mandate_sacrifice_buff_delta";
+        public const string MANDATE_RITUAL_COMPLETENESS = "aw_mandate_ritual_completeness";
         public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
         public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";
         public const string RESTORATION_CLAIM_ID = "aw_restoration_claim_id";

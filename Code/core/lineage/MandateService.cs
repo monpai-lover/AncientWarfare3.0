@@ -416,18 +416,28 @@ namespace AncientWarfare3.core.lineage
             return mandate?.data != null && pKingdom?.data != null && mandate == pKingdom;
         }
 
-        public static bool TryStabilizeMandate(Kingdom pKingdom, int pValue, string pReason)
+        public static bool ApplySacrificeOutcome(Kingdom pKingdom,
+            MandateSacrificeEffects pEffects, string pReason)
+        {
+            return ApplySacrificeOutcome(pKingdom, pEffects, pReason, null);
+        }
+
+        internal static bool ApplySacrificeOutcome(Kingdom pKingdom,
+            MandateSacrificeEffects pEffects, string pReason, string pContent)
         {
             if (!CanStabilizeMandate(pKingdom)) return false;
-            ChangeMandate(pKingdom, Mathf.Max(1, pValue), pReason ?? "mandate_ritual");
+            ChangeMandate(pKingdom, pEffects.MandateDelta,
+                pReason ?? "mandate_sacrifice", pContent);
             MandateReport r = ReadReport();
-            UpdateState(pKingdom, r.period_id, r.mandate_value,
-                Mathf.Clamp(r.imperial_authority + 4, 0, 100),
-                Mathf.Clamp(r.dynasty_prestige + 3, 0, 999),
+            int authority = Mathf.Clamp(
+                r.imperial_authority + pEffects.AuthorityDelta, 0, 100);
+            int prestige = Mathf.Clamp(
+                r.dynasty_prestige + pEffects.PrestigeDelta, 0, 999);
+            UpdateState(pKingdom, r.period_id, r.mandate_value, authority, prestige,
                 r.core_control, r.vassal_loyalty, CrisisLevel(r.mandate_value), Date.getCurrentYear());
-            HistoryWriter.RecordKingdom(pKingdom, "mandate_ritual",
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_ritual"),
-                HistoryTarget.Kingdom(pKingdom));
+            pKingdom.data.set(LineageKeys.MANDATE_VALUE, r.mandate_value);
+            pKingdom.data.set(LineageKeys.MANDATE_AUTHORITY, authority);
+            pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, prestige);
             return true;
         }
 
@@ -1018,6 +1028,12 @@ namespace AncientWarfare3.core.lineage
             if (pReport.vassal_loyalty >= 0.7f) delta += 1;
             else if (pReport.vassal_loyalty < 0.35f) delta -= 2;
             delta += HeirService.GetMandateChildScarcityPenalty(pKingdom);
+            pKingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_UNTIL,
+                out int sacrificeBuffUntil, int.MinValue);
+            pKingdom.data.get(LineageKeys.MANDATE_SACRIFICE_BUFF_DELTA,
+                out int sacrificeBuffDelta, 0);
+            delta += MandateSacrificeRules.ActiveAnnualDelta(
+                Date.getCurrentYear(), sacrificeBuffUntil, sacrificeBuffDelta);
 
             Actor king = pKingdom.king;
             if (king?.data != null)

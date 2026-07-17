@@ -1312,7 +1312,9 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_claim_mandate":
                     return MandateService.TryDeclareMandate(pKingdom, "decision");
                 case "aw_decision_mandate_ritual":
-                    return MandateService.TryStabilizeMandate(pKingdom, 8, "mandate_ritual");
+                    return MandateService.ApplySacrificeOutcome(pKingdom,
+                        new MandateSacrificeEffects(8, 4, 3, 0),
+                        "mandate_ritual");
                 case "aw_decision_title_upgrade":
                     if (!CanPromoteTitle(pKingdom)) return false;
                     KingdomTitleService.PromoteTitle(pKingdom);

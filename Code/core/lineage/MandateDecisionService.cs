@@ -198,7 +198,9 @@ namespace AncientWarfare3.core.lineage
                 case "aw_mandate_decision_border_defense":
                     return MandateBorderDefenseService.ExecuteDecision(pKingdom);
                 case "aw_mandate_decision_ritual":
-                    return MandateService.TryStabilizeMandate(pKingdom, 8, "mandate_ritual");
+                    return MandateService.ApplySacrificeOutcome(pKingdom,
+                        new MandateSacrificeEffects(8, 4, 3, 0),
+                        "mandate_ritual");
                 case "aw_mandate_decision_year_name":
                     YearNameService.ChangeYearName(pKingdom);
                     MandateReport report = MandateService.ReadReport();
