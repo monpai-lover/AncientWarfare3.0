@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -172,22 +174,62 @@ namespace AncientWarfare3.core.lineage
 
         private static bool TryPalaceCoup(Actor pGeneral, Kingdom pKingdom, int pRisk)
         {
-            bool success = pRisk >= 100 || CalculateKingdomCrisis(pKingdom) >= 75 || !RoyalGuardExists(pKingdom);
             pGeneral.data.set("aw_general_rebelled_once", true);
             GeneralService.MarkRebelled(pGeneral);
-
-            if (success)
-            {
-                try { pKingdom.setKing(pGeneral); }
-                catch (Exception e)
-                {
-                    ModClass.LogWarning("General palace coup setKing failed: " + e.Message);
-                    return false;
-                }
-            }
-
+            bool success = TryResolvePalaceCoup(pGeneral, pKingdom, pRisk);
             RecordPalaceCoup(pGeneral, pKingdom, pRisk, success);
             return success;
+        }
+
+        internal static bool TryResolvePalaceCoup(Actor pChallenger,
+            Kingdom pKingdom, int pPressure)
+        {
+            if (pChallenger?.data == null || pKingdom?.data == null ||
+                pKingdom.isRekt()) return false;
+            bool success = pPressure >= 100 ||
+                           CalculateKingdomCrisis(pKingdom) >= 75 ||
+                           !RoyalGuardExists(pKingdom);
+            if (!success) return false;
+            CourtService.ClearOfficeForReignTransition(pChallenger,
+                "palace_coup");
+            if (!PrepareChallengerForAccession(pChallenger, pKingdom)) return false;
+            try
+            {
+                pKingdom.setKing(pChallenger);
+                return pKingdom.king == pChallenger;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Palace coup setKing failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private static bool PrepareChallengerForAccession(Actor pChallenger,
+            Kingdom pKingdom)
+        {
+            City capital = pKingdom?.capital;
+            if (pChallenger?.data == null || capital?.data == null) return false;
+            try { if (pChallenger.hasArmy()) pChallenger.removeFromArmy(); } catch { }
+            try { pChallenger.stopBeingWarrior(); } catch { }
+            try
+            {
+                if (pChallenger.isCityLeader() && pChallenger.city?.data != null)
+                    pChallenger.city.removeLeader();
+            }
+            catch { }
+            try
+            {
+                using (FormalAffiliationTransferScope.Open(pChallenger.data.id,
+                           pKingdom.id, capital.data.id))
+                    pChallenger.joinCity(capital);
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Palace coup accession transfer failed: " + e.Message);
+                return false;
+            }
+            return pChallenger.kingdom == pKingdom && pChallenger.city == capital;
         }
 
         private static bool TryDefectToNeighbor(Actor pGeneral, Kingdom pOldKingdom, int pRisk)

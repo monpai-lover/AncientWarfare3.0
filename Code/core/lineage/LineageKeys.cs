@@ -270,6 +270,13 @@ namespace AncientWarfare3.core.lineage
         public const string OFFICER_SENIORITY = "aw_officer_seniority";
         public const string OFFICER_LAST_POP_SNAPSHOT = "aw_officer_last_pop_snapshot";
         public const string OFFICIAL_CAREER_LAST_YEAR = "aw_official_career_last_year";
+        public const string MINISTERIAL_POWER = "aw_ministerial_power";
+        public const string MINISTERIAL_POWER_KINGDOM_ID = "aw_ministerial_power_kingdom_id";
+        public const string MINISTERIAL_POWER_LAST_KINGDOM_ID = "aw_ministerial_power_last_kingdom_id";
+        public const string MINISTERIAL_POWER_ACTOR_LAST_YEAR = "aw_ministerial_power_actor_last_year";
+        public const string MINISTERIAL_PREMIER_ID = "aw_ministerial_premier_id";
+        public const string MINISTERIAL_PREMIER_POWER = "aw_ministerial_premier_power";
+        public const string MINISTERIAL_POWER_LAST_YEAR = "aw_ministerial_power_last_year";
         public const string COURT_IMPERIAL_PHYSICIAN_ID = "aw_court_imperial_physician_id";
         public const string COURT_MEDICAL_KING_ID = "aw_court_medical_king_id";
         public const string COURT_MEDICAL_HEIR_ID = "aw_court_medical_heir_id";

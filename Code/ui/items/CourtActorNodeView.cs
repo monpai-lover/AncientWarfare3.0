@@ -289,6 +289,19 @@ namespace AncientWarfare3.ui.items
                     lines.Add(AW_L10n.Text("aw_court_official_term_end", "Term review year") + ": " +
                               pNode.OfficialTermEndYear);
             }
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_ID,
+                out long ministerialPremierId, -1L);
+            if (pNode.ActorId >= 0 && pNode.ActorId == ministerialPremierId)
+            {
+                pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_POWER,
+                    out int ministerialPower, 0);
+                int stage = MinisterialPowerRules.HighestReachedThreshold(
+                    ministerialPower);
+                lines.Add(AW_L10n.Text("aw_court_ministerial_power", "Ministerial power") +
+                          ": " + ministerialPower + "/100");
+                lines.Add(AW_L10n.Text("aw_court_ministerial_stage", "Authority stage") +
+                          ": " + MinisterialStageName(stage));
+            }
             if (pActor?.data != null)
             {
                 lines.Add(AW_L10n.Text("aw_court_age", "Age") + ": " + SafeAge(pActor));
@@ -323,6 +336,12 @@ namespace AncientWarfare3.ui.items
             if (pGrade < 0 || pGrade > 4)
                 return AW_L10n.Text("aw_court_official_kaoke_none", "Not evaluated");
             return AW_L10n.Text("aw_court_official_kaoke_" + pGrade, pGrade.ToString());
+        }
+
+        private static string MinisterialStageName(int pThreshold)
+        {
+            return AW_L10n.Text("aw_court_ministerial_stage_" + pThreshold,
+                pThreshold.ToString());
         }
 
         private static string RoleLine(CourtPyramidNodeModel pNode, Kingdom pKingdom)

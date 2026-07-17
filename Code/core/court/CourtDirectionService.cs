@@ -52,6 +52,12 @@ namespace AncientWarfare3.core.court
         private static IEnumerable<CourtInfluenceContribution> BuildContributions(Kingdom pKingdom)
         {
             var result = new List<CourtInfluenceContribution>();
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_ID,
+                out long ministerialPremierId, -1L);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_POWER,
+                out int ministerialPower, 0);
+            float ministerialMultiplier =
+                MinisterialPowerRules.DirectionMultiplier(ministerialPower);
             Actor king = pKingdom.king;
             if (IsValid(king, pKingdom))
             {
@@ -78,10 +84,14 @@ namespace AncientWarfare3.core.court
                     office != officer.office_id) continue;
                 string school = ResolveSchool(actor);
                 if (!string.IsNullOrEmpty(school))
+                {
+                    float weight = 4f * OfficialCareerRankRules.InfluenceMultiplier(
+                        OfficialCareerStateService.ReadRankFast(actor));
+                    if (actor.data.id == ministerialPremierId)
+                        weight *= ministerialMultiplier;
                     result.Add(new CourtInfluenceContribution(actor.data.id, school,
-                        4f * OfficialCareerRankRules.InfluenceMultiplier(
-                            OfficialCareerStateService.ReadRankFast(actor)),
-                        OfficeRank(office), isKing: false));
+                        weight, OfficeRank(office), isKing: false));
+                }
             }
 
             foreach (GeneralReadModelEntry entry in GeneralService.GetActiveGeneralsForReadModel(

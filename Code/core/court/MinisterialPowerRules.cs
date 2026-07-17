@@ -44,7 +44,12 @@ namespace AncientWarfare3.core.court
 
         public static int DecayFormerPremier(int pCurrentPower)
         {
-            return ClampPower(pCurrentPower - 8);
+            return DecayFormerPremier(pCurrentPower, 1);
+        }
+
+        public static int DecayFormerPremier(int pCurrentPower, int pYears)
+        {
+            return ClampPower(pCurrentPower - Math.Max(0, pYears) * 8);
         }
 
         public static bool CrossedThreshold(int pPreviousPower, int pNextPower,
@@ -58,6 +63,28 @@ namespace AncientWarfare3.core.court
         {
             return monarchy && !atWar && ClampPower(power) >= 90 &&
                    (weakRuler || mandateCrisis);
+        }
+
+        public static int HighestReachedThreshold(int pPower)
+        {
+            int power = ClampPower(pPower);
+            int reached = 0;
+            foreach (int threshold in Thresholds)
+            {
+                if (power < threshold) break;
+                reached = threshold;
+            }
+            return reached;
+        }
+
+        public static float DirectionMultiplier(int pPower)
+        {
+            int stage = HighestReachedThreshold(pPower);
+            if (stage >= 90) return 1.20f;
+            if (stage >= 80) return 1.15f;
+            if (stage >= 60) return 1.10f;
+            if (stage >= 40) return 1.05f;
+            return 1f;
         }
 
         public static int CompareCandidates(int leftPriority, int leftRank,

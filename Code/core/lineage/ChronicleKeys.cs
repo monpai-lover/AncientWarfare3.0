@@ -47,6 +47,7 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_OFFICER_APPOINTED = "court_officer_appointed";
         public const string COURT_OFFICER_DISMISSED = "court_officer_dismissed";
         public const string OFFICIAL_EVALUATION = "official_evaluation";
+        public const string MINISTERIAL_POWER = "ministerial_power";
         public const string ROYAL_MEDICAL_CURE = "royal_medical_cure";
         public const string ROYAL_ASYLUM_STARTED = "royal_asylum_started";
         public const string ROYAL_ASYLUM_RELOCATED = "royal_asylum_relocated";
@@ -105,6 +106,7 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_REFORM_EVENT = "court_reform_event";
         public const string COURT_CITY_BUREAU = "court_city_bureau";
         public const string COURT_TIER_UPGRADED = "court_tier_upgraded";
+        public const string MINISTERIAL_POWER = "ministerial_power";
         public const string RESTORATION_UPRISING = "restoration_uprising";
         public const string RESTORATION_COMPLETED = "restoration_completed";
         public const string RESTORATION_FAILED = "restoration_failed";
