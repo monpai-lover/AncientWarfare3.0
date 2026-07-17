@@ -106,6 +106,11 @@ aw_vassal_years,臣属年数:,Years as vassal:,臣屬年數：
 aw_vassal_autonomy,自治度:,Autonomy:,自治度：
 aw_vassal_tribute,贡赋:,Tribute:,貢賦：
 aw_vassal_military,军役:,Military obligation:,軍役：
+aw_vassal_contract_tier,契约:,Contract:,契約：
+aw_vassal_contract_inner,内藩,Inner Vassal,內藩
+aw_vassal_contract_outer,外藩,Outer Vassal,外藩
+aw_vassal_contract_jimi,羁縻,Jimi Subject,羈縻
+aw_vassal_contract_tributary,朝贡国,Tributary,朝貢國
 aw_click_to_inspect_kingdom,点击跳转该国,Click to inspect this kingdom,點擊跳轉該國
 aw_city_history_entry,城市历史,City History,城市歷史
 aw_view_city_history,查看该城的易主历史,View this city's transfer history,查看該城的易主歷史

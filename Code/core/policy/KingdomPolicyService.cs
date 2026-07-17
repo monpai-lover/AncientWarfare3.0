@@ -444,11 +444,13 @@ namespace AncientWarfare3.core.policy
             bool hasClaimTarget = goalType == WarTerritoryService.GOAL_PRESS_CLAIM_CITY &&
                                   WarTerritoryService.FindBestClaimTargetCityForDecision(pKingdom, pTarget)?.data != null;
             bool canForceVassal = WarDecisionService.CanForceVassal(pKingdom, pTarget);
+            bool canForceTributary = WarDecisionService.CanForceTributary(pKingdom, pTarget);
             bool isIndependenceTarget = VassalService.GetSuzerain(pKingdom) == pTarget;
             bool hasRestorationTarget = WarTerritoryService.FindBestRestorationTargetCityForDecision(pKingdom, pTarget)?.data != null;
             bool canForceNoCb = WarDecisionService.CanForceNoCb(pKingdom);
             if (!WarDecisionQueueRules.CanQueueGoal(goalType, basicAllowed, hasNormalCb, canForceNoCb,
-                    hasCoreTarget, hasClaimTarget, canForceVassal, isIndependenceTarget, hasRestorationTarget,
+                    hasCoreTarget, hasClaimTarget, canForceVassal, canForceTributary,
+                    isIndependenceTarget, hasRestorationTarget,
                     out _))
                 return false;
 
@@ -504,6 +506,7 @@ namespace AncientWarfare3.core.policy
                 case WarTerritoryService.GOAL_MANDATE_CONQUEST: return WarDecisionService.WAR_NORMAL;
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY: return "reclaim";
                 case WarTerritoryService.GOAL_FORCE_VASSAL: return "vassal_war";
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY: return WarDecisionService.WAR_TRIBUTARY;
                 case WarTerritoryService.GOAL_INDEPENDENCE: return "independence_war";
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM: return WarDecisionService.WAR_RESTORATION;
                 default: return WarDecisionService.WAR_NORMAL;
@@ -519,6 +522,7 @@ namespace AncientWarfare3.core.policy
                 case WarTerritoryService.GOAL_TAKE_CORE_CITY: return "core_reclaim";
                 case WarTerritoryService.GOAL_PRESS_CLAIM_CITY: return "claim_war";
                 case WarTerritoryService.GOAL_FORCE_VASSAL: return "force_vassal";
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY: return "tributary_war";
                 case WarTerritoryService.GOAL_INDEPENDENCE: return "independence_war";
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM: return "restoration";
                 case WarTerritoryService.GOAL_NO_CB: return "no_cb";
@@ -2184,6 +2188,8 @@ namespace AncientWarfare3.core.policy
                     return WarTerritoryService.TryDeclareClaimWar(pKingdom, target, targetCity, sourceClaimId);
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                     return WarTerritoryService.TryDeclareVassalWar(pKingdom, target);
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
+                    return WarTerritoryService.TryDeclareTributaryWar(pKingdom, target);
                 case WarTerritoryService.GOAL_INDEPENDENCE:
                     return WarTerritoryService.TryDeclareIndependenceWar(pKingdom, target);
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:

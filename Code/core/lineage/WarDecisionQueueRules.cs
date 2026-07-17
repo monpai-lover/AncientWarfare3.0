@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
             bool pHasCoreTarget,
             bool pHasClaimTarget,
             bool pCanForceVassal,
+            bool pCanForceTributary,
             bool pIsIndependenceTarget,
             bool pHasRestorationTarget,
             out string pReason)
@@ -31,6 +32,8 @@ namespace AncientWarfare3.core.lineage
                     return Check(pHasClaimTarget, "missing_claim_target", out pReason);
                 case "force_vassal":
                     return Check(pCanForceVassal, "cannot_force_vassal", out pReason);
+                case "force_tributary":
+                    return Check(pCanForceTributary, "cannot_force_tributary", out pReason);
                 case "independence":
                     return Check(pIsIndependenceTarget, "not_suzerain", out pReason);
                 case "restore_kingdom":

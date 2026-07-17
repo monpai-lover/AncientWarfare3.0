@@ -24,6 +24,7 @@ namespace AncientWarfare3.core.lineage
         public const string GOAL_TAKE_CORE_CITY = "take_core_city";
         public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
         public const string GOAL_FORCE_VASSAL = "force_vassal";
+        public const string GOAL_FORCE_TRIBUTARY = "force_tributary";
         public const string GOAL_INDEPENDENCE = "independence";
         public const string GOAL_RESTORE_KINGDOM = "restore_kingdom";
         public const string GOAL_NO_CB = "no_cb_punitive";
@@ -68,6 +69,7 @@ namespace AncientWarfare3.core.lineage
             public bool can_reclaim;
             public bool can_press_claim;
             public bool can_force_vassal;
+            public bool can_force_tributary;
             public bool can_independence;
             public bool can_restore;
             public bool can_take_mandate;
@@ -414,6 +416,24 @@ namespace AncientWarfare3.core.lineage
                 target_city = targetCapital
             };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, "vassal_war", "force_vassal");
+            if (war?.data == null) return false;
+            CreateGoalForWar(war, goal);
+            return true;
+        }
+
+        public static bool TryDeclareTributaryWar(Kingdom pAttacker, Kingdom pDefender)
+        {
+            if (!WarDecisionService.CanForceTributary(pAttacker, pDefender)) return false;
+            City targetCapital = pDefender?.capital ?? FindFirstTargetCity(pDefender);
+            if (targetCapital?.data == null) return false;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_FORCE_TRIBUTARY,
+                target_kingdom = pDefender,
+                target_city = targetCapital
+            };
+            War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
+                WarDecisionService.WAR_TRIBUTARY, "tributary_war");
             if (war?.data == null) return false;
             CreateGoalForWar(war, goal);
             return true;
@@ -833,6 +853,9 @@ namespace AncientWarfare3.core.lineage
                 report.can_mandate_conquest = CanUseMandateConquest(pSource, target);
                 report.can_force_vassal = !vassalBlocked &&
                     WarDecisionService.HasValidCasusBelli(pSource, target, "vassal_war");
+                report.can_force_tributary = !vassalBlocked &&
+                    WarDecisionService.HasValidCasusBelli(pSource, target,
+                        WarDecisionService.WAR_TRIBUTARY);
                 report.can_independence = VassalService.GetSuzerain(pSource) == target &&
                                           !IsAlreadyAtWar(pSource, target);
                 report.restoration_claim_count = CountRestorationClaimsAgainst(hostedRoyalClaims, target);
@@ -845,9 +868,9 @@ namespace AncientWarfare3.core.lineage
             }
             result.Sort((a, b) =>
             {
-                int scoreA = (a.can_take_mandate ? 500 : 0) + (a.can_mandate_conquest ? 260 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
+                int scoreA = (a.can_take_mandate ? 500 : 0) + (a.can_mandate_conquest ? 260 : 0) + (a.can_force_tributary ? 45 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
                              a.weak_claim_count * 20 + a.pending_count;
-                int scoreB = (b.can_take_mandate ? 500 : 0) + (b.can_mandate_conquest ? 260 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
+                int scoreB = (b.can_take_mandate ? 500 : 0) + (b.can_mandate_conquest ? 260 : 0) + (b.can_force_tributary ? 45 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
                              b.weak_claim_count * 20 + b.pending_count;
                 int cmp = scoreB.CompareTo(scoreA);
                 return cmp != 0 ? cmp : string.Compare(a.target?.name, b.target?.name, StringComparison.Ordinal);
@@ -903,6 +926,13 @@ namespace AncientWarfare3.core.lineage
 
             if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(pSource, pTarget, "vassal_war"))
                 result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, GoalLabel(GOAL_FORCE_VASSAL),
+                    -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
+                    restorationStrength: 0));
+
+            if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(
+                    pSource, pTarget, WarDecisionService.WAR_TRIBUTARY))
+                result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
+                    GOAL_FORCE_TRIBUTARY, GoalLabel(GOAL_FORCE_TRIBUTARY),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
@@ -1521,6 +1551,7 @@ namespace AncientWarfare3.core.lineage
                 case GOAL_TAKE_MANDATE: return T("aw_hist_goal_take_mandate");
                 case GOAL_MANDATE_CONQUEST: return T("aw_hist_goal_mandate_conquest");
                 case GOAL_FORCE_VASSAL: return T("aw_hist_goal_force_vassal");
+                case GOAL_FORCE_TRIBUTARY: return T("aw_hist_goal_force_tributary");
                 case GOAL_INDEPENDENCE: return T("aw_hist_goal_independence");
                 case GOAL_RESTORE_KINGDOM: return T("aw_hist_goal_restore_kingdom");
                 case GOAL_NO_CB: return T("aw_hist_goal_no_cb");

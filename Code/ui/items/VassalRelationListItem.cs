@@ -209,6 +209,8 @@ namespace AncientWarfare3.ui.items
                               subject + " -> " + Fallback(pObject.suzerain_name));
                 sb.AppendLine(AW_L10n.Text("aw_vassal_reason", "\u539F\u56E0:") +
                               Fallback(pObject.relation_reason_label));
+                sb.AppendLine(AW_L10n.Text("aw_vassal_contract_tier", "\u5951\u7EA6:") +
+                              ContractTierLabel(pObject.contract_tier));
                 sb.AppendLine(AW_L10n.Text("aw_vassal_started", "\u5F00\u59CB:") + FormatDate(pObject.start_time));
                 if (pObject.years >= 0)
                     sb.AppendLine(AW_L10n.Text("aw_vassal_years", "\u81E3\u5C5E\u5E74\u6570:") + pObject.years);
@@ -219,6 +221,21 @@ namespace AncientWarfare3.ui.items
 
             sb.Append(AW_L10n.Text("aw_click_to_inspect_kingdom", "\u70B9\u51FB\u8DF3\u8F6C\u8BE5\u56FD"));
             return sb.ToString();
+        }
+
+        private static string ContractTierLabel(int pTier)
+        {
+            switch (VassalContractTierRules.NormalizeTier(pTier))
+            {
+                case VassalContractTierRules.Inner:
+                    return AW_L10n.Text("aw_vassal_contract_inner", "\u5185\u85E9");
+                case VassalContractTierRules.Jimi:
+                    return AW_L10n.Text("aw_vassal_contract_jimi", "\u7F81\u7E3B");
+                case VassalContractTierRules.Tributary:
+                    return AW_L10n.Text("aw_vassal_contract_tributary", "\u671D\u8D21\u56FD");
+                default:
+                    return AW_L10n.Text("aw_vassal_contract_outer", "\u5916\u85E9");
+            }
         }
 
         private void OnClick()

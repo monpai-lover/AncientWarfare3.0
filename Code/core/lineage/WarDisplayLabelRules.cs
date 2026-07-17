@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.lineage
             "claim_war",
             "force_vassal",
             "vassal_war",
+            "tributary_war",
             "independence_war",
             "restoration_war",
             "restoration",
@@ -92,6 +93,8 @@ namespace AncientWarfare3.core.lineage
                 case "centralization_reformed": return T("aw_hist_event_centralization_reformed", pLanguage);
                 case "centralization_chaos_downgrade": return T("aw_hist_event_centralization_chaos_downgrade", pLanguage);
                 case "vassal_tribute": return T("aw_hist_event_vassal_tribute", pLanguage);
+                case "tributary_set": return T("aw_hist_event_tributary_set", pLanguage);
+                case "tributary_get": return T("aw_hist_event_tributary_get", pLanguage);
                 case "city_economy_role": return T("aw_hist_event_city_economy_role", pLanguage);
                 case "city_economy_tax": return T("aw_hist_event_city_economy_tax", pLanguage);
                 case "royal_asylum_started": return T("aw_hist_event_royal_asylum_started", pLanguage);
@@ -138,6 +141,10 @@ namespace AncientWarfare3.core.lineage
                     return true;
                 case "vassal_war":
                     pLabel = T("aw_hist_label_vassal_war", pLanguage);
+                    return true;
+                case "tributary_war":
+                case "force_tributary":
+                    pLabel = T("aw_hist_label_tributary_war", pLanguage);
                     return true;
                 case "independence_war":
                     pLabel = T("aw_hist_label_independence_war", pLanguage);

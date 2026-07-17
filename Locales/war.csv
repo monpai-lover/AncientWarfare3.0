@@ -7,6 +7,8 @@ war_type_reclaim,收复战争,Reclaim War,收復戰爭
 war_name_reclaim,收复战争,Reclaim War,收復戰爭
 war_type_vassal_war,附庸战争,Vassal War,附庸戰爭
 war_name_vassal_war,附庸战争,Vassal War,附庸戰爭
+war_type_tributary_war,叩关战争,Tributary War,叩關戰爭
+war_name_tributary_war,叩关战争,Tributary War,叩關戰爭
 war_type_independence_war,独立战争,Independence War,獨立戰爭
 war_name_independence_war,独立战争,Independence War,獨立戰爭
 war_type_tianming,天命战争,Mandate War,天命戰爭
@@ -42,6 +44,19 @@ aw_war_press_claim,按宣称宣战,Press Claim,按宣稱宣戰
 aw_war_press_claim_desc,按强弱宣称发动战争,Start a war using a strong or weak claim,按強弱宣稱發動戰爭
 aw_war_force_vassal,强制臣服,Force Vassalage,強制臣服
 aw_war_force_vassal_desc,迫使目标成为附庸,Force the target to become a vassal,迫使目標成為附庸
+aw_war_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
+aw_war_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
+aw_war_force_tributary_desc,迫使接壤弱国岁时纳贡但不纳入附庸体系,Compel a weaker neighboring realm to pay annual tribute without entering the vassal hierarchy,迫使接壤弱國歲時納貢但不納入附庸體系
+aw_hist_label_tributary_war,叩关战争,Tributary War,叩關戰爭
+aw_hist_goal_force_tributary,叩关纳贡,Compel Tribute,叩關納貢
+aw_hist_event_tributary_set,称臣纳贡,Tributary Submission,稱臣納貢
+aw_hist_event_tributary_get,受贡册封,Tributary Received,受貢冊封
+aw_hist_tributary_set_mid,向, began paying annual tribute to ,向
+aw_hist_tributary_set_suffix,称臣纳贡。,.,稱臣納貢。
+aw_hist_tributary_get_mid,册封, received ,冊封
+aw_hist_tributary_get_suffix,为朝贡国, as a tributary,為朝貢國
+aw_hist_vassal_set_reason_tributary_war,战败纳贡于,submitted in tribute to ,戰敗納貢於
+aw_hist_vassal_get_reason_tributary_war,叩关受贡,tributary war,叩關受貢
 aw_war_independence,独立战争,Independence War,獨立戰爭
 aw_war_independence_desc,对当前宗主发动独立战争,Start an independence war against the suzerain,對當前宗主發動獨立戰爭
 aw_war_restoration,复国战争,Restoration War,復國戰爭

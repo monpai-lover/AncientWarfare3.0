@@ -11,6 +11,7 @@ namespace AncientWarfare3.core.lineage
     {
         public const string WAR_NORMAL = "aw_normal_war";
         public const string WAR_RESTORATION = "restoration_war";
+        public const string WAR_TRIBUTARY = "tributary_war";
 
         private const int DEFAULT_CLAIM_YEARS = 30;
         private const int NO_CB_COOLDOWN_YEARS = 20;
@@ -300,6 +301,8 @@ namespace AncientWarfare3.core.lineage
                     return WarTerritoryService.FindBestCoreTargetCityForDecision(pAttacker, pDefender)?.data != null;
                 case "vassal_war":
                     return CanForceVassal(pAttacker, pDefender);
+                case WAR_TRIBUTARY:
+                    return CanForceTributary(pAttacker, pDefender);
                 case WAR_NORMAL:
                     return WarTerritoryService.CanUseMandateConquest(pAttacker, pDefender);
                 case MandateService.WAR_TIANMING:
@@ -323,6 +326,19 @@ namespace AncientWarfare3.core.lineage
             float own = VassalService.GetPowerScore(pAttacker, pIncludeVassals: true);
             float target = Mathf.Max(1f, VassalService.GetPowerScore(pDefender, pIncludeVassals: true));
             return own >= target * 1.25f;
+        }
+
+        public static bool CanForceTributary(Kingdom pAttacker, Kingdom pDefender)
+        {
+            bool participantsValid = VassalService.CanSetVassal(pDefender, pAttacker) &&
+                                     !VassalService.IsVassalKingdom(pAttacker);
+            bool targetIndependent = !VassalService.IsVassalKingdom(pDefender);
+            bool targetAlreadyTributary = VassalService.IsTributaryKingdom(pDefender);
+            bool adjacent = KingdomAdjacency.AreDirectNeighbors(pAttacker, pDefender);
+            float own = VassalService.GetPowerScore(pAttacker, pIncludeVassals: true);
+            float target = VassalService.GetPowerScore(pDefender, pIncludeVassals: true);
+            return VassalContractTierRules.CanForceTributary(participantsValid,
+                targetIndependent, targetAlreadyTributary, adjacent, own, target);
         }
 
         private static bool HasActiveClaim(long pSourceId, long pTargetId, string pWarType)
@@ -427,6 +443,7 @@ namespace AncientWarfare3.core.lineage
             switch (pWarType)
             {
                 case "vassal_war": return WarDisplayLabelRules.Label("vassal_war");
+                case WAR_TRIBUTARY: return WarDisplayLabelRules.Label(WAR_TRIBUTARY);
                 case "independence_war": return WarDisplayLabelRules.Label("independence_war");
                 case "reclaim": return WarDisplayLabelRules.Label("core_reclaim");
                 case WAR_RESTORATION: return WarDisplayLabelRules.Label("restoration_war");

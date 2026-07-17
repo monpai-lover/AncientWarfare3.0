@@ -175,6 +175,18 @@ namespace AncientWarfare3.ui.windows
                         WarTerritoryService.GOAL_FORCE_VASSAL, null,
                         "vassal_war", "force_vassal", "\u5F3A\u5236\u81E3\u670D"));
 
+            if (pReport.can_force_tributary)
+                AddWarRow(pRows, pSource, target, pReport,
+                    WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_FORCE_TRIBUTARY),
+                    AW_L10n.Text("aw_war_force_tributary", "\u53E9\u5173\u7EB3\u8D21"),
+                    WarTerritoryService.GOAL_FORCE_TRIBUTARY,
+                    AW_L10n.Text("aw_war_force_tributary_desc",
+                        "\u8FEB\u4F7F\u76F8\u90BB\u5F31\u56FD\u5C81\u65F6\u7EB3\u8D21\uFF0C\u4F46\u4E0D\u7EB3\u5165\u9644\u5EB8\u4F53\u7CFB"),
+                    AW_L10n.Text("aw_war_target_action_war", "\u5BA3\u6218"),
+                    () => KingdomPolicyService.StartWarDecision(pSource, target,
+                        WarTerritoryService.GOAL_FORCE_TRIBUTARY, null,
+                        WarDecisionService.WAR_TRIBUTARY, "tributary_war", "\u53E9\u5173\u7EB3\u8D21"));
+
             if (pReport.can_independence)
                 AddWarRow(pRows, pSource, target, pReport,
                     WarDecisionTargetOrderRules.SortOrder(WarTerritoryService.GOAL_INDEPENDENCE),

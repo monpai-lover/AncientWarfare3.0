@@ -26,6 +26,9 @@ namespace AncientWarfare3.core.lineage
         public const string MATRILOCAL_WIFE_ID = "aw_matrilocal_wife_id";
         public const string VASSAL_SUZERAIN_ID = "aw_vassal_suzerain_id";
         public const string VASSAL_RELATION_ID = "aw_vassal_relation_id";
+        public const string VASSAL_CONTRACT_TIER = "aw_vassal_contract_tier";
+        public const string TRIBUTARY_SUZERAIN_ID = "aw_tributary_suzerain_id";
+        public const string TRIBUTARY_RELATION_ID = "aw_tributary_relation_id";
         public const string VASSAL_INDEPENDENCE_WAR_ID = "aw_vassal_independence_war_id";
         public const string VASSAL_INDEPENDENCE_SUZERAIN_ID = "aw_vassal_independence_suzerain_id";
         public const string MANDATE_PERIOD_ID = "aw_mandate_period_id";
@@ -52,6 +55,7 @@ namespace AncientWarfare3.core.lineage
         public const string CENTRALIZATION_LAST_CHAOS_EPOCH = "aw_centralization_last_chaos_epoch";
         public const string VASSAL_TRIBUTE_LAST_YEAR = "aw_vassal_tribute_last_year";
         public const string VASSAL_DIRECT_COUNT = "aw_vassal_direct_count";
+        public const string TRIBUTARY_DIRECT_COUNT = "aw_tributary_direct_count";
         public const string VASSAL_OBLIGATION_DECISIONS = "aw_vassal_obligation_decisions";
         public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
         public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";

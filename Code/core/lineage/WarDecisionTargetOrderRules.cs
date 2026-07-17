@@ -24,6 +24,8 @@ namespace AncientWarfare3.core.lineage
                     return 30;
                 case "force_vassal":
                     return 40;
+                case "force_tributary":
+                    return 45;
                 case "independence":
                     return 50;
                 case "no_cb":

@@ -110,6 +110,8 @@ namespace AncientWarfare3.core.lineage
         public int autonomy = 50;
         public int tribute_rate = 10;
         public int military_obligation = 50;
+        public int contract_tier = VassalContractTierRules.Outer;
+        public bool is_tributary;
         public double start_time = -1;
         public int years = -1;
         public int cities;
@@ -133,6 +135,8 @@ namespace AncientWarfare3.core.lineage
         public int banner_background_id;
         public string banner_id = "";
         public string relation_type = "";
+        public int contract_tier = VassalContractTierRules.Outer;
+        public bool is_tributary;
         public int base_autonomy;
         public int base_tribute_rate;
         public int base_military_obligation;
