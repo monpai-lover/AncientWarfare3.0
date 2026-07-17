@@ -253,7 +253,11 @@ namespace AncientWarfare3.core.lineage
             City pCity, Actor pRecruit)
         {
             Army army = ResolveArmy(pState.ArmyId);
-            if (army?.data != null && !IsArmyOwnedBy(army, pKingdom)) army = null;
+            if (army?.data != null && !IsArmyOwnedBy(army, pKingdom))
+            {
+                DiscardForeignArmyReference(pState, pKingdom);
+                army = null;
+            }
             if (army?.data == null)
             {
                 try
@@ -282,6 +286,15 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, army.id);
             if (pRecruit.army != army) AWArmyService.AddToArmy(pRecruit, army);
             return pRecruit.army == army ? army : null;
+        }
+
+        private static void DiscardForeignArmyReference(CampaignState pState,
+            Kingdom pKingdom)
+        {
+            ClearArmyFields(pState);
+            pState.ArmyId = -1L;
+            if (pKingdom?.data != null)
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, -1L);
         }
 
         private static bool IsArmyOwnedBy(Army pArmy, Kingdom pKingdom)
