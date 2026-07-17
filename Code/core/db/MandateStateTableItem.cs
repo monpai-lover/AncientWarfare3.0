@@ -30,5 +30,10 @@ namespace AncientWarfare3.core.db
         public string rebel_origin_kingdom_name = "";
         public string claimant_kind = "orthodox";
         public string map_marker_kind = "moh";
+        public string mandate_phase = "golden";
+        public int phase_since_year = -999999;
+        public int phase_stability_years = 0;
+        public int catalyst_score = 0;
+        public int phase_last_year = -999999;
     }
 }
