@@ -161,6 +161,7 @@ namespace AncientWarfare3.core.lineage
             int recruited = 0;
             if (seed?.data != null && !seed.isRekt() && seed.kingdom == kingdom)
                 ScanSeedCity(state, kingdom, seed, ref scanned, ref recruited);
+            if (recruited > 0) PublishArmyChanged(state, kingdom);
             state.WorkItems++;
             state.Scanned += scanned;
             state.Recruited += recruited;
@@ -238,8 +239,14 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, army.id);
             pActor.data.set(LineageKeys.SOLDIER_SERVICE_START_TIME, -1f);
             pState.MemberIds.Add(pActor.data.id);
-            WarNoticeService.QueueArmyChanged(pKingdom, army, pRosterExpanded: true);
             return true;
+        }
+
+        private static void PublishArmyChanged(CampaignState pState, Kingdom pKingdom)
+        {
+            Army army = ResolveArmy(pState?.ArmyId ?? -1L);
+            if (!IsArmyOwnedBy(army, pKingdom)) return;
+            WarNoticeService.QueueArmyChanged(pKingdom, army, pRosterExpanded: true);
         }
 
         private static Army EnsureArmy(CampaignState pState, Kingdom pKingdom,
