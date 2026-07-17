@@ -69,8 +69,17 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldStartAiCampaign(int claimStrength, bool claimantValid,
             bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
         {
-            return claimStrength >= AiMinimumClaimStrength && claimantValid &&
-                   oldKingdomDead && hasEligibleSeed && cooldownReady;
+            return CanStartAutonomousCampaign(false, false, claimStrength,
+                claimantValid, oldKingdomDead, hasEligibleSeed, cooldownReady);
+        }
+
+        public static bool CanStartAutonomousCampaign(bool mandateExists,
+            bool playerRequested, int claimStrength, bool claimantValid,
+            bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
+        {
+            return !mandateExists && claimantValid && oldKingdomDead &&
+                   hasEligibleSeed && cooldownReady &&
+                   (playerRequested || claimStrength >= AiMinimumClaimStrength);
         }
 
         public static bool CanUseSeedCity(bool cityValid, bool oldCore,
