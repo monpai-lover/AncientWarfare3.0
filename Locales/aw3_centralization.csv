@@ -1,4 +1,34 @@
 key,cz,en,ch
+aw_central_power_entry,中央权力,Central Power,中央權力
+aw_central_tab_power,中央,Central,中央
+aw_central_tab_rites,礼制,Rites,禮制
+aw_central_tab_vassals,藩属,Vassals,藩屬
+aw_central_reform,整饬中央,Central Reform,整飭中央
+aw_central_reform_success,中央改革完成,Central reform completed,中央改革完成
+aw_central_unavailable,当前国家不可用,Unavailable for this realm,當前國家不可用
+aw_central_nominal,名义集权,Nominal centralization,名義集權
+aw_central_phase_cap,治乱阶段上限,Phase cap,治亂階段上限
+aw_central_tax_effect,税收倍率,Tax multiplier,稅收倍率
+aw_central_manpower_effect,兵源倍率,Manpower multiplier,兵源倍率
+aw_central_unrest_effect,动乱降低,Unrest reduction,動亂降低
+aw_central_reform_cost,改革政治点开支,Reform political cost,改革政治點開支
+aw_central_required_tech,所需科技,Required technology,所需科技
+aw_central_ready_year,下次可改革年份,Next reform year,下次可改革年份
+aw_central_direct_vassals,直属附庸,Direct vassals,直屬附庸
+aw_central_no_vassals,没有直属附庸,No direct vassals,沒有直屬附庸
+aw_central_tribute_forecast,预计年度贡赋（政治点 / 黄金）,Annual forecast (political points / gold),預計年度貢賦（政治點 / 黃金）
+aw_central_tribute,贡赋,Tribute,貢賦
+aw_central_autonomy,自治,Autonomy,自治
+aw_central_obligation,军事义务,Military obligation,軍事義務
+aw_central_reason_invalid_kingdom,国家无效,Invalid realm,國家無效
+aw_central_reason_unsupported_kingdom,当前国家不支持国策,Policy system unsupported,當前國家不支援國策
+aw_central_reason_maximum_level,已经达到最高集权,Maximum centralization reached,已經達到最高集權
+aw_central_reason_phase_cap,当前治乱阶段限制改革,Current phase blocks reform,當前治亂階段限制改革
+aw_central_reason_at_war,战争期间不能改革,Cannot reform during war,戰爭期間不能改革
+aw_central_reason_cooldown,改革冷却尚未结束,Reform cooldown active,改革冷卻尚未結束
+aw_central_reason_requires_tech,缺少所需科技,Required technology missing,缺少所需科技
+aw_central_reason_insufficient_points,政治点不足,Insufficient political points,政治點不足
+aw_central_reason_unknown,目前不能改革,Reform unavailable,目前不能改革
 aw_hist_event_vassal_tribute,岁贡入朝,Annual Vassal Tribute,歲貢入朝
 aw_hist_vassal_tribute_text,收取直属附庸岁贡（政治点 / 黄金）：, received annual direct-vassal tribute (political points / gold): ,收取直屬附庸歲貢（政治點 / 黃金）：
 aw_hist_event_centralization_reformed,整饬中央,Central Reform,整飭中央
