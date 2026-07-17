@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.lineage
         public const int MaxRecruitsPerWorkItem = 6;
         public const int MaxCandidatesPerCampaignYear = 96;
         public const int MaxRecruitsPerCampaignYear = 24;
+        public const int MaxActiveRecruitsPerCampaign = 96;
         public const int DemobilizationBatchSize = 8;
         public const float MaximumEnlistmentAge = 65f;
 

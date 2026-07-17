@@ -73,6 +73,12 @@ namespace AncientWarfare3.core.lineage
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral()) return;
+            if (AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom))
+            {
+                RecruitmentPlans.Remove(pKingdom.id);
+                ScheduleDemobilization(pKingdom.id);
+                return;
+            }
             if (!MilitaryEmergencyService.HasAny(pKingdom))
             {
                 ScheduleDemobilization(pKingdom.id);
@@ -121,6 +127,12 @@ namespace AncientWarfare3.core.lineage
         public static void OnEmergencyChanged(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (AutonomousRestorationService.IsActiveCampaignKingdom(pKingdom))
+            {
+                RecruitmentPlans.Remove(pKingdom.id);
+                ScheduleDemobilization(pKingdom.id);
+                return;
+            }
             long kingdomId = pKingdom.id;
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 DeferredRuntimeWorkRules.CoalescingKey("levy_emergency", kingdomId),
@@ -269,6 +281,12 @@ namespace AncientWarfare3.core.lineage
                 plan.Year != pYear) return;
             Kingdom kingdom = ResolveKingdom(pKingdomId);
             if (kingdom?.data == null || kingdom.isRekt())
+            {
+                RecruitmentPlans.Remove(pKingdomId);
+                ScheduleDemobilization(pKingdomId);
+                return;
+            }
+            if (AutonomousRestorationService.IsActiveCampaignKingdom(kingdom))
             {
                 RecruitmentPlans.Remove(pKingdomId);
                 ScheduleDemobilization(pKingdomId);
@@ -462,7 +480,8 @@ namespace AncientWarfare3.core.lineage
         private static void DemobilizeBatch(long pKingdomId)
         {
             Kingdom kingdom = ResolveKingdom(pKingdomId);
-            if (kingdom?.data != null && MilitaryEmergencyService.HasAny(kingdom)) return;
+            if (kingdom?.data != null && MilitaryEmergencyService.HasAny(kingdom) &&
+                !AutonomousRestorationService.IsActiveCampaignKingdom(kingdom)) return;
             if (!Pools.TryGetValue(pKingdomId, out LevyPool pool)) return;
 
             long[] batch = pool.DemobilizationBuffer;
