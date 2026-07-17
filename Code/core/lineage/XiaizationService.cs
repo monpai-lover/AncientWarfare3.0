@@ -145,6 +145,47 @@ namespace AncientWarfare3.core.lineage
             return Math.Max(LevelNone, dbValue);
         }
 
+        public static bool RestoreIdentityContinuity(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return false;
+            if (LineageService.IsXiaKingdom(pKingdom))
+            {
+                pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, LevelXiaizedDynasty);
+                pKingdom.data.set(LineageKeys.POLICY_ENABLED, true);
+                pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED, true);
+                return true;
+            }
+            if (!Ready) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText =
+                    $"SELECT XIAIZATION_LEVEL, LEGITIMACY_TYPE FROM " +
+                    $"{KingdomXiaizationStateTableItem.GetTableName()} WHERE KINGDOM_ID=@k LIMIT 1";
+                cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!reader.Read()) return false;
+                int level = reader.IsDBNull(0) ? LevelNone : Convert.ToInt32(reader.GetValue(0));
+                string legitimacy = reader.IsDBNull(1) ? "" : Convert.ToString(reader.GetValue(1)) ?? "";
+                pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, level);
+                pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, legitimacy);
+                pKingdom.data.set(LineageKeys.XIAIZATION_PSEUDO_DYNASTY,
+                    level >= LevelPseudoDynasty &&
+                    (legitimacy == TYPE_PSEUDO_DYNASTY || legitimacy == "pseudo_mandate"));
+                if (level >= LevelPseudoDynasty)
+                {
+                    pKingdom.data.set(LineageKeys.POLICY_ENABLED, true);
+                    pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED, true);
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Kingdom Xiaization continuity read failed: " + e.Message);
+                return false;
+            }
+        }
+
         public static string GetLevelLabel(Kingdom pKingdom)
         {
             return LevelLabel(GetLevel(pKingdom));

@@ -136,6 +136,65 @@ namespace AncientWarfare3.core.court
         }
 
         // 从缓存表读取在任官员，UI 打开时只做一次索引查询，不扫描全国人物。
+        public static bool RestoreIdentityContinuity(Kingdom pKingdom)
+        {
+            var db = CourtDB;
+            if (db == null || pKingdom?.data == null) return false;
+            try
+            {
+                using var cmd = new SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT COURT_MODE, DOMINANT_SCHOOL, SECONDARY_SCHOOL, COURT_EFFICIENCY, " +
+                    $"FACTION_CONCENTRATION, FACTION_CACHE, DIRECTION_LIVELIHOOD, DIRECTION_WAR, " +
+                    $"DIRECTION_AGGRESSION, DIRECTION_PEACE, DIRECTION_ORDER, DIRECTION_COMMERCE, " +
+                    $"DIRECTION_TECHNOLOGY, LAST_REFRESH_YEAR, LAST_CANDIDATE_REFRESH_YEAR, " +
+                    $"LAST_STRONG_EVENT_YEAR FROM {KingdomCourtStateTableItem.GetTableName()} " +
+                    "WHERE KINGDOM_ID=@k LIMIT 1";
+                cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                if (!reader.Read()) return false;
+                pKingdom.data.set(LineageKeys.COURT_MODE, CourtDbString(reader, 0));
+                pKingdom.data.set(LineageKeys.COURT_DOMINANT_SCHOOL, CourtDbString(reader, 1));
+                pKingdom.data.set(LineageKeys.COURT_SECONDARY_SCHOOL, CourtDbString(reader, 2));
+                pKingdom.data.set(LineageKeys.COURT_EFFICIENCY, CourtDbFloat(reader, 3));
+                pKingdom.data.set(LineageKeys.COURT_CONCENTRATION, CourtDbFloat(reader, 4));
+                pKingdom.data.set(LineageKeys.COURT_FACTION_CACHE, CourtDbString(reader, 5));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_LIVELIHOOD, CourtDbFloat(reader, 6));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_WAR, CourtDbFloat(reader, 7));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_AGGRESSION, CourtDbFloat(reader, 8));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_PEACE, CourtDbFloat(reader, 9));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_ORDER, CourtDbFloat(reader, 10));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_COMMERCE, CourtDbFloat(reader, 11));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_TECHNOLOGY, CourtDbFloat(reader, 12));
+                pKingdom.data.set(LineageKeys.COURT_LAST_REFRESH_YEAR, CourtDbInt(reader, 13));
+                pKingdom.data.set(LineageKeys.COURT_LAST_CANDIDATE_YEAR, CourtDbInt(reader, 14));
+                pKingdom.data.set(LineageKeys.COURT_LAST_STRONG_EVENT_YEAR, CourtDbInt(reader, 15));
+                pKingdom.data.set(LineageKeys.COURT_TIER, ResolveTier(pKingdom));
+                pKingdom.data.set(LineageKeys.COURT_DIRECTION_DIRTY, true);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Kingdom court continuity read failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private static string CourtDbString(SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? "";
+        }
+
+        private static float CourtDbFloat(SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? 0f : Convert.ToSingle(pReader.GetValue(pIndex));
+        }
+
+        private static int CourtDbInt(SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? -1 : Convert.ToInt32(pReader.GetValue(pIndex));
+        }
+
         public static List<CourtOfficerView> GetActiveOfficers(Kingdom pKingdom, int pLimit)
         {
             var result = new List<CourtOfficerView>();

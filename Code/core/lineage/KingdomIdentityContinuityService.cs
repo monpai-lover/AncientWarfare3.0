@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Reflection;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
@@ -64,6 +65,11 @@ namespace AncientWarfare3.core.lineage
             public long legitimateShiId = -1;
             public int title;
             public bool integrated;
+            public bool policyEnabled;
+            public bool policyAiEnabled;
+            public bool slaveryEnabled;
+            public bool slaveArmyEnabled;
+            public float xiaContactProgress;
             public bool wasMandate;
             public long mandatePeriodId = -1;
         }
@@ -104,6 +110,13 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_LEGITIMATE_SHI_ID,
                 out long legitimateShiId, -1L);
             pKingdom.data.get(LineageKeys.KINGDOM_INTEGRATED, out bool integrated, false);
+            pKingdom.data.get(LineageKeys.POLICY_ENABLED, out bool policyEnabled,
+                XiaizationService.DefaultPolicyEnabled(pKingdom));
+            pKingdom.data.get(LineageKeys.POLICY_AI_ENABLED, out bool policyAiEnabled,
+                XiaizationService.DefaultPolicyAIEnabled(pKingdom));
+            pKingdom.data.get(LineageKeys.SLAVERY_ENABLED, out bool slaveryEnabled, false);
+            pKingdom.data.get(LineageKeys.SLAVE_ARMY_ENABLED, out bool slaveArmyEnabled, false);
+            pKingdom.data.get(LineageKeys.XIA_CONTACT_PROGRESS, out float xiaContactProgress, 0f);
             pKingdom.data.get(LineageKeys.MANDATE_PERIOD_ID, out long mandatePeriodId, -1L);
             bool wasMandate = MandateService.IsMandateKingdom(pKingdom);
             City capital = pKingdom.capital;
@@ -132,6 +145,11 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("LEGITIMATE_SHI_ID", legitimateShiId),
                 ColumnVal.Create("KINGDOM_TITLE", (int)KingdomTitleService.GetTitle(pKingdom)),
                 ColumnVal.Create("NAME_INTEGRATED", integrated ? 1 : 0),
+                ColumnVal.Create("POLICY_ENABLED", policyEnabled ? 1 : 0),
+                ColumnVal.Create("POLICY_AI_ENABLED", policyAiEnabled ? 1 : 0),
+                ColumnVal.Create("SLAVERY_ENABLED", slaveryEnabled ? 1 : 0),
+                ColumnVal.Create("SLAVE_ARMY_ENABLED", slaveArmyEnabled ? 1 : 0),
+                ColumnVal.Create("XIA_CONTACT_PROGRESS", (double)xiaContactProgress),
                 ColumnVal.Create("WAS_MANDATE", wasMandate ? 1 : 0),
                 ColumnVal.Create("MANDATE_PERIOD_ID", wasMandate ? mandatePeriodId : -1L),
                 ColumnVal.Create("RESTORATION_COUNT", restorationCount),
@@ -235,6 +253,11 @@ namespace AncientWarfare3.core.lineage
             {
                 ApplyIdentity(restored, pTargetCity, pClaimant, pRequest,
                     archive, continuity, deadStats);
+                XiaizationService.RestoreIdentityContinuity(restored);
+                KingdomPolicyService.RestoreIdentityContinuity(restored);
+                CourtService.RestoreIdentityContinuity(restored);
+                RestorePersistentRuntimeFlags(restored, continuity);
+                WarTerritoryService.ResetTransientStateForIdentityRestoration(restored.id);
                 KingdomArchiveWriter.ReviveContinuity(restored);
                 MarkContinuityRestored(restored.id);
                 ChronicleEvents.OnKingChanged(restored, pClaimant);
@@ -366,6 +389,18 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static void RestorePersistentRuntimeFlags(Kingdom pKingdom,
+            ContinuitySnapshot pSnapshot)
+        {
+            if (pKingdom?.data == null || pSnapshot == null) return;
+            pKingdom.data.set(LineageKeys.POLICY_ENABLED, pSnapshot.policyEnabled);
+            pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED,
+                pSnapshot.policyEnabled && pSnapshot.policyAiEnabled);
+            pKingdom.data.set(LineageKeys.SLAVERY_ENABLED, pSnapshot.slaveryEnabled);
+            pKingdom.data.set(LineageKeys.SLAVE_ARMY_ENABLED, pSnapshot.slaveArmyEnabled);
+            pKingdom.data.set(LineageKeys.XIA_CONTACT_PROGRESS, pSnapshot.xiaContactProgress);
+        }
+
         private static KingdomData DetachDeadStatsRow(long pKingdomId)
         {
             if (Config.disable_db) return null;
@@ -448,7 +483,9 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText =
                     $"SELECT KINGDOM_ID, KINGDOM_NAME, FOUNDED_TIME, ORIGINAL_ACTOR_ASSET, " +
                     $"CULTURE_ID, LANGUAGE_ID, RELIGION_ID, CAPITAL_CITY_ID, LEGITIMATE_LINEAGE_ID, " +
-                    $"LEGITIMATE_SHI_ID, KINGDOM_TITLE, NAME_INTEGRATED, WAS_MANDATE, MANDATE_PERIOD_ID " +
+                    $"LEGITIMATE_SHI_ID, KINGDOM_TITLE, NAME_INTEGRATED, POLICY_ENABLED, " +
+                    $"POLICY_AI_ENABLED, SLAVERY_ENABLED, SLAVE_ARMY_ENABLED, XIA_CONTACT_PROGRESS, " +
+                    $"WAS_MANDATE, MANDATE_PERIOD_ID " +
                     $"FROM {KingdomContinuityTableItem.GetTableName()} WHERE KINGDOM_ID=@k LIMIT 1";
                 cmd.Parameters.AddWithValue("@k", pKingdomId);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -467,8 +504,13 @@ namespace AncientWarfare3.core.lineage
                     legitimateShiId = reader.IsDBNull(9) ? -1L : reader.GetInt64(9),
                     title = reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                     integrated = !reader.IsDBNull(11) && reader.GetInt32(11) != 0,
-                    wasMandate = !reader.IsDBNull(12) && reader.GetInt32(12) != 0,
-                    mandatePeriodId = reader.IsDBNull(13) ? -1L : reader.GetInt64(13)
+                    policyEnabled = !reader.IsDBNull(12) && reader.GetInt32(12) != 0,
+                    policyAiEnabled = !reader.IsDBNull(13) && reader.GetInt32(13) != 0,
+                    slaveryEnabled = !reader.IsDBNull(14) && reader.GetInt32(14) != 0,
+                    slaveArmyEnabled = !reader.IsDBNull(15) && reader.GetInt32(15) != 0,
+                    xiaContactProgress = reader.IsDBNull(16) ? 0f : Convert.ToSingle(reader.GetValue(16)),
+                    wasMandate = !reader.IsDBNull(17) && reader.GetInt32(17) != 0,
+                    mandatePeriodId = reader.IsDBNull(18) ? -1L : reader.GetInt64(18)
                 };
             }
             catch (Exception e)

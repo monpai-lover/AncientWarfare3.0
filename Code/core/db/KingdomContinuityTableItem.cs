@@ -23,6 +23,11 @@ namespace AncientWarfare3.core.db
         public long legitimate_shi_id = -1;
         public int kingdom_title = 0;
         public int name_integrated = 0;
+        public int policy_enabled = 0;
+        public int policy_ai_enabled = 0;
+        public int slavery_enabled = 0;
+        public int slave_army_enabled = 0;
+        public double xia_contact_progress = 0;
         public int was_mandate = 0;
         public long mandate_period_id = -1;
         public int restoration_count = 0;

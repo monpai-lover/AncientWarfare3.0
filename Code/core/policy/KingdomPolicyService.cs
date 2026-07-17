@@ -882,6 +882,107 @@ namespace AncientWarfare3.core.policy
             UpsertSnapshot(pKingdom);
         }
 
+        public static bool RestoreIdentityContinuity(Kingdom pKingdom)
+        {
+            var db = LineageArchiveManager.Instance?.OperatingDB;
+            if (db == null || pKingdom?.data == null) return false;
+            RestorationInstitutionState fallen;
+            try
+            {
+                using var cmd = new System.Data.SQLite.SQLiteCommand(db);
+                cmd.CommandText =
+                    $"SELECT CLASS_STATE, ARMY_STATE, NAME_STATE, ENFEOFFMENT_STATE, " +
+                    $"POLICY_POINTS, TECH_POINTS, CURRENT_POLICY, POLICY_PROGRESS, CURRENT_TECH, " +
+                    $"TECH_PROGRESS, CURRENT_DECISION, DECISION_PROGRESS, DECISION_QUEUE, " +
+                    $"CORE_FAB_CURRENT_CITY_ID, CORE_FAB_CURRENT_CITY_NAME, CORE_FAB_PROGRESS, " +
+                    $"CORE_FAB_QUEUE, COMPLETED_POLICIES, COMPLETED_TECHS, COMPLETED_DECISIONS, " +
+                    $"LOCKED_NODES FROM {KingdomPolicyStateTableItem.GetTableName()} " +
+                    "WHERE KINGDOM_ID=@k LIMIT 1";
+                cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                using var reader = (System.Data.SQLite.SQLiteDataReader)cmd.ExecuteReader();
+                if (!reader.Read()) return false;
+                fallen = new RestorationInstitutionState
+                {
+                    classState = DbString(reader, 0),
+                    armyState = DbString(reader, 1),
+                    nameState = DbString(reader, 2),
+                    enfeoffmentState = DbString(reader, 3),
+                    policyPoints = DbFloat(reader, 4),
+                    techPoints = DbFloat(reader, 5),
+                    currentPolicy = DbString(reader, 6),
+                    policyProgress = DbFloat(reader, 7),
+                    currentTech = DbString(reader, 8),
+                    techProgress = DbFloat(reader, 9),
+                    currentDecision = DbString(reader, 10),
+                    decisionProgress = DbFloat(reader, 11),
+                    decisionQueue = DbString(reader, 12),
+                    coreFabricationCityId = DbLong(reader, 13),
+                    coreFabricationCityName = DbString(reader, 14),
+                    coreFabricationProgress = DbFloat(reader, 15),
+                    coreFabricationQueue = DbString(reader, 16),
+                    completedPolicies = DbString(reader, 17),
+                    completedTechs = DbString(reader, 18),
+                    completedDecisions = DbString(reader, 19),
+                    lockedNodes = DbString(reader, 20)
+                };
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Kingdom policy continuity read failed: " + e.Message);
+                return false;
+            }
+
+            RestorationInstitutionState state =
+                RestorationInstitutionRules.SanitizeForRevival(fallen);
+            if (state == null) return false;
+            pKingdom.data.set(LineageKeys.POLICY_ENABLED, true);
+            pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED, true);
+            SetState(pKingdom, LineageKeys.POLICY_CLASS_STATE,
+                NonEmpty(state.classState, KingdomPolicyDefs.ClassDefault));
+            SetState(pKingdom, LineageKeys.POLICY_ARMY_STATE,
+                NonEmpty(state.armyState, KingdomPolicyDefs.ArmyDefault));
+            SetState(pKingdom, LineageKeys.POLICY_NAME_STATE,
+                NonEmpty(state.nameState, KingdomPolicyDefs.NameDefault));
+            SetState(pKingdom, LineageKeys.POLICY_ENFEOFFMENT_STATE,
+                NonEmpty(state.enfeoffmentState, KingdomPolicyDefs.EnfeoffmentDefault));
+            pKingdom.data.set(LineageKeys.POLICY_POINTS, Mathf.Clamp(state.policyPoints, 0f, MAX_POINTS));
+            pKingdom.data.set(LineageKeys.TECH_POINTS, Mathf.Clamp(state.techPoints, 0f, MAX_POINTS));
+            pKingdom.data.set(LineageKeys.POLICY_CURRENT, state.currentPolicy);
+            pKingdom.data.set(LineageKeys.POLICY_PROGRESS, state.policyProgress);
+            pKingdom.data.set(LineageKeys.TECH_CURRENT, state.currentTech);
+            pKingdom.data.set(LineageKeys.TECH_PROGRESS, state.techProgress);
+            pKingdom.data.set(LineageKeys.POLICY_COMPLETED, state.completedPolicies);
+            pKingdom.data.set(LineageKeys.TECH_COMPLETED, state.completedTechs);
+            pKingdom.data.set(LineageKeys.DECISION_COMPLETED, state.completedDecisions);
+            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, state.lockedNodes);
+            pKingdom.data.set(LineageKeys.DECISION_CURRENT, state.currentDecision);
+            pKingdom.data.set(LineageKeys.DECISION_PROGRESS, state.decisionProgress);
+            pKingdom.data.set(LineageKeys.DECISION_QUEUE, state.decisionQueue);
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, state.coreFabricationCityId);
+            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, state.coreFabricationCityName);
+            pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, state.coreFabricationProgress);
+            pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, state.coreFabricationQueue);
+            ClearDecisionTarget(pKingdom);
+            pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, Date.getCurrentYear());
+            UpsertSnapshot(pKingdom);
+            return true;
+        }
+
+        private static string DbString(System.Data.SQLite.SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? "" : Convert.ToString(pReader.GetValue(pIndex)) ?? "";
+        }
+
+        private static float DbFloat(System.Data.SQLite.SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? 0f : Convert.ToSingle(pReader.GetValue(pIndex));
+        }
+
+        private static long DbLong(System.Data.SQLite.SQLiteDataReader pReader, int pIndex)
+        {
+            return pReader.IsDBNull(pIndex) ? -1L : Convert.ToInt64(pReader.GetValue(pIndex));
+        }
+
         public static TechLevelReport GetTechLevelReport(Kingdom pKingdom)
         {
             var report = new TechLevelReport();

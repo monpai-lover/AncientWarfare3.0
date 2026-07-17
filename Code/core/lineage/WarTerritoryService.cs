@@ -101,6 +101,50 @@ namespace AncientWarfare3.core.lineage
             AdvanceProjects(pKingdom);
         }
 
+        public static void ResetTransientStateForIdentityRestoration(long pKingdomId)
+        {
+            if (!Ready || pKingdomId < 0) return;
+            using var transaction = DB.BeginTransaction();
+            try
+            {
+                using (var cmd = new SQLiteCommand(DB))
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"UPDATE {WarProjectTableItem.GetTableName()} " +
+                                      "SET ACTIVE=0, COMPLETED=0, FINISHED_TIME=@now " +
+                                      "WHERE SOURCE_KINGDOM_ID=@k AND ACTIVE=1";
+                    cmd.Parameters.AddWithValue("@now", LineageService.CurTime());
+                    cmd.Parameters.AddWithValue("@k", pKingdomId);
+                    cmd.ExecuteNonQuery();
+                }
+                using (var cmd = new SQLiteCommand(DB))
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"UPDATE {WarClaimTableItem.GetTableName()} SET ACTIVE=0 " +
+                                      "WHERE SOURCE_KINGDOM_ID=@k AND ACTIVE=1";
+                    cmd.Parameters.AddWithValue("@k", pKingdomId);
+                    cmd.ExecuteNonQuery();
+                }
+                using (var cmd = new SQLiteCommand(DB))
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"UPDATE {WarGoalTableItem.GetTableName()} " +
+                                      "SET RESOLVED=1, RESOLVED_TIME=@now, RESULT='kingdom_fell_reset' " +
+                                      "WHERE RESOLVED=0 AND (ATTACKER_KINGDOM_ID=@k OR DEFENDER_KINGDOM_ID=@k)";
+                    cmd.Parameters.AddWithValue("@now", LineageService.CurTime());
+                    cmd.Parameters.AddWithValue("@k", pKingdomId);
+                    cmd.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+            catch (Exception e)
+            {
+                try { transaction.Rollback(); } catch { }
+                ModClass.LogWarning("Restoration transient war reset failed: " + e.Message);
+            }
+            DirtyWarMaps();
+        }
+
         public static void OnCityTransferred(City pCity, Kingdom pOldKingdom, Kingdom pNewKingdom)
         {
             if (pCity?.data == null || pNewKingdom?.data == null || !Ready) return;
