@@ -97,5 +97,34 @@ namespace AncientWarfare3.core.lineage
                     false, false)
             };
         }
+
+        public static int AiScore(int pDirectVassals, bool pForeignLandBorder,
+            MandatePhase pPhase)
+        {
+            int phaseBonus = pPhase == MandatePhase.Golden ? 20 :
+                pPhase == MandatePhase.Renewal ? 10 : 0;
+            int score = 20 + Math.Min(30, Math.Max(0, pDirectVassals) * 10) +
+                        (pForeignLandBorder ? 20 : 0) + phaseBonus;
+            return Math.Max(0, Math.Min(90, score));
+        }
+
+        public static int AiPercentage(long pKingdomId, int pYear, int pTargetLevel)
+        {
+            unchecked
+            {
+                ulong hash = 1469598103934665603UL;
+                hash = (hash ^ (ulong)pKingdomId) * 1099511628211UL;
+                hash = (hash ^ (uint)pYear) * 1099511628211UL;
+                hash = (hash ^ (uint)pTargetLevel) * 1099511628211UL;
+                return (int)((hash ^ (hash >> 32)) % 100UL);
+            }
+        }
+
+        public static bool CanAiReform(bool pBaseAllowed, float pPoliticalPoints,
+            int pCost, int pRoll, int pScore)
+        {
+            return pBaseAllowed && pPoliticalPoints + 0.001f >= pCost + 20f &&
+                   pRoll >= 0 && pRoll < Math.Max(0, Math.Min(90, pScore));
+        }
     }
 }

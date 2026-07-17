@@ -109,6 +109,16 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
+        public static bool TryGetLatestCachedForeignLandBorder(Kingdom pKingdom, out bool pHasBorder)
+        {
+            pHasBorder = false;
+            if (pKingdom?.data == null ||
+                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached))
+                return false;
+            pHasBorder = cached.has_foreign_land_border;
+            return true;
+        }
+
         public static bool HasForeignLandBorder(Kingdom pKingdom)
         {
             return GetContributionSums(pKingdom).has_foreign_land_border;

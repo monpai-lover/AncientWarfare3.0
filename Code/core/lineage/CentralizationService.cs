@@ -100,6 +100,18 @@ namespace AncientWarfare3.core.lineage
             int normalized = CentralizationRules.NormalizeLevel(storedLevel);
             if (normalized != storedLevel)
                 pKingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, normalized);
+            if (!KingdomPolicyService.IsPolicyAIEnabled(pKingdom)) return;
+            CentralizationSnapshot snapshot = BuildSnapshot(pKingdom);
+            bool baseAllowed = ValidateReform(pKingdom, snapshot, out _);
+            CityEconomyService.TryGetLatestCachedForeignLandBorder(
+                pKingdom, out bool foreignLandBorder);
+            int score = CentralizationRules.AiScore(
+                VassalService.GetDirectVassalCount(pKingdom), foreignLandBorder, snapshot.phase);
+            int roll = CentralizationRules.AiPercentage(
+                pKingdom.id, snapshot.current_year, snapshot.next_target_level);
+            if (!CentralizationRules.CanAiReform(baseAllowed, snapshot.political_points,
+                    snapshot.reform_cost, roll, score)) return;
+            TryReform(pKingdom, out _);
         }
 
         private static CentralizationSnapshot BuildSnapshot(Kingdom pKingdom)

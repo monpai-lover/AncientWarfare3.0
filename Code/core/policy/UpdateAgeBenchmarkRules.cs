@@ -54,6 +54,7 @@ namespace AncientWarfare3.core.policy
         public const int ActorFullWallIndex = 41;
         public const int CityFullWallIndex = 42;
         public const int KingdomFullWallIndex = 43;
+        public const int KingdomCentralizationIndex = 44;
 
         public const string ActorRetirement = "aw3_actor_update_age_retirement";
         public const string ActorOldHead = "aw3_actor_update_age_old_head";
@@ -99,6 +100,7 @@ namespace AncientWarfare3.core.policy
         public const string ActorFullWall = "aw3_actor_update_age_wall";
         public const string CityFullWall = "aw3_city_update_age_wall";
         public const string KingdomFullWall = "aw3_kingdom_update_age_wall";
+        public const string KingdomCentralization = "aw3_kingdom_policy_centralization";
 
         public static readonly string[] EntryIds =
         {
@@ -145,7 +147,8 @@ namespace AncientWarfare3.core.policy
             CityEconomyDbUpsert,
             ActorFullWall,
             CityFullWall,
-            KingdomFullWall
+            KingdomFullWall,
+            KingdomCentralization
         };
 
         public static bool Contains(string pId)
@@ -176,6 +179,7 @@ namespace AncientWarfare3.core.policy
                 return KingdomCityEconomy;
             if (pIndex >= ActorFullWallIndex && pIndex <= KingdomFullWallIndex)
                 return FullWall;
+            if (pIndex == KingdomCentralizationIndex) return KingdomPolicy;
             return Total;
         }
     }

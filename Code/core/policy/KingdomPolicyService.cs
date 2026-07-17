@@ -81,6 +81,10 @@ namespace AncientWarfare3.core.policy
             try { AddYearlyPoints(pKingdom); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyPointsIndex, benchmark); }
 
+            benchmark = UpdateAgeBenchmark.Begin();
+            try { CentralizationService.OnKingdomYear(pKingdom); }
+            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomCentralizationIndex, benchmark); }
+
             EraChangeTriggerService.TryProcessAnnualAi(pKingdom);
 
             TryStartCoreFabrication(pKingdom);
