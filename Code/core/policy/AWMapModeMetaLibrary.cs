@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 using UnityEngine;
 
 namespace AncientWarfare3.core.policy
@@ -23,6 +24,7 @@ namespace AncientWarfare3.core.policy
         public static MetaTypeAsset MandateCoreAsset { get; private set; }
         public static MetaTypeAsset DevelopmentAsset { get; private set; }
         public static MetaTypeAsset SchoolAsset { get; private set; }
+        public static MetaTypeAsset FeudatoryAsset { get; private set; }
 
         private static ZoneCalculator ZoneManager => World.world?.zone_calculator;
 
@@ -53,6 +55,8 @@ namespace AncientWarfare3.core.policy
                     return DevelopmentAsset;
                 case SchoolMapModeService.POWER_ID:
                     return SchoolAsset;
+                case FeudatoryMapModeService.POWER_ID:
+                    return FeudatoryAsset;
                 default:
                     return null;
             }
@@ -83,6 +87,9 @@ namespace AncientWarfare3.core.policy
             ConfigureSchoolSelectionAsset(SchoolAsset);
             SchoolAsset.tile_get_metaobject = (pZone, _) => GetSchoolIdentityMetaForZone(pZone);
             SchoolAsset.click_action_zone = SchoolMapModeService.SelectCity;
+            FeudatoryAsset = AddOrGet(AWMapModeMetaTypes.FeudatoryId,
+                AWMapModeMetaTypes.Feudatory, FeudatoryMapModeService.POWER_ID,
+                GetFeudatoryMetaForZone);
         }
 
         private static void ConfigureSchoolSelectionAsset(MetaTypeAsset pAsset)
@@ -193,6 +200,10 @@ namespace AncientWarfare3.core.policy
 
         private static bool ShouldDrawKingdomZones(MetaTypeAsset pAsset, Kingdom pKingdom)
         {
+            if (AWMapModeMetaRules.IsRuntimeMeta(
+                    pAsset?.map_mode ?? MetaType.None,
+                    AWMapModeMetaTypes.Feudatory))
+                return FeudatoryMapModeService.IsMandateKingdom(pKingdom);
             if (!AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None,
                     AWMapModeMetaTypes.MandateDynasty))
                 return true;
@@ -337,6 +348,33 @@ namespace AncientWarfare3.core.policy
             string schoolId = snapshot?.DominantSchool ?? CourtSchoolId.None;
             return GetMeta(AWMapModeMetaTypes.School, "render:" + schoolId + ":" + colorKey,
                 SchoolMapModeService.GetSchoolDisplayName(schoolId), SchoolMapModeService.GetColorAsset(city));
+        }
+
+        private static IMetaObject GetFeudatoryMetaForZone(TileZone pZone)
+        {
+            City city = GetCityForZone(pZone);
+            if (!FeudatoryMapModeService.IsMandateCity(city)) return null;
+            Kingdom empire = city.kingdom;
+            if (FeudatoryMapModeService.TryGetSnapshot(city,
+                    out FeudatorySnapshot snapshot))
+            {
+                string seatName = string.IsNullOrEmpty(snapshot.SeatName)
+                    ? "#" + snapshot.SeatCityId
+                    : snapshot.SeatName;
+                string name = seatName +
+                    AW_L10n.Text("aw_feudatory_name_suffix", " Feudatory");
+                string colorHex = FeudatoryMapModeService.GetColorHex(snapshot,
+                    empire);
+                return GetMeta(AWMapModeMetaTypes.Feudatory,
+                    "feudatory:" + snapshot.FeudatoryId, name,
+                    MakeColor(colorHex));
+            }
+
+            string directName = AW_L10n.Text("aw_feudatory_mapmode_direct",
+                "Direct imperial administration");
+            return GetMeta(AWMapModeMetaTypes.Feudatory,
+                "direct:" + empire.id, directName,
+                DirectKingdomColor(empire, MakeColor("#808080")));
         }
 
         private static IMetaObject GetSchoolIdentityMetaForZone(TileZone pZone)
@@ -533,6 +571,32 @@ namespace AncientWarfare3.core.policy
                 AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None, AWMapModeMetaTypes.Development))
             {
                 QuantumSpriteLibrary.colorZones(pQAsset, city.zones, color);
+                return;
+            }
+
+            if (FeudatoryMapModeService.IsActive() &&
+                AWMapModeMetaRules.IsRuntimeMeta(
+                    pAsset?.map_mode ?? MetaType.None,
+                    AWMapModeMetaTypes.Feudatory))
+            {
+                if (FeudatoryMapModeService.TryGetSnapshot(city,
+                        out FeudatorySnapshot snapshot))
+                {
+                    CityManager cities = World.world?.cities;
+                    for (int i = 0; i < snapshot.CityIds.Count; i++)
+                    {
+                        City member;
+                        try { member = cities?.get(snapshot.CityIds[i]); }
+                        catch { member = null; }
+                        if (member?.data != null)
+                            QuantumSpriteLibrary.colorZones(pQAsset, member.zones,
+                                color);
+                    }
+                }
+                else
+                {
+                    QuantumSpriteLibrary.colorZones(pQAsset, city.zones, color);
+                }
                 return;
             }
 

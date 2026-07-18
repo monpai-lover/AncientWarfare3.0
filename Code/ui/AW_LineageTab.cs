@@ -92,6 +92,13 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
             if (mandateMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateMapButton);
 
+            PowerButton feudatoryMapButton = CreateMapModeToggleButton(
+                FeudatoryMapModeService.POWER_ID,
+                SpriteTextureLoader.getSprite("ui/Icons/traits/iconzhuhou")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
+            if (feudatoryMapButton != null)
+                tab.AddPowerButton(GROUP_LINEAGE, feudatoryMapButton);
+
             PowerButton grantMandateButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.GRANT_MANDATE,
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")

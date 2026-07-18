@@ -109,3 +109,14 @@ aw_job_feudatory_prince,藩王,Feudatory Prince,藩王
 task_unit_aw_task_feudatory_prince_roam,巡行藩都,Patrolling the Feudatory Seat,巡行藩都
 aw_feudatory_established,建立藩国,Feudatory Established,建立藩國
 aw_hist_mandate_end_player_grant,玩家转授天命,Mandate transferred by player,玩家轉授天命
+aw_feudatory_mapmode,藩国地图,Feudatory Map,藩國地圖
+aw_feudatory_mapmode Description,显示天命国内的中央直辖地与各藩国边界,Show direct imperial territory and internal feudatory boundaries,顯示天命國內的中央直轄地與各藩國邊界
+aw_feudatory_mapmode_description,显示天命国内的中央直辖地与各藩国边界,Show direct imperial territory and internal feudatory boundaries,顯示天命國內的中央直轄地與各藩國邊界
+aw_feudatory_mapmode_tooltip,藩国图层,Feudatory Map,藩國圖層
+aw_feudatory_mapmode_direct,中央直辖,Direct imperial administration,中央直轄
+aw_feudatory_name_suffix,藩国, Feudatory,藩國
+aw_feudatory_mapmode_prince,藩王,Prince,藩王
+aw_feudatory_mapmode_seat,藩都,Seat,藩都
+aw_feudatory_mapmode_cities,辖城,Cities,轄城
+aw_feudatory_mapmode_autonomy,自治,Autonomy,自治
+aw_feudatory_mapmode_loyalty,忠诚,Loyalty,忠誠

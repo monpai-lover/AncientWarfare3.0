@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using AncientWarfare3.content;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.policy;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
@@ -108,9 +109,13 @@ namespace AncientWarfare3.core.lineage
             var cityIds = new long[pCities.Count];
             for (int i = 0; i < pCities.Count; i++) cityIds[i] = pCities[i].id;
             var snapshot = new FeudatorySnapshot(feudatoryId, pEmpire.id,
-                pPrince.data.id, pCities[0].id, 40, 60, cityIds);
+                pPrince.data.id, pCities[0].id, 40, 60, cityIds,
+                pEmpireName: pEmpire.name ?? "",
+                pPrinceName: pPrince.getName() ?? "",
+                pSeatName: pCities[0].data.name ?? "");
             ProjectHotIds(snapshot, pPrince, pCities);
             PublishAdded(snapshot);
+            FeudatoryMapModeService.DirtyMapIfActive();
             for (int i = 0; i < pCities.Count; i++)
                 MandateService.OnKingdomCoreCreated(pEmpire, pCities[i], "feudatory");
             ChronicleEvents.OnFeudatoryEstablished(pEmpire, pPrince, pCities[0],
@@ -205,9 +210,13 @@ namespace AncientWarfare3.core.lineage
                 snapshots.Add(new FeudatorySnapshot(row.feudatory_id,
                     row.empire_kingdom_id, row.prince_actor_id, row.seat_city_id,
                     row.autonomy, row.loyalty, memberIds,
-                    row.garrison_army_id, row.garrison_captain_actor_id));
+                    row.garrison_army_id, row.garrison_captain_actor_id,
+                    FindKingdom(row.empire_kingdom_id)?.name ?? "",
+                    row.prince_name ?? "",
+                    FindCity(row.seat_city_id)?.data?.name ?? ""));
             }
             Publish(snapshots);
+            FeudatoryMapModeService.DirtyMapIfActive();
         }
 
         public static void OnCityTransferred(City pCity, Kingdom pOldKingdom,
@@ -398,6 +407,7 @@ namespace AncientWarfare3.core.lineage
             if (decision.Action == FeudatoryRepairAction.Abolish)
             {
                 PublishRemoved(pSnapshot.FeudatoryId);
+                FeudatoryMapModeService.DirtyMapIfActive();
                 ClearPrinceIdentity(pSnapshot);
                 RemoveGarrison(pSnapshot);
                 return true;
@@ -407,8 +417,9 @@ namespace AncientWarfare3.core.lineage
                 ? decision.NewSeatCityId
                 : pSnapshot.SeatCityId;
             FeudatorySnapshot updated = pSnapshot.WithCitiesAndSeat(remaining,
-                seatId);
+                seatId, FindCity(seatId)?.data?.name);
             PublishReplaced(updated);
+            FeudatoryMapModeService.DirtyMapIfActive();
             if (decision.Action == FeudatoryRepairAction.MoveSeat)
             {
                 MovePrinceToSeat(updated);
@@ -626,6 +637,17 @@ namespace AncientWarfare3.core.lineage
             {
                 CityManager cities = World.world?.cities;
                 return cities?.get(pCityId);
+            }
+            catch { return null; }
+        }
+
+        private static Kingdom FindKingdom(long pKingdomId)
+        {
+            if (pKingdomId < 0) return null;
+            try
+            {
+                KingdomManager kingdoms = World.world?.kingdoms;
+                return kingdoms?.get(pKingdomId);
             }
             catch { return null; }
         }

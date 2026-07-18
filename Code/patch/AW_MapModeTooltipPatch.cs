@@ -30,6 +30,16 @@ namespace AncientWarfare3.patch
         private static bool TryShowMapModeTooltip(Tooltip pTooltip, City city, Kingdom kingdom)
         {
             string selected = GetSelectedMapModePower();
+            if (selected == FeudatoryMapModeService.POWER_ID ||
+                (selected == null && FeudatoryMapModeService.IsActive()))
+            {
+                if (city?.data == null) return false;
+                ShowCityMapModeTooltip(pTooltip, city,
+                    "aw_feudatory_mapmode_tooltip", "Feudatory Map",
+                    FeudatoryMapModeService.BuildTooltip(city), "#D6A326");
+                return true;
+            }
+
             if (selected == SchoolMapModeService.POWER_ID ||
                 (selected == null && SchoolMapModeService.IsActive()))
             {

@@ -37,6 +37,8 @@ namespace AncientWarfare3.core.policy
                     return AWMapModeMetaTypes.Development;
                 case SchoolMapModeService.POWER_ID:
                     return AWMapModeMetaTypes.School;
+                case FeudatoryMapModeService.POWER_ID:
+                    return AWMapModeMetaTypes.Feudatory;
                 default:
                     return MetaType.Kingdom;
             }
@@ -96,6 +98,7 @@ namespace AncientWarfare3.core.policy
                 case WarClaimMapModeService.POWER_ID:
                 case MandateCoreMapModeService.POWER_ID:
                 case SchoolMapModeService.POWER_ID:
+                case FeudatoryMapModeService.POWER_ID:
                     return true;
                 default:
                     return false;
@@ -109,7 +112,8 @@ namespace AncientWarfare3.core.policy
                    pMapMode == AWMapModeMetaTypes.WarCore ||
                    pMapMode == AWMapModeMetaTypes.WarClaim ||
                    pMapMode == AWMapModeMetaTypes.MandateCore ||
-                   pMapMode == AWMapModeMetaTypes.School;
+                   pMapMode == AWMapModeMetaTypes.School ||
+                   pMapMode == AWMapModeMetaTypes.Feudatory;
         }
 
         public static string BuildFocusedCityStatusCacheKey(long pFocusId, long pCityId)

@@ -14,6 +14,11 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Zones), nameof(Zones.getMapMetaAsset))]
         public static void ZonesGetMapMetaAsset_Postfix(ref MetaTypeAsset __result)
         {
+            if (FeudatoryMapModeService.IsActive())
+            {
+                __result = AWMapModeMetaLibrary.FeudatoryAsset ?? __result;
+                return;
+            }
             if (MandateDynastyMapModeService.IsActive())
             {
                 __result = AWMapModeMetaLibrary.MandateDynastyAsset ?? __result;
@@ -27,7 +32,9 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Zones), nameof(Zones.showMapBorders))]
         public static void ZonesShowMapBorders_Postfix(ref bool __result)
         {
-            if (!MandateDynastyMapModeService.IsActive() && !MandateCoreMapModeService.IsActive()) return;
+            if (!FeudatoryMapModeService.IsActive() &&
+                !MandateDynastyMapModeService.IsActive() &&
+                !MandateCoreMapModeService.IsActive()) return;
             __result = true;
         }
 
@@ -38,6 +45,8 @@ namespace AncientWarfare3.patch
             if (__instance == null) return;
             if (__instance.name == MandateDynastyMapModeService.POWER_ID) MandateDynastyMapModeService.DirtyMap();
             if (__instance.name == MandateCoreMapModeService.POWER_ID) MandateCoreMapModeService.DirtyMap();
+            if (__instance.name == FeudatoryMapModeService.POWER_ID)
+                FeudatoryMapModeService.DirtyMap();
         }
 
         [HarmonyPrefix]

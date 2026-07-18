@@ -27,6 +27,7 @@ namespace AncientWarfare3.content
             RegisterWarMapModes();
             RegisterVassalMapMode();
             RegisterMandateMapModes();
+            RegisterFeudatoryMapMode();
             RegisterSchoolMapMode();
             LinkMapModeAssets();
             AWMapModeMetaLibrary.Init();
@@ -259,6 +260,38 @@ namespace AncientWarfare3.content
                 ignore_cursor_icon = true,
                 allow_unit_selection = true,
                 toggle_action = BuildMapModeToggleAction(MandateCoreMapModeService.DirtyMap)
+            });
+        }
+
+        private static void RegisterFeudatoryMapMode()
+        {
+            RegisterMapModeOption(FeudatoryMapModeService.POWER_ID);
+            GodPower existing = AssetManager.powers.get(
+                FeudatoryMapModeService.POWER_ID);
+            if (existing != null)
+            {
+                ConfigureMapModePower(existing,
+                    FeudatoryMapModeService.POWER_ID,
+                    FeudatoryMapModeService.DirtyMap);
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = FeudatoryMapModeService.POWER_ID,
+                name = FeudatoryMapModeService.POWER_ID,
+                path_icon = "ui/Icons/traits/iconzhuhou",
+                map_modes_switch = true,
+                multi_toggle = false,
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(
+                    FeudatoryMapModeService.POWER_ID),
+                force_map_mode =
+                    AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = BuildMapModeToggleAction(
+                    FeudatoryMapModeService.DirtyMap)
             });
         }
 
