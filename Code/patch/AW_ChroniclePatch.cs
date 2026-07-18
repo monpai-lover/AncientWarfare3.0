@@ -85,6 +85,8 @@ namespace AncientWarfare3.patch
             AutonomousRestorationService.OnCityTransferred(
                 __instance, __state, __instance?.kingdom ?? pKingdom);
             MandateService.OnCityTransferred(__instance);
+            FeudatoryService.OnCityTransferred(
+                __instance, __state, __instance?.kingdom ?? pKingdom);
             CitySchoolSnapshotService.MarkDirty(__instance);
         }
 

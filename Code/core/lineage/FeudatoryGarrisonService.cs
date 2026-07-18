@@ -24,11 +24,43 @@ namespace AncientWarfare3.core.lineage
                                (seat.data.name ?? "");
             string name = AWArmyRoleRules.DisplayName(
                 AWArmyRole.FeudatoryGarrison, ownerName, 1);
-            Army army = AWArmyService.EnsureArmy(empire, seat, captain,
-                AWArmyRole.FeudatoryGarrison, name, pDetached: false);
+            Army army = FindArmy(pSnapshot.GarrisonArmyId);
+            if (IsValidStoredArmy(army, empire))
+            {
+                AWArmyService.ReanchorArmy(army, empire, seat,
+                    AWArmyRole.FeudatoryGarrison, name);
+                AWArmyService.AddToArmy(captain, army);
+                AWArmyService.SetCaptainIfChanged(army, captain);
+            }
+            else
+            {
+                army = AWArmyService.EnsureArmy(empire, seat, captain,
+                    AWArmyRole.FeudatoryGarrison, name, pDetached: false);
+            }
             if (army?.data == null) return false;
             return FeudatoryService.UpdateGarrison(pSnapshot.FeudatoryId,
                 army.id, captain.data.id);
+        }
+
+        public static bool NeedsRepair(FeudatorySnapshot pSnapshot)
+        {
+            if (pSnapshot == null) return false;
+            Kingdom empire = FindKingdom(pSnapshot.EmpireKingdomId);
+            City seat = FindCity(pSnapshot.SeatCityId);
+            if (empire?.data == null || seat?.data == null ||
+                seat.kingdom != empire)
+                return false;
+            Actor captain = FindActor(pSnapshot.GarrisonCaptainActorId);
+            if (!IsEligibleCaptain(captain, empire) ||
+                IsUsedByAnotherFeudatory(pSnapshot.FeudatoryId,
+                    pSnapshot.GarrisonCaptainActorId))
+                return true;
+            Army army = FindArmy(pSnapshot.GarrisonArmyId);
+            if (!IsValidStoredArmy(army, empire) ||
+                AWArmyService.GetAnchorCityId(army) != seat.id)
+                return true;
+            try { return army.getCaptain()?.data?.id != captain.data.id; }
+            catch { return true; }
         }
 
         private static Actor SelectCaptain(Kingdom pEmpire, City pSeat,
@@ -98,6 +130,27 @@ namespace AncientWarfare3.core.lineage
                 return units?.get(pId);
             }
             catch { return null; }
+        }
+
+        private static Army FindArmy(long pId)
+        {
+            if (pId < 0) return null;
+            try
+            {
+                ArmyManager armies = World.world?.armies;
+                return armies?.get(pId);
+            }
+            catch { return null; }
+        }
+
+        private static bool IsValidStoredArmy(Army pArmy, Kingdom pEmpire)
+        {
+            if (pArmy?.data == null || !pArmy.isAlive() ||
+                !AWArmyService.IsRoleArmy(pArmy,
+                    AWArmyRole.FeudatoryGarrison))
+                return false;
+            try { return pArmy.getKingdom() == pEmpire; }
+            catch { return false; }
         }
     }
 }

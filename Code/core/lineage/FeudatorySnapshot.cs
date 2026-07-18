@@ -41,5 +41,13 @@ namespace AncientWarfare3.core.lineage
                 PrinceActorId, SeatCityId, Autonomy, Loyalty, _cityIds,
                 pArmyId, pCaptainActorId);
         }
+
+        public FeudatorySnapshot WithCitiesAndSeat(
+            IReadOnlyList<long> pCityIds, long pSeatCityId)
+        {
+            return new FeudatorySnapshot(FeudatoryId, EmpireKingdomId,
+                PrinceActorId, pSeatCityId, Autonomy, Loyalty, pCityIds,
+                GarrisonArmyId, GarrisonCaptainActorId);
+        }
     }
 }

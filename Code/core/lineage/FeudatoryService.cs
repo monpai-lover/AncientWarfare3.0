@@ -10,7 +10,10 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class FeudatoryService
     {
+        private const int MaximumAnnualRepairs = 4;
         private static readonly object CacheLock = new object();
+        private static readonly Dictionary<long, int> AnnualCursorByKingdom =
+            new Dictionary<long, int>();
         private static FeudatoryCache _cache = FeudatoryCache.Empty;
 
         private static SQLiteConnection DB =>
@@ -108,6 +111,8 @@ namespace AncientWarfare3.core.lineage
                 pPrince.data.id, pCities[0].id, 40, 60, cityIds);
             ProjectHotIds(snapshot, pPrince, pCities);
             PublishAdded(snapshot);
+            for (int i = 0; i < pCities.Count; i++)
+                MandateService.OnKingdomCoreCreated(pEmpire, pCities[i], "feudatory");
             ChronicleEvents.OnFeudatoryEstablished(pEmpire, pPrince, pCities[0],
                 pCities.Count);
             FeudatoryGarrisonService.EnsureFor(snapshot);
@@ -205,6 +210,75 @@ namespace AncientWarfare3.core.lineage
             Publish(snapshots);
         }
 
+        public static void OnCityTransferred(City pCity, Kingdom pOldKingdom,
+            Kingdom pNewKingdom)
+        {
+            if (!Ready || pCity?.data == null || pOldKingdom == pNewKingdom ||
+                !TryGetByCity(pCity.id, out FeudatorySnapshot snapshot))
+                return;
+            RemoveCity(snapshot, pCity.id, "owner_changed");
+        }
+
+        public static void OnKingdomYear(Kingdom pEmpire)
+        {
+            if (!Ready || pEmpire?.data == null || pEmpire.isRekt() ||
+                !MandateService.IsMandateKingdom(pEmpire))
+                return;
+            int year = SafeCurrentYear();
+            if (!FeudatoryRules.ShouldRunAnnualWork(year, pEmpire.id)) return;
+            IReadOnlyList<FeudatorySnapshot> rows = GetByKingdom(pEmpire.id);
+            if (rows.Count == 0) return;
+
+            var capitalCoreIds = new List<long>();
+            City capital = pEmpire.capital;
+            if (capital?.data != null)
+            {
+                capitalCoreIds.Add(capital.id);
+                if (capital.neighbours_cities != null)
+                    foreach (City adjacent in capital.neighbours_cities)
+                        if (adjacent?.data != null)
+                            capitalCoreIds.Add(adjacent.id);
+            }
+
+            AnnualCursorByKingdom.TryGetValue(pEmpire.id, out int cursor);
+            if (cursor < 0 || cursor >= rows.Count) cursor = 0;
+            int count = Math.Min(MaximumAnnualRepairs, rows.Count);
+            bool reclaimedCoreCity = false;
+            bool repairedGarrison = false;
+            for (int offset = 0; offset < count; offset++)
+            {
+                FeudatorySnapshot snapshot = rows[(cursor + offset) % rows.Count];
+                long invalidCityId = FindFirstInvalidCity(snapshot, pEmpire);
+                bool removedInvalidCity = invalidCityId >= 0 &&
+                    RemoveCity(snapshot, invalidCityId, "annual_invalid_city");
+                if (removedInvalidCity &&
+                    !TryGet(snapshot.FeudatoryId, out snapshot))
+                    continue;
+
+                if (!removedInvalidCity && !reclaimedCoreCity)
+                {
+                    long cityId = FeudatoryRules.SelectOneCapitalCoreRepair(
+                        snapshot.CityIds, capitalCoreIds);
+                    if (cityId >= 0)
+                    {
+                        RemoveCity(snapshot, cityId, "capital_core_repair");
+                        reclaimedCoreCity = true;
+                        if (!TryGet(snapshot.FeudatoryId, out snapshot)) continue;
+                    }
+                }
+
+                if (!IsValidPrince(snapshot, pEmpire)) continue;
+
+                if (!repairedGarrison &&
+                    FeudatoryGarrisonService.NeedsRepair(snapshot))
+                {
+                    FeudatoryGarrisonService.EnsureFor(snapshot);
+                    repairedGarrison = true;
+                }
+            }
+            AnnualCursorByKingdom[pEmpire.id] = (cursor + count) % rows.Count;
+        }
+
         private static bool ValidateEstablishment(Kingdom pEmpire, Actor pPrince,
             IReadOnlyList<City> pCities)
         {
@@ -239,6 +313,130 @@ namespace AncientWarfare3.core.lineage
                 if (!allowed || !selected.Add(city.id)) return false;
             }
             return true;
+        }
+
+        private static bool RemoveCity(FeudatorySnapshot pSnapshot,
+            long pCityId, string pReason)
+        {
+            if (pSnapshot == null) return false;
+            var remaining = new List<long>(pSnapshot.CityIds.Count - 1);
+            bool member = false;
+            for (int i = 0; i < pSnapshot.CityIds.Count; i++)
+            {
+                long cityId = pSnapshot.CityIds[i];
+                if (cityId == pCityId)
+                {
+                    member = true;
+                    continue;
+                }
+                remaining.Add(cityId);
+            }
+            FeudatoryRepairDecision decision = FeudatoryRules.ResolveCityTransfer(
+                member, pSameOwner: false, pCityId, pSnapshot.SeatCityId,
+                remaining);
+            if (decision.Action == FeudatoryRepairAction.Ignore) return false;
+
+            double now = LineageService.CurTime();
+            try
+            {
+                using SQLiteTransaction transaction = DB.BeginTransaction();
+                using (var cityCommand = new SQLiteCommand(DB)
+                       { Transaction = transaction })
+                {
+                    cityCommand.CommandText = "UPDATE " +
+                        FeudatoryCityTableItem.GetTableName() +
+                        " SET ACTIVE=0,END_TIME=@time,END_REASON=@reason " +
+                        "WHERE FEUDATORY_ID=@feudatory AND CITY_ID=@city " +
+                        "AND ACTIVE=1";
+                    cityCommand.Parameters.AddWithValue("@time", now);
+                    cityCommand.Parameters.AddWithValue("@reason", pReason ?? "");
+                    cityCommand.Parameters.AddWithValue("@feudatory",
+                        pSnapshot.FeudatoryId);
+                    cityCommand.Parameters.AddWithValue("@city", pCityId);
+                    if (cityCommand.ExecuteNonQuery() != 1) return false;
+                }
+
+                using (var headerCommand = new SQLiteCommand(DB)
+                       { Transaction = transaction })
+                {
+                    if (decision.Action == FeudatoryRepairAction.Abolish)
+                    {
+                        headerCommand.CommandText = "UPDATE " +
+                            FeudatoryTableItem.GetTableName() +
+                            " SET STATUS=1,END_TIME=@time,END_REASON=@reason " +
+                            "WHERE FEUDATORY_ID=@id AND STATUS=0 AND END_TIME<0";
+                    }
+                    else if (decision.Action == FeudatoryRepairAction.MoveSeat)
+                    {
+                        headerCommand.CommandText = "UPDATE " +
+                            FeudatoryTableItem.GetTableName() +
+                            " SET SEAT_CITY_ID=@seat WHERE FEUDATORY_ID=@id " +
+                            "AND STATUS=0 AND END_TIME<0";
+                        headerCommand.Parameters.AddWithValue("@seat",
+                            decision.NewSeatCityId);
+                    }
+                    if (headerCommand.CommandText.Length > 0)
+                    {
+                        headerCommand.Parameters.AddWithValue("@time", now);
+                        headerCommand.Parameters.AddWithValue("@reason",
+                            pReason ?? "");
+                        headerCommand.Parameters.AddWithValue("@id",
+                            pSnapshot.FeudatoryId);
+                        if (headerCommand.ExecuteNonQuery() != 1) return false;
+                    }
+                }
+                transaction.Commit();
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Feudatory city repair failed: " +
+                                    exception.Message);
+                return false;
+            }
+
+            ClearCityProjection(pCityId);
+            if (decision.Action == FeudatoryRepairAction.Abolish)
+            {
+                PublishRemoved(pSnapshot.FeudatoryId);
+                ClearPrinceIdentity(pSnapshot);
+                RemoveGarrison(pSnapshot);
+                return true;
+            }
+
+            long seatId = decision.Action == FeudatoryRepairAction.MoveSeat
+                ? decision.NewSeatCityId
+                : pSnapshot.SeatCityId;
+            FeudatorySnapshot updated = pSnapshot.WithCitiesAndSeat(remaining,
+                seatId);
+            PublishReplaced(updated);
+            if (decision.Action == FeudatoryRepairAction.MoveSeat)
+            {
+                MovePrinceToSeat(updated);
+                FeudatoryGarrisonService.EnsureFor(updated);
+            }
+            return true;
+        }
+
+        private static long FindFirstInvalidCity(FeudatorySnapshot pSnapshot,
+            Kingdom pEmpire)
+        {
+            for (int i = 0; i < pSnapshot.CityIds.Count; i++)
+            {
+                long cityId = pSnapshot.CityIds[i];
+                City city = FindCity(cityId);
+                if (city?.data == null || city.isRekt() || !city.isAlive() ||
+                    city.kingdom != pEmpire)
+                    return cityId;
+            }
+            return -1L;
+        }
+
+        private static bool IsValidPrince(FeudatorySnapshot pSnapshot,
+            Kingdom pEmpire)
+        {
+            Actor prince = FindActor(pSnapshot.PrinceActorId);
+            return prince?.data != null && !prince.isRekt() && prince.isAlive() &&
+                   prince.kingdom == pEmpire;
         }
 
         private static bool IsConnected(City pCity, HashSet<long> pSelected)
@@ -350,6 +548,86 @@ namespace AncientWarfare3.core.lineage
                         : existing);
                 _cache = FeudatoryCache.Build(all);
             }
+        }
+
+        private static void PublishRemoved(long pFeudatoryId)
+        {
+            lock (CacheLock)
+            {
+                var all = new List<FeudatorySnapshot>(
+                    Math.Max(0, _cache.ById.Count - 1));
+                foreach (FeudatorySnapshot existing in _cache.ById.Values)
+                    if (existing.FeudatoryId != pFeudatoryId)
+                        all.Add(existing);
+                _cache = FeudatoryCache.Build(all);
+            }
+        }
+
+        private static void ClearCityProjection(long pCityId)
+        {
+            City city = FindCity(pCityId);
+            city?.data?.set(LineageKeys.CITY_FEUDATORY_ID, -1L);
+        }
+
+        private static void ClearPrinceIdentity(FeudatorySnapshot pSnapshot)
+        {
+            Actor prince = FindActor(pSnapshot.PrinceActorId);
+            if (prince?.data == null) return;
+            prince.data.set(LineageKeys.FEUDATORY_ID, -1L);
+            if (prince.hasTrait(FeudatoryContent.TraitId))
+                prince.removeTrait(FeudatoryContent.TraitId);
+            if (!prince.isRekt())
+            {
+                try { prince.ai?.setJob(prince.getNextJob()); }
+                catch { }
+                prince.clearGraphicsFully();
+            }
+        }
+
+        private static void MovePrinceToSeat(FeudatorySnapshot pSnapshot)
+        {
+            Actor prince = FindActor(pSnapshot.PrinceActorId);
+            City seat = FindCity(pSnapshot.SeatCityId);
+            if (prince?.data == null || prince.isRekt() || seat?.data == null ||
+                seat.kingdom != prince.kingdom)
+                return;
+            prince.joinCity(seat);
+        }
+
+        private static void RemoveGarrison(FeudatorySnapshot pSnapshot)
+        {
+            if (pSnapshot.GarrisonArmyId < 0) return;
+            try
+            {
+                ArmyManager armies = World.world?.armies;
+                Army army = armies?.get(pSnapshot.GarrisonArmyId);
+                if (AWArmyService.IsRoleArmy(army,
+                        AWArmyRole.FeudatoryGarrison))
+                    AWArmyService.RemoveSpecialArmy(army);
+            }
+            catch { }
+        }
+
+        private static Actor FindActor(long pActorId)
+        {
+            if (pActorId < 0) return null;
+            try
+            {
+                ActorManager units = World.world?.units;
+                return units?.get(pActorId);
+            }
+            catch { return null; }
+        }
+
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0) return null;
+            try
+            {
+                CityManager cities = World.world?.cities;
+                return cities?.get(pCityId);
+            }
+            catch { return null; }
         }
 
         private static void Publish(IReadOnlyList<FeudatorySnapshot> pSnapshots)

@@ -57,6 +57,7 @@ namespace AncientWarfare3.core.policy
         public const int KingdomCentralizationIndex = 44;
         public const int KingdomOfficialCareerIndex = 45;
         public const int KingdomMinisterialPowerIndex = 46;
+        public const int KingdomFeudatoryIndex = 47;
 
         public const string ActorRetirement = "aw3_actor_update_age_retirement";
         public const string ActorOldHead = "aw3_actor_update_age_old_head";
@@ -105,6 +106,7 @@ namespace AncientWarfare3.core.policy
         public const string KingdomCentralization = "aw3_kingdom_policy_centralization";
         public const string KingdomOfficialCareer = "aw3_kingdom_official_career";
         public const string KingdomMinisterialPower = "aw3_kingdom_ministerial_power";
+        public const string KingdomFeudatory = "aw3_kingdom_feudatory";
 
         public static readonly string[] EntryIds =
         {
@@ -154,7 +156,8 @@ namespace AncientWarfare3.core.policy
             KingdomFullWall,
             KingdomCentralization,
             KingdomOfficialCareer,
-            KingdomMinisterialPower
+            KingdomMinisterialPower,
+            KingdomFeudatory
         };
 
         public static bool Contains(string pId)
@@ -172,7 +175,8 @@ namespace AncientWarfare3.core.policy
         {
             return pIndex >= 0 && pIndex < TopLevelEntryCount ||
                    pIndex == KingdomOfficialCareerIndex ||
-                   pIndex == KingdomMinisterialPowerIndex;
+                   pIndex == KingdomMinisterialPowerIndex ||
+                   pIndex == KingdomFeudatoryIndex;
         }
 
         public static string ParentForIndex(int pIndex)
@@ -190,6 +194,7 @@ namespace AncientWarfare3.core.policy
             if (pIndex == KingdomCentralizationIndex) return KingdomPolicy;
             if (pIndex == KingdomOfficialCareerIndex) return Total;
             if (pIndex == KingdomMinisterialPowerIndex) return Total;
+            if (pIndex == KingdomFeudatoryIndex) return Total;
             return Total;
         }
     }
