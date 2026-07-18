@@ -5,6 +5,7 @@ namespace AncientWarfare3.core.lineage
     public static class FeudatoryRules
     {
         public const int MaximumCities = 5;
+        public const int MaximumPrincesPerDecision = 8;
         public const int AnnualModulo = 4;
 
         public static bool IsEligiblePrince(bool pIsMandateDynast, bool pAdult,

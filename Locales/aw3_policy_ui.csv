@@ -165,3 +165,5 @@ aw_policy_lock_node_desc,玩家和AI都不能选择该项,Player and AI cannot s
 aw_policy_unlock_node_desc,恢复该项的正常选择,Restore normal selection for this node,恢復該項的正常選擇
 aw_policy_locked_count,锁定项,Locked Nodes,鎖定項
 aw_policy_core_fabrication_locked,制造核心已锁定,Core fabrication is locked,製造核心已鎖定
+aw_mandate_decision_great_enfeoffment,大封诸王,Enfeoff the Princes,大封諸王
+aw_mandate_decision_great_enfeoffment_desc,将成年宗室分封至京畿以外的边疆藩国，城市仍由流官治理。,Establish frontier feudatories outside the imperial core while ordinary governors continue to administer their cities.,將成年宗室分封至京畿以外的邊疆藩國，城市仍由流官治理。

@@ -66,6 +66,16 @@ namespace AncientWarfare3.core.lineage
             },
             new MandateDecisionDef
             {
+                Id = "aw_mandate_decision_great_enfeoffment",
+                NameKey = "aw_mandate_decision_great_enfeoffment",
+                DescKey = "aw_mandate_decision_great_enfeoffment_desc",
+                FallbackName = "Enfeoff the Princes",
+                FallbackDesc = "Establish frontier feudatories outside the imperial core while ordinary governors continue to administer their cities.",
+                IconPath = "ui/Icons/traits/iconzhuhou",
+                Cost = 80f
+            },
+            new MandateDecisionDef
+            {
                 Id = "aw_mandate_decision_sacrifice_gamble",
                 NameKey = "aw_mandate_decision_sacrifice_gamble",
                 DescKey = "aw_mandate_decision_sacrifice_gamble_desc",
@@ -194,6 +204,8 @@ namespace AncientWarfare3.core.lineage
             {
                 case "aw_mandate_decision_border_defense":
                     return true;
+                case "aw_mandate_decision_great_enfeoffment":
+                    return FeudatorySelectionService.CanExecuteGreatEnfeoffment(pKingdom);
                 default:
                     return false;
             }
@@ -289,6 +301,8 @@ namespace AncientWarfare3.core.lineage
             {
                 case "aw_mandate_decision_border_defense":
                     return MandateBorderDefenseService.ExecuteDecision(pKingdom);
+                case "aw_mandate_decision_great_enfeoffment":
+                    return FeudatorySelectionService.ExecuteGreatEnfeoffment(pKingdom) > 0;
                 default:
                     return false;
             }
