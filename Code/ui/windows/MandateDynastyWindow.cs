@@ -53,6 +53,8 @@ namespace AncientWarfare3.ui.windows
                 if (kingdom?.data == null) return;
                 if (key == "central_power")
                     CentralPowerWindow.Open(kingdom.id);
+                else if (key == "feudatories")
+                    FeudatoryWindow.Open(kingdom.id);
                 else
                     MandateDecisionWindow.Open(kingdom.id);
             };
@@ -80,6 +82,7 @@ namespace AncientWarfare3.ui.windows
             {
                 Kingdom mandate = MandateService.GetCurrentMandateKingdom();
                 AddCentralPowerRow(mandate);
+                AddFeudatoryRow(mandate);
                 AddDecisionRow(mandate);
             }
             else AddPlain(AW_L10n.Text("aw_mandate_none_desc",
@@ -166,6 +169,24 @@ namespace AncientWarfare3.ui.windows
                                ": " + snapshot.nominal_level +
                                "\n" + AW_L10n.Text("aw_central_phase_cap", "Phase cap") +
                                ": " + snapshot.phase_cap
+            });
+        }
+
+        private void AddFeudatoryRow(Kingdom pKingdom)
+        {
+            int count = pKingdom?.data == null
+                ? 0
+                : FeudatoryService.GetByKingdom(pKingdom.id).Count;
+            string title = AW_L10n.Text("aw_feudatory_entry", "Feudatories");
+            AddItemToList(new HistoryRow
+            {
+                width = ROW_WIDTH,
+                is_filter = true,
+                filter_key = "feudatories",
+                text = title + ": " + count,
+                tooltip_title = title,
+                tooltip_desc = AW_L10n.Text("aw_feudatory_entry_desc",
+                    "Inspect princes, seats, cities, autonomy and garrisons")
             });
         }
 

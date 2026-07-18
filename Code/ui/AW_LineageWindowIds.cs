@@ -19,6 +19,7 @@ namespace AncientWarfare3.ui
         public const string SCHOOL_ROSTER = "aw_school_roster";
         public const string NAME_DECISION = "aw_name_decision";
         public const string CENTRAL_POWER = "aw_central_power";
+        public const string FEUDATORIES = "aw_feudatories";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {

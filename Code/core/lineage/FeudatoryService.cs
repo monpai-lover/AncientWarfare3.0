@@ -108,11 +108,19 @@ namespace AncientWarfare3.core.lineage
 
             var cityIds = new long[pCities.Count];
             for (int i = 0; i < pCities.Count; i++) cityIds[i] = pCities[i].id;
+            Actor successor = FindFeudatorySuccessor(pPrince);
+            string seatName = pCities[0].data.name ?? "";
             var snapshot = new FeudatorySnapshot(feudatoryId, pEmpire.id,
                 pPrince.data.id, pCities[0].id, 40, 60, cityIds,
                 pEmpireName: pEmpire.name ?? "",
                 pPrinceName: pPrince.getName() ?? "",
-                pSeatName: pCities[0].data.name ?? "");
+                pSeatName: seatName,
+                pFeudatoryName: BuildFeudatoryName(seatName),
+                pParentColor: HistoryColors.FromKingdom(pEmpire),
+                pPrinceShiLabel: BuildPrinceShiLabel(pPrince.data.id),
+                pSuccessorActorId: successor?.data?.id ?? -1L,
+                pSuccessorName: successor?.getName() ?? "",
+                pCityRows: BuildCityRows(cityIds));
             ProjectHotIds(snapshot, pPrince, pCities);
             PublishAdded(snapshot);
             FeudatoryMapModeService.DirtyMapIfActive();
@@ -154,7 +162,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            PublishReplaced(current.WithGarrison(pArmyId, pCaptainActorId));
+            PublishReplaced(current.WithGarrison(pArmyId, pCaptainActorId,
+                GetArmySize(pArmyId)));
             return true;
         }
 
@@ -207,13 +216,22 @@ namespace AncientWarfare3.core.lineage
             foreach (FeudatoryTableItem row in rows)
             {
                 cityIds.TryGetValue(row.feudatory_id, out List<long> memberIds);
+                Kingdom empire = FindKingdom(row.empire_kingdom_id);
+                Actor prince = FindActor(row.prince_actor_id);
+                Actor successor = FindFeudatorySuccessor(prince);
+                string seatName = FindCity(row.seat_city_id)?.data?.name ?? "";
                 snapshots.Add(new FeudatorySnapshot(row.feudatory_id,
                     row.empire_kingdom_id, row.prince_actor_id, row.seat_city_id,
                     row.autonomy, row.loyalty, memberIds,
                     row.garrison_army_id, row.garrison_captain_actor_id,
-                    FindKingdom(row.empire_kingdom_id)?.name ?? "",
+                    empire?.name ?? "",
                     row.prince_name ?? "",
-                    FindCity(row.seat_city_id)?.data?.name ?? ""));
+                    seatName, BuildFeudatoryName(seatName),
+                    HistoryColors.FromKingdom(empire),
+                    BuildPrinceShiLabel(row.prince_actor_id),
+                    GetArmySize(row.garrison_army_id),
+                    successor?.data?.id ?? -1L,
+                    successor?.getName() ?? "", BuildCityRows(memberIds)));
             }
             Publish(snapshots);
             FeudatoryMapModeService.DirtyMapIfActive();
@@ -416,8 +434,10 @@ namespace AncientWarfare3.core.lineage
             long seatId = decision.Action == FeudatoryRepairAction.MoveSeat
                 ? decision.NewSeatCityId
                 : pSnapshot.SeatCityId;
+            string seatName = FindCity(seatId)?.data?.name;
             FeudatorySnapshot updated = pSnapshot.WithCitiesAndSeat(remaining,
-                seatId, FindCity(seatId)?.data?.name);
+                seatId, seatName, BuildCityRows(remaining),
+                BuildFeudatoryName(seatName));
             PublishReplaced(updated);
             FeudatoryMapModeService.DirtyMapIfActive();
             if (decision.Action == FeudatoryRepairAction.MoveSeat)
@@ -650,6 +670,68 @@ namespace AncientWarfare3.core.lineage
                 return kingdoms?.get(pKingdomId);
             }
             catch { return null; }
+        }
+
+        private static FeudatoryCityDisplayRow[] BuildCityRows(
+            IReadOnlyList<long> pCityIds)
+        {
+            int count = Math.Min(FeudatoryRules.MaximumCities,
+                pCityIds?.Count ?? 0);
+            var rows = new FeudatoryCityDisplayRow[count];
+            for (int i = 0; i < count; i++)
+            {
+                long cityId = pCityIds[i];
+                City city = FindCity(cityId);
+                Actor governor = city?.leader;
+                rows[i] = new FeudatoryCityDisplayRow(cityId,
+                    city?.data?.name ?? "", governor?.data?.id ?? -1L,
+                    governor?.getName() ?? "");
+            }
+            return rows;
+        }
+
+        private static string BuildFeudatoryName(string pSeatName)
+        {
+            return string.IsNullOrEmpty(pSeatName) ? "" : pSeatName + "藩";
+        }
+
+        private static string BuildPrinceShiLabel(long pActorId)
+        {
+            long shiId = LineageQuery.GetActorShiId(pActorId);
+            ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+            return branch == null
+                ? ""
+                : ShiBranchRules.BuildDisplayName(branch.origin_city_name,
+                    branch.clan_name);
+        }
+
+        private static Actor FindFeudatorySuccessor(Actor pPrince)
+        {
+            if (pPrince?.data == null) return null;
+            Actor eldest = null;
+            double earliest = double.MaxValue;
+            foreach (Actor child in pPrince.getChildren(false))
+            {
+                if (child?.data == null || child.isRekt() || !child.isAlive() ||
+                    !child.isAdult() || !child.isSexMale() ||
+                    child.kingdom != pPrince.kingdom ||
+                    child.data.created_time >= earliest)
+                    continue;
+                eldest = child;
+                earliest = child.data.created_time;
+            }
+            return eldest;
+        }
+
+        private static int GetArmySize(long pArmyId)
+        {
+            if (pArmyId < 0) return 0;
+            try
+            {
+                ArmyManager armies = World.world?.armies;
+                return Math.Max(0, armies?.get(pArmyId)?.countUnits() ?? 0);
+            }
+            catch { return 0; }
         }
 
         private static void Publish(IReadOnlyList<FeudatorySnapshot> pSnapshots)

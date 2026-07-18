@@ -120,3 +120,15 @@ aw_feudatory_mapmode_seat,藩都,Seat,藩都
 aw_feudatory_mapmode_cities,辖城,Cities,轄城
 aw_feudatory_mapmode_autonomy,自治,Autonomy,自治
 aw_feudatory_mapmode_loyalty,忠诚,Loyalty,忠誠
+aw_feudatory_window_title,藩国总览,Feudatories,藩國總覽
+aw_feudatory_entry,藩国,Feudatories,藩國
+aw_feudatory_entry_desc,查看藩王 藩都 辖城 自治 忠诚与镇军,Inspect princes seats cities autonomy loyalty and garrisons,查看藩王 藩都 轄城 自治 忠誠與鎮軍
+aw_feudatory_empty,当前没有活动藩国,No active feudatories,當前沒有活動藩國
+aw_feudatory_shi_unknown,氏族未详,Shi unknown,氏族未詳
+aw_feudatory_garrison,镇军,Garrison,鎮軍
+aw_feudatory_successor,继承人,Successor,繼承人
+aw_feudatory_successor_none,暂无合格继承人,No qualified successor,暫無合格繼承人
+aw_feudatory_cities,辖城,Cities,轄城
+aw_feudatory_governor,流官,Governor,流官
+aw_feudatory_governor_vacant,空缺,Vacant,空缺
+aw_feudatory_selected_city,当前查看,Selected city,當前查看
