@@ -15,8 +15,9 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
         public static bool MakeWarrior_Asylum_Prefix(Actor pActor)
         {
-            return RoyalAsylumRules.CanPerformProtectedRole(
-                RoyalAsylumService.IsActive(pActor));
+            return !FeudatoryService.IsActivePrince(pActor) &&
+                   RoyalAsylumRules.CanPerformProtectedRole(
+                       RoyalAsylumService.IsActive(pActor));
         }
 
         [HarmonyPrefix]
@@ -25,6 +26,7 @@ namespace AncientWarfare3.patch
         public static bool SetProfession_Asylum_Prefix(Actor __instance, UnitProfession pType)
         {
             return pType != UnitProfession.Warrior ||
+                   !FeudatoryService.IsActivePrince(__instance) &&
                    RoyalAsylumRules.CanPerformProtectedRole(
                        RoyalAsylumService.IsActive(__instance));
         }
@@ -61,8 +63,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.getNextJob))]
         public static bool GetNextJob_Asylum_Prefix(Actor __instance, ref string __result)
         {
-            if (!RoyalAsylumService.IsActive(__instance)) return true;
-            __result = RoyalAsylumContent.ActorJobId;
+            if (RoyalAsylumService.IsActive(__instance))
+            {
+                __result = RoyalAsylumContent.ActorJobId;
+                return false;
+            }
+            if (!FeudatoryService.IsActivePrince(__instance) ||
+                __instance.isWarrior()) return true;
+            __result = FeudatoryContent.ActorJobId;
             return false;
         }
     }

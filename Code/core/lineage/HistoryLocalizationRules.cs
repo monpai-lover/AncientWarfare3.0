@@ -88,6 +88,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_label_tianmingrebel", "义军天命战争", "Rebel Mandate War", "義軍天命戰爭"),
             new Entry("aw_hist_label_general_rebellion_war", "大将叛乱", "General Rebellion", "大將叛亂"),
             new Entry("aw_hist_label_fief_independence_war", "封地独立", "Fief Independence", "封地獨立"),
+            new Entry("aw_hist_event_feudatory_established", "建立藩国", "Feudatory Established", "建立藩國"),
 
             // Event labels
             new Entry("aw_hist_event_war_claim_created", "制造宣称", "Claim Fabricated", "製造宣稱"),
@@ -390,6 +391,12 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_restoration_completed_suffix", " \u6536\u590d\u65e7\u5730\uff0c\u590d\u56fd\u544a\u6210", " recovered its old cores and completed the restoration", " \u6536\u5fa9\u820a\u5730\uff0c\u5fa9\u570b\u544a\u6210"),
             new Entry("aw_hist_restoration_failed_suffix", " \u590d\u56fd\u653f\u6743\u518d\u5ea6\u8986\u4ea1\uff0c\u5b97\u5ba4\u5ba3\u79f0\u5f85\u65f6\u800c\u52a8", " restoration regime fell again; its royal claims became dormant", " \u5fa9\u570b\u653f\u6b0a\u518d\u5ea6\u8986\u4ea1\uff0c\u5b97\u5ba4\u5ba3\u7a31\u5f85\u6642\u800c\u52d5"),
             new Entry("aw_hist_general_declare_war_risk", " 宣战，风险 ", ", risk ", " 宣戰，風險 "),
+            new Entry("aw_hist_feudatory_became_prince", " 受封为藩王，就藩", " was enfeoffed as a feudatory prince at ", " 受封為藩王，就藩"),
+            new Entry("aw_hist_feudatory_granted", " 封", " enfeoffed ", " 封"),
+            new Entry("aw_hist_feudatory_as_prince_at", " 为藩王，就藩", " as a feudatory prince at ", " 為藩王，就藩"),
+            new Entry("aw_hist_feudatory_city_count", "，辖城 ", ", governing cities: ", "，轄城 "),
+            new Entry("aw_hist_feudatory_seat_became", " 成为", " became the seat of ", " 成為"),
+            new Entry("aw_hist_feudatory_seat_suffix", " 的藩都，流官仍治其城", "'s feudatory while appointed governors retained city administration", " 的藩都，流官仍治其城"),
             new Entry("aw_hist_era_changed", "改元 ", "Changed era to ", "改元 "),
 
             // Mandate text

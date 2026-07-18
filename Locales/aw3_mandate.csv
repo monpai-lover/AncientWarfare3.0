@@ -105,4 +105,7 @@ aw_grant_mandate_error_already_holder,该国已经拥有天命,This realm alread
 aw_grant_mandate_error_database_not_ready,天命档案尚未就绪,Mandate archive is not ready,天命檔案尚未就緒
 aw_grant_mandate_error_grant_failed,授予天命失败,Failed to grant the Mandate,授予天命失敗
 aw_hist_event_mandate_declared_player_grant,玩家授命,Player-Granted Mandate,玩家授命
+aw_job_feudatory_prince,藩王,Feudatory Prince,藩王
+task_unit_aw_task_feudatory_prince_roam,巡行藩都,Patrolling the Feudatory Seat,巡行藩都
+aw_feudatory_established,建立藩国,Feudatory Established,建立藩國
 aw_hist_mandate_end_player_grant,玩家转授天命,Mandate transferred by player,玩家轉授天命

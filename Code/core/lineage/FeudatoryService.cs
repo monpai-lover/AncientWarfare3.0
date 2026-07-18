@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.content;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -43,6 +46,31 @@ namespace AncientWarfare3.core.lineage
                    _cache.ById.TryGetValue(feudatoryId, out pSnapshot);
         }
 
+        public static bool IsActivePrince(Actor pActor)
+        {
+            return pActor?.data != null && !pActor.isRekt() &&
+                   TryGetByPrince(pActor.data.id, out FeudatorySnapshot snapshot) &&
+                   snapshot.PrinceActorId == pActor.data.id;
+        }
+
+        public static bool TryGetRoamTile(Actor pActor, out WorldTile pTarget)
+        {
+            pTarget = null;
+            if (!IsActivePrince(pActor) ||
+                !TryGetByPrince(pActor.data.id, out FeudatorySnapshot snapshot))
+                return false;
+            City seat;
+            try { seat = World.world?.cities?.get(snapshot.SeatCityId); }
+            catch { seat = null; }
+            if (seat?.data == null || seat.isRekt() || seat.zones == null ||
+                seat.zones.Count == 0)
+                return false;
+
+            TileZone zone = seat.zones[UnityEngine.Random.Range(0, seat.zones.Count)];
+            pTarget = zone?.getRandomTile() ?? zone?.centerTile ?? seat.getTile();
+            return pTarget != null;
+        }
+
         public static bool TryEstablish(Kingdom pEmpire, Actor pPrince,
             IReadOnlyList<City> pCities, string pReason, out long pFeudatoryId)
         {
@@ -80,6 +108,8 @@ namespace AncientWarfare3.core.lineage
                 pPrince.data.id, pCities[0].id, 40, 60, cityIds);
             ProjectHotIds(snapshot, pPrince, pCities);
             PublishAdded(snapshot);
+            ChronicleEvents.OnFeudatoryEstablished(pEmpire, pPrince, pCities[0],
+                pCities.Count);
             pFeudatoryId = feudatoryId;
             return true;
         }
@@ -242,6 +272,24 @@ namespace AncientWarfare3.core.lineage
             for (int i = 0; i < pCities.Count; i++)
                 pCities[i].data.set(LineageKeys.CITY_FEUDATORY_ID,
                     pSnapshot.FeudatoryId);
+            AssignPrinceIdentity(pPrince, pCities[0]);
+        }
+
+        private static void AssignPrinceIdentity(Actor pPrince, City pSeat)
+        {
+            if (pPrince?.data == null || pSeat?.data == null) return;
+            pPrince.joinCity(pSeat);
+            if (!pPrince.hasTrait(FeudatoryContent.TraitId))
+                pPrince.addTrait(FeudatoryContent.TraitId);
+
+            pPrince.data.get(LineageKeys.COURT_LAYER, out string layer, "");
+            if (!pPrince.isWarrior() &&
+                layer != CourtOfficeLayer.Military)
+                CourtService.ClearOfficeForReignTransition(pPrince,
+                    "became_feudatory_prince");
+            if (pPrince.isWarrior()) return;
+            try { pPrince.ai?.setJob(FeudatoryContent.ActorJobId); }
+            catch { }
         }
 
         private static void PublishAdded(FeudatorySnapshot pSnapshot)

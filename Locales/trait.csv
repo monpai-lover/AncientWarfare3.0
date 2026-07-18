@@ -57,3 +57,5 @@ trait_aw_school_historian,史家,Historian School,史家
 trait_aw_school_historian_info,记录史事典章并以往鉴今,Records events and institutions so the past can guide the present,記錄史事典章並以往鑒今
 trait_aw_historical_school_master,百家先师,Historical School Master,百家先師
 trait_aw_historical_school_master_info,负一门学说之传承而游历列国的历史先师,A mortal historical master who carries a school tradition between states,負一門學說之傳承而遊歷列國的歷史先師
+trait_fanwang,藩王,Feudatory Prince,藩王
+trait_fanwang_info,受天子分封而镇守京畿之外的宗室藩王，辖城仍由流官治理,A dynastic prince enfeoffed outside the imperial core while appointed governors continue to administer the cities,受天子分封而鎮守京畿之外的宗室藩王，轄城仍由流官治理

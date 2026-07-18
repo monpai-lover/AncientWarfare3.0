@@ -31,6 +31,7 @@ namespace AncientWarfare3.content
             GuardContent.Init();
             BorderGuardContent.Init();
             RoyalAsylumContent.Init();
+            FeudatoryContent.Init();
             WarMobilizationContent.Init();
             core.lineage.WarPlotRedirectService.Init();
 

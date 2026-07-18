@@ -50,6 +50,37 @@ namespace AncientWarfare3.core.lineage
             RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
 
+        public static void OnFeudatoryEstablished(Kingdom pKingdom,
+            Actor pPrince, City pSeat, int pCityCount)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null ||
+                pSeat?.data == null)
+                return;
+            HistoryText person = HistoryText.Actor(pPrince) +
+                                 H("aw_hist_feudatory_became_prince") +
+                                 HistoryText.City(pSeat, pKingdom);
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), "feudatory_established", person,
+                ChronicleCategory.HONOR, HistoryTarget.City(pSeat));
+
+            HistoryText kingdom = HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_feudatory_granted") +
+                                  HistoryText.Actor(pPrince) +
+                                  H("aw_hist_feudatory_as_prince_at") +
+                                  HistoryText.City(pSeat, pKingdom) +
+                                  H("aw_hist_feudatory_city_count") +
+                                  HistoryText.PlainText(pCityCount.ToString());
+            HistoryWriter.RecordKingdom(pKingdom, "feudatory_established",
+                kingdom, HistoryTarget.Actor(pPrince));
+
+            HistoryText city = HistoryText.City(pSeat, pKingdom) +
+                               H("aw_hist_feudatory_seat_became") +
+                               HistoryText.Actor(pPrince) +
+                               H("aw_hist_feudatory_seat_suffix");
+            HistoryWriter.RecordCity(pSeat, pKingdom,
+                "feudatory_established", city, HistoryTarget.Actor(pPrince));
+        }
+
         private static bool BindStateNameForRuler(Kingdom pKingdom, Actor pRuler)
         {
             if (!LineageService.IsXiaKingdom(pKingdom) &&
