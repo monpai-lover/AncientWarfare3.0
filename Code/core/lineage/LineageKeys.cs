@@ -308,6 +308,9 @@ namespace AncientWarfare3.core.lineage
         public const string GENERAL_FIEF_CITY_ID = "aw_general_fief_city_id";
         public const string CITY_FIEF_GENERAL_ID = "aw_city_fief_general_id";
         public const string CITY_FIEF_GENERAL_NAME = "aw_city_fief_general_name";
+        public const string FEUDATORY_ID = "aw_feudatory_id";
+        public const string CITY_FEUDATORY_ID = "aw_city_feudatory_id";
+        public const string FAVOR_ORDER_ENABLED = "aw_favor_order_enabled";
         public const string GENERAL_RISK_RECORDED_YEAR = "aw_general_risk_recorded_year";
         public const string FORMER_KINGDOM_ID = "aw_former_kingdom_id";
         public const string FORMER_KINGDOM_NAME = "aw_former_kingdom_name";
