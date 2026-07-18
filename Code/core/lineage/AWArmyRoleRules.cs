@@ -6,7 +6,8 @@ namespace AncientWarfare3.core.lineage
         {
             return pRole == AWArmyRole.RoyalGuard ||
                    pRole == AWArmyRole.SlaveArmy ||
-                   pRole == AWArmyRole.BorderArmy;
+                   pRole == AWArmyRole.BorderArmy ||
+                   pRole == AWArmyRole.FeudatoryGarrison;
         }
 
         public static bool ShouldUseDetachedArmy(string pRole)
@@ -16,7 +17,10 @@ namespace AncientWarfare3.core.lineage
 
         public static int MaxArmiesPerCity(string pRole)
         {
-            return pRole == AWArmyRole.SlaveArmy ? 1 : int.MaxValue;
+            return pRole == AWArmyRole.SlaveArmy ||
+                   pRole == AWArmyRole.FeudatoryGarrison
+                ? 1
+                : int.MaxValue;
         }
 
         public static int MaxArmiesPerKingdom(string pRole)
@@ -58,6 +62,7 @@ namespace AncientWarfare3.core.lineage
             if (pRole == AWArmyRole.RoyalGuard) return "禁卫军";
             if (pRole == AWArmyRole.SlaveArmy) return "奴隶军";
             if (pRole == AWArmyRole.BorderArmy) return "边军";
+            if (pRole == AWArmyRole.FeudatoryGarrison) return "藩国镇军";
             return "军";
         }
     }

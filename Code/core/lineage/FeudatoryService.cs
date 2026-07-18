@@ -110,7 +110,41 @@ namespace AncientWarfare3.core.lineage
             PublishAdded(snapshot);
             ChronicleEvents.OnFeudatoryEstablished(pEmpire, pPrince, pCities[0],
                 pCities.Count);
+            FeudatoryGarrisonService.EnsureFor(snapshot);
             pFeudatoryId = feudatoryId;
+            return true;
+        }
+
+        public static bool UpdateGarrison(long pFeudatoryId, long pArmyId,
+            long pCaptainActorId)
+        {
+            if (!Ready || pArmyId < 0 || pCaptainActorId < 0 ||
+                !TryGet(pFeudatoryId, out FeudatorySnapshot current))
+                return false;
+            if (current.GarrisonArmyId == pArmyId &&
+                current.GarrisonCaptainActorId == pCaptainActorId)
+                return true;
+
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + FeudatoryTableItem.GetTableName() +
+                    " SET GARRISON_ARMY_ID=@army," +
+                    "GARRISON_CAPTAIN_ACTOR_ID=@captain WHERE FEUDATORY_ID=@id " +
+                    "AND STATUS=0 AND END_TIME<0";
+                command.Parameters.AddWithValue("@army", pArmyId);
+                command.Parameters.AddWithValue("@captain", pCaptainActorId);
+                command.Parameters.AddWithValue("@id", pFeudatoryId);
+                if (command.ExecuteNonQuery() != 1) return false;
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Feudatory garrison update failed: " +
+                                    exception.Message);
+                return false;
+            }
+
+            PublishReplaced(current.WithGarrison(pArmyId, pCaptainActorId));
             return true;
         }
 
@@ -165,7 +199,8 @@ namespace AncientWarfare3.core.lineage
                 cityIds.TryGetValue(row.feudatory_id, out List<long> memberIds);
                 snapshots.Add(new FeudatorySnapshot(row.feudatory_id,
                     row.empire_kingdom_id, row.prince_actor_id, row.seat_city_id,
-                    row.autonomy, row.loyalty, memberIds));
+                    row.autonomy, row.loyalty, memberIds,
+                    row.garrison_army_id, row.garrison_captain_actor_id));
             }
             Publish(snapshots);
         }
@@ -300,6 +335,19 @@ namespace AncientWarfare3.core.lineage
                 foreach (FeudatorySnapshot existing in _cache.ById.Values)
                     all.Add(existing);
                 all.Add(pSnapshot);
+                _cache = FeudatoryCache.Build(all);
+            }
+        }
+
+        private static void PublishReplaced(FeudatorySnapshot pSnapshot)
+        {
+            lock (CacheLock)
+            {
+                var all = new List<FeudatorySnapshot>(_cache.ById.Count);
+                foreach (FeudatorySnapshot existing in _cache.ById.Values)
+                    all.Add(existing.FeudatoryId == pSnapshot.FeudatoryId
+                        ? pSnapshot
+                        : existing);
                 _cache = FeudatoryCache.Build(all);
             }
         }
