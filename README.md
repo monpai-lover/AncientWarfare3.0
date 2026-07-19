@@ -4,6 +4,15 @@ AncientWarfare 3.0 是基于新版 WorldBox 0.51.x、NeoModLoader、Harmony 和 
 
 本 README 是当前 GitHub 首页说明和近期开发记录。更细的设计计划保留在 `docs/superpowers/plans/`。
 
+## 支持 · 赞赏
+
+如果「春秋模组」对你有帮助，欢迎扫码赞赏，支持它的持续开发 🙏
+
+<p align="center">
+  <img src="sponsor_qr.jpg" width="240" alt="安东飞马 的赞赏码 · 支持春秋模组"><br/>
+  <sub>安东飞马 的赞赏码 · 微信扫码「支持春秋模组」</sub>
+</p>
+
 ## 最近更新：2026-07-18 礼制、中央集权与附庸义务
 
 本轮把天命礼制、0–3 级中央集权、附庸贡赋与军事义务接成了一条完整的国家治理链路。实现以年度低频和缓存优先为原则，不增加全世界人物扫描、逐帧 SQL 或 UI `Update()` 轮询。
