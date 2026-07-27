@@ -196,7 +196,9 @@ Require-Present $service 'HashSet<long>'
 Require-Present $service 'MaxCandidatesPerCycle = 8'
 Require-Present $service 'MaxSweepZonesPerCycle = 64'
 Require-Present $service 'MaxCityBoundaryZonesPerCycle = 16'
+Require-Present $service 'MaxCityBoundaryRecordsPerCycle = 4'
 Require-Present $service 'Queue<CityBoundaryScan>'
+Require-Present $service 'rescanRequested = true'
 Require-Present $service 'pTargetCity.addZone(pZone)'
 Require-Present $authority 'EnclosedUnownedZoneRepairService.ProcessAuthorityCycle()'
 Require-Present $authority 'EnclosedUnownedZoneRepairService.Reset()'
@@ -261,7 +263,9 @@ path. When the cursor reaches the current list count, set it to `-1`.
 `ObserveCityKingdomChange` adds a transferred city to a coalesced resumable
 queue. Before ordinary candidates drain, inspect at most 16 of its city Zones
 and enqueue only unowned cardinal neighbours. This covers conquest without an
-unbounded synchronous border scan.
+unbounded synchronous border scan. Dequeue at most four city records per cycle,
+counting invalid records against that budget. A repeated transfer sets a rescan
+flag so the coalesced record restarts at Zone index zero on its next pass.
 
 - [ ] **Step 3: Implement candidate revalidation and assignment**
 

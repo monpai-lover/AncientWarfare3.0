@@ -55,10 +55,18 @@ Require-Present $service 'MaxSweepZonesPerCycle = 64' `
     'The initial sweep must advance at most 64 Zones per cycle.'
 Require-Present $service 'MaxCityBoundaryZonesPerCycle = 16' `
     'City transfer boundary inspection must have a fixed cycle budget.'
+Require-Present $service 'MaxCityBoundaryRecordsPerCycle = 4' `
+    'Invalid city transfer records must also have a fixed cycle budget.'
 Require-Present $service 'Queue<CityBoundaryScan>' `
     'Transferred cities must use a resumable boundary queue.'
-Require-Present $service 'PendingBoundaryCityIds' `
+Require-Present $service 'Dictionary<long, CityBoundaryScan>' `
     'Transferred city boundary work must be coalesced by city id.'
+Require-Present $service 'rescanRequested = true' `
+    'A repeated city transfer must request a full boundary rescan.'
+Require-Present $service 'scan.zoneIndex = 0' `
+    'Repeated city transfers must restart from the first city Zone.'
+Require-Present $service 'recordsRemaining--' `
+    'Every dequeued city scan record must consume the record budget.'
 Require-Present $service 'if (neighbour?.city == null)' `
     'City transfer repair must enqueue only unowned boundary neighbours.'
 Require-Present $service 'pTargetCity.addZone(pZone);' `

@@ -47,6 +47,11 @@ Transferred cities enter a coalesced, resumable boundary queue. Each authority
 cycle examines at most 16 of that city's Zones and queues only cardinal
 neighbours that are still unowned.
 
+At most four city-boundary records are dequeued per authority cycle, including
+dead or otherwise invalid cities. If the same city changes kingdom again while
+its scan is pending, its coalesced record is marked for rescan and restarts at
+Zone index zero on its next pass.
+
 The authoritative simulation cycle drains a fixed number of queued candidates.
 If a repair succeeds, the original ownership mutation hook queues the newly
 affected neighbours, allowing adjacent holes to settle over later cycles
@@ -63,7 +68,7 @@ are already excluded by the authority-cycle gate.
 
 - Normal ownership changes inspect only the changed Zone and four neighbours.
 - Whole-city transfers inspect at most 16 city Zones per authority cycle and
-  never scan unrelated cities.
+  at most four queued city records; they never scan unrelated cities.
 - Queue membership is coalesced, so bulk captures and save loading cannot add
   duplicate work for the same coordinates.
 - Candidate processing and initial-sweep advancement both have fixed per-cycle

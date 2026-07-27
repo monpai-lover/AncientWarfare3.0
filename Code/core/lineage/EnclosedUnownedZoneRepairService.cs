@@ -7,11 +7,14 @@ namespace AncientWarfare3.core.lineage
         private const int MaxCandidatesPerCycle = 8;
         private const int MaxSweepZonesPerCycle = 64;
         private const int MaxCityBoundaryZonesPerCycle = 16;
+        private const int MaxCityBoundaryRecordsPerCycle = 4;
 
         private sealed class CityBoundaryScan
         {
             public City city;
+            public long cityId;
             public int zoneIndex;
+            public bool rescanRequested;
         }
 
         private static readonly Queue<long> PendingCoordinates =
@@ -20,8 +23,9 @@ namespace AncientWarfare3.core.lineage
             new HashSet<long>();
         private static readonly Queue<CityBoundaryScan>
             PendingCityBoundaryScans = new Queue<CityBoundaryScan>();
-        private static readonly HashSet<long> PendingBoundaryCityIds =
-            new HashSet<long>();
+        private static readonly Dictionary<long, CityBoundaryScan>
+            PendingBoundaryScansByCityId =
+                new Dictionary<long, CityBoundaryScan>();
         private static int _sweepCursor = -1;
 
         public static void ObserveOwnershipChange(TileZone pZone)
@@ -40,15 +44,26 @@ namespace AncientWarfare3.core.lineage
         public static void ObserveCityKingdomChange(City pCity)
         {
             if (pCity?.data == null || pCity.id < 0L ||
-                !Config.game_loaded || SmoothLoader.isLoading() ||
-                !PendingBoundaryCityIds.Add(pCity.id))
+                !Config.game_loaded || SmoothLoader.isLoading())
                 return;
 
-            PendingCityBoundaryScans.Enqueue(new CityBoundaryScan
+            if (PendingBoundaryScansByCityId.TryGetValue(pCity.id,
+                    out CityBoundaryScan existing))
+            {
+                existing.city = pCity;
+                existing.rescanRequested = true;
+                return;
+            }
+
+            var scan = new CityBoundaryScan
             {
                 city = pCity,
-                zoneIndex = 0
-            });
+                cityId = pCity.id,
+                zoneIndex = 0,
+                rescanRequested = false
+            };
+            PendingBoundaryScansByCityId[pCity.id] = scan;
+            PendingCityBoundaryScans.Enqueue(scan);
         }
 
         public static void BeginInitialSweep()
@@ -56,7 +71,7 @@ namespace AncientWarfare3.core.lineage
             PendingCoordinates.Clear();
             PendingCoordinateSet.Clear();
             PendingCityBoundaryScans.Clear();
-            PendingBoundaryCityIds.Clear();
+            PendingBoundaryScansByCityId.Clear();
             _sweepCursor = 0;
         }
 
@@ -65,7 +80,7 @@ namespace AncientWarfare3.core.lineage
             PendingCoordinates.Clear();
             PendingCoordinateSet.Clear();
             PendingCityBoundaryScans.Clear();
-            PendingBoundaryCityIds.Clear();
+            PendingBoundaryScansByCityId.Clear();
             _sweepCursor = -1;
         }
 
@@ -97,14 +112,21 @@ namespace AncientWarfare3.core.lineage
         private static void ProcessCityBoundaryScans()
         {
             int remaining = MaxCityBoundaryZonesPerCycle;
-            while (remaining > 0 && PendingCityBoundaryScans.Count > 0)
+            int recordsRemaining = MaxCityBoundaryRecordsPerCycle;
+            while (remaining > 0 && recordsRemaining > 0 &&
+                   PendingCityBoundaryScans.Count > 0)
             {
                 CityBoundaryScan scan = PendingCityBoundaryScans.Dequeue();
+                recordsRemaining--;
+                if (scan.rescanRequested)
+                {
+                    scan.rescanRequested = false;
+                    scan.zoneIndex = 0;
+                }
                 City city = scan.city;
                 if (!IsLiveTarget(city) || city.zones == null)
                 {
-                    if (city != null)
-                        PendingBoundaryCityIds.Remove(city.id);
+                    PendingBoundaryScansByCityId.Remove(scan.cityId);
                     continue;
                 }
 
@@ -117,10 +139,10 @@ namespace AncientWarfare3.core.lineage
                     remaining--;
                 }
 
-                if (scan.zoneIndex < zones.Count)
+                if (scan.zoneIndex < zones.Count || scan.rescanRequested)
                     PendingCityBoundaryScans.Enqueue(scan);
                 else
-                    PendingBoundaryCityIds.Remove(city.id);
+                    PendingBoundaryScansByCityId.Remove(scan.cityId);
             }
         }
 
