@@ -15,6 +15,14 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), "setKingdom")]
+        private static void CitySetKingdom_Postfix(City __instance)
+        {
+            EnclosedUnownedZoneRepairService.
+                ObserveCityKingdomChange(__instance);
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.addLoadWorldCallbacks))]
         private static void RegisterWorldLoaded_Postfix()
         {

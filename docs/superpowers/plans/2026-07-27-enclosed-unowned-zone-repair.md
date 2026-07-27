@@ -188,11 +188,15 @@ The script must read the future service, patch, and authority files and assert:
 ```powershell
 Require-Present $patch 'HarmonyPatch(typeof(TileZone), "setCity")'
 Require-Present $patch 'ObserveOwnershipChange(__instance)'
+Require-Present $patch 'HarmonyPatch(typeof(City), "setKingdom")'
+Require-Present $patch 'ObserveCityKingdomChange(__instance)'
 Require-Present $patch 'MapBox.on_world_loaded += OnWorldLoaded'
 Require-Present $service 'Queue<long>'
 Require-Present $service 'HashSet<long>'
 Require-Present $service 'MaxCandidatesPerCycle = 8'
 Require-Present $service 'MaxSweepZonesPerCycle = 64'
+Require-Present $service 'MaxCityBoundaryZonesPerCycle = 16'
+Require-Present $service 'Queue<CityBoundaryScan>'
 Require-Present $service 'pTargetCity.addZone(pZone)'
 Require-Present $authority 'EnclosedUnownedZoneRepairService.ProcessAuthorityCycle()'
 Require-Present $authority 'EnclosedUnownedZoneRepairService.Reset()'
@@ -254,6 +258,11 @@ Each authority cycle indexes at most 64 entries from
 `World.world.zone_calculator.zones`, enqueuing them through the same coalescing
 path. When the cursor reaches the current list count, set it to `-1`.
 
+`ObserveCityKingdomChange` adds a transferred city to a coalesced resumable
+queue. Before ordinary candidates drain, inspect at most 16 of its city Zones
+and enqueue only unowned cardinal neighbours. This covers conquest without an
+unbounded synchronous border scan.
+
 - [ ] **Step 3: Implement candidate revalidation and assignment**
 
 Resolve queued coordinates through `zone_calculator.getZone(x, y)`. Build four
@@ -276,6 +285,13 @@ directly.
 private static void SetCity_Postfix(TileZone __instance)
 {
     EnclosedUnownedZoneRepairService.ObserveOwnershipChange(__instance);
+}
+
+[HarmonyPostfix]
+[HarmonyPatch(typeof(City), "setKingdom")]
+private static void CitySetKingdom_Postfix(City __instance)
+{
+    EnclosedUnownedZoneRepairService.ObserveCityKingdomChange(__instance);
 }
 
 [HarmonyPostfix]

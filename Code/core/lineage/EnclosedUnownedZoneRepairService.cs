@@ -6,10 +6,21 @@ namespace AncientWarfare3.core.lineage
     {
         private const int MaxCandidatesPerCycle = 8;
         private const int MaxSweepZonesPerCycle = 64;
+        private const int MaxCityBoundaryZonesPerCycle = 16;
+
+        private sealed class CityBoundaryScan
+        {
+            public City city;
+            public int zoneIndex;
+        }
 
         private static readonly Queue<long> PendingCoordinates =
             new Queue<long>();
         private static readonly HashSet<long> PendingCoordinateSet =
+            new HashSet<long>();
+        private static readonly Queue<CityBoundaryScan>
+            PendingCityBoundaryScans = new Queue<CityBoundaryScan>();
+        private static readonly HashSet<long> PendingBoundaryCityIds =
             new HashSet<long>();
         private static int _sweepCursor = -1;
 
@@ -26,10 +37,26 @@ namespace AncientWarfare3.core.lineage
                 Enqueue(neighbours[i]);
         }
 
+        public static void ObserveCityKingdomChange(City pCity)
+        {
+            if (pCity?.data == null || pCity.id < 0L ||
+                !Config.game_loaded || SmoothLoader.isLoading() ||
+                !PendingBoundaryCityIds.Add(pCity.id))
+                return;
+
+            PendingCityBoundaryScans.Enqueue(new CityBoundaryScan
+            {
+                city = pCity,
+                zoneIndex = 0
+            });
+        }
+
         public static void BeginInitialSweep()
         {
             PendingCoordinates.Clear();
             PendingCoordinateSet.Clear();
+            PendingCityBoundaryScans.Clear();
+            PendingBoundaryCityIds.Clear();
             _sweepCursor = 0;
         }
 
@@ -37,6 +64,8 @@ namespace AncientWarfare3.core.lineage
         {
             PendingCoordinates.Clear();
             PendingCoordinateSet.Clear();
+            PendingCityBoundaryScans.Clear();
+            PendingBoundaryCityIds.Clear();
             _sweepCursor = -1;
         }
 
@@ -45,6 +74,7 @@ namespace AncientWarfare3.core.lineage
             ZoneCalculator calculator = World.world?.zone_calculator;
             if (calculator == null) return;
 
+            ProcessCityBoundaryScans();
             AdvanceInitialSweep(calculator);
             int count = EnclosedUnownedZoneRules.ResolveDrainCount(
                 PendingCoordinates.Count, MaxCandidatesPerCycle);
@@ -61,6 +91,47 @@ namespace AncientWarfare3.core.lineage
                     // Ownership may change again while queued; stale work is
                     // safely reconsidered by the next ownership event.
                 }
+            }
+        }
+
+        private static void ProcessCityBoundaryScans()
+        {
+            int remaining = MaxCityBoundaryZonesPerCycle;
+            while (remaining > 0 && PendingCityBoundaryScans.Count > 0)
+            {
+                CityBoundaryScan scan = PendingCityBoundaryScans.Dequeue();
+                City city = scan.city;
+                if (!IsLiveTarget(city) || city.zones == null)
+                {
+                    if (city != null)
+                        PendingBoundaryCityIds.Remove(city.id);
+                    continue;
+                }
+
+                List<TileZone> zones = city.zones;
+                while (remaining > 0 && scan.zoneIndex < zones.Count)
+                {
+                    EnqueueUnownedCardinalNeighbours(
+                        zones[scan.zoneIndex]);
+                    scan.zoneIndex++;
+                    remaining--;
+                }
+
+                if (scan.zoneIndex < zones.Count)
+                    PendingCityBoundaryScans.Enqueue(scan);
+                else
+                    PendingBoundaryCityIds.Remove(city.id);
+            }
+        }
+
+        private static void EnqueueUnownedCardinalNeighbours(TileZone pZone)
+        {
+            TileZone[] neighbours = pZone?.neighbours;
+            if (neighbours == null) return;
+            for (int i = 0; i < neighbours.Length; i++)
+            {
+                TileZone neighbour = neighbours[i];
+                if (neighbour?.city == null) Enqueue(neighbour);
             }
         }
 

@@ -41,6 +41,12 @@ completely enclosed by the kingdom.
 does not change ownership directly. It queues the changed Zone and its four
 cardinal neighbours by coordinate, coalescing duplicate entries.
 
+`City.setKingdom` is observed separately because conquering a whole city changes
+the kingdom of every existing city Zone without calling `TileZone.setCity`.
+Transferred cities enter a coalesced, resumable boundary queue. Each authority
+cycle examines at most 16 of that city's Zones and queues only cardinal
+neighbours that are still unowned.
+
 The authoritative simulation cycle drains a fixed number of queued candidates.
 If a repair succeeds, the original ownership mutation hook queues the newly
 affected neighbours, allowing adjacent holes to settle over later cycles
@@ -56,6 +62,8 @@ are already excluded by the authority-cycle gate.
 ## Safety And Performance
 
 - Normal ownership changes inspect only the changed Zone and four neighbours.
+- Whole-city transfers inspect at most 16 city Zones per authority cycle and
+  never scan unrelated cities.
 - Queue membership is coalesced, so bulk captures and save loading cannot add
   duplicate work for the same coordinates.
 - Candidate processing and initial-sweep advancement both have fixed per-cycle
@@ -81,6 +89,8 @@ Pure rule tests must prove:
 Source guards must prove:
 
 - ownership is observed through `TileZone.setCity`;
+- city conquest is observed through `City.setKingdom` and uses a bounded,
+  resumable boundary scan;
 - assignment uses `City.addZone`;
 - the service is drained only by `AWAuthorityCycleService`;
 - runtime state resets on world lifecycle reset;

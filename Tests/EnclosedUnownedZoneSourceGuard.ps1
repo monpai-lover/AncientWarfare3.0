@@ -34,6 +34,10 @@ Require-Present $patch `
     'Zone ownership changes must be observed at TileZone.setCity.'
 Require-Present $patch 'ObserveOwnershipChange(__instance)' `
     'The ownership patch must enqueue the changed Zone.'
+Require-Present $patch '[HarmonyPatch(typeof(City), "setKingdom")]' `
+    'Whole-city kingdom transfers must be observed.'
+Require-Present $patch 'ObserveCityKingdomChange(__instance)' `
+    'A transferred city must queue its local boundary for repair.'
 Require-Present $patch 'MapBox.on_world_loaded += OnWorldLoaded' `
     'Each loaded world must start one bounded repair sweep.'
 Require-Absent $patch 'nameof(MapBox.Update)' `
@@ -49,6 +53,14 @@ Require-Present $service 'MaxCandidatesPerCycle = 8' `
     'Candidate repair must have an eight-Zone cycle budget.'
 Require-Present $service 'MaxSweepZonesPerCycle = 64' `
     'The initial sweep must advance at most 64 Zones per cycle.'
+Require-Present $service 'MaxCityBoundaryZonesPerCycle = 16' `
+    'City transfer boundary inspection must have a fixed cycle budget.'
+Require-Present $service 'Queue<CityBoundaryScan>' `
+    'Transferred cities must use a resumable boundary queue.'
+Require-Present $service 'PendingBoundaryCityIds' `
+    'Transferred city boundary work must be coalesced by city id.'
+Require-Present $service 'if (neighbour?.city == null)' `
+    'City transfer repair must enqueue only unowned boundary neighbours.'
 Require-Present $service 'pTargetCity.addZone(pZone);' `
     'Repair must use the original City.addZone ownership API.'
 Require-Absent $service 'OnWorldYear' `
