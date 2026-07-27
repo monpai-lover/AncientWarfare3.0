@@ -34,6 +34,8 @@ A small rule object decides whether a rebellion context is eligible for restorat
 
 The explicit city is validated again immediately before campaign persistence and immediately before identity creation. The entry point must not silently choose another eligible city, because the event being redirected is specifically the actor's current uprising.
 
+The current host-city exclusion used by scheduled autonomous restoration does not apply to this exact city. A vanilla rebellion event proves that the actor is no longer peacefully hosted there. Population, occupation, defender, supporter, core, and owner-liveness checks still apply, and scheduled restoration keeps the original peaceful-host exclusion.
+
 ### Harmony Integration
 
 The prefixes for `DiplomacyHelpersRebellion.startRebellion` and `City.useInspire` call a shared redirect service. They return `false` only after a restoration has successfully created and initialized the restored kingdom. Otherwise they return `true` and allow vanilla behavior.
