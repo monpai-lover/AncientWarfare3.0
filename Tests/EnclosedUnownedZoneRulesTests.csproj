@@ -9,7 +9,7 @@
     <IntermediateOutputPath>obj\EnclosedUnownedZoneRulesTests\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="EnclosedUnownedZoneRulesTests.cs" />
+    <Compile Include="EnclosedUnownedZoneRulesTests.cs.txt" />
     <Compile Include="..\Code\core\lineage\EnclosedUnownedZoneRules.cs"
              Link="EnclosedUnownedZoneRules.cs" />
   </ItemGroup>

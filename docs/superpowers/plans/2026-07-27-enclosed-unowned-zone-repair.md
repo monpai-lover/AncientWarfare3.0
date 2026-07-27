@@ -20,14 +20,14 @@ replica remains read-only through the existing authority-cycle gate.
 - Create `Code/core/lineage/EnclosedUnownedZoneRepairService.cs`: coordinate queue, initial sweep, world-object validation, and original `City.addZone` call.
 - Create `Code/patch/AW_EnclosedUnownedZonePatch.cs`: ownership observation and world-loaded event registration only.
 - Modify `Code/core/performance/AWAuthorityCycleService.cs`: drain and reset the repair service within the existing authority gate.
-- Create `Tests/EnclosedUnownedZoneRulesTests.cs`: executable rule and source-integration regression tests.
+- Create `Tests/EnclosedUnownedZoneRulesTests.cs.txt`: executable rule and source-integration regression tests.
 - Create `Tests/EnclosedUnownedZoneRulesTests.csproj`: isolated test project.
 - Create `Tests/EnclosedUnownedZoneSourceGuard.ps1`: performance and lifecycle source guards.
 
 ### Task 1: Add Failing Rule Tests
 
 **Files:**
-- Create: `Tests/EnclosedUnownedZoneRulesTests.cs`
+- Create: `Tests/EnclosedUnownedZoneRulesTests.cs.txt`
 - Create: `Tests/EnclosedUnownedZoneRulesTests.csproj`
 
 - [ ] **Step 1: Create the isolated test project**
@@ -42,7 +42,7 @@ replica remains read-only through the existing authority-cycle gate.
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="EnclosedUnownedZoneRulesTests.cs" />
+    <Compile Include="EnclosedUnownedZoneRulesTests.cs.txt" />
     <Compile Include="..\Code\core\lineage\EnclosedUnownedZoneRules.cs" Link="EnclosedUnownedZoneRules.cs" />
   </ItemGroup>
 </Project>
@@ -89,7 +89,7 @@ Expected: build failure because `EnclosedUnownedZoneRules.cs` and its types do n
 - [ ] **Step 4: Commit the RED tests**
 
 ```powershell
-git add Tests/EnclosedUnownedZoneRulesTests.cs Tests/EnclosedUnownedZoneRulesTests.csproj
+git add Tests/EnclosedUnownedZoneRulesTests.cs.txt Tests/EnclosedUnownedZoneRulesTests.csproj
 git commit -m "test: specify enclosed zone assignment"
 ```
 
@@ -97,7 +97,7 @@ git commit -m "test: specify enclosed zone assignment"
 
 **Files:**
 - Create: `Code/core/lineage/EnclosedUnownedZoneRules.cs`
-- Test: `Tests/EnclosedUnownedZoneRulesTests.cs`
+- Test: `Tests/EnclosedUnownedZoneRulesTests.cs.txt`
 
 - [ ] **Step 1: Add the neighbour facts type**
 
@@ -172,7 +172,7 @@ Expected: `Enclosed unowned Zone rule tests passed.`
 - [ ] **Step 5: Commit the pure rules**
 
 ```powershell
-git add Code/core/lineage/EnclosedUnownedZoneRules.cs Tests/EnclosedUnownedZoneRulesTests.cs
+git add Code/core/lineage/EnclosedUnownedZoneRules.cs Tests/EnclosedUnownedZoneRulesTests.cs.txt
 git commit -m "feat: decide enclosed zone ownership"
 ```
 
@@ -369,7 +369,7 @@ Expected: both builds exit 0 with zero new errors or warnings.
 
 ```powershell
 git diff --check
-git diff -- Code/core/lineage/EnclosedUnownedZoneRules.cs Code/core/lineage/EnclosedUnownedZoneRepairService.cs Code/patch/AW_EnclosedUnownedZonePatch.cs Code/core/performance/AWAuthorityCycleService.cs Tests/EnclosedUnownedZoneRulesTests.cs Tests/EnclosedUnownedZoneRulesTests.csproj Tests/EnclosedUnownedZoneSourceGuard.ps1 Tests/SourceGuardTests.ps1
+git diff -- Code/core/lineage/EnclosedUnownedZoneRules.cs Code/core/lineage/EnclosedUnownedZoneRepairService.cs Code/patch/AW_EnclosedUnownedZonePatch.cs Code/core/performance/AWAuthorityCycleService.cs Tests/EnclosedUnownedZoneRulesTests.cs.txt Tests/EnclosedUnownedZoneRulesTests.csproj Tests/EnclosedUnownedZoneSourceGuard.ps1 Tests/SourceGuardTests.ps1
 ```
 
 Expected: no whitespace errors and no unrelated edits in the scoped diff.
