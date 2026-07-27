@@ -11,6 +11,7 @@ public static class EnclosedUnownedZoneRulesTests
             SharedSidesWin();
             NearestCentreWinsTie();
             StableCityIdWinsFinalTie();
+            ZeroCityIdRemainsValid();
             MixedKingdomsRemainDisputed();
             OpenExitRemainsUnowned();
             InvalidZonesRemainUnowned();
@@ -62,6 +63,13 @@ public static class EnclosedUnownedZoneRulesTests
         EnclosedZoneNeighbourFacts second = Neighbour(51L, 6L, 11, 10);
         Equal(-1L, Select(first, first, second, second),
             "mixed kingdoms remain disputed");
+    }
+
+    private static void ZeroCityIdRemainsValid()
+    {
+        EnclosedZoneNeighbourFacts city = Neighbour(0L, 1L, 10, 10);
+        Equal(0L, Select(city, city, city, city),
+            "zero is a valid stable city id");
     }
 
     private static void OpenExitRemainsUnowned()

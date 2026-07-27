@@ -42,7 +42,7 @@ namespace AncientWarfare3.core.lineage
             {
                 EnclosedZoneNeighbourFacts neighbour = neighbours[i];
                 if (!neighbour.IsOwned || !neighbour.IsLive ||
-                    neighbour.CityId <= 0L || neighbour.KingdomId <= 0L)
+                    neighbour.CityId < 0L || neighbour.KingdomId < 0L)
                     return -1L;
 
                 if (enclosingKingdomId < 0L)
