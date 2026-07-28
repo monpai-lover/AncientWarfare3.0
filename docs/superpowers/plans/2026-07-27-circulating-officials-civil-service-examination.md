@@ -423,3 +423,44 @@ git log -10 --oneline
 ```
 
 Do not mark the goal complete until the focused tests, broad guards, Debug/Release builds, deployment, save/load, two-cycle runtime test, and log inspection all have current evidence.
+
+### Task 10: Drive Admission by Court Vacancies and Render Real Stage Rosters
+
+**Files:**
+- Modify: `Code/core/court/CivilServiceExamRules.cs`
+- Modify: `Code/core/court/CivilServiceExamService.cs`
+- Modify: `Code/core/db/CivilServiceExamSessionTableItem.cs`
+- Modify: `Code/core/court/CivilServiceExamPersistence.cs`
+- Modify: `Code/core/court/CivilServiceExamReadModel.cs`
+- Modify: `Code/ui/windows/CivilServiceExamWindow.cs`
+- Modify: `Tests/AncientWarfare3.Rules.Tests/CivilServiceExamRulesTests.cs.txt`
+- Modify: `Tests/CivilServiceExamRuntimeSourceGuard.ps1`
+- Modify: `Tests/CivilServiceExamUiSourceGuard.ps1`
+
+- [ ] **Step 1: Write failing vacancy-quota and stage-roster tests**
+
+Cover zero vacancies retaining one reserve graduate, increasing vacancies increasing final seats, preliminary stages using four-times and two-times funnels, hard city-scale caps, and score failures never passing merely to fill seats. Add UI rule assertions that later-stage rosters require evidence of prior-stage passage or legal advancement.
+
+- [ ] **Step 2: Run the focused tests and confirm RED**
+
+```powershell
+dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --civil-service-exam-slice
+```
+
+Expected: compile failure because vacancy-quota and stage-roster rule methods do not exist.
+
+- [ ] **Step 3: Persist a frozen demand snapshot per sitting**
+
+Add central vacancy count, city vacancy count, and final admission quota to the session schema. Populate them when the session is created from bounded court and city indexes. Existing rows receive safe defaults and retain their historical results.
+
+- [ ] **Step 4: Apply vacancy-aware stage quotas**
+
+Resolve final seats as `min(finalStageCap, vacancies + max(1, ceil(vacancies / 4)))`. Resolve local or prefectural seats as `min(existingStageCap, finalSeats * 4)` and metropolitan seats as `min(existingStageCap, finalSeats * 2)`. Continue requiring the 60-point pass mark.
+
+- [ ] **Step 5: Filter every stage tab by actual participation**
+
+Move stage-roster predicates into `CivilServiceExamRules` so they are unit tested. Local and prefectural tabs require that stage's score; metropolitan and national tabs require prior-stage passage or persisted advancement; palace requires metropolitan passage and `gongshi` status. The all/history tabs remain unchanged.
+
+- [ ] **Step 6: Verify, build, deploy, and run two sittings**
+
+Run the focused Rules slice and all civil-service source guards, build Debug and Release, deploy while preserving `.runtime`, load the newest autosave, and advance through at least one imperial and one tributary sitting. Verify candidate counts, different stage rosters, vacancy-linked final graduates, office filling, localized history, and absence of SQLite/runtime errors.
