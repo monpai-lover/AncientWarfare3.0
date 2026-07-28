@@ -1,0 +1,65 @@
+Succession Split Opinion And War-Goal Deployment Evidence
+Date: 2026-07-28 Asia/Shanghai
+Branch: feature/ai-rts-army
+Design commit: 86955b5
+Plan commit: da04300
+
+Implemented behavior
+- Native WorldBox opinion asset: aw_opinion_succession_split
+- Visible locale: 宗统分裂 / Dynastic split / 宗統分裂
+- Symmetric opinion value: -100 for one materialized original/rival pair
+- Automatic removal: closed dispute, reunification, destroyed court, or unrelated pair
+- Bounded reunification AI preference: +60
+- Existing three-generation free reunification claim remains unchanged
+
+Deployed production files
+- Code/core/lineage/SuccessionDisputeRules.cs
+- Code/core/lineage/SuccessionDisputeService.cs
+- Code/core/lineage/RitualDiplomacyOpinionCallbacks.cs
+- Code/core/lineage/RitualDiplomacyOpinionService.cs
+- Code/core/lineage/WarAiGoalSelectionRules.cs
+- Code/core/lineage/WarDecisionAI.cs
+- Locales/others.csv
+
+Deployment target
+D:\SteamLibrary\steamapps\common\worldbox\Mods\AncientWarfare3.0
+
+Installed runtime preservation
+Before files: 454
+Before aggregate SHA-256: 5EFB1B0236FFA590D00DF081ACB53D9645EA7499B63A2DE68CE5326F6BF9AFFF
+After files: 454
+After aggregate SHA-256: 5EFB1B0236FFA590D00DF081ACB53D9645EA7499B63A2DE68CE5326F6BF9AFFF
+Result: exact match; .runtime was not copied, deleted, or recreated.
+
+Automated verification
+- SuccessionSplitOpinionSourceGuard.ps1: passed
+- Debug --inheritance-slice: passed
+- Debug --war-ai-slice: passed
+- Development Debug build: 0 warnings, 0 errors
+- Development Release build: 0 warnings, 0 errors
+- Installed Debug build: 0 warnings, 0 errors
+- Installed Release build: 0 warnings, 0 errors
+- Scoped whitespace checks: passed
+
+Complete Rules harness
+- Result: blocked by an unrelated existing occupation assertion.
+- Failure: active-war captures expose a fail-closed transfer gate: expected true
+- Location: Tests/AncientWarfare3.Rules.Tests/Program.cs.txt:2313
+- No occupation, RTS, war-score, or settlement file was changed for this feature.
+
+Runtime acceptance
+- Autosave: C:\Users\24908\AppData\LocalLow\mkarpenko\WorldBox\autosaves\1785248429
+- Process ID: 44856
+- Autosave load time: 7.7885 seconds
+- Runtime database: D:\SteamLibrary\steamapps\common\worldbox\Mods\AncientWarfare3.0\.runtime\process-44856\aw3_lineage_archive.db
+- PRAGMA integrity_check: ok
+- Active dispute: ID 1, original kingdom 5, rival kingdom 11, state 黄
+- Dispute status: Active (4), original and rival archives both alive
+- Rule precondition: satisfied for symmetric -100 opinion callback
+- Player.log: no AW3 compilation, succession-opinion, SQLite, or async-write error
+- Visual row acceptance remains available in the running game by opening the
+  diplomacy opinion breakdown between the two 黄 courts.
+
+Safety
+- save8 was not used.
+- The game was launched only from the latest approved autosave listed above.
