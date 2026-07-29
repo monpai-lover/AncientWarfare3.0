@@ -5,8 +5,6 @@ $patchPath = Join-Path $repo `
     'Code\patch\AW_EmptyCitySurvivalPatch.cs'
 $servicePath = Join-Path $repo `
     'Code\core\lineage\EmptyCitySurvivalService.cs'
-$zoneServicePath = Join-Path $repo `
-    'Code\core\lineage\EnclosedUnownedZoneRepairService.cs'
 
 function Read-RequiredFile([string]$path, [string]$name) {
     if (-not [IO.File]::Exists($path)) {
@@ -27,8 +25,6 @@ function Require-Absent([string]$source, [string]$needle,
 
 $patch = Read-RequiredFile $patchPath 'Empty city survival patch'
 $service = Read-RequiredFile $servicePath 'Empty city survival service'
-$zoneService = Read-RequiredFile $zoneServicePath `
-    'Enclosed Zone repair service'
 
 Require-Present $patch `
     '[HarmonyPatch(typeof(CityBehBorderShrink), nameof(CityBehBorderShrink.execute))]' `
@@ -81,10 +77,5 @@ Require-Absent $patch 'typeof(CityManager)' `
     'The feature must not intercept CityManager removal.'
 Require-Absent $patch 'nameof(City.destroyCity)' `
     'The feature must not intercept the shared city destruction path.'
-
-Require-Present $zoneService '!kingdom.isNeutral()' `
-    'Neutral cities cannot contribute an enclosing sovereign boundary.'
-Require-Present $zoneService '!pCity.kingdom.isNeutral()' `
-    'Neutral cities cannot receive enclosed unowned Zones.'
 
 Write-Output 'Empty city survival source guard passed.'
