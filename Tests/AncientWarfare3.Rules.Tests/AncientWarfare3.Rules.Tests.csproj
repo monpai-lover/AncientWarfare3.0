@@ -84,6 +84,7 @@
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
     <Compile Include="CityArmyReinforcementRulesTests.cs.txt" />
     <Compile Include="CityReservePoolRulesTests.cs.txt" />
+    <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRecoveryRulesTests.cs.txt" />
     <Compile Include="GarrisonSortieRuntimeIndexRulesTests.cs.txt" />
     <Compile Include="XiaPopulationRecoveryRulesTests.cs.txt" />
@@ -243,6 +244,7 @@
     <Compile Include="..\..\Code\core\court\OfficialCareerRankRules.cs" Link="Production\OfficialCareerRankRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerBiographyRules.cs" Link="Production\OfficialCareerBiographyRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtAuxiliaryLawRules.cs" Link="Production\CourtAuxiliaryLawRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtConscriptionLawRules.cs" Link="Production\CourtConscriptionLawRules.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />

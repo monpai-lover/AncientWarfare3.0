@@ -1,0 +1,75 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CourtConscriptionLawRulesTests
+{
+    internal static void Run()
+    {
+        Equal(CourtConscriptionLaw.Standard,
+            CourtConscriptionLawRules.DefaultLaw,
+            "missing saves use the fifty-percent tier");
+        Equal(30, CourtConscriptionLawRules.ReservePercent(
+            CourtConscriptionLaw.Limited), "limited share");
+        Equal(50, CourtConscriptionLawRules.ReservePercent(
+            CourtConscriptionLaw.Standard), "standard share");
+        Equal(70, CourtConscriptionLawRules.ReservePercent(
+            CourtConscriptionLaw.Expanded), "expanded share");
+        Equal(100, CourtConscriptionLawRules.ReservePercent(
+            CourtConscriptionLaw.FullMobilization), "full share");
+        Equal(0, CourtConscriptionLawRules.Capacity(-4, 70),
+            "negative eligibility cannot create capacity");
+        Equal(21, CourtConscriptionLawRules.Capacity(31, 70),
+            "capacity floors the selected share");
+
+        Greater(
+            Score(CourtConscriptionLaw.Limited, "nong", 0.9f, 0.8f,
+                0.1f, 0.1f, false, false, false),
+            Score(CourtConscriptionLaw.Expanded, "nong", 0.9f, 0.8f,
+                0.1f, 0.1f, false, false, false),
+            "livelihood agrarian courts prefer limited service");
+        Greater(
+            Score(CourtConscriptionLaw.Expanded, "bing", 0.2f, 0.1f,
+                0.9f, 0.9f, false, false, false),
+            Score(CourtConscriptionLaw.Standard, "bing", 0.2f, 0.1f,
+                0.9f, 0.9f, false, false, false),
+            "military aggressive courts prefer expanded service");
+        Greater(
+            Score(CourtConscriptionLaw.FullMobilization, "fa", 0.2f,
+                0.1f, 0.9f, 0.9f, true, true, true),
+            Score(CourtConscriptionLaw.Expanded, "fa", 0.2f,
+                0.1f, 0.9f, 0.9f, true, true, true),
+            "existential capital defense permits full mobilization");
+        Greater(
+            Score(CourtConscriptionLaw.Standard, "", 0.5f, 0.5f,
+                0.5f, 0.5f, false, false, false),
+            Score(CourtConscriptionLaw.FullMobilization, "", 0.5f, 0.5f,
+                0.5f, 0.5f, false, false, false),
+            "full mobilization is not a peacetime default");
+        Equal(4, CourtAuxiliaryLawRules.OptionCount(
+            CourtAuxiliaryLawKind.Conscription),
+            "conscription exposes four options");
+    }
+
+    private static int Score(CourtConscriptionLaw law, string school,
+        float livelihood, float peace, float war, float aggression,
+        bool existential, bool capitalThreat, bool severeDisadvantage)
+    {
+        return CourtConscriptionLawRules.Score(law, school, livelihood,
+            peace, war, aggression, existential, capitalThreat,
+            severeDisadvantage);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+
+    private static void Greater(int left, int right, string name)
+    {
+        if (left <= right)
+            throw new InvalidOperationException(name + ": " + left +
+                " <= " + right);
+    }
+}

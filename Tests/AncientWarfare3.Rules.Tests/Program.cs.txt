@@ -108,6 +108,13 @@ if (args.Length == 1 && args[0] == "--city-reserve-pool-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--conscription-law-slice")
+{
+    CourtConscriptionLawRulesTests.Run();
+    Console.WriteLine("AW3 conscription law rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-command-slice")
 {
     RunArmyRtsCommandContinuityRulesTests();

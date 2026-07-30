@@ -28,7 +28,8 @@ namespace AncientWarfare3.core.court
     {
         Term,
         BorderCommand,
-        AppointmentCulture
+        AppointmentCulture,
+        Conscription
     }
 
     public enum CourtAuxiliaryLawChangeResult
@@ -173,7 +174,10 @@ namespace AncientWarfare3.core.court
 
         public static int OptionCount(CourtAuxiliaryLawKind pKind)
         {
-            return pKind == CourtAuxiliaryLawKind.Term ? 4 : 3;
+            return pKind == CourtAuxiliaryLawKind.Term ||
+                   pKind == CourtAuxiliaryLawKind.Conscription
+                ? 4
+                : 3;
         }
 
         public static int ScoreTermLaw(CourtTermLaw pLaw, float pEfficiency,
