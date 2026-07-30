@@ -39,6 +39,10 @@ only after they enter military service.
    relationships, and reproduction.
 2. The target size is the existing city military capacity:
    `min(effective warrior_slots, floor(city population * 35%))`.
+   This is a hard ceiling. Once a pool reaches it, that city's enrollment work
+   stops immediately: adulthood events are ignored, no waiting list is kept,
+   and maintenance does not scan additional candidates until a peace-time
+   vacancy exists.
 3. The primary enrollment path is event-driven. A patch on the original actor
    adulthood transition attempts to register a newly adult eligible resident
    in the current city's pool. If the pool is already at capacity, the actor
@@ -163,41 +167,43 @@ Automated regression coverage will prove:
 4. Repeated roster changes coalesce to one kingdom refresh.
 5. The adulthood transition enrolls an eligible resident only when its kingdom
    is unfrozen and its city pool has capacity.
-6. Death, migration, kingdom change, enlistment, and eligibility loss remove
+6. A full pool skips new adults without creating a waiting queue or scanning
+   further candidates during that maintenance visit.
+7. Death, migration, kingdom change, enlistment, and eligibility loss remove
    the actor immediately.
-7. An actor becoming adult during war is not enrolled.
-8. Peace-time maintenance adds missed eligible actor IDs only up to the
+8. An actor becoming adult during war is not enrolled.
+9. Peace-time maintenance adds missed eligible actor IDs only up to the
    existing city military capacity and distributes repair work through bounded
    cursors.
-9. Preparation maintenance accelerates bounded completion without converting
+10. Preparation maintenance accelerates bounded completion without converting
    reserve members into warriors.
-10. War start freezes both attackers' and defenders' partial pools.
-11. No actor can be added while a kingdom remains in any active war.
-12. Concurrent wars cannot consume the same reserve actor twice and ending one
+11. War start freezes both attackers' and defenders' partial pools.
+12. No actor can be added while a kingdom remains in any active war.
+13. Concurrent wars cannot consume the same reserve actor twice and ending one
    war does not unfreeze a kingdom still participating in another.
-13. Save/load restores exactly the persisted pool and never fills missing
+14. Save/load restores exactly the persisted pool and never fills missing
     places in a frozen pool.
-14. Death, migration, transfer, ineligibility, and prior enlistment remove a
+15. Death, migration, transfer, ineligibility, and prior enlistment remove a
     reserve record without wartime replacement.
-15. Pool exhaustion prevents further reinforcement during the war.
-16. Forced reinforcement selects real indexed actors without crossing the
+16. Pool exhaustion prevents further reinforcement during the war.
+17. Forced reinforcement selects real indexed actors without crossing the
     donor-city population floor.
-17. Reinforced actors are assigned to the intended army and teleported to its
+18. Reinforced actors are assigned to the intended army and teleported to its
     captain or rally tile before or after its first mission.
-18. Repeated reinforcement requests cannot attach or teleport the same actor
+19. Repeated reinforcement requests cannot attach or teleport the same actor
     twice.
-19. Reinforcing a newly operational army queues a coalesced director refresh
+20. Reinforcing a newly operational army queues a coalesced director refresh
     and leads to a real attack, defense, or reserve mission.
-20. A normal field army currently shown as `Defend` can be reassigned to
+21. A normal field army currently shown as `Defend` can be reassigned to
     `Attack` after its defensive demand is satisfied and an offensive demand
     exists.
-21. A threatened capital or under-strength defense prevents that reassignment,
+22. A threatened capital or under-strength defense prevents that reassignment,
     and dedicated garrisons or special armies never enter the conversion path.
-22. An operational army with no open attack target receives a reserve or
+23. An operational army with no open attack target receives a reserve or
     defense mission when a friendly anchor exists.
-23. A missionless but valid army still renders basic map information with an
+24. A missionless but valid army still renders basic map information with an
     awaiting-order status.
-24. Existing RTS lifecycle and performance rule suites remain green.
+25. Existing RTS lifecycle and performance rule suites remain green.
 
 ## Out Of Scope
 
