@@ -16,13 +16,12 @@
 
 **Files:**
 - Create: `Code/core/lineage/RebellionDirectTerritoryTransferRules.cs`
-- Create: `Tests/AncientWarfare3.Rules.Tests/RebellionDirectTerritoryTransferRulesTests.cs.txt`
-- Modify: `Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj`
-- Modify: `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt`
+- Create: `Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj`
+- Create: `Tests/RebellionDirectTerritoryTransferRulesSlice/Program.cs`
 
 - [ ] **Step 1: Write the failing policy tests**
 
-Create a test slice covering rebel capture, old-regime recapture, normal-war fallback, same-side rejection, invalid facts, and ordinary-settlement blocking:
+Create an isolated test executable covering rebel capture, old-regime recapture, normal-war fallback, same-side rejection, invalid facts, and ordinary-settlement blocking:
 
 ```csharp
 using AncientWarfare3.core.lineage;
@@ -56,12 +55,12 @@ internal static class RebellionDirectTerritoryTransferRulesTests
 }
 ```
 
-Link the new production/test files in the rules test project, add a `--rebellion-direct-transfer-slice` entry point, and invoke the test from the full suite.
+The project links only `RebellionDirectTerritoryTransferRules.cs` and `WarPeaceProtectionRules.cs`, so it does not stage the shared untracked rules-test project.
 
 - [ ] **Step 2: Run the slice and verify RED**
 
 ```powershell
-dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --rebellion-direct-transfer-slice
+dotnet run --project Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj --no-restore
 ```
 
 Expected: build fails because `RebellionDirectTerritoryTransferRules` does not exist.
@@ -102,7 +101,7 @@ Run the Step 2 command. Expected: `AW3 rebellion direct-transfer rules passed.`
 - [ ] **Step 5: Commit the policy slice**
 
 ```powershell
-git add -- Code/core/lineage/RebellionDirectTerritoryTransferRules.cs Tests/AncientWarfare3.Rules.Tests/RebellionDirectTerritoryTransferRulesTests.cs.txt Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj Tests/AncientWarfare3.Rules.Tests/Program.cs.txt
+git add -- Code/core/lineage/RebellionDirectTerritoryTransferRules.cs Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj Tests/RebellionDirectTerritoryTransferRulesSlice/Program.cs
 git commit -m "test: define direct rebellion transfer policy"
 ```
 
@@ -209,7 +208,7 @@ The partial war-score bridge removes the pending row for that city, reads only `
 - [ ] **Step 5: Run capture regressions**
 
 ```powershell
-dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --rebellion-direct-transfer-slice
+dotnet run --project Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj --no-restore
 & Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
 & Tests/CityOccupationFailClosedSourceGuard.ps1
 & Tests/OccupationVanillaProgressSourceGuard.ps1
@@ -238,7 +237,7 @@ git commit -m "feat: transfer rebellion captures directly"
 - Modify: `Code/ui/windows/WarPeaceNegotiationController.cs`
 - Modify: `Code/ui/windows/DiplomacyConversationWindow.cs`
 - Modify: `Code/core/lineage/HistoryLocalizationRules.cs`
-- Modify: `Tests/AncientWarfare3.Rules.Tests/RebellionDirectTerritoryTransferRulesTests.cs.txt`
+- Modify: `Tests/RebellionDirectTerritoryTransferRulesSlice/Program.cs`
 - Modify: `Tests/RebellionDirectTerritoryTransferSourceGuard.ps1`
 
 - [ ] **Step 1: Extend the failing policy test**
@@ -252,7 +251,7 @@ False(WarPeaceProtectionRules.IsProtected("future_revolt", false,
     "an unknown ordinary war remains negotiable");
 ```
 
-Add this exact production link to the rules test project:
+The isolated slice project already contains this exact production link:
 
 ```xml
 <Compile Include="..\..\Code\core\lineage\WarPeaceProtectionRules.cs"
@@ -276,7 +275,7 @@ Require the service to cancel an old pending/accepted proposal when validation r
 - [ ] **Step 3: Run the policy and guard and verify RED**
 
 ```powershell
-dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --rebellion-direct-transfer-slice
+dotnet run --project Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj --no-restore
 & Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
 ```
 
@@ -318,7 +317,7 @@ English: Rebellion territory transfers by direct capture and cannot use ordinary
 - [ ] **Step 6: Run peace regressions**
 
 ```powershell
-dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --rebellion-direct-transfer-slice
+dotnet run --project Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj --no-restore
 & Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
 dotnet run --project Tests/WarPeaceSettlementServiceTests.csproj --no-restore
 & Tests/WarGoalAutomaticSettlementSourceGuard.ps1
@@ -332,7 +331,7 @@ Expected: all pass; ordinary wars still prepare and execute settlements.
 - [ ] **Step 7: Commit the peace block**
 
 ```powershell
-git add -- Code/core/lineage/WarPeaceProtectionRules.cs Code/core/lineage/WarPeaceSettlementRuntime.cs Code/core/lineage/WarPeaceSettlementService.cs Code/core/lineage/DiplomacyProposalService.cs Code/core/lineage/WarScoreDecisiveSettlementService.cs Code/core/lineage/WarGoalSettlementRuntimeService.cs Code/core/lineage/WarExhaustionSettlementRuntimeService.cs Code/ui/windows/WarPeaceNegotiationController.cs Code/ui/windows/DiplomacyConversationWindow.cs Code/core/lineage/HistoryLocalizationRules.cs Tests/AncientWarfare3.Rules.Tests/RebellionDirectTerritoryTransferRulesTests.cs.txt Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
+git add -- Code/core/lineage/WarPeaceProtectionRules.cs Code/core/lineage/WarPeaceSettlementRuntime.cs Code/core/lineage/WarPeaceSettlementService.cs Code/core/lineage/DiplomacyProposalService.cs Code/core/lineage/WarScoreDecisiveSettlementService.cs Code/core/lineage/WarGoalSettlementRuntimeService.cs Code/core/lineage/WarExhaustionSettlementRuntimeService.cs Code/ui/windows/WarPeaceNegotiationController.cs Code/ui/windows/DiplomacyConversationWindow.cs Code/core/lineage/HistoryLocalizationRules.cs Tests/RebellionDirectTerritoryTransferRulesSlice/Program.cs Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
 git commit -m "fix: keep rebellion wars out of ordinary peace"
 ```
 
@@ -357,7 +356,7 @@ Expected: all pass. Allied controller and same-side war leader remain equal-cost
 - [ ] **Step 2: Run direct-transfer and occupation regressions**
 
 ```powershell
-dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tests.csproj --no-restore -- --rebellion-direct-transfer-slice
+dotnet run --project Tests/RebellionDirectTerritoryTransferRulesSlice/RebellionDirectTerritoryTransferRulesSlice.csproj --no-restore
 & Tests/RebellionDirectTerritoryTransferSourceGuard.ps1
 & Tests/CityOccupationFailClosedSourceGuard.ps1
 & Tests/OccupationVanillaProgressSourceGuard.ps1
