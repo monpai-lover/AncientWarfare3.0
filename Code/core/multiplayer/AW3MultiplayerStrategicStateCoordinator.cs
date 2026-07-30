@@ -119,6 +119,7 @@ namespace AncientWarfare3.core.multiplayer
         {
             var result = new List<AW3MultiplayerArmyProjection>();
             if (World.world?.armies == null) return result;
+            var reserveAvailableByKingdom = new Dictionary<long, int>();
             foreach (Army army in World.world.armies)
             {
                 if (army?.data == null || !army.isAlive()) continue;
@@ -168,18 +169,25 @@ namespace AncientWarfare3.core.multiplayer
                 Kingdom kingdom = null;
                 try { kingdom = army.getKingdom(); }
                 catch { }
-                kingdomReserveAvailable =
-                    CityReservePoolService.CountAvailable(kingdom);
+                if (kingdom?.data != null &&
+                    !reserveAvailableByKingdom.TryGetValue(kingdom.id,
+                        out kingdomReserveAvailable))
+                {
+                    kingdomReserveAvailable =
+                        CityReservePoolService.CountAvailable(kingdom);
+                    reserveAvailableByKingdom[kingdom.id] =
+                        kingdomReserveAvailable;
+                }
                 result.Add(new AW3MultiplayerArmyProjection(army.id,
                     AWArmyService.GetRole(army),
                     AWArmyService.GetAnchorCityId(army), orderId,
                     targetKind, targetId, target?.x ?? -1,
-                    target?.y ?? -1,
+                    target?.y ?? -1, replenishmentShortage,
+                    kingdomReserveAvailable,
                     operationalState.ToString().ToLowerInvariant(),
                     posture.ToString().ToLowerInvariant(), warId, frontId,
                     supply, organization, playerOrder,
-                    rtsRole.ToString().ToLowerInvariant(),
-                    replenishmentShortage, kingdomReserveAvailable));
+                    rtsRole.ToString().ToLowerInvariant()));
             }
             return result;
         }

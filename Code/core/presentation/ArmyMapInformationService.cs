@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.performance;
 using UnityEngine;
@@ -47,6 +48,9 @@ namespace AncientWarfare3.core.presentation
         private static long _selectionKingdomId = -1L;
         private static long _selectionAfterArmyId = -1L;
         private static bool _selectionInProgress;
+        private static int _reserveSupplyFrame = -1;
+        private static long _reserveSupplyKingdomId = -1L;
+        private static int _reserveSupplyValue;
 
         static ArmyMapInformationService()
         {
@@ -103,6 +107,9 @@ namespace AncientWarfare3.core.presentation
             ClearDisplayState();
             _reportedFailure = false;
             _initializationFailed = false;
+            _reserveSupplyFrame = -1;
+            _reserveSupplyKingdomId = -1L;
+            _reserveSupplyValue = 0;
         }
 
         public static void Shutdown()
@@ -388,7 +395,22 @@ namespace AncientWarfare3.core.presentation
             Kingdom kingdom = null;
             try { kingdom = pArmy?.getKingdom(); }
             catch { }
-            pReserveSupply = CityReservePoolService.CountAvailable(kingdom);
+            pReserveSupply = ResolveAuthoritativeReserveSupply(kingdom);
+        }
+
+        private static int ResolveAuthoritativeReserveSupply(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0;
+            int frame = Time.frameCount;
+            if (_reserveSupplyFrame == frame &&
+                _reserveSupplyKingdomId == pKingdom.id)
+                return _reserveSupplyValue;
+            _reserveSupplyFrame = frame;
+            _reserveSupplyKingdomId = pKingdom.id;
+            _reserveSupplyValue =
+                CityReservePoolService.CountAvailable(pKingdom);
+            return _reserveSupplyValue;
         }
 
         private static bool TryResolveLiveCaptain(long pArmyId,

@@ -58,6 +58,19 @@ if (-not $models.Contains('public int ReplenishmentShortage { get; }') -or
 if (-not $coordinator.Contains('CityReservePoolService.CountAvailable(')) {
     throw 'Authoritative strategic capture must publish indexed reserve supply.'
 }
+if (-not $coordinator.Contains('reserveAvailableByKingdom') -or
+    -not $coordinator.Contains(
+        'reserveAvailableByKingdom.TryGetValue(')) {
+    throw 'One strategic capture must aggregate reserve supply once per kingdom.'
+}
+if (-not $service.Contains(
+        'private static int ResolveAuthoritativeReserveSupply(') -or
+    -not $service.Contains('Time.frameCount')) {
+    throw 'Native Army flags must share one authoritative reserve count per render frame.'
+}
+if (-not $service.Contains('using AncientWarfare3.api.multiplayer;')) {
+    throw 'Army information must import the typed multiplayer replica scope.'
+}
 if (-not $keys.Contains('AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE') -or
     -not $keys.Contains('AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE')) {
     throw 'Replica manpower values need dedicated Army read keys.'

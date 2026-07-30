@@ -67,6 +67,17 @@ internal static class AW3MultiplayerStrategicStateRulesTests
 
     private static void ModelsRejectInvalidIdentityAndTick()
     {
+        Equal(true, typeof(AW3MultiplayerArmyProjection).GetConstructor(
+                new[]
+                {
+                    typeof(long), typeof(string), typeof(long),
+                    typeof(string),
+                    typeof(AW3MultiplayerStrategicTargetKind), typeof(long),
+                    typeof(int), typeof(int), typeof(string), typeof(string),
+                    typeof(long), typeof(long), typeof(int), typeof(int),
+                    typeof(bool), typeof(string)
+                }) != null,
+            "the original multiplayer Army constructor ABI remains available");
         Throws<ArgumentOutOfRangeException>(() =>
                 new AW3MultiplayerStrategicSnapshot(-1,
                     Array.Empty<AW3MultiplayerArmyProjection>(),
@@ -103,7 +114,8 @@ internal static class AW3MultiplayerStrategicStateRulesTests
         Throws<ArgumentOutOfRangeException>(() =>
                 new AW3MultiplayerArmyProjection(1, "role", -1,
                     "order", AW3MultiplayerStrategicTargetKind.None,
-                    -1, -1, -1, kingdomReserveAvailable: -1),
+                    -1, -1, -1, replenishmentShortage: 0,
+                    kingdomReserveAvailable: -1),
             "negative kingdom reserve supply rejected");
     }
 
@@ -309,11 +321,11 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             anchorCityId: 3, currentOrderId: "defend",
             targetKind: AW3MultiplayerStrategicTargetKind.City,
             targetId: 7, targetTileX: -1, targetTileY: -1,
+            replenishmentShortage: replenishmentShortage,
+            kingdomReserveAvailable: kingdomReserveAvailable,
             operationalStateId: "march", postureId: posture,
             warId: 21, frontId: 22, supply: 64, organization: 71,
-            playerOrder: true, rtsRoleId: rtsRole,
-            replenishmentShortage: replenishmentShortage,
-            kingdomReserveAvailable: kingdomReserveAvailable);
+            playerOrder: true, rtsRoleId: rtsRole);
     }
 
     private static AW3MultiplayerActorProjection Actor(long id,

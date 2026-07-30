@@ -47,8 +47,24 @@ namespace AncientWarfare3.api.multiplayer
             string operationalStateId = "", string postureId = "",
             long warId = -1L, long frontId = -1L, int supply = 100,
             int organization = 100, bool playerOrder = false,
-            string rtsRoleId = "reserve", int replenishmentShortage = 0,
-            int kingdomReserveAvailable = 0)
+            string rtsRoleId = "reserve")
+            : this(armyId, roleId, anchorCityId, currentOrderId, targetKind,
+                targetId, targetTileX, targetTileY,
+                replenishmentShortage: 0, kingdomReserveAvailable: 0,
+                operationalStateId, postureId, warId, frontId, supply,
+                organization, playerOrder, rtsRoleId)
+        {
+        }
+
+        public AW3MultiplayerArmyProjection(long armyId, string roleId,
+            long anchorCityId, string currentOrderId,
+            AW3MultiplayerStrategicTargetKind targetKind, long targetId,
+            int targetTileX, int targetTileY, int replenishmentShortage,
+            int kingdomReserveAvailable = 0,
+            string operationalStateId = "", string postureId = "",
+            long warId = -1L, long frontId = -1L, int supply = 100,
+            int organization = 100, bool playerOrder = false,
+            string rtsRoleId = "reserve")
         {
             AW3MultiplayerStrategicValidation.RequiredId(armyId,
                 nameof(armyId));
