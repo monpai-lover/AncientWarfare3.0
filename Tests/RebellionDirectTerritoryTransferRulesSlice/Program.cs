@@ -26,6 +26,12 @@ False(RebellionDirectTerritoryTransferRules.BlocksOrdinarySettlement(
 Equal("rebellion_uses_direct_territory_transfer",
     RebellionDirectTerritoryTransferRules.SettlementBlockedReason,
     "the rejection reason is stable");
+True(WarPeaceProtectionRules.IsProtected("future_revolt", false,
+        false, pAuthoritativeRebellion: true),
+    "future rebellion assets automatically bypass ordinary peace");
+False(WarPeaceProtectionRules.IsProtected("future_revolt", false,
+        false, pAuthoritativeRebellion: false),
+    "an unknown ordinary war remains negotiable");
 
 Console.WriteLine("AW3 rebellion direct-transfer rules passed.");
 

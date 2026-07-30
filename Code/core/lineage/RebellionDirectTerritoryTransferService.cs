@@ -2,6 +2,21 @@ namespace AncientWarfare3.core.lineage
 {
     public static class RebellionDirectTerritoryTransferService
     {
+        public static bool BlocksOrdinarySettlement(War pWar)
+        {
+            bool valid = pWar?.data != null;
+            bool active;
+            bool rebellion;
+            try
+            {
+                active = valid && !pWar.hasEnded();
+                rebellion = active && pWar.getAsset()?.rebellion == true;
+            }
+            catch { return false; }
+            return RebellionDirectTerritoryTransferRules.
+                BlocksOrdinarySettlement(valid, active, rebellion);
+        }
+
         public static bool TryResolve(City pCity, Kingdom pCapturer,
             out War pWar)
         {

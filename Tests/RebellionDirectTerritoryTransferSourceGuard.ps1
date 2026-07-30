@@ -23,6 +23,23 @@ $service = Read-Source `
 $patch = Read-Source 'Code/patch/AW_CityOccupationAccelerationPatch.cs'
 $bridge = Read-Source `
     'Code/core/lineage/WarScoreRebellionDirectTransferBridge.cs'
+$peaceRuntime = Read-Source `
+    'Code/core/lineage/WarPeaceSettlementRuntime.cs'
+$peaceService = Read-Source `
+    'Code/core/lineage/WarPeaceSettlementService.cs'
+$diplomacy = Read-Source `
+    'Code/core/lineage/DiplomacyProposalService.cs'
+$decisive = Read-Source `
+    'Code/core/lineage/WarScoreDecisiveSettlementService.cs'
+$goals = Read-Source `
+    'Code/core/lineage/WarGoalSettlementRuntimeService.cs'
+$exhaustion = Read-Source `
+    'Code/core/lineage/WarExhaustionSettlementRuntimeService.cs'
+$controller = Read-Source `
+    'Code/ui/windows/WarPeaceNegotiationController.cs'
+$conversation = Read-Source `
+    'Code/ui/windows/DiplomacyConversationWindow.cs'
+$locale = Read-Source 'locales/aw3_diplomacy.csv'
 
 Require $service 'foreach (War war in pCapturer.getWars())' `
     'direct rebellion resolution must inspect only the capturer active-war index'
@@ -75,5 +92,29 @@ Require $bridge 'runtime.TryGetFrozenCityControl(pWarId, pCityId' `
     'direct cleanup must read only the matching war and city row'
 Require $bridge 'ClearGoalControlForCity(runtime, state, pCityId' `
     'direct cleanup must use the existing scoped war-score cleanup path'
+
+Require $peaceRuntime 'BlocksOrdinarySettlement(war)' `
+    'authoritative settlement context must reject direct-transfer rebellions'
+Require $peaceRuntime 'SettlementBlockedReason' `
+    'authoritative settlement rejection must use the stable reason'
+Require $peaceService 'SettlementBlockedReason' `
+    'settlement recovery must recognize stale rebellion proposals'
+Require $peaceService 'Cancel(proposal.DetailId,' `
+    'pending or accepted stale rebellion proposals must be cancelled'
+Require $diplomacy `
+    'pAuthoritativeRebellion: authoritativeRebellion' `
+    'AI protected-war selection must use the authoritative asset flag'
+Require $decisive 'BlocksOrdinarySettlement(pWar)' `
+    'decisive score must not force an ordinary rebellion treaty'
+Require $goals 'BlocksOrdinarySettlement(pWar)' `
+    'war goals must not force an ordinary rebellion treaty'
+Require $exhaustion 'BlocksOrdinarySettlement(pWar)' `
+    'exhaustion must not force an ordinary rebellion treaty'
+Require $controller 'BlocksOrdinarySettlement(war)' `
+    'the player negotiation window must remain closed for rebellions'
+Require $conversation 'rebellion_uses_direct_territory_transfer' `
+    'the stable rebellion rejection reason must have player feedback'
+Require $locale 'aw_diplomacy_failure_rebellion_direct_transfer,' `
+    'direct rebellion transfer feedback must be localized'
 
 Write-Output 'Rebellion direct territory transfer source guards passed.'
