@@ -1,76 +1,169 @@
 using System;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.pathfinding
 {
     internal static class AWPathfindingBootstrap
     {
-        private static readonly AWTraversalCache TraversalCache = new AWTraversalCache();
-        private static readonly AWPathRecoveryManager Recovery = new AWPathRecoveryManager();
         private static readonly AWPathDiagnostics Diagnostics = new AWPathDiagnostics();
+        private static readonly AWTraversalCache TraversalCache =
+            new AWTraversalCache(Diagnostics);
+        private static readonly AWPathRecoveryManager Recovery = new AWPathRecoveryManager();
         private static AWPathFinder _finder;
-        private static AWPathOwnerState _lastState = AWPathOwnerState.Pending;
         private static bool _running;
+        private static bool _traversalRunning;
+        private static long _maintenanceFrame;
 
         internal static AWPathFinder Finder => _finder;
+        internal static bool ReadyToIntercept =>
+            AWTraversalCaptureRules.ReadyToIntercept(_traversalRunning,
+                _running, _finder != null);
         internal static AWTraversalCache Cache => TraversalCache;
         internal static AWPathRecoveryManager RecoveryManager => Recovery;
         internal static AWPathDiagnostics PathDiagnostics => Diagnostics;
 
         public static void PrepareOwnership()
         {
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
             PathfindingOwnershipService.Prepare();
         }
 
         public static void AfterPatchesRegistered()
         {
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
             PathfindingOwnershipService.BeginStabilization();
         }
 
         public static void ProcessFrame()
         {
-            AWPathOwnerState state = PathfindingOwnershipService.ProcessMainThreadTick();
-            if (state != _lastState)
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
+            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            AWPathOwnerState state;
+            try
             {
-                AncientWarfare3.ModClass.LogInfo("AW3 pathfinding owner: " + state);
-                _lastState = state;
+                state = PathfindingOwnershipService.ProcessMainThreadTick();
             }
-
-            if (state == AWPathOwnerState.Suspending || state == AWPathOwnerState.Cultiway)
+            finally
             {
-                StopOwnedPathfinder();
-                return;
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "path_owner_audit", diagnostic);
             }
-            if (state != AWPathOwnerState.Aw3) return;
-            EnsureStarted();
-            if (!_running) return;
-            TraversalCache.ProcessDirty(2);
-            TraversalCache.ConsistencySweep(64);
-            AWPathMovementBridge.ProcessTransports(64);
-            Diagnostics.DrainAndMaybeLog(32, _finder.QueueDepth,
-                AncientWarfare3.ModClass.LogWarning);
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { EnsureTraversalStarted(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "path_traversal_ensure_started", diagnostic);
+            }
+            if (!_traversalRunning) return;
+            if (state == AWPathOwnerState.Suspending ||
+                state == AWPathOwnerState.Cultiway)
+            {
+                diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try { StopOwnedPathfinder(); }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "path_owner_stop", diagnostic);
+                }
+            }
+            else if (state == AWPathOwnerState.Aw3)
+            {
+                diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try { EnsureStarted(); }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "path_ensure_started", diagnostic);
+                }
+            }
+            if (_maintenanceFrame < long.MaxValue) _maintenanceFrame++;
+            int dirtyChunkCount = TraversalCache.DirtyChunkCount;
+            if (AWTraversalCacheBudgetRules.ShouldProcessDirty(
+                    _maintenanceFrame, dirtyChunkCount))
+            {
+                diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try
+                {
+                    TraversalCache.ProcessDirty(
+                        AWTraversalCacheBudgetRules.DirtyChunkBudgetForFrame(
+                            dirtyChunkCount));
+                }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "path_dirty_chunks", diagnostic);
+                }
+            }
+            if (AWTraversalCacheBudgetRules.ShouldRunConsistencySweep(
+                    _maintenanceFrame))
+            {
+                diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try
+                {
+                    TraversalCache.ConsistencySweep(
+                        AWTraversalCacheBudgetRules.ConsistencyTileBudget);
+                }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "path_consistency_sweep", diagnostic);
+                }
+            }
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try
+            {
+                Diagnostics.DrainAndMaybeLog(32,
+                    _finder?.QueueDepth ?? 0, null);
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "path_diagnostics_drain", diagnostic);
+            }
         }
 
         public static void ClearWorld()
         {
+            AWArmyMarchService.Clear();
+            ArmyRouteProviderService.ClearWorld();
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
             StopOwnedPathfinder();
+            TraversalCache.Clear();
+            _traversalRunning = false;
+            _maintenanceFrame = 0;
             Recovery.Clear();
             PathfindingOwnershipService.ResetWorld();
-            _lastState = AWPathOwnerState.Pending;
         }
 
         private static void EnsureStarted()
         {
             if (_running) return;
-            WorldTile[] tiles = World.world?.tiles_list;
-            if (tiles == null || tiles.Length == 0 || MapBox.width <= 0 || MapBox.height <= 0) return;
-            TraversalCache.Initialize();
+            EnsureTraversalStarted();
+            if (!_traversalRunning) return;
+            int workerCount =
+                AWPerformanceSettings.ActorPathfindingWorkerCount;
+            if (workerCount <= 0) return;
             _finder = new AWPathFinder(new AWStreamingPathGenerator(), Diagnostics);
-            _finder.Start(AWPathfindingConfig.WorkerCount(Environment.ProcessorCount));
+            _finder.Start(workerCount);
             _running = true;
+        }
+
+        private static void EnsureTraversalStarted()
+        {
+            if (_traversalRunning) return;
+            WorldTile[] tiles = World.world?.tiles_list;
+            if (tiles == null || tiles.Length == 0 || MapBox.width <= 0 ||
+                MapBox.height <= 0) return;
+            TraversalCache.Initialize();
+            _traversalRunning = TraversalCache.GenerationId >= 0;
         }
 
         private static void StopOwnedPathfinder()
         {
+            if (!_running && _finder == null) return;
             AWPathMovementBridge.Clear();
             if (_finder != null)
             {
@@ -79,7 +172,6 @@ namespace AncientWarfare3.core.pathfinding
                 _finder.Dispose();
                 _finder = null;
             }
-            TraversalCache.Clear();
             _running = false;
         }
     }

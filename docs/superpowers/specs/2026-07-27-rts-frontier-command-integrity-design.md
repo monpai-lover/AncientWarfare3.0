@@ -4,8 +4,8 @@
 
 Make pre-war armies visibly assemble on the real shared frontier and make live
 RTS armies continuously advance and attack while a valid war objective exists.
-Stabilize the Army captain identity and keep kings and city leaders completely
-outside national-war combat and occupation.
+Stabilize the Army captain identity and keep kings and city leaders who are not
+the current Army captain outside national-war combat and occupation.
 
 ## Confirmed Failures
 
@@ -48,6 +48,15 @@ An RTS Army with a live war, live target city, valid captain, and operational
 force must always have exactly one actionable command owner. Vanilla strategic
 Army decisions remain disabled while RTS is enabled.
 
+An Army at or above 80 percent of its establishment strength is immediately
+eligible to depart. Spatial formation observation continues to position and
+correct followers, but it cannot indefinitely block the strategic route. An
+operational understrength Army may wait for replenishment only for the bounded
+readiness window; after that window it departs and replenishment continues as a
+background military requirement. Every transition into `March`, including a
+transition from `Replenish`, submits or continues the shared strategic route in
+the same controller opportunity.
+
 Immediate actor combat may temporarily preempt movement only while the actor
 has a live, hostile, attackable target in local range. A generic task marked
 `in_combat`, a stale attack target, or a completed combat animation is not
@@ -86,27 +95,46 @@ fight military defenders, capture the city, and request the next target.
 
 ## Stable Captain Ownership
 
-Every live RTS mission records one stable captain identity. A living Warrior
-who still belongs to the Army and kingdom remains captain even while rallying,
-moving, fighting, replenishing, or receiving new members. Routine maintenance,
-formation refresh, recruitment, save repair, and vanilla captain checks cannot
-replace that actor.
+Every live RTS mission records one stable captain identity. New captains are
+selected only from career standing soldiers; temporary levies, wartime
+garrisons, temporary slave-vanguard members, and slaves are ineligible. When a
+temporary levy creates a new field Army, its first captain is promoted into the
+permanent cadre and is never inserted into the temporary demobilization pool.
+A living captain who still belongs to the Army and kingdom remains captain even
+while rallying, moving, fighting, replenishing, or receiving new members.
+Routine maintenance, formation refresh, recruitment, save repair, and vanilla
+captain checks cannot replace that actor.
 
-Replacement is allowed only when the captain is dead, rekt, no longer a current
-Warrior, belongs to another Army or kingdom, or has an invalid runtime object.
-One bounded replacement operation selects a new valid member, updates Army
-data and RTS ownership atomically, and preserves the mission and route. This
-prevents alternating captain writes and flag flicker.
+The captain lease ends only when the Actor is dead, rekt, its runtime object has
+been destroyed, or the Army itself has entered formal disposal. Retirement,
+profession changes, routine Army membership cleanup, roster maintenance, save
+repair, and ordinary captain selection cannot replace a living captain.
+Attempts to detach a living captain are rejected at the Actor-to-Army boundary,
+and attempts to write another captain are rejected at the Army captain
+boundary. One bounded replacement operation selects a new valid career member
+after death, updates Army data and RTS ownership atomically, and preserves the
+mission and route. This prevents alternating captain writes and flag flicker.
+
+War-end demobilization removes only members tracked by a temporary military
+role. Career standing members remain in the Army. A legacy temporary levy who
+is already the living captain is removed from the temporary pool and retained
+as permanent cadre instead of being detached.
+
+A living captain who becomes a King or city leader keeps the same Army and
+captain identity. That Actor remains a military combatant for RTS task
+ownership, hostile target selection, damage, and occupation. This is the sole
+authority-role exception: Kings and city leaders who are not an Army captain
+remain outside national-war combat.
 
 ## King And Leader War Exclusion
 
-Kings and city leaders are authority actors, not military actors. During a
-national war they:
+Kings and city leaders who are not the living captain of an Army are authority
+actors, not military actors. During a national war they:
 
 - cannot select or retain a hostile attack target;
 - cannot be selected as a hostile target by actors or combat boats;
 - cannot deal or receive actor-supplied weapon damage;
-- cannot join an Army or become its captain;
+- cannot join an Army or become its captain through ordinary recruitment;
 - cannot contribute occupation points or trigger city capture.
 
 The protection applies at both `canAttackTarget` and final actor-damage entry
@@ -137,7 +165,13 @@ Automated coverage must prove:
 - a published route with no contact triggers task reassertion before replan;
 - `Assault` without contact resumes movement into the target city;
 - a valid captain cannot be replaced, while an invalid captain is replaced once;
-- kings and city leaders cannot attack, be attacked, or occupy in national war;
+- a living captain remains stable after becoming King or city leader and still
+  advances, attacks military targets, and occupies;
+- non-captain kings and city leaders cannot attack, be attacked, or occupy in
+  national war;
+- an Army at 80 percent establishment strength enters `March` and submits its
+  route without waiting for spatial formation quorum;
+- leaving `Replenish` for `March` submits the route in the same controller pass;
 - non-war damage to kings and leaders remains valid;
 - target completion causes the Army to attack another unconquered city;
 - focused rule/runtime tests, source guards, and Debug/Release builds pass.

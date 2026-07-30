@@ -19,8 +19,14 @@ namespace AncientWarfare3.patch
         public static void NewKillAction_Postfix(Actor __instance, Actor pDeadUnit, Kingdom pPrevKingdom, AttackType pAttackType)
         {
             if (__instance == null || pDeadUnit == null) return;
+            if (pAttackType == AttackType.Weapon)
+                WarBattleEpisodeService.RecordMilitaryKill(__instance,
+                    pDeadUnit, pPrevKingdom);
             if (pDeadUnit.data != null)
-                pDeadUnit.data.set(LineageKeys.DEATH_CAUSE, "被 " + __instance.getName() + " 击杀");
+                pDeadUnit.data.set(LineageKeys.DEATH_CAUSE,
+                    HistoryLocalizationRules.Text("aw_death_cause_killed_by_prefix") +
+                    __instance.getName() +
+                    HistoryLocalizationRules.Text("aw_death_cause_killed_by_suffix"));
             ChronicleEvents.OnImportantKill(__instance, pDeadUnit, pPrevKingdom);
             // 批2:战争击杀累加到内存缓存(WarRecordWriter 在 endWar 时落库)。
             WarRecordWriter.AddKill(__instance, pDeadUnit, pPrevKingdom);

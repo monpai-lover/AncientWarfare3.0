@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
 using ai.behaviours;
@@ -41,19 +42,24 @@ namespace AncientWarfare3.core.lineage
 
         public static bool ExecuteDecision(Kingdom pMandate)
         {
-            return ReinforceBorder(pMandate, YEARLY_GUARD_CAP, YEARLY_WALL_CAP, YEARLY_TOWER_CAP, "decision");
+            if (ReinforceBorder(pMandate, YEARLY_GUARD_CAP,
+                    YEARLY_WALL_CAP, YEARLY_TOWER_CAP, "decision"))
+                return true;
+            return CityEconomyService.TryGetLatestCachedForeignLandBorder(
+                       pMandate, out bool hasBorder) && hasBorder;
         }
 
         public static void OnMandateWarStarted(War pWar)
         {
             if (pWar?.data == null) return;
-            Kingdom mandate = MandateService.GetCurrentMandateKingdom();
-            if (mandate?.data == null) return;
-
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             if (attacker?.data == null || defender?.data == null) return;
-            if (defender != mandate && attacker != mandate) return;
+            MandateReport report = MandateService.ReadReport();
+            if (!MandateWarDefenseRules.ShouldActivate(
+                    report.active, report.kingdom_id, attacker.id, defender.id)) return;
+            Kingdom mandate = MandateService.GetCurrentMandateKingdom();
+            if (mandate?.data == null) return;
 
             ReinforceBorder(mandate, WAR_GUARD_CAP, WAR_WALL_CAP, WAR_TOWER_CAP, "war");
         }
@@ -202,24 +208,27 @@ namespace AncientWarfare3.core.lineage
         private static void ReleaseBorderArmy(Army pArmy)
         {
             if (pArmy?.data == null) return;
-            var units = new List<Actor>();
-            try
+            using (ArmyCaptainDisposalScope.Open(pArmy))
             {
-                foreach (Actor unit in pArmy.getUnits())
-                    if (unit?.data != null && !unit.isRekt())
-                        units.Add(unit);
-            }
-            catch { }
+                var units = new List<Actor>();
+                try
+                {
+                    foreach (Actor unit in pArmy.getUnits())
+                        if (unit?.data != null && !unit.isRekt())
+                            units.Add(unit);
+                }
+                catch { }
 
-            foreach (Actor unit in units)
-            {
-                unit.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
-                try { unit.removeFromArmy(); }
-                catch { unit.setArmy(null); }
-            }
+                foreach (Actor unit in units)
+                {
+                    unit.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
+                    try { unit.removeFromArmy(); }
+                    catch { unit.setArmy(null); }
+                }
 
-            try { pArmy.setCaptain(null); } catch { }
-            try { World.world?.armies?.removeObject(pArmy); } catch { }
+                try { pArmy.setCaptain(null); } catch { }
+                try { World.world?.armies?.removeObject(pArmy); } catch { }
+            }
         }
 
         private static bool HasOutsideNeighbour(City pCity, Kingdom pMandate)
@@ -300,12 +309,19 @@ namespace AncientWarfare3.core.lineage
                 if (borderArmy != null)
                     AWArmyService.AddToArmy(actor, borderArmy);
                 AssignBorderGuardJob(actor);
-                if (patrol != null && actor.current_tile != null && actor.current_tile.isSameIsland(patrol))
+                if (ArmyRtsRuntimeModeRules.
+                        ShouldUseLegacyArmyFollowerOrders(
+                            ArmyRtsRuntimeMode.Current) &&
+                    patrol != null && actor.current_tile != null &&
+                    actor.current_tile.isSameIsland(patrol))
                 {
                     try { actor.goTo(patrol); } catch { }
                 }
                 changed++;
             }
+            if (borderArmy?.data != null && patrol != null)
+                ArmyRtsControllerService.TrySetFormationAnchor(borderArmy,
+                    patrol);
             if (changed > 0 && borderArmy?.data != null)
                 WarNoticeService.OnArmyChanged(owner, borderArmy);
             return changed;
@@ -316,6 +332,12 @@ namespace AncientWarfare3.core.lineage
             if (pArmy?.data == null || pCity?.data == null) return;
             WorldTile patrol = PickBorderTile(pCity, pMandate);
             if (patrol == null) return;
+            bool useLegacyFollowerOrders = ArmyRtsRuntimeModeRules.
+                ShouldUseLegacyArmyFollowerOrders(
+                    ArmyRtsRuntimeMode.Current);
+            if (!useLegacyFollowerOrders)
+                ArmyRtsControllerService.TrySetFormationAnchor(pArmy,
+                    patrol);
             try
             {
                 foreach (Actor actor in pArmy.getUnits())
@@ -323,7 +345,9 @@ namespace AncientWarfare3.core.lineage
                     if (actor?.data == null || actor.isRekt()) continue;
                     actor.data.set(LineageKeys.MANDATE_BORDER_GUARD, true);
                     AssignBorderGuardJob(actor);
-                    if (actor.current_tile != null && actor.current_tile.isSameIsland(patrol))
+                    if (useLegacyFollowerOrders &&
+                        actor.current_tile != null &&
+                        actor.current_tile.isSameIsland(patrol))
                         actor.goTo(patrol);
                 }
             }
@@ -332,7 +356,9 @@ namespace AncientWarfare3.core.lineage
 
         private static void AssignBorderGuardJob(Actor pActor)
         {
-            if (pActor?.data == null || BorderGuardContent.ACTOR_JOB_BORDER_GUARD == null) return;
+            if (!ArmyRtsRuntimeModeRules.ShouldUseLegacyArmyFollowerOrders(
+                    ArmyRtsRuntimeMode.Current) || pActor?.data == null ||
+                BorderGuardContent.ACTOR_JOB_BORDER_GUARD == null) return;
             try { pActor.ai.setJob(BorderGuardContent.ACTOR_JOB_BORDER_GUARD); }
             catch { }
         }

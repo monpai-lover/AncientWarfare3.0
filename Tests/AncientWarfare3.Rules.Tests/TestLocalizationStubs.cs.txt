@@ -1,0 +1,23 @@
+public sealed class LocalizedTextManager
+{
+    public static LocalizedTextManager instance;
+    public string language = "cz";
+}
+
+namespace AncientWarfare3.core.lineage
+{
+    public readonly struct HistoryText
+    {
+        private HistoryText(string pPlain)
+        {
+            Plain = pPlain ?? "";
+        }
+
+        public string Plain { get; }
+
+        public static HistoryText PlainText(string pText)
+        {
+            return new HistoryText(pText);
+        }
+    }
+}

@@ -105,8 +105,72 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("WAR_LOSSES",         0),
                     ColumnVal.Create("LOST_CAPITAL",       0),
                     ColumnVal.Create("DEATH_CAUSE",        ""));
+                pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START,
+                    (float)now);
             }
             catch (Exception e) { ModClass.LogWarning("ReignRecordWriter.OpenReign: " + e.Message); }
+        }
+
+        public static void ProjectCurrentReignStart(Kingdom pKingdom,
+            Actor pKing, double pStartTime)
+        {
+            if (pKingdom?.data == null || pKing?.data == null ||
+                pStartTime < 0d) return;
+            pKingdom.data.set(LineageKeys.CHRONICLE_LAST_KING_ID,
+                pKing.data.id);
+            pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START,
+                (float)pStartTime);
+        }
+
+        public static bool TryRecoverCurrentProjection(Kingdom pKingdom,
+            Actor pKing)
+        {
+            if (!Ready || pKingdom?.data == null || pKing?.data == null)
+                return false;
+            try
+            {
+                double startTime = -1d;
+                using (var history = new SQLiteCommand(DB))
+                {
+                    history.CommandText =
+                        "SELECT WORLD_TIME FROM " +
+                        KingdomHistoryTableItem.GetTableName() +
+                        " WHERE KINGDOM_ID=@kingdom AND EVENT_TYPE=@event" +
+                        " AND TARGET_TYPE='actor' AND TARGET_ID=@actor" +
+                        " ORDER BY WORLD_TIME DESC,EVENT_ID DESC LIMIT 1";
+                    history.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                    history.Parameters.AddWithValue("@event",
+                        KingdomEvent.RULE_CHANGE);
+                    history.Parameters.AddWithValue("@actor", pKing.data.id);
+                    object value = history.ExecuteScalar();
+                    if (value != null && value != DBNull.Value)
+                        startTime = Convert.ToDouble(value);
+                }
+
+                if (startTime < 0d)
+                {
+                    using var reign = new SQLiteCommand(DB);
+                    reign.CommandText =
+                        "SELECT START_TIME FROM " + TABLE +
+                        " WHERE KINGDOM_ID=@kingdom AND KING_ACTOR_ID=@actor" +
+                        " ORDER BY START_TIME DESC LIMIT 1";
+                    reign.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                    reign.Parameters.AddWithValue("@actor", pKing.data.id);
+                    object value = reign.ExecuteScalar();
+                    if (value != null && value != DBNull.Value)
+                        startTime = Convert.ToDouble(value);
+                }
+
+                if (startTime < 0d) return false;
+                ProjectCurrentReignStart(pKingdom, pKing, startTime);
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Reign projection recovery failed: " +
+                                    error.Message);
+                return false;
+            }
         }
 
         /// <summary>关闭该国当前 end_time=-1 的 reign,并写入结束快照。</summary>
@@ -156,6 +220,7 @@ namespace AncientWarfare3.core.lineage
             open.HighestTitle = highestTitle;
             open.DeathCause = deathCause;
             open.EndTime = endTime;
+            pKingdom.data.set(LineageKeys.KINGDOM_REIGN_START, -1f);
             return open;
         }
 

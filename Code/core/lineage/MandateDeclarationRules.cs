@@ -16,6 +16,48 @@ namespace AncientWarfare3.core.lineage
             return !pMandateActive || pCurrentKingdomId != pCandidateKingdomId;
         }
 
+        public static bool ShouldEndDestroyedMandate(bool mandateActive,
+            long mandateKingdomId, long destroyedKingdomId)
+        {
+            return mandateActive && mandateKingdomId >= 0 &&
+                   mandateKingdomId == destroyedKingdomId;
+        }
+
+        public static long ResolveHostileMandateCityConqueror(bool mandateActive,
+            long mandateKingdomId, long losingKingdomId, long gainingKingdomId,
+            bool gainingKingdomValid, bool hostileTransfer)
+        {
+            if (!mandateActive || mandateKingdomId < 0 ||
+                mandateKingdomId != losingKingdomId ||
+                !gainingKingdomValid || gainingKingdomId < 0 ||
+                gainingKingdomId == losingKingdomId || !hostileTransfer)
+                return -1L;
+            return gainingKingdomId;
+        }
+
+        public static long ResolveHostileMandateFinalCityConqueror(
+            bool mandateActive, long mandateKingdomId,
+            long losingKingdomId, long gainingKingdomId,
+            bool gainingKingdomValid, bool hostileTransfer,
+            int losingCityCountBeforeTransfer)
+        {
+            if (losingCityCountBeforeTransfer != 1) return -1L;
+            return ResolveHostileMandateCityConqueror(mandateActive,
+                mandateKingdomId, losingKingdomId, gainingKingdomId,
+                gainingKingdomValid, hostileTransfer);
+        }
+
+        public static bool CanTransferDestroyedMandate(bool mandateActive,
+            long mandateKingdomId, long destroyedKingdomId, long candidateKingdomId,
+            bool candidateValid, bool candidateHasKing)
+        {
+            return ShouldEndDestroyedMandate(
+                       mandateActive, mandateKingdomId, destroyedKingdomId) &&
+                   candidateKingdomId >= 0 &&
+                   candidateKingdomId != destroyedKingdomId &&
+                   candidateValid && candidateHasKing;
+        }
+
         public static bool HasEnoughRealmToDeclare(int pCityCount, int pTitle,
             bool pHistoricalFigureKing, int pMinimumCities, int pKingTitleValue)
         {

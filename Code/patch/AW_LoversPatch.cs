@@ -10,11 +10,19 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_LoversPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.setLover))]
+        public static void SetLover_Prefix(Actor __instance, Actor pActor)
+        {
+            NobleHeirPregnancyService.OnLoverChanging(__instance, pActor);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.becomeLoversWith))]
         public static void BecomeLoversWith_Postfix(Actor __instance, Actor pTarget)
         {
             ChronicleEvents.OnBecameLovers(__instance, pTarget);
+            NobleHeirPregnancyService.OnBecameLovers(__instance, pTarget);
         }
     }
 }

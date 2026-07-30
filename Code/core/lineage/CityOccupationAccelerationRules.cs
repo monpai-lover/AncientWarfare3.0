@@ -1,48 +1,49 @@
-using System;
-
 namespace AncientWarfare3.core.lineage
 {
     public static class CityOccupationAccelerationRules
     {
-        public static bool ShouldAdoptDominantCapturer(bool hasDominantEnemy, bool hasCaptureOwner,
-            bool captureOwnerAlive, bool captureOwnerStillEnemyOfCity)
+        public static bool HasActiveDefenderSignal(bool pZonePresence,
+            bool pIndexedGarrisonPresence)
         {
-            return hasDominantEnemy &&
-                   (!hasCaptureOwner || !captureOwnerAlive || !captureOwnerStillEnemyOfCity);
+            return pZonePresence || pIndexedGarrisonPresence;
         }
 
-        public static bool ShouldApplyCapturePointContribution(bool contributorIsCityOwner,
-            int capturePoints, bool cityOwnerHasActiveDefenders)
+        public static bool HasReachedNaturalCaptureLimit(float pCaptureProgress)
         {
-            bool passiveWatchtowerContribution = contributorIsCityOwner && capturePoints >= 10;
-            return !passiveWatchtowerContribution || cityOwnerHasActiveDefenders;
+            return pCaptureProgress >= 100f;
         }
 
-        public static bool ShouldLatchDefenderEngagement(bool ownerWarriorPresent,
-            bool attackerWarriorPresent, bool attackerIsEnemy)
+        public static bool ShouldBlockPermanentTransfer(
+            bool pActiveHostileWar, bool pFreezeRecorded,
+            bool pPeaceExecution)
         {
-            return ownerWarriorPresent && attackerWarriorPresent && attackerIsEnemy;
+            return pActiveHostileWar && !pPeaceExecution;
         }
 
-        public static bool ShouldCompleteAfterDefenderDefeat(bool enemyCapturer,
-            bool activeCaptureUnits, bool activeDefenders, bool hostileRivalActive,
-            bool ownershipChanged, bool cityManagerLocked, bool defenderEngagementObserved = false)
+        public static bool ShouldAttemptControlledSettlementImmediately(
+            bool hasOpenNonTerritorialGoal, bool cityManagerLocked)
         {
-            return enemyCapturer &&
-                   activeCaptureUnits &&
-                   !activeDefenders &&
-                   !hostileRivalActive &&
-                   !ownershipChanged &&
-                   !cityManagerLocked &&
-                   defenderEngagementObserved;
+            return hasOpenNonTerritorialGoal && !cityManagerLocked;
         }
 
-        public static bool ShouldRetainDefenderEngagement(bool ownerMatches,
-            bool attackerMatches, bool attackerStillEnemy,
-            bool attackerPresentInCompletedCycle)
+        public static bool ShouldTreatSettlementAttemptAsComplete(
+            bool settlementReportedSuccess, bool warEndedAfterAttempt)
         {
-            return ownerMatches && attackerMatches && attackerStillEnemy &&
-                   attackerPresentInCompletedCycle;
+            return settlementReportedSuccess || warEndedAfterAttempt;
+        }
+
+        public static bool ShouldHonorQueuedCompletion(
+            bool completionAuthorized, bool cityOwnerUnchanged,
+            bool capturerStillEnemy)
+        {
+            return completionAuthorized && cityOwnerUnchanged &&
+                   capturerStillEnemy;
+        }
+
+        public static bool ShouldRetryQueuedSettlement(
+            bool settlementSucceeded, bool goalStillOpen)
+        {
+            return !settlementSucceeded && goalStillOpen;
         }
 
         public static bool ShouldCountMilitaryCapturePresence(bool participantIsCityOwner,
@@ -57,32 +58,5 @@ namespace AncientWarfare3.core.lineage
             return isActor && actorAlive && actorIsWarrior && actorHasKingdom;
         }
 
-        public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasDefenders,
-            bool pHasCityControlGoal, int pWatchTowerCount)
-        {
-            return ExtraCapturePoints(pIsBeingCapturedByEnemy, true, pHasDefenders,
-                pHasCityControlGoal, pWatchTowerCount);
-        }
-
-        public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasActiveCaptureUnits,
-            bool pHasDefenders, bool pHasCityControlGoal, int pWatchTowerCount)
-        {
-            return ExtraCapturePoints(pIsBeingCapturedByEnemy, pHasActiveCaptureUnits,
-                pCanAdvanceCurrentCapture: true, pHasDefenders, pHasCityControlGoal, pWatchTowerCount);
-        }
-
-        public static float ExtraCapturePoints(bool pIsBeingCapturedByEnemy, bool pHasActiveCaptureUnits,
-            bool pCanAdvanceCurrentCapture, bool pHasDefenders, bool pHasCityControlGoal,
-            int pWatchTowerCount, float pPhaseMultiplier = 1f)
-        {
-            if (!pIsBeingCapturedByEnemy) return 0f;
-            if (!pHasActiveCaptureUnits) return 0f;
-            if (!pCanAdvanceCurrentCapture) return 0f;
-            if (pHasDefenders) return 0f;
-
-            float bonus = pHasCityControlGoal ? 1.55f : 0.45f;
-            bonus -= Math.Max(0, pWatchTowerCount) * 0.35f;
-            return Math.Max(0f, bonus) * Math.Max(0f, pPhaseMultiplier);
-        }
     }
 }

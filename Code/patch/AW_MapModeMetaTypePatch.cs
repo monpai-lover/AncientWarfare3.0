@@ -103,6 +103,12 @@ namespace AncientWarfare3.patch
 
         private static bool TryGetActiveAwMapMode(bool pCheckOnlyOption, ref MetaType pResult)
         {
+            if (IsActive(AWMapModeMetaLibrary.FeudatoryAsset,
+                    pCheckOnlyOption))
+            {
+                pResult = AWMapModeMetaTypes.Feudatory;
+                return true;
+            }
             if (IsActive(AWMapModeMetaLibrary.SchoolAsset, pCheckOnlyOption))
             {
                 pResult = AWMapModeMetaTypes.School;

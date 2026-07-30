@@ -1,3 +1,4 @@
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
@@ -21,6 +22,9 @@ namespace AncientWarfare3.ui.items
         private TipButton _tip;
         private long _kingdomId = -1;
         private long _contextKingdomId = -1;
+        private bool _commandPending;
+        private bool _commandRefreshRequested;
+        private bool _subscribed;
 
         public override void Setup(VassalRelationInfo pObject)
         {
@@ -110,6 +114,8 @@ namespace AncientWarfare3.ui.items
             AW_UIStyle.ApplyButton(_absorbObj.GetComponent<Image>(), 0.95f);
             _absorbObj.GetComponent<Button>().onClick.AddListener(OnClickAbsorbTarget);
             _absorbTip = _absorbObj.GetComponent<TipButton>();
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
+            _subscribed = true;
 
             var absorbTextObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
             absorbTextObj.transform.SetParent(_absorbObj.transform, false);
@@ -131,7 +137,8 @@ namespace AncientWarfare3.ui.items
         {
             Kingdom live = FindKingdom(pObject.kingdom_id);
             if (live?.data == null || live.isRekt()) return;
-            pObject.kingdom_name = live.name ?? pObject.kingdom_name;
+            pObject.kingdom_name = RulerAppellationService.
+                GetProjectedStateName(live) ?? pObject.kingdom_name;
             pObject.color_text = HistoryColors.FromKingdom(live);
             pObject.color_id = live.data.color_id;
             pObject.banner_icon_id = live.data.banner_icon_id;
@@ -175,6 +182,8 @@ namespace AncientWarfare3.ui.items
             if (_absorbObj == null) return;
             bool visible = pObject.can_absorb_by_context && pObject.context_kingdom_id >= 0;
             _absorbObj.SetActive(visible);
+            _absorbObj.GetComponent<Button>().interactable =
+                visible && !_commandPending;
             if (!visible || _absorbTip == null) return;
 
             _absorbTip.enabled = true;
@@ -248,11 +257,41 @@ namespace AncientWarfare3.ui.items
 
         private void OnClickAbsorbTarget()
         {
+            if (_commandPending) return;
             Kingdom context = FindKingdom(_contextKingdomId);
             Kingdom target = FindKingdom(_kingdomId);
             if (context == null || target == null) return;
-            if (KingdomPolicyService.StartDecisionWithTarget(context, "aw_decision_absorb_vassal", target))
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.StartTargetedDecision(context.id,
+                        target.id, "aw_decision_absorb_vassal"));
+            _commandPending = result.Status == AW3CommandStatus.Pending;
+            if (_absorbObj != null)
+                _absorbObj.GetComponent<Button>().interactable =
+                    !_commandPending;
+            if (result.Accepted)
                 VassalRelationWindow.Open(context.id);
+        }
+
+        private void Update()
+        {
+            if (!_commandRefreshRequested) return;
+            _commandRefreshRequested = false;
+            _commandPending = false;
+            if (_contextKingdomId > 0)
+                VassalRelationWindow.Open(_contextKingdomId);
+        }
+
+        private void OnCommandStateChanged()
+        {
+            if (_commandPending) _commandRefreshRequested = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (!_subscribed) return;
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
+            _subscribed = false;
         }
 
         private static Kingdom FindKingdom(long pId)

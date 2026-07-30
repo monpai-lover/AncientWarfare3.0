@@ -1,0 +1,191 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarParticipantRosterRulesTests
+{
+    public static void Run()
+    {
+        var obligationOnly = new[]
+        {
+            new WarParticipantSourceFact(
+                WarParticipantEntrySourceKind.FormalVassalObligation, 20)
+        };
+        True(WarParticipantRosterRules.IsObligationOnlyFromParent(
+                obligationOnly, 20),
+            "the sole obligation source from the live parent may follow out");
+        False(WarParticipantRosterRules.IsObligationOnlyFromParent(
+                obligationOnly, 21),
+            "an obligation from a different parent cannot follow out");
+        False(WarParticipantRosterRules.IsObligationOnlyFromParent(
+                new[]
+                {
+                    obligationOnly[0],
+                    new WarParticipantSourceFact(
+                        WarParticipantEntrySourceKind.AllianceCall, 30)
+                }, 20),
+            "an alliance source keeps a formal vassal in the war");
+        False(WarParticipantRosterRules.IsObligationOnlyFromParent(
+                Array.Empty<WarParticipantSourceFact>(), 20),
+            "a legacy participant with unknown provenance stays in the war");
+
+        Equal("alliance_call:30|scripted_join:40",
+            WarParticipantRosterRules.BuildSourceFingerprint(new[]
+            {
+                new WarParticipantSourceFact(
+                    WarParticipantEntrySourceKind.ScriptedJoin, 40),
+                new WarParticipantSourceFact(
+                    WarParticipantEntrySourceKind.AllianceCall, 30)
+            }),
+            "source fingerprints are deterministic and sorted");
+        Equal("unknown", WarParticipantRosterRules.BuildSourceFingerprint(
+                Array.Empty<WarParticipantSourceFact>()),
+            "an empty source set has an explicit unknown fingerprint");
+
+        var expected = Snapshot(side: WarParticipantSideKind.Defender,
+            role: WarParticipantRoleKind.FormalVassal,
+            relationId: 71, exitParentId: 20,
+            fingerprint: "formal_vassal_obligation:20", included: true);
+        True(WarParticipantRosterRules.SnapshotMatches(expected,
+                Snapshot(WarParticipantSideKind.Defender,
+                    WarParticipantRoleKind.FormalVassal, 71, 20,
+                    "formal_vassal_obligation:20", true)),
+            "an unchanged live participant matches the proposal snapshot");
+        False(WarParticipantRosterRules.SnapshotMatches(expected,
+                Snapshot(WarParticipantSideKind.Attacker,
+                    WarParticipantRoleKind.FormalVassal, 71, 20,
+                    "formal_vassal_obligation:20", true)),
+            "a side change invalidates the proposal snapshot");
+        False(WarParticipantRosterRules.SnapshotMatches(expected,
+                Snapshot(WarParticipantSideKind.Defender,
+                    WarParticipantRoleKind.FormalVassal, 72, 20,
+                    "formal_vassal_obligation:20", true)),
+            "a vassal relation change invalidates the proposal snapshot");
+        False(WarParticipantRosterRules.SnapshotMatches(expected,
+                Snapshot(WarParticipantSideKind.Defender,
+                    WarParticipantRoleKind.FormalVassal, 71, 20,
+                    "alliance_call:30|formal_vassal_obligation:20", true)),
+            "a new entry source invalidates the proposal snapshot");
+
+        True(WarParticipantLifecycleRules.CanJoin(
+                alreadyOnSide: true, initializingMainBelligerent: false,
+                exitLookupSucceeded: false, hasSeparatePeaceExit: false),
+            "an existing participant is not blocked by a provenance lookup");
+        True(WarParticipantLifecycleRules.CanJoin(
+                alreadyOnSide: false, initializingMainBelligerent: true,
+                exitLookupSucceeded: false, hasSeparatePeaceExit: false),
+            "the two initial belligerents may join while newWar is constructing");
+        True(WarParticipantLifecycleRules.CanJoin(
+                alreadyOnSide: false, initializingMainBelligerent: false,
+                exitLookupSucceeded: true, hasSeparatePeaceExit: false),
+            "a live participant without an exit marker may join");
+        False(WarParticipantLifecycleRules.CanJoin(
+                alreadyOnSide: false, initializingMainBelligerent: false,
+                exitLookupSucceeded: true, hasSeparatePeaceExit: true),
+            "a participant that separately exited cannot rejoin the same war");
+        False(WarParticipantLifecycleRules.CanJoin(
+                alreadyOnSide: false, initializingMainBelligerent: false,
+                exitLookupSucceeded: false, hasSeparatePeaceExit: false),
+            "an operational lookup failure is fail-closed outside initialization");
+        True(WarParticipantLifecycleRules.ShouldRollbackJoin(
+                wasOnSideBeforeJoin: false, joinedAfterCall: true,
+                sourceRequired: true, sourceWriteSucceeded: false),
+            "a newly joined AW3 participant rolls back when provenance cannot be persisted");
+        False(WarParticipantLifecycleRules.ShouldRollbackJoin(
+                wasOnSideBeforeJoin: true, joinedAfterCall: true,
+                sourceRequired: true, sourceWriteSucceeded: false),
+            "an existing participant is never removed by a duplicate source failure");
+        False(WarParticipantLifecycleRules.ShouldRollbackJoin(
+                wasOnSideBeforeJoin: false, joinedAfterCall: true,
+                sourceRequired: false, sourceWriteSucceeded: false),
+            "an unscoped native join remains unknown instead of being misclassified");
+        False(WarParticipantLifecycleRules.ShouldRollbackJoin(
+                wasOnSideBeforeJoin: false, joinedAfterCall: true,
+                sourceRequired: true, sourceWriteSucceeded: true),
+            "a durable AW3 join remains in the war");
+        True(WarParticipantLifecycleRules.ShouldQueueRollbackRepair(
+                rollbackVerified: false,
+                membershipLookupSucceeded: true,
+                remainsOnSideAfterRollback: true),
+            "an unverified live rollback is retried on the critical queue");
+        False(WarParticipantLifecycleRules.ShouldQueueRollbackRepair(
+                rollbackVerified: false,
+                membershipLookupSucceeded: true,
+                remainsOnSideAfterRollback: false),
+            "a participant already absent from the war needs no rollback retry");
+        True(WarParticipantLifecycleRules.ShouldQueueRollbackRepair(
+                rollbackVerified: false,
+                membershipLookupSucceeded: false,
+                remainsOnSideAfterRollback: false),
+            "a failed membership lookup cannot be treated as confirmed departure");
+        True(WarParticipantLifecycleRules.ShouldNotifyRollbackDeparture(
+                participantServicesStarted: true,
+                membershipLookupSucceeded: true,
+                remainsOnSideAfterRollback: false),
+            "a deferred rollback closes the temporary live participant state");
+        False(WarParticipantLifecycleRules.ShouldNotifyRollbackDeparture(
+                participantServicesStarted: true,
+                membershipLookupSucceeded: true,
+                remainsOnSideAfterRollback: true),
+            "a failed deferred rollback cannot announce a false departure");
+        False(WarParticipantLifecycleRules.ShouldNotifyRollbackDeparture(
+                participantServicesStarted: true,
+                membershipLookupSucceeded: false,
+                remainsOnSideAfterRollback: false),
+            "a failed membership lookup cannot announce a false departure");
+        False(WarParticipantLifecycleRules.RequiresDurableJoinSource(
+                hasSource: true,
+                WarParticipantEntrySourceKind.MainBelligerent),
+            "main belligerents are reconstructable from the live war");
+        True(WarParticipantLifecycleRules.RequiresDurableJoinSource(
+                hasSource: true,
+                WarParticipantEntrySourceKind.AllianceCall),
+            "an alliance join requires durable provenance");
+        False(WarParticipantLifecycleRules.RequiresDurableJoinSource(
+                hasSource: false,
+                WarParticipantEntrySourceKind.Unknown),
+            "an unscoped native join remains explicitly unknown");
+
+        True(WarParticipantLifecycleRules.ShouldNotifyDeparture(
+                wasOnSideBeforeRemove: true,
+                remainsOnSideAfterRemove: false),
+            "departure cleanup follows the pre-remove side snapshot");
+        False(WarParticipantLifecycleRules.ShouldNotifyDeparture(
+                wasOnSideBeforeRemove: false,
+                remainsOnSideAfterRemove: false),
+            "the opposite-side remove call cannot duplicate departure cleanup");
+        False(WarParticipantLifecycleRules.ShouldNotifyDeparture(
+                wasOnSideBeforeRemove: true,
+                remainsOnSideAfterRemove: true),
+            "a no-op removal cannot close active provenance");
+    }
+
+    private static WarParticipantSnapshotFacts Snapshot(
+        WarParticipantSideKind side, WarParticipantRoleKind role,
+        long relationId, long exitParentId, string fingerprint,
+        bool included)
+    {
+        return new WarParticipantSnapshotFacts(kingdomId: 25,
+            side: side, role: role, formalSuzerainId: 20,
+            vassalRelationId: relationId, exitParentId: exitParentId,
+            entrySourceFingerprint: fingerprint,
+            includedInExitGroup: included);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value)
+            throw new InvalidOperationException($"{name}: expected false");
+    }
+}

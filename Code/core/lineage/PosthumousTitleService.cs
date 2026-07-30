@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -96,7 +97,7 @@ namespace AncientWarfare3.core.lineage
             }
             decision.Reason = BuildReason(facts, posthumous);
             HistoryText titleEvent = BuildTitleEventText(pKing, pEndReason,
-                decision.DisplayTitle, facts.KingdomColor, decision.Reason, titleKind);
+                decision);
             double now = World.world?.getCurWorldTime() ?? LineageService.CurTime();
             decision.HistoryPlain = titleEvent.Plain;
             decision.HistoryRich = titleEvent.Rich;
@@ -122,6 +123,13 @@ namespace AncientWarfare3.core.lineage
         public static void OnFormerRulerDied(Actor pActor)
         {
             if (pActor?.data == null) return;
+            pActor.data.get(LineageKeys.FORMER_KINGDOM_ID,
+                out long formerKingdomId, -1L);
+            pActor.data.get(LineageKeys.CAPTURED_RULER_KINGDOM_ID,
+                out long capturedRulerKingdomId, -1L);
+            if (!FormerRulerPosthumousRules.ShouldInspectDeathContext(
+                    pActor.hasTrait(LineageKeys.TRAIT_FORMER_KING),
+                    formerKingdomId, capturedRulerKingdomId)) return;
             ReignRecordWriter.ReignInfo reign =
                 ReignRecordWriter.ReadLatestUntitledClosedReignForActor(pActor.data.id);
             bool hasCapturedSnapshot = TryReadCapturedRulerContext(
@@ -327,24 +335,77 @@ namespace AncientWarfare3.core.lineage
             };
         }
 
-        private static HistoryText BuildTitleEventText(Actor pKing, string pEndReason,
-            string pFullTitle, string pTitleColor, string pReason, string pTitleKind)
+        private static HistoryText BuildTitleEventText(Actor pKing,
+            string pEndReason, RulerTitleDecision pDecision)
         {
-            string verb = EndVerb(pEndReason);
-            string label = pTitleKind == "deposed"
-                ? T("aw_hist_posthumous_title_deposed")
-                : pEndReason == "abdicated"
-                    ? T("aw_hist_posthumous_title_abdicated")
-                    : T("aw_hist_posthumous_title_normal");
+            if (pDecision == null) return HistoryText.PlainText("");
+            bool hasTemple = !string.IsNullOrEmpty(pDecision.TempleName);
+            CeremonialTitleEventKind kind =
+                CeremonialHistoryRules.ResolveTitleEventKind(
+                    pDecision.TitleKind, pEndReason, hasTemple);
+            string lifeKey = CeremonialHistoryRules.LifeSummaryKey(
+                pDecision.DominantDimension, pDecision.Grade);
+            string life = AW_L10n.Text(lifeKey,
+                "功过具载，褒贬有章");
+            IReadOnlyList<string> meaningKeys =
+                CeremonialHistoryRules.MeaningKeys(
+                    pDecision.PosthumousName);
+            var meanings = new System.Text.StringBuilder();
+            for (int i = 0; i < meaningKeys.Count; i++)
+            {
+                string meaning = AW_L10n.Text(meaningKeys[i], "");
+                if (string.IsNullOrEmpty(meaning) ||
+                    meaning == meaningKeys[i]) continue;
+                if (meanings.Length > 0) meanings.Append("；");
+                meanings.Append(meaning);
+            }
+            if (meanings.Length == 0)
+                meanings.Append(pDecision.PosthumousName);
+
+            string templateKey;
+            string fallback;
+            switch (kind)
+            {
+                case CeremonialTitleEventKind.TempleAndPosthumous:
+                    templateKey = "aw_hist_edict_temple_posthumous";
+                    fallback = "先君{0}，{1}；考其行而议其谥：{2}。" +
+                               "今上尊号{3}，庙号{4}。";
+                    break;
+                case CeremonialTitleEventKind.Abdication:
+                    templateKey = "aw_hist_edict_abdication";
+                    fallback = "{0}逊位退居，{1}；考其行曰：{2}。" +
+                               "今尊为{3}，以全终始之礼。";
+                    break;
+                case CeremonialTitleEventKind.Deposed:
+                    templateKey = "aw_hist_edict_deposed";
+                    fallback = "{0}失德废位，{1}；据其行迹曰：{2}。" +
+                               "今黜号为{3}，以示褒贬。";
+                    break;
+                default:
+                    templateKey = "aw_hist_edict_posthumous";
+                    fallback = "先君{0}，{1}；考其行而议其谥：{2}。" +
+                               "今上尊号{3}。";
+                    break;
+            }
             HistoryText actor = HistoryText.Actor(pKing, pKing?.getName() ?? "");
-            HistoryText title = HistoryText.Colored(pFullTitle, pTitleColor);
-            string template = T("aw_hist_title_awarded");
-            string suffix = "（" + verb + "；" + label.Trim('，', ' ', ':') +
-                            "；" + pReason + "）";
-            string plain = string.Format(template,
-                pKing?.getName() ?? "", pFullTitle) + suffix;
-            string rich = string.Format(template, actor.Rich, title.Rich) +
-                          HistoryColors.EscapeRich(suffix);
+            HistoryText title = HistoryText.Colored(pDecision.DisplayTitle,
+                pDecision.Facts?.KingdomColor ?? "");
+            string template = AW_L10n.Text(templateKey, fallback);
+            string temple = pDecision.TempleName ?? "";
+            string plain = string.Format(template, actor.Plain, life,
+                meanings.ToString(), title.Plain, temple);
+            string rich = string.Format(template, actor.Rich,
+                HistoryColors.EscapeRich(life),
+                HistoryColors.EscapeRich(meanings.ToString()), title.Rich,
+                HistoryColors.EscapeRich(temple));
+            if (!string.IsNullOrEmpty(pDecision.Reason))
+            {
+                string reason = "（" + AW_L10n.Text(
+                    "aw_hist_edict_evaluation", "考课") + "：" +
+                                pDecision.Reason + "）";
+                plain += reason;
+                rich += HistoryColors.EscapeRich(reason);
+            }
             return new HistoryText(plain, rich, actor.TargetType, actor.TargetId);
         }
 

@@ -119,6 +119,94 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public readonly struct HistoricalSchoolYearCityKey :
+        IEquatable<HistoricalSchoolYearCityKey>
+    {
+        public HistoricalSchoolYearCityKey(long pCityId, int pYear)
+        {
+            CityId = pCityId;
+            Year = pYear;
+        }
+
+        public long CityId { get; }
+        public int Year { get; }
+
+        public bool Equals(HistoricalSchoolYearCityKey pOther)
+        {
+            return CityId == pOther.CityId && Year == pOther.Year;
+        }
+
+        public override bool Equals(object pObject)
+        {
+            return pObject is HistoricalSchoolYearCityKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (CityId.GetHashCode() * 397) ^ Year;
+            }
+        }
+    }
+
+    public sealed class HistoricalSchoolYearCityCache<TValue>
+    {
+        private readonly HistoricalSchoolFixedLru<HistoricalSchoolYearCityKey, TValue>
+            _entries;
+
+        public HistoricalSchoolYearCityCache(int pCapacity)
+        {
+            _entries = new HistoricalSchoolFixedLru<
+                HistoricalSchoolYearCityKey, TValue>(pCapacity);
+        }
+
+        public int Count => _entries.Count;
+
+        public bool TryGet(long pCityId, int pYear, out TValue pValue)
+        {
+            return _entries.TryGet(new HistoricalSchoolYearCityKey(pCityId, pYear),
+                out pValue);
+        }
+
+        public void Set(long pCityId, int pYear, TValue pValue)
+        {
+            if (pCityId < 0 || pYear < 0) return;
+            _entries.Set(new HistoricalSchoolYearCityKey(pCityId, pYear), pValue);
+        }
+
+        public bool Remove(long pCityId, int pYear)
+        {
+            return _entries.Remove(new HistoricalSchoolYearCityKey(pCityId, pYear));
+        }
+
+        public long[] CollectMisses(IReadOnlyList<long> pCityIds, int pYear,
+            IDictionary<long, TValue> pHits)
+        {
+            if (pCityIds == null || pCityIds.Count == 0)
+                return Array.Empty<long>();
+            var missing = new List<long>(pCityIds.Count);
+            var seen = new HashSet<long>();
+            for (int index = 0; index < pCityIds.Count; index++)
+            {
+                long cityId = pCityIds[index];
+                if (cityId < 0 || !seen.Add(cityId)) continue;
+                if (TryGet(cityId, pYear, out TValue cached))
+                {
+                    if (pHits != null) pHits[cityId] = cached;
+                    continue;
+                }
+                missing.Add(cityId);
+            }
+            return missing.Count == 0 ? Array.Empty<long>() : missing.ToArray();
+        }
+
+        public void Clear()
+        {
+            _entries.Clear();
+        }
+    }
+
     public sealed class HistoricalSchoolActiveReservationBook<TKey, TValue>
     {
         private readonly int _capacity;
@@ -155,6 +243,15 @@ namespace AncientWarfare3.core.schools
         public void Clear()
         {
             _values.Clear();
+        }
+    }
+
+    public static class HistoricalSchoolTravelReservationRestoreRules
+    {
+        public static bool ShouldUseExamTravelerReservation(
+            bool activeTravel, bool qualifiedTeacher)
+        {
+            return activeTravel && !qualifiedTeacher;
         }
     }
 

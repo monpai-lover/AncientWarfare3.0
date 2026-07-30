@@ -76,6 +76,26 @@ namespace AncientWarfare3.core.lineage
             },
             new MandateDecisionDef
             {
+                Id = "aw_mandate_decision_grant_royal_titles",
+                NameKey = "aw_mandate_decision_grant_royal_titles",
+                DescKey = "aw_mandate_decision_grant_royal_titles_desc",
+                FallbackName = "Great Grant of Royal Titles",
+                FallbackDesc = "Grant hereditary titular ranks to the royal clan within five degrees without transferring land or military command.",
+                IconPath = "ui/Icons/traits/iconzhuhou",
+                Cost = 65f
+            },
+            new MandateDecisionDef
+            {
+                Id = "aw_mandate_decision_favor_order",
+                NameKey = "aw_mandate_decision_favor_order",
+                DescKey = "aw_mandate_decision_favor_order_desc",
+                FallbackName = "Proclaim the Favor Order",
+                FallbackDesc = "Raise centralization by one level and reclaim one non-seat city at each future feudatory succession.",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 0f
+            },
+            new MandateDecisionDef
+            {
                 Id = "aw_mandate_decision_sacrifice_gamble",
                 NameKey = "aw_mandate_decision_sacrifice_gamble",
                 DescKey = "aw_mandate_decision_sacrifice_gamble_desc",
@@ -156,8 +176,23 @@ namespace AncientWarfare3.core.lineage
         public static float GetProgressFraction(Kingdom pKingdom)
         {
             MandateDecisionDef def = GetCurrentDef(pKingdom);
-            if (def == null || def.Cost <= 0f) return 0f;
-            return Mathf.Clamp01(GetProgress(pKingdom) / def.Cost);
+            float cost = GetCost(pKingdom, def);
+            if (def == null || cost <= 0f) return 0f;
+            return Mathf.Clamp01(GetProgress(pKingdom) / cost);
+        }
+
+        public static float GetCost(Kingdom pKingdom,
+            MandateDecisionDef pDef)
+        {
+            if (pDef == null) return 0f;
+            if (pDef.Id == "aw_mandate_decision_favor_order")
+            {
+                CentralizationSnapshot snapshot =
+                    CentralizationService.ReadSnapshot(pKingdom);
+                return CentralizationRules.ReformCost(
+                    snapshot.next_target_level);
+            }
+            return pDef.Cost;
         }
 
         public static bool ForceStart(Kingdom pKingdom, string pId)
@@ -203,12 +238,30 @@ namespace AncientWarfare3.core.lineage
             switch (pDef.Id)
             {
                 case "aw_mandate_decision_border_defense":
-                    return true;
+                    if (CityEconomyService.TryGetLatestCachedForeignLandBorder(
+                            pKingdom, out bool hasBorder) && !hasBorder)
+                        return false;
+                    break;
                 case "aw_mandate_decision_great_enfeoffment":
-                    return FeudatorySelectionService.CanExecuteGreatEnfeoffment(pKingdom);
+                    if (!FeudatorySelectionService.CanExecuteGreatEnfeoffment(pKingdom))
+                        return false;
+                    break;
+                case "aw_mandate_decision_grant_royal_titles":
+                    if (!NobleRankService.CanExecuteGreatRoyalGrant(pKingdom))
+                        return false;
+                    break;
+                case "aw_mandate_decision_favor_order":
+                    return FeudatoryService.CanEnableFavorOrder(pKingdom,
+                        out _);
                 default:
                     return false;
             }
+            int cooldown = MandateDecisionAiRules.CooldownYears(pDef.Id);
+            if (cooldown <= 0) return true;
+            pKingdom.data.get(LastSuccessKey(pDef.Id), out int lastSuccess,
+                -1);
+            return MandateDecisionAiRules.IsCooldownReady(
+                Date.getCurrentYear(), lastSuccess, cooldown);
         }
 
         public static float EstimateYearlyGain(Kingdom pKingdom)
@@ -227,29 +280,30 @@ namespace AncientWarfare3.core.lineage
             float progress = GetCurrent(pKingdom) == pDef.Id
                 ? GetProgress(pKingdom)
                 : 0f;
+            float cost = GetCost(pKingdom, pDef);
             return MandateSacrificeRules.SpendForYear(
-                KingdomPolicyService.GetPoliticalPoints(pKingdom),
-                pDef.Cost - progress, KingdomPolicyService.MAX_YEARLY_SPEND);
+                PoliticalPointSpendingRules.AutomaticSpend(
+                    KingdomPolicyService.GetPoliticalPoints(pKingdom),
+                    KingdomPolicyService.MAX_YEARLY_SPEND),
+                cost - progress, KingdomPolicyService.MAX_YEARLY_SPEND);
         }
 
         private static void AutoSelect(Kingdom pKingdom)
         {
             string preferredId =
                 MandateSacrificeService.PreferredAiDecisionId(pKingdom);
-            MandateDecisionDef preferred = Get(preferredId);
-            if (preferred != null && CanRun(pKingdom, preferred))
-            {
-                ForceStart(pKingdom, preferred.Id);
-                return;
-            }
-
+            MandateDecisionDef selected = null;
+            int selectedScore = int.MinValue;
             foreach (MandateDecisionDef def in _all)
             {
-                if (def.SacrificeLevel.HasValue) continue;
                 if (!CanRun(pKingdom, def)) continue;
-                ForceStart(pKingdom, def.Id);
-                return;
+                int score = MandateDecisionAiRules.Score(def.Id,
+                    def.Id == preferredId);
+                if (selected != null && score <= selectedScore) continue;
+                selected = def;
+                selectedScore = score;
             }
+            if (selected != null) ForceStart(pKingdom, selected.Id);
         }
 
         private static void AdvanceCurrent(Kingdom pKingdom)
@@ -261,7 +315,14 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.data.set(LineageKeys.MANDATE_DECISION_PROGRESS, 0f);
                 return;
             }
-            if (!CanRun(pKingdom, def)) return;
+            if (!CanRun(pKingdom, def))
+            {
+                ClearCurrent(pKingdom);
+                AutoSelect(pKingdom);
+                return;
+            }
+            float cost = GetCost(pKingdom, def);
+            if (cost <= 0f) return;
 
             float progress;
             if (def.SacrificeLevel.HasValue)
@@ -269,24 +330,43 @@ namespace AncientWarfare3.core.lineage
                 float currentProgress = GetProgress(pKingdom);
                 float politicalPoints = KingdomPolicyService.GetPoliticalPoints(pKingdom);
                 float spend = MandateSacrificeRules.SpendForYear(
-                    politicalPoints, def.Cost - currentProgress,
+                    PoliticalPointSpendingRules.AutomaticSpend(
+                        politicalPoints,
+                        KingdomPolicyService.MAX_YEARLY_SPEND),
+                    cost - currentProgress,
                     KingdomPolicyService.MAX_YEARLY_SPEND);
                 if (spend <= 0f) return;
-                progress = Mathf.Min(def.Cost, currentProgress + spend);
+                progress = Mathf.Min(cost, currentProgress + spend);
                 pKingdom.data.set(LineageKeys.POLICY_POINTS, politicalPoints - spend);
             }
             else
             {
-                progress = Mathf.Min(def.Cost,
+                progress = Mathf.Min(cost,
                     GetProgress(pKingdom) + EstimateYearlyGain(pKingdom));
             }
             pKingdom.data.set(LineageKeys.MANDATE_DECISION_PROGRESS, progress);
-            if (progress + 0.001f < def.Cost) return;
+            if (progress + 0.001f < cost) return;
 
             bool applied = ApplyEffect(pKingdom, def);
+            if (applied &&
+                MandateDecisionAiRules.CooldownYears(def.Id) > 0)
+                pKingdom.data.set(LastSuccessKey(def.Id),
+                    Date.getCurrentYear());
+            ClearCurrent(pKingdom);
+            if (!applied) AutoSelect(pKingdom);
+        }
+
+        private static void ClearCurrent(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
             pKingdom.data.set(LineageKeys.MANDATE_DECISION_CURRENT, "");
             pKingdom.data.set(LineageKeys.MANDATE_DECISION_PROGRESS, 0f);
-            if (!applied) AutoSelect(pKingdom);
+        }
+
+        private static string LastSuccessKey(string pDecisionId)
+        {
+            return LineageKeys.MANDATE_DECISION_LAST_SUCCESS_PREFIX +
+                   (pDecisionId ?? "");
         }
 
         private static bool ApplyEffect(Kingdom pKingdom, MandateDecisionDef pDef)
@@ -303,6 +383,11 @@ namespace AncientWarfare3.core.lineage
                     return MandateBorderDefenseService.ExecuteDecision(pKingdom);
                 case "aw_mandate_decision_great_enfeoffment":
                     return FeudatorySelectionService.ExecuteGreatEnfeoffment(pKingdom) > 0;
+                case "aw_mandate_decision_grant_royal_titles":
+                    return NobleRankService.ExecuteGreatRoyalGrant(pKingdom) > 0;
+                case "aw_mandate_decision_favor_order":
+                    return FeudatoryService.EnableFavorOrder(pKingdom,
+                        out _);
                 default:
                     return false;
             }

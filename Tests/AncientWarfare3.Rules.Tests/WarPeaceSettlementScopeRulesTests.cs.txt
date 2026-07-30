@@ -1,0 +1,107 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarPeaceSettlementScopeRulesTests
+{
+    public static void Run()
+    {
+        Equal(WarPeaceSettlementScopeKind.Coalition,
+            WarPeaceSettlementScopeRules.ParseScope(""),
+            "legacy drafts default to coalition scope");
+        Equal(WarPeaceSettlementScopeKind.SeparateParticipant,
+            WarPeaceSettlementScopeRules.ParseScope("separate_participant"),
+            "separate participant scope survives persistence");
+
+        True(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.Coalition,
+                Authority(requesterLeader: true, responderLeader: true)),
+            "opposing war leaders may negotiate comprehensive peace");
+        True(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.SeparateParticipant,
+                Authority(requesterLeader: true, responderLeader: false)),
+            "a war leader may negotiate with an opposing independent ally");
+        False(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.SeparateParticipant,
+                Authority(requesterLeader: false, responderLeader: false)),
+            "two secondary allies cannot negotiate directly");
+        False(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.SeparateParticipant,
+                Authority(requesterLeader: true, responderLeader: false,
+                    exitRootRole: WarParticipantRoleKind.FormalVassal)),
+            "a formal vassal cannot be selected as the exit root");
+        True(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.SeparateParticipant,
+                Authority(requesterLeader: true, responderLeader: false,
+                    exitRootRole: WarParticipantRoleKind.Tributary)),
+            "a tributary remains an independent separate-peace target");
+        False(WarPeaceSettlementScopeRules.CanNegotiate(
+                WarPeaceSettlementScopeKind.SeparateParticipant,
+                Authority(requesterLeader: true, responderLeader: false,
+                    exitRootRole: WarParticipantRoleKind.Unknown)),
+            "an ambiguous exit-root relation must fail closed");
+
+        True(WarPeaceSettlementScopeRules.ShouldIncludeVassal(
+                ExitFacts(parentIncluded: true,
+                    WarParticipantEntrySourceKind.FormalVassalObligation,
+                    hasIndependentSource: false)),
+            "an obligation-only formal vassal follows its suzerain out");
+        False(WarPeaceSettlementScopeRules.ShouldIncludeVassal(
+                ExitFacts(parentIncluded: true,
+                    WarParticipantEntrySourceKind.FormalVassalObligation,
+                    hasIndependentSource: true)),
+            "an alternate independent source keeps the vassal in war");
+        False(WarPeaceSettlementScopeRules.ShouldIncludeVassal(
+                ExitFacts(parentIncluded: false,
+                    WarParticipantEntrySourceKind.FormalVassalObligation,
+                    hasIndependentSource: false)),
+            "an excluded parent stops its entire vassal subtree");
+        False(WarPeaceSettlementScopeRules.ShouldIncludeVassal(
+                ExitFacts(parentIncluded: true,
+                    WarParticipantEntrySourceKind.AllianceCall,
+                    hasIndependentSource: false)),
+            "an alliance-called vassal does not follow an obligation exit");
+    }
+
+    private static WarPeaceNegotiationAuthorityFacts Authority(
+        bool requesterLeader, bool responderLeader,
+        WarParticipantRoleKind exitRootRole =
+            WarParticipantRoleKind.Independent)
+    {
+        return new WarPeaceNegotiationAuthorityFacts(
+            sameWar: true, opposingSides: true,
+            requesterIsParticipant: true, responderIsParticipant: true,
+            requesterIsWarLeader: requesterLeader,
+            responderIsWarLeader: responderLeader,
+            exitRootRole: exitRootRole);
+    }
+
+    private static WarPeaceExitParticipantFacts ExitFacts(
+        bool parentIncluded, WarParticipantEntrySourceKind source,
+        bool hasIndependentSource)
+    {
+        return new WarPeaceExitParticipantFacts(
+            activeParticipant: true, sameSide: true,
+            parentIncluded: parentIncluded, currentFormalVassal: true,
+            suzerainMatchesParent: true, tributary: false,
+            entrySource: source,
+            hasIndependentEntrySource: hasIndependentSource);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value)
+            throw new InvalidOperationException($"{name}: expected false");
+    }
+}

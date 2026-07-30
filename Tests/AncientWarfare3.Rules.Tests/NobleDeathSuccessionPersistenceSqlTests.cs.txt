@@ -1,0 +1,75 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class NobleDeathSuccessionPersistenceSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Enfeoffment (GRANT_ID INTEGER PRIMARY KEY," +
+                    "KINGDOM_ID INTEGER,ACTOR_ID INTEGER,NOBLE_RANK INTEGER," +
+                    "TITLE_STYLE TEXT,TITLE_NAME TEXT,GRANT_REASON TEXT," +
+                    "INHERITED_FROM_ACTOR_ID INTEGER,PREDECESSOR_GRANT_ID INTEGER," +
+                    "ACTIVE INTEGER)");
+        Insert(db, grantId: 2, kingdomId: 7, actorId: 999, rank: 5,
+            holderId: 10, predecessorId: 1);
+        Insert(db, grantId: 3, kingdomId: 7, actorId: 11, rank: 5,
+            holderId: 999, predecessorId: 1);
+        Insert(db, grantId: 4, kingdomId: 8, actorId: 11, rank: 5,
+            holderId: 10, predecessorId: 1);
+        Insert(db, grantId: 5, kingdomId: 7, actorId: 11, rank: 4,
+            holderId: 10, predecessorId: 1);
+        Insert(db, grantId: 6, kingdomId: 7, actorId: 11, rank: 5,
+            holderId: 10, predecessorId: 1, reason: "unrelated");
+
+        bool unrelatedClaimed = NobleDeathSuccessionPersistence
+            .TryReadCommittedInheritance(db, "Enfeoffment",
+                predecessorGrantId: 1, expectedSuccessorActorId: 11,
+                expectedHolderActorId: 10, expectedKingdomId: 7,
+                expectedRank: 5, expectedStyle: NobleTitleStyle.Male,
+                out _);
+        Assert(!unrelatedClaimed,
+            "NobleDeathSuccessionPersistenceSqlTests.UnrelatedPredecessorRowIsNotClaimed: complete succession identity is required");
+
+        Insert(db, grantId: 7, kingdomId: 7, actorId: 11, rank: 5,
+            holderId: 10, predecessorId: 1);
+        bool committed = NobleDeathSuccessionPersistence
+            .TryReadCommittedInheritance(db, "Enfeoffment",
+                predecessorGrantId: 1, expectedSuccessorActorId: 11,
+                expectedHolderActorId: 10, expectedKingdomId: 7,
+                expectedRank: 5, expectedStyle: NobleTitleStyle.Male,
+                out NobleDeathSuccessionCommittedGrant grant);
+        int inserts = committed ? 0 : 1;
+        Assert(committed && grant.GrantId == 7L && inserts == 0,
+            "NobleDeathSuccessionPersistenceSqlTests.CommittedReplayIsExactlyOnce: exact committed inheritance suppresses a second insert");
+    }
+
+    private static void Insert(SQLiteConnection db, long grantId,
+        long kingdomId, long actorId, int rank, long holderId,
+        long predecessorId, string reason = "eldest_son_inheritance")
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO Enfeoffment VALUES(@id,@kingdom,@actor,@rank,'male'," +
+            "'title',@reason,@holder,@predecessor,1)", db);
+        command.Parameters.AddWithValue("@id", grantId);
+        command.Parameters.AddWithValue("@kingdom", kingdomId);
+        command.Parameters.AddWithValue("@actor", actorId);
+        command.Parameters.AddWithValue("@rank", rank);
+        command.Parameters.AddWithValue("@holder", holderId);
+        command.Parameters.AddWithValue("@predecessor", predecessorId);
+        command.Parameters.AddWithValue("@reason", reason);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

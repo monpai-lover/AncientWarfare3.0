@@ -14,5 +14,11 @@ namespace AncientWarfare3.core.lineage
             _ = markerApplied;
             return originalXia || xiaizationLevel < maximumLevel;
         }
+
+        public static bool ShouldDisplayStateSuffix(bool originalXia,
+            int xiaizationLevel, int maximumLevel)
+        {
+            return originalXia || xiaizationLevel >= maximumLevel;
+        }
     }
 }

@@ -20,3 +20,16 @@ aw_general_ambition,野心,Ambition,野心
 aw_general_risk_low,低风险,Low Risk,低風險
 aw_general_risk_mid,中风险,Medium Risk,中風險
 aw_general_risk_high,高风险,High Risk,高風險
+aw_xiaization_none,未入夏,Not Xiaized,未入夏
+aw_xiaization_contact,入夏接触：,Xia contact: ,入夏接觸：
+aw_xiaization_contact_source,接触来源：,Contact sources: ,接觸來源：
+aw_xiaization_pseudo_detail,伪朝：保留外族血统并行夏制,Pseudo dynasty: retains foreign ancestry while adopting Xia institutions,偽朝：保留外族血統並行夏制
+aw_xiaization_institutions_detail,行夏制：保留原种族外貌与血统并接入官制,Xia institutions: retain original appearance and ancestry while adopting AW3 government,行夏制：保留原種族外貌與血統並接入官制
+aw_xiaization_max_resentment,民怨最高：,Highest resentment: ,民怨最高：
+aw_xiaization_source_border,接壤,Shared border,接壤
+aw_xiaization_source_nearby,邻近,Nearby,鄰近
+aw_xiaization_source_diplomacy,结盟,Alliance,結盟
+aw_xiaization_source_vassal,附庸,Vassalage,附庸
+aw_xiaization_source_occupation,统治夏地,Rule over Xia lands,統治夏地
+aw_xiaization_source_mixed,通婚混血,Intermarriage,通婚混血
+aw_xiaization_source_official,官员接触,Official contact,官員接觸

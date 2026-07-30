@@ -954,7 +954,7 @@ Require-Present 'war notice is visible in the diplomacy conversation' 'Code/core
 Require-Present 'successful declaration returns to diplomacy' 'Code/ui/windows/WarDecisionTargetWindow.cs' 'DiplomacyConversationWindow.Open(pSource.id);'
 Require-Absent 'declare war is not a kingdom decision definition' 'Code/content/policies/KingdomPolicyDefs.cs' 'Id = "aw_decision_declare_war"'
 Require-Absent 'kingdom policy service no longer owns war declarations' 'Code/core/policy/KingdomPolicyService.cs' 'StartWarDecision('
-Require-Present 'war end records a truce treaty' 'Code/patch/AW_WarPatch.cs' 'DiplomacyProposalService.RegisterTruce(pWar);'
+Require-Present 'war end records cross-side truce treaties' 'Code/patch/AW_WarPatch.cs' 'DiplomacyProposalService.RegisterCoalitionTruces(pWar,'
 Require-Present 'mandate captures final-city hostility before war settlement' `
     'Code/patch/AW_ChroniclePatch.cs' `
     'MandateService.OnCityTransferStarting(__instance,'
@@ -962,6 +962,7 @@ Require-Present 'mandate succession only records the final hostile city transfer
     'Code/core/lineage/MandateService.cs' `
     'ResolveHostileMandateFinalCityConqueror('
 Require-Present 'truce is persisted as a treaty' 'Code/core/lineage/DiplomacyProposalService.cs' 'public static bool RegisterTruce(War pWar)'
+Require-Present 'coalition truce covers every cross-side pair' 'Code/core/lineage/DiplomacyProposalService.cs' 'public static bool RegisterCoalitionTruces(War pWar,'
 Require-Present 'war notice runtime rebuild exists' 'Code/core/lineage/WarNoticeService.cs' 'public static void RebuildRuntime()'
 Require-Present 'war notice runtime clear exists' 'Code/core/lineage/WarNoticeService.cs' 'public static void ClearRuntime()'
 Require-Present 'kingdom year invokes temporary levies' 'Code/core/policy/KingdomAnnualWorkService.cs' 'TemporaryLevyService.OnKingdomYear(pKingdom);'

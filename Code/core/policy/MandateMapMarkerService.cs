@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.policy
 {
@@ -23,9 +24,12 @@ namespace AncientWarfare3.core.policy
         {
             switch (pKind)
             {
-                case "rebel_claimant": return "\u4E49\u519B\u5929\u547D";
-                case "pseudo_foreign": return "\u4F2A\u671D\u5929\u547D";
-                default: return "\u771F\u5929\u547D";
+                case "rebel_claimant":
+                    return AW_L10n.Text("aw_mandate_marker_rebel", "Rebel Mandate");
+                case "pseudo_foreign":
+                    return AW_L10n.Text("aw_mandate_marker_pseudo", "Pseudo-dynastic Mandate");
+                default:
+                    return AW_L10n.Text("aw_mandate_marker_true", "True Mandate");
             }
         }
     }

@@ -21,8 +21,11 @@ namespace AncientWarfare3.patch
             if (rekt || !warrior) return;
             bool supportedActor = SlaveService.IsSupportedSlaveryActor(__instance);
             if (!SoldierRetirementRules.ShouldEnterActorUpdateAgeRetirement(supportedActor, rekt, warrior)) return;
-            if (TemporaryLevyService.IsTemporaryLevy(__instance) ||
-                TemporarySlaveVanguardService.IsMember(__instance)) return;
+            bool temporaryService =
+                TemporaryLevyService.IsTemporaryLevy(__instance) ||
+                TemporarySlaveVanguardService.IsMember(__instance);
+            if (SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
+                    temporaryService, __instance.getAge())) return;
 
             long benchmark = UpdateAgeBenchmark.Begin();
             try
@@ -57,7 +60,6 @@ namespace AncientWarfare3.patch
                 Bench.benchEnd(CityMaintenanceBenchmarkRules.RoyalGuard, CityMaintenanceBenchmarkRules.Group);
 
                 // 求嗣:无在世男嗣的国王疯狂生育直到有儿子(与禁卫军同在都城错帧触发)。
-                RoyalFertilityService.RefreshHeirUrge(pCity?.kingdom);
             }
 
             Bench.bench(CityMaintenanceBenchmarkRules.FiefCommand, CityMaintenanceBenchmarkRules.Group);
@@ -112,10 +114,28 @@ namespace AncientWarfare3.patch
         public static void CheckCanMakeWarrior_Postfix(City __instance, Actor pActor, ref bool __result)
         {
             if (!__result) return;
+            if (!SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(
+                    pActor?.getAge() ?? SoldierRetirementRules.HardRetirementAge))
+                __result = false;
             if (RoyalGuardService.ShouldBlockNormalArmy(pActor))
                 __result = false;
             if (SlaveService.ShouldBlockConscription(__instance, pActor))
                 __result = false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(City), nameof(City.makeWarrior))]
+        public static void MakeWarrior_Postfix(Actor pActor)
+        {
+            MandateMilitaryPhaseService.ReconcileWarrior(pActor);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.stopBeingWarrior))]
+        public static void StopBeingWarrior_Postfix(Actor __instance)
+        {
+            Actor pActor = __instance;
+            MandateMilitaryPhaseService.Clear(pActor);
         }
     }
 }

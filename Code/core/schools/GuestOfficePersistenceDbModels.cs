@@ -78,6 +78,10 @@ namespace AncientWarfare3.core.schools
         public int Active = 1;
         public string EndReason = "";
         public double UpdatedTime;
+        public string InstitutionAtAppointment = "";
+        public int RankAtAppointment;
+        public int LocalGradeAtAppointment;
+        public bool IsActing;
 
         public GuestOfficeCareerRow Copy()
         {
@@ -95,7 +99,11 @@ namespace AncientWarfare3.core.schools
                    AppointedTime.Equals(pOther.AppointedTime) &&
                    EndedYear == pOther.EndedYear && EndedTime.Equals(pOther.EndedTime) &&
                    Active == pOther.Active && EndReason == pOther.EndReason &&
-                   UpdatedTime.Equals(pOther.UpdatedTime);
+                   UpdatedTime.Equals(pOther.UpdatedTime) &&
+                   InstitutionAtAppointment == pOther.InstitutionAtAppointment &&
+                   RankAtAppointment == pOther.RankAtAppointment &&
+                   LocalGradeAtAppointment == pOther.LocalGradeAtAppointment &&
+                   IsActing == pOther.IsActing;
         }
     }
 

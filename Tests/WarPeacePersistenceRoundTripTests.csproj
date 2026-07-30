@@ -1,0 +1,57 @@
+<Project>
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>obj\WarPeacePersistenceRoundTripTests\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\WarPeacePersistenceRoundTripTests\</BaseOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="WarPeacePersistenceRoundTripTests.cs" />
+    <Compile Include="WarPeacePersistenceRoundTripTestStubs.cs" />
+    <Compile Include="..\Code\attributes\TableDefAttribute.cs"
+             Link="TableDefAttribute.cs" />
+    <Compile Include="..\Code\attributes\TableItemDefAttribute.cs"
+             Link="TableItemDefAttribute.cs" />
+    <Compile Include="..\Code\utils\SQLiteHelper.cs" Link="SQLiteHelper.cs" />
+    <Compile Include="..\Code\core\db\AbstractTableItem.cs"
+             Link="AbstractTableItem.cs" />
+    <Compile Include="..\Code\core\db\WarParticipantEntrySourceTableItem.cs"
+             Link="WarParticipantEntrySourceTableItem.cs" />
+    <Compile Include="..\Code\core\db\WarPeaceSettlementParticipantTableItem.cs"
+             Link="WarPeaceSettlementParticipantTableItem.cs" />
+    <Compile Include="..\Code\core\db\WarPeaceSettlementProposalTableItem.cs"
+             Link="WarPeaceSettlementProposalTableItem.cs" />
+    <Compile Include="..\Code\core\db\WarPeaceSettlementTermTableItem.cs"
+             Link="WarPeaceSettlementTermTableItem.cs" />
+    <Compile Include="..\Code\core\db\DiplomacyProposalTableItem.cs"
+             Link="DiplomacyProposalTableItem.cs" />
+    <Compile Include="..\Code\core\db\LineageArchiveIndexRules.cs"
+             Link="LineageArchiveIndexRules.cs" />
+    <Compile Include="..\Code\core\lineage\TableIdAllocator.cs"
+             Link="TableIdAllocator.cs" />
+    <Compile Include="..\Code\core\lineage\WarPeaceTermsRules.cs"
+             Link="WarPeaceTermsRules.cs" />
+    <Compile Include="..\Code\core\lineage\WarGoalSettlementRules.cs"
+             Link="WarGoalSettlementRules.cs" />
+    <Compile Include="..\Code\core\lineage\WarPeaceSettlementScopeRules.cs"
+             Link="WarPeaceSettlementScopeRules.cs" />
+    <Compile Include="..\Code\core\lineage\WarParticipantRosterRules.cs"
+             Link="WarParticipantRosterRules.cs" />
+    <Compile Include="..\Code\core\lineage\WarPeaceSettlementModels.cs"
+             Link="WarPeaceSettlementModels.cs" />
+    <Compile Include="..\Code\core\lineage\WarPeaceSettlementStore.cs"
+             Link="WarPeaceSettlementStore.cs" />
+    <Compile Include="..\Code\core\lineage\WarParticipantEntrySourceService.cs"
+             Link="WarParticipantEntrySourceService.cs" />
+    <Reference Include="System.Data.SQLite">
+      <HintPath>..\Assemblies\System.Data.SQLite.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

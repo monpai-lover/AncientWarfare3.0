@@ -6,7 +6,17 @@ namespace AncientWarfare3.core.lineage
             bool pTargetCityMatchesGoal,
             bool pNewOwnerIsWarAttacker)
         {
-            return pTargetCityMatchesGoal && pNewOwnerIsWarAttacker && IsCityControlGoal(pGoalType);
+            return pTargetCityMatchesGoal && pNewOwnerIsWarAttacker &&
+                   IsTerritorialCityControlGoal(pGoalType);
+        }
+
+        public static bool ShouldResolveControlledSettlementGoal(string pGoalType,
+            bool pTargetCityMatchesGoal, bool pCapturerIsOnAttackerSide,
+            bool pCityStillOwnedByDefender)
+        {
+            return pTargetCityMatchesGoal && pCapturerIsOnAttackerSide &&
+                   pCityStillOwnedByDefender &&
+                   IsNonTerritorialSettlementGoal(pGoalType);
         }
 
         public static bool ShouldResolveControlledCityGoal(string pGoalType,
@@ -18,11 +28,26 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsCityControlGoal(string pGoalType)
         {
+            return IsTerritorialCityControlGoal(pGoalType) ||
+                   IsNonTerritorialSettlementGoal(pGoalType);
+        }
+
+        public static bool IsNonTerritorialSettlementGoal(string pGoalType)
+        {
+            return pGoalType == "force_vassal" ||
+                   pGoalType == "force_tributary" ||
+                   pGoalType == "take_mandate" ||
+                   pGoalType == "independence" ||
+                   pGoalType == "reunify_succession" ||
+                   pGoalType == "no_cb" ||
+                   pGoalType == "no_cb_punitive";
+        }
+
+        private static bool IsTerritorialCityControlGoal(string pGoalType)
+        {
             return pGoalType == "take_core_city" ||
                    pGoalType == "press_claim_city" ||
                    pGoalType == "mandate_conquest" ||
-                   pGoalType == "force_vassal" ||
-                   pGoalType == "force_tributary" ||
                    pGoalType == "restore_kingdom";
         }
     }

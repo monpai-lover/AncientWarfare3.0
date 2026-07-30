@@ -1,0 +1,216 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.policy;
+
+internal static class ConsistencyRegressionRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Near(float expected, float actual, string name)
+    {
+        if (Math.Abs(expected - actual) > 0.0001f)
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static List<(bool HasKing, double Start, double End, int Opening)>
+        BuildReignTimeline(double pInitialTime, double[] pTimes,
+            bool[] pBeginsKing, long[] pEventIds)
+    {
+        var method = typeof(HistoryDynastyAssignmentRules).GetMethod(
+            "BuildReignTimeline",
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "history timeline must expose destruction and restoration boundaries");
+        object raw = method.Invoke(null,
+            new object[] { pInitialTime, pTimes, pBeginsKing, pEventIds });
+        var result = new List<(bool, double, double, int)>();
+        foreach (object segment in (System.Collections.IEnumerable)raw)
+        {
+            Type type = segment.GetType();
+            result.Add((
+                (bool)type.GetField("HasKing").GetValue(segment),
+                (double)type.GetField("StartTime").GetValue(segment),
+                (double)type.GetField("EndTime").GetValue(segment),
+                (int)type.GetField("OpeningTransitionIndex").GetValue(segment)));
+        }
+        return result;
+    }
+
+    public static void Run()
+    {
+        Equal(false, SuccessionDisputeRules.CanMaintainTerritorialInvariant(0, 1),
+            "a zero-city original court is invalid");
+        Equal(false, SuccessionDisputeRules.CanMaintainTerritorialInvariant(1, 0),
+            "a zero-city rival court is invalid");
+        Equal(true, SuccessionDisputeRules.CanMaintainTerritorialInvariant(1, 1),
+            "both courts require a city");
+
+        Equal(false, KingdomExtinctionRules.ShouldTreatAsHavingCities(
+                cityIndexStable: false, liveCityCount: 0),
+            "dirty indexes are not proof of city ownership");
+        Equal(true, KingdomExtinctionRules.ShouldQueueVerification(
+                isCivilization: true, cityIndexStable: false, liveCityCount: 0),
+            "dirty zero-city kingdoms enter deferred verification");
+
+        Equal(false, RoyalRestorationRules.CanCompleteCampaign(
+                hasRecoveredThreshold: true, kingdomAlive: true,
+                hasCity: true, hasActiveWar: true),
+            "restoration cannot complete during war");
+        Equal(true, RoyalRestorationRules.CanCompleteCampaign(
+                hasRecoveredThreshold: true, kingdomAlive: true,
+                hasCity: true, hasActiveWar: false),
+            "peace completes a stable restoration");
+
+        Equal(false, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: true, isEmpireRank: false,
+                changedRulingShi: true, hasExistingBoundStateName: true),
+            "lower ranks retain the existing state name");
+        Equal(false, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: false, isEmpireRank: true,
+                changedRulingShi: true, hasExistingBoundStateName: true),
+            "an accession without a newly persisted dynasty cannot rename");
+        Equal(false, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: true, isEmpireRank: true,
+                changedRulingShi: true, hasExistingBoundStateName: false),
+            "a new dynasty cannot invent a state name during accession");
+        Equal(true, StateNameRules.ShouldProjectDynasticStateName(
+                newDynastyCreated: true, isEmpireRank: true,
+                changedRulingShi: true, hasExistingBoundStateName: true),
+            "a newly established imperial dynasty may project its old state name");
+
+        Equal(true, LineageBranchRules.ShouldFoundCollateralBranch(
+                collateral: true, hasTraceableAncestor: true,
+                foreignThrone: true, highInfluenceElsewhere: false,
+                directHeir: false, previousKingDirectChild: false,
+                alreadyFoundedForDestination: false),
+            "traceable collateral foreign king founds a branch");
+        Equal(false, LineageBranchRules.ShouldFoundCollateralBranch(
+                collateral: true, hasTraceableAncestor: true,
+                foreignThrone: true, highInfluenceElsewhere: false,
+                directHeir: false, previousKingDirectChild: true,
+                alreadyFoundedForDestination: false),
+            "previous king direct child stays in the main branch");
+
+        Near(0.1325f, NobleCaptureRules.ResolveChance(
+                baseChance: 0.28f, captorBonus: 0.25f, noble: true),
+            "noble protection applies after captor bonus");
+        Near(0.53f, NobleCaptureRules.ResolveChance(
+                baseChance: 0.28f, captorBonus: 0.25f, noble: false),
+            "ordinary capture chance remains unchanged");
+        Near(0.95f, NobleCaptureRules.ResolveChance(
+                baseChance: 1f, captorBonus: 1f, noble: false),
+            "capture probability remains capped below certainty");
+
+        Equal(true, AWNarrowWaterRecoveryRules.CanStart(
+                military: true, isBoat: false, isWaterCreature: false,
+                damagedByOcean: false, alreadyRetried: false),
+            "land soldiers may attempt bounded water recovery");
+        Equal(true, AWNarrowWaterRecoveryRules.CanStart(
+                military: true, isBoat: false, isWaterCreature: false,
+                damagedByOcean: true, alreadyRetried: false),
+            "water-vulnerable soldiers may try when the path estimate remains nonlethal");
+        Equal(false, AWNarrowWaterRecoveryRules.CanStart(
+                military: false, isBoat: false, isWaterCreature: false,
+                damagedByOcean: false, alreadyRetried: false),
+            "civilians never receive military narrow-water recovery");
+        Equal(false, AWNarrowWaterRecoveryRules.CanStart(
+                military: true, isBoat: true, isWaterCreature: false,
+                damagedByOcean: false, alreadyRetried: false),
+            "boats do not use land-soldier water recovery");
+        Equal(false, AWNarrowWaterRecoveryRules.CanStart(
+                military: true, isBoat: false, isWaterCreature: true,
+                damagedByOcean: false, alreadyRetried: false),
+            "water creatures retain their native traversal");
+        Equal(false, AWNarrowWaterRecoveryRules.CanStart(
+                military: true, isBoat: false, isWaterCreature: false,
+                damagedByOcean: false, alreadyRetried: true),
+            "narrow-water recovery is attempted at most once");
+        Equal(5, AWNarrowWaterRecoveryRules.MaximumConsecutiveWaterTiles,
+            "military recovery is limited to five water tiles");
+        Equal(true,
+            AWNarrowWaterRecoveryRules.ShouldTryBoundedCrossingBeforeTransport(
+                military: true, boundedCrossingAttempt: false),
+            "military paths try a bounded narrow-water crossing before requesting transport");
+        Equal(false,
+            AWNarrowWaterRecoveryRules.ShouldTryBoundedCrossingBeforeTransport(
+                military: true, boundedCrossingAttempt: true),
+            "a failed bounded crossing falls back to transport instead of retrying forever");
+        Equal(true, AWNarrowWaterRecoveryRules.CanAdvance(
+                currentWaterRun: 4, enteringWater: true,
+                predictedLethal: false, lava: false),
+            "fifth water tile is allowed");
+        Equal(false, AWNarrowWaterRecoveryRules.CanAdvance(
+                currentWaterRun: 5, enteringWater: true,
+                predictedLethal: false, lava: false),
+            "sixth water tile is rejected");
+
+        Equal(true, ArmyCreationSafetyRules.ShouldSkipSave(
+                hasData: false, alive: true),
+            "null-data armies never reach original save");
+        Equal(true, ArmyCreationSafetyRules.ShouldSkipSave(
+                hasData: true, alive: false),
+            "dead armies never reach original save");
+        Equal(true, ArmyCreationSafetyRules.ShouldCleanupFailedCreation(
+                objectAllocated: true, initializationSucceeded: false),
+            "half-created army is removed");
+        Equal(false, ArmyCreationSafetyRules.ShouldSkipSave(
+                hasData: true, alive: true),
+            "valid armies use normal save");
+
+        Equal(false, RecentFeatureBenchmarkRules.ShouldLogSnapshot(
+                diagnosticSwitch: null, totalMilliseconds: 3.5),
+            "benchmark snapshots are silent by default");
+        Equal(true, RecentFeatureBenchmarkRules.ShouldLogSnapshot(
+                diagnosticSwitch: "1", totalMilliseconds: 3.5),
+            "explicit diagnostics retain benchmark snapshots");
+
+        Equal(false, AllianceConversationRules.ShouldRecordJoin(
+                creatingNewAlliance: true),
+            "founder joins wait for final alliance naming");
+        Equal(true, AllianceConversationRules.ShouldRecordJoin(
+                creatingNewAlliance: false),
+            "later alliance joins record immediately");
+        Equal("合纵盟", AllianceConversationRules.ResolveRecordedName(
+                finalDisplayName: "合纵盟", generatedFallback: "Titans and Noses"),
+            "final custom alliance name wins over generated fallback");
+        Equal(false, AllianceConversationRules.ShouldRecordCreation(
+                namingCallbacksCompleted: false, hasTwoFounders: true),
+            "alliance history waits until every naming callback has completed");
+        Equal(true, AllianceConversationRules.ShouldRecordCreation(
+                namingCallbacksCompleted: true, hasTwoFounders: true),
+            "alliance history records once the final live name is available");
+
+        Equal(0, HistoryDynastyAssignmentRules.SelectIndex(65d,
+                new[] { 109d, 150d }, new[] { 120d, -1d }),
+            "a reign before the first dynasty belongs to the first temporal bucket");
+        Equal(0, HistoryDynastyAssignmentRules.SelectIndex(125d,
+                new[] { 109d, 150d }, new[] { 120d, -1d }),
+            "a reign in a gap belongs to the nearest earlier dynasty");
+        Equal(1, HistoryDynastyAssignmentRules.SelectIndex(170d,
+                new[] { 109d, 150d }, new[] { 120d, -1d }),
+            "a late reign belongs to the last open dynasty");
+
+        var reignTimeline = BuildReignTimeline(0d,
+            new[] { 10d, 65d, 109d, 110d },
+            new[] { true, false, true, false },
+            new long[] { 1, 2, 3, 4 });
+        Equal(5, reignTimeline.Count,
+            "destruction and restoration create explicit timeline periods");
+        Equal((false, 0d, 10d, -1), reignTimeline[0],
+            "foundation begins with a bounded no-ruler period");
+        Equal((true, 10d, 65d, 0), reignTimeline[1],
+            "the old reign closes at kingdom destruction");
+        Equal((false, 65d, 109d, 1), reignTimeline[2],
+            "the fallen kingdom keeps an explicit no-ruler interval");
+        Equal((true, 109d, 110d, 2), reignTimeline[3],
+            "restoration opens a later reign without rewriting the old one");
+        Equal((false, 110d, -1d, 3), reignTimeline[4],
+            "a later destruction opens a new no-ruler interval");
+    }
+}

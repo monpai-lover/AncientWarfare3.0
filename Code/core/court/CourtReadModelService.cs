@@ -23,12 +23,14 @@ namespace AncientWarfare3.core.court
             List<CourtOfficerView> officers = CourtService.GetActiveOfficers(pKingdom, 96);
             AddOfficersAndVacancies(seeds, pKingdom, officers, tier);
             AddGenerals(seeds, pKingdom);
+            AddFeudatoryPrinces(seeds, pKingdom);
             AddCityLeaders(seeds, pKingdom);
             List<CourtPyramidNodeModel> result = CourtPyramidRules.BuildLayout(
                 seeds, HorizontalSpacing, VerticalSpacing);
             AddCachedHeirRole(result, pKingdom);
             ApplyCareerStates(result,
-                OfficialCareerStateService.LoadKingdomStates(pKingdom.id));
+                OfficialCareerStateService.LoadKingdomStates(pKingdom.id),
+                CourtService.HasNineRankSystem(pKingdom));
             return result;
         }
 
@@ -78,7 +80,9 @@ namespace AncientWarfare3.core.court
                 int order = expectedOrder.TryGetValue(officer.office_id, out int officeOrder)
                     ? officeOrder
                     : expected.Length + StableStringOrder(officer.office_id);
-                int rank = officer.layer == CourtOfficeLayer.City
+                int rank = officer.layer == CourtOfficeLayer.Feudatory
+                    ? FeudatoryOfficeRules.InspectorRank
+                    : officer.layer == CourtOfficeLayer.City
                     ? CourtPyramidRules.GovernorRank
                     : officer.layer == CourtOfficeLayer.Military
                         ? CourtPyramidRules.GeneralRank
@@ -146,6 +150,32 @@ namespace AncientWarfare3.core.court
             }
         }
 
+        private static void AddFeudatoryPrinces(
+            List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
+        {
+            IReadOnlyList<FeudatorySnapshot> rows =
+                FeudatoryService.GetByKingdom(pKingdom.id);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                FeudatorySnapshot snapshot = rows[i];
+                Actor prince = World.world?.units?.get(snapshot.PrinceActorId);
+                if (!IsValid(prince, pKingdom)) continue;
+                string school = ActorSchool(prince, "");
+                pSeeds.Add(new CourtPyramidNodeModel(prince.data.id,
+                    CourtPyramidRoleId.FeudatoryPrince,
+                    CourtPyramidRoleId.FeudatoryPrince,
+                    FeudatoryOfficeRules.PrinceRank, i, false)
+                {
+                    ActorName = SafeActorName(prince),
+                    SchoolId = school,
+                    SchoolIconPath = RegisteredSchoolIconPath(school),
+                    CityId = snapshot.SeatCityId,
+                    CityName = snapshot.SeatName,
+                    Influence = 30f + snapshot.Autonomy * 0.3f
+                });
+            }
+        }
+
         private static void AddCityLeaders(List<CourtPyramidNodeModel> pSeeds, Kingdom pKingdom)
         {
             int order = 0;
@@ -187,7 +217,8 @@ namespace AncientWarfare3.core.court
         }
 
         private static void ApplyCareerStates(List<CourtPyramidNodeModel> pNodes,
-            Dictionary<long, OfficialCareerStateView> pStates)
+            Dictionary<long, OfficialCareerStateView> pStates,
+            bool pHasNineRankSystem)
         {
             if (pNodes == null || pStates == null || pStates.Count == 0) return;
             foreach (CourtPyramidNodeModel node in pNodes)
@@ -195,12 +226,19 @@ namespace AncientWarfare3.core.court
                 if (node == null || node.ActorId < 0 ||
                     !pStates.TryGetValue(node.ActorId, out OfficialCareerStateView state))
                     continue;
-                node.OfficialRank = state.Rank;
+                bool rankedCareer = OfficialCareerRankRules.CanDisplayRankedCareer(
+                    pHasNineRankSystem, state.Rank);
+                node.OfficialRank = rankedCareer
+                    ? state.Rank
+                    : OfficialCareerRankRules.Unranked;
                 node.OfficialTrack = state.Track;
                 node.OfficialMerit = state.Merit;
                 node.OfficialMeritCap = state.MeritCap;
                 node.OfficialLastEvaluation = state.LastEvaluation;
                 node.OfficialTermEndYear = state.TermEndYear;
+                node.OfficialLocalGrade = rankedCareer
+                    ? state.LocalGrade
+                    : NineRankRules.Unranked;
             }
         }
 

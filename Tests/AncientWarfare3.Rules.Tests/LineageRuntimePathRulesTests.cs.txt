@@ -1,0 +1,41 @@
+using AncientWarfare3.core.db;
+
+internal static class LineageRuntimePathRulesTests
+{
+    public static void Run()
+    {
+        string modFolder = Path.GetFullPath(
+            Path.Combine(Path.GetTempPath(), "AncientWarfare3.0"));
+
+        string first = LineageRuntimePathRules.Resolve(
+            modFolder, processId: 101);
+        string sameProcess = LineageRuntimePathRules.Resolve(
+            modFolder, processId: 101);
+        string second = LineageRuntimePathRules.Resolve(
+            modFolder, processId: 202);
+
+        Equal(first, sameProcess,
+            "one process receives a stable lineage runtime path");
+        NotEqual(first, second,
+            "two processes sharing one mod install receive isolated lineage paths");
+        Equal("aw3_lineage_archive.db", Path.GetFileName(first),
+            "snapshot-compatible lineage database filename is retained");
+        Equal(Path.Combine(modFolder, ".runtime", "process-101",
+                "aw3_lineage_archive.db"),
+            first, "lineage runtime database is scoped below the process directory");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void NotEqual<T>(T first, T second, string name)
+    {
+        if (EqualityComparer<T>.Default.Equals(first, second))
+            throw new InvalidOperationException(
+                $"{name}: both values were {first}");
+    }
+}

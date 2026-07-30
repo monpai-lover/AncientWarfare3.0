@@ -21,6 +21,7 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 AWMapModeMetaLibrary.ClearMandateDynastyStatusCache();
@@ -28,6 +29,11 @@ namespace AncientWarfare3.core.policy
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void DirtyMapIfActive()
@@ -36,6 +42,11 @@ namespace AncientWarfare3.core.policy
             if (!MapModeDirtyThrottleRules.ShouldDirty(IsActive(), now, _lastDirtyTime, DIRTY_MIN_INTERVAL)) return;
             _lastDirtyTime = now;
             DirtyMap();
+        }
+
+        internal static void ResetRuntime()
+        {
+            _lastDirtyTime = -1.0;
         }
 
     }

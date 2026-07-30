@@ -1,0 +1,73 @@
+using System.Reflection;
+using AncientWarfare3.core.lineage;
+
+internal static class TemporaryLevyRulesTests
+{
+    public static void Run()
+    {
+        RecoversEligibleOrphanWarriorsDuringWar();
+        PreservesGarrisonAndAssignedSoldiers();
+        NotifiesRtsForEveryRosterMembershipChange();
+        PreparationScanRunsOnlyOnMonthTickOrInvalidation();
+    }
+
+    private static void RecoversEligibleOrphanWarriorsDuringWar()
+    {
+        Assert(TemporaryLevyRules.ShouldRecoverOrphanWarrior(
+                emergencyActive: true, isWarrior: true, hasArmy: false,
+                localResident: true, protectedIdentity: false,
+                activeGarrison: false),
+            "an unassigned local warrior must be recovered into a field army during war");
+    }
+
+    private static void PreservesGarrisonAndAssignedSoldiers()
+    {
+        Assert(!TemporaryLevyRules.ShouldRecoverOrphanWarrior(
+                emergencyActive: true, isWarrior: true, hasArmy: false,
+                localResident: true, protectedIdentity: false,
+                activeGarrison: true),
+            "a city garrison must not be reassigned as an ordinary field soldier");
+        Assert(!TemporaryLevyRules.ShouldRecoverOrphanWarrior(
+                emergencyActive: true, isWarrior: true, hasArmy: true,
+                localResident: true, protectedIdentity: false,
+                activeGarrison: false),
+            "a soldier already assigned to an army must not be reprocessed");
+    }
+
+    private static void NotifiesRtsForEveryRosterMembershipChange()
+    {
+        Assert(TemporaryLevyRules.ShouldNotifyRtsRosterChanged(
+                actorArmyChanged: true, armyListChanged: false),
+            "joining an existing army must reopen the RTS member work");
+        Assert(TemporaryLevyRules.ShouldNotifyRtsRosterChanged(
+                actorArmyChanged: false, armyListChanged: true),
+            "repairing a missing roster entry must reopen the RTS member work");
+        Assert(!TemporaryLevyRules.ShouldNotifyRtsRosterChanged(
+                actorArmyChanged: false, armyListChanged: false),
+            "unchanged membership must not create RTS roster work");
+    }
+
+    private static void PreparationScanRunsOnlyOnMonthTickOrInvalidation()
+    {
+        MethodInfo method = typeof(TemporaryLevyRules).GetMethod(
+            "ShouldProcessPreparationMonth",
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "war-preparation scanning must be gated by game month");
+        Assert((bool)method.Invoke(null, new object[]
+            { 24288, int.MinValue }),
+            "the first observed game month must initialize war preparation");
+        Assert(!(bool)method.Invoke(null, new object[]
+            { 24288, 24288 }),
+            "war preparation must not rescan every rendered frame in the same month");
+        Assert((bool)method.Invoke(null, new object[]
+            { 24289, 24288 }),
+            "the next game month must permit a new preparation scan");
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition) throw new InvalidOperationException(name);
+    }
+}

@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.schools
             long pSqlStatements,
             long pSqlCommitTicks,
             long pSqlRetries,
+            long pDbSyncDependencies,
             long pMapSnapshotRebuilds,
             long pWindowSnapshotRebuilds,
             long pConsumerSnapshotRebuilds,
@@ -47,6 +48,7 @@ namespace AncientWarfare3.core.schools
             SqlStatements = pSqlStatements;
             SqlCommitTicks = pSqlCommitTicks;
             SqlRetries = pSqlRetries;
+            DbSyncDependencies = pDbSyncDependencies;
             MapSnapshotRebuilds = pMapSnapshotRebuilds;
             WindowSnapshotRebuilds = pWindowSnapshotRebuilds;
             ConsumerSnapshotRebuilds = pConsumerSnapshotRebuilds;
@@ -72,6 +74,7 @@ namespace AncientWarfare3.core.schools
         public long SqlStatements { get; }
         public long SqlCommitTicks { get; }
         public long SqlRetries { get; }
+        public long DbSyncDependencies { get; }
         public long MapSnapshotRebuilds { get; }
         public long WindowSnapshotRebuilds { get; }
         public long ConsumerSnapshotRebuilds { get; }
@@ -99,6 +102,7 @@ namespace AncientWarfare3.core.schools
         private static long _sqlStatements;
         private static long _sqlCommitTicks;
         private static long _sqlRetries;
+        private static long _dbSyncDependencies;
         private static long _mapSnapshotRebuilds;
         private static long _windowSnapshotRebuilds;
         private static long _consumerSnapshotRebuilds;
@@ -114,6 +118,34 @@ namespace AncientWarfare3.core.schools
 
         public static long IdleAllocatedBytes =>
             Interlocked.Read(ref _idleAllocatedBytes);
+
+        public static void ClearRuntime()
+        {
+            Interlocked.Exchange(ref _yearTokens, 0L);
+            Interlocked.Exchange(ref _yearEnqueueTicks, 0L);
+            Interlocked.Exchange(ref _schedulerFrames, 0L);
+            Interlocked.Exchange(ref _schedulerTicks, 0L);
+            Interlocked.Exchange(ref _schedulerAllocatedBytes, 0L);
+            Interlocked.Exchange(ref _idleFrames, 0L);
+            Interlocked.Exchange(ref _idleAllocatedBytes, 0L);
+            Interlocked.Exchange(ref _sqlBatches, 0L);
+            Interlocked.Exchange(ref _sqlStatements, 0L);
+            Interlocked.Exchange(ref _sqlCommitTicks, 0L);
+            Interlocked.Exchange(ref _sqlRetries, 0L);
+            Interlocked.Exchange(ref _dbSyncDependencies, 0L);
+            Interlocked.Exchange(ref _mapSnapshotRebuilds, 0L);
+            Interlocked.Exchange(ref _windowSnapshotRebuilds, 0L);
+            Interlocked.Exchange(ref _consumerSnapshotRebuilds, 0L);
+            Interlocked.Exchange(ref _activeLectures, 0L);
+            Interlocked.Exchange(ref _activeDebates, 0L);
+            Interlocked.Exchange(ref _activeTravel, 0L);
+            Interlocked.Exchange(ref _taskLeases, 0L);
+            Interlocked.Exchange(ref _memberships, 0L);
+            Interlocked.Exchange(ref _teachers, 0L);
+            Interlocked.Exchange(ref _leaders, 0L);
+            Interlocked.Exchange(ref _canonicalMasters, 0L);
+            Interlocked.Exchange(ref _cacheEntries, 0L);
+        }
 
         public static void RecordYearEnqueue(long pTicks)
         {
@@ -143,6 +175,11 @@ namespace AncientWarfare3.core.schools
             Interlocked.Add(ref _sqlStatements, pStatements);
             Interlocked.Add(ref _sqlCommitTicks, pCommitTicks);
             if (pRetry) Interlocked.Increment(ref _sqlRetries);
+        }
+
+        public static void RecordDbSyncDependency()
+        {
+            Interlocked.Increment(ref _dbSyncDependencies);
         }
 
         public static void RecordSnapshotRebuild(HistoricalSchoolSnapshotCause pCause)
@@ -204,6 +241,7 @@ namespace AncientWarfare3.core.schools
                 Interlocked.Read(ref _sqlStatements),
                 Interlocked.Read(ref _sqlCommitTicks),
                 Interlocked.Read(ref _sqlRetries),
+                Interlocked.Read(ref _dbSyncDependencies),
                 Interlocked.Read(ref _mapSnapshotRebuilds),
                 Interlocked.Read(ref _windowSnapshotRebuilds),
                 Interlocked.Read(ref _consumerSnapshotRebuilds),

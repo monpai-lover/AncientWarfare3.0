@@ -9,14 +9,26 @@ namespace AncientWarfare3.core.schools
         private const int MaxZonesToInspect = 24;
         private const int MaxTilesPerZone = 8;
 
-        private static readonly HashSet<long> StartedCities = new HashSet<long>();
+        private static readonly Dictionary<long, Building> StartedAcademies =
+            new Dictionary<long, Building>();
         private static readonly Dictionary<long, int> PlacementAttempts =
+            new Dictionary<long, int>();
+        private static readonly Dictionary<long, int> LastPlacementAttemptYear =
             new Dictionary<long, int>();
 
         public static void ClearRuntime()
         {
-            StartedCities.Clear();
+            StartedAcademies.Clear();
             PlacementAttempts.Clear();
+            LastPlacementAttemptYear.Clear();
+        }
+
+        public static void InvalidateCity(long pCityId)
+        {
+            if (pCityId < 0) return;
+            StartedAcademies.Remove(pCityId);
+            PlacementAttempts.Remove(pCityId);
+            LastPlacementAttemptYear.Remove(pCityId);
         }
 
         public static Building TryStart(City pCity)
@@ -26,21 +38,34 @@ namespace AncientWarfare3.core.schools
                                       SchoolAcademyBuildingContent.BuildingId);
             bool cityValid = IsValidCity(pCity);
             bool assetAvailable = asset != null;
-            bool academyIdAlreadyPresent = cityValid &&
-                pCity.countBuildingsOfID(SchoolAcademyBuildingContent.BuildingId) > 0;
-            bool academyTypeAlreadyPresent = cityValid &&
-                pCity.countBuildingsType(SchoolAcademyBuildingContent.BuildingTypeId,
-                    pCountOnlyFinished: false) > 0;
+            bool academyAlreadyPresent = cityValid &&
+                HistoricalSchoolAcademyService.HasLiveAcademy(pCity);
             if (!SchoolAcademyConstructionRules.ShouldStart(
                     cityValid,
                     assetAvailable,
-                    academyIdAlreadyPresent,
-                    academyTypeAlreadyPresent,
+                    academyAlreadyPresent,
+                    academyAlreadyPresent,
                     placementAvailable: true))
                 return null;
 
             long cityId = pCity.data.id;
-            if (!StartedCities.Add(cityId)) return null;
+            if (StartedAcademies.TryGetValue(cityId, out Building started))
+            {
+                if (HistoricalSchoolAcademyService.IsLiveAcademyForCity(
+                        started, pCity)) return null;
+                StartedAcademies.Remove(cityId);
+            }
+
+            int currentYear = Date.getCurrentYear();
+            LastPlacementAttemptYear.TryGetValue(cityId,
+                out int lastAttemptYear);
+            if (!SchoolAcademyConstructionRules.ShouldAttemptPlacement(
+                    currentYear,
+                    LastPlacementAttemptYear.ContainsKey(cityId)
+                        ? lastAttemptYear
+                        : -1))
+                return null;
+            LastPlacementAttemptYear[cityId] = currentYear;
 
             Building building = null;
             try
@@ -50,17 +75,15 @@ namespace AncientWarfare3.core.schools
                     : 0;
                 PlacementAttempts[cityId] = attempt == int.MaxValue ? 0 : attempt + 1;
                 WorldTile placement = FindPlacement(pCity, asset, attempt);
+                bool academyAppeared =
+                    HistoricalSchoolAcademyService.HasLiveAcademy(pCity);
                 if (!SchoolAcademyConstructionRules.ShouldStart(
                         cityValid,
                         assetAvailable,
-                        pCity.countBuildingsOfID(
-                            SchoolAcademyBuildingContent.BuildingId) > 0,
-                        pCity.countBuildingsType(
-                            SchoolAcademyBuildingContent.BuildingTypeId,
-                            pCountOnlyFinished: false) > 0,
+                        academyAppeared,
+                        academyAppeared,
                         placementAvailable: placement != null))
                 {
-                    StartedCities.Remove(cityId);
                     return null;
                 }
 
@@ -68,10 +91,10 @@ namespace AncientWarfare3.core.schools
                     asset, placement, pCheckForBuild: false);
                 if (building == null)
                 {
-                    StartedCities.Remove(cityId);
                     return null;
                 }
 
+                StartedAcademies[cityId] = building;
                 building.setKingdom(pCity.kingdom);
                 building.setUnderConstruction();
                 if (pCity.under_construction_building == null)
@@ -82,7 +105,7 @@ namespace AncientWarfare3.core.schools
             }
             catch (Exception error)
             {
-                if (building == null) StartedCities.Remove(cityId);
+                if (building == null) StartedAcademies.Remove(cityId);
                 ModClass.LogWarning("School academy construction failed: city=" + cityId +
                                     " - " + error.Message);
                 return null;

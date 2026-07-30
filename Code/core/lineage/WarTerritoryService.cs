@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 using UnityEngine;
 
@@ -19,15 +20,21 @@ namespace AncientWarfare3.core.lineage
         public const string PROJECT_WEAK_CLAIM = "fabricate_weak_claim";
         public const string PROJECT_STRONG_CLAIM = "fabricate_strong_claim";
 
-        public const string GOAL_TAKE_MANDATE = "take_mandate";
-        public const string GOAL_MANDATE_CONQUEST = "mandate_conquest";
-        public const string GOAL_TAKE_CORE_CITY = "take_core_city";
-        public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
-        public const string GOAL_FORCE_VASSAL = "force_vassal";
-        public const string GOAL_FORCE_TRIBUTARY = "force_tributary";
-        public const string GOAL_INDEPENDENCE = "independence";
-        public const string GOAL_RESTORE_KINGDOM = "restore_kingdom";
-        public const string GOAL_NO_CB = "no_cb_punitive";
+        public const string GOAL_TAKE_MANDATE = WarGoalTypeIds.TakeMandate;
+        public const string GOAL_MANDATE_CONQUEST =
+            WarGoalTypeIds.MandateConquest;
+        public const string GOAL_TAKE_CORE_CITY = WarGoalTypeIds.TakeCoreCity;
+        public const string GOAL_PRESS_CLAIM_CITY =
+            WarGoalTypeIds.PressClaimCity;
+        public const string GOAL_FORCE_VASSAL = WarGoalTypeIds.ForceVassal;
+        public const string GOAL_FORCE_TRIBUTARY =
+            WarGoalTypeIds.ForceTributary;
+        public const string GOAL_INDEPENDENCE = WarGoalTypeIds.Independence;
+        public const string GOAL_RESTORE_KINGDOM =
+            WarGoalTypeIds.RestoreKingdom;
+        public const string GOAL_REUNIFY_SUCCESSION =
+            WarGoalTypeIds.ReunifySuccession;
+        public const string GOAL_NO_CB = WarGoalTypeIds.NoCb;
 
         private const double DEFAULT_PROJECT_COST = 100.0;
 
@@ -36,6 +43,11 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<string, bool> OwnedNonCoreCache = new Dictionary<string, bool>();
         private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
         private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
+
+        public static void ClearRuntime()
+        {
+            OwnedNonCoreCache.Clear();
+        }
 
         internal sealed class WarGoalRequest
         {
@@ -72,6 +84,7 @@ namespace AncientWarfare3.core.lineage
             public bool can_force_tributary;
             public bool can_independence;
             public bool can_restore;
+            public bool can_reunify_succession;
             public bool can_take_mandate;
             public bool can_mandate_conquest;
             public bool can_no_cb;
@@ -164,6 +177,31 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static bool TryGetPrimaryOpenGoalCityId(long pWarId,
+            out long pCityId)
+        {
+            pCityId = -1L;
+            if (!Ready || pWarId < 0L) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT TARGET_CITY_ID FROM " +
+                    WarGoalTableItem.GetTableName() +
+                    " WHERE WAR_ID=@war AND RESOLVED=0 AND " +
+                    "TARGET_CITY_ID>=0 ORDER BY WAR_GOAL_ID ASC LIMIT 1";
+                command.Parameters.AddWithValue("@war", pWarId);
+                object value = command.ExecuteScalar();
+                if (value == null || value == DBNull.Value) return false;
+                pCityId = Convert.ToInt64(value);
+                return pCityId >= 0L;
+            }
+            catch
+            {
+                pCityId = -1L;
+                return false;
+            }
+        }
+
         internal static bool HasOpenCityControlGoalForAttacker(City pCity, Kingdom pCapturingKingdom)
         {
             if (pCity?.data == null || pCapturingKingdom?.data == null || !Ready) return false;
@@ -189,6 +227,60 @@ namespace AncientWarfare3.core.lineage
             }
 
             return false;
+        }
+
+        internal static bool HasOpenNonTerritorialSettlementGoal(City pCity,
+            Kingdom pCapturingKingdom)
+        {
+            return FindControlledSettlementWar(pCity, pCapturingKingdom) != null;
+        }
+
+        internal static bool TryResolveControlledSettlementGoal(City pCity,
+            Kingdom pCapturingKingdom)
+        {
+            War war = FindControlledSettlementWar(pCity, pCapturingKingdom);
+            if (war?.data == null || war.hasEnded()) return false;
+            bool completed = WarGoalSettlementRuntimeService.
+                OnCityControlChanged(war, pCity, pCapturingKingdom);
+            return completed ||
+                   WarGoalSettlementRuntimeService.QueueIfReady(war);
+        }
+
+        private static War FindControlledSettlementWar(City pCity,
+            Kingdom pCapturingKingdom)
+        {
+            if (pCity?.data == null || pCity.kingdom?.data == null ||
+                pCapturingKingdom?.data == null || !Ready) return null;
+            try
+            {
+                foreach (War war in pCapturingKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    foreach (GoalRow goal in ReadOpenGoals(war.data.id))
+                    {
+                        bool targetCityMatches = goal.target_city_id == pCity.data.id ||
+                                                 goal.target_city_id == pCity.id;
+                        Kingdom attacker = FindKingdom(goal.attacker_kingdom_id) ??
+                                           war.getMainAttacker();
+                        Kingdom defender = FindKingdom(goal.defender_kingdom_id) ??
+                                           war.getMainDefender();
+                        bool capturerIsOnAttackerSide = IsOnAttackerSideOrSystem(
+                            war, pCapturingKingdom, attacker);
+                        bool cityStillOwnedByDefender = defender?.data != null &&
+                                                        pCity.kingdom == defender;
+                        if (WarGoalControlRules.ShouldResolveControlledSettlementGoal(
+                                goal.goal_type, targetCityMatches,
+                                capturerIsOnAttackerSide,
+                                cityStillOwnedByDefender)) return war;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Controlled settlement lookup failed city=" +
+                                    (pCity?.id ?? -1L) + ": " + e.Message);
+            }
+            return null;
         }
 
         private static List<War> GetCandidateWarsForTransferredCity(City pCity, Kingdom pNewKingdom)
@@ -224,6 +316,9 @@ namespace AncientWarfare3.core.lineage
         private static bool TryResolveTransferredCityGoal(City pCity, Kingdom pNewKingdom, War pWar)
         {
             if (pCity?.data == null || pNewKingdom?.data == null || pWar?.data == null || pWar.hasEnded()) return false;
+            if (WarPeaceSettlementService.Instance.HasActionableSettlement(
+                    pWar.data.id))
+                return false;
 
             foreach (GoalRow goal in ReadOpenGoals(pWar.data.id))
             {
@@ -234,8 +329,7 @@ namespace AncientWarfare3.core.lineage
                         newOwnerIsWarAttacker))
                     continue;
 
-                World.world?.wars?.endWar(pWar, WarWinner.Attackers);
-                return true;
+                return WarGoalSettlementRuntimeService.QueueIfReady(pWar);
             }
 
             return false;
@@ -370,8 +464,7 @@ namespace AncientWarfare3.core.lineage
             };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, "reclaim", "core_reclaim");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareClaimWar(Kingdom pAttacker, Kingdom pDefender)
@@ -400,8 +493,7 @@ namespace AncientWarfare3.core.lineage
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, WarDecisionService.WAR_NORMAL,
                 "claim_war");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareVassalWar(Kingdom pAttacker, Kingdom pDefender)
@@ -417,8 +509,7 @@ namespace AncientWarfare3.core.lineage
             };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, "vassal_war", "force_vassal");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareTributaryWar(Kingdom pAttacker, Kingdom pDefender)
@@ -435,20 +526,27 @@ namespace AncientWarfare3.core.lineage
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
                 WarDecisionService.WAR_TRIBUTARY, "tributary_war");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareIndependenceWar(Kingdom pAttacker, Kingdom pSuzerain)
         {
             if (pAttacker?.data == null || pSuzerain?.data == null) return false;
-            if (VassalService.GetSuzerain(pAttacker) != pSuzerain) return false;
-            var goal = new WarGoalRequest { goal_type = GOAL_INDEPENDENCE, target_kingdom = pSuzerain };
+            if (VassalService.GetDiplomaticSuzerain(pAttacker) != pSuzerain)
+                return false;
+            City targetCapital = pSuzerain.capital ??
+                                 FindFirstTargetCity(pSuzerain);
+            if (targetCapital?.data == null) return false;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_INDEPENDENCE,
+                target_kingdom = pSuzerain,
+                target_city = targetCapital
+            };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pSuzerain,
                 "independence_war", "independence_war");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareRestorationWar(Kingdom pAttacker, Kingdom pDefender)
@@ -489,8 +587,7 @@ namespace AncientWarfare3.core.lineage
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
                 WarDecisionService.WAR_RESTORATION, "restoration");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static War TryDeclareAutonomousRestorationCoreWar(Kingdom pAttacker,
@@ -512,19 +609,25 @@ namespace AncientWarfare3.core.lineage
             War war = WarDecisionService.TryStartSystemWar(pAttacker, defender,
                 WarDecisionService.WAR_RESTORATION, "self_restoration_core");
             if (war?.data == null) return null;
-            CreateGoalForWar(war, goal);
-            return war;
+            return TryPersistGoalOrEndWar(war, goal).Success ? war : null;
         }
 
         public static bool TryDeclareNoCbWar(Kingdom pAttacker, Kingdom pDefender)
         {
             if (IsVassalDecisionOnlyTarget(pAttacker, pDefender)) return false;
-            var goal = new WarGoalRequest { goal_type = GOAL_NO_CB, target_kingdom = pDefender };
+            City targetCapital = pDefender?.capital ??
+                                 FindFirstTargetCity(pDefender);
+            if (targetCapital?.data == null) return false;
+            var goal = new WarGoalRequest
+            {
+                goal_type = GOAL_NO_CB,
+                target_kingdom = pDefender,
+                target_city = targetCapital
+            };
             War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender, WarDecisionService.WAR_NORMAL,
                 "no_cb", pNoCb: true);
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareMandateWar(Kingdom pAttacker, Kingdom pDefender)
@@ -538,11 +641,10 @@ namespace AncientWarfare3.core.lineage
                 target_kingdom = pDefender,
                 target_city = pDefender?.capital ?? FindFirstTargetCity(pDefender)
             };
-            War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
-                MandateService.WAR_TIANMING, "tianming");
+            War war = WarDecisionService.TryStartSystemWar(pAttacker,
+                pDefender, MandateService.WAR_TIANMING, "tianming");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
         public static bool TryDeclareMandateConquestWar(Kingdom pAttacker, Kingdom pDefender, City pSelectedCity)
@@ -555,48 +657,71 @@ namespace AncientWarfare3.core.lineage
                 target_kingdom = pDefender,
                 target_city = city
             };
-            War war = WarDecisionService.TryStartWarWithResult(pAttacker, pDefender,
-                WarDecisionService.WAR_NORMAL, "mandate_conquest");
+            War war = WarDecisionService.TryStartSystemWar(pAttacker,
+                pDefender, WarDecisionService.WAR_NORMAL,
+                "mandate_conquest");
             if (war?.data == null) return false;
-            CreateGoalForWar(war, goal);
-            return true;
+            return TryPersistGoalOrEndWar(war, goal).Success;
         }
 
-        public static void CreateGoalForWar(War pWar, WarGoalRequest pGoal)
+        internal static WarGoalCreateResult TryPersistGoalOrEndWar(
+            War pWar, WarGoalRequest pGoal)
         {
-            if (pWar?.data == null || pGoal == null || !Ready) return;
+            WarGoalCreateResult result = CreateGoalForWar(pWar, pGoal);
+            if (result.Success) return result;
+            try { World.world?.wars?.endWar(pWar, WarWinner.Nobody); }
+            catch { }
+            return result;
+        }
+
+        public static WarGoalCreateResult CreateGoalForWar(War pWar,
+            WarGoalRequest pGoal)
+        {
+            if (pWar?.data == null || pGoal == null)
+                return new WarGoalCreateResult(false, -1L,
+                    "invalid_war_goal_snapshot");
+            if (!Ready)
+                return new WarGoalCreateResult(false, -1L,
+                    "war_goal_database_unavailable");
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
-            if (attacker?.data == null || defender?.data == null) return;
+            if (attacker?.data == null || defender?.data == null)
+                return new WarGoalCreateResult(false, -1L,
+                    "invalid_war_goal_participants");
+            if (!TryGetGoalSettlementSnapshot(pGoal, attacker, defender,
+                    out string completionKind, out int requiredWarScore,
+                    out string snapshotFailure))
+                return new WarGoalCreateResult(false, -1L, snapshotFailure);
 
-            long goalId = TableIdAllocator.Next(DB, WarGoalTableItem.GetTableName(), "WAR_GOAL_ID");
+            var snapshot = new WarGoalSnapshot
+            {
+                WarId = pWar.data.id,
+                AttackerKingdomId = attacker.id,
+                AttackerName = attacker.name ?? "",
+                AttackerColor = HistoryColors.FromKingdom(attacker),
+                DefenderKingdomId = defender.id,
+                DefenderName = defender.name ?? "",
+                DefenderColor = HistoryColors.FromKingdom(defender),
+                WarType = pWar.getAsset()?.id ?? "",
+                GoalType = pGoal.goal_type ?? "",
+                RequiredWarScore = requiredWarScore,
+                CompletionKind = completionKind,
+                TargetCityId = pGoal.target_city?.data?.id ?? -1L,
+                TargetCityName = pGoal.target_city?.data?.name ?? "",
+                TargetKingdomId = pGoal.target_kingdom?.id ?? -1L,
+                TargetKingdomName = pGoal.target_kingdom?.name ?? "",
+                SourceClaimId = pGoal.source_claim_id,
+                SourceCoreId = pGoal.source_core_id,
+                SourceProjectId = pGoal.source_project_id,
+                ClaimantActorId = pGoal.claimant?.data?.id ?? -1L,
+                ClaimantName = pGoal.claimant?.getName() ?? "",
+                CreatedTime = LineageService.CurTime()
+            };
+            WarGoalCreateResult result = WarGoalPersistence.TryCreate(
+                DB, snapshot);
+            if (!result.Success) return result;
             try
             {
-                DB.Insert(WarGoalTableItem.GetTableName(),
-                    ColumnVal.Create("WAR_GOAL_ID", goalId),
-                    ColumnVal.Create("WAR_ID", pWar.data.id),
-                    ColumnVal.Create("ATTACKER_KINGDOM_ID", attacker.id),
-                    ColumnVal.Create("ATTACKER_NAME", attacker.name ?? ""),
-                    ColumnVal.Create("ATTACKER_COLOR", HistoryColors.FromKingdom(attacker)),
-                    ColumnVal.Create("DEFENDER_KINGDOM_ID", defender.id),
-                    ColumnVal.Create("DEFENDER_NAME", defender.name ?? ""),
-                    ColumnVal.Create("DEFENDER_COLOR", HistoryColors.FromKingdom(defender)),
-                    ColumnVal.Create("WAR_TYPE", pWar.getAsset()?.id ?? ""),
-                    ColumnVal.Create("GOAL_TYPE", pGoal.goal_type ?? ""),
-                    ColumnVal.Create("TARGET_CITY_ID", pGoal.target_city?.data?.id ?? -1L),
-                    ColumnVal.Create("TARGET_CITY_NAME", pGoal.target_city?.data?.name ?? ""),
-                    ColumnVal.Create("TARGET_KINGDOM_ID", pGoal.target_kingdom?.id ?? -1L),
-                    ColumnVal.Create("TARGET_KINGDOM_NAME", pGoal.target_kingdom?.name ?? ""),
-                    ColumnVal.Create("SOURCE_CLAIM_ID", pGoal.source_claim_id),
-                    ColumnVal.Create("SOURCE_CORE_ID", pGoal.source_core_id),
-                    ColumnVal.Create("SOURCE_PROJECT_ID", pGoal.source_project_id),
-                    ColumnVal.Create("CLAIMANT_ACTOR_ID", pGoal.claimant?.data?.id ?? -1L),
-                    ColumnVal.Create("CLAIMANT_NAME", pGoal.claimant?.getName() ?? ""),
-                    ColumnVal.Create("CREATED_TIME", LineageService.CurTime()),
-                    ColumnVal.Create("RESOLVED_TIME", -1.0),
-                    ColumnVal.Create("RESOLVED", 0),
-                    ColumnVal.Create("RESULT", ""));
-
                 HistoryWriter.RecordKingdom(attacker, "war_goal_set",
                     HistoryText.Kingdom(attacker) + H("aw_hist_war_goal_set_mid") +
                     HistoryText.PlainText(GoalLabel(pGoal.goal_type)) +
@@ -604,15 +729,129 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
-                ModClass.LogWarning("WarTerritoryService.CreateGoalForWar failed: " + e.Message);
+                ModClass.LogWarning(
+                    "WarTerritoryService war-goal history failed: " +
+                    e.Message);
             }
+            return result;
+        }
+
+        private static bool TryGetGoalSettlementSnapshot(
+            WarGoalRequest pGoal, Kingdom pAttacker, Kingdom pDefender,
+            out string pCompletionKind, out int pRequiredWarScore,
+            out string pFailureReason)
+        {
+            pCompletionKind = "";
+            pRequiredWarScore = -1;
+            pFailureReason = "";
+            if (!WarGoalSettlementRules.TryGetAutomaticSettlementProfile(
+                    pGoal?.goal_type, out var profile))
+            {
+                pFailureReason = "unknown_war_goal_type";
+                return false;
+            }
+            if (pGoal.target_city?.data == null)
+            {
+                pFailureReason = "war_goal_target_city_unavailable";
+                return false;
+            }
+
+            pCompletionKind = profile.CompletionKind;
+            int actualCost = profile.UsesDynamicCityCost
+                ? WarPeaceTermsRules.CityCessionCost(
+                    WarPeaceSettlementWorld.CityFacts(pGoal.target_city,
+                        pAttacker.id, pDefender.id))
+                : profile.RequiredWarScore;
+            pRequiredWarScore =
+                WarGoalSettlementRules.SnapshotRequiredScore(actualCost);
+            return true;
         }
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
         {
             if (pWar?.data == null || !Ready) return;
+            if (!WarPeaceSettlementService.Instance
+                    .TryHasExecutedCoalitionSettlement(pWar.data.id,
+                        out bool hasExecutedSettlement)) return;
+            if (hasExecutedSettlement)
+            {
+                if (!WarPeaceSettlementService.Instance
+                        .TryReadExecutedCoalitionTerms(pWar.data.id,
+                            out IReadOnlyList<WarPeaceSettlementTerm>
+                                executedTerms)) return;
+                foreach (GoalRow row in ReadOpenGoals(pWar.data.id))
+                    ResolveNegotiatedGoalRecord(pWar, pWinner, row,
+                        executedTerms);
+                return;
+            }
             foreach (GoalRow row in ReadOpenGoals(pWar.data.id))
                 ResolveGoal(pWar, pWinner, row);
+        }
+
+        private static void ResolveNegotiatedGoalRecord(War pWar,
+            WarWinner pWinner, GoalRow pGoal,
+            IReadOnlyList<WarPeaceSettlementTerm> pExecutedTerms)
+        {
+            Kingdom attacker = FindKingdom(pGoal.attacker_kingdom_id) ??
+                               pWar.getMainAttacker();
+            Kingdom defender = FindKingdom(pGoal.defender_kingdom_id) ??
+                               pWar.getMainDefender();
+            City targetCity = FindCity(pGoal.target_city_id);
+            string result;
+            if (NegotiatedGoalMatchesExecutedTerm(pGoal, pExecutedTerms))
+            {
+                RecordGoalVictory(attacker, defender, targetCity, pGoal);
+                result = "negotiated_goal_enforced";
+            }
+            else
+            {
+                result = "negotiated_goal_not_enforced";
+                RecordGoalFailure(attacker, defender, targetCity, pGoal,
+                    result);
+            }
+            MarkGoalResolved(pGoal.war_goal_id, result);
+        }
+
+        private static bool NegotiatedGoalMatchesExecutedTerm(
+            GoalRow pGoal,
+            IReadOnlyList<WarPeaceSettlementTerm> pExecutedTerms)
+        {
+            if (pExecutedTerms == null) return false;
+            for (int i = 0; i < pExecutedTerms.Count; i++)
+            {
+                WarPeaceSettlementTerm term = pExecutedTerms[i];
+                if (term == null ||
+                    term.ToKingdomId != pGoal.attacker_kingdom_id ||
+                    term.FromKingdomId != pGoal.defender_kingdom_id)
+                    continue;
+                if (pGoal.goal_type == GOAL_FORCE_VASSAL &&
+                    term.Kind == WarPeaceTermKind.ForceVassal) return true;
+                if (pGoal.goal_type == GOAL_FORCE_TRIBUTARY &&
+                    term.Kind == WarPeaceTermKind.ForceTributary) return true;
+                if (pGoal.target_city_id >= 0 &&
+                    term.Kind == WarPeaceTermKind.CedeCity &&
+                    term.CityId == pGoal.target_city_id) return true;
+                if (term.WarGoalId != pGoal.war_goal_id ||
+                    !WarGoalSettlementRules.TryGetAutomaticSettlementProfile(
+                        pGoal.goal_type, out var profile))
+                    continue;
+                if (profile.Effect ==
+                        WarGoalAutomaticSettlementEffect.TakeMandate &&
+                    term.Kind == WarPeaceTermKind.TakeMandate) return true;
+                if (profile.Effect ==
+                        WarGoalAutomaticSettlementEffect.RestoreKingdom &&
+                    term.Kind == WarPeaceTermKind.RestoreKingdom) return true;
+                if (profile.Effect ==
+                        WarGoalAutomaticSettlementEffect.Independence &&
+                    term.Kind == WarPeaceTermKind.Independence) return true;
+                if (profile.Effect ==
+                        WarGoalAutomaticSettlementEffect.ReunifySuccession &&
+                    term.Kind == WarPeaceTermKind.ReunifySuccession) return true;
+                if (profile.Effect ==
+                        WarGoalAutomaticSettlementEffect.NoCbOutcome &&
+                    term.Kind == WarPeaceTermKind.NoCbOutcome) return true;
+            }
+            return false;
         }
 
         public static bool HasWarGoal(long pWarId)
@@ -789,6 +1028,21 @@ namespace AncientWarfare3.core.lineage
                 pDefenderAlliancePower: GetAllianceSystemPower(pTarget));
         }
 
+        public static bool CanUseMandateConquestReadOnly(Kingdom pSource,
+            Kingdom pTarget, MandateReport pMandateReport)
+        {
+            if (!IsCivil(pSource) || !IsCivil(pTarget) || pSource == pTarget)
+                return false;
+            return MandateConquestRules.CanUseMandateConquest(
+                pAttackerIsCurrentMandate:
+                MandateService.IsMandateKingdomReadOnly(pSource,
+                    pMandateReport),
+                pVassalBlocked: IsVassalDecisionOnlyTarget(pSource, pTarget),
+                pSameAlliance: IsSameAlliance(pSource, pTarget),
+                pAttackerSystemPower: GetAllianceSystemPower(pSource),
+                pDefenderAlliancePower: GetAllianceSystemPower(pTarget));
+        }
+
         public static float GetAllianceSystemPower(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0f;
@@ -802,15 +1056,21 @@ namespace AncientWarfare3.core.lineage
                     foreach (Kingdom member in alliance.kingdoms_hashset)
                     {
                         if (member?.data == null || member.isRekt() || !seen.Add(member.id)) continue;
-                        power += VassalService.GetPowerScore(member, pIncludeVassals: true);
+                        power += VassalService.GetWarPowerScore(member, pIncludeVassals: true);
                     }
                 }
             }
             catch { }
 
             if (seen.Add(pKingdom.id))
-                power += VassalService.GetPowerScore(pKingdom, pIncludeVassals: true);
+                power += VassalService.GetWarPowerScore(pKingdom, pIncludeVassals: true);
             return power;
+        }
+
+        public static bool AreInSameAlliance(Kingdom pSource,
+            Kingdom pTarget)
+        {
+            return IsSameAlliance(pSource, pTarget);
         }
 
         public static List<TargetReport> BuildTargetReports(Kingdom pSource)
@@ -856,7 +1116,7 @@ namespace AncientWarfare3.core.lineage
                 report.can_force_tributary = !vassalBlocked &&
                     WarDecisionService.HasValidCasusBelli(pSource, target,
                         WarDecisionService.WAR_TRIBUTARY);
-                report.can_independence = VassalService.GetSuzerain(pSource) == target &&
+                report.can_independence = VassalService.GetDiplomaticSuzerain(pSource) == target &&
                                           !IsAlreadyAtWar(pSource, target);
                 report.restoration_claim_count = CountRestorationClaimsAgainst(hostedRoyalClaims, target);
                 report.can_restore = WarRestorationRules.CanExposeRestorationAction(
@@ -864,13 +1124,16 @@ namespace AncientWarfare3.core.lineage
                     vassalBlocked,
                     IsAlreadyAtWar(pSource, target),
                     out _);
+                report.can_reunify_succession =
+                    SuccessionDisputeService.CanDeclareReunification(
+                        pSource, target);
                 result.Add(report);
             }
             result.Sort((a, b) =>
             {
-                int scoreA = (a.can_take_mandate ? 500 : 0) + (a.can_mandate_conquest ? 260 : 0) + (a.can_force_tributary ? 45 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
-                             a.weak_claim_count * 20 + a.pending_count;
-                int scoreB = (b.can_take_mandate ? 500 : 0) + (b.can_mandate_conquest ? 260 : 0) + (b.can_force_tributary ? 45 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
+                int scoreA = (a.can_take_mandate ? 500 : 0) + (a.can_reunify_succession ? 420 : 0) + (a.can_mandate_conquest ? 260 : 0) + (a.can_force_tributary ? 45 : 0) + a.core_count * 100 + (a.can_restore ? 80 : 0) + (a.can_independence ? 90 : 0) + a.strong_claim_count * 50 +
+                              a.weak_claim_count * 20 + a.pending_count;
+                int scoreB = (b.can_take_mandate ? 500 : 0) + (b.can_reunify_succession ? 420 : 0) + (b.can_mandate_conquest ? 260 : 0) + (b.can_force_tributary ? 45 : 0) + b.core_count * 100 + (b.can_restore ? 80 : 0) + (b.can_independence ? 90 : 0) + b.strong_claim_count * 50 +
                              b.weak_claim_count * 20 + b.pending_count;
                 int cmp = scoreB.CompareTo(scoreA);
                 return cmp != 0 ? cmp : string.Compare(a.target?.name, b.target?.name, StringComparison.Ordinal);
@@ -884,6 +1147,15 @@ namespace AncientWarfare3.core.lineage
             if (!IsCivil(pSource) || pTarget?.data == null) return result;
 
             bool vassalBlocked = IsVassalDecisionOnlyTarget(pSource, pTarget);
+            if (!vassalBlocked &&
+                SuccessionDisputeService.CanDeclareReunification(
+                    pSource, pTarget))
+                result.Add(MakeOption(pTarget,
+                    pTarget.capital ?? FindFirstTargetCity(pTarget),
+                    GOAL_REUNIFY_SUCCESSION,
+                    GoalLabel(GOAL_REUNIFY_SUCCESSION), -1, -1, -1,
+                    pSource.king, hasCore: false, hasStrongClaim: true,
+                    hasWeakClaim: false, restorationStrength: 0));
             if (!vassalBlocked && MandateService.GetCurrentMandateKingdom() == pTarget &&
                 WarDecisionService.HasValidCasusBelli(pSource, pTarget, MandateService.WAR_TIANMING))
                 result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget),
@@ -925,7 +1197,7 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (!vassalBlocked && WarDecisionService.HasValidCasusBelli(pSource, pTarget, "vassal_war"))
-                result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, GoalLabel(GOAL_FORCE_VASSAL),
+                result.Add(MakeOption(pTarget, pTarget.capital ?? FindFirstTargetCity(pTarget), GOAL_FORCE_VASSAL, GoalLabel(GOAL_FORCE_VASSAL),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
@@ -936,7 +1208,8 @@ namespace AncientWarfare3.core.lineage
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
 
-            if (VassalService.GetSuzerain(pSource) == pTarget && !IsAlreadyAtWar(pSource, pTarget))
+            if (VassalService.GetDiplomaticSuzerain(pSource) == pTarget &&
+                !IsAlreadyAtWar(pSource, pTarget))
                 result.Add(MakeOption(pTarget, FindFirstTargetCity(pTarget), GOAL_INDEPENDENCE, GoalLabel(GOAL_INDEPENDENCE),
                     -1, -1, -1, null, hasCore: false, hasStrongClaim: false, hasWeakClaim: false,
                     restorationStrength: 0));
@@ -1148,22 +1421,16 @@ namespace AncientWarfare3.core.lineage
         public static bool IsVassalDecisionOnlyTarget(Kingdom pSource, Kingdom pTarget)
         {
             if (pSource?.data == null || pTarget?.data == null || pSource == pTarget) return false;
-            Kingdom sourceSuzerain = VassalService.GetSuzerain(pSource);
-            Kingdom targetSuzerain = VassalService.GetSuzerain(pTarget);
-            bool sourceVassal = sourceSuzerain?.data != null && !sourceSuzerain.isRekt();
-            bool targetVassal = targetSuzerain?.data != null && !targetSuzerain.isRekt();
-
-            if (sourceVassal)
-            {
-                bool sameSuzerain = targetVassal && sourceSuzerain == targetSuzerain;
-                return !sameSuzerain;
-            }
-
-            if (targetVassal) return true;
-
-            Kingdom sourceRoot = VassalService.GetRootSuzerain(pSource);
-            Kingdom targetRoot = VassalService.GetRootSuzerain(pTarget);
-            return sourceRoot?.data != null && targetRoot?.data != null && sourceRoot == targetRoot;
+            Kingdom sourceSuzerain =
+                VassalService.GetDiplomaticSuzerain(pSource);
+            Kingdom targetSuzerain =
+                VassalService.GetDiplomaticSuzerain(pTarget);
+            bool sourceSubject = sourceSuzerain?.data != null &&
+                                 !sourceSuzerain.isRekt();
+            bool targetSubject = targetSuzerain?.data != null &&
+                                 !targetSuzerain.isRekt();
+            return !VassalWarPermissionRules.CanUseOrdinaryWarDecision(
+                sourceSubject, targetSubject);
         }
 
         private static bool IsSameAlliance(Kingdom pSource, Kingdom pTarget)
@@ -1182,15 +1449,32 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pReason)
             {
-                case "same_kingdom_or_invalid": return "\u4e0d\u662f\u53ef\u7528\u7684\u4ed6\u56fd\u76ee\u6807";
-                case "target_city_invalid": return "\u6ca1\u6709\u53ef\u7528\u7684\u76ee\u6807\u57ce\u5e02";
-                case "vassal_annex_by_decision": return "\u9644\u5eb8\u4f53\u7cfb\u53ea\u80fd\u901a\u8fc7\u9644\u5eb8\u51b3\u8bae\u541e\u5e76";
-                case "not_neighbor": return "\u53ea\u80fd\u5728\u63a5\u58e4\u7684\u4ed6\u56fd\u57ce\u5e02\u5236\u9020";
-                case "source_invalid": return "\u672c\u56fd\u4e0d\u53ef\u7528";
-                case "not_own_city": return "\u53ea\u80fd\u5728\u672c\u56fd\u63a7\u5236\u7684\u57ce\u5e02\u5236\u9020\u6838\u5fc3";
-                case "already_core": return "\u8be5\u57ce\u5e02\u5df2\u662f\u6838\u5fc3";
-                case "project_exists": return "\u5df2\u6709\u540c\u7c7b\u51b3\u7b56\u6216\u9879\u76ee\u5728\u8fdb\u884c";
-                default: return "\u5df2\u53ef\u5236\u9020";
+                case "same_kingdom_or_invalid":
+                    return AW_L10n.Text("aw_war_fabrication_reason_same_kingdom_or_invalid",
+                        "Not an eligible foreign target");
+                case "target_city_invalid":
+                    return AW_L10n.Text("aw_war_fabrication_reason_target_city_invalid",
+                        "No eligible target city");
+                case "vassal_annex_by_decision":
+                    return AW_L10n.Text("aw_war_fabrication_reason_vassal_annex_by_decision",
+                        "Vassals can be annexed only through a vassal decision");
+                case "not_neighbor":
+                    return AW_L10n.Text("aw_war_fabrication_reason_not_neighbor",
+                        "Can be fabricated only in a bordering foreign city");
+                case "source_invalid":
+                    return AW_L10n.Text("aw_war_fabrication_reason_source_invalid",
+                        "The source realm is unavailable");
+                case "not_own_city":
+                    return AW_L10n.Text("aw_war_fabrication_reason_not_own_city",
+                        "Cores can be fabricated only in a controlled city");
+                case "already_core":
+                    return AW_L10n.Text("aw_war_fabrication_reason_already_core",
+                        "This city is already a core");
+                case "project_exists":
+                    return AW_L10n.Text("aw_war_fabrication_reason_project_exists",
+                        "A similar decision or project is already active");
+                default:
+                    return AW_L10n.Text("aw_war_fabrication_reason_available", "Fabrication available");
             }
         }
 
@@ -1330,14 +1614,58 @@ namespace AncientWarfare3.core.lineage
                         result = "attacker_goal_enforced";
                         break;
                     case PeaceSettlementAction.ForceVassal:
+                        bool vassalSettled = false;
                         try
                         {
-                            VassalService.SetVassal(defender, attacker, "peace_force_vassal",
-                                pWar.data.id, pEnforceWarVictory: true);
+                            vassalSettled = VassalService.SetVassal(defender,
+                                attacker, "peace_force_vassal", pWar.data.id,
+                                pEnforceWarVictory: true,
+                                pContractTier: VassalContractTierRules.Inner) ||
+                                VassalService.GetSuzerain(defender) == attacker;
                         }
-                        catch (Exception e) { ModClass.LogWarning("War goal force vassal failed: " + e.Message); }
-                        RecordGoalVictory(attacker, defender, targetCity, pGoal);
-                        result = "attacker_goal_enforced";
+                        catch (Exception e)
+                        {
+                            ModClass.LogWarning("War goal force vassal failed: " +
+                                                e.Message);
+                        }
+                        if (vassalSettled)
+                        {
+                            RecordGoalVictory(attacker, defender, targetCity, pGoal);
+                            result = "attacker_goal_enforced";
+                        }
+                        else
+                        {
+                            RecordGoalFailure(attacker, defender, targetCity,
+                                pGoal, "settlement_failed");
+                            result = "settlement_failed";
+                        }
+                        break;
+                    case PeaceSettlementAction.ForceTributary:
+                        bool tributarySettled = false;
+                        try
+                        {
+                            tributarySettled = VassalService.SetTributary(defender,
+                                attacker, "peace_force_tributary", pWar.data.id,
+                                pEnforceWarVictory: true) ||
+                                VassalService.GetTributarySuzerain(defender) ==
+                                attacker;
+                        }
+                        catch (Exception e)
+                        {
+                            ModClass.LogWarning("War goal force tributary failed: " +
+                                                e.Message);
+                        }
+                        if (tributarySettled)
+                        {
+                            RecordGoalVictory(attacker, defender, targetCity, pGoal);
+                            result = "attacker_goal_enforced";
+                        }
+                        else
+                        {
+                            RecordGoalFailure(attacker, defender, targetCity,
+                                pGoal, "settlement_failed");
+                            result = "settlement_failed";
+                        }
                         break;
                     case PeaceSettlementAction.ReleaseVassal:
                         try { VassalService.ResolveIndependenceWarWon(attacker, defender); }
@@ -1377,7 +1705,7 @@ namespace AncientWarfare3.core.lineage
                 if ((pGoal.goal_type == GOAL_TAKE_CORE_CITY || pGoal.goal_type == GOAL_PRESS_CLAIM_CITY) &&
                     attacker?.data != null && targetCity?.data != null && targetCity.kingdom != attacker)
                 {
-                    try { targetCity.setKingdom(attacker, false); }
+                    try { targetCity.joinAnotherKingdom(attacker); }
                     catch (Exception e) { ModClass.LogWarning("War goal city transfer failed: " + e.Message); }
                 }
 
@@ -1423,7 +1751,7 @@ namespace AncientWarfare3.core.lineage
         private static void TryTransferTargetCity(Kingdom pAttacker, City pTargetCity)
         {
             if (pAttacker?.data == null || pTargetCity?.data == null || pTargetCity.kingdom == pAttacker) return;
-            try { pTargetCity.setKingdom(pAttacker, false); }
+            try { pTargetCity.joinAnotherKingdom(pAttacker); }
             catch (Exception e) { ModClass.LogWarning("War goal city transfer failed: " + e.Message); }
         }
 
@@ -1554,6 +1882,8 @@ namespace AncientWarfare3.core.lineage
                 case GOAL_FORCE_TRIBUTARY: return T("aw_hist_goal_force_tributary");
                 case GOAL_INDEPENDENCE: return T("aw_hist_goal_independence");
                 case GOAL_RESTORE_KINGDOM: return T("aw_hist_goal_restore_kingdom");
+                case GOAL_REUNIFY_SUCCESSION:
+                    return T("aw_hist_goal_reunify_succession");
                 case GOAL_NO_CB: return T("aw_hist_goal_no_cb");
                 default: return T("aw_hist_goal_generic");
             }
@@ -1623,8 +1953,8 @@ namespace AncientWarfare3.core.lineage
 
         private static float PowerRatio(Kingdom pSource, Kingdom pTarget)
         {
-            float own = Mathf.Max(1f, VassalService.GetPowerScore(pSource, pIncludeVassals: true));
-            float target = Mathf.Max(1f, VassalService.GetPowerScore(pTarget, pIncludeVassals: true));
+            float own = Mathf.Max(1f, VassalService.GetWarPowerScore(pSource, pIncludeVassals: true));
+            float target = Mathf.Max(1f, VassalService.GetWarPowerScore(pTarget, pIncludeVassals: true));
             return own / target;
         }
 

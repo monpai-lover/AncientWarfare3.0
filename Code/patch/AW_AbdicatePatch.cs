@@ -1,5 +1,6 @@
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.court;
+using AncientWarfare3.api.multiplayer;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -25,6 +26,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.kingLeftEvent))]
         public static void KingLeft_Postfix(Kingdom __instance, Actor __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__state?.data == null) return;
             // 若此 king 正是 Die_Prefix 标记的"正在死亡的王",则跳过(驾崩已记录)。
             if (__state.data.id == AW_ActorDeathPatch.DyingKingActorId) return;

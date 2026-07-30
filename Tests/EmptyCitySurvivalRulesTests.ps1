@@ -55,6 +55,11 @@ Assert-Equal 'natural neutralization preserves raze intent' $false `
 Assert-Equal 'load restoration preserves persisted intent' $false `
     ($rules::ShouldClearRazeIntent($false, $true, $false, $true))
 
+Assert-Equal 'frozen occupation keeps the formal owner' $true `
+    ($rules::ShouldKeepFormalOwner($true))
+Assert-Equal 'ended occupation permits neutralization' $false `
+    ($rules::ShouldKeepFormalOwner($false))
+
 Assert-Equal 'a live city suppresses automatic abandoned-zone cleanup' $true `
     ($rules::ShouldSuppressAutomaticAbandonedZoneCleanup(
         $true, $false, 4))

@@ -213,6 +213,8 @@ namespace AncientWarfare3.core.schools
         public const int MaxDescentsPerEligibleYear = 2;
         public const int TravelReturnCooldownYears = 12;
         public const int MaxNonHistoricalItinerantsPerSchool = 6;
+        public const int MaxTravelActorsPerQuarter =
+            HistoricalSchoolSchedulerRules.MaxTravelActorsPerQuarter;
 
         public static int WaveForOrder(int pOrder)
         {
@@ -347,6 +349,12 @@ namespace AncientWarfare3.core.schools
         {
             long positive = pActorId == long.MinValue ? long.MaxValue : Math.Abs(pActorId);
             return (int)(positive % 4L);
+        }
+
+        public static int QuarterlyTravelWorkCount(int pEligibleActorCount)
+        {
+            return HistoricalSchoolSchedulerRules.QuarterlyTravelWorkCount(
+                pEligibleActorCount);
         }
 
         public static float ScoreTravelDestination(HistoricalSchoolTravelContext pContext,

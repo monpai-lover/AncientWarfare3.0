@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DefineConstants>AW3_RULES_TESTS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsModels.cs"
+             Link="Production\ArmyRtsModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsObjectiveRules.cs"
+             Link="Production\ArmyRtsObjectiveRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs"
+             Link="Production\ArmyRtsRuntimeMode.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs"
+             Link="Production\ArmyCaptainContinuityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsTaskOwnershipRules.cs"
+             Link="Production\ArmyRtsTaskOwnershipRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsRules.cs"
+             Link="Production\ArmyRtsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyLogisticsRules.cs"
+             Link="Production\ArmyLogisticsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMarchRules.cs"
+             Link="Production\ArmyMarchRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyFormationRules.cs"
+             Link="Production\ArmyFormationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyStallWatchdogRules.cs"
+             Link="Production\ArmyStallWatchdogRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsTransportRules.cs"
+             Link="Production\ArmyRtsTransportRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyLifecycleRules.cs"
+             Link="Production\ArmyLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\TemporaryLevyRules.cs"
+             Link="Production\TemporaryLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WartimeRecruitmentPopulationRules.cs"
+             Link="Production\WartimeRecruitmentPopulationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\OccupiedCityCivilianProtectionRules.cs"
+             Link="Production\OccupiedCityCivilianProtectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarParticipantCityBaselineRules.cs"
+             Link="Production\WarParticipantCityBaselineRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs"
+             Link="Production\WarScoreRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarGoalSettlementRules.cs"
+             Link="Production\WarGoalSettlementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarExhaustionSettlementRules.cs"
+             Link="Production\WarExhaustionSettlementRules.cs" />
+  </ItemGroup>
+</Project>

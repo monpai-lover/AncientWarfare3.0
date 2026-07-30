@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -12,8 +13,18 @@ namespace AncientWarfare3.patch
         {
             if (__instance == null || __instance.is_mini ||
                 !(__instance.nano_object is Kingdom kingdom) || kingdom.data == null) return;
-            string cached = RulerAppellationService.GetCompactLivingAppellation(kingdom);
-            if (!string.IsNullOrEmpty(cached)) pName = cached;
+            long benchmark = RecentFeatureBenchmark.Begin();
+            try
+            {
+                string projected =
+                    RulerAppellationService.GetProjectedStateName(kingdom);
+                if (!string.IsNullOrEmpty(projected)) pName = projected;
+            }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.NameplatesIndex, benchmark);
+            }
         }
     }
 }

@@ -21,7 +21,10 @@ namespace AncientWarfare3.core.lineage
             "tianmingrebel",
             "tianming",
             "general_rebellion_war",
-            "fief_independence_war"
+            "fief_independence_war",
+            "jingnan_war",
+            "succession_dispute_war",
+            "coup_restoration_war"
         };
 
         public static string Label(string pKey)
@@ -101,6 +104,16 @@ namespace AncientWarfare3.core.lineage
                 case "royal_asylum_relocated": return T("aw_hist_event_royal_asylum_relocated", pLanguage);
                 case "royal_asylum_returned": return T("aw_hist_event_royal_asylum_returned", pLanguage);
                 case "royal_asylum_naturalized": return T("aw_hist_event_royal_asylum_naturalized", pLanguage);
+                case "school_disciple": return T("aw_hist_event_school_disciple", pLanguage);
+                case "school_work_authored": return T("aw_hist_event_school_work_authored", pLanguage);
+                case "school_conversion": return T("aw_hist_event_school_conversion", pLanguage);
+                case "school_rediscovery": return T("aw_hist_event_school_rediscovery", pLanguage);
+                case "school_debate": return T("aw_hist_event_school_debate", pLanguage);
+                case "school_master_death": return T("aw_hist_event_school_master_death", pLanguage);
+                case "school_master_descent": return T("aw_hist_event_school_master_descent", pLanguage);
+                case "school_master_travel": return T("aw_hist_event_school_master_travel", pLanguage);
+                case "school_master_arrival": return T("aw_hist_event_school_master_arrival", pLanguage);
+                case "school_guest_service": return T("aw_hist_event_school_guest_service", pLanguage);
                 default:
                     if (TryWarOrDecisionLabel(pKey, pLanguage, out string label)) return label;
                     return string.IsNullOrEmpty(pKey) ? T("aw_hist_event_unknown", pLanguage) : pKey;
@@ -170,6 +183,19 @@ namespace AncientWarfare3.core.lineage
                     return true;
                 case "fief_independence_war":
                     pLabel = T("aw_hist_label_fief_independence_war", pLanguage);
+                    return true;
+                case "jingnan":
+                case "jingnan_war":
+                    pLabel = T("aw_hist_label_jingnan_war", pLanguage);
+                    return true;
+                case "succession_dispute":
+                case "succession_dispute_war":
+                    pLabel = T("aw_hist_label_succession_dispute_war",
+                        pLanguage);
+                    return true;
+                case "coup_restoration_war":
+                    pLabel = T("aw_hist_label_coup_restoration_war",
+                        pLanguage);
                     return true;
                 default:
                     pLabel = "";

@@ -1,0 +1,18 @@
+key,cz,en,ch
+aw_world_age_clock_title,世界时间速度,World Time Speed,世界時間速度
+aw_world_age_clock_unavailable,世界尚未载入。,The world is not loaded.,世界尚未載入。
+aw_world_age_clock_paused,世界已暂停；采样将在继续后重新开始。,The world is paused; sampling will restart when it resumes.,世界已暫停；取樣將在繼續後重新開始。
+aw_world_age_clock_measuring,正在测量实际世界速度...,Measuring actual world speed...,正在測量實際世界速度...
+aw_world_age_clock_not_advancing,世界时间当前没有推进。,World time is not currently advancing.,世界時間目前沒有推進。
+aw_world_age_clock_requested_speed,请求速度：{0}x,Requested speed: {0}x,請求速度：{0}x
+aw_world_age_clock_actual_speed,实测世界速度：{0}x,Measured world speed: {0}x,實測世界速度：{0}x
+aw_world_age_clock_actual_paused,实测世界速度：已暂停,Measured world speed: paused,實測世界速度：已暫停
+aw_world_age_clock_actual_measuring,实测世界速度：测量中,Measured world speed: measuring,實測世界速度：測量中
+aw_world_age_clock_real_to_game,现实 1 秒约对应 {0},1 real second is about {0},現實 1 秒約對應 {0}
+aw_world_age_clock_game_to_real,游戏 1 年约需现实 {0},1 game year takes about {0},遊戲 1 年約需現實 {0}
+aw_world_age_clock_game_days,{0} 游戏日,{0} game days,{0} 遊戲日
+aw_world_age_clock_game_months,{0} 游戏月,{0} game months,{0} 遊戲月
+aw_world_age_clock_game_years,{0} 游戏年,{0} game years,{0} 遊戲年
+aw_world_age_clock_real_seconds,{0} 秒,{0} seconds,{0} 秒
+aw_world_age_clock_real_minutes,{0} 分钟,{0} minutes,{0} 分鐘
+aw_world_age_clock_real_hours,{0} 小时,{0} hours,{0} 小時

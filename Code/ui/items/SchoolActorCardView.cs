@@ -22,6 +22,8 @@ namespace AncientWarfare3.ui.items
         private long _boundActorId = -1L;
         private bool _portraitAttemptedForBind;
 
+        public bool HasPortrait => _avatar != null;
+
         public static SchoolActorCardView Create(Transform pParent)
         {
             var obj = new GameObject("SchoolActorCard", typeof(RectTransform), typeof(Image),
@@ -95,6 +97,13 @@ namespace AncientWarfare3.ui.items
             gameObject.SetActive(false);
         }
 
+        public bool TryEnsurePortrait()
+        {
+            Actor actor = FindActor(_boundActorId);
+            return actor?.data != null && actor.isAlive() && !actor.isRekt() &&
+                   EnsurePortrait(actor);
+        }
+
         private void ClearInteractions()
         {
             _button?.onClick.RemoveAllListeners();
@@ -149,7 +158,11 @@ namespace AncientWarfare3.ui.items
             if (_portraitAttemptedForBind) return false;
             _portraitAttemptedForBind = true;
             UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
-            if (prefab == null) return false;
+            if (prefab == null)
+            {
+                _portraitAttemptedForBind = false;
+                return false;
+            }
 
             _avatar = Instantiate(prefab, _avatarHolder.transform);
             RectTransform avatarRect = _avatar.GetComponent<RectTransform>();

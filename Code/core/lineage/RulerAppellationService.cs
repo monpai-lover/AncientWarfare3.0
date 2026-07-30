@@ -7,8 +7,23 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class RulerAppellationService
     {
-        private static readonly Dictionary<long, string> CompactByKingdom =
-            new Dictionary<long, string>();
+        private readonly struct LivingProjection
+        {
+            public readonly string StateName;
+            public readonly string Appellation;
+            public readonly string Suffix;
+
+            public LivingProjection(string pStateName, string pAppellation,
+                string pSuffix)
+            {
+                StateName = pStateName ?? "";
+                Appellation = pAppellation ?? "";
+                Suffix = pSuffix ?? "";
+            }
+        }
+
+        private static readonly Dictionary<long, LivingProjection> CompactByKingdom =
+            new Dictionary<long, LivingProjection>();
         private static readonly Dictionary<long, string> PosthumousByActor =
             new Dictionary<long, string>();
         private static readonly Dictionary<long, string> PosthumousByReign =
@@ -28,18 +43,23 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || pKingdom.isRekt()) return "";
             bool rebel = MandateRebelService.IsRebelKingdom(pKingdom);
             bool republic = RepublicGovernmentService.IsRepublic(pKingdom);
+            RulerRank rank = MapRank(KingdomTitleService.GetTitle(pKingdom));
+            bool mandate = MandateService.IsMandateKingdom(pKingdom);
+            bool ceremonialEmperor =
+                RulerAppellationRules.ShouldUseLivingEmperor(
+                    rank == RulerRank.Emperor, mandate);
             if (!RulerAppellationRules.ShouldProjectLiving(
                     LineageService.IsXiaKingdom(pKingdom),
                     XiaizationService.UsesXiaizedInstitutionSystem(pKingdom),
-                    rebel, republic)) return "";
+                    rebel, republic, ceremonialEmperor)) return "";
             if (rebel)
                 return BuildCompact(pKingdom);
             if (republic)
                 return RulerAppellationRules.LivingRepublic();
 
-            string stateName = pKingdom.name ?? "";
-            RulerRank rank = MapRank(KingdomTitleService.GetTitle(pKingdom));
-            if (rank != RulerRank.Emperor)
+            string stateName = SuccessionDisputeService.GetDisplayName(
+                pKingdom);
+            if (!ceremonialEmperor)
                 return RulerAppellationRules.LivingRanked(stateName, rank);
             EffectiveChronology chronology = YearNameService.GetEffectiveChronology(pKingdom);
             return RulerAppellationRules.LivingEmperor(
@@ -48,10 +68,14 @@ namespace AncientWarfare3.core.lineage
 
         public static string GetCompactLivingAppellation(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return "";
-            return CompactByKingdom.TryGetValue(pKingdom.id, out string value)
-                ? value
-                : "";
+            return ResolveProjectedStateName(pKingdom,
+                pEmptyWhenSuffixIsHidden: true);
+        }
+
+        public static string GetProjectedStateName(Kingdom pKingdom)
+        {
+            return ResolveProjectedStateName(pKingdom,
+                pEmptyWhenSuffixIsHidden: false);
         }
 
         public static string GetPosthumousAppellation(long pActorId,
@@ -110,6 +134,8 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data != null)
                 PosthumousByActor[pActor.data.id] = pCommitted.DisplayTitle;
             RefreshLivingProjection(pKingdom);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.PosthumousTitle);
         }
 
         public static void ProjectCommittedTitle(long pActorId,
@@ -121,56 +147,69 @@ namespace AncientWarfare3.core.lineage
             if (!string.IsNullOrWhiteSpace(pRetrospectiveRelation))
                 RetrospectiveRelationByActor[pActorId] =
                     pRetrospectiveRelation.Trim();
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.PosthumousTitle);
         }
 
         public static void EnrichFamilyTreeNode(FamilyTreeNode pNode)
         {
             if (pNode == null) return;
-            Actor actor = null;
-            try { actor = World.world?.units?.get(pNode.id); }
-            catch { actor = null; }
-            if (actor?.data != null && actor.isAlive() && !actor.isRekt() &&
-                actor.kingdom?.king == actor)
-            {
-                pNode.ritual_appellation = GetFullLivingAppellation(actor.kingdom);
-            }
-            else if (PosthumousByActor.TryGetValue(pNode.id, out string title))
-            {
-                pNode.ritual_appellation = title;
-            }
+            ProjectFamilyTreeRitualAppellation(pNode);
             if (RetrospectiveRelationByActor.TryGetValue(
                     pNode.id, out string relation))
                 pNode.retrospective_relation = relation;
 
             FamilyShiProjection shi = ReadFamilyShiProjection(pNode.shi_id);
             if (shi == null) return;
-            pNode.parent_shi_display = shi.ParentDisplay;
-            pNode.root_shi_display = shi.RootDisplay;
+            ShiBranchDisplayProjection projection =
+                ShiBranchRules.ResolveDisplayProjection(shi.ShiId,
+                    shi.ParentShiId, shi.Display, shi.ParentDisplay,
+                    shi.RootDisplay);
+            pNode.parent_shi_display = projection.ParentDisplay;
+            pNode.root_shi_display = projection.RootDisplay;
             pNode.origin_city_name = shi.OriginCityName;
             pNode.state_name = shi.StateName;
-            if (string.IsNullOrEmpty(pNode.branch_display))
-                pNode.branch_display = shi.Display;
+            pNode.branch_display = projection.BranchDisplay;
+        }
+
+        public static void ProjectFamilyTreeRitualAppellation(
+            FamilyTreeNode pNode)
+        {
+            if (pNode == null) return;
+            Actor actor = null;
+            try { actor = World.world?.units?.get(pNode.id); }
+            catch { actor = null; }
+            bool currentRuler = false;
+            string living = "";
+            if (pNode.is_alive && actor?.data != null && actor.isAlive() &&
+                !actor.isRekt() && actor.kingdom?.king == actor)
+            {
+                currentRuler = true;
+                living = GetFullLivingAppellation(actor.kingdom);
+            }
+            string posthumous = pNode.ritual_appellation ?? "";
+            if (string.IsNullOrEmpty(posthumous) &&
+                PosthumousByActor.TryGetValue(pNode.id, out string cached))
+                posthumous = cached;
+            pNode.ritual_appellation =
+                RulerAppellationRules.ResolveFamilyTreeRitualAppellation(
+                    pNode.is_alive, currentRuler, living, posthumous);
         }
 
         public static void RefreshLivingProjection(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null || pKingdom.isRekt()) return;
-            bool rebel = MandateRebelService.IsRebelKingdom(pKingdom);
-            bool republic = RepublicGovernmentService.IsRepublic(pKingdom);
-            if (!RulerAppellationRules.ShouldProjectLiving(
-                    LineageService.IsXiaKingdom(pKingdom),
-                    XiaizationService.UsesXiaizedInstitutionSystem(pKingdom),
-                    rebel, republic))
-            {
-                CompactByKingdom.Remove(pKingdom.id);
-                return;
-            }
-            CompactByKingdom[pKingdom.id] = BuildCompact(pKingdom);
+            ResolveProjectedStateName(pKingdom,
+                pEmptyWhenSuffixIsHidden: true);
         }
 
         public static void RemoveKingdom(long pKingdomId)
         {
             if (pKingdomId >= 0) CompactByKingdom.Remove(pKingdomId);
+        }
+
+        public static void InvalidateFamilyTreeProjectionCaches()
+        {
+            ShiProjectionById.Clear();
         }
 
         public static void RebuildLivingCache()
@@ -194,13 +233,45 @@ namespace AncientWarfare3.core.lineage
 
         private static string BuildCompact(Kingdom pKingdom)
         {
-            string stateName = pKingdom?.name ?? "";
+            return ResolveProjectedStateName(pKingdom,
+                pEmptyWhenSuffixIsHidden: false);
+        }
+
+        private static string ResolveProjectedStateName(Kingdom pKingdom,
+            bool pEmptyWhenSuffixIsHidden)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return "";
+            string stateName = SuccessionDisputeService.GetDisplayName(
+                pKingdom);
+            bool originalXia = LineageService.IsXiaKingdom(pKingdom);
+            bool displaySuffix = XiaizedKingdomNamingRules.
+                ShouldDisplayStateSuffix(originalXia,
+                    XiaizationService.GetLevel(pKingdom),
+                    XiaizationService.LevelXiaizedDynasty);
+            if (!displaySuffix)
+            {
+                CompactByKingdom.Remove(pKingdom.id);
+                return pEmptyWhenSuffixIsHidden ? "" : stateName;
+            }
+
             string suffix = KingdomTitleDisplayRules.GetNameplateTitleSuffix(
                 (int)KingdomTitleService.GetTitle(pKingdom),
                 MandateService.IsRuntimeMandateKingdom(pKingdom),
                 MandateRebelService.IsRebelKingdom(pKingdom),
                 RepublicGovernmentService.IsRepublic(pKingdom));
-            return stateName + suffix;
+            if (CompactByKingdom.TryGetValue(pKingdom.id,
+                    out LivingProjection cached) &&
+                string.Equals(cached.StateName, stateName,
+                    StringComparison.Ordinal) &&
+                string.Equals(cached.Suffix, suffix,
+                    StringComparison.Ordinal))
+                return cached.Appellation;
+
+            string projected = KingdomNameplateSuffixRules.ProjectName(
+                stateName, suffix, pShouldDisplaySuffix: true);
+            CompactByKingdom[pKingdom.id] = new LivingProjection(
+                stateName, projected, suffix);
+            return projected;
         }
 
         private static RulerRank MapRank(KingdomTitle pTitle)
@@ -263,18 +334,18 @@ namespace AncientWarfare3.core.lineage
             {
                 using var command = new SQLiteCommand(DB);
                 command.CommandText =
-                    "WITH RECURSIVE chain(SHI_ID,LINEAGE_ID,CLAN_NAME," +
+                    "WITH RECURSIVE chain(SHI_ID,LINEAGE_ID,CLAN_NAME,SOURCE_TYPE," +
                     "PARENT_SHI_ID,STATE_NAME,FOUNDER_ACTOR_ID,ORIGIN_CITY_ID,DEPTH) AS (" +
-                    "SELECT SHI_ID,LINEAGE_ID,IFNULL(CLAN_NAME,'')," +
+                    "SELECT SHI_ID,LINEAGE_ID,IFNULL(CLAN_NAME,''),IFNULL(SOURCE_TYPE,'')," +
                     "IFNULL(PARENT_SHI_ID,-1),IFNULL(STATE_NAME,'')," +
                     "IFNULL(FOUNDER_ACTOR_ID,-1),IFNULL(ORIGIN_CITY_ID,-1),0 FROM " +
                     ShiBranchTableItem.GetTableName() + " WHERE SHI_ID=@shi " +
-                    "UNION ALL SELECT p.SHI_ID,p.LINEAGE_ID,IFNULL(p.CLAN_NAME,'')," +
+                    "UNION ALL SELECT p.SHI_ID,p.LINEAGE_ID,IFNULL(p.CLAN_NAME,''),IFNULL(p.SOURCE_TYPE,'')," +
                     "IFNULL(p.PARENT_SHI_ID,-1),IFNULL(p.STATE_NAME,'')," +
                     "IFNULL(p.FOUNDER_ACTOR_ID,-1),IFNULL(p.ORIGIN_CITY_ID,-1),c.DEPTH+1 " +
                     "FROM " + ShiBranchTableItem.GetTableName() +
                     " p JOIN chain c ON p.SHI_ID=c.PARENT_SHI_ID WHERE c.DEPTH<63) " +
-                    "SELECT c.SHI_ID,c.LINEAGE_ID,c.CLAN_NAME,c.PARENT_SHI_ID," +
+                    "SELECT c.SHI_ID,c.LINEAGE_ID,c.CLAN_NAME,c.SOURCE_TYPE,c.PARENT_SHI_ID," +
                     "c.STATE_NAME,c.ORIGIN_CITY_ID,c.DEPTH," +
                     "IFNULL((SELECT a.CITY_NAME FROM " +
                     ActorArchiveTableItem.GetTableName() +
@@ -285,17 +356,20 @@ namespace AncientWarfare3.core.lineage
                 using SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    long originCityId = reader.GetInt64(5);
-                    string archivedCity = reader.IsDBNull(7) ? "" : reader.GetString(7);
+                    long originCityId = reader.GetInt64(6);
+                    string archivedCity = reader.IsDBNull(8) ? "" : reader.GetString(8);
                     string cityName = ResolveOriginCityName(originCityId, archivedCity);
                     string clanName = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                    string sourceType = reader.IsDBNull(3) ? "" : reader.GetString(3);
+                    string stateName = reader.IsDBNull(5) ? "" : reader.GetString(5);
                     chain.Add(new FamilyShiProjection
                     {
                         ShiId = reader.GetInt64(0),
-                        ParentShiId = reader.GetInt64(3),
-                        StateName = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                        ParentShiId = reader.GetInt64(4),
+                        StateName = stateName,
                         OriginCityName = cityName,
-                        Display = ShiBranchRules.BuildDisplayName(cityName, clanName)
+                        Display = ShiBranchRules.BuildDisplayName(cityName,
+                            clanName, sourceType, stateName)
                     });
                 }
                 if (chain.Count == 0) return null;

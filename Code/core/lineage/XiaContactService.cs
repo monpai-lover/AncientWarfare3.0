@@ -8,6 +8,12 @@ namespace AncientWarfare3.core.lineage
         private static readonly Dictionary<long, bool> XiaVassalContactBySuzerain = new Dictionary<long, bool>();
         private static int _vassalContactCacheYear = int.MinValue;
 
+        public static void ClearRuntime()
+        {
+            XiaVassalContactBySuzerain.Clear();
+            _vassalContactCacheYear = int.MinValue;
+        }
+
         public static void OnKingdomYear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt() || pKingdom.isNeutral() || !pKingdom.isCiv()) return;

@@ -4,6 +4,10 @@ internal static class CityMilitaryThreatFactsRulesTests
 {
     public static void Run()
     {
+        CacheEntryPointIsInstalledWithoutTileClosures();
+        LiveInvalidationUsesTheRevisionRule();
+        CacheRotationDoesNotInvalidateAsyncFacts();
+
         var key = new CityMilitaryThreatKey(17L, 9L, 3L);
         Assert(CityMilitaryThreatFactsRules.CanCache(true, 17L, 9L, 3L),
             "a valid query inside an authority cycle is cacheable");
@@ -19,6 +23,50 @@ internal static class CityMilitaryThreatFactsRulesTests
             "city-control changes invalidate that city");
         Assert(!CityMilitaryThreatFactsRules.ShouldInvalidate(9L, 10L),
             "an unrelated city remains cacheable in the current cycle");
+        Assert(CityMilitaryThreatFactsRules.ShouldAdvanceRevisionForInvalidation(
+                9L),
+            "a live city or war state change invalidates async snapshots even without a cache hit");
+        Assert(!CityMilitaryThreatFactsRules.ShouldAdvanceRevisionForInvalidation(
+                -1L),
+            "an invalid state-change identifier cannot advance a fact revision");
+    }
+
+    private static void CacheEntryPointIsInstalledWithoutTileClosures()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityAttackZoneService.cs"));
+        Assert(source.Contains("CityMilitaryThreatFacts.TryGet("),
+            "city hostile-military queries enter the authority-cycle cache");
+        Assert(!source.Contains("tile.doUnits(actor =>"),
+            "a physical city scan does not allocate one captured callback per tile");
+    }
+
+    private static void LiveInvalidationUsesTheRevisionRule()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityMilitaryThreatFacts.cs"));
+        Assert(source.Contains(
+                "ShouldAdvanceRevisionForInvalidation(cityId)"),
+            "a valid city-control change advances the async fact revision");
+        Assert(source.Contains(
+                "ShouldAdvanceRevisionForInvalidation(warId)"),
+            "a valid war-state change advances the async fact revision");
+    }
+
+    private static void CacheRotationDoesNotInvalidateAsyncFacts()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityMilitaryThreatFacts.cs"));
+        int begin = source.IndexOf("internal static void BeginAuthorityCycle()",
+            StringComparison.Ordinal);
+        int end = source.IndexOf("internal static void EndAuthorityCycle()",
+            begin, StringComparison.Ordinal);
+        Assert(begin >= 0 && end > begin && !source.Substring(begin,
+                end - begin).Contains("AdvanceRevision()"),
+            "clearing a per-cycle cache does not invalidate an unchanged async front snapshot");
     }
 
     private static void Assert(bool pCondition, string pMessage)

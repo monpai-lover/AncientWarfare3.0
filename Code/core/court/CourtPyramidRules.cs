@@ -63,6 +63,7 @@ namespace AncientWarfare3.core.court
         public const string Heir = "heir";
         public const string General = "general";
         public const string Governor = "governor";
+        public const string FeudatoryPrince = "feudatory_prince";
     }
 
     public sealed class CourtPyramidNodeModel
@@ -85,6 +86,7 @@ namespace AncientWarfare3.core.court
         public int OfficialMeritCap = 1;
         public int OfficialLastEvaluation = -1;
         public int OfficialTermEndYear = -1;
+        public int OfficialLocalGrade = -1;
         public int StableOrder;
         public bool IsVacancy;
         public float X;
@@ -120,6 +122,7 @@ namespace AncientWarfare3.core.court
                 OfficialMeritCap = OfficialMeritCap,
                 OfficialLastEvaluation = OfficialLastEvaluation,
                 OfficialTermEndYear = OfficialTermEndYear,
+                OfficialLocalGrade = OfficialLocalGrade,
                 X = X,
                 Y = Y,
                 Roles = new List<string>(Roles)
@@ -140,7 +143,7 @@ namespace AncientWarfare3.core.court
 
         public static bool ShouldAddStandaloneHeir(string pTier, bool hasValidHeir)
         {
-            return hasValidHeir && pTier == CourtTier.Primitive;
+            return hasValidHeir && pTier == CourtTier.EasternZhou;
         }
 
         public static bool ShouldResetCanvas(bool switchedKingdom, bool openingWindow)
@@ -197,6 +200,7 @@ namespace AncientWarfare3.core.court
                         merged.OfficialMeritCap = item.OfficialMeritCap;
                         merged.OfficialLastEvaluation = item.OfficialLastEvaluation;
                         merged.OfficialTermEndYear = item.OfficialTermEndYear;
+                        merged.OfficialLocalGrade = item.OfficialLocalGrade;
                     }
                 }
                 result.Add(merged);
@@ -393,6 +397,12 @@ namespace AncientWarfare3.core.court
         {
             switch (pOfficeId ?? "")
             {
+                case CourtOfficeId.TaiZai:
+                case CourtOfficeId.SiTu:
+                case CourtOfficeId.ZongBo:
+                case CourtOfficeId.SiMa:
+                case CourtOfficeId.SiKou:
+                case CourtOfficeId.SiKong:
                 case CourtOfficeId.Chancellor:
                 case CourtOfficeId.Censor:
                 case CourtOfficeId.Marshal:
@@ -403,6 +413,8 @@ namespace AncientWarfare3.core.court
                 case CourtOfficeId.ImperialPhysician:
                 case CourtOfficeId.ImperialAstrologer:
                     return SpecialistRank;
+                case CourtOfficeId.FeudatoryChiefClerk:
+                    return FeudatoryOfficeRules.InspectorRank;
                 default:
                     return MinistryRank;
             }

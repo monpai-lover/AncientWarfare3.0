@@ -265,6 +265,8 @@ namespace AncientWarfare3.core.schools
 
     public static class HistoricalSchoolLectureRules
     {
+        public const int StablePopulationTarget = 50;
+        public const int SustainableMemberCount = StablePopulationTarget;
         public const int CanonicalLectureCooldownYears = 3;
         public const int LaterLectureCooldownYears = 5;
         public const int MaxWorldLecturesPerYear = 8;
@@ -276,6 +278,51 @@ namespace AncientWarfare3.core.schools
         public const float PersuasionMinimumReputation = 40f;
         public const int PersuasionCooldownYears = 5;
         public const int MaxKingdomPersuasionsPerYear = 1;
+
+        public static int PopulationPriority(int livingMemberCount)
+        {
+            return Math.Max(0, SustainableMemberCount -
+                               Math.Max(0, livingMemberCount));
+        }
+
+        public static IReadOnlyList<int> BuildPopulationPriorityOrder(
+            IReadOnlyList<int> pLivingMemberCounts, int pStartIndex)
+        {
+            int count = pLivingMemberCounts?.Count ?? 0;
+            if (count == 0) return Array.Empty<int>();
+            int start = PositiveModulo(pStartIndex, count);
+            var order = new int[count];
+            for (int index = 0; index < count; index++) order[index] = index;
+            Array.Sort(order, (left, right) =>
+            {
+                int priority = PopulationPriority(
+                        pLivingMemberCounts[right])
+                    .CompareTo(PopulationPriority(
+                        pLivingMemberCounts[left]));
+                if (priority != 0) return priority;
+                return PositiveModulo(left - start, count).CompareTo(
+                    PositiveModulo(right - start, count));
+            });
+            return order;
+        }
+
+        public static bool HasDiscipleCapacity(int pDirectDiscipleCount,
+            int pDirectDiscipleCap)
+        {
+            return pDirectDiscipleCount >= 0 && pDirectDiscipleCap > 0 &&
+                   pDirectDiscipleCount < pDirectDiscipleCap;
+        }
+
+        public static bool TeacherPrecedesForLecture(
+            bool pHasDiscipleCapacity, int pStartYear, long pActorId,
+            bool pOtherHasDiscipleCapacity, int pOtherStartYear,
+            long pOtherActorId)
+        {
+            if (pHasDiscipleCapacity != pOtherHasDiscipleCapacity)
+                return pHasDiscipleCapacity;
+            return pStartYear < pOtherStartYear ||
+                   pStartYear == pOtherStartYear && pActorId < pOtherActorId;
+        }
 
         public static bool IsTeacherEligible(HistoricalSchoolLectureCandidate pCandidate,
             int pYear)
@@ -316,6 +363,13 @@ namespace AncientWarfare3.core.schools
             string school = pSchoolId ?? "";
             return pCityId.ToString(CultureInfo.InvariantCulture) + ":" +
                    school.Length.ToString(CultureInfo.InvariantCulture) + ":" + school;
+        }
+
+        private static int PositiveModulo(int pValue, int pCount)
+        {
+            if (pCount <= 0) return 0;
+            int value = pValue % pCount;
+            return value < 0 ? value + pCount : value;
         }
     }
 }

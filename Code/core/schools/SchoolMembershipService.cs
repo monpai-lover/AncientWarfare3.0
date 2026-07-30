@@ -87,6 +87,11 @@ namespace AncientWarfare3.core.schools
             return Memberships.GetActive(pActorId);
         }
 
+        internal static bool IsJoinPending(long pActorId)
+        {
+            return pActorId >= 0 && PendingMembershipActors.Contains(pActorId);
+        }
+
         public static bool ApplyReputationDelta(long pActorId, float pDelta)
         {
             if (pActorId < 0 || float.IsNaN(pDelta) || float.IsInfinity(pDelta)) return false;
@@ -737,7 +742,8 @@ namespace AncientWarfare3.core.schools
 
         public static int Count(string pSchoolId)
         {
-            return Memberships.Members(pSchoolId).Count;
+            return HistoricalSchoolRuntimeIndex.Instance.MemberCount(
+                pSchoolId);
         }
 
         public static long[] Members(string pSchoolId)
@@ -789,16 +795,37 @@ namespace AncientWarfare3.core.schools
         private static void TryPromoteTeacher(long pActorId, int pYear)
         {
             SchoolMembershipRecord current = Memberships.GetActive(pActorId);
-            if (current == null || current.Standing != HistoricalSchoolStanding.Disciple ||
-                pYear - current.StartYear <
-                HistoricalSchoolStandingRules.TeacherMembershipYears ||
-                current.Reputation < HistoricalSchoolStandingRules.TeacherReputation)
-                return;
+            if (current == null) return;
+            HistoricalSchoolStanding nextStanding =
+                HistoricalSchoolStandingRules.ResolvePromotion(
+                    current.Standing, Math.Max(0, pYear - current.StartYear),
+                    current.Reputation);
+            if (nextStanding == current.Standing) return;
             SchoolMembershipRecord next =
-                current.WithStanding(HistoricalSchoolStanding.Teacher);
+                current.WithStanding(nextStanding);
             if (!HistoricalSchoolStore.UpdateMembershipStanding(
                     current, next, WorldTime())) return;
-            AdoptCommittedStanding(current, HistoricalSchoolStanding.Teacher);
+            AdoptCommittedStanding(current, nextStanding);
+        }
+
+        internal static bool TryPromoteContinuityTeacher(long pActorId, int pYear)
+        {
+            SchoolMembershipRecord current = Memberships.GetActive(pActorId);
+            Actor actor = FindLivingActor(pActorId);
+            if (current == null || actor == null ||
+                !HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
+                    HistoricalSchoolRuntimeIndex.Instance.MemberCount(current.SchoolId),
+                    HistoricalSchoolRuntimeIndex.Instance.TeacherCount(current.SchoolId),
+                    current.Standing,
+                    HistoricalAffiliationService.IsPresentForInfluence(actor),
+                    Math.Max(0, pYear - current.StartYear), current.Reputation))
+                return false;
+            SchoolMembershipRecord next =
+                current.WithStanding(HistoricalSchoolStanding.Teacher);
+            return HistoricalSchoolStore.UpdateMembershipStanding(
+                       current, next, WorldTime()) &&
+                   AdoptCommittedStanding(current,
+                       HistoricalSchoolStanding.Teacher);
         }
 
         private static void EnsureSchoolLeader(string pSchoolId)
@@ -886,18 +913,36 @@ namespace AncientWarfare3.core.schools
 
         private static Actor FindLivingActor(long pActorId)
         {
-            Actor actor = null;
-            try { actor = pActorId >= 0 ? World.world?.units?.get(pActorId) : null; }
-            catch { }
+            Actor actor = FindActor(pActorId);
             return actor?.data != null && actor.isAlive() && !actor.isRekt()
                 ? actor
                 : null;
         }
 
+        private static Actor FindActor(long pActorId)
+        {
+            try
+            {
+                return pActorId >= 0
+                    ? World.world?.units?.get(pActorId)
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         internal static void RefreshRuntimeIndex(long pActorId)
         {
             SchoolMembershipRecord membership = Memberships.GetActive(pActorId);
-            if (membership == null || !membership.Active)
+            Actor actor = FindActor(pActorId);
+            bool actorExists = actor?.data != null;
+            bool actorAlive = actorExists && actor.isAlive();
+            bool actorWrecked = !actorExists || actor.isRekt();
+            if (!HistoricalSchoolRuntimeMembershipRules.ShouldIndex(
+                    membership != null && membership.Active, actorExists,
+                    actorAlive, actorWrecked))
             {
                 HistoricalSchoolRuntimeIndex.Instance.Remove(pActorId);
                 return;
@@ -910,7 +955,7 @@ namespace AncientWarfare3.core.schools
                 (affiliation.LifecycleState == HistoricalSchoolLifecycleState.Travelling ||
                  affiliation.LifecycleState == HistoricalSchoolLifecycleState.Voyage);
             bool travelEligible = affiliation != null &&
-                HistoricalAffiliationService.IsTravelEligible(FindLivingActor(pActorId));
+                HistoricalAffiliationService.IsTravelEligible(actor);
             bool directDiscipleship =
                 membership.Source == SchoolMembershipSource.DirectDiscipleship ||
                 membership.Source == SchoolMembershipSource.LaterDiscipleship;
@@ -938,15 +983,10 @@ namespace AncientWarfare3.core.schools
 
         private static int PromotionDueYear(SchoolMembershipRecord pMembership)
         {
-            if (pMembership == null ||
-                pMembership.Standing != HistoricalSchoolStanding.Disciple ||
-                pMembership.Reputation < HistoricalSchoolStandingRules.TeacherReputation)
-                return -1;
-            return pMembership.StartYear >
-                   int.MaxValue - HistoricalSchoolStandingRules.TeacherMembershipYears
-                ? int.MaxValue
-                : pMembership.StartYear +
-                  HistoricalSchoolStandingRules.TeacherMembershipYears;
+            return pMembership == null
+                ? -1
+                : HistoricalSchoolStandingRules.PromotionDueYear(
+                    pMembership.Standing, pMembership.StartYear);
         }
 
         private abstract class MembershipWriteOperation :
@@ -957,12 +997,14 @@ namespace AncientWarfare3.core.schools
                 MembershipWriteEvent pEvent, Action<bool> pCompletion)
             {
                 Actor = pActor;
+                ActorId = pActor?.data?.id ?? -1L;
                 Affiliation = pAffiliation;
                 Event = pEvent;
                 Completion = pCompletion;
             }
 
             protected Actor Actor { get; }
+            protected long ActorId { get; }
             protected HistoricalSchoolAffiliationSnapshot Affiliation { get; }
             protected MembershipWriteEvent Event { get; }
             private Action<bool> Completion { get; }
@@ -987,7 +1029,7 @@ namespace AncientWarfare3.core.schools
                                         error.Message);
                     throw;
                 }
-                PendingMembershipActors.Remove(Actor?.data?.id ?? -1L);
+                PendingMembershipActors.Remove(ActorId);
                 try { Completion?.Invoke(true); }
                 catch (Exception error)
                 {
@@ -998,7 +1040,7 @@ namespace AncientWarfare3.core.schools
 
             public void OnCleanFailure()
             {
-                PendingMembershipActors.Remove(Actor?.data?.id ?? -1L);
+                PendingMembershipActors.Remove(ActorId);
                 try { Completion?.Invoke(false); }
                 catch (Exception error)
                 {
@@ -1079,6 +1121,11 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
+                if (!CanPersistPendingActor(Actor, _record.ActorId))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                SchoolMembershipRecord active = Memberships.GetActive(_record.ActorId);
+                if (active != null && !SameMembershipRecord(active, _record))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
                 HistoricalSchoolTeachingPersistenceOutcome outcome =
                     HistoricalSchoolStore.InsertMembershipInTransaction(pDb,
                         pTransaction, _record, Event.WorldTime);
@@ -1142,6 +1189,13 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
+                if (!CanPersistPendingActor(Actor, _replacement.ActorId))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                SchoolMembershipRecord active = Memberships.GetActive(
+                    _replacement.ActorId);
+                if (!SameMembershipRecord(active, _current) &&
+                    !SameMembershipRecord(active, _replacement))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
                 HistoricalSchoolTeachingPersistenceOutcome outcome =
                     HistoricalSchoolStore.ConvertMembershipInTransaction(pDb,
                         pTransaction, _current, _replacement,
@@ -1306,6 +1360,17 @@ namespace AncientWarfare3.core.schools
                    pFirst.EndReason == pSecond.EndReason &&
                    pFirst.Standing == pSecond.Standing &&
                    pFirst.LoyaltyUntilYear == pSecond.LoyaltyUntilYear;
+        }
+
+        private static bool CanPersistPendingActor(Actor pActor,
+            long pExpectedActorId)
+        {
+            return SchoolMembershipPersistenceRules.CanPersistPendingActor(
+                pActor?.data != null,
+                pActor?.isAlive() == true,
+                pActor?.isRekt() != false,
+                pExpectedActorId,
+                pActor?.data?.id ?? -1L);
         }
 
         private static int LoyaltyUntil(int pYear)

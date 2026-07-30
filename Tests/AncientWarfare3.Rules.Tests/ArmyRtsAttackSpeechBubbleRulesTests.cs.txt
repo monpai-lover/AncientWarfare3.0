@@ -1,0 +1,468 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsAttackSpeechBubbleRulesTests
+{
+    public static void Run()
+    {
+        EligibilityRequiresExactBattleMission();
+        SoldierEligibilityRequiresActualCombat();
+        EventIdentityIncludesIssuedTime();
+        LedgerRepeatsAnOngoingAssaultAfterCooldown();
+        LedgerEnforcesCapacityAndClear();
+        ReplicaMissionWithoutIssuedTimeCanEmit();
+        VisibleCaptainScanRotatesFairly();
+        ActivePlayClockStopsOutsideRunningWorld();
+        MinimapSuppressesBattleSpeechPresentation();
+        BattleContextUsesDeterministicPriority();
+        LinePoolsMatchBattleContext();
+        LocalizationKeysAreStableAndUnique();
+        LineSelectionAvoidsImmediateRepetition();
+        TextLayoutFitsTheOriginalBubble();
+        ExpiryUsesSimulationTime();
+    }
+
+    private static void EligibilityRequiresExactBattleMission()
+    {
+        True(ArmyRtsAttackSpeechBubbleRules.IsEligible(
+                talkBubblesEnabled: true,
+                captainAlive: true,
+                captainId: 11L,
+                armyId: 21L,
+                warId: 31L,
+                targetCityId: 41L,
+                state: ArmyRtsState.Assault,
+                proposalKind: ArmyRtsProposalKind.Attack,
+                role: ArmyRtsRole.Assault),
+            "a live captain in a genuine assault mission is eligible");
+
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(false, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Assault,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault),
+            "the original talk-bubbles switch is authoritative");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, false,
+                11L, 21L, 31L, 41L, ArmyRtsState.Assault,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault),
+            "dead captains are rejected");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                -1L, 21L, 31L, 41L, ArmyRtsState.Assault,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault),
+            "invalid actor identifiers are rejected");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.March,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault),
+            "marching is not yet assaulting");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Assault,
+                ArmyRtsProposalKind.Defend, ArmyRtsRole.Assault),
+            "defense proposals do not emit the attack oath");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Assault,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Defense),
+            "defense-role armies do not emit the attack oath");
+        True(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Retreat,
+                ArmyRtsProposalKind.Retreat, ArmyRtsRole.Defense),
+            "a live captain in a genuine retreat mission is eligible");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Retreat,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault),
+            "a retreat state without a retreat proposal is rejected");
+        True(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Pursue,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault,
+                captainInCombat: false),
+            "an RTS pursuit remains battle-related between contacts");
+        True(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Hold,
+                ArmyRtsProposalKind.Defend, ArmyRtsRole.Defense,
+                captainInCombat: true),
+            "a defensive captain emits only during actual combat");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.Hold,
+                ArmyRtsProposalKind.Defend, ArmyRtsRole.Defense,
+                captainInCombat: false),
+            "an idle front hold does not emit battle speech");
+        False(ArmyRtsAttackSpeechBubbleRules.IsEligible(true, true,
+                11L, 21L, 31L, 41L, ArmyRtsState.March,
+                ArmyRtsProposalKind.Attack, ArmyRtsRole.Assault,
+                captainInCombat: true),
+            "march remains ineligible even near combat");
+    }
+
+    private static void EventIdentityIncludesIssuedTime()
+    {
+        var first = new ArmyRtsAttackSpeechEventKey(21L, 31L, 41L, 5d);
+        var same = new ArmyRtsAttackSpeechEventKey(21L, 31L, 41L, 5d);
+        var reissued = new ArmyRtsAttackSpeechEventKey(21L, 31L, 41L, 6d);
+
+        True(first.Equals(same),
+            "identical mission coordinates and issue time share identity");
+        Equal(first.GetHashCode(), same.GetHashCode(),
+            "equal event keys have equal hashes");
+        False(first.Equals(reissued),
+            "a reissued mission is a new event even with the same target");
+    }
+
+    private static void SoldierEligibilityRequiresActualCombat()
+    {
+        True(ArmyRtsAttackSpeechBubbleRules.IsSoldierCombatEligible(
+                talkBubblesEnabled: true, soldierAlive: true,
+                soldierId: 12L, isMilitary: true,
+                isArmyCaptain: false, inCombat: true),
+            "a living ordinary soldier in combat may emit the oath");
+        False(ArmyRtsAttackSpeechBubbleRules.IsSoldierCombatEligible(
+                true, true, 12L, true, false, false),
+            "an idle soldier does not emit the combat oath");
+        False(ArmyRtsAttackSpeechBubbleRules.IsSoldierCombatEligible(
+                true, true, 12L, false, false, true),
+            "a civilian caught near combat is not treated as a soldier");
+        False(ArmyRtsAttackSpeechBubbleRules.IsSoldierCombatEligible(
+                true, true, 12L, true, true, true),
+            "captains stay on the RTS mission trigger path");
+
+        var ledger = new ArmyRtsAttackSpeechBubbleLedger();
+        True(ledger.TryReserveCombatant(12L, now: 10d, activeCount: 0),
+            "the first combat observation reserves a soldier bubble");
+        False(ledger.TryReserveCombatant(12L, now: 29.99d,
+                activeCount: 0),
+            "the same soldier shares the twenty-second actor cooldown");
+        True(ledger.TryReserveCombatant(12L, now: 30d, activeCount: 0),
+            "a soldier can repeat while combat continues");
+    }
+
+    private static void LedgerRepeatsAnOngoingAssaultAfterCooldown()
+    {
+        var ledger = new ArmyRtsAttackSpeechBubbleLedger();
+        var first = new ArmyRtsAttackSpeechEventKey(21L, 31L, 41L, 5d);
+        var sameCaptainNext = new ArmyRtsAttackSpeechEventKey(
+            21L, 31L, 42L, 6d);
+        var otherCaptain = new ArmyRtsAttackSpeechEventKey(
+            22L, 31L, 43L, 7d);
+
+        True(ledger.TryReserve(first, 11L, now: 10d, activeCount: 0),
+            "the first eligible mission reserves a bubble");
+        True(ledger.TryReserve(first, 11L, now: 30d, activeCount: 0),
+            "an ongoing assault may repeat its oath after twenty seconds");
+        False(ledger.TryReserve(sameCaptainNext, 11L, now: 49.99d,
+                activeCount: 0),
+            "the same captain observes a twenty-second cooldown");
+        True(ledger.TryReserve(sameCaptainNext, 11L, now: 50d,
+                activeCount: 0),
+            "the captain may emit at the cooldown boundary");
+        False(ledger.TryReserve(otherCaptain, 12L, now: 52.99d,
+                activeCount: 0),
+            "the global three-second interval limits simultaneous starts");
+        True(ledger.TryReserve(otherCaptain, 12L, now: 53d,
+                activeCount: 0),
+            "another captain may emit at the global interval boundary");
+    }
+
+    private static void LedgerEnforcesCapacityAndClear()
+    {
+        var ledger = new ArmyRtsAttackSpeechBubbleLedger();
+        var key = new ArmyRtsAttackSpeechEventKey(21L, 31L, 41L, 5d);
+
+        False(ledger.TryReserve(key, 11L, now: 10d,
+                activeCount:
+                    ArmyRtsAttackSpeechBubbleRules.MaximumActiveBubbles),
+            "two live bubbles block a third");
+        True(ledger.TryReserve(key, 11L, now: 10d, activeCount: 1),
+            "capacity below the limit permits emission");
+        ledger.Clear();
+        True(ledger.TryReserve(key, 11L, now: 10d, activeCount: 0),
+            "clearing the world clears mission and cooldown state");
+
+        Equal(20d,
+            ArmyRtsAttackSpeechBubbleRules.CaptainCooldownSeconds,
+            "captain cooldown remains explicit");
+        Equal(3d,
+            ArmyRtsAttackSpeechBubbleRules.GlobalEmissionIntervalSeconds,
+            "global interval remains explicit");
+        Equal(2, ArmyRtsAttackSpeechBubbleRules.MaximumActiveBubbles,
+            "active bubble capacity remains bounded");
+    }
+
+    private static void ActivePlayClockStopsOutsideRunningWorld()
+    {
+        Equal(11.25d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                currentTime: 10d, unscaledDeltaSeconds: 1.25d,
+                worldLoaded: true, paused: false),
+            "a running loaded world advances the presentation clock");
+        Equal(10d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                10d, 1.25d, true, true),
+            "a paused world freezes the presentation clock");
+        Equal(10d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                10d, 1.25d, false, false),
+            "an unloaded world freezes the presentation clock");
+        Equal(10d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                10d, -1d, true, false),
+            "negative frame deltas do not rewind the clock");
+        Equal(10d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                10d, double.NaN, true, false),
+            "NaN frame deltas do not poison the clock");
+        Equal(10d, ArmyRtsAttackSpeechBubbleRules.AdvanceActivePlayTime(
+                10d, double.PositiveInfinity, true, false),
+            "infinite frame deltas do not poison the clock");
+    }
+
+    private static void MinimapSuppressesBattleSpeechPresentation()
+    {
+        True(ArmyRtsAttackSpeechBubbleRules.ShouldSuppressPresentation(
+                renderingMiniMap: true),
+            "the minimap suppresses battle speech presentation");
+        False(ArmyRtsAttackSpeechBubbleRules.ShouldSuppressPresentation(
+                renderingMiniMap: false),
+            "normal gameplay keeps battle speech presentation enabled");
+    }
+
+    private static void BattleContextUsesDeterministicPriority()
+    {
+        Equal(ArmyRtsAttackSpeechContext.Retreat,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Retreat, ArmyRtsProposalKind.Retreat,
+                ArmyRtsRole.Assault, activeVoyage: true,
+                embarkedOrInsideBoat: true),
+            "retreat takes priority even while crossing water");
+        Equal(ArmyRtsAttackSpeechContext.CrossingWater,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Pursue, ArmyRtsProposalKind.Attack,
+                ArmyRtsRole.Assault, activeVoyage: true,
+                embarkedOrInsideBoat: false),
+            "an active voyage takes priority over pursuit");
+        Equal(ArmyRtsAttackSpeechContext.Pursuit,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Pursue, ArmyRtsProposalKind.Attack,
+                ArmyRtsRole.Assault, false, false),
+            "pursuit has its own pool");
+        Equal(ArmyRtsAttackSpeechContext.Defense,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Hold, ArmyRtsProposalKind.Defend,
+                ArmyRtsRole.Defense, false, false),
+            "defensive combat has its own pool");
+        Equal(ArmyRtsAttackSpeechContext.Assault,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Assault, ArmyRtsProposalKind.Attack,
+                ArmyRtsRole.Assault, false, false),
+            "an exact attack mission is classified as assault");
+        Equal(ArmyRtsAttackSpeechContext.GeneralCombat,
+            ArmyRtsAttackSpeechBubbleRules.ClassifyContext(
+                ArmyRtsState.Regroup, ArmyRtsProposalKind.FrontHold,
+                ArmyRtsRole.Reserve, false, false),
+            "other combat states use the general fallback pool");
+    }
+
+    private static void LinePoolsMatchBattleContext()
+    {
+        True(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Assault,
+                ArmyRtsAttackSpeechLine.GreatAxe),
+            "assaults may use the great-axe line");
+        False(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Assault,
+                ArmyRtsAttackSpeechLine.Impossible),
+            "assaults do not use the retreat disbelief line");
+        True(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Retreat,
+                ArmyRtsAttackSpeechLine.Impossible),
+            "retreats may use the disbelief line");
+        Equal(9, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.Assault),
+            "assault pool count");
+        Equal(6, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.Defense),
+            "defense pool count");
+        Equal(7, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.Pursuit),
+            "pursuit pool count");
+        Equal(5, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.Retreat),
+            "retreat pool count");
+        Equal(1, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.CrossingWater),
+            "crossing water has one exact scene line");
+        Equal(10, ArmyRtsAttackSpeechBubbleRules.LineCountFor(
+                ArmyRtsAttackSpeechContext.GeneralCombat),
+            "general combat pool count");
+        True(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Assault,
+                ArmyRtsAttackSpeechLine.LiuSandao),
+            "assault includes Liu Sandao");
+        True(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Defense,
+                ArmyRtsAttackSpeechLine.CommandTable),
+            "defense includes the command-table line");
+        True(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Pursuit,
+                ArmyRtsAttackSpeechLine.ThrowOut),
+            "pursuit includes the throw-out line");
+        False(ArmyRtsAttackSpeechBubbleRules.ContextContainsLine(
+                ArmyRtsAttackSpeechContext.Retreat,
+                ArmyRtsAttackSpeechLine.PanFeng),
+            "retreat excludes attack boasts");
+        Equal("aw_army_rts_speech_crossing_river",
+            ArmyRtsAttackSpeechBubbleRules.LocalizationKeyFor(
+                ArmyRtsAttackSpeechLine.CrossingRiver),
+            "each selected line owns a stable localization key");
+    }
+
+    private static void LocalizationKeysAreStableAndUnique()
+    {
+        ArmyRtsAttackSpeechLine[] lines =
+        {
+            ArmyRtsAttackSpeechLine.LastStand,
+            ArmyRtsAttackSpeechLine.GreatAxe,
+            ArmyRtsAttackSpeechLine.CalmWisdom,
+            ArmyRtsAttackSpeechLine.Impossible,
+            ArmyRtsAttackSpeechLine.CrossingRiver,
+            ArmyRtsAttackSpeechLine.ProudArmy,
+            ArmyRtsAttackSpeechLine.NoCourtesy,
+            ArmyRtsAttackSpeechLine.BrotherInvincible,
+            ArmyRtsAttackSpeechLine.XuzhouPass,
+            ArmyRtsAttackSpeechLine.ThrowOut,
+            ArmyRtsAttackSpeechLine.LookAtYourHead,
+            ArmyRtsAttackSpeechLine.CaoTraitor,
+            ArmyRtsAttackSpeechLine.ThreeSurnameSlave,
+            ArmyRtsAttackSpeechLine.FourFathers,
+            ArmyRtsAttackSpeechLine.DongZhuoTraitor,
+            ArmyRtsAttackSpeechLine.DeathUnclear,
+            ArmyRtsAttackSpeechLine.CommandTable,
+            ArmyRtsAttackSpeechLine.FiveHundredYears,
+            ArmyRtsAttackSpeechLine.NoSecondAmbush,
+            ArmyRtsAttackSpeechLine.TenMyriadTroops,
+            ArmyRtsAttackSpeechLine.XuHuangHeroes,
+            ArmyRtsAttackSpeechLine.LiuSandao,
+            ArmyRtsAttackSpeechLine.PanFeng,
+            ArmyRtsAttackSpeechLine.DragonTiger
+        };
+        Equal(24, lines.Length, "the curated pool contains 24 lines");
+
+        var keys = new HashSet<string>();
+        for (int index = 0; index < lines.Length; index++)
+        {
+            string key = ArmyRtsAttackSpeechBubbleRules.LocalizationKeyFor(
+                lines[index]);
+            True(!string.IsNullOrWhiteSpace(key),
+                "every curated line has a localization key");
+            True(keys.Add(key), "curated localization keys are unique");
+        }
+    }
+
+    private static void LineSelectionAvoidsImmediateRepetition()
+    {
+        Equal(ArmyRtsAttackSpeechLine.GreatAxe,
+            ArmyRtsAttackSpeechBubbleRules.SelectLine(
+                ArmyRtsAttackSpeechContext.Assault, randomValue: 0,
+                previousLine: ArmyRtsAttackSpeechLine.LastStand),
+            "selection skips the previous line in a multi-line pool");
+        Equal(ArmyRtsAttackSpeechLine.NoCourtesy,
+            ArmyRtsAttackSpeechBubbleRules.SelectLine(
+                ArmyRtsAttackSpeechContext.Assault, randomValue: 1,
+                previousLine: ArmyRtsAttackSpeechLine.LastStand),
+            "all non-repeating assault alternatives remain reachable");
+        Equal(ArmyRtsAttackSpeechLine.CrossingRiver,
+            ArmyRtsAttackSpeechBubbleRules.SelectLine(
+                ArmyRtsAttackSpeechContext.CrossingWater, randomValue: 9,
+                previousLine: ArmyRtsAttackSpeechLine.CrossingRiver),
+            "a one-line scene pool remains selectable");
+    }
+
+    private static void VisibleCaptainScanRotatesFairly()
+    {
+        Equal(63, ArmyRtsAttackSpeechBubbleRules.VisibleScanIndex(
+                cursor: 63, offset: 0, visibleCount: 100),
+            "a scan starts at its persisted cursor");
+        Equal(0, ArmyRtsAttackSpeechBubbleRules.VisibleScanIndex(
+                cursor: 99, offset: 1, visibleCount: 100),
+            "the scan wraps across the visible list");
+        Equal(64, ArmyRtsAttackSpeechBubbleRules.AdvanceVisibleScanCursor(
+                cursor: 0, visitedCount: 64, visibleCount: 100),
+            "the next scan starts after all visited captains");
+        Equal(4, ArmyRtsAttackSpeechBubbleRules.AdvanceVisibleScanCursor(
+                cursor: 3, visitedCount: 1, visibleCount: 100),
+            "an early capacity stop still advances past the examined captain");
+    }
+
+    private static void ReplicaMissionWithoutIssuedTimeCanEmit()
+    {
+        var ledger = new ArmyRtsAttackSpeechBubbleLedger();
+        var replicaMission = new ArmyRtsAttackSpeechEventKey(
+            21L, 31L, 41L, -1d);
+
+        True(ledger.TryReserve(replicaMission, 11L, now: 10d,
+                activeCount: 0),
+            "a replicated assault can emit without a local issue timestamp");
+    }
+
+    private static void TextLayoutFitsTheOriginalBubble()
+    {
+        Equal("战至最后一刻，\n自刎归天",
+            ArmyRtsAttackSpeechBubbleRules.FormatText(
+                "战至最后一刻，自刎归天"),
+            "Chinese oath wraps once at its punctuation");
+        Equal("已经有了一次伏击，\n就绝不会再有第二\n次伏击",
+            ArmyRtsAttackSpeechBubbleRules.FormatText(
+                "已经有了一次伏击，就绝不会再有第二次伏击"),
+            "long Chinese lines wrap at punctuation then eight characters");
+        Equal("此战将决定今后五\n百年的历史",
+            ArmyRtsAttackSpeechBubbleRules.FormatText(
+                "此战将决定今后五百年的历史"),
+            "Chinese without punctuation wraps at eight characters");
+        Equal("Fight to the last\nmoment; accept\ndeath before\nsurrender.",
+            ArmyRtsAttackSpeechBubbleRules.FormatText(
+                "\"Fight to the last moment; accept death before surrender.\""),
+            "quoted fallback is normalized and wrapped to four short lines");
+        Equal(1.4f, ArmyRtsAttackSpeechBubbleRules.TextScaleFor(
+                "战至最后一刻，自刎归天"),
+            "Chinese glyphs remain legible inside the bubble");
+        Equal(1.4f, ArmyRtsAttackSpeechBubbleRules.TextScaleFor(
+                "一二三四五六七八九十"),
+            "ten CJK characters keep the current scale");
+        Equal(1.2f, ArmyRtsAttackSpeechBubbleRules.TextScaleFor(
+                "一二三四五六七八九十一"),
+            "eleven CJK characters use the medium scale");
+        Equal(1.0f, ArmyRtsAttackSpeechBubbleRules.TextScaleFor(
+                "一二三四五六七八九十一二三四五六七"),
+            "seventeen CJK characters use the compact scale");
+        Equal(1.1f, ArmyRtsAttackSpeechBubbleRules.TextScaleFor(
+                "Fight to the last moment; accept death before surrender."),
+            "Latin text is reduced to fit the original bubble");
+        Equal(0.16f, ArmyRtsAttackSpeechBubbleRules.BubbleScaleFor(1f),
+            "the speech background is compact at ordinary actor scale");
+        Equal(0.12f, ArmyRtsAttackSpeechBubbleRules.BubbleScaleFor(.5f),
+            "small actors keep a readable minimum bubble size");
+        Equal(-1.8f, ArmyRtsAttackSpeechBubbleRules.TextLocalX,
+            "text is centered inside the bubble's visible white body");
+        Equal(9.59f, ArmyRtsAttackSpeechBubbleRules.TextLocalY,
+            "two text lines sit in the white body above the bubble tail");
+    }
+
+    private static void ExpiryUsesSimulationTime()
+    {
+        False(ArmyRtsAttackSpeechBubbleRules.IsExpired(
+                expiresAt: 13d, simulationTime: 10d),
+            "a bubble remains visible before its simulation deadline");
+        False(ArmyRtsAttackSpeechBubbleRules.IsExpired(
+                expiresAt: 13d, simulationTime: 10d),
+            "unchanged simulation time keeps a paused bubble visible");
+        True(ArmyRtsAttackSpeechBubbleRules.IsExpired(
+                expiresAt: 13d, simulationTime: 13d),
+            "a bubble expires when simulation time reaches its deadline");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

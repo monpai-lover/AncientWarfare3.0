@@ -95,8 +95,9 @@ Run the same command. Expected: exit 0.
 
 Require the RTS follower behaviour and vanilla follower interception patch to
 obtain targets from `AWArmyMarchService`. Require explicit path-anchor formation
-resolution, stable slot reuse, lateral-offset validation, center-line fallback,
-and local `BehGoToTileTarget` only after direct correction fails.
+resolution, stable slot reuse, lateral-offset validation, collision-free
+alternate slots, and local `BehGoToTileTarget` only after direct correction
+fails.
 
 - [ ] **Step 2: Run both guards and verify RED**
 
@@ -115,8 +116,10 @@ still call `ArmyFormationService` directly.
 For each follower, assign one stable slot and trail cursor. Limit the cursor to
 the latest sequence minus the slot row, advance it only after reaching its
 current path target, and resolve the next target from the path node plus rotated
-lateral offset. Use the center node when the offset is unsafe. Clamp a
-disconnected target to eight tiles before publishing it to local path fallback.
+lateral offset. Use the follower's first safe dedicated alternate when the
+preferred offset is unsafe; never use the captain center tile as a follower
+slot. Clamp a disconnected target to eight tiles before publishing it to local
+path fallback.
 
 - [ ] **Step 4: Run guards and focused RTS slices**
 
@@ -175,7 +178,45 @@ Run the Army RTS rules and source guards. If they pass, make no production edit
 for this task. If they fail, make only the minimum change required by the failed
 assertion, then rerun to green.
 
-### Task 6: Full Verification And Deployment
+### Task 6: Keep Prewar Formations With The Captain
+
+**Files:**
+- Modify: `Code/core/lineage/ArmyDeploymentRules.cs`
+- Modify: `Code/core/lineage/ArmyDeploymentService.cs`
+- Modify: `Code/core/lineage/ArmyMarchRules.cs`
+- Modify: `Code/core/lineage/AWArmyMarchService.cs`
+- Modify: `Tests/ArmyRtsRulesSlice/Program.cs`
+- Modify: `Tests/ArmyRtsRuntimeSlice/Program.cs`
+- Modify: `Tests/ArmySharedCaptainPathSourceGuardTests.ps1`
+
+- [x] **Step 1: Write failing deployment lifecycle tests**
+
+Cover both-side declaration readiness, captain-following anchors while in
+transit, frontier anchors only inside the arrival radius, completed vanilla
+trail retention for living followers, exact projection identity under
+overlapping notices, provider-route target precedence, assignment-close and
+last-follower cleanup, and same-target assignment replacement.
+
+- [x] **Step 2: Run focused tests and verify RED**
+
+Verify each assertion fails for the missing production rule rather than a test
+setup error.
+
+- [x] **Step 3: Implement the deployment lifecycle fix**
+
+Evaluate attacker and defender projections together. Keep the formation anchor
+on the moving captain until arrival, then switch to the final frontier anchor
+and observe the deployment quorum. Retain a completed vanilla leader trail
+while the assignment and living followers remain, and never bootstrap over a
+provider route for the same target. Reject stale provider ownership and rebuild
+a completed vanilla trail when its retained assignment key differs from the
+current assignment, even when both assignments target the same tile.
+
+- [x] **Step 4: Run focused tests and verify GREEN**
+
+Run the rule/runtime slices and shared-path source guard. Expected: exit 0.
+
+### Task 7: Full Verification And Deployment
 
 **Files:**
 - Verify: `Tests/ArmyRtsAdversarialSimulation/ArmyRtsAdversarialSimulation.csproj`

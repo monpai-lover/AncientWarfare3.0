@@ -1,0 +1,1128 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.court;
+
+public static class CivilServiceExamRulesTests
+{
+    public static void Run()
+    {
+        ExamModeAndCadenceAreStable();
+        EmptyCandidateRollWaitsForRecovery();
+        WaitingReserveControlsAdmissionQuotas();
+        CandidateTargetsScaleWithPopulationAndVacancies();
+        WaitingCandidateRuntimeEligibilityRejectsStaleActors();
+        ReserveSummaryRequiresKnownSnapshots();
+        RealmSizeCapsEveryExaminationStage();
+        StageRosterRequiresActualParticipation();
+        StageTabsKeepIndependentResults();
+        LegacyStageResultsRecoverFromScoresAndQualifications();
+        CivilServiceHistorySegmentsAreLocalized();
+        StageScheduleAndBudgetsStayBounded();
+        QuotasAndQualificationsFollowTheInstitution();
+        FormalAppointmentsRequireGongshiOrJinshi();
+        CandidateSourcesInterleaveWithinTheBoundedScanBudget();
+        ScoringIsDeterministicAndClassNeutral();
+        ActorAbilitiesAreNormalizedToTheExamScale();
+        ForeignResidentsCanAttendHostExaminations();
+        ForeignCandidateSnapshotsKeepTheirHometown();
+        GuestCandidateDiscoveryMatchesCentralOfficeEligibility();
+        CandidateRowsUseDeterministicWindowWidth();
+        ActingCentralFallbackKeepsVacanciesUsable();
+        CityVacancyFillIsBoundedAndSkipsUnsafeCities();
+        SingleCityRealmsStillUseQualifiedGovernorAppointments();
+        CandidateSelectionPreservesEverySocialOrigin();
+        FullLocalPoolStillAdmitsOneForeignCandidate();
+        CandidateSelectionUsesFixedOriginOrderWhenCapacityIsTooSmall();
+        CandidateSelectionUsesTheCompleteAcademicOrder();
+        CandidateSelectionDeduplicatesActorIds();
+        SocialOriginClassificationMatchesTheArchiveStrata();
+        PlayerPalaceRankingIsValidatedAndStable();
+        AiRankingBalancesMeritRulerAndDominantFaction();
+        CareerEntryCannotSkipServiceLayers();
+        ActingAppointmentsPreserveExistingFormalRank();
+        VacantOfficesPermitQualifiedPromotion();
+        ServiceHistoryRequiresTheActualOfficeTier();
+        FirstFormalAppointmentHistoryIsOneShot();
+        LegacyOfficialHistoryKeysRenderAsLocalizedLabels();
+        ExistingOfficialsCannotEnterTheActingGovernorPool();
+        GovernorRotationIsAllOrNothing();
+        GovernorRotationRuntimeScopeIsNestedAndExceptionSafe();
+        CrossLayerPromotionReleasesThePriorCityLeader();
+        CivilServiceForeignResidentSqlTests.Run();
+    }
+
+    private static void ExamModeAndCadenceAreStable()
+    {
+        Equal(CivilServiceExamMode.Imperial,
+            CivilServiceExamRules.ResolveMode(hasMandate: true,
+                hasEmpireTitle: false),
+            "mandate realm uses imperial examinations");
+        Equal(CivilServiceExamMode.Imperial,
+            CivilServiceExamRules.ResolveMode(hasMandate: false,
+                hasEmpireTitle: true),
+            "empire title uses imperial examinations");
+        Equal(CivilServiceExamMode.Tribute,
+            CivilServiceExamRules.ResolveMode(hasMandate: false,
+                hasEmpireTitle: false),
+            "lesser realm uses tribute examinations");
+        Equal(121, CivilServiceExamRules.FirstOpeningYear(120),
+            "first sitting waits for a complete year");
+        True(CivilServiceExamRules.IsCycleYear(121, 121),
+            "anchor year opens a sitting");
+        True(CivilServiceExamRules.IsCycleYear(124, 121),
+            "sittings repeat every three years");
+        False(CivilServiceExamRules.IsCycleYear(123, 121),
+            "intermediate year has no sitting");
+    }
+
+    private static void EmptyCandidateRollWaitsForRecovery()
+    {
+        False(CivilServiceExamRules.ShouldOpenCandidateRoll(0),
+            "an empty transient candidate index cannot commit an empty sitting");
+        False(CivilServiceExamRules.ShouldOpenCandidateRoll(-1),
+            "invalid candidate counts remain scheduled for recovery");
+        True(CivilServiceExamRules.ShouldOpenCandidateRoll(1),
+            "the sitting opens as soon as one eligible candidate is available");
+        Equal(30, CivilServiceExamRules.EmptyCandidateRetryDays,
+            "empty candidate rolls retry monthly instead of every authority tick");
+    }
+
+    private static void WaitingReserveControlsAdmissionQuotas()
+    {
+        Equal(4, CivilServiceExamRules.ReserveTarget(establishedPosts: 6),
+            "a small administration keeps the four-person reserve floor");
+        Equal(10, CivilServiceExamRules.ReserveTarget(establishedPosts: 20),
+            "the reserve is half the established posts rounded upward");
+        Equal(11, CivilServiceExamRules.ReserveTarget(establishedPosts: 21),
+            "odd post counts round the reserve upward");
+        Equal(32, CivilServiceExamRules.ReserveTarget(establishedPosts: 200),
+            "large administrations keep the thirty-two-person reserve ceiling");
+
+        Equal(9, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 2, cityVacancies: 1,
+                waitingCandidateCount: 4, reserveTarget: 10,
+                candidateCapacity: 32),
+            "three vacancies plus a six-person reserve deficit admit nine");
+        Equal(3, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 2, cityVacancies: 1,
+                waitingCandidateCount: 10, reserveTarget: 10,
+                candidateCapacity: 32),
+            "waiting candidates assigned to vacancies are replenished");
+        Equal(1, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 0, cityVacancies: 0,
+                waitingCandidateCount: 15, reserveTarget: 10,
+                candidateCapacity: 32),
+            "an overfilled reserve still renews by one graduate");
+        Equal(4, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 0, cityVacancies: 0,
+                waitingCandidateCount: 0, reserveTarget: 4,
+                candidateCapacity: 20),
+            "an empty small-realm reserve admits to its floor");
+        Equal(1, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 0, cityVacancies: 0,
+                waitingCandidateCount: 4, reserveTarget: 4,
+                candidateCapacity: 20),
+            "a filled small-realm reserve keeps one renewal place");
+        Equal(6, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 12, cityVacancies: 3,
+                waitingCandidateCount: 0, reserveTarget: 10,
+                candidateCapacity: 6),
+            "final-stage capacity remains the hard admission ceiling");
+        Equal(20, CivilServiceExamRules.AdmissionQuotaForStage(
+                CivilServiceExamStage.Local, finalAdmissionQuota: 5,
+                stageCap: 64),
+            "local examinations keep at most four times the final demand");
+        Equal(10, CivilServiceExamRules.AdmissionQuotaForStage(
+                CivilServiceExamStage.Metropolitan,
+                finalAdmissionQuota: 5, stageCap: 32),
+            "metropolitan examinations keep at most twice final demand");
+        Equal(5, CivilServiceExamRules.AdmissionQuotaForStage(
+                CivilServiceExamStage.Palace, finalAdmissionQuota: 5,
+                stageCap: 32),
+            "palace admission uses the frozen final demand");
+        Equal(12, CivilServiceExamRules.AdmissionQuotaForStage(
+                CivilServiceExamStage.Prefectural,
+                finalAdmissionQuota: 5, stageCap: 12),
+            "prefectural demand remains bounded by its stage cap");
+        Equal(5, CivilServiceExamRules.AdmissionQuotaForStage(
+                CivilServiceExamStage.National, finalAdmissionQuota: 5,
+                stageCap: 20),
+            "national admission uses the frozen final demand");
+    }
+
+    private static void CandidateTargetsScaleWithPopulationAndVacancies()
+    {
+        Equal(24, CivilServiceExamRules.CandidateTarget(
+                livingPopulation: 141, finalAdmissionQuota: 1),
+            "small realms retain the minimum examination pipeline");
+        Equal(33, CivilServiceExamRules.CandidateTarget(
+                livingPopulation: 1311, finalAdmissionQuota: 5),
+            "population creates one target candidate per forty residents");
+        Equal(40, CivilServiceExamRules.CandidateTarget(
+                livingPopulation: 400, finalAdmissionQuota: 10),
+            "vacancy competition overrides a smaller population target");
+        Equal(96, CivilServiceExamRules.CandidateTarget(
+                livingPopulation: 10000, finalAdmissionQuota: 30),
+            "candidate work remains capped at the sitting limit");
+        Equal(4, CivilServiceExamRules.ForeignInvitationCount(
+                examinationEnabled: true, targetCandidates: 67,
+                eligibleCount: 60, annualInvitedCount: 0,
+                availableForeignCount: 10),
+            "foreign invitations close the dynamic realm deficit within their annual cap");
+        Equal(0, CivilServiceExamRules.ForeignInvitationCount(
+                examinationEnabled: true, targetCandidates: 33,
+                eligibleCount: 33, annualInvitedCount: 0,
+                availableForeignCount: 10),
+            "a realm already at its dynamic target invites nobody");
+    }
+
+    private static void WaitingCandidateRuntimeEligibilityRejectsStaleActors()
+    {
+        True(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: true, slave: false,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "an available formally qualified man can wait for office");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: false, male: true, slave: false,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "a stale underage projection cannot enter the waiting pool");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: false, adult: true, male: true, slave: false,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "a dead runtime actor cannot enter the waiting pool");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: false, slave: false,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "women remain outside the examination waiting pool");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: true, slave: true,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "a newly enslaved actor cannot enter the waiting pool");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: true, slave: false,
+                availableForOffice: false, activeOffice: false,
+                domesticOrHostQualifiedResident: true),
+            "a travelling or serving actor is unavailable for office");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: true, slave: false,
+                availableForOffice: true, activeOffice: true,
+                domesticOrHostQualifiedResident: true),
+            "an actor already holding any office is not a waiting candidate");
+        False(CivilServiceExamRules.IsWaitingCandidate(
+                alive: true, adult: true, male: true, slave: false,
+                availableForOffice: true, activeOffice: false,
+                domesticOrHostQualifiedResident: false),
+            "an unrelated foreign actor cannot wait in the host pool");
+    }
+
+    private static void ReserveSummaryRequiresKnownSnapshots()
+    {
+        True(CivilServiceExamRules.ShouldShowReserveSummary(
+                waitingCandidateCount: 4, reserveTarget: 10),
+            "new sessions show their frozen waiting reserve");
+        False(CivilServiceExamRules.ShouldShowReserveSummary(
+                waitingCandidateCount: -1, reserveTarget: 10),
+            "legacy sessions omit an unknown waiting count");
+        False(CivilServiceExamRules.ShouldShowReserveSummary(
+                waitingCandidateCount: 4, reserveTarget: -1),
+            "legacy sessions omit an unknown reserve target");
+    }
+
+    private static void RealmSizeCapsEveryExaminationStage()
+    {
+        Equal(12, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Local, cityCount: 1),
+            "one-city imperial local examinations retain the historical floor");
+        Equal(6, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Metropolitan, cityCount: 1),
+            "one-city imperial metropolitan examinations are capped at six");
+        Equal(6, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Palace, cityCount: 1),
+            "the palace roll cannot exceed the metropolitan intake");
+        Equal(8, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Tribute,
+                CivilServiceExamStage.Prefectural, cityCount: 1),
+            "one-city tributary examinations retain the prefectural floor");
+        Equal(4, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Tribute,
+                CivilServiceExamStage.National, cityCount: 1),
+            "one-city tributary final examinations are capped at four");
+        Equal(0, CivilServiceExamRules.StageCapacity(
+                CivilServiceExamMode.Tribute,
+                CivilServiceExamStage.Palace, cityCount: 20),
+            "a stage outside the frozen examination mode has no capacity");
+        Equal(6, CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: 12, cityVacancies: 3,
+                waitingCandidateCount: 0, reserveTarget: 10,
+                candidateCapacity: CivilServiceExamRules.StageCapacity(
+                    CivilServiceExamMode.Imperial,
+                    CivilServiceExamStage.Palace, cityCount: 1)),
+            "vacancy demand cannot overfill a one-city palace examination");
+    }
+
+    private static void ForeignCandidateSnapshotsKeepTheirHometown()
+    {
+        Equal(11L, CivilServiceExamRules.ResolveCandidateHomeCityId(
+                foreignResident: true, hometownCityId: 11L,
+                residenceCityId: 22L),
+            "a foreign candidate keeps the city of origin rather than the host residence");
+        Equal(22L, CivilServiceExamRules.ResolveCandidateHomeCityId(
+                foreignResident: true, hometownCityId: -1L,
+                residenceCityId: 22L),
+            "legacy affiliations without a hometown fall back to residence");
+        Equal(22L, CivilServiceExamRules.ResolveCandidateHomeCityId(
+                foreignResident: false, hometownCityId: 11L,
+                residenceCityId: 22L),
+            "a domestic candidate snapshots the current home city");
+    }
+
+    private static void StageTabsKeepIndependentResults()
+    {
+        Equal("passed", CivilServiceExamRules.ResolveStageResult(
+                CivilServiceExamStage.Local, "passed", "failed",
+                "pending", "pending", "failed"),
+            "the local roll keeps its pass after a metropolitan failure");
+        Equal("failed", CivilServiceExamRules.ResolveStageResult(
+                CivilServiceExamStage.Metropolitan, "passed", "failed",
+                "pending", "pending", "failed"),
+            "the metropolitan roll shows its own failure");
+        Equal("failed", CivilServiceExamRules.ResolveStageResult(
+                CivilServiceExamStage.Ranking, "passed", "failed",
+                "pending", "pending", "failed"),
+            "non-stage views keep the latest compatibility result");
+    }
+
+    private static void AiRankingBalancesMeritRulerAndDominantFaction()
+    {
+        var finalists = new[]
+        {
+            new CivilServiceAiRankingFacts(10, 100, 80, "ru"),
+            new CivilServiceAiRankingFacts(11, 101, 78, "fa")
+        };
+        Equal("11,10", string.Join(",",
+                CivilServiceExamRules.BuildAiRanking(finalists, "fa", 20)),
+            "a weak ruler can let the dominant faction decide a close contest");
+        Equal("10,11", string.Join(",",
+                CivilServiceExamRules.BuildAiRanking(finalists, "fa", 80)),
+            "an able ruler preserves a clear academic lead");
+
+        var separated = new[]
+        {
+            new CivilServiceAiRankingFacts(20, 200, 85, "ru"),
+            new CivilServiceAiRankingFacts(21, 201, 78, "fa")
+        };
+        Equal("20,21", string.Join(",",
+                CivilServiceExamRules.BuildAiRanking(separated, "fa", 20)),
+            "a raw score lead greater than six cannot be reversed");
+        for (int ability = 0; ability <= 100; ability += 10)
+        {
+            int adjustment = CivilServiceExamRules.AiRankingAdjustment(
+                rawScore: 80, candidateSchool: "fa",
+                dominantSchool: "fa", rulerAbility: ability);
+            True(adjustment >= -3 && adjustment <= 3,
+                "AI ranking adjustment stays within the institutional bound");
+        }
+    }
+
+    private static void LegacyStageResultsRecoverFromScoresAndQualifications()
+    {
+        Equal("passed", CivilServiceExamRules.RepairLegacyStageResult(
+                CivilServiceExamStage.Local, "pending", localScore: 72,
+                metropolitanScore: 55, palaceScore: -1,
+                nationalScore: -1, qualification: "juren",
+                currentResult: "failed"),
+            "a later metropolitan attempt proves the old local pass");
+        Equal("failed", CivilServiceExamRules.RepairLegacyStageResult(
+                CivilServiceExamStage.Metropolitan, "pending",
+                localScore: 72, metropolitanScore: 55, palaceScore: -1,
+                nationalScore: -1, qualification: "juren",
+                currentResult: "failed"),
+            "the old latest result restores the failed metropolitan stage");
+        Equal("passed", CivilServiceExamRules.RepairLegacyStageResult(
+                CivilServiceExamStage.Palace, "pending", localScore: 80,
+                metropolitanScore: 80, palaceScore: 82,
+                nationalScore: -1, qualification: "jinshi",
+                currentResult: "passed"),
+            "a jinshi qualification proves the old palace pass");
+    }
+
+    private static void StageRosterRequiresActualParticipation()
+    {
+        True(CivilServiceExamRules.IsStageParticipant(
+                CivilServiceExamStage.Prefectural, localScore: 72,
+                metropolitanScore: -1, palaceScore: -1,
+                nationalScore: -1),
+            "a recorded prefectural score places the candidate on that roll");
+        False(CivilServiceExamRules.IsStageParticipant(
+                CivilServiceExamStage.National, localScore: 72,
+                metropolitanScore: -1, palaceScore: -1,
+                nationalScore: -1),
+            "a prefectural candidate does not appear in the national roll");
+        True(CivilServiceExamRules.IsStageParticipant(
+                CivilServiceExamStage.National, localScore: 72,
+                metropolitanScore: -1, palaceScore: -1,
+                nationalScore: 68),
+            "a national score proves actual national participation");
+        False(CivilServiceExamRules.IsStageParticipant(
+                CivilServiceExamStage.Palace, localScore: 80,
+                metropolitanScore: 77, palaceScore: -1,
+                nationalScore: -1),
+            "a metropolitan finalist is not shown in palace before sitting it");
+    }
+
+    private static void CivilServiceHistorySegmentsAreLocalized()
+    {
+        Equal("于本届考试取得",
+            AncientWarfare3.core.lineage.HistoryLocalizationRules.Text(
+                "aw_hist_civil_service_qualified_mid", "cz"),
+            "qualification history resolves its Chinese middle segment");
+        Equal("资格，本届为世界第",
+            AncientWarfare3.core.lineage.HistoryLocalizationRules.Text(
+                "aw_hist_civil_service_qualified_year_mid", "cz"),
+            "qualification history resolves its year segment");
+        Equal("获定为",
+            AncientWarfare3.core.lineage.HistoryLocalizationRules.Text(
+                "aw_hist_civil_service_top_ranked_mid", "cz"),
+            "top-ranked history resolves its Chinese middle segment");
+        Equal("，本届为世界第",
+            AncientWarfare3.core.lineage.HistoryLocalizationRules.Text(
+                "aw_hist_civil_service_top_ranked_year_mid", "cz"),
+            "top-ranked history resolves its year segment");
+    }
+
+    private static void StageScheduleAndBudgetsStayBounded()
+    {
+        Equal(96, CivilServiceExamRules.CandidateLimit,
+            "candidate pool has a hard cap");
+        Equal(288, CivilServiceExamRules.CandidateSourceLimit,
+            "three bounded social sources may feed the final pool");
+        Equal(8, CivilServiceExamRules.AuthorityCandidateBudget,
+            "one authority cycle handles at most eight candidates");
+        Equal(60, CivilServiceExamRules.PassMark,
+            "all selective stages share the pass mark");
+        Equal(30, CivilServiceExamRules.StagePercent(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Local),
+            "imperial local examination settles at thirty percent");
+        Equal(80, CivilServiceExamRules.StagePercent(
+                CivilServiceExamMode.Tribute,
+                CivilServiceExamStage.National),
+            "tribute national examination settles at eighty percent");
+        True(CivilServiceExamRules.KingdomOffsetDays(37L) >= 0 &&
+             CivilServiceExamRules.KingdomOffsetDays(37L) <= 30,
+            "kingdom stage offset remains within thirty days");
+    }
+
+    private static void QuotasAndQualificationsFollowTheInstitution()
+    {
+        Equal(12, CivilServiceExamRules.LocalQuota(1),
+            "small imperial realm keeps a useful local quota");
+        Equal(64, CivilServiceExamRules.LocalQuota(30),
+            "imperial local quota is capped");
+        Equal(6, CivilServiceExamRules.MetropolitanQuota(1),
+            "small imperial realm keeps a metropolitan quota");
+        Equal(32, CivilServiceExamRules.MetropolitanQuota(30),
+            "metropolitan quota is capped");
+        Equal(8, CivilServiceExamRules.PrefecturalQuota(1),
+            "small lesser realm keeps a prefectural quota");
+        Equal(48, CivilServiceExamRules.PrefecturalQuota(30),
+            "prefectural quota is capped");
+        Equal(4, CivilServiceExamRules.NationalQuota(1),
+            "small lesser realm keeps a national quota");
+        Equal(20, CivilServiceExamRules.NationalQuota(30),
+            "national quota is capped");
+        False(CivilServiceExamRules.Passes(59),
+            "fifty-nine fails a selective stage");
+        True(CivilServiceExamRules.Passes(60),
+            "sixty passes a selective stage");
+        Equal(CivilServiceQualification.Juren,
+            CivilServiceExamRules.QualificationAfterPass(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Local),
+            "imperial local pass grants juren");
+        Equal(CivilServiceQualification.Gongshi,
+            CivilServiceExamRules.QualificationAfterPass(
+                CivilServiceExamMode.Tribute,
+                CivilServiceExamStage.National),
+            "tribute national pass grants gongshi");
+        Equal(CivilServiceQualification.Jinshi,
+            CivilServiceExamRules.QualificationAfterPass(
+                CivilServiceExamMode.Imperial,
+                CivilServiceExamStage.Palace),
+            "palace completion grants jinshi");
+        True(CivilServiceExamRules.CanEnterMetropolitan(
+                CivilServiceQualification.Gongshi),
+            "tribute gongshi may enter an imperial metropolitan exam");
+    }
+
+    private static void FormalAppointmentsRequireGongshiOrJinshi()
+    {
+        False(CivilServiceExamRules.IsFormalAppointmentQualification(
+                CivilServiceQualification.None),
+            "no qualification cannot support a formal appointment");
+        False(CivilServiceExamRules.IsFormalAppointmentQualification(
+                CivilServiceQualification.Juren),
+            "a local juren may continue the examination but cannot enter office");
+        True(CivilServiceExamRules.IsFormalAppointmentQualification(
+                CivilServiceQualification.Gongshi),
+            "a gongshi may enter formal office");
+        True(CivilServiceExamRules.IsFormalAppointmentQualification(
+                CivilServiceQualification.Jinshi),
+            "a jinshi may enter formal office");
+        False(CivilServiceExamRules.IsFormalAppointmentQualification("juren"),
+            "the persisted juren value is not a formal appointment credential");
+        True(CivilServiceExamRules.IsFormalAppointmentQualification("jinshi"),
+            "the persisted jinshi value is a formal appointment credential");
+    }
+
+    private static void CandidateSourcesInterleaveWithinTheBoundedScanBudget()
+    {
+        IReadOnlyList<long>[] sources =
+        {
+            Enumerable.Range(1, 140).Select(p => (long)p).ToArray(),
+            new long[] { 1001L },
+            new long[] { 2001L }
+        };
+
+        IReadOnlyList<long> result = CivilServiceExamRules.
+            InterleaveCandidateSources(sources,
+                CivilServiceExamRules.CandidateSourceLimit);
+
+        True(result.Contains(121L),
+            "a valid row after the old ninety-six-row window remains visible");
+        True(result.Contains(1001L) && result.Contains(2001L),
+            "round-robin scanning cannot starve the other social origins");
+        True(result.Count <= CivilServiceExamRules.CandidateSourceLimit,
+            "interleaved source work remains strictly bounded");
+    }
+
+    private static void ScoringIsDeterministicAndClassNeutral()
+    {
+        int first = CivilServiceExamRules.DeterministicJitter(41L, 77L,
+            CivilServiceExamStage.Metropolitan);
+        int second = CivilServiceExamRules.DeterministicJitter(41L, 77L,
+            CivilServiceExamStage.Metropolitan);
+        Equal(first, second, "stage jitter survives save-load retries");
+        True(first >= -5 && first <= 5,
+            "stage jitter remains in the designed band");
+        Equal(CivilServiceExamRules.Score(70, 50, 12, first),
+            CivilServiceExamRules.Score(70, 50, 12, first),
+            "identical learned facts produce identical scores");
+        Equal(100, CivilServiceExamRules.Score(100, 100, 100, 5),
+            "exam score is clamped to one hundred");
+        Equal(0, CivilServiceExamRules.Score(0, 0, 0, -5),
+            "exam score is clamped to zero");
+    }
+
+    private static void ActorAbilitiesAreNormalizedToTheExamScale()
+    {
+        Equal(0, CivilServiceExamRules.NormalizeActorAbility(-1),
+            "negative actor ability is clamped");
+        Equal(50, CivilServiceExamRules.NormalizeActorAbility(5),
+            "ordinary Xia ability maps into the examination scale");
+        Equal(60, CivilServiceExamRules.NormalizeActorAbility(6),
+            "an above-average Xia ability reaches the examination pass scale");
+        Equal(100, CivilServiceExamRules.NormalizeActorAbility(10),
+            "ten raw ability reaches the examination ceiling");
+        Equal(100, CivilServiceExamRules.NormalizeActorAbility(28),
+            "exceptional actor ability remains capped");
+        True(CivilServiceExamRules.Passes(CivilServiceExamRules.Score(
+                CivilServiceExamRules.NormalizeActorAbility(6),
+                CivilServiceExamRules.NormalizeActorAbility(6),
+                education: 60, jitter: 0)),
+            "an educated above-average Xia actor can pass at sixty");
+    }
+
+    private static void ForeignResidentsCanAttendHostExaminations()
+    {
+        True(CivilServiceExamRules.IsPresentAtHostExamination(
+                alive: true, rekt: false, currentKingdomIsHost: true,
+                activeForeignResident: false, residenceInHost: false,
+                foreignHome: false),
+            "a living local candidate attends through current kingdom");
+        True(CivilServiceExamRules.IsPresentAtHostExamination(
+                alive: true, rekt: false, currentKingdomIsHost: false,
+                activeForeignResident: true, residenceInHost: true,
+                foreignHome: true),
+            "a foreign resident may attend without changing home kingdom");
+        False(CivilServiceExamRules.IsPresentAtHostExamination(
+                alive: true, rekt: false, currentKingdomIsHost: false,
+                activeForeignResident: false, residenceInHost: true,
+                foreignHome: true),
+            "a travelling foreign candidate has not arrived for the exam");
+        False(CivilServiceExamRules.IsPresentAtHostExamination(
+                alive: true, rekt: false, currentKingdomIsHost: false,
+                activeForeignResident: true, residenceInHost: false,
+                foreignHome: true),
+            "a resident of another realm is absent from the host exam");
+        False(CivilServiceExamRules.IsPresentAtHostExamination(
+                alive: false, rekt: false, currentKingdomIsHost: false,
+                activeForeignResident: true, residenceInHost: true,
+                foreignHome: true),
+            "a dead foreign candidate cannot be counted as present");
+    }
+
+    private static void GuestCandidateDiscoveryMatchesCentralOfficeEligibility()
+    {
+        True(CivilServiceExamRules.CanEnterGuestCandidateIndex(
+                centralOfficeSexEligible: true, hasExaminationSystem: true,
+                educatedScholar: true, qualifiedTeacher: false,
+                hostIssuedQualification: true),
+            "a host-qualified male foreign resident enters the guest index");
+        False(CivilServiceExamRules.CanEnterGuestCandidateIndex(
+                centralOfficeSexEligible: false, hasExaminationSystem: true,
+                educatedScholar: true, qualifiedTeacher: false,
+                hostIssuedQualification: true),
+            "host qualification cannot bypass central office sex rules");
+        False(CivilServiceExamRules.CanEnterGuestCandidateIndex(
+                centralOfficeSexEligible: true, hasExaminationSystem: true,
+                educatedScholar: true, qualifiedTeacher: false,
+                hostIssuedQualification: false),
+            "an unqualified non-teacher does not enter the post-exam guest index");
+        True(CivilServiceExamRules.CanEnterGuestCandidateIndex(
+                centralOfficeSexEligible: true, hasExaminationSystem: false,
+                educatedScholar: true, qualifiedTeacher: false,
+                hostIssuedQualification: false),
+            "an ordinary educated scholar enters the pre-exam guest index");
+        False(CivilServiceExamRules.CanEnterGuestCandidateIndex(
+                centralOfficeSexEligible: true, hasExaminationSystem: false,
+                educatedScholar: false, qualifiedTeacher: false,
+                hostIssuedQualification: false),
+            "an uneducated resident does not enter the pre-exam guest index");
+    }
+
+    private static void CandidateRowsUseDeterministicWindowWidth()
+    {
+        Equal(510f, CivilServiceExamRules.CandidateRowWidth(
+                windowWidth: 560f, horizontalWindowMargin: 36f,
+                scrollbarAndGap: 14f),
+            "default examination rows fill the known content width");
+        Equal(370f, CivilServiceExamRules.CandidateRowWidth(
+                windowWidth: 420f, horizontalWindowMargin: 36f,
+                scrollbarAndGap: 14f),
+            "minimum examination rows remain fully visible");
+        Equal(260f, CivilServiceExamRules.CandidateRowWidth(
+                windowWidth: 200f, horizontalWindowMargin: 36f,
+                scrollbarAndGap: 14f),
+            "invalid transient geometry cannot collapse a row below minimum");
+    }
+
+    private static void ActingCentralFallbackKeepsVacanciesUsable()
+    {
+        True(CivilServiceExamRules.ShouldUseActingCentralFallback(
+                allowActing: true, hasExaminationSystem: true,
+                formalCandidateFound: false,
+                educatedCandidateFound: true),
+            "an educated acting official fills a post when no graduate exists");
+        False(CivilServiceExamRules.ShouldUseActingCentralFallback(
+                allowActing: true, hasExaminationSystem: true,
+                formalCandidateFound: true,
+                educatedCandidateFound: true),
+            "a graduate always takes priority over an acting official");
+        False(CivilServiceExamRules.ShouldUseActingCentralFallback(
+                allowActing: true, hasExaminationSystem: false,
+                formalCandidateFound: false,
+                educatedCandidateFound: true),
+            "pre-examination courts retain their original appointment path");
+        False(CivilServiceExamRules.ShouldUseActingCentralFallback(
+                allowActing: false, hasExaminationSystem: true,
+                formalCandidateFound: false,
+                educatedCandidateFound: true),
+            "the formal pass cannot consume an office with a local acting candidate");
+        True(CivilServiceExamRules.ShouldExpireActingCentralOfficial(
+                "central", actingSinceYear: 120, currentYear: 121),
+            "central acting appointments are reconsidered after one year");
+        False(CivilServiceExamRules.ShouldExpireActingCentralOfficial(
+                "city", actingSinceYear: 120, currentYear: 121),
+            "city acting expiration remains owned by the city leader path");
+    }
+
+    private static void CityVacancyFillIsBoundedAndSkipsUnsafeCities()
+    {
+        Equal(32, CivilServiceExamRules.CityVacancyFillBudget,
+            "post-exam city vacancy repair has a strict realm budget");
+        True(CivilServiceExamRules.ShouldAttemptCityVacancyFill(
+                hasLeader: false, gettingCaptured: false,
+                belongsToHost: true, attemptsRemaining: 1),
+            "an empty stable host city is filled after ranking");
+        False(CivilServiceExamRules.ShouldAttemptCityVacancyFill(
+                hasLeader: true, gettingCaptured: false,
+                belongsToHost: true, attemptsRemaining: 1),
+            "an occupied governorship is never replaced by the vacancy pass");
+        False(CivilServiceExamRules.ShouldAttemptCityVacancyFill(
+                hasLeader: false, gettingCaptured: true,
+                belongsToHost: true, attemptsRemaining: 1),
+            "a city changing hands is not assigned a governor");
+        False(CivilServiceExamRules.ShouldAttemptCityVacancyFill(
+                hasLeader: false, gettingCaptured: false,
+                belongsToHost: true, attemptsRemaining: 0),
+            "the post-exam vacancy pass cannot exceed its budget");
+    }
+
+    private static void SingleCityRealmsStillUseQualifiedGovernorAppointments()
+    {
+        True(CivilServiceExamRules.ShouldUseCivilServiceGovernorPipeline(
+                hasNineRankSystem: true),
+            "a one-city realm with the rank institution still enforces education and qualification");
+        False(CivilServiceExamRules.ShouldUseCivilServiceGovernorPipeline(
+                hasNineRankSystem: false),
+            "a realm before the rank institution retains the primitive leader path");
+        False(CivilServiceExamRules.ShouldUseIntercityGovernorCirculation(
+                hasNineRankSystem: true, liveCityCount: 1),
+            "a one-city realm enforces the career gate without pretending to rotate between cities");
+        True(CivilServiceExamRules.ShouldUseIntercityGovernorCirculation(
+                hasNineRankSystem: true, liveCityCount: 2),
+            "a multi-city ranked realm enables actual intercity circulation");
+    }
+
+    private static void CandidateSelectionPreservesEverySocialOrigin()
+    {
+        var candidates = new[]
+        {
+            new CivilServiceExamCandidateFacts(100L, "noble", 50, 50, 50),
+            new CivilServiceExamCandidateFacts(6L, "noble", 70, 50, 50),
+            new CivilServiceExamCandidateFacts(200L, "declined_noble", 50,
+                50, 50),
+            new CivilServiceExamCandidateFacts(300L, "commoner", 50, 50,
+                50),
+            new CivilServiceExamCandidateFacts(4L, "commoner", 90, 50, 50),
+            new CivilServiceExamCandidateFacts(5L, "commoner", 80, 50, 50)
+        };
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> selected =
+            CivilServiceExamRules.SelectCandidates(candidates, 4);
+
+        Equal("4,5,6,200",
+            string.Join(",", selected.Select(p => p.ActorId)),
+            "guarantees retain every origin while remaining seats follow education");
+        Equal(3, selected.Select(p => p.SocialOrigin).Distinct().Count(),
+            "noble, declined noble, and commoner each retain a seat");
+        True(selected.Any(p => p.ActorId == 5L),
+            "a stronger commoner takes the remaining seat over a stronger-status noble");
+        False(selected.Any(p => p.ActorId == 100L),
+            "social class supplies no score bonus beyond the guarantee");
+        True(CivilServiceExamRules.AgeFitness(30) >
+             CivilServiceExamRules.AgeFitness(65),
+            "adult young-middle age is more suitable than old age");
+    }
+
+    private static void FullLocalPoolStillAdmitsOneForeignCandidate()
+    {
+        var local = new[]
+        {
+            new CivilServiceExamCandidateFacts(1L, "noble", 100, 100, 100),
+            new CivilServiceExamCandidateFacts(2L, "declined_noble", 99, 99,
+                99),
+            new CivilServiceExamCandidateFacts(3L, "commoner", 98, 98, 98),
+            new CivilServiceExamCandidateFacts(4L, "commoner", 97, 97, 97)
+        };
+        var foreign = new[]
+        {
+            new CivilServiceExamCandidateFacts(100L, "commoner", 96, 96, 96)
+        };
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> selected =
+            CivilServiceExamRules.SelectCandidatesWithLocalPriority(local,
+                foreign, 4);
+
+        Equal(4, selected.Count,
+            "foreign access does not reduce the sitting size");
+        True(selected.Any(p => p.ActorId == 100L),
+            "a full local pool still leaves one seat for a resident foreign examinee");
+        Equal(3, selected.Where(p => p.ActorId < 100L)
+                .Select(p => p.SocialOrigin).Distinct().Count(),
+            "the foreign reserve preserves all three domestic social origins");
+    }
+
+    private static void CandidateSelectionUsesFixedOriginOrderWhenCapacityIsTooSmall()
+    {
+        var candidates = new[]
+        {
+            new CivilServiceExamCandidateFacts(10L, "noble", 10, 10, 10),
+            new CivilServiceExamCandidateFacts(20L, "declined_noble", 20,
+                20, 20),
+            new CivilServiceExamCandidateFacts(30L, "commoner", 100, 100,
+                100)
+        };
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> one =
+            CivilServiceExamRules.SelectCandidates(candidates, 1);
+        Equal(10L, one.Single().ActorId,
+            "noble is the first fixed source when only one guarantee fits");
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> two =
+            CivilServiceExamRules.SelectCandidates(candidates, 2);
+        True(two.Any(p => p.ActorId == 10L) &&
+             two.Any(p => p.ActorId == 20L),
+            "the first two fixed sources are retained when two seats fit");
+        False(two.Any(p => p.ActorId == 30L),
+            "insufficient capacity never overflows to the third source");
+        Equal(2, two.Count, "fixed-source guarantees never exceed capacity");
+    }
+
+    private static void CandidateSelectionUsesTheCompleteAcademicOrder()
+    {
+        var candidates = new[]
+        {
+            new CivilServiceExamCandidateFacts(40L, "commoner", 80, 60, 90),
+            new CivilServiceExamCandidateFacts(30L, "commoner", 80, 70, 20),
+            new CivilServiceExamCandidateFacts(20L, "commoner", 80, 70, 90),
+            new CivilServiceExamCandidateFacts(10L, "commoner", 80, 70, 90)
+        };
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> selected =
+            CivilServiceExamRules.SelectCandidates(candidates, 4);
+        Equal("10,20,30,40",
+            string.Join(",", selected.Select(p => p.ActorId)),
+            "selection descends by education, knowledge, and age fitness before actor id");
+    }
+
+    private static void CandidateSelectionDeduplicatesActorIds()
+    {
+        var candidates = new[]
+        {
+            new CivilServiceExamCandidateFacts(1L, "commoner", 100, 90, 80),
+            new CivilServiceExamCandidateFacts(1L, "commoner", 90, 90, 80),
+            new CivilServiceExamCandidateFacts(2L, "commoner", 80, 90, 80)
+        };
+
+        IReadOnlyList<CivilServiceExamCandidateFacts> selected =
+            CivilServiceExamRules.SelectCandidates(candidates, 2);
+        Equal("1,2", string.Join(",", selected.Select(p => p.ActorId)),
+            "duplicate actor facts retain the stronger fact and do not consume a seat");
+        Equal(2, selected.Select(p => p.ActorId).Distinct().Count(),
+            "final candidate actors are unique");
+    }
+
+    private static void SocialOriginClassificationMatchesTheArchiveStrata()
+    {
+        Equal("noble", CivilServiceExamRules.ResolveSocialOrigin(
+                "noble", everNoble: true, lineageId: 7L),
+            "current noble status defines the noble stratum");
+        Equal("declined_noble", CivilServiceExamRules.ResolveSocialOrigin(
+                "common_lineage", everNoble: false, lineageId: 7L),
+            "lineage membership alone defines declined nobility");
+        Equal("declined_noble", CivilServiceExamRules.ResolveSocialOrigin(
+                "none", everNoble: true, lineageId: -1L),
+            "historical noble blood defines declined nobility");
+        Equal("commoner", CivilServiceExamRules.ResolveSocialOrigin(
+                "none", everNoble: false, lineageId: -1L),
+            "an actor without current or historical nobility is commoner");
+    }
+
+    private static void PlayerPalaceRankingIsValidatedAndStable()
+    {
+        var finalists = new[]
+        {
+            new CivilServiceRankingFacts(101L, 11L, 88),
+            new CivilServiceRankingFacts(102L, 12L, 92),
+            new CivilServiceRankingFacts(103L, 13L, 88),
+            new CivilServiceRankingFacts(104L, 14L, 74)
+        };
+        True(CivilServiceExamRules.TryBuildPlayerRanking(finalists,
+                new[] { 103L, 101L, 102L }, out long[] ordered),
+            "valid palace finalists can be ranked by the player");
+        Equal("103,101,102,104", string.Join(",", ordered),
+            "chosen top three are preserved and the remainder is stable");
+        False(CivilServiceExamRules.TryBuildPlayerRanking(finalists,
+                new[] { 101L, 101L, 102L }, out _),
+            "duplicate palace choices are rejected");
+        False(CivilServiceExamRules.TryBuildPlayerRanking(finalists,
+                new[] { 101L, 999L, 102L }, out _),
+            "non-finalists cannot be inserted into the palace roll");
+    }
+
+    private static void CareerEntryCannotSkipServiceLayers()
+    {
+        True(OfficialCareerRankRules.CanEnterOffice(0, 30,
+                hasLowerService: false, hasMiddleService: false,
+                hasPassingEvaluation: false),
+            "an unranked graduate may receive a lower office and its rank together");
+        True(OfficialCareerRankRules.CanEnterOffice(6, 30,
+                hasLowerService: false, hasMiddleService: false,
+                hasPassingEvaluation: false),
+            "qualified entrant may begin in a lower office");
+        False(OfficialCareerRankRules.CanEnterOffice(14, 20,
+                hasLowerService: false, hasMiddleService: false,
+                hasPassingEvaluation: true),
+            "rank cannot bypass lower-office service");
+        True(OfficialCareerRankRules.CanEnterOffice(10, 20,
+                hasLowerService: true, hasMiddleService: false,
+                hasPassingEvaluation: true),
+            "reviewed lower official may enter a middle office");
+        False(OfficialCareerRankRules.CanEnterOffice(14, 10,
+                hasLowerService: true, hasMiddleService: false,
+                hasPassingEvaluation: true),
+            "high office requires middle-office service");
+        True(OfficialCareerRankRules.CanEnterOffice(14, 10,
+                hasLowerService: true, hasMiddleService: true,
+                hasPassingEvaluation: true),
+            "reviewed middle official may enter high office");
+        Equal(14, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                currentRank: 0, officeGrade: 10, hasNineRankSystem: true,
+                hasFormalQualification: true, entryBonus: 2),
+            "a high-office appointment grants its rank floor in the same operation");
+        Equal(10, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                currentRank: 0, officeGrade: 20, hasNineRankSystem: true,
+                hasFormalQualification: true, entryBonus: 0),
+            "a middle-office appointment grants its rank floor in the same operation");
+        Equal(10, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                currentRank: 6, officeGrade: 20, hasNineRankSystem: true,
+                hasFormalQualification: true, entryBonus: 0),
+            "an existing lower rank rises with a middle-office appointment");
+        Equal(8, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                currentRank: 0, officeGrade: 30, hasNineRankSystem: true,
+                hasFormalQualification: true, entryBonus: 2),
+            "top graduate receives bounded lower-office entry rank");
+        Equal(0, OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                currentRank: 0, officeGrade: 30, hasNineRankSystem: true,
+                hasFormalQualification: false, entryBonus: 2),
+            "unqualified white body receives no official rank");
+    }
+
+    private static void VacantOfficesPermitQualifiedPromotion()
+    {
+        True(CivilServiceExamRules.ShouldUseVacancyPromotion(
+                officeVacant: true, strictEligible: false,
+                hasFormalQualification: true),
+            "a real vacancy promotes a formally qualified graduate when the strict ladder is empty");
+        False(CivilServiceExamRules.ShouldUseVacancyPromotion(
+                officeVacant: false, strictEligible: false,
+                hasFormalQualification: true),
+            "vacancy promotion cannot replace a sitting official");
+        False(CivilServiceExamRules.ShouldUseVacancyPromotion(
+                officeVacant: true, strictEligible: false,
+                hasFormalQualification: false),
+            "an unqualified educated actor remains acting rather than becoming formal");
+        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+                currentRank: 0, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: true,
+                vacancyPromotion: true),
+            "a promoted graduate lands on the vacant middle office rank floor");
+        Equal(10, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+                currentRank: 0, officeGrade: 20,
+                hasNineRankSystem: true, hasFormalQualification: true,
+                vacancyPromotion: false),
+            "an ordinary formal appointment grants the office rank floor");
+        Equal(0, OfficialCareerRankRules.ResolveVacancyPromotionRank(
+                currentRank: 0, officeGrade: 10,
+                hasNineRankSystem: true, hasFormalQualification: false,
+                vacancyPromotion: true),
+            "vacancy promotion never grants rank without a formal qualification");
+    }
+
+    private static void ActingAppointmentsPreserveExistingFormalRank()
+    {
+        Equal(14, OfficialCareerRankRules.ResolveActingAppointmentRank(
+                currentRank: 14, hasNineRankSystem: true),
+            "an acting appointment preserves an existing formal rank");
+        Equal(0, OfficialCareerRankRules.ResolveActingAppointmentRank(
+                currentRank: 0, hasNineRankSystem: true),
+            "an acting appointment does not grant rank to an unranked actor");
+        Equal(0, OfficialCareerRankRules.ResolveActingAppointmentRank(
+                currentRank: 14, hasNineRankSystem: false),
+            "rank projection remains locked before the nine-rank institution");
+    }
+
+    private static void ServiceHistoryRequiresTheActualOfficeTier()
+    {
+        True(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 10, requiredOfficeGrade: 10),
+            "high office supplies high-office service");
+        True(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 30, requiredOfficeGrade: 30),
+            "lower office supplies lower-office service");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 10, requiredOfficeGrade: 30),
+            "prior high office cannot supply lower-office service");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 20, requiredOfficeGrade: 30),
+            "prior middle office cannot supply lower-office service");
+        True(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 20, requiredOfficeGrade: 20),
+            "middle office supplies middle-office service");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 10, requiredOfficeGrade: 20),
+            "prior high office cannot supply middle-office service");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 30, requiredOfficeGrade: 20),
+            "prior lower office cannot supply middle-office service");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 15, requiredOfficeGrade: 15),
+            "unknown matching positive grades are not service tiers");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: 0, requiredOfficeGrade: 0),
+            "unranked values are not service tiers");
+        False(OfficialCareerRankRules.IsRequiredServiceGrade(
+                servedOfficeGrade: -10, requiredOfficeGrade: -10),
+            "negative values are not service tiers");
+    }
+
+    private static void LegacyOfficialHistoryKeysRenderAsLocalizedLabels()
+    {
+        string normalized = OfficialCareerBiographyRules.
+            NormalizeLegacyLocalizationKeys(
+                "rank aw_court_rank_12->aw_court_rank_14 " +
+                "aw_hist_official_rank_grant_midX" +
+                "aw_hist_official_rank_grant_suffix",
+                rank => "rank" + rank,
+                key => key == "aw_hist_official_rank_grant_mid"
+                    ? "<grant>"
+                    : "</grant>");
+        Equal("rank rank12->rank14 <grant>X</grant>", normalized,
+            "legacy career history resolves complete rank keys without rank-one prefix corruption");
+    }
+
+    private static void ExistingOfficialsCannotEnterTheActingGovernorPool()
+    {
+        True(CivilServiceExamRules.CanEnterActingGovernorCandidatePool(
+                directCandidateEligible: true, hasExistingCourtOffice: false),
+            "an otherwise eligible citizen without office may act as governor");
+        False(CivilServiceExamRules.CanEnterActingGovernorCandidatePool(
+                directCandidateEligible: true, hasExistingCourtOffice: true),
+            "an existing official cannot enter the acting governor pool");
+        False(CivilServiceExamRules.CanEnterActingGovernorCandidatePool(
+                directCandidateEligible: false, hasExistingCourtOffice: false),
+            "an ineligible citizen remains excluded from the acting governor pool");
+    }
+
+    private static void GovernorRotationIsAllOrNothing()
+    {
+        var two = new[]
+        {
+            new GovernorRotationFacts(1L, 101L, 1001L, 120),
+            new GovernorRotationFacts(2L, 102L, 1002L, 120)
+        };
+        True(OfficialCirculationRules.TryBuildRotationPlan(two,
+                out IReadOnlyList<GovernorRotationAssignment> swap),
+            "two compatible governors form a complete swap");
+        Equal(2, swap.Count, "complete swap contains every governor");
+        Equal(2, swap.Select(p => p.DestinationCityId).Distinct().Count(),
+            "complete swap has distinct destination cities");
+        True(swap.All(p => p.CurrentCityId != p.DestinationCityId),
+            "complete swap has no stationary governor");
+
+        var one = new[]
+        {
+            new GovernorRotationFacts(3L, 103L, 1003L, 120)
+        };
+        False(OfficialCirculationRules.TryBuildRotationPlan(one,
+                out IReadOnlyList<GovernorRotationAssignment> none),
+            "one due governor cannot form a rotation ring");
+        Equal(0, none.Count, "failed plan returns no partial assignments");
+
+        var blocked = new[]
+        {
+            new GovernorRotationFacts(4L, 104L, 105L, 120),
+            new GovernorRotationFacts(5L, 105L, 104L, 120)
+        };
+        False(OfficialCirculationRules.TryBuildRotationPlan(blocked,
+                out IReadOnlyList<GovernorRotationAssignment> blockedPlan),
+            "native-city restrictions may make the whole ring invalid");
+        Equal(0, blockedPlan.Count,
+            "invalid ring exposes no partial mutation plan");
+    }
+
+    private static void GovernorRotationRuntimeScopeIsNestedAndExceptionSafe()
+    {
+        False(GovernorRotationRuntimeScope.IsActive,
+            "rotation projection suppression starts inactive");
+        using (GovernorRotationRuntimeScope.Enter())
+        {
+            True(GovernorRotationRuntimeScope.IsActive,
+                "outer rotation scope suppresses recursive career patches");
+            using (GovernorRotationRuntimeScope.Enter())
+                True(GovernorRotationRuntimeScope.IsActive,
+                    "nested rotation scope remains active");
+            True(GovernorRotationRuntimeScope.IsActive,
+                "disposing a nested scope preserves the outer scope");
+        }
+        False(GovernorRotationRuntimeScope.IsActive,
+            "disposing the outer rotation scope restores normal patches");
+
+        try
+        {
+            using (GovernorRotationRuntimeScope.Enter())
+                throw new InvalidOperationException("scope-test");
+        }
+        catch (InvalidOperationException error)
+        {
+            Equal("scope-test", error.Message,
+                "test exception crosses the rotation scope");
+        }
+        False(GovernorRotationRuntimeScope.IsActive,
+            "exceptional exit cannot leave career patches suppressed");
+    }
+
+    private static void CrossLayerPromotionReleasesThePriorCityLeader()
+    {
+        var cityPrior = new OfficialCareerPrior(7L, 70L,
+            CourtOfficeLayer.City, CourtOfficeId.Governor);
+        True(OfficialCareerProjectionRecoveryRules.ShouldReleasePriorCityLeader(
+                cityPrior, CourtOfficeLayer.Central),
+            "a committed city-to-central promotion releases the old city leader");
+        False(OfficialCareerProjectionRecoveryRules.ShouldReleasePriorCityLeader(
+                cityPrior, CourtOfficeLayer.City),
+            "a city-layer projection is handled by the city assignment path");
+        False(OfficialCareerProjectionRecoveryRules.ShouldReleasePriorCityLeader(
+                new OfficialCareerPrior(7L, -1L, CourtOfficeLayer.Central,
+                    CourtOfficeId.Chancellor), CourtOfficeLayer.Central),
+            "a central prior has no city leader reference to release");
+    }
+
+    private static void FirstFormalAppointmentHistoryIsOneShot()
+    {
+        True(OfficialCareerBiographyRules.
+                ShouldRecordFirstFormalAppointment(
+                    hasExaminationSystem: true,
+                    appointmentCommitted: true,
+                    createdAppointmentEvent: true,
+                    actingAppointment: false,
+                    hasQualification: true,
+                    alreadyRecorded: false),
+            "first qualified formal appointment enters the biography");
+        False(OfficialCareerBiographyRules.
+                ShouldRecordFirstFormalAppointment(
+                    hasExaminationSystem: true,
+                    appointmentCommitted: true,
+                    createdAppointmentEvent: true,
+                    actingAppointment: false,
+                    hasQualification: true,
+                    alreadyRecorded: true),
+            "later appointments cannot duplicate the first appointment event");
+        False(OfficialCareerBiographyRules.
+                ShouldRecordFirstFormalAppointment(
+                    hasExaminationSystem: true,
+                    appointmentCommitted: true,
+                    createdAppointmentEvent: true,
+                    actingAppointment: true,
+                    hasQualification: true,
+                    alreadyRecorded: false),
+            "acting appointments do not count as formal entry");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name + ": expected false");
+    }
+}

@@ -1,0 +1,28 @@
+key,cz,en,ch
+aw_ruler_household Title,后宫,Ruler Household,後宮
+aw_ruler_household_offer Title,提供后妃,Offer Consort,提供後妃
+aw_ruler_household_request_select Title,择女应请,Select Requested Consort,擇女應請
+aw3_command_pending,等待主机处理,Waiting for host,等待主機處理
+aw3_command_replica_read_only,联机副本只能由主机执行操作,Replica sessions are read-only; the host must execute this action,聯機副本只能由主機執行操作
+aw_lineage_overview,姓氏总览,Surname Overview,姓氏總覽
+aw_shi_list,氏支列表,Shi Branches,氏支列表
+aw_family_tree,氏族树,Family Tree,氏族樹
+aw_history,人物传记,Biography,人物傳記
+aw_kingdom_roster,国家总览,Realm Overview,國家總覽
+aw_policy_tree,国策科技,Policy and Technology,國策科技
+aw_ancestry_analysis,身世分析,Ancestry Analysis,身世分析
+aw_mandate_dynasty,天命王朝,Mandate Dynasty,天命王朝
+aw_mandate_cycle,天下治乱,Dynastic Cycle,天下治亂
+aw_mandate_decisions,天朝决议,Mandate Decisions,天朝決議
+aw_court,百家官场,Court of the Hundred Schools,百家官場
+aw_court_disposition,宫廷处置,Court Disposition,宮廷處置
+aw_court_auxiliary_laws,官制辅助法,Court Auxiliary Laws,官制輔助法
+aw_inheritance_laws,继承法,Inheritance Law,繼承法
+aw_school_browser,百家学派,Hundred Schools,百家學派
+aw_school_roster,学派人物,School Members,學派人物
+aw_name_decision,定国号,Choose State Name,定國號
+aw_conferred_posthumous,追谥赠谥,Confer Posthumous Title,追諡贈諡
+aw_central_power,中央权力,Central Authority,中央權力
+aw_feudatories,藩国总览,Feudatories,藩國總覽
+aw_diplomacy_conversations,外交,Diplomacy,外交
+aw_diplomatic_war_declaration,宣战,Declare War,宣戰

@@ -1,11 +1,14 @@
 using System;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.multiplayer;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.content;
 using AncientWarfare3.ui.windows;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.presentation;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -21,103 +24,197 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_SavePatch
     {
+        [ThreadStatic]
+        private static int _multiplayerSnapshotSaveDepth;
+        [ThreadStatic]
+        private static bool _ownsAsyncSaveBarrier;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
         public static void SaveWorldToDirectory_Prefix()
         {
-            core.lineage.DeferredRuntimeWorkService.FlushPersistent();
-            bool descentsResolved =
-                HistoricalSchoolDescentService.FlushPendingDescentsForSave();
-            bool deathsResolved = SchoolMembershipService.FlushDeathRetriesForSave();
-            bool runtimeStateResolved = HistoricalSchoolRuntime.FlushPendingStateForSave();
-            bool activitiesResolved =
-                HistoricalSchoolActivityQueue.FlushPendingPersistenceForSave();
-            bool writesResolved = HistoricalSchoolWriteBufferService.FlushForSave();
-            if (!descentsResolved || !deathsResolved || !runtimeStateResolved ||
-                !activitiesResolved || !writesResolved)
-                throw new InvalidOperationException(
-                    "World save blocked: unresolved school persistence");
-            if (!LineageArchivePragmaService.CheckpointForSave(
-                    LineageArchiveManager.Instance.OperatingDB))
-                throw new InvalidOperationException(
-                    "World save blocked: lineage archive checkpoint failed");
+            if (_multiplayerSnapshotSaveDepth > 0) return;
+            try
+            {
+                EnterOwnedSaveBoundary();
+                if (!TryPrepareForSave(out string error,
+                        out Exception cause))
+                    throw AWSaveBoundaryException.CreateBlocked(
+                        error, cause);
+            }
+            catch
+            {
+                ExitOwnedSaveBarrier();
+                throw;
+            }
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
         public static void SaveWorldToDirectory_Postfix(string pFolder)
         {
-            if (string.IsNullOrEmpty(pFolder)) return;
-            LineageArchiveManager.Instance.SaveToSaveDirectory(pFolder);
+            if (_multiplayerSnapshotSaveDepth > 0) return;
+            try
+            {
+                if (string.IsNullOrEmpty(pFolder)) return;
+                if (!LineageArchiveManager.Instance.TryExportLineageArchive(
+                        pFolder, out string error))
+                {
+                    ModClass.LogWarning(
+                        "LineageArchiveManager: lineage export failed");
+                    ModClass.LogWarning(error);
+                }
+                ArmyRtsPlanSnapshotService.PublishToSave(pFolder);
+            }
+            finally
+            {
+                ExitOwnedSaveBarrier();
+            }
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.saveWorldToDirectory))]
+        private static Exception SaveWorldToDirectory_Finalizer(
+            Exception __exception)
+        {
+            ExitOwnedSaveBarrier();
+            return __exception;
+        }
+
+        internal static bool TryPrepareForSave(out string pError)
+        {
+            return TryPrepareForSave(out pError, out _);
+        }
+
+        internal static bool TryPrepareForSave(out string pError,
+            out Exception pCause)
+        {
+            pError = string.Empty;
+            pCause = null;
+            try
+            {
+                core.lineage.DeferredRuntimeWorkService.FlushPersistent();
+                bool descentsResolved =
+                    HistoricalSchoolDescentService.FlushPendingDescentsForSave();
+                bool deathsResolved =
+                    SchoolMembershipService.FlushDeathRetriesForSave();
+                bool nobleDeathsResolved =
+                    NobleRankService.FlushPendingDeathSuccessionsForSave();
+                bool runtimeStateResolved =
+                    HistoricalSchoolRuntime.FlushPendingStateForSave();
+                bool priorWritesResolved =
+                    HistoricalSchoolWriteBufferService.FlushForSave();
+                bool activitiesResolved =
+                    HistoricalSchoolActivityQueue.FlushPendingPersistenceForSave();
+                bool writesResolved =
+                    HistoricalSchoolWriteBufferService.FlushForSave();
+                core.lineage.DeferredRuntimeWorkService.FlushPersistent();
+                bool asyncWritesResolved =
+                    HistoricalWriteService.FlushForSave(
+                        TimeSpan.FromSeconds(5), out string asyncWriteError);
+                if (!descentsResolved || !deathsResolved ||
+                    !nobleDeathsResolved ||
+                    !runtimeStateResolved || !priorWritesResolved ||
+                    !activitiesResolved || !writesResolved ||
+                    !asyncWritesResolved)
+                {
+                    pError = "unresolved school persistence " +
+                             "descents=" + descentsResolved +
+                             " deaths=" + deathsResolved +
+                             " noble_deaths=" + nobleDeathsResolved +
+                             " runtime=" + runtimeStateResolved +
+                             " prior_writes=" + priorWritesResolved +
+                             " activities=" + activitiesResolved +
+                             " writes=" + writesResolved +
+                             " async_writes=" + asyncWritesResolved +
+                             " async_error=" + asyncWriteError +
+                             " buffered=" +
+                             HistoricalSchoolWriteBufferService.Count;
+                    return false;
+                }
+
+                if (!LineageArchivePragmaService.CheckpointForSave(
+                        LineageArchiveManager.Instance.OperatingDB))
+                {
+                    pError = "lineage archive checkpoint failed";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception error)
+            {
+                pError = error.Message;
+                pCause = error;
+                return false;
+            }
+        }
+
+        internal static IDisposable EnterMultiplayerSnapshotSave()
+        {
+            if (_multiplayerSnapshotSaveDepth == 0)
+                EnterOwnedSaveBoundary();
+            _multiplayerSnapshotSaveDepth++;
+            return new MultiplayerSnapshotSaveScope();
+        }
+
+        private static void EnterOwnedSaveBoundary()
+        {
+            if (!AWAsyncWorldLifecycle.TryEnterSaveBarrier(
+                    TimeSpan.FromSeconds(5),
+                    AW_FramePrioritySchedulerPatch
+                        .DrainSimulationToSaveBoundary,
+                    out string barrierError))
+                throw AWSaveBoundaryException.CreateBlocked(
+                    barrierError, null);
+            _ownsAsyncSaveBarrier = true;
+        }
+
+        private static void ExitOwnedSaveBarrier()
+        {
+            if (!_ownsAsyncSaveBarrier) return;
+            _ownsAsyncSaveBarrier = false;
+            AWAsyncWorldLifecycle.ExitSaveBarrier();
+        }
+
+        private sealed class MultiplayerSnapshotSaveScope : IDisposable
+        {
+            private bool _disposed;
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (_multiplayerSnapshotSaveDepth > 0)
+                    _multiplayerSnapshotSaveDepth--;
+                if (_multiplayerSnapshotSaveDepth == 0)
+                    ExitOwnedSaveBarrier();
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld), new[] { typeof(string), typeof(bool) })]
+        public static void LoadWorld_Prefix(string pPath)
+        {
+            ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
+            AW3WorldLoadCoordinator.ObserveLoadWorldStarted(pPath);
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadWorld), new[] { typeof(string), typeof(bool) })]
-        public static void LoadWorld_Postfix(string pPath)
+        [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.loadData),
+            new[] { typeof(SavedMap), typeof(string) })]
+        public static void LoadData_Postfix(string pPath)
         {
-            if (string.IsNullOrEmpty(pPath)) return;
-            LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath);
-            core.lineage.MandateService.RebuildRuntimeMarkerProjection();
-            XiaSubspeciesRepair.EnsureWorldTraits();
-            FigureStateStore.Load();
-            core.lineage.KingdomArchiveWriter.BackfillAll();
-            core.lineage.RulerAppellationService.RebuildLivingCache();
-            ResetHistoryWindowsAfterArchiveSwitch();
-            MandatePhaseService.RebuildRuntime();
-            core.lineage.RoyalAsylumService.LoadRuntimeState();
-            SchoolMembershipService.LoadIndexes();
-            HistoricalSchoolRuntime.LoadState();
-            core.lineage.AWArmyService.RepairSpecialArmiesAfterLoad();
-            core.lineage.KingdomMilitaryReadinessService.RebuildRuntime();
-            core.lineage.MilitaryEmergencyService.RebuildRuntime();
-            core.lineage.WarNoticeService.RebuildRuntime();
-            core.lineage.TemporaryLevyService.RebuildRuntime();
-            core.lineage.TemporarySlaveVanguardService.RebuildRuntime();
-            AutonomousRestorationService.RebuildRuntime();
-            core.lineage.WarPlotRedirectService.SweepExistingPlots();
-            core.lineage.WarRecordWriter.BackfillActive(); // 重建进行中战争的内存缓存
+            AW3WorldLoadCoordinator.ObserveWorldDataQueued(pPath);
+            ArmyRtsPlanSnapshotService.ObserveLoadDirectory(pPath);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapBox), nameof(MapBox.generateNewMap))]
         public static void GenerateNewMap_Postfix()
         {
-            LineageArchiveManager.Instance.CreateDataBase();
-            core.lineage.MandateService.RebuildRuntimeMarkerProjection();
-            core.lineage.WarPlotRedirectService.SweepExistingPlots();
-            XiaSubspeciesRepair.EnsureWorldTraits();
-            FigureStateStore.Load(); // 新世界:空库 → 全部重置为未生成
-            ResetHistoryWindowsAfterArchiveSwitch();
-            MandatePhaseService.RebuildRuntime();
-            core.lineage.RoyalAsylumService.LoadRuntimeState();
-            SchoolMembershipService.LoadIndexes();
-            HistoricalSchoolRuntime.LoadState();
-        }
-
-        private static void ResetHistoryWindowsAfterArchiveSwitch()
-        {
-            try { core.lineage.DeferredRuntimeWorkService.ClearRuntimeState(); } catch { }
-            try { core.lineage.WarNoticeService.ClearRuntime(); } catch { }
-            try { core.lineage.MilitaryEmergencyService.ClearRuntime(); } catch { }
-            try { core.lineage.TemporaryLevyService.ClearRuntime(); } catch { }
-            try { core.lineage.TemporarySlaveVanguardService.ClearRuntime(); } catch { }
-            try { AutonomousRestorationService.ClearRuntime(); } catch { }
-            try { core.lineage.KingdomMilitaryReadinessService.ClearRuntime(); } catch { }
-            try { core.lineage.CityOccupationAccelerationService.ClearRuntime(); } catch { }
-            try { MandatePhaseService.ClearRuntime(); } catch { }
-            try { core.lineage.ArmyRetreatService.ClearRuntime(); } catch { }
-            try { core.lineage.RoyalAsylumService.ClearRuntime(); } catch { }
-            try { core.lineage.RulerAppellationService.ClearRuntime(); } catch { }
-            try { core.lineage.SlaveCaptureScanService.Clear(); } catch { }
-            try { core.lineage.RoyalGuardService.ClearRuntimeCaches(); } catch { }
-            try { core.lineage.SlaveService.ClearRuntimeCaches(); } catch { }
-            try { SchoolMapBottomBarController.Hide(); } catch { }
-            try { AWMapModeMetaLibrary.ClearRuntimeCaches(); } catch { }
-            try { SchoolWindow.ResetWorldCache(); } catch { }
-            try { SchoolRosterWindow.ResetWorldCache(); } catch { }
-            try { HistoricalSchoolRuntime.ClearRuntime(); } catch { }
-            try { HistoryListWindow.ResetWorldCache(); } catch { }
-            try { KingdomRosterWindow.ResetWorldCache(pRefreshIfCurrent: true); } catch { }
+            ArmyRtsPlanSnapshotService.OnNewWorldGenerated();
+            AW3WorldLoadCoordinator.ObserveGeneratedWorldQueued();
         }
     }
 }

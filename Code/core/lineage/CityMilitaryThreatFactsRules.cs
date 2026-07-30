@@ -64,5 +64,11 @@ namespace AncientWarfare3.core.lineage
         {
             return pCachedCityId >= 0L && pCachedCityId == pChangedCityId;
         }
+
+        internal static bool ShouldAdvanceRevisionForInvalidation(
+            long pChangedId)
+        {
+            return pChangedId >= 0L;
+        }
     }
 }

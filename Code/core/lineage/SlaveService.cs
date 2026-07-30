@@ -314,6 +314,9 @@ namespace AncientWarfare3.core.lineage
         public static bool CaptureTargetAsSlave(Actor pCatcher, Actor pTarget)
         {
             if (!CanCaptureTarget(pCatcher, pTarget)) return false;
+            float captureChance = NobleCaptureRules.ResolveChance(
+                1f, 0f, pTarget.hasTrait(LineageKeys.TRAIT_GUIZU));
+            if (Rng.NextDouble() >= captureChance) return false;
 
             bool nationalRecord = IsImportantCaptureTarget(pTarget);
             bool wasKingBeforeRelocation = SafeIsKing(pTarget);
@@ -343,6 +346,8 @@ namespace AncientWarfare3.core.lineage
             Kingdom contextKingdom = pContextKingdom ?? pActor?.kingdom ?? pContextCity?.kingdom;
             if (!IsSlaveryEnabled(contextKingdom)) return false;
             if (!CanBeEnslaved(pActor, pForceNationalRecord)) return false;
+            if (!RoyalGuardOfficeRules.CanReplaceLifetimeGuardIdentity(
+                    RoyalGuardService.IsRoyalGuard(pActor))) return false;
 
             bool wasSlave = IsSlave(pActor);
             bool liveWasKing = SafeIsKing(pActor);
@@ -420,6 +425,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pContextCity?.data == null || pOccupier?.data == null) return false;
             if (!CanBeEnslaved(pActor, pImportantRecord)) return false;
+            float captureChance = NobleCaptureRules.ResolveChance(
+                1f, 0f, pActor.hasTrait(LineageKeys.TRAIT_GUIZU));
+            if (Rng.NextDouble() >= captureChance) return false;
             if (!IsSlaveryEnabled(pOccupier))
                 SetSlaveryEnabled(pOccupier, true);
             return Enslave(pActor, "foreign_occupation", null, pContextCity, pOccupier,
@@ -470,12 +478,18 @@ namespace AncientWarfare3.core.lineage
             bool rekt = pActor.isRekt();
             bool warrior = pActor.isWarrior();
             if (!SoldierRetirementRules.ShouldReadRetirementState(supportedActor, rekt, warrior)) return false;
-            if (TemporaryLevyService.IsTemporaryLevy(pActor) ||
-                TemporarySlaveVanguardService.IsMember(pActor)) return false;
+            if (ActiveMilitaryLifecycleService.
+                    HasWartimeMilitaryLock(pActor)) return false;
+            float age = pActor.getAge();
+            bool hardRetirement = SoldierRetirementRules.
+                HasReachedHardRetirementAge(age);
+            if (!hardRetirement &&
+                (TemporaryLevyService.IsTemporaryLevy(pActor) ||
+                 TemporarySlaveVanguardService.IsMember(pActor))) return false;
             bool alreadyRetired = IsRetiredSoldier(pActor);
             float lifespan = pActor.stats["lifespan"];
             if (!SoldierRetirementRules.ShouldRunExpensiveRetirementChecks(supportedActor, rekt, warrior,
-                    alreadyRetired, pActor.getAge(), lifespan, RETIREMENT_AGE_RATIO)) return false;
+                    alreadyRetired, age, lifespan, RETIREMENT_AGE_RATIO)) return false;
 
             bool general = GeneralService.IsGeneral(pActor);
             bool fiefHolder = GeneralService.IsFiefHolder(pActor);
@@ -483,11 +497,14 @@ namespace AncientWarfare3.core.lineage
                               RoyalGuardService.IsRoyalGuard(pActor);
 
             if (!SoldierRetirementRules.CanConsiderForRetirement(supportedActor, rekt, warrior, alreadyRetired,
-                    general, fiefHolder, royalGuard)) return false;
+                    general, fiefHolder, royalGuard, hardRetirement)) return false;
 
-            if (!HasServedEnoughForRetirement(pActor)) return false;
+            if (!hardRetirement && !HasServedEnoughForRetirement(pActor))
+                return false;
 
             pActor.stopBeingWarrior();
+            if (!ActiveMilitaryLifecycleService.
+                    CanCommitRetirement(pActor)) return false;
             pActor.data.set(LineageKeys.RETIRED_SOLDIER, true);
             pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
             if (!pActor.hasTrait(LineageKeys.TRAIT_VETERAN)) pActor.addTrait(LineageKeys.TRAIT_VETERAN);
@@ -495,7 +512,6 @@ namespace AncientWarfare3.core.lineage
             LineageService.ArchiveActor(pActor, pAlive: true);
             pActor.clearGraphicsFully();
             UpsertSlaveState(pActor, IsSlave(pActor), pActor.city, pActor.kingdom);
-            ChronicleEvents.OnRetiredSoldier(pActor, pActor.kingdom, pActor.city);
             return true;
         }
 
@@ -545,9 +561,14 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null) return false;
             if (!IsSupportedSlaveryActor(pActor)) return false;
-            if (IsRetiredSoldier(pActor)) return true;
+            if (IsRetiredSoldier(pActor))
+                return MilitaryRecruitmentScope.Current !=
+                       MilitaryRecruitmentKind.TemporaryLevy;
             if (!IsSlave(pActor)) return false;
-            return MilitaryRecruitmentScope.Current != MilitaryRecruitmentKind.SlaveVanguard;
+            return MilitaryRecruitmentScope.Current !=
+                       MilitaryRecruitmentKind.SlaveVanguard &&
+                   MilitaryRecruitmentScope.Current !=
+                       MilitaryRecruitmentKind.TemporaryLevy;
         }
 
         public static void OnMadeWarrior(City pCity, Actor pActor)
@@ -557,8 +578,14 @@ namespace AncientWarfare3.core.lineage
 
             if (IsRetiredSoldier(pActor))
             {
-                pActor.stopBeingWarrior();
-                return;
+                if (MilitaryRecruitmentScope.Current !=
+                        MilitaryRecruitmentKind.TemporaryLevy ||
+                    !pActor.isWarrior())
+                {
+                    pActor.stopBeingWarrior();
+                    return;
+                }
+                pActor.data.set(LineageKeys.RETIRED_SOLDIER, false);
             }
 
             MarkSoldierServiceStarted(pActor);
@@ -574,6 +601,14 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.SLAVE_SOLDIER, true);
             UpsertSlaveState(pActor, pActive: true, pCity ?? pActor.city, pActor.kingdom ?? pCity?.kingdom);
             ChronicleEvents.OnSlaveEnlisted(pActor, pActor.kingdom ?? pCity?.kingdom, pCity ?? pActor.city);
+        }
+
+        public static void OnTemporaryLevyDemobilized(Actor pActor)
+        {
+            if (pActor?.data == null || !IsSlave(pActor)) return;
+            pActor.data.set(LineageKeys.SLAVE_SOLDIER, false);
+            QueueSlaveStatePersistence(pActor, pActive: true,
+                pActor.city, pActor.kingdom);
         }
 
         private static void ApplyFiefSoldierTraining(City pCity, Actor pActor)
@@ -651,9 +686,15 @@ namespace AncientWarfare3.core.lineage
             if (target <= 0) return;
             int enslaved = 0;
             for (int i = 0; i < target && i < candidates.Count; i++)
-                if (Enslave(candidates[i], "city_fall", null, pCity, pNewKingdom) &&
+            {
+                Actor candidate = candidates[i];
+                float captureChance = NobleCaptureRules.ResolveChance(
+                    1f, 0f, candidate.hasTrait(LineageKeys.TRAIT_GUIZU));
+                if (Rng.NextDouble() >= captureChance) continue;
+                if (Enslave(candidate, "city_fall", null, pCity, pNewKingdom) &&
                     ShouldCountAsWarSlaveCapture(candidates[i]))
                     enslaved++;
+            }
             QueueWarSlaveCaptureSummary(pNewKingdom, pCity, enslaved);
         }
 
@@ -948,16 +989,17 @@ namespace AncientWarfare3.core.lineage
 
         private static bool RollCombatCapture(Actor pCaptor, Actor pTarget)
         {
-            float chance = IsImportantCaptureTarget(pTarget)
+            float baseChance = IsImportantCaptureTarget(pTarget)
                 ? COMBAT_CAPTURE_IMPORTANT_CHANCE
                 : pTarget.isWarrior()
                     ? COMBAT_CAPTURE_WARRIOR_CHANCE
                     : COMBAT_CAPTURE_CIVILIAN_CHANCE;
 
-            if (pCaptor != null && IsSlaveArmyCaptain(pCaptor))
-                chance += COMBAT_CAPTURE_CATCHER_BONUS;
-
-            chance = Math.Max(0f, Math.Min(0.95f, chance));
+            float captorBonus = pCaptor != null && IsSlaveArmyCaptain(pCaptor)
+                ? COMBAT_CAPTURE_CATCHER_BONUS
+                : 0f;
+            float chance = NobleCaptureRules.ResolveChance(baseChance,
+                captorBonus, pTarget.hasTrait(LineageKeys.TRAIT_GUIZU));
             return Rng.NextDouble() < chance;
         }
 

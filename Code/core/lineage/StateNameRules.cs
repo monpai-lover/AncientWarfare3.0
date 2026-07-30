@@ -72,9 +72,64 @@ namespace AncientWarfare3.core.lineage
             return IsValid(requested) ? requested : "";
         }
 
+        public static string ResolvePreferredBoundName(string pBoundName,
+            string pPreferredName)
+        {
+            string preferred = pPreferredName ?? "";
+            if (IsValid(preferred)) return preferred;
+            string bound = pBoundName ?? "";
+            return IsValid(bound) ? bound : "";
+        }
+
+        public static string ResolveInitialBoundName(string pBoundName,
+            string pPreferredName, string pCurrentKingdomName)
+        {
+            string preferred = pPreferredName ?? "";
+            if (IsValid(preferred)) return preferred;
+            string bound = pBoundName ?? "";
+            if (IsValid(bound)) return bound;
+            string current = pCurrentKingdomName ?? "";
+            return IsValid(current) ? current : "";
+        }
+
         public static bool IsSameShiContinuity(long pCurrentShiId, long pNewShiId)
         {
             return pCurrentShiId >= 0 && pCurrentShiId == pNewShiId;
+        }
+
+        public static bool IsDynasticContinuity(long pCurrentShiId,
+            long pNewShiId, long pCurrentLineageId, long pNewLineageId,
+            long pNewOriginKingdomId, long pInheritedKingdomId,
+            string pNewSourceType, IReadOnlyList<long> pNewParentShiIds)
+        {
+            if (IsSameShiContinuity(pCurrentShiId, pNewShiId)) return true;
+            if (pCurrentShiId < 0 || pNewShiId < 0 ||
+                pCurrentLineageId < 0 ||
+                pCurrentLineageId != pNewLineageId ||
+                pInheritedKingdomId < 0 ||
+                pNewOriginKingdomId != pInheritedKingdomId ||
+                !string.Equals(pNewSourceType, "feudatory",
+                    StringComparison.OrdinalIgnoreCase)) return false;
+            int count = pNewParentShiIds == null
+                ? 0
+                : pNewParentShiIds.Count;
+            for (int i = 0; i < count; i++)
+                if (pNewParentShiIds[i] == pCurrentShiId) return true;
+            return false;
+        }
+
+        public static bool ShouldSkipInitialStateBinding(
+            bool hasCurrentDynasty, bool hasHistoricalPreferredName)
+        {
+            return hasCurrentDynasty && !hasHistoricalPreferredName;
+        }
+
+        public static bool ShouldProjectDynasticStateName(
+            bool newDynastyCreated, bool isEmpireRank,
+            bool changedRulingShi, bool hasExistingBoundStateName)
+        {
+            return newDynastyCreated && isEmpireRank &&
+                   changedRulingShi && hasExistingBoundStateName;
         }
 
         private static bool LooksLikeLocalizationKey(string pValue)

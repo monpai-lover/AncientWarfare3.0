@@ -3,9 +3,11 @@ namespace AncientWarfare3.core.court
     public sealed class OfficialCareerReadModel
     {
         public OfficialCareerReadModel(long pOfficerId, long pKingdomId, long pActorId,
-            long pCityId, string pLayer, string pOfficeId, int pAppointedYear,
+            long pCityId, string pLayer, string pOfficeId,
+            string pInstitutionAtAppointment, int pAppointedYear,
             double pAppointedTime, int pEndedYear, double pEndedTime, bool pIsCurrent,
-            string pEndReason, string pKingdomName, string pKingdomColor, string pCityName)
+            string pEndReason, string pKingdomName, string pKingdomColor, string pCityName,
+            int pRankAtAppointment, int pLocalGradeAtAppointment)
         {
             OfficerId = pOfficerId;
             KingdomId = pKingdomId;
@@ -13,6 +15,7 @@ namespace AncientWarfare3.core.court
             CityId = pCityId;
             Layer = pLayer ?? "";
             OfficeId = pOfficeId ?? "";
+            InstitutionAtAppointment = pInstitutionAtAppointment ?? "";
             AppointedYear = pAppointedYear;
             AppointedTime = pAppointedTime;
             EndedYear = pEndedYear;
@@ -22,6 +25,10 @@ namespace AncientWarfare3.core.court
             KingdomName = pKingdomName ?? "";
             KingdomColor = NormalizeKingdomColor(pKingdomColor);
             CityName = pCityName ?? "";
+            RankAtAppointment = pRankAtAppointment > 0
+                ? OfficialCareerRankRules.ClampRank(pRankAtAppointment)
+                : -1;
+            LocalGradeAtAppointment = pLocalGradeAtAppointment;
         }
 
         public static string NormalizeKingdomColor(string pColor)
@@ -46,6 +53,7 @@ namespace AncientWarfare3.core.court
         public long CityId { get; }
         public string Layer { get; }
         public string OfficeId { get; }
+        public string InstitutionAtAppointment { get; }
         public int AppointedYear { get; }
         public double AppointedTime { get; }
         public int EndedYear { get; }
@@ -55,6 +63,8 @@ namespace AncientWarfare3.core.court
         public string KingdomName { get; }
         public string KingdomColor { get; }
         public string CityName { get; }
+        public int RankAtAppointment { get; }
+        public int LocalGradeAtAppointment { get; }
         public bool HasCity => CityId >= 0;
     }
 }

@@ -12,6 +12,13 @@ namespace AncientWarfare3.core.lineage
                 RitualDiplomacyOpinionCallbacks.Rites);
             AddOpinion("aw_opinion_usurpation", "opinion_aw_usurpation",
                 "opinion_aw_usurpation_negative", RitualDiplomacyOpinionCallbacks.Usurpation);
+            AddOpinion("aw_opinion_court_openness",
+                "opinion_aw_court_openness", "",
+                RitualDiplomacyOpinionCallbacks.CourtOpenness);
+            AddOpinion("aw_opinion_succession_split",
+                "opinion_aw_succession_split",
+                "opinion_aw_succession_split",
+                RitualDiplomacyOpinionCallbacks.SuccessionSplit);
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -34,6 +41,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.DIPLOMACY_RITES_SCORE, ritesScore);
             pKingdom.data.set(LineageKeys.DIPLOMACY_TITLE_RANK, titleRank);
             pKingdom.data.set(LineageKeys.DIPLOMACY_IS_MANDATE, isMandate);
+            pKingdom.data.set(LineageKeys.DIPLOMACY_CULTURE_ID,
+                pKingdom.culture?.id ?? -1L);
             pKingdom.data.set(LineageKeys.DIPLOMACY_SNAPSHOT_LAST_YEAR, year);
         }
 

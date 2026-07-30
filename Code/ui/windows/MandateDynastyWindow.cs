@@ -49,6 +49,11 @@ namespace AncientWarfare3.ui.windows
             };
             HistoryListItem.OnFilterToggle = key =>
             {
+                if (key == "mandate_cycle")
+                {
+                    MandateCycleWindow.Open();
+                    return;
+                }
                 Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
                 if (kingdom?.data == null) return;
                 if (key == "central_power")
@@ -58,9 +63,16 @@ namespace AncientWarfare3.ui.windows
                 else
                     MandateDecisionWindow.Open(kingdom.id);
             };
-            HistoryListItem.OnActorBiography = actorId =>
+            HistoryListItem.OnActorBiography = (actorId, kingdomId) =>
             {
-                if (actorId >= 0) HistoryListWindow.OpenPerson(actorId);
+                if (actorId >= 0)
+                    HistoryListWindow.OpenPerson(actorId, kingdomId);
+            };
+            HistoryListItem.OnConferredPosthumous = (actorId, kingdomId) =>
+            {
+                if (actorId >= 0 && kingdomId >= 0)
+                    ConferredPosthumousTitleWindow.Open(
+                        kingdomId, actorId);
             };
             HistoryListItem.OnActorFamilyTree = actorId =>
             {
@@ -78,6 +90,7 @@ namespace AncientWarfare3.ui.windows
             MandatePeriodView currentPeriod = FindPeriod(periods, report.period_id);
 
             AddStatusRows(report, currentPeriod);
+            AddMandateCycleRow();
             if (report.active)
             {
                 Kingdom mandate = MandateService.GetCurrentMandateKingdom();
@@ -116,7 +129,6 @@ namespace AncientWarfare3.ui.windows
                 tooltip_desc = BuildStatusTooltip(pReport)
             });
 
-            AddPlain(BuildPhaseSummary("  "));
             if (!pReport.active) return;
             AddPlain(BuildSacrificeSummary("  "));
             AddPlain(
@@ -149,6 +161,27 @@ namespace AncientWarfare3.ui.windows
                 text = title + ": " + name + "  " + Mathf.FloorToInt(fraction * 100f) + "%",
                 tooltip_title = title,
                 tooltip_desc = BuildDecisionTooltip(pKingdom, def)
+            });
+        }
+
+        private void AddMandateCycleRow()
+        {
+            MandatePhase phase = MandatePhaseService.CurrentPhase;
+            int duration = Mathf.Max(0,
+                Date.getCurrentYear() - MandatePhaseService.PhaseSinceYear);
+            string title = AW_L10n.Text("aw_mandate_cycle_entry",
+                "Dynastic Cycle");
+            AddItemToList(new HistoryRow
+            {
+                width = ROW_WIDTH,
+                is_filter = true,
+                filter_key = "mandate_cycle",
+                text = title + ": " + PhaseText(phase) + "  " +
+                       duration + AW_L10n.Text("aw_mandate_cycle_years",
+                           " years"),
+                tooltip_title = title,
+                tooltip_desc = AW_L10n.Text("aw_mandate_cycle_entry_desc",
+                    "Inspect the current phase, pressures and realm-wide effects")
             });
         }
 
@@ -231,6 +264,7 @@ namespace AncientWarfare3.ui.windows
                         width = ROW_WIDTH,
                         is_action = true,
                         action_actor_id = reign.king_actor_id,
+                        action_kingdom_id = pPeriod.kingdom_id,
                         text = AW_L10n.Text("aw_view_emperor_biography", "\u67E5\u770B\u5929\u5B50\u4F20\u8BB0\uFF1A") +
                                RichName(DisplayKingName(reign), DisplayKingColor(reign)),
                         tooltip_title = AW_L10n.Text("aw_view_emperor_biography", "\u67E5\u770B\u5929\u5B50\u4F20\u8BB0"),
@@ -295,9 +329,31 @@ namespace AncientWarfare3.ui.windows
             string span = YearSpan(pReign.start_time, pReign.end_time);
             if (!pReign.has_king)
                 return AW_L10n.Text("aw_mandate_no_emperor_period", "\u65E0\u660E\u786E\u5929\u5B50\u65F6\u671F") + "  " + span;
-            string prefix = HistoryWriter.NormalizeYearPrefix(pReign.year_prefix_snapshot, pReign.start_time);
-            string era = string.IsNullOrEmpty(prefix) ? "" : RichName(prefix, pReign.king_color) + "  ";
+            string era = BuildReignEraTitle(pReign);
+            if (era.Length > 0) era += "  ";
             return era + RichName(DisplayKingName(pReign), DisplayKingColor(pReign)) + "  " + span;
+        }
+
+        private static string BuildReignEraTitle(MandateReignView pReign)
+        {
+            if (pReign?.eras == null || pReign.eras.Count == 0)
+            {
+                string prefix = HistoryWriter.NormalizeYearPrefix(
+                    pReign?.year_prefix_snapshot ?? "",
+                    pReign?.start_time ?? -1d);
+                return prefix.Length == 0
+                    ? ""
+                    : RichName(prefix, pReign?.king_color ?? "");
+            }
+
+            MandateEraHistoryRecord first = pReign.eras[0];
+            if (pReign.eras.Count == 1)
+                return RichName(first.EraName, first.EraColor);
+            MandateEraHistoryRecord last =
+                pReign.eras[pReign.eras.Count - 1];
+            string separator = pReign.eras.Count == 2 ? " / " : " ... ";
+            return RichName(first.EraName, first.EraColor) + separator +
+                   RichName(last.EraName, last.EraColor);
         }
 
         private static string BuildStatusTooltip(MandateReport pReport)
@@ -405,8 +461,18 @@ namespace AncientWarfare3.ui.windows
         {
             if (!pReign.has_king)
                 return AW_L10n.Text("aw_mandate_no_emperor_period", "\u65E0\u660E\u786E\u5929\u5B50\u65F6\u671F");
-            return AW_L10n.Text("aw_mandate_emperor", "\u5929\u547D\u7687\u5E1D") + ": " + DisplayKingName(pReign) +
-                   "\n" + AW_L10n.Text("aw_dynasty_duration", "\u5B58\u7EED\u65F6\u95F4\uFF1A") + YearSpan(pReign.start_time, pReign.end_time);
+            string tooltip = AW_L10n.Text("aw_mandate_emperor", "\u5929\u547D\u7687\u5E1D") + ": " + DisplayKingName(pReign) +
+                             "\n" + AW_L10n.Text("aw_dynasty_duration", "\u5B58\u7EED\u65F6\u95F4\uFF1A") + YearSpan(pReign.start_time, pReign.end_time);
+            if (pReign.eras.Count == 0) return tooltip;
+            tooltip += "\n" + AW_L10n.Text("aw_mandate_era_sequence",
+                "\u5E74\u53F7\u6CBF\u9769") + ":";
+            for (int i = 0; i < pReign.eras.Count; i++)
+            {
+                MandateEraHistoryRecord era = pReign.eras[i];
+                tooltip += "\n" + era.EraName + "  " +
+                           YearSpan(era.StartTime, era.EndTime);
+            }
+            return tooltip;
         }
 
         private static string BuildEventTooltip(MandateHistoryEvent pEvent)
@@ -478,17 +544,15 @@ namespace AncientWarfare3.ui.windows
 
         private static string PhaseText(MandatePhase pPhase)
         {
-            switch (pPhase)
+            string fallback = pPhase switch
             {
-                case MandatePhase.Decline:
-                    return AW_L10n.Text("aw_mandate_phase_decline", "\u8870\u4E16");
-                case MandatePhase.Chaos:
-                    return AW_L10n.Text("aw_mandate_phase_chaos", "\u4E71\u4E16");
-                case MandatePhase.Renewal:
-                    return AW_L10n.Text("aw_mandate_phase_renewal", "\u65B0\u671D");
-                default:
-                    return AW_L10n.Text("aw_mandate_phase_golden", "\u6CBB\u4E16");
-            }
+                MandatePhase.Decline => "Political Tension",
+                MandatePhase.Chaos => "Warring Contenders",
+                MandatePhase.Renewal => "Territorial Expansion",
+                _ => "Political Clarity"
+            };
+            return AW_L10n.Text(MandatePhaseRules.LocalizationKey(pPhase),
+                fallback);
         }
 
         private static string OriginText(string pOrigin)

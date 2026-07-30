@@ -1,13 +1,15 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
+using UnityEngine;
 
 namespace AncientWarfare3.patch
 {
     [HarmonyPatch]
     internal static class AW_MandateMapModePatch
     {
-        private static readonly HashSet<string> AvailableMarkerPaths = new HashSet<string>();
+        private static readonly Dictionary<string, Sprite> MarkerSprites =
+            new Dictionary<string, Sprite>();
         private static readonly HashSet<string> MissingMarkerPaths = new HashSet<string>();
 
         [HarmonyPostfix]
@@ -50,25 +52,39 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(NameplateText), "showSpecies", new[] { typeof(string) })]
-        public static void NameplateTextShowSpecies_Prefix(NameplateText __instance, ref string pPath)
+        [HarmonyPatch(typeof(NameplateText), "showSpecies", new[] { typeof(Sprite) })]
+        public static void NameplateTextShowSpecies_Prefix(NameplateText __instance,
+            ref Sprite pSprite)
         {
             if (__instance == null || __instance.is_mini ||
                 !(__instance.nano_object is Kingdom kingdom)) return;
 
-            string markerPath = MandateMapMarkerService.GetMarkerIcon(kingdom);
-            if (!string.IsNullOrEmpty(markerPath) && IsMarkerAvailable(markerPath))
-                pPath = markerPath;
+            long benchmark = RecentFeatureBenchmark.Begin();
+            try
+            {
+                string markerPath =
+                    MandateMapMarkerService.GetMarkerIcon(kingdom);
+                if (TryGetMarkerSprite(markerPath, out Sprite marker))
+                    pSprite = marker;
+            }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.NameplatesIndex, benchmark);
+            }
         }
 
-        private static bool IsMarkerAvailable(string pPath)
+        private static bool TryGetMarkerSprite(string pPath, out Sprite pSprite)
         {
-            if (AvailableMarkerPaths.Contains(pPath)) return true;
-            if (MissingMarkerPaths.Contains(pPath)) return false;
+            pSprite = null;
+            if (string.IsNullOrEmpty(pPath) || MissingMarkerPaths.Contains(pPath))
+                return false;
+            if (MarkerSprites.TryGetValue(pPath, out pSprite)) return true;
 
-            if (SpriteTextureLoader.getSprite(pPath) != null)
+            pSprite = SpriteTextureLoader.getSprite(pPath);
+            if (pSprite != null)
             {
-                AvailableMarkerPaths.Add(pPath);
+                MarkerSprites[pPath] = pSprite;
                 return true;
             }
 

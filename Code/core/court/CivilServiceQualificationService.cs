@@ -1,0 +1,241 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.content.policies;
+using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
+
+namespace AncientWarfare3.core.court
+{
+    internal static class CivilServiceQualificationService
+    {
+        internal const string TechnologyId =
+            "aw_tech_civil_service_examination";
+
+        private static SQLiteConnection DB =>
+            LineageArchiveManager.Instance?.OperatingDB;
+        private static bool _rebuildPending;
+        private static long _rebuildAfterCandidateId;
+
+        public static bool HasExaminationSystem(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   KingdomPolicyService.IsCompleted(pKingdom,
+                       PolicyNodeKind.Tech, TechnologyId);
+        }
+
+        public static void ClearRuntime()
+        {
+            _rebuildPending = false;
+            _rebuildAfterCandidateId = 0L;
+        }
+
+        public static void RebuildRuntimeProjections()
+        {
+            _rebuildAfterCandidateId = 0L;
+            _rebuildPending = DB != null;
+        }
+
+        public static void ProcessRuntimeRebuild()
+        {
+            if (!_rebuildPending || DB == null) return;
+            List<CivilServiceQualificationRecord> page =
+                CivilServiceExamPersistence.LoadLatestQualificationsPage(DB,
+                    _rebuildAfterCandidateId,
+                    CivilServiceExamRules.AuthorityCandidateBudget);
+            if (page.Count == 0)
+            {
+                _rebuildPending = false;
+                return;
+            }
+
+            foreach (CivilServiceQualificationRecord record in page)
+            {
+                _rebuildAfterCandidateId = Math.Max(_rebuildAfterCandidateId,
+                    record.CandidateId);
+                Actor actor;
+                Kingdom kingdom;
+                try
+                {
+                    actor = World.world?.units?.get(record.ActorId);
+                    kingdom = World.world?.kingdoms?.get(record.KingdomId);
+                }
+                catch
+                {
+                    actor = null;
+                    kingdom = null;
+                }
+                if (actor?.data == null || kingdom?.data == null ||
+                    actor.kingdom != kingdom || !actor.isAlive() ||
+                    actor.isRekt()) continue;
+                Project(actor, record);
+            }
+        }
+
+        public static bool CanReceiveFormalCivilAppointment(Actor pActor,
+            Kingdom pKingdom, string pLayer, string pOfficeId,
+            bool pAllowVacancyPromotion = false)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return false;
+            if (!HasExaminationSystem(pKingdom)) return true;
+            if (IsAppointmentExempt(pActor, pKingdom, pLayer, pOfficeId))
+                return true;
+            if (!HistoricalSchoolEducationService.CanAppoint(pActor,
+                    pKingdom, pLayer, pOfficeId)) return false;
+            CivilServiceQualificationRecord qualification =
+                LoadOrRepair(pActor, pKingdom);
+            if (qualification == null ||
+                !CivilServiceExamRules.IsFormalAppointmentQualification(
+                    ParseQualification(qualification.Qualification)))
+                return false;
+
+            int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
+                pOfficeId);
+            int currentRank = OfficialCareerStateService.ReadRankFast(pActor);
+            if (currentRank <= OfficialCareerRankRules.Unranked)
+                currentRank = OfficialCareerRankRules.ResolveInitialAppointmentRank(
+                    OfficialCareerRankRules.Unranked, officeGrade,
+                    hasNineRankSystem: true, hasFormalQualification: true,
+                    qualification.EntryBonus);
+            bool hasLowerService = HasRequiredServiceHistory(pActor,
+                pKingdom, requiredOfficeGrade: 30);
+            bool hasMiddleService = HasRequiredServiceHistory(pActor,
+                pKingdom, requiredOfficeGrade: 20);
+            pActor.data.get(LineageKeys.OFFICER_LAST_KAOKE,
+                out int evaluation, -1);
+            bool passingEvaluation = evaluation >= 0 && evaluation <= 2;
+            bool strictEligible = OfficialCareerRankRules.CanEnterOffice(currentRank,
+                officeGrade, hasLowerService, hasMiddleService,
+                passingEvaluation);
+            return strictEligible || CivilServiceExamRules.ShouldUseVacancyPromotion(
+                officeVacant: pAllowVacancyPromotion, strictEligible,
+                hasFormalQualification: true);
+        }
+
+        public static CivilServiceQualificationRecord LoadOrRepair(
+            Actor pActor, Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return null;
+            pActor.data.get(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                out string qualification, "none");
+            pActor.data.get(LineageKeys.CIVIL_SERVICE_ISSUING_KINGDOM_ID,
+                out long issuingKingdomId, -1L);
+            pActor.data.get(LineageKeys.CIVIL_SERVICE_SESSION_ID,
+                out long sessionId, -1L);
+            pActor.data.get(LineageKeys.CIVIL_SERVICE_RESULT_YEAR,
+                out int resultYear, -1);
+            pActor.data.get(LineageKeys.CIVIL_SERVICE_ENTRY_BONUS,
+                out int entryBonus, 0);
+            if (issuingKingdomId == pKingdom.id && sessionId >= 0L &&
+                resultYear >= 0 &&
+                ParseQualification(qualification) !=
+                CivilServiceQualification.None)
+            {
+                return new CivilServiceQualificationRecord
+                {
+                    ActorId = pActor.data.id,
+                    KingdomId = issuingKingdomId,
+                    SessionId = sessionId,
+                    Qualification = qualification,
+                    ResultYear = resultYear,
+                    EntryBonus = entryBonus
+                };
+            }
+
+            CivilServiceQualificationRecord repaired =
+                CivilServiceExamPersistence.LoadLatestQualification(DB,
+                    pActor.data.id, pKingdom.id);
+            Project(pActor, repaired);
+            return repaired;
+        }
+
+        public static bool HasRequiredServiceHistory(Actor pActor,
+            Kingdom pKingdom, int requiredOfficeGrade)
+        {
+            if (DB == null || pActor?.data == null ||
+                pKingdom?.data == null) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT OFFICE_ID FROM " +
+                    CourtOfficerTableItem.GetTableName() +
+                    " WHERE ACTOR_ID=@actor AND KINGDOM_ID=@kingdom " +
+                    "AND IFNULL(IS_ACTING,0)=0 " +
+                    "ORDER BY APPOINTED_TIME DESC,OFFICER_ID DESC LIMIT 64";
+                command.Parameters.AddWithValue("@actor", pActor.data.id);
+                command.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    string office = reader.IsDBNull(0)
+                        ? ""
+                        : Convert.ToString(reader.GetValue(0)) ?? "";
+                    int grade = OfficialCareerStateService.OfficeGradeForOffice(
+                        office);
+                    if (OfficialCareerRankRules.IsRequiredServiceGrade(
+                            grade, requiredOfficeGrade)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool IsAppointmentExempt(Actor pActor,
+            Kingdom pKingdom, string pLayer, string pOfficeId)
+        {
+            if (pActor?.data == null) return false;
+            if (pLayer == CourtOfficeLayer.Military ||
+                pOfficeId == CourtOfficeId.SiMa ||
+                pOfficeId == CourtOfficeId.Marshal ||
+                pOfficeId == CourtOfficeId.Bingbu ||
+                pOfficeId == CourtPyramidRoleId.General) return true;
+            if (pActor.isKing() ||
+                HeirService.PeekRegisteredHeir(pKingdom) == pActor ||
+                FeudatoryService.IsActivePrince(pActor) ||
+                HistoricalSchoolDescentService.IsCanonicalMaster(pActor))
+                return true;
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long currentKingdomId, -1L);
+            pActor.data.get(LineageKeys.COURT_LAYER,
+                out string currentLayer, "");
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string currentOffice, "");
+            return currentKingdomId == pKingdom?.id &&
+                   currentLayer == (pLayer ?? "") &&
+                   currentOffice == (pOfficeId ?? "");
+        }
+
+        private static void Project(Actor pActor,
+            CivilServiceQualificationRecord pQualification)
+        {
+            if (pActor?.data == null) return;
+            pActor.data.set(LineageKeys.CIVIL_SERVICE_QUALIFICATION,
+                pQualification?.Qualification ?? "none");
+            pActor.data.set(LineageKeys.CIVIL_SERVICE_ISSUING_KINGDOM_ID,
+                pQualification?.KingdomId ?? -1L);
+            pActor.data.set(LineageKeys.CIVIL_SERVICE_SESSION_ID,
+                pQualification?.SessionId ?? -1L);
+            pActor.data.set(LineageKeys.CIVIL_SERVICE_RESULT_YEAR,
+                pQualification?.ResultYear ?? -1);
+            pActor.data.set(LineageKeys.CIVIL_SERVICE_ENTRY_BONUS,
+                pQualification?.EntryBonus ?? 0);
+        }
+
+        private static CivilServiceQualification ParseQualification(
+            string pValue)
+        {
+            if (string.Equals(pValue, "jinshi",
+                    StringComparison.OrdinalIgnoreCase))
+                return CivilServiceQualification.Jinshi;
+            if (string.Equals(pValue, "gongshi",
+                    StringComparison.OrdinalIgnoreCase))
+                return CivilServiceQualification.Gongshi;
+            if (string.Equals(pValue, "juren",
+                    StringComparison.OrdinalIgnoreCase))
+                return CivilServiceQualification.Juren;
+            return CivilServiceQualification.None;
+        }
+    }
+}

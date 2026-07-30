@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadModels.cs"
+             Link="Production\AW3MultiplayerWorldLoadModels.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadOperation.cs"
+             Link="Production\AW3MultiplayerWorldLoadOperation.cs" />
+    <Compile Include="..\..\Code\core\multiplayer\AW3WorldLoadCoordinator.cs"
+             Link="Production\AW3WorldLoadCoordinator.cs" />
+  </ItemGroup>
+</Project>

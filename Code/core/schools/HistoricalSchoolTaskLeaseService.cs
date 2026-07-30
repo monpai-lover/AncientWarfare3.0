@@ -51,6 +51,17 @@ namespace AncientWarfare3.core.schools
             return Leases.IsCurrent(pActorId, pActivityId, pTaskId);
         }
 
+        public static bool TryHold(HistoricalSchoolTaskLease pPrevious,
+            long pStartFrame, long pExpiryFrame)
+        {
+            var renewed = new HistoricalSchoolTaskLease(
+                pPrevious.ActorId, pPrevious.ActivityId,
+                pPrevious.TaskId, pPrevious.SchoolId,
+                pPrevious.CityId, pPrevious.VenueKey,
+                pStartFrame, pExpiryFrame);
+            return Leases.TryAcquire(renewed);
+        }
+
         public static bool TryGet(
             long pActorId,
             out HistoricalSchoolTaskLease pLease)

@@ -1,0 +1,269 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.db;
+using AncientWarfare3.utils;
+
+public static class SQLiteHelperSchemaMigrationTests
+{
+    public static int Main()
+    {
+        try
+        {
+            AddedColumnsBackfillOldRowsAndDefaultNewRows();
+            CivilServiceReserveColumnsMigrateLegacySessions();
+            FigurePendingOwnerColumnsMigrateOldDatabase();
+            StaleFigurePendingCleanupIsOwnerExact();
+            CreateTableUsesMigrationTextDefaultSemantics();
+            Console.WriteLine("SQLite helper schema migration tests passed.");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error);
+            return 1;
+        }
+    }
+
+    private static void CivilServiceReserveColumnsMigrateLegacySessions()
+    {
+        using var db = OpenMemoryDatabase();
+        Execute(db, "CREATE TABLE CivilServiceExamSession (" +
+            "ID INTEGER PRIMARY KEY,ADMISSION_QUOTA INTEGER)");
+        Execute(db, "INSERT INTO CivilServiceExamSession VALUES (1,9)");
+        var columns = new List<SQLiteHelper.ColumnDef>
+        {
+            new SQLiteHelper.ColumnDef("ID",
+                SQLiteHelper.ColumnType.INTEGER, pIsPrimary: true),
+            new SQLiteHelper.ColumnDef("ADMISSION_QUOTA",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("WAITING_CANDIDATE_COUNT",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("RESERVE_TARGET",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1")
+        };
+
+        db.AddMissingColumns("CivilServiceExamSession", columns);
+        db.AddMissingColumns("CivilServiceExamSession", columns);
+
+        using var command = new SQLiteCommand(
+            "SELECT ADMISSION_QUOTA,WAITING_CANDIDATE_COUNT,RESERVE_TARGET " +
+            "FROM CivilServiceExamSession WHERE ID=1", db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        Equal(true, reader.Read(), "legacy examination session remains");
+        Equal(9L, reader.GetInt64(0),
+            "legacy frozen admission quota remains unchanged");
+        Equal(-1L, reader.GetInt64(1),
+            "legacy waiting count is explicitly unknown");
+        Equal(-1L, reader.GetInt64(2),
+            "legacy reserve target is explicitly unknown");
+    }
+
+    private static void FigurePendingOwnerColumnsMigrateOldDatabase()
+    {
+        using var db = OpenMemoryDatabase();
+        Execute(db, "CREATE TABLE FigureState (" +
+            "FIGURE_INDEX INTEGER PRIMARY KEY,SPAWNED INTEGER," +
+            "ACTOR_ID INTEGER)");
+        Execute(db, "INSERT INTO FigureState VALUES (0,2,100)");
+
+        db.AddMissingColumns("FigureState", FigureOwnerColumns());
+
+        using var command = new SQLiteCommand(
+            "SELECT PENDING_LINEAGE_ID,PENDING_SHI_ID FROM FigureState " +
+            "WHERE FIGURE_INDEX=0", db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        Equal(true, reader.Read(), "legacy figure state row exists");
+        Equal(-1L, reader.GetInt64(0),
+            "legacy pending lineage defaults to unowned");
+        Equal(-1L, reader.GetInt64(1),
+            "legacy pending shi defaults to unowned");
+    }
+
+    private static void StaleFigurePendingCleanupIsOwnerExact()
+    {
+        using var db = OpenMemoryDatabase();
+        Execute(db, "CREATE TABLE FigureState (FIGURE_INDEX INTEGER PRIMARY KEY," +
+            "FIGURE_KEY TEXT,SPAWNED INTEGER,ACTOR_ID INTEGER,DEAD INTEGER," +
+            "KINGDOM_ID INTEGER,KINGDOM_NAME_APPLIED TEXT,SPAWN_TIME REAL," +
+            "PENDING_LINEAGE_ID INTEGER,PENDING_SHI_ID INTEGER)");
+        Execute(db, "CREATE TABLE ShiBranch (SHI_ID INTEGER PRIMARY KEY," +
+            "LINEAGE_ID INTEGER,FOUNDER_ACTOR_ID INTEGER,SOURCE_TYPE TEXT)");
+        Execute(db, "CREATE TABLE LineageGroup (LINEAGE_ID INTEGER PRIMARY KEY," +
+            "FOUNDER_ACTOR_ID INTEGER)");
+        Execute(db, "INSERT INTO FigureState VALUES " +
+            "(0,'figure',2,100,0,-1,'',12,200,300)," +
+            "(1,'committed',1,101,0,-1,'',13,-1,-1)");
+        Execute(db, "INSERT INTO ShiBranch VALUES " +
+            "(300,200,100,'special_figure')," +
+            "(301,201,100,'special_figure')," +
+            "(302,202,100,'unrelated')");
+        Execute(db, "INSERT INTO LineageGroup VALUES " +
+            "(200,100),(201,100),(202,100)");
+
+        FigureStatePendingRecovery.Recover(db, "FigureState", "ShiBranch",
+            "LineageGroup", "special_figure");
+
+        Equal(0L, Scalar(db,
+            "SELECT SPAWNED FROM FigureState WHERE FIGURE_INDEX=0"),
+            "stale pending is released");
+        Equal(-1L, Scalar(db,
+            "SELECT ACTOR_ID FROM FigureState WHERE FIGURE_INDEX=0"),
+            "released pending clears actor");
+        Equal(-1L, Scalar(db,
+            "SELECT PENDING_LINEAGE_ID FROM FigureState WHERE FIGURE_INDEX=0"),
+            "released pending clears lineage owner");
+        Equal(0L, Scalar(db,
+            "SELECT COUNT(*) FROM ShiBranch WHERE SHI_ID=300"),
+            "owned pending shi is deleted");
+        Equal(0L, Scalar(db,
+            "SELECT COUNT(*) FROM LineageGroup WHERE LINEAGE_ID=200"),
+            "owned pending lineage is deleted");
+        Equal(2L, Scalar(db,
+            "SELECT COUNT(*) FROM ShiBranch WHERE SHI_ID IN (301,302)"),
+            "unrelated shi rows remain");
+        Equal(2L, Scalar(db,
+            "SELECT COUNT(*) FROM LineageGroup WHERE LINEAGE_ID IN (201,202)"),
+            "unrelated lineage rows remain");
+        Equal(1L, Scalar(db,
+            "SELECT SPAWNED FROM FigureState WHERE FIGURE_INDEX=1"),
+            "committed row remains committed");
+    }
+
+    private static List<SQLiteHelper.ColumnDef> FigureOwnerColumns()
+    {
+        return new List<SQLiteHelper.ColumnDef>
+        {
+            new SQLiteHelper.ColumnDef("FIGURE_INDEX",
+                SQLiteHelper.ColumnType.INTEGER, pIsPrimary: true),
+            new SQLiteHelper.ColumnDef("SPAWNED",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "0"),
+            new SQLiteHelper.ColumnDef("ACTOR_ID",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("PENDING_LINEAGE_ID",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("PENDING_SHI_ID",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1")
+        };
+    }
+
+    private static SQLiteConnection OpenMemoryDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        return db;
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void CreateTableUsesMigrationTextDefaultSemantics()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        db.CreateTable("FreshGoals", new List<SQLiteHelper.ColumnDef>
+        {
+            new SQLiteHelper.ColumnDef("ID",
+                SQLiteHelper.ColumnType.INTEGER, pIsPrimary: true),
+            new SQLiteHelper.ColumnDef("COMPLETION_KIND",
+                SQLiteHelper.ColumnType.TEXT, pDefault: ""),
+            new SQLiteHelper.ColumnDef("ESCAPED_TEXT_DEFAULT",
+                SQLiteHelper.ColumnType.TEXT, pDefault: "claimant's objective"),
+            new SQLiteHelper.ColumnDef("COMPLETION_SCORE",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-101")
+        });
+        Execute(db, "INSERT INTO FreshGoals (ID) VALUES (1)");
+
+        using var command = new SQLiteCommand(
+            "SELECT COMPLETION_KIND,ESCAPED_TEXT_DEFAULT," +
+            "COMPLETION_SCORE FROM FreshGoals WHERE ID=1", db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        Equal(true, reader.Read(), "fresh table row exists");
+        Equal("", reader.GetString(0),
+            "fresh table empty text default");
+        Equal("claimant's objective", reader.GetString(1),
+            "fresh table escaped text default");
+        Equal(-101L, reader.GetInt64(2),
+            "fresh table non-text default remains declared value");
+    }
+
+    private static void AddedColumnsBackfillOldRowsAndDefaultNewRows()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE WarGoal (WAR_GOAL_ID INTEGER PRIMARY KEY)");
+        Execute(db, "INSERT INTO WarGoal (WAR_GOAL_ID) VALUES (1)");
+
+        db.AddMissingColumns("WarGoal", new List<SQLiteHelper.ColumnDef>
+        {
+            new SQLiteHelper.ColumnDef("WAR_GOAL_ID",
+                SQLiteHelper.ColumnType.INTEGER, pIsPrimary: true),
+            new SQLiteHelper.ColumnDef("POSITION",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("REQUIRED_WAR_SCORE",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("COMPLETION_KIND",
+                SQLiteHelper.ColumnType.TEXT, pDefault: ""),
+            new SQLiteHelper.ColumnDef("COMPLETED",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "0"),
+            new SQLiteHelper.ColumnDef("COMPLETED_TIME",
+                SQLiteHelper.ColumnType.REAL, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("COMPLETION_SCORE",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-101"),
+            new SQLiteHelper.ColumnDef("COMPLETION_REVISION",
+                SQLiteHelper.ColumnType.INTEGER, pDefault: "-1"),
+            new SQLiteHelper.ColumnDef("ESCAPED_TEXT_DEFAULT",
+                SQLiteHelper.ColumnType.TEXT, pDefault: "claimant's objective")
+        });
+
+        AssertDefaults(db, 1, "existing row is backfilled");
+        Execute(db, "INSERT INTO WarGoal (WAR_GOAL_ID) VALUES (2)");
+        AssertDefaults(db, 2, "new row uses SQL defaults");
+    }
+
+    private static void AssertDefaults(SQLiteConnection db, long id,
+        string context)
+    {
+        using var command = new SQLiteCommand(
+            "SELECT POSITION,REQUIRED_WAR_SCORE,COMPLETION_KIND," +
+            "COMPLETED,COMPLETED_TIME,COMPLETION_SCORE," +
+            "COMPLETION_REVISION,ESCAPED_TEXT_DEFAULT FROM WarGoal " +
+            "WHERE WAR_GOAL_ID=@id", db);
+        command.Parameters.AddWithValue("@id", id);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        Equal(true, reader.Read(), context + " exists");
+        Equal(-1L, reader.GetInt64(0), context + " position default");
+        Equal(-1L, reader.GetInt64(1),
+            context + " required score default");
+        Equal("", reader.GetString(2),
+            context + " completion kind default");
+        Equal(0L, reader.GetInt64(3), context + " completed default");
+        Equal(-1d, reader.GetDouble(4),
+            context + " completed time default");
+        Equal(-101L, reader.GetInt64(5),
+            context + " completion score default");
+        Equal(-1L, reader.GetInt64(6),
+            context + " completion revision default");
+        Equal("claimant's objective", reader.GetString(7),
+            context + " escaped text default");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

@@ -1,0 +1,116 @@
+using AncientWarfare3.core.lineage;
+using System.Data.SQLite;
+
+internal static class WarScoreBudgetServiceTests
+{
+    public static void Run()
+    {
+        Equal(40, WarParticipantMobilizationBaselineRules.
+                ResolveContribution(0, 40),
+            "a new participant records its full mobilization potential");
+        Equal(40, WarParticipantMobilizationBaselineRules.
+                ResolveContribution(40, 90),
+            "a registered participant keeps its original baseline");
+        Equal(1, WarParticipantMobilizationBaselineRules.
+                NormalizePotential(0),
+            "every participant contributes a non-zero baseline");
+
+        using var database = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        database.Open();
+
+        var service = new WarScoreService(database);
+        True(service.StartWar(101, 1, 2, 1d, 100),
+            "a total war registers its city-score budget");
+        for (int cityId = 1; cityId <= 3; cityId++)
+            True(service.RecordCityControlChanged(101,
+                    City(cityId), WarScoreSide.Defenders,
+                    WarScoreSide.Attackers, 2, 1, 2d + cityId),
+                "each newly occupied city updates the score");
+        True(service.TryGetSnapshot(101, WarScoreSide.Attackers,
+                out WarScoreSnapshot occupied),
+            "the active total-war score can be read");
+        Equal(60, occupied.CityScore,
+            "three of five cities use three fifths of the 100-point pool");
+        IReadOnlyList<WarScoreOccupiedCitySnapshot> frozenByHome =
+            service.ReadOccupiedCitiesByHomeKingdom(101, 2, "", 32);
+        Equal(3, frozenByHome.Count,
+            "runtime occupation reads retain every city by its persisted home kingdom");
+        True(frozenByHome.All(city => city.HomeKingdomId == 2),
+            "home-kingdom lookup does not depend on the city's current live owner collection");
+
+        True(service.RecordCityControlChanged(101, City(2),
+                WarScoreSide.Defenders, WarScoreSide.Defenders,
+                2, 2, 7d),
+            "a recaptured city replaces hostile control");
+        True(service.TryGetSnapshot(101, WarScoreSide.Attackers,
+                out WarScoreSnapshot recaptured),
+            "the recaptured score can be read");
+        Equal(40, recaptured.CityScore,
+            "recapture removes exactly the persisted city contribution");
+
+        var legacy = new WarScoreService(database);
+        True(legacy.StartWar(202, 3, 4, 10d),
+            "a legacy active war starts with the compatibility budget");
+        for (int cityId = 11; cityId <= 13; cityId++)
+            legacy.RecordCityControlChanged(202, City(cityId),
+                WarScoreSide.Defenders, WarScoreSide.Attackers,
+                4, 3, 10d + cityId);
+        True(legacy.TryGetSnapshot(202, WarScoreSide.Attackers,
+                out WarScoreSnapshot beforeRestore),
+            "the legacy active score can be read");
+        Equal(51, beforeRestore.CityScore,
+            "the compatibility budget preserves default active-war scoring");
+
+        var restored = new WarScoreService(database);
+        Equal(false, restored.StartWar(202, 3, 4, 30d, 100),
+            "restoring an active war does not create a duplicate snapshot");
+        for (int cityId = 11; cityId <= 13; cityId++)
+            restored.RecordCityControlChanged(202, City(cityId),
+                WarScoreSide.Defenders, WarScoreSide.Attackers,
+                4, 3, 30d + cityId);
+        True(restored.TryGetSnapshot(202, WarScoreSide.Attackers,
+                out WarScoreSnapshot afterRestore),
+            "the restored active score can be read");
+        Equal(60, afterRestore.CityScore,
+            "restore-time revaluation uses the live war budget");
+
+        True(restored.StartWar(303, 5, 6, 40d, 100, 120, 80),
+            "a war starts with both full-mobilization baselines");
+        True(restored.TryGetSnapshot(303, WarScoreSide.Attackers,
+                out WarScoreSnapshot mobilization),
+            "the mobilization snapshot can be read");
+        Equal(120, mobilization.AttackerMobilizationBaseline,
+            "the attacker baseline is stored on the live snapshot");
+        Equal(80, mobilization.DefenderMobilizationBaseline,
+            "the defender baseline is stored on the live snapshot");
+
+        var mobilizationReloaded = new WarScoreService(database);
+        True(mobilizationReloaded.TryGetSnapshot(303,
+                WarScoreSide.Attackers, out WarScoreSnapshot persisted),
+            "the mobilization snapshot survives a service reload");
+        Equal(120, persisted.AttackerMobilizationBaseline,
+            "the attacker baseline survives SQLite reload");
+        Equal(80, persisted.DefenderMobilizationBaseline,
+            "the defender baseline survives SQLite reload");
+    }
+
+    private static WarScoreCityFacts City(long pCityId)
+    {
+        return new WarScoreCityFacts(pCityId, 0f, 0, 0, 0,
+            false, false, false, 5);
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+}

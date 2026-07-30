@@ -158,40 +158,92 @@ namespace AncientWarfare3.core.lineage
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText =
-                    "SELECT reign.KING_ACTOR_ID,reign.KING_NAME,reign.KING_COLOR," +
-                    "reign.START_TIME,reign.END_TIME,reign.YEAR_NAME_STEM," +
-                    "reign.YEAR_NAME_COLOR,IFNULL(title.FULL_TITLE,'')," +
+                    "SELECT reign.REIGN_ID,reign.KING_ACTOR_ID," +
+                    "reign.KING_NAME,reign.KING_COLOR,reign.START_TIME," +
+                    "reign.END_TIME,IFNULL(title.FULL_TITLE,'')," +
                     "IFNULL(title.FULL_TITLE_COLOR,'') FROM " +
                     KingdomReignTableItem.GetTableName() + " reign LEFT JOIN " +
                     PosthumousTitleTableItem.GetTableName() + " title ON " +
                     "title.REIGN_ID=reign.REIGN_ID AND title.IS_RETROSPECTIVE=0 " +
                     "WHERE reign.KINGDOM_ID=@kid ORDER BY reign.START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pPeriod.kingdom_id);
-                using SQLiteDataReader r = cmd.ExecuteReader();
-                while (r.Read())
+                using (SQLiteDataReader r = cmd.ExecuteReader())
                 {
-                    double start = ToDouble(r, 3, -1);
-                    double end = ToDouble(r, 4, -1);
-                    if (!Overlaps(start, end, pPeriod.start_time, pPeriod.end_time)) continue;
-
-                    string stem = SafeStr(r, 5);
-                    result.Add(new MandateReignView
+                    while (r.Read())
                     {
-                        has_king = true,
-                        king_actor_id = ToLong(r, 0, -1),
-                        king_name = SafeStr(r, 1),
-                        king_color = SafeStr(r, 2),
-                        start_time = Math.Max(start, pPeriod.start_time),
-                        end_time = ClampEnd(end, pPeriod.end_time),
-                        year_prefix_snapshot = string.IsNullOrEmpty(stem) ? "" : stem + "\u5143\u5E74",
-                        posthumous_title = SafeStr(r, 7),
-                        posthumous_color = SafeStr(r, 8)
-                    });
+                        double start = ToDouble(r, 4, -1);
+                        double end = ToDouble(r, 5, -1);
+                        if (!EraChronologyPeriodRules.OverlapsReign(
+                                start, end, pPeriod.start_time,
+                                pPeriod.end_time)) continue;
+
+                        result.Add(new MandateReignView
+                        {
+                            reign_id = ToLong(r, 0, -1),
+                            has_king = true,
+                            king_actor_id = ToLong(r, 1, -1),
+                            king_name = SafeStr(r, 2),
+                            king_color = SafeStr(r, 3),
+                            start_time = Math.Max(start,
+                                pPeriod.start_time),
+                            end_time = ClampEnd(end, pPeriod.end_time),
+                            posthumous_title = SafeStr(r, 6),
+                            posthumous_color = SafeStr(r, 7)
+                        });
+                    }
                 }
+                AttachEraHistory(result, pPeriod);
             }
             catch { }
 
             return result;
+        }
+
+        private static void AttachEraHistory(
+            List<MandateReignView> pReigns, MandatePeriodView pPeriod)
+        {
+            if (pReigns == null || pReigns.Count == 0 ||
+                pPeriod == null) return;
+            IReadOnlyList<MandateEraHistoryRecord> records =
+                MandateEraHistoryPersistence.Read(DB, pPeriod.kingdom_id,
+                    pPeriod.start_time, pPeriod.end_time);
+            if (records.Count == 0) return;
+
+            var byReign = new Dictionary<long, MandateReignView>(
+                pReigns.Count);
+            for (int i = 0; i < pReigns.Count; i++)
+            {
+                MandateReignView reign = pReigns[i];
+                if (reign?.reign_id >= 0)
+                    byReign[reign.reign_id] = reign;
+            }
+            for (int i = 0; i < records.Count; i++)
+            {
+                MandateEraHistoryRecord record = records[i];
+                if (record == null ||
+                    !byReign.TryGetValue(record.ReignId,
+                        out MandateReignView reign) ||
+                    !EraChronologyPeriodRules.OverlapsReign(
+                        record.StartTime, record.EndTime,
+                        reign.start_time, reign.end_time))
+                    continue;
+
+                var clipped = new MandateEraHistoryRecord
+                {
+                    EraId = record.EraId,
+                    ReignId = record.ReignId,
+                    EraName = record.EraName,
+                    EraColor = record.EraColor,
+                    StartTime = Math.Max(record.StartTime,
+                        reign.start_time),
+                    EndTime = ClampEnd(record.EndTime, reign.end_time)
+                };
+                reign.eras.Add(clipped);
+                if (reign.year_prefix_snapshot.Length == 0 &&
+                    clipped.EraName.Length > 0)
+                    reign.year_prefix_snapshot = clipped.EraName +
+                                                 "\u5143\u5E74";
+            }
         }
 
         private static MandateReignView BuildFallbackReign(MandatePeriodView pPeriod)
@@ -252,14 +304,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (pPeriod == null || pPeriod.reigns.Count <= 1) return;
             pPeriod.reigns.RemoveAll(r => r != null && !r.has_king && r.events.Count == 0);
-        }
-
-        private static bool Overlaps(double pStart, double pEnd, double pPeriodStart, double pPeriodEnd)
-        {
-            if (pStart < 0 || pPeriodStart < 0) return false;
-            double end = pEnd < 0 ? double.MaxValue : pEnd;
-            double periodEnd = pPeriodEnd < 0 ? double.MaxValue : pPeriodEnd;
-            return pStart < periodEnd && end >= pPeriodStart;
         }
 
         private static bool Contains(double pStart, double pEnd, double pTime)

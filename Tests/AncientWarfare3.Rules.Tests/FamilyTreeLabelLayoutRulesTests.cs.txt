@@ -1,0 +1,75 @@
+using AncientWarfare3.core.lineage;
+
+internal static class FamilyTreeLabelLayoutRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    public static void Run()
+    {
+        const string fullName = "姐优波离亚达夫萨维";
+        string nameLabel = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(
+            "兄长", fullName, "男", "本人");
+        True(nameLabel.Contains(fullName, StringComparison.Ordinal),
+            "the complete actor name remains visible ahead of relation metadata");
+        True(!nameLabel.Contains("...", StringComparison.Ordinal),
+            "actor names are never shortened with an ellipsis");
+
+        string title = "广平县子 · 拉罕斯坦国 世子 · 纳西苇赫尔 太守 · 郡守";
+        string titleLabel = FamilyTreeLabelLayoutRules.BuildSocialTitleLabel(title);
+        Equal("广平县子 · 世子\n太守 · 郡守", titleLabel,
+            "multi-role titles retain historically meaningful office words");
+        string[] lines = titleLabel.Split('\n');
+        True(lines.Length <= FamilyTreeLabelLayoutRules.MaxSocialTitleLines,
+            "social titles occupy at most two card lines");
+        foreach (string line in lines)
+            True(FamilyTreeLabelLayoutRules.CountHalfUnits(line) <=
+                 FamilyTreeLabelLayoutRules.MaxSocialTitleLineHalfUnits,
+                "each social-title line stays inside the fixed card width");
+        string indivisibleTitle =
+            FamilyTreeLabelLayoutRules.BuildSocialTitleLabel(
+                "超长且没有自然分隔符的完整历史人物礼仪头衔");
+        True(indivisibleTitle.EndsWith(
+                FamilyTreeLabelLayoutRules.DisplayEllipsis,
+                StringComparison.Ordinal),
+            "an indivisible title that still does not fit exposes an omission marker");
+
+        Equal("拉罕斯坦国 世子", FamilyTreeLabelLayoutRules.BuildSocialTitleLabel(
+                "拉罕斯坦国 世子"),
+            "a title that fits is not semantically rewritten");
+        Equal("", FamilyTreeLabelLayoutRules.BuildSocialTitleLabel("   "),
+            "blank social titles remain hidden");
+        string compactTitle = FamilyTreeLabelLayoutRules.BuildSocialTitleLabel(
+            title, 1);
+        Equal(1, compactTitle.Split('\n').Length,
+            "a branch badge can reserve the second title line");
+        True(compactTitle.EndsWith(FamilyTreeLabelLayoutRules.DisplayEllipsis,
+                StringComparison.Ordinal),
+            "a one-line branch title still exposes omitted detail");
+        True(FamilyTreeLabelLayoutRules.LabelWidth <=
+             FamilyTreeLabelLayoutRules.NodeWidth,
+            "all family-tree labels are bounded by the fixed node width");
+
+        Equal(false, FamilyTreeSnapshotOverlayRules.ResolveAlive(
+                snapshotAlive: true, hasPendingArchive: true,
+                pendingArchiveAlive: false, liveKnownDead: false),
+            "pending death wins over an older committed async snapshot");
+        Equal(false, FamilyTreeSnapshotOverlayRules.ResolveAlive(
+                snapshotAlive: true, hasPendingArchive: false,
+                pendingArchiveAlive: true, liveKnownDead: true),
+            "a dead live actor wins over an older committed async snapshot");
+        Equal(true, FamilyTreeSnapshotOverlayRules.ResolveAlive(
+                snapshotAlive: true, hasPendingArchive: false,
+                pendingArchiveAlive: false, liveKnownDead: false),
+            "a current living snapshot remains alive without an override");
+    }
+}

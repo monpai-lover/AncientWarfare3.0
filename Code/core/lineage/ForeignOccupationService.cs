@@ -160,18 +160,32 @@ namespace AncientWarfare3.core.lineage
             if (pCity?.data == null || pOwner?.data == null) return false;
 
             bool ownerXia = LineageService.IsXiaKingdom(pOwner);
-            bool legalCore = MandateService.IsLegalCoreCity(pCity);
+            if (ownerXia) return false;
             bool cityXia = IsXiaOriginCity(pCity) || HasXiaCultureOrLanguage(pCity);
             bool differentCultureOrLanguage = HasDifferentCultureOrLanguage(pCity, pOwner);
+            if (!cityXia)
+            {
+                return ForeignOccupationDetectionRules.TryDetectOccupation(
+                    ownerIsXia: false,
+                    legalCore: false,
+                    mandateCoreControlRatio: 0f,
+                    cityHasXiaIdentity: false,
+                    differentCultureOrLanguage: differentCultureOrLanguage,
+                    sameOwnerOriginCity: false,
+                    type: out pType);
+            }
+
+            bool legalCore = MandateService.IsLegalCoreCity(pCity);
 
             return ForeignOccupationDetectionRules.TryDetectOccupation(
-                ownerXia,
-                legalCore,
-                MandateService.GetCoreControlRatioFor(pOwner),
-                cityXia,
-                differentCultureOrLanguage,
-                false,
-                out pType);
+                ownerIsXia: false,
+                legalCore: legalCore,
+                mandateCoreControlRatio:
+                    MandateService.GetCoreControlRatioFor(pOwner),
+                cityHasXiaIdentity: cityXia,
+                differentCultureOrLanguage: differentCultureOrLanguage,
+                sameOwnerOriginCity: false,
+                type: out pType);
         }
 
         private static OccupationRow OpenOccupation(City pCity, Kingdom pOwner, Kingdom pPreviousOwner, string pType)
@@ -274,8 +288,10 @@ namespace AncientWarfare3.core.lineage
             if (converted > 0)
             {
                 HistoryWriter.RecordCity(pCity, pOwner, CityEvent.FOREIGN_OCCUPATION,
-                    HistoryText.City(pCity, pOwner) + " \u5916\u65CF\u5360\u9886\u671F\u95F4\u7F16\u5165\u5974\u96B6 " +
-                    converted.ToString() + " \u540D",
+                    HistoryText.City(pCity, pOwner) +
+                    HistoryLocalizationRules.H("aw_hist_foreign_slaves_mid") +
+                    HistoryText.PlainText(converted.ToString()) +
+                    HistoryLocalizationRules.H("aw_hist_foreign_count_suffix"),
                     HistoryTarget.City(pCity));
             }
 
@@ -307,8 +323,12 @@ namespace AncientWarfare3.core.lineage
             pCity.setLeader(replacement, pNew: true);
 
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.FOREIGN_OCCUPATION,
-                HistoryText.City(pCity, pOwner) + " \u7684\u672C\u5730\u57CE\u4E3B " +
-                HistoryText.Actor(leader) + " \u88AB" + HistoryText.Actor(replacement) + " \u53D6\u4EE3",
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_local_leader_mid") +
+                HistoryText.Actor(leader) +
+                HistoryLocalizationRules.H("aw_hist_foreign_replaced_mid") +
+                HistoryText.Actor(replacement) +
+                HistoryLocalizationRules.H("aw_hist_foreign_replaced_suffix"),
                 HistoryTarget.Actor(replacement));
             return true;
         }
@@ -347,12 +367,16 @@ namespace AncientWarfare3.core.lineage
                 pCity.setLanguage(pOwner.language);
 
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.CULTURE_ASSIMILATED,
-                HistoryText.City(pCity, pOwner) + " \u88AB\u540C\u5316\u4E3A" +
-                HistoryText.Kingdom(pOwner) + " \u7684\u6587\u5316\u4E0E\u8BED\u8A00",
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_city_assimilated_mid") +
+                HistoryText.Kingdom(pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_city_assimilated_suffix"),
                 HistoryTarget.City(pCity));
             HistoryWriter.RecordKingdom(pOwner, KingdomEvent.FOREIGN_OCCUPATION,
-                HistoryText.Kingdom(pOwner) + " \u5B8C\u6210\u5BF9" +
-                HistoryText.City(pCity, pOwner) + " \u7684\u6587\u5316\u540C\u5316",
+                HistoryText.Kingdom(pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_kingdom_assimilated_mid") +
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_kingdom_assimilated_suffix"),
                 HistoryTarget.City(pCity));
         }
 
@@ -360,25 +384,34 @@ namespace AncientWarfare3.core.lineage
         {
             if (pOld >= pMilestone || pNext < pMilestone) return;
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.FOREIGN_OCCUPATION,
-                HistoryText.City(pCity, pOwner) + " \u5916\u65CF\u5360\u9886\u540C\u5316\u8FDB\u5EA6\u8FBE\u5230 " +
-                pMilestone.ToString() + "%",
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_progress_mid") +
+                HistoryText.PlainText(pMilestone + "%"),
                 HistoryTarget.City(pCity));
         }
 
         private static void RecordOccupationStarted(City pCity, Kingdom pOwner, string pType)
         {
-            string label = pType == TYPE_PSEUDO_DYNASTY
-                ? "\u4F2A\u671D\u5165\u636E"
+            string labelKey = pType == TYPE_PSEUDO_DYNASTY
+                ? "aw_hist_occupation_type_pseudo_dynasty"
                 : pType == TYPE_FOREIGN_ENTRY
-                    ? "\u5916\u65CF\u5165\u636E"
-                    : "\u5F02\u6587\u5316\u5360\u9886";
+                    ? "aw_hist_occupation_type_foreign_entry"
+                    : "aw_hist_occupation_type_foreign_occupation";
             HistoryWriter.RecordCity(pCity, pOwner, CityEvent.FOREIGN_OCCUPATION,
-                HistoryText.City(pCity, pOwner) + " \u88AB" + HistoryText.Kingdom(pOwner) +
-                " " + HistoryText.PlainText(label),
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_city_occupied_mid") +
+                HistoryText.Kingdom(pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_occupation_label_prefix") +
+                HistoryLocalizationRules.H(labelKey) +
+                HistoryLocalizationRules.H("aw_hist_foreign_occupation_label_suffix"),
                 HistoryTarget.City(pCity));
             HistoryWriter.RecordKingdom(pOwner, KingdomEvent.FOREIGN_OCCUPATION,
-                HistoryText.Kingdom(pOwner) + " \u5360\u636E " + HistoryText.City(pCity, pOwner) +
-                "\uFF08" + HistoryText.PlainText(label) + "\uFF09",
+                HistoryText.Kingdom(pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_kingdom_occupied_mid") +
+                HistoryText.City(pCity, pOwner) +
+                HistoryLocalizationRules.H("aw_hist_foreign_occupation_label_prefix") +
+                HistoryLocalizationRules.H(labelKey) +
+                HistoryLocalizationRules.H("aw_hist_foreign_occupation_label_suffix"),
                 HistoryTarget.City(pCity));
         }
 
@@ -444,16 +477,25 @@ namespace AncientWarfare3.core.lineage
         private static OccupationRow ReadActive(City pCity)
         {
             if (pCity?.data == null || !Ready) return null;
+            pCity.data.get(LineageKeys.FOREIGN_OCCUPATION_ID,
+                out long occupationId, -1L);
+            if (occupationId < 0) return null;
             try
             {
                 using var cmd = new SQLiteCommand(DB);
                 cmd.CommandText = "SELECT OCCUPATION_ID,OCCUPATION_TYPE,ASSIMILATION_PROGRESS,RESENTMENT," +
                                   "SLAVE_CONVERTED_COUNT,LEADER_REPLACED FROM " +
                                   CityOccupationStateTableItem.GetTableName() +
-                                  " WHERE CITY_ID=@city AND END_TIME<0 ORDER BY OCCUPATION_ID DESC LIMIT 1";
+                                  " WHERE OCCUPATION_ID=@occupation AND CITY_ID=@city" +
+                                  " AND END_TIME<0 LIMIT 1";
+                cmd.Parameters.AddWithValue("@occupation", occupationId);
                 cmd.Parameters.AddWithValue("@city", pCity.id);
                 using SQLiteDataReader reader = cmd.ExecuteReader();
-                if (!reader.Read()) return null;
+                if (!reader.Read())
+                {
+                    pCity.data.set(LineageKeys.FOREIGN_OCCUPATION_ID, -1L);
+                    return null;
+                }
                 return new OccupationRow
                 {
                     id = ToLong(reader, 0),

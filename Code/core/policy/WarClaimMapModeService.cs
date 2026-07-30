@@ -73,6 +73,7 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 ClearCache();
@@ -80,11 +81,23 @@ namespace AncientWarfare3.core.policy
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void ClearCache()
         {
             _statusCache.Clear();
+        }
+
+        internal static void ResetRuntime()
+        {
+            _focusedKingdomId = -1L;
+            _statusCache.Clear();
+            _lastDirtyTime = -1.0;
         }
 
         public static void DirtyMapIfActive()

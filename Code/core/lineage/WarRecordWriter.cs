@@ -28,6 +28,11 @@ namespace AncientWarfare3.core.lineage
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
+        public static void ClearRuntime()
+        {
+            _active.Clear();
+        }
+
         // ──────────────── 外部接口 ────────────────
 
         /// <summary>战争开始:立即 INSERT 一行(end=-1)并加入活跃缓存。</summary>
@@ -166,7 +171,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>读档后重建活跃缓存(当前进行中的战争,kills 归零可接受)。</summary>
         public static void BackfillActive()
         {
-            _active.Clear();
+            ClearRuntime();
             if (!Ready || World.world?.wars == null) return;
             foreach (War war in World.world.wars)
             {
@@ -258,15 +263,20 @@ namespace AncientWarfare3.core.lineage
         /// <summary>供 AW_WarPatch 生成国家史内容用的胜负描述（含国名）。</summary>
         public static string WinnerLabel(WarWinner pWinner, Kingdom pAtk, Kingdom pDef)
         {
-            string atkName = pAtk?.name ?? "攻方";
-            string defName = pDef?.name ?? "守方";
+            string atkName = pAtk?.name ?? HistoryLocalizationRules.Text("aw_hist_war_attacker");
+            string defName = pDef?.name ?? HistoryLocalizationRules.Text("aw_hist_war_defender");
             switch (pWinner)
             {
-                case WarWinner.Attackers: return atkName + " 胜";
-                case WarWinner.Defenders: return defName + " 胜";
-                case WarWinner.Peace:     return "议和";
-                case WarWinner.Merged:    return "合并";
-                default:                  return "不分胜负";
+                case WarWinner.Attackers:
+                    return atkName + HistoryLocalizationRules.Text("aw_hist_war_victory_suffix");
+                case WarWinner.Defenders:
+                    return defName + HistoryLocalizationRules.Text("aw_hist_war_victory_suffix");
+                case WarWinner.Peace:
+                    return HistoryLocalizationRules.Text("aw_hist_war_result_peace");
+                case WarWinner.Merged:
+                    return HistoryLocalizationRules.Text("aw_hist_war_result_merged");
+                default:
+                    return HistoryLocalizationRules.Text("aw_hist_war_result_inconclusive");
             }
         }
 
@@ -275,15 +285,19 @@ namespace AncientWarfare3.core.lineage
             switch (pWinner)
             {
                 case WarWinner.Attackers:
-                    return HistoryText.Kingdom(pAtk, "攻方") + " 胜";
+                    return HistoryText.Kingdom(pAtk,
+                               HistoryLocalizationRules.Text("aw_hist_war_attacker")) +
+                           HistoryLocalizationRules.H("aw_hist_war_victory_suffix");
                 case WarWinner.Defenders:
-                    return HistoryText.Kingdom(pDef, "守方") + " 胜";
+                    return HistoryText.Kingdom(pDef,
+                               HistoryLocalizationRules.Text("aw_hist_war_defender")) +
+                           HistoryLocalizationRules.H("aw_hist_war_victory_suffix");
                 case WarWinner.Peace:
-                    return "议和";
+                    return HistoryLocalizationRules.H("aw_hist_war_result_peace");
                 case WarWinner.Merged:
-                    return "合并";
+                    return HistoryLocalizationRules.H("aw_hist_war_result_merged");
                 default:
-                    return "不分胜负";
+                    return HistoryLocalizationRules.H("aw_hist_war_result_inconclusive");
             }
         }
 

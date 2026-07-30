@@ -1,0 +1,198 @@
+using System.Reflection;
+using AncientWarfare3.core.lineage;
+
+internal static class TemporaryLevyRecoveryRulesTests
+{
+    public static void Run()
+    {
+        RepeatedRecoveryRequestPreservesCandidateScanProgress();
+        ZeroCapacityCitiesDoNotConsumeCasualtyRecoveryBatches();
+        DirectedRecoveryUsesOneBoundedBurst();
+        Assert(TemporaryLevyDiagnosticRules.ShouldWriteRecoveryDiagnostic(
+                diagnosticsEnabled: true, pendingDemand: 1),
+            "an active recovery demand must emit its batch result when RTS diagnostics are enabled");
+        Assert(!TemporaryLevyDiagnosticRules.ShouldWriteRecoveryDiagnostic(
+                diagnosticsEnabled: false, pendingDemand: 1),
+            "recovery diagnostics must stay silent when RTS diagnostics are disabled");
+        Assert(!TemporaryLevyDiagnosticRules.ShouldWriteRecoveryDiagnostic(
+                diagnosticsEnabled: true, pendingDemand: 0),
+            "a completed recovery plan must not emit a misleading pending-demand diagnostic");
+        Assert(TemporaryLevyDiagnosticRules.ShouldWriteRecoveryRequestDiagnostic(
+                diagnosticsEnabled: true, requestedDemand: 1),
+            "an accepted or rejected replenishment request remains observable when RTS diagnostics are enabled");
+        Assert(!TemporaryLevyDiagnosticRules.ShouldWriteRecoveryRequestDiagnostic(
+                diagnosticsEnabled: false, requestedDemand: 1),
+            "replenishment request diagnostics stay silent when RTS diagnostics are disabled");
+        Assert(!TemporaryLevyDiagnosticRules.ShouldWriteRecoveryRequestDiagnostic(
+                diagnosticsEnabled: true, requestedDemand: 0),
+            "empty replenishment requests never add diagnostic noise");
+        Equal("already_warrior=4 ineligible=7 viable=3 enlist_failed=2",
+            TemporaryLevyDiagnosticRules.RecoveryCandidateBreakdown(
+                alreadyWarrior: 4, ineligible: 7, viable: 3,
+                enlistFailures: 2),
+            "recovery diagnostics must distinguish scan filtering from enlist failure");
+        Equal("not_resident=1 not_living_adult=2 wrong_profession=3 " +
+              "reserve_policy=4 slave_policy=5 protected_identity=6 " +
+              "native_eligibility=7 age_limit=8 capacity=9",
+            TemporaryLevyDiagnosticRules.RecoveryIneligibilityBreakdown(
+                notResident: 1, notLivingAdult: 2, wrongProfession: 3,
+                reservePolicy: 4, slavePolicy: 5, protectedIdentity: 6,
+                nativeEligibility: 7, ageLimit: 8, capacity: 9),
+            "recovery diagnostics must expose the exact enlistment blocker " +
+            "instead of collapsing every failed candidate into ineligible");
+
+        MethodInfo transfer = typeof(TemporaryLevyRules).GetMethod(
+            "MoveInvalidDirectedReplenishmentDemand",
+            BindingFlags.Public | BindingFlags.Static);
+        if (transfer == null)
+            throw new InvalidOperationException(
+                "invalid directed replenishment demand must be preserved for replacement establishment");
+
+        Equal(15, Invoke(transfer, 3, 12),
+            "a destroyed target Army transfers its remaining demand to replacement establishment");
+        Equal(TemporaryLevyRules.MaxPendingCasualtyReinforcements,
+            Invoke(transfer,
+                TemporaryLevyRules.MaxPendingCasualtyReinforcements - 2,
+                12),
+            "replacement demand retains the bounded reinforcement cap");
+
+        MethodInfo retainCity = typeof(TemporaryLevyRules).GetMethod(
+            "ShouldKeepCasualtyReinforcementCity",
+            new[] { typeof(bool) });
+        if (retainCity == null)
+            throw new InvalidOperationException(
+                "the legacy casualty-reinforcement city selector must stay conservative");
+        Assert(!(bool)retainCity.Invoke(null, new object[] { false }),
+            "the legacy selector must not repeatedly trap recovery in one partial city scan");
+        Assert(!(bool)retainCity.Invoke(null, new object[] { true }),
+            "a completed candidate scan releases the city so the recovery plan can rotate");
+
+        MethodInfo retainCityWithRecruitment =
+            typeof(TemporaryLevyRules).GetMethod(
+                "ShouldKeepCasualtyReinforcementCity", new[]
+                {
+                    typeof(bool), typeof(int)
+                });
+        if (retainCityWithRecruitment == null)
+            throw new InvalidOperationException(
+                "recovery city retention must distinguish productive and nonproductive partial scans");
+        Assert(!(bool)retainCityWithRecruitment.Invoke(null,
+                new object[] { false, 0 }),
+            "a nonproductive partial scan must rotate so other cities can supply the army");
+        Assert((bool)retainCityWithRecruitment.Invoke(null,
+                new object[] { false, 1 }),
+            "a productive partial scan may remain selected to finish immediate replenishment");
+        Assert(!(bool)retainCityWithRecruitment.Invoke(null,
+                new object[] { true, 1 }),
+            "a completed scan must release the city even after a productive batch");
+
+        MethodInfo retainPreparationCity = typeof(TemporaryLevyRules).
+            GetMethod("ShouldKeepPreparationRecruitmentCity", new[]
+            {
+                typeof(bool), typeof(int)
+            });
+        if (retainPreparationCity == null)
+            throw new InvalidOperationException(
+                "preparation recruitment must rotate after a nonproductive partial city scan");
+        Assert(!(bool)retainPreparationCity.Invoke(null,
+                new object[] { false, 0 }),
+            "a preparation scan with no recruit must not trap the monthly plan in one city");
+        Assert((bool)retainPreparationCity.Invoke(null,
+                new object[] { false, 1 }),
+            "a productive partial preparation scan may continue filling its current frontline Army");
+        Assert(!(bool)retainPreparationCity.Invoke(null,
+                new object[] { true, 1 }),
+            "a completed preparation city must yield to the next city after its cursor reaches the end");
+
+        Assert(TemporaryLevyRules.ShouldContinueCasualtyRecoveryUntilCoverage(
+                emergencyActive: true, pendingDemand: 8,
+                candidateCoverageComplete: false),
+            "a large city with unscanned candidates must continue recovery beyond the legacy work-item cap");
+        Assert(!TemporaryLevyRules.ShouldContinueCasualtyRecoveryUntilCoverage(
+                emergencyActive: true, pendingDemand: 8,
+                candidateCoverageComplete: true),
+            "recovery must stop after every city has completed a candidate scan without filling demand");
+        Assert(!TemporaryLevyRules.ShouldContinueCasualtyRecoveryUntilCoverage(
+                emergencyActive: false, pendingDemand: 8,
+                candidateCoverageComplete: false),
+            "recovery must not continue outside a military emergency");
+    }
+
+    private static void DirectedRecoveryUsesOneBoundedBurst()
+    {
+        Equal(4, TemporaryLevyRules.
+                ImmediateDirectedRecoveryBatchBudget(25),
+            "a 25-member shortage receives four eight-member batches in one directed burst");
+        Equal(TemporaryLevyRules.MaxCasualtyReinforcementWorkItems,
+            TemporaryLevyRules.ImmediateDirectedRecoveryBatchBudget(
+                int.MaxValue),
+            "an extreme shortage cannot create an unbounded immediate burst");
+        Assert(TemporaryLevyRules.ShouldContinueImmediateDirectedRecovery(
+                targetArmyActive: true, pendingDemand: 25,
+                candidateCoverageComplete: false, batchesProcessed: 0,
+                batchBudget: 4),
+            "an active directed shortage continues inside the same critical work item");
+        Assert(!TemporaryLevyRules.ShouldContinueImmediateDirectedRecovery(
+                targetArmyActive: true, pendingDemand: 25,
+                candidateCoverageComplete: true, batchesProcessed: 0,
+                batchBudget: 4),
+            "complete candidate coverage stops the immediate burst");
+        Assert(!TemporaryLevyRules.ShouldContinueImmediateDirectedRecovery(
+                targetArmyActive: true, pendingDemand: 25,
+                candidateCoverageComplete: false, batchesProcessed: 4,
+                batchBudget: 4),
+            "the immediate burst stops at its bounded batch budget");
+    }
+
+    private static void RepeatedRecoveryRequestPreservesCandidateScanProgress()
+    {
+        MethodInfo resetProgress = typeof(TemporaryLevyRules).GetMethod(
+            "ShouldResetCasualtyReinforcementProgress",
+            BindingFlags.Public | BindingFlags.Static);
+        if (resetProgress == null)
+            throw new InvalidOperationException(
+                "recovery requests must distinguish a new plan from a repeated demand");
+
+        Assert((bool)resetProgress.Invoke(null, new object[] { true }),
+            "a newly created recovery plan must begin at the first work item");
+        Assert(!(bool)resetProgress.Invoke(null, new object[] { false }),
+            "a repeated demand for an active recovery plan must retain its candidate scan progress");
+    }
+
+    private static void ZeroCapacityCitiesDoNotConsumeCasualtyRecoveryBatches()
+    {
+        MethodInfo canSupply = typeof(TemporaryLevyRules).GetMethod(
+            "CanSupplyCasualtyRecoveryCity",
+            BindingFlags.Public | BindingFlags.Static);
+        if (canSupply == null)
+            throw new InvalidOperationException(
+                "casualty recovery must reject cities that cannot produce a recruit");
+
+        Assert(!(bool)canSupply.Invoke(null, new object[]
+            { 20, 0, 40, false }),
+            "a city at the civilian population floor cannot consume a recovery batch");
+        Assert(!(bool)canSupply.Invoke(null, new object[]
+            { 80, 12, 12, false }),
+            "a full normal warrior establishment cannot consume an ordinary recovery batch");
+        Assert((bool)canSupply.Invoke(null, new object[]
+            { 80, 12, 12, true }),
+            "directed emergency replenishment may exceed the normal warrior establishment");
+    }
+
+    private static int Invoke(MethodInfo method, int pending, int directed)
+    {
+        return (int)method.Invoke(null, new object[] { pending, directed });
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition) throw new InvalidOperationException(name);
+    }
+}

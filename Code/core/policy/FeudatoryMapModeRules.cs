@@ -19,6 +19,34 @@ namespace AncientWarfare3.core.policy
             return pModeActive && pHasFeudatorySnapshot;
         }
 
+        public static string BuildCityLabel(string pFeudatoryName,
+            string pCityName)
+        {
+            string feudatory = (pFeudatoryName ?? "").Trim();
+            string city = (pCityName ?? "").Trim();
+            if (feudatory.Length == 0) feudatory = city;
+            if (feudatory.Length == 0) return "";
+            feudatory = feudatory.TrimEnd('\u85E9') + "\u85E9";
+            return city.Length == 0 ? feudatory : feudatory + "-" + city;
+        }
+
+        public static bool ShouldReplaceNameplateAnchor(
+            long pCurrentCityId, bool pCurrentIsSeat,
+            bool pCurrentCenterVisible, int pCurrentZoneId,
+            long pCandidateCityId, bool pCandidateIsSeat,
+            bool pCandidateCenterVisible, int pCandidateZoneId)
+        {
+            if (pCandidateCityId < 0) return false;
+            if (pCurrentCityId < 0) return true;
+            if (pCurrentIsSeat != pCandidateIsSeat)
+                return pCandidateIsSeat;
+            if (pCurrentCenterVisible != pCandidateCenterVisible)
+                return pCandidateCenterVisible;
+            if (pCurrentCityId != pCandidateCityId)
+                return pCandidateCityId < pCurrentCityId;
+            return pCandidateZoneId < pCurrentZoneId;
+        }
+
         public static string ColorHex(long pParentKingdomId,
             long pFeudatoryId, string pParentColorHex)
         {

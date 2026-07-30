@@ -23,6 +23,22 @@ namespace AncientWarfare3.core.lineage
             return !militaryEmergency && !temporaryLeviesActive;
         }
 
+        public static bool ShouldUsePeacetimePatrol(
+            bool isCareerStandingSoldier,
+            bool militaryEmergency,
+            bool inCombat,
+            bool cityAttackOrder)
+        {
+            return isCareerStandingSoldier &&
+                   !militaryEmergency && !inCombat && !cityAttackOrder;
+        }
+
+        public static bool ShouldEnsureArmyMembership(
+            bool isWarrior, bool hasArmyMembership)
+        {
+            return isWarrior && !hasArmyMembership;
+        }
+
         public static float MilitaryScore(float damage, float warfare, float health, float armor, float speed)
         {
             return damage + warfare * 2f + health * 0.1f + armor * 2f + speed * 0.25f;
@@ -47,12 +63,12 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldAllowGuardMaintenance(bool hasExistingGuards, bool standingCoreReady,
             bool militaryEmergency)
         {
-            return hasExistingGuards || standingCoreReady && !militaryEmergency;
+            return hasExistingGuards || standingCoreReady;
         }
 
         public static bool ShouldAllowGuardRecruitment(bool standingCoreReady, bool militaryEmergency)
         {
-            return standingCoreReady && !militaryEmergency;
+            return standingCoreReady;
         }
     }
 }

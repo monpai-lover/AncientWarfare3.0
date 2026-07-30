@@ -39,11 +39,13 @@ namespace AncientWarfare3.core.performance
             _nativeCycleToken = 0L;
             ArmyRtsSchedulingService.Reset();
             NobleHeirPregnancyService.Reset();
+            RulerHouseholdPregnancyService.Reset();
             DynasticMaleLineContinuityService.Reset();
             EnclosedUnownedZoneRepairService.Reset();
             WarScoreService.ClearPendingCityOccupations();
             CivilServiceExamService.ClearRuntime();
             TemporaryMilitaryReturnService.ClearRuntime();
+            WarParticipantEntrySourceService.Instance.ClearRuntime();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -56,6 +58,7 @@ namespace AncientWarfare3.core.performance
 
             DynasticMaleLineContinuityService.ProcessAuthorityCycle();
             NobleHeirPregnancyService.ProcessAuthorityCycle();
+            RulerHouseholdPregnancyService.ProcessAuthorityCycle();
             EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();
             TemporaryMilitaryReturnService.ProcessFrame();
             Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
@@ -69,8 +72,12 @@ namespace AncientWarfare3.core.performance
                 DiplomacyProposalService.ProcessFrame);
             Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
                 DiplomaticOperationService.ProcessFrame);
+            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+                TemporaryLevyService.ProcessPreparationMonth);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);
+            Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
+                FlushPendingWarParticipantSources);
             Measure(RecentFeatureBenchmarkRules.DeferredWorkIndex,
                 DrainDeferredAuthorityWork);
             Measure(RecentFeatureBenchmarkRules.CaptureScanIndex,
@@ -90,6 +97,12 @@ namespace AncientWarfare3.core.performance
             if (itemLimit <= 0) return;
             DeferredRuntimeWorkService.DrainFrame(pMilliseconds: 1.0,
                 pMaxItems: itemLimit);
+        }
+
+        private static void FlushPendingWarParticipantSources()
+        {
+            WarParticipantEntrySourceService.Instance.
+                FlushPendingSources(32);
         }
 
         private static void Measure(int pIndex, System.Action pAction)

@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $servicePath = Join-Path $repo `
     'Code\core\lineage\EnclosedUnownedZoneRepairService.cs'
+$rulesPath = Join-Path $repo `
+    'Code\core\lineage\EnclosedUnownedZoneRules.cs'
 $patchPath = Join-Path $repo `
     'Code\patch\AW_EnclosedUnownedZonePatch.cs'
 $authorityPath = Join-Path $repo `
@@ -26,6 +28,7 @@ function Require-Absent([string]$source, [string]$needle,
 }
 
 $service = Read-RequiredFile $servicePath 'Enclosed Zone repair service'
+$rules = Read-RequiredFile $rulesPath 'Enclosed Zone repair rules'
 $patch = Read-RequiredFile $patchPath 'Enclosed Zone ownership patch'
 $authority = Read-RequiredFile $authorityPath 'Authority cycle service'
 
@@ -57,6 +60,8 @@ Require-Present $service 'MaxCityBoundaryZonesPerCycle = 16' `
     'City transfer boundary inspection must have a fixed cycle budget.'
 Require-Present $service 'MaxCityBoundaryRecordsPerCycle = 4' `
     'Invalid city transfer records must also have a fixed cycle budget.'
+Require-Present $service 'MaxEnclosedComponentZones = 64' `
+    'Connected unowned components must have a fixed traversal budget.'
 Require-Present $service 'Queue<CityBoundaryScan>' `
     'Transferred cities must use a resumable boundary queue.'
 Require-Present $service 'Dictionary<long, CityBoundaryScan>' `
@@ -71,6 +76,17 @@ Require-Present $service 'if (neighbour?.city == null)' `
     'City transfer repair must enqueue only unowned boundary neighbours.'
 Require-Present $service 'pTargetCity.addZone(pZone);' `
     'Repair must use the original City.addZone ownership API.'
+Require-Present $service `
+    'EnclosedUnownedZoneRules.SelectComponentTargetCity(' `
+    'Runtime repair must evaluate the complete connected unowned component.'
+Require-Present $service 'CanStartComponentScan(' `
+    'Open wilderness must be rejected before allocating traversal state.'
+Require-Present $service 'Queue<TileZone>' `
+    'Connected unowned components must be traversed without recursion.'
+Require-Absent $rules 'containsGroundlessZone' `
+    'Rule selection must not reject enclosed non-land components.'
+Require-Absent $service 'containsGroundlessZone' `
+    'Runtime repair must not reject or track groundless components.'
 Require-Absent $service 'OnWorldYear' `
     'Zone repair must not add an annual global scan.'
 Require-Absent $service 'World.world.cities' `

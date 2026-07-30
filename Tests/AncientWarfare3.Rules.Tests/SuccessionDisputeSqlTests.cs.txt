@@ -1,0 +1,101 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.db;
+
+internal static class SuccessionDisputeSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE SuccessionDispute(" +
+            "DISPUTE_ID INTEGER PRIMARY KEY," +
+            "ORIGINAL_KINGDOM_ID INTEGER,RIVAL_KINGDOM_ID INTEGER," +
+            "STATUS INTEGER,DEADLINE_YEAR INTEGER,END_TIME REAL);" +
+            "CREATE TABLE SuccessionDisputeCity(" +
+            "ENTRY_ID INTEGER PRIMARY KEY,DISPUTE_ID INTEGER," +
+            "CITY_ID INTEGER,ACTIVE INTEGER,ORDINAL INTEGER);");
+        IReadOnlyList<SuccessionDisputeIndexSpec> specs =
+            SuccessionDisputeIndexRules.GetRequiredIndexes();
+        Equal(5, specs.Count,
+            "succession disputes own five bounded lookup indexes");
+        foreach (SuccessionDisputeIndexSpec spec in specs)
+            Execute(db, spec.BuildSql());
+
+        Execute(db, "INSERT INTO SuccessionDispute VALUES" +
+                    "(1,10,20,4,112,-1);");
+        Equal(true, ThrowsSqlite(db,
+                "INSERT INTO SuccessionDispute VALUES" +
+                "(2,10,21,0,113,-1);"),
+            "one original kingdom cannot own two active disputes");
+        Equal(true, ThrowsSqlite(db,
+                "INSERT INTO SuccessionDispute VALUES" +
+                "(3,11,20,0,113,-1);"),
+            "one rival kingdom cannot belong to two active disputes");
+        Execute(db, "UPDATE SuccessionDispute SET STATUS=6,END_TIME=50 " +
+                    "WHERE DISPUTE_ID=1;");
+        Execute(db, "INSERT INTO SuccessionDispute VALUES" +
+                    "(4,10,20,0,120,-1);");
+
+        Execute(db, "INSERT INTO SuccessionDisputeCity VALUES" +
+                    "(1,4,100,1,0);");
+        Equal(true, ThrowsSqlite(db,
+                "INSERT INTO SuccessionDisputeCity VALUES" +
+                "(2,5,100,1,0);"),
+            "one city cannot support two active disputes");
+
+        string duePlan = Explain(db,
+            "SELECT DISPUTE_ID FROM SuccessionDispute " +
+            "WHERE STATUS=4 AND DEADLINE_YEAR<=120 " +
+            "ORDER BY DEADLINE_YEAR,DISPUTE_ID LIMIT 1");
+        Equal(true, duePlan.Contains("idx_SuccessionDispute_due",
+                StringComparison.OrdinalIgnoreCase),
+            "deadline processing uses the status-year index");
+        string cityPlan = Explain(db,
+            "SELECT CITY_ID FROM SuccessionDisputeCity " +
+            "WHERE DISPUTE_ID=4 AND ACTIVE=1 " +
+            "ORDER BY ORDINAL,CITY_ID LIMIT 3");
+        Equal(true, cityPlan.Contains(
+                "idx_SuccessionDisputeCity_dispute_active",
+                StringComparison.OrdinalIgnoreCase),
+            "dispute city reads use the bounded ordinal index");
+    }
+
+    private static string Explain(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand("EXPLAIN QUERY PLAN " + sql,
+            db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        var lines = new List<string>();
+        while (reader.Read())
+            lines.Add(Convert.ToString(reader.GetValue(3)) ?? "");
+        return string.Join("\n", lines);
+    }
+
+    private static bool ThrowsSqlite(SQLiteConnection db, string sql)
+    {
+        try
+        {
+            Execute(db, sql);
+            return false;
+        }
+        catch (SQLiteException)
+        {
+            return true;
+        }
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

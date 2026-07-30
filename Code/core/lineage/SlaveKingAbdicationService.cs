@@ -6,6 +6,11 @@ namespace AncientWarfare3.core.lineage
     {
         private static readonly Dictionary<long, string> PendingReasons = new Dictionary<long, string>();
 
+        public static void ClearRuntime()
+        {
+            PendingReasons.Clear();
+        }
+
         public static bool TryForceAbdicate(Actor pActor, string pReason, bool pWasKing, bool pWasSlave,
             Kingdom pKingdom)
         {
@@ -63,12 +68,12 @@ namespace AncientWarfare3.core.lineage
             {
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
                     HistoryText.Kingdom(pKingdom) +
-                    HistoryText.PlainText(" \u56E0\u56FD\u4E2D\u5DF2\u65E0\u81EA\u7531\u6C11\u53EF\u7ACB\uFF0C\u89E3\u5974\u7C4D\u5E76\u6539\u7F16\u4E3A\u4E49\u519B"),
+                    HistoryLocalizationRules.H("aw_hist_slave_only_rebel_kingdom"),
                     HistoryTarget.Actor(pKing));
                 HistoryWriter.RecordPerson(pKing.data.id, pKingdom, pKing.getName(),
                     PersonEvent.MANDATE_REBEL_LEADER,
                     HistoryText.Actor(pKing) +
-                    HistoryText.PlainText(" \u89E3\u5974\u7C4D\uFF0C\u88AB\u63A8\u4E3A\u4E49\u519B\u9886\u8896"),
+                    HistoryLocalizationRules.H("aw_hist_slave_only_rebel_leader"),
                     ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
             }

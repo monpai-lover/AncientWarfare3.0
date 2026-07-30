@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
     public enum DeferredWorkClass
     {
         Persistent,
-        Runtime
+        Runtime,
+        CriticalRuntime
     }
 
     public static class DeferredRuntimeWorkService
@@ -22,17 +24,36 @@ namespace AncientWarfare3.core.lineage
             public int attempts;
         }
 
-        private static readonly LinkedList<WorkItem> Queue = new LinkedList<WorkItem>();
+        private static readonly LinkedList<WorkItem> PersistentQueue =
+            new LinkedList<WorkItem>();
+        private static readonly LinkedList<WorkItem> RuntimeQueue =
+            new LinkedList<WorkItem>();
+        private static readonly LinkedList<WorkItem> CriticalRuntimeQueue =
+            new LinkedList<WorkItem>();
         private static readonly Dictionary<string, LinkedListNode<WorkItem>> Coalesced =
             new Dictionary<string, LinkedListNode<WorkItem>>(StringComparer.Ordinal);
+        private static int _consecutiveCriticalRuntimeWork;
+        private static int _consecutiveRuntimeWork;
 
-        public static int PendingCount => Queue.Count;
+        public static int PendingCount => PersistentQueue.Count +
+                                          RuntimeQueue.Count +
+                                          CriticalRuntimeQueue.Count;
 
         public static void EnqueueCoalesced(string pKey, DeferredWorkClass pClass, Action pAction)
         {
             if (string.IsNullOrEmpty(pKey) || pAction == null) return;
             if (Coalesced.TryGetValue(pKey, out LinkedListNode<WorkItem> existing))
             {
+                if (existing.Value.workClass != pClass)
+                {
+                    WorkItem movedItem = existing.Value;
+                    existing.List?.Remove(existing);
+                    movedItem.workClass = pClass;
+                    movedItem.action = pAction;
+                    movedItem.attempts = 0;
+                    Coalesced[pKey] = QueueFor(pClass).AddLast(movedItem);
+                    return;
+                }
                 existing.Value.workClass = pClass;
                 existing.Value.action = pAction;
                 existing.Value.attempts = 0;
@@ -40,27 +61,32 @@ namespace AncientWarfare3.core.lineage
             }
 
             var item = new WorkItem { key = pKey, workClass = pClass, action = pAction };
-            LinkedListNode<WorkItem> node = Queue.AddLast(item);
+            LinkedListNode<WorkItem> node = QueueFor(pClass).AddLast(item);
             Coalesced[pKey] = node;
         }
 
         public static void EnqueueOrdered(DeferredWorkClass pClass, Action pAction)
         {
             if (pAction == null) return;
-            Queue.AddLast(new WorkItem { workClass = pClass, action = pAction });
+            QueueFor(pClass).AddLast(new WorkItem
+            {
+                workClass = pClass,
+                action = pAction
+            });
         }
 
         public static void DrainFrame(double pMilliseconds = 1.5, int pMaxItems = 1)
         {
-            if (Queue.Count == 0) return;
+            if (PendingCount == 0) return;
             long start = Stopwatch.GetTimestamp();
             long budget = MillisecondsToTicks(pMilliseconds);
             int processed = 0;
-            while (Queue.Count > 0 &&
+            while (PendingCount > 0 &&
                    !DeferredRuntimeWorkRules.ShouldStopDrain(
                        processed, pMaxItems, Stopwatch.GetTimestamp() - start, budget))
             {
-                LinkedListNode<WorkItem> node = Queue.First;
+                LinkedListNode<WorkItem> node = TakeNext();
+                if (node == null) return;
                 Remove(node);
                 Execute(node.Value);
                 processed++;
@@ -69,29 +95,27 @@ namespace AncientWarfare3.core.lineage
 
         public static void FlushPersistent()
         {
-            LinkedListNode<WorkItem> node = Queue.First;
-            while (node != null)
+            while (PersistentQueue.Count > 0)
             {
-                LinkedListNode<WorkItem> next = node.Next;
-                if (node.Value.workClass == DeferredWorkClass.Persistent)
-                {
-                    Remove(node);
-                    Execute(node.Value);
-                }
-                node = next ?? Queue.First;
-                if (node != null && node == Queue.First &&
-                    !ContainsPersistent()) break;
+                LinkedListNode<WorkItem> node = PersistentQueue.First;
+                Remove(node);
+                Execute(node.Value);
             }
         }
 
         public static void ClearRuntimeState()
         {
-            Queue.Clear();
+            PersistentQueue.Clear();
+            RuntimeQueue.Clear();
+            CriticalRuntimeQueue.Clear();
             Coalesced.Clear();
+            _consecutiveCriticalRuntimeWork = 0;
+            _consecutiveRuntimeWork = 0;
         }
 
         private static void Execute(WorkItem pItem)
         {
+            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
             try
             {
                 pItem.action();
@@ -104,13 +128,20 @@ namespace AncientWarfare3.core.lineage
                     Requeue(pItem);
                     return;
                 }
-                ModClass.LogWarning("Deferred work failed: " + e.Message);
+                ModClass.LogWarning(DeferredRuntimeWorkRules.FormatFailure(
+                    pItem.key, e));
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDeferredItem(pItem.key,
+                    diagnostic);
             }
         }
 
         private static void Requeue(WorkItem pItem)
         {
-            LinkedListNode<WorkItem> node = Queue.AddLast(pItem);
+            LinkedListNode<WorkItem> node = QueueFor(pItem.workClass)
+                .AddLast(pItem);
             if (!string.IsNullOrEmpty(pItem.key)) Coalesced[pItem.key] = node;
         }
 
@@ -118,18 +149,59 @@ namespace AncientWarfare3.core.lineage
         {
             if (pNode == null) return;
             string key = pNode.Value.key;
-            Queue.Remove(pNode);
+            pNode.List?.Remove(pNode);
             if (!string.IsNullOrEmpty(key) && Coalesced.TryGetValue(key, out LinkedListNode<WorkItem> indexed) &&
                 indexed == pNode)
                 Coalesced.Remove(key);
         }
 
-        private static bool ContainsPersistent()
+        private static LinkedListNode<WorkItem> TakeNext()
         {
-            for (LinkedListNode<WorkItem> node = Queue.First; node != null; node = node.Next)
-                if (node.Value.workClass == DeferredWorkClass.Persistent)
-                    return true;
-            return false;
+            bool criticalPending = CriticalRuntimeQueue.Count > 0;
+            bool runtimePending = RuntimeQueue.Count > 0;
+            bool persistentPending = PersistentQueue.Count > 0;
+            if (DeferredRuntimeWorkRules.ShouldPrioritizeCriticalRuntimeWork(
+                    criticalPending, runtimePending, persistentPending,
+                    _consecutiveCriticalRuntimeWork))
+            {
+                _consecutiveCriticalRuntimeWork++;
+                return CriticalRuntimeQueue.First;
+            }
+            if (DeferredRuntimeWorkRules.ShouldPrioritizeRuntimeWork(
+                    runtimePending, persistentPending,
+                    _consecutiveRuntimeWork))
+            {
+                _consecutiveRuntimeWork++;
+                _consecutiveCriticalRuntimeWork = 0;
+                return RuntimeQueue.First;
+            }
+            if (persistentPending)
+            {
+                _consecutiveCriticalRuntimeWork = 0;
+                _consecutiveRuntimeWork = 0;
+                return PersistentQueue.First;
+            }
+            if (criticalPending)
+            {
+                _consecutiveCriticalRuntimeWork++;
+                _consecutiveRuntimeWork = 0;
+                return CriticalRuntimeQueue.First;
+            }
+            _consecutiveCriticalRuntimeWork = 0;
+            return RuntimeQueue.First;
+        }
+
+        private static LinkedList<WorkItem> QueueFor(DeferredWorkClass pClass)
+        {
+            switch (pClass)
+            {
+                case DeferredWorkClass.CriticalRuntime:
+                    return CriticalRuntimeQueue;
+                case DeferredWorkClass.Runtime:
+                    return RuntimeQueue;
+                default:
+                    return PersistentQueue;
+            }
         }
 
         private static long MillisecondsToTicks(double pMilliseconds)

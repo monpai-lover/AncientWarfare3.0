@@ -1,6 +1,7 @@
 using System;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
+using AncientWarfare3.ui.windows;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -30,6 +31,7 @@ namespace AncientWarfare3.ui.items
         private TipButton _avatarTip;
         private Text _nameText;
         private Text _socialText;
+        private RectTransform _socialRect;
         private Text _relationText;
         private Button _upButton;          // 上溯(到父)
         private Button _downButton;        // 下溯(到子)
@@ -38,6 +40,8 @@ namespace AncientWarfare3.ui.items
         private GameObject _branchBadge;   // 称王分封"建立分支X氏"提示徽标(点击跳新支大树)
         private Text _branchBadgeText;
         private Button _branchBadgeButton;
+        private Button _biographyButton;
+        private TipButton _biographyTip;
 
         private static readonly Color DeadTint = new Color(0.6f, 0.6f, 0.6f, 1f);
 
@@ -100,7 +104,8 @@ namespace AncientWarfare3.ui.items
             var nrect = nameObj.GetComponent<RectTransform>();
             nrect.anchorMin = new Vector2(0.5f, 1f); nrect.anchorMax = new Vector2(0.5f, 1f);
             nrect.pivot = new Vector2(0.5f, 1f);
-            nrect.sizeDelta = new Vector2(NODE_W, 14);
+            nrect.sizeDelta = new Vector2(FamilyTreeLabelLayoutRules.LabelWidth,
+                FamilyTreeLabelLayoutRules.NameLabelHeight);
             nrect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP)); // 往下挪,避开头像与外溢旗帜
             _nameText = nameObj.GetComponent<Text>();
             _nameText.font = LocalizedTextManager.current_font;
@@ -109,22 +114,28 @@ namespace AncientWarfare3.ui.items
             _nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
             _nameText.verticalOverflow = VerticalWrapMode.Truncate;
             _nameText.resizeTextForBestFit = true;
-            _nameText.resizeTextMinSize = 7;
+            _nameText.resizeTextMinSize = 6;
             _nameText.resizeTextMaxSize = 9;
             _nameText.raycastTarget = false;
 
             var socialObj = new GameObject("SocialTitle", typeof(RectTransform), typeof(Text));
             socialObj.transform.SetParent(transform, false);
-            var srect = socialObj.GetComponent<RectTransform>();
-            srect.anchorMin = new Vector2(0.5f, 1f); srect.anchorMax = new Vector2(0.5f, 1f);
-            srect.pivot = new Vector2(0.5f, 1f);
-            srect.sizeDelta = new Vector2(NODE_W + 24, 12);
-            srect.anchoredPosition = new Vector2(0, -(AVATAR + NAME_GAP + 13));
+            _socialRect = socialObj.GetComponent<RectTransform>();
+            _socialRect.anchorMin = new Vector2(0.5f, 1f); _socialRect.anchorMax = new Vector2(0.5f, 1f);
+            _socialRect.pivot = new Vector2(0.5f, 1f);
+            _socialRect.sizeDelta = new Vector2(FamilyTreeLabelLayoutRules.LabelWidth,
+                FamilyTreeLabelLayoutRules.SocialTitleHeight);
+            _socialRect.anchoredPosition = new Vector2(0,
+                -(AVATAR + NAME_GAP + FamilyTreeLabelLayoutRules.NameLabelHeight));
             _socialText = socialObj.GetComponent<Text>();
             _socialText.font = LocalizedTextManager.current_font;
             _socialText.fontSize = 8;
             _socialText.alignment = TextAnchor.UpperCenter;
-            _socialText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _socialText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _socialText.verticalOverflow = VerticalWrapMode.Truncate;
+            _socialText.resizeTextForBestFit = true;
+            _socialText.resizeTextMinSize = 6;
+            _socialText.resizeTextMaxSize = 8;
             _socialText.color = new Color(0.95f, 0.86f, 0.55f, 1f);
             _socialText.raycastTarget = false;
             socialObj.SetActive(false);
@@ -149,6 +160,7 @@ namespace AncientWarfare3.ui.items
             _downButton = MakeArrow("Down", new Vector2(0.5f, 0f), new Vector2(0, -2), "▼");
             _toggleButton = MakeToggle();
             BuildBranchBadge();
+            BuildBiographyButton();
         }
 
         /// <summary>称王分封徽标:名字下方一行"建支:X氏"(青色),点击跳转新支大树。默认隐藏,Bind 按数据显隐。</summary>
@@ -169,6 +181,41 @@ namespace AncientWarfare3.ui.items
             _branchBadgeText.color = new Color(0.4f, 0.85f, 0.95f, 1f); // 青色链接感
             _branchBadgeButton = obj.GetComponent<Button>();
             _branchBadge = obj;
+            obj.SetActive(false);
+        }
+
+        private void BuildBiographyButton()
+        {
+            var obj = new GameObject("Biography", typeof(RectTransform), typeof(Image),
+                typeof(Button), typeof(TipButton));
+            obj.transform.SetParent(transform, false);
+
+            var rect = obj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(FamilyTreeBiographyButtonRules.Size,
+                FamilyTreeBiographyButtonRules.Size);
+            var position = FamilyTreeBiographyButtonRules.AnchoredPosition;
+            rect.anchoredPosition = new Vector2(position.X, position.Y);
+
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
+            _biographyButton = obj.GetComponent<Button>();
+            _biographyTip = obj.GetComponent<TipButton>();
+
+            var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconObj.transform.SetParent(obj.transform, false);
+            var iconRect = iconObj.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.offsetMin = Vector2.one;
+            iconRect.offsetMax = -Vector2.one;
+            var icon = iconObj.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite("ui/icons/iconDocument")
+                          ?? SpriteTextureLoader.getSprite("ui/Icons/iconXias")
+                          ?? SpriteTextureLoader.getSprite("ui/icons/iconClan");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
             obj.SetActive(false);
         }
 
@@ -221,17 +268,34 @@ namespace AncientWarfare3.ui.items
         public void Bind(FamilyTreeNode pNode, Action<long> pOnNode, Action pOnToggle,
             bool pHasChildren, bool pExpanded, Action pOnUp, Action pOnDown)
         {
+            ResetAvatarForReuse();
             RenderAvatar(pNode);
 
             string sex = pNode.sex == 0 ? "♂" : "♀";
             string relation = pNode.relation_label ?? "";
             string self = AW_L10n.Text("aw_relation_self", "\u672C\u4EBA");
-            _nameText.text = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(relation, pNode.display_name, sex, self);
+            string primaryDisplayName = FamilyTreeLabelLayoutRules.
+                ResolvePrimaryDisplayName(pNode.is_alive, pNode.display_name,
+                    pNode.ritual_appellation);
+            _nameText.text = FamilyTreeLabelLayoutRules.BuildNodeNameLabel(
+                relation, primaryDisplayName, sex, self);
             _nameText.color = ResolveNameColor(pNode);
+            BindBranchBadge(pNode);
             if (_socialText != null)
             {
-                bool hasSocialTitle = !string.IsNullOrEmpty(pNode.social_title);
-                _socialText.text = hasSocialTitle ? pNode.social_title : "";
+                bool reserveBranchLine = _branchBadge != null && _branchBadge.activeSelf;
+                int socialLines = reserveBranchLine ? 1 :
+                    FamilyTreeLabelLayoutRules.MaxSocialTitleLines;
+                string identityTitle = FamilyTreeLabelLayoutRules.
+                    BuildIdentityTitleBlock(pNode.ritual_appellation,
+                        pNode.social_title, socialLines);
+                bool hasSocialTitle = !string.IsNullOrEmpty(identityTitle);
+                _socialRect.sizeDelta = new Vector2(
+                    FamilyTreeLabelLayoutRules.LabelWidth,
+                    reserveBranchLine
+                        ? FamilyTreeLabelLayoutRules.CompactSocialTitleHeight
+                        : FamilyTreeLabelLayoutRules.SocialTitleHeight);
+                _socialText.text = identityTitle;
                 _socialText.color = ResolveSocialColor(pNode);
                 _socialText.gameObject.SetActive(hasSocialTitle);
             }
@@ -244,27 +308,92 @@ namespace AncientWarfare3.ui.items
             long id = pNode.id;
             _avatarButton.onClick.RemoveAllListeners();
             _avatarButton.onClick.AddListener(() => pOnNode?.Invoke(id));
-            SetTip(_avatarTip, gameObject, pNode.display_name, BuildActorTip(pNode));
+            SetTip(_avatarTip, gameObject, primaryDisplayName,
+                BuildActorTip(pNode, primaryDisplayName));
+
+            long actorId = pNode.id;
+            bool showBiography = FamilyTreeBiographyButtonRules.ShouldShow(actorId);
+            _biographyButton.onClick.RemoveAllListeners();
+            _biographyButton.gameObject.SetActive(showBiography);
+            if (showBiography)
+            {
+                _biographyButton.onClick.AddListener(() =>
+                    HistoryListWindow.OpenPerson(actorId));
+                SetTip(_biographyTip, _biographyButton.gameObject,
+                    AW_L10n.Text("aw_biography_entry", "Biography"),
+                    AW_L10n.Text("aw_view_person_biography_desc",
+                        "View this person's life and official career."));
+            }
 
             // 上/下溯箭头(小树用)
             SetArrow(_upButton, pOnUp);
             SetArrow(_downButton, pOnDown);
 
             // 展开/折叠(大树用)
+            UpdateExpansionState(pHasChildren, pExpanded, pOnToggle);
+
+            // 分支徽标已在头衔布局前绑定,以便为它保留第二行空间。
+        }
+
+        public void UpdateExpansionState(bool pHasChildren,
+            bool pExpanded, Action pOnToggle)
+        {
             _toggleButton.onClick.RemoveAllListeners();
             if (pHasChildren && pOnToggle != null)
             {
                 _toggleText.text = pExpanded ? "-" : "+";
                 _toggleButton.gameObject.SetActive(true);
                 _toggleButton.onClick.AddListener(() => pOnToggle.Invoke());
+                return;
             }
-            else
+            _toggleButton.gameObject.SetActive(false);
+        }
+
+        private void ResetAvatarForReuse()
+        {
+            if (_deadPortrait != null)
             {
-                _toggleButton.gameObject.SetActive(false);
+                _deadPortrait.gameObject.SetActive(false);
+                _deadPortrait.sprite = null;
+                _deadPortrait.color = Color.white;
+                RectTransform deadRect =
+                    _deadPortrait.GetComponent<RectTransform>();
+                if (deadRect != null)
+                {
+                    deadRect.sizeDelta = new Vector2(AVATAR, AVATAR);
+                    deadRect.anchoredPosition = Vector2.zero;
+                    deadRect.localScale = Vector3.one;
+                }
             }
 
-            // 称王分封:该节点开了新氏支 → 显示"建支:X氏",点击跳转新支大树。
-            BindBranchBadge(pNode);
+            if (_avatar == null) return;
+            _avatar.enabled = false;
+            if (_avatar.avatarLoader != null)
+            {
+                _avatar.avatarLoader.enabled = false;
+                if (_avatar.avatarLoader.getData() != null)
+                {
+                    try { _avatar.avatarLoader.clear(); }
+                    catch { }
+                }
+                _avatar.avatarLoader._actor = null;
+                _avatar.avatarLoader._data = null;
+                _avatar.avatarLoader._animation_container = null;
+                if (_avatar.avatarLoader._actor_image != null)
+                    _avatar.avatarLoader._actor_image.sprite = null;
+                if (_avatar.avatarLoader._item_image != null)
+                {
+                    _avatar.avatarLoader._item_image.sprite = null;
+                    _avatar.avatarLoader._item_image.enabled = false;
+                }
+            }
+            if (_avatar.kingdomBanner != null)
+                _avatar.kingdomBanner.gameObject.SetActive(false);
+            if (_avatar.clanBanner != null)
+                _avatar.clanBanner.gameObject.SetActive(false);
+            if (_avatar.unit_type_bg != null)
+                _avatar.unit_type_bg.gameObject.SetActive(false);
+            HideAvatarBody();
         }
 
         /// <summary>绑定"建立分支X氏"徽标:节点有 founded_branch_shi_id 时显示并可点击跳新支大树;否则隐藏。</summary>
@@ -280,16 +409,8 @@ namespace AncientWarfare3.ui.items
                 return;
             }
 
-            // 取新支氏名 + 创建城(查 ShiBranch 档案);格式:建支:cityname X氏。
-            var info = LineageQuery.GetShiBranchInfo(branchShi);
-            if (info == null || info.founder_actor_id != pNode.id || info.source_type != ShiSourceType.KING_FOUNDED)
-            {
-                _branchBadge.SetActive(false);
-                return;
-            }
             string prefix = AW_L10n.Text("aw_branch_badge_prefix", "▸建支:");
-            string displayName = ShiBranchRules.BuildDisplayName(
-                info.origin_city_name, info.clan_name);
+            string displayName = (pNode.branch_display ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(displayName))
                 displayName = AW_L10n.Text("aw_new_branch", "新支");
             _branchBadgeText.text = prefix + displayName;
@@ -327,17 +448,26 @@ namespace AncientWarfare3.ui.items
             Actor live = World.world?.units?.get(pNode.id);
             // 必须 isAlive():死者在世界里可能仍有 actor 但 !isRekt(),走 show(live) 会触发 loader 的 showDied()
             // 渲染 _died_sprite(墓碑/僵尸占位)。真死者一律走下方静态重建分支。
-            bool alive = live != null && !live.isRekt() && live.isAlive();
+            bool alive = pNode.is_alive && live != null &&
+                         !live.isRekt() && live.isAlive();
 
             if (alive)
             {
-                _avatar.enabled = true;                                 // 恢复控件刷新(死者分支会关掉)
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true; // 恢复活人动画
-                RestoreAvatarBody();
-                ResetAvatarRoleFrame();
-                _avatar.show(live);
-                RestoreAvatarBody();
-                FixClanBannerColor(live);
+                try
+                {
+                    _avatar.enabled = true;                             // 恢复控件刷新(死者分支会关掉)
+                    if (_avatar.avatarLoader != null)
+                        _avatar.avatarLoader.enabled = true;            // 恢复活人动画
+                    RestoreAvatarBody();
+                    ResetAvatarRoleFrame();
+                    _avatar.show(live);
+                    RestoreAvatarBody();
+                    FixClanBannerColor(live);
+                }
+                catch
+                {
+                    RenderStaticPortraitFallback(pNode, live, false);
+                }
                 return;
             }
 
@@ -349,20 +479,75 @@ namespace AncientWarfare3.ui.items
             _avatar.enabled = false;                               // 停控件自身刷新(IRefreshElement),杜绝 null-actor 刷新
             HideAvatarBody();                                      // 关掉原版控件的单位贴图/底图标(留 _deadPortrait 接管)
 
+            Sprite dead = ResolveDeadPortraitSprite(pNode) ??
+                          _avatar.avatarLoader?._died_sprite;
+            if (dead != null && _deadPortrait != null)
+            {
+                ApplyDeadPortraitLayout(pNode);
+                _deadPortrait.sprite = dead;
+                _deadPortrait.color = DeadTint;                    // 整体灰度(死者)
+                _deadPortrait.gameObject.SetActive(true);
+            }
+
+            try { LoadDeadKingdomBanner(pNode); }                  // 国旗帜:活国实时 / 亡国用 KingdomArchive 重建
+            catch { }
+            try { LoadDeadClanBanner(pNode); }                     // 氏族旗帜:活 Clan / 人物档案快照重建
+            catch { }
+        }
+
+        private void RenderStaticPortraitFallback(FamilyTreeNode pNode,
+            Actor pLive, bool pDead)
+        {
+            if (_avatar == null || _deadPortrait == null) return;
+            _avatar.enabled = false;
+            if (_avatar.avatarLoader != null)
+                _avatar.avatarLoader.enabled = false;
+            HideAvatarBody();
+
+            Sprite portrait = TryBuildLiveWalkingSprite(pLive) ??
+                              ResolveDeadPortraitSprite(pNode) ??
+                              _avatar.avatarLoader?._died_sprite;
+            if (portrait == null) return;
+
+            ApplyDeadPortraitLayout(pNode);
+            _deadPortrait.sprite = portrait;
+            _deadPortrait.color = pDead ? DeadTint : Color.white;
+            _deadPortrait.gameObject.SetActive(true);
+            if (pLive != null)
+            {
+                try { FixClanBannerColor(pLive); }
+                catch { }
+            }
+        }
+
+        private static Sprite TryBuildLiveWalkingSprite(Actor pLive)
+        {
+            if (pLive?.asset == null) return null;
             try
             {
-                Sprite dead = BuildDeadSprite(pNode);
-                if (dead != null && _deadPortrait != null)
+                if (pLive.asset.has_override_sprite)
+                    return pLive.asset.get_override_sprite(pLive);
+
+                AnimationContainerUnit container = pLive.animation_container ??
+                    DynamicActorSpriteCreatorUI.getContainerForUI(pLive);
+                if (container?.walking?.frames == null ||
+                    container.walking.frames.Length == 0) return null;
+                Sprite baseFrame = container.walking.frames[0];
+                if (baseFrame == null) return null;
+                try
                 {
-                    ApplyDeadPortraitLayout(pNode);
-                    _deadPortrait.gameObject.SetActive(true);
-                    _deadPortrait.sprite = dead;
-                    _deadPortrait.color = DeadTint;                // 整体灰度(死者)
+                    return DynamicActorSpriteCreatorUI.getUnitSpriteForUI(
+                               pLive, baseFrame) ?? baseFrame;
                 }
-                LoadDeadKingdomBanner(pNode);                      // 国旗帜:活国实时 / 亡国用 KingdomArchive 重建
-                LoadDeadClanBanner(pNode);                         // 氏族旗帜:活 Clan / 人物档案快照重建
+                catch
+                {
+                    return baseFrame;
+                }
             }
-            catch { /* 合成失败:留空头像 + 灰名,不崩 */ }
+            catch
+            {
+                return null;
+            }
         }
 
         private void ApplyDeadPortraitLayout(FamilyTreeNode pNode)
@@ -380,8 +565,9 @@ namespace AncientWarfare3.ui.items
 
         private static bool ShouldUseDeadBabyLayout(FamilyTreeNode pNode)
         {
-            ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
-            return xia != null && xia.has_baby_form && !ShouldRenderDeadAsAdult(pNode, xia);
+            ActorAsset asset = ResolveArchivedActorAsset(pNode);
+            return asset != null && asset.has_baby_form &&
+                   !ShouldRenderDeadAsAdult(pNode, asset);
         }
 
         /// <summary>关掉原版控件的单位贴图/底图标本体(保留 kingdomBanner 子树供死者旗帜用),让 _deadPortrait 接管画像。</summary>
@@ -424,36 +610,169 @@ namespace AncientWarfare3.ui.items
 
         private static Sprite BuildDeadSprite(FamilyTreeNode pNode)
         {
-            var data = BuildDeadAvatarData(pNode);
-            if (data == null || data.asset == null) return null;
-            if (data.asset.has_override_sprite) return data.asset.get_override_sprite(null);
+            return ResolveDeadPortraitSprite(pNode);
+        }
 
-            var container = DynamicActorSpriteCreatorUI.getContainerForUI(
-                data.asset, data.is_adult, data.getTextureAsset(),
-                data.mutation_skin_asset, data.is_egg, data.egg_asset);
-            if (container?.walking?.frames == null || container.walking.frames.Length == 0) return null;
-            data.head_id = SafeHeadId(data.sex, data.head_id, container);
+        private static Sprite ResolveDeadPortraitSprite(FamilyTreeNode pNode)
+        {
+            ActorAsset asset = ResolveArchivedActorAsset(pNode);
+            if (asset == null) return null;
 
-            Sprite baseFrame = container.walking.frames[0];
-            return data.getColoredSprite(baseFrame, container); // 内部用 data.phenotype_* 上 Xia 真实肤色
+            bool renderAdult = ShouldRenderDeadAsAdult(pNode, asset);
+            Sprite portrait = TryBuildColoredDeadSprite(pNode, asset, renderAdult);
+            if (portrait != null) return portrait;
+
+            portrait = TryBuildBaseDeadSprite(pNode, asset, renderAdult);
+            if (portrait != null) return portrait;
+
+            if (!renderAdult)
+            {
+                portrait = TryBuildBaseDeadSprite(pNode, asset, true);
+                if (portrait != null) return portrait;
+            }
+
+            portrait = TryGetActorAssetIcon(asset);
+            if (portrait != null) return portrait;
+
+            return SpriteTextureLoader.getSprite("ui/Icons/iconQuestionMark");
+        }
+
+        private static Sprite TryBuildColoredDeadSprite(FamilyTreeNode pNode,
+            ActorAsset pAsset, bool pRenderAdult)
+        {
+            try
+            {
+                var data = BuildDeadAvatarData(pNode, pAsset, pRenderAdult);
+                if (data == null || data.asset == null) return null;
+                if (data.asset.has_override_sprite)
+                    return data.asset.get_override_sprite(null);
+
+                AnimationContainerUnit container = TryGetDeadAnimationContainer(
+                    pNode, data.asset, data.is_adult);
+                if (container?.walking?.frames == null ||
+                    container.walking.frames.Length == 0) return null;
+                data.head_id = SafeHeadId(data.sex, data.head_id,
+                    pNode.id, container);
+
+                Sprite baseFrame = container.walking.frames[0];
+                if (baseFrame == null) return null;
+                return data.getColoredSprite(baseFrame, container);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static Sprite TryBuildBaseDeadSprite(FamilyTreeNode pNode,
+            ActorAsset pAsset, bool pRenderAdult)
+        {
+            try
+            {
+                if (pAsset == null) return null;
+                if (pAsset.has_override_sprite)
+                    return pAsset.get_override_sprite(null);
+
+                AnimationContainerUnit container =
+                    TryGetDeadAnimationContainer(pNode, pAsset, pRenderAdult);
+                if (container?.walking?.frames == null ||
+                    container.walking.frames.Length == 0) return null;
+                return container.walking.frames[0];
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static AnimationContainerUnit TryGetDeadAnimationContainer(
+            FamilyTreeNode pNode, ActorAsset pAsset, bool pRenderAdult)
+        {
+            if (pAsset?.texture_asset == null) return null;
+            try
+            {
+                if (pRenderAdult && pAsset.civ &&
+                    pAsset.texture_asset.has_advanced_textures)
+                {
+                    string archivedTexturePath =
+                        FamilyTreePortraitIdentityRules.ResolveCitizenTexturePath(
+                                pAsset.texture_asset.texture_path_base,
+                                pAsset.skin_citizen_male,
+                                pAsset.skin_citizen_female,
+                                pNode?.sex ?? 0,
+                                archivedSkinId:
+                                    ResolveEffectiveArchivedSkinId(pNode));
+                    if (!string.IsNullOrEmpty(archivedTexturePath))
+                        return DynamicActorSpriteCreatorUI.getContainerForUI(
+                            pAsset, true, pAsset.texture_asset,
+                            pTexturePath: archivedTexturePath);
+                }
+
+                return DynamicActorSpriteCreatorUI.getContainerForUI(
+                    pAsset, pRenderAdult, pAsset.texture_asset);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static int ResolveEffectiveArchivedSkinId(
+            FamilyTreeNode pNode)
+        {
+            if (pNode == null) return 0;
+            int subspeciesSkinId = -1;
+            if (pNode.subspecies_id >= 0L)
+            {
+                try
+                {
+                    subspeciesSkinId = World.world?.subspecies?
+                        .get(pNode.subspecies_id)?.data?.skin_id ?? -1;
+                }
+                catch { }
+            }
+            return FamilyTreePortraitIdentityRules.ResolveEffectiveSkinId(
+                pNode.skin, pNode.skin_set != 0, subspeciesSkinId);
+        }
+
+        private static Sprite TryGetActorAssetIcon(ActorAsset pAsset)
+        {
+            if (pAsset == null) return null;
+            try { return pAsset.getSpriteIcon(); }
+            catch { return null; }
         }
 
         /// <summary>用死者存档数据(sex/head id)构造 ActorAvatarData(无 live Actor)。
         /// pIsStopIdleAnimation=true → avatarLoader.load 走 showStatic 定格静态首帧,不触发动画 Update 越界。</summary>
         private static ActorAvatarData BuildDeadAvatarData(FamilyTreeNode pNode)
         {
-            ActorAsset xia = AssetManager.actor_library.get(LineageService.XIA_ASSET_ID);
-            if (xia == null) return null;
+            ActorAsset asset = ResolveArchivedActorAsset(pNode);
+            if (asset == null) return null;
 
-            ColorAsset color = KingdomFlagBuilder.ResolveColor(pNode.kingdom_color, pNode.kingdom_color_id);
+            return BuildDeadAvatarData(pNode, asset,
+                ShouldRenderDeadAsAdult(pNode, asset));
+        }
+
+        private static ActorAvatarData BuildDeadAvatarData(FamilyTreeNode pNode,
+            ActorAsset pAsset, bool pRenderAdult)
+        {
+            if (pNode == null || pAsset == null) return null;
+
+            ColorAsset color = KingdomFlagBuilder.ResolveColor(
+                pNode.kingdom_color, pNode.kingdom_color_id);
+            if (color == null)
+                color = ColorAsset.tryMakeNewColorAsset(
+                    FamilyTreePortraitIdentityRules.ResolvePortraitColorHex(
+                        pNode.kingdom_color));
+            color?.initColor();
 
             var data = new ActorAvatarData();
             data.setData(
-                xia,                                   // asset
+                pAsset,                                // asset
                 null,                                  // mutation
                 pNode.sex == 0 ? ActorSex.Male : ActorSex.Female,
                 pNode.id,                              // actor id(头部随机种子;有 head id 时不用)
-                pNode.head >= 0 ? pNode.head : 0,      // head id
+                pNode.head,                            // head id; -1 keeps the engine-stable actor-id selection
                 null,                                  // sprite_head(loader 填)
                 pNode.phenotype_index,                 // phenotype_index(生前真实肤色,0 会被上成僵尸绿)
                 pNode.phenotype_shade,                 // phenotype_skin_shade
@@ -461,7 +780,7 @@ namespace AncientWarfare3.ui.items
                 false,                                 // is_egg
                 false, false, false,                   // king / warrior / wise
                 null,                                  // egg_asset
-                ShouldRenderDeadAsAdult(pNode, xia),   // is_adult
+                pRenderAdult,                          // is_adult
                 false,                                 // is_lying
                 false,                                 // is_touching_liquid
                 false,                                 // is_inside_boat
@@ -473,6 +792,19 @@ namespace AncientWarfare3.ui.items
                 (int)pNode.id,                         // hash
                 null, null);                           // statuses
             return data;
+        }
+
+        private static ActorAsset ResolveArchivedActorAsset(FamilyTreeNode pNode)
+        {
+            if (pNode == null) return null;
+            if (!string.IsNullOrWhiteSpace(pNode.asset_id))
+            {
+                ActorAsset archived = AssetManager.actor_library.get(
+                    pNode.asset_id);
+                if (archived != null) return archived;
+            }
+
+            return World.world?.units?.get(pNode.id)?.asset;
         }
 
         private static bool ShouldRenderDeadAsAdult(FamilyTreeNode pNode, ActorAsset pAsset)
@@ -531,12 +863,13 @@ namespace AncientWarfare3.ui.items
             cb.gameObject.SetActive(false);
         }
 
-        private static int SafeHeadId(ActorSex pSex, int pHeadId, AnimationContainerUnit pContainer)
+        private static int SafeHeadId(ActorSex pSex, int pHeadId,
+            long pActorId, AnimationContainerUnit pContainer)
         {
-            if (pHeadId < 0 || pContainer == null) return -1;
+            if (pContainer == null) return -1;
             Sprite[] heads = pSex == ActorSex.Male ? pContainer.heads_male : pContainer.heads_female;
-            if (heads == null || heads.Length == 0) return -1;
-            return pHeadId < heads.Length ? pHeadId : -1;
+            return FamilyTreePortraitIdentityRules.ResolveRenderableHeadId(
+                pHeadId, pActorId, heads?.Length ?? 0);
         }
 
         private static Image BannerBackground(KingdomBanner pBanner)
@@ -701,9 +1034,18 @@ namespace AncientWarfare3.ui.items
         }
 
         /// <summary>节点 tooltip 正文:多行丰富信息(身份/性别 · 氏族 · 国/城 · 生卒 · 代)。空字段省略该行。</summary>
-        private static string BuildActorTip(FamilyTreeNode pNode)
+        private static string BuildActorTip(FamilyTreeNode pNode,
+            string pPrimaryDisplayName)
         {
             var sb = new System.Text.StringBuilder();
+
+            if (!pNode.is_alive &&
+                !string.IsNullOrWhiteSpace(pNode.display_name) &&
+                !string.Equals(pNode.display_name.Trim(),
+                    pPrimaryDisplayName?.Trim(),
+                    StringComparison.Ordinal))
+                sb.AppendLine(AW_L10n.Text("aw_ruler_real_name",
+                    "Ruler Name") + "：" + pNode.display_name.Trim());
 
             // 行1:身份 · 性别 · 状态(在世/已故)
             string identity = IdentityLabel(pNode.status);
@@ -872,8 +1214,12 @@ namespace AncientWarfare3.ui.items
                 var node = new FamilyTreeNode
                 {
                     id = row.id,
+                    asset_id = row.asset_id,
+                    subspecies_id = row.subspecies_id,
                     sex = row.sex,
                     head = row.head,
+                    skin = row.skin,
+                    skin_set = row.skin_set,
                     phenotype_index = row.phenotype_index,
                     phenotype_shade = row.phenotype_shade,
                     kingdom_color = row.kingdom_color,

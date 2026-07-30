@@ -1,0 +1,49 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolEducationCandidateSqlTests
+{
+    public static void Run()
+    {
+        DeclinedNobleQueryExcludesCurrentNoblesAndCommoners();
+    }
+
+    private static void DeclinedNobleQueryExcludesCurrentNoblesAndCommoners()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,KINGDOM_ID INTEGER," +
+            "IS_ALIVE INTEGER,STATUS TEXT,EVER_NOBLE_BLOOD INTEGER," +
+            "LINEAGE_ID INTEGER)");
+        Execute(db, "INSERT INTO Archive VALUES " +
+            "(1,7,1,'noble',1,10)," +
+            "(2,7,1,'none',1,-1)," +
+            "(3,7,1,'none',0,12)," +
+            "(4,7,1,'none',0,-1)," +
+            "(5,7,0,'none',1,-1)," +
+            "(6,8,1,'none',1,-1)");
+
+        List<long> result = HistoricalSchoolEducationCandidateQuery.
+            LoadDeclinedNobles(db, "Archive", pKingdomId: 7,
+                pAfterActorId: -1, pLimit: 8);
+
+        Equal("2,3", string.Join(",", result),
+            "only living domestic former nobles and lineage members are returned");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+}

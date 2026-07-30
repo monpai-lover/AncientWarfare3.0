@@ -1,3 +1,5 @@
+using AncientWarfare3.core.court;
+
 namespace AncientWarfare3.core.lineage
 {
     internal static class RitualDiplomacyOpinionCallbacks
@@ -15,6 +17,29 @@ namespace AncientWarfare3.core.lineage
         public static int Usurpation(Kingdom pMain, Kingdom pTarget)
         {
             return RitualDiplomacyOpinionRules.Usurpation(ReadFacts(pMain), ReadFacts(pTarget));
+        }
+
+        public static int CourtOpenness(Kingdom pMain, Kingdom pTarget)
+        {
+            CourtInstitutionEffects effects =
+                CourtInstitutionEffectService.Read(pMain);
+            return CourtInstitutionEffectRules.CrossCultureOpinion(
+                effects.CrossCultureOpinionBonus,
+                ReadCultureId(pMain), ReadCultureId(pTarget));
+        }
+
+        public static int SuccessionSplit(Kingdom pMain, Kingdom pTarget)
+        {
+            return SuccessionDisputeService.ReadOpposedCourtOpinion(
+                pMain, pTarget);
+        }
+
+        private static long ReadCultureId(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return -1L;
+            pKingdom.data.get(LineageKeys.DIPLOMACY_CULTURE_ID,
+                out long cultureId, -1L);
+            return cultureId;
         }
 
         private static RitualDiplomacyFacts ReadFacts(Kingdom pKingdom)

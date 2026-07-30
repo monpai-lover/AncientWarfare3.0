@@ -189,6 +189,12 @@ namespace AncientWarfare3.core.lineage
                 pError = "invalid_restoration_request";
                 return null;
             }
+            if (!RoyalGuardOfficeRules.CanReplaceLifetimeGuardIdentity(
+                    RoyalGuardService.IsRoyalGuard(pClaimant)))
+            {
+                pError = "claimant_is_royal_guard";
+                return null;
+            }
             if (_current != null)
             {
                 pError = "nested_restoration_creation";

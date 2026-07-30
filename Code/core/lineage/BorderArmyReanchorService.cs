@@ -66,13 +66,22 @@ namespace AncientWarfare3.core.lineage
             WorldTile patrol = null;
             try { patrol = pPatrolSelector?.Invoke(pCity) ?? pCity?.getTile(); } catch { }
             if (patrol == null) return;
+            bool useLegacyFollowerOrders = ArmyRtsRuntimeModeRules.
+                ShouldUseLegacyArmyFollowerOrders(
+                    ArmyRtsRuntimeMode.Current);
+            if (!useLegacyFollowerOrders)
+                ArmyRtsControllerService.TrySetFormationAnchor(pArmy,
+                    patrol);
             try
             {
                 foreach (Actor actor in pArmy.getUnits())
                 {
                     if (actor?.data == null || actor.isRekt()) continue;
                     pPrepareActor?.Invoke(actor);
-                    if (actor.current_tile != null && actor.current_tile.isSameIsland(patrol)) actor.goTo(patrol);
+                    if (useLegacyFollowerOrders &&
+                        actor.current_tile != null &&
+                        actor.current_tile.isSameIsland(patrol))
+                        actor.goTo(patrol);
                 }
             }
             catch { }
@@ -81,16 +90,19 @@ namespace AncientWarfare3.core.lineage
         private static void Release(Army pArmy)
         {
             if (pArmy?.data == null) return;
-            var units = new List<Actor>();
-            try { foreach (Actor unit in pArmy.getUnits()) if (unit?.data != null && !unit.isRekt()) units.Add(unit); }
-            catch { }
-            foreach (Actor unit in units)
+            using (ArmyCaptainDisposalScope.Open(pArmy))
             {
-                unit.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
-                try { unit.removeFromArmy(); } catch { unit.setArmy(null); }
+                var units = new List<Actor>();
+                try { foreach (Actor unit in pArmy.getUnits()) if (unit?.data != null && !unit.isRekt()) units.Add(unit); }
+                catch { }
+                foreach (Actor unit in units)
+                {
+                    unit.data.set(LineageKeys.MANDATE_BORDER_GUARD, false);
+                    try { unit.removeFromArmy(); } catch { unit.setArmy(null); }
+                }
+                try { pArmy.setCaptain(null); } catch { }
+                try { World.world?.armies?.removeObject(pArmy); } catch { }
             }
-            try { pArmy.setCaptain(null); } catch { }
-            try { World.world?.armies?.removeObject(pArmy); } catch { }
         }
 
         private static Kingdom SafeOwner(Army pArmy)

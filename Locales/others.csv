@@ -1,4 +1,13 @@
 key,cz,en,ch
+aw_back_to_kingdom,返回国家,Back to Kingdom,返回國家
+status_title_aw_mandate_army_golden,盛世军威,Golden Age Army,盛世軍威
+status_description_aw_mandate_army_golden,天命鼎盛时军队获得小幅数量与战力加成,The army receives a moderate strength bonus while the Mandate flourishes,天命鼎盛時軍隊獲得小幅數量與戰力加成
+status_title_aw_mandate_army_decline,衰世疲军,Declining Army,衰世疲軍
+status_description_aw_mandate_army_decline,天命衰退使军队数量与战力下降,Declining Mandate reduces army size and combat strength,天命衰退使軍隊數量與戰力下降
+status_title_aw_mandate_army_chaos,乱世溃军,Chaos-Worn Army,亂世潰軍
+status_description_aw_mandate_army_chaos,乱世与政令崩解严重削弱军队,Chaos and collapsed authority severely weaken the army,亂世與政令崩解嚴重削弱軍隊
+status_title_aw_mandate_army_renewal,中兴新军,Renewal Army,中興新軍
+status_description_aw_mandate_army_renewal,初创与中兴时期军队获得最强数量与战力加成,Founding and renewal grant the largest army size and combat bonus,初創與中興時期軍隊獲得最強數量與戰力加成
 academy_Xia,书院,Academy,書院
 building_academy_Xia,书院,Academy,書院
 type_aw_school_academy,书院,Academy,書院
@@ -37,7 +46,7 @@ ge_description,戈:勾啄并用的青铜长兵，暴击更高。,Ge: a bronze da
 binfa_description,孙子兵法:传世兵书，佩之大幅增益军略。,The Art of War: a legendary text greatly boosting warfare.,孫子兵法：傳世兵書，佩之大幅增益軍略。
 tianming,天命,Mandate of God,天命
 tianminggo,天命,Mandate of God,天命
-public_year_name,盒历,Box Calendar,盒曆
+public_year_name,纪年,Calendar,紀年
 year_name_format,$year_name$$year_number$年,$year_name$ Year at $year_number$,$year_name$$year_number$年
 first_year_number,元,First,元
 moh_desc_common,天命如常,Mandate of God is steady,天命如常
@@ -58,6 +67,7 @@ aw_family_tree Title,家族树,Family Tree,家族樹
 aw_history Title,编年史,Chronicle,編年史
 aw_kingdom_roster Title,万国史,All Kingdoms,萬國史
 aw_vassal_relations Title,附庸关系,Vassal Relations,附庸關係
+aw_vassal_mapmode_at_war,交战中,At war,交戰中
 aw_kingdom_roster_btn,万国史,All Kingdoms,萬國史
 aw_kingdom_roster_btn Description,查看世界所有王国(含已亡国)的历史,View history of every kingdom incl. fallen ones,查看世界所有王國(含已亡國)的歷史
 aw_identity,身份,Identity,身份
@@ -71,6 +81,8 @@ aw_kingdom_title,爵位,Title,爵位
 aw_heir,继承人,Heir,繼承人
 aw_heir_shizi,世子,Heir Apparent,世子
 aw_heir_taizi,太子,Crown Prince,太子
+aw_heir_liuhou,留后,Military-designated Heir,留後
+aw_heir_sijun,嗣君,Civil-designated Heir,嗣君
 aw_lineage_overview_btn,姓族总览,Lineage Overview,姓族總覽
 aw_lineage_overview_btn Description,查看所有姓与氏支的谱系档案,View all surname and branch lineage archives,查看所有姓與氏支的譜系檔案
 xia,夏人,Xia,夏人
@@ -78,7 +90,7 @@ xia_description,点击地图生成一个夏人单位,Click on the map to spawn a
 AW3 Lineage,古代战争3.0(春秋),Ancient Warfare 3.0 (Spring and Autumn),古代戰爭3.0(春秋)
 AW3 Lineage Description,历史 / 国策 / 科技 / 姓族,History / Policies / Technology / Lineage,歷史 / 國策 / 科技 / 姓族
 aw_toggle_figure,历史人物降临,Historical Figures,歷史人物降臨
-aw_toggle_figure_description,开关历史人物(姬发/嬴政/刘邦/曹丕/司马炎)按序降临,Toggle whether historical figures spawn in order,開關歷史人物(姬發/嬴政/劉邦/曹丕/司馬炎)按序降臨
+aw_toggle_figure_description,开关历代开国君主按时代顺序降临,Toggle founders across Chinese history in chronological order,開關歷代開國君主按時代順序降臨
 aw_policy_state_placeholder,阶级,Class,階級
 aw_policy_exec_placeholder,国策,Policy,國策
 aw_label_king,国王,King,國王
@@ -87,6 +99,7 @@ aw_republic_head,元首,Head of State,元首
 aw_republic_elder,元老,Elder,元老
 aw_biography_entry,人物传记,Biography,人物傳記
 aw_view_biography,查看该人的生平编年史,View this person's chronicle,查看該人的生平編年史
+aw_view_person_biography_desc,查看该人物的生平与仕途记录,View this person's life and official career,查看該人物的生平與仕途記錄
 aw_kingdom_history_entry,国家历史,Kingdom History,國家歷史
 aw_view_kingdom_history,查看该国的历史编年史,View this kingdom's chronicle,查看該國的歷史編年史
 aw_vassal_relations,附庸关系,Vassal Relations,附庸關係
@@ -124,6 +137,8 @@ aw_tree_collapse,收缩,Collapse,收縮
 aw_back_big_tree,← 回氏族大树,← Clan Tree,← 回氏族大樹
 aw_clan_big_tree,氏族大树,Clan Tree,氏族大樹
 aw_family_tree_short,家族树,Family Tree,家族樹
+aw_family_tree_loading,正在载入家族树,Loading family tree,正在載入家族樹
+aw_family_tree_unavailable,家族树暂不可用,Family tree unavailable,家族樹暫不可用
 aw_history_filter_all,全部,All,全部
 aw_history_filter_life,人生,Life,人生
 aw_history_filter_honor,荣耀,Honor,榮耀
@@ -226,6 +241,8 @@ status_title_aw_school_voyage,远洋访学,Scholarly Sea Voyage,遠洋訪學
 status_description_aw_school_voyage,因长期无船而进行有时限的远洋访学,A bounded scholarly voyage used only after prolonged transport failure,因長期無船而進行有時限的遠洋訪學
 status_title_aw_royal_asylum,王族避难,Royal Asylum,王族避難
 status_description_aw_royal_asylum,因本国防御战争暂居和平国家且保留原国籍,Temporarily residing in a peaceful realm during a defensive war while retaining home nationality,因本國防禦戰爭暫居和平國家且保留原國籍
+status_title_aw_army_rts_mobilizing,紧急集结,Emergency Mobilization,緊急集結
+status_description_aw_army_rts_mobilizing,正在向部队集结地赶赴，移动速度提高,Moving quickly to rally or replenish an Army,正在向部隊集結地趕赴，移動速度提高
 task_unit_aw_royal_asylum_roam,避难地闲居,Asylum Residence,避難地閒居
 aw_royal_asylum_host,避难城市,Host City,避難城市
 aw_historical_school_scholar,游学先师,Itinerant Master,遊學先師
@@ -233,4 +250,55 @@ task_unit_aw_historical_school_lecture,开坛讲学,Public Lecture,開壇講學
 task_unit_aw_historical_school_debate_travel,赴会论辩,Travel to Debate,赴會論辯
 task_unit_aw_historical_school_debate,百家论辩,School Debate,百家論辯
 task_unit_aw_historical_school_debate_receiving,应邀论辩,Debate Respondent,應邀論辯
+task_unit_aw_guard_protect_king,保护国王,Protecting the King,保護國王
 aw_family_name_unknown,未详,Unknown,未詳
+aw_home_shi_label,本家：,Home branch: ,本家：
+aw_return_home_shi,返回本家,Return to Home Branch,返回本家
+aw_population,人口,Population,人口
+aw_unknown_city,某城,Unknown city,某城
+aw_hist_posthumous_total_label,总分：,Total: ,總分：
+aw_hist_posthumous_civil_label,民生,Civil,民生
+aw_hist_posthumous_territory_label,疆域,Territory,疆域
+aw_hist_posthumous_war_label,战功,War,戰功
+aw_hist_posthumous_order_label,秩序,Order,秩序
+aw_hist_posthumous_ending_label,结局,Ending,結局
+aw_vassal_short_nested,臣+,V+,臣+
+aw_vassal_short_vassal,臣,V,臣
+aw_vassal_short_tributary,贡,T,貢
+aw_vassal_short_suzerain,主,S,主
+aw_vassal_short_tributary_suzerain,贡+,T+,貢+
+aw_vassal_short_independent,独,I,獨
+aw_vassal_label_suzerain,宗主：,Suzerain: ,宗主：
+aw_vassal_label_tributary_suzerain,朝贡宗主：,Tributary suzerain: ,朝貢宗主：
+aw_vassal_label_root_suzerain,根宗主：,Root suzerain: ,根宗主：
+aw_vassal_label_direct,直属附庸：,Direct vassals: ,直屬附庸：
+aw_vassal_label_direct_tributary,直属朝贡国：,Direct tributaries: ,直屬朝貢國：
+aw_vassal_label_network,附庸体系：,Vassal network: ,附庸體系：
+aw_vassal_label_network_total,附庸体系总数：,Total vassal network: ,附庸體系總數：
+aw_vassal_label_years,臣属年数：,Years as subject: ,臣屬年數：
+aw_vassal_label_tributary_years,朝贡年数：,Years as tributary: ,朝貢年數：
+aw_vassal_label_network_army,体系军力：,Network military strength: ,體系軍力：
+aw_vassal_role_tributary_suzerain,朝贡宗主,Tributary suzerain,朝貢宗主
+aw_vassal_role_direct_suzerain,直接宗主,Direct suzerain,直接宗主
+aw_vassal_role_upper_suzerain,上级宗主,Upper suzerain,上級宗主
+aw_vassal_role_direct_vassal,直属附庸,Direct vassal,直屬附庸
+aw_vassal_role_vassal,附庸,Vassal,附庸
+aw_vassal_context_vassal_suzerain,本国·附庸宗主,This realm · Vassal suzerain,本國·附庸宗主
+aw_vassal_context_vassal,本国·附庸,This realm · Vassal,本國·附庸
+aw_vassal_context_tributary_suzerain,本国·朝贡国·宗主,This realm · Tributary · Suzerain,本國·朝貢國·宗主
+aw_vassal_context_tributary,本国·朝贡国,This realm · Tributary,本國·朝貢國
+aw_vassal_context_dual_suzerain,本国·宗主·朝贡宗主,This realm · Suzerain · Tributary suzerain,本國·宗主·朝貢宗主
+aw_vassal_context_suzerain,本国·宗主,This realm · Suzerain,本國·宗主
+aw_vassal_context_tributary_overlord,本国·朝贡宗主,This realm · Tributary suzerain,本國·朝貢宗主
+aw_vassal_context_independent,本国·独立,This realm · Independent,本國·獨立
+aw_vassal_status_nested,附庸国并拥有下级附庸,Vassal realm with subordinate vassals,附庸國並擁有下級附庸
+aw_vassal_status_vassal,附庸国,Vassal realm,附庸國
+aw_vassal_status_tributary,朝贡国,Tributary realm,朝貢國
+aw_vassal_status_dual_suzerain,宗主国并接受朝贡,Suzerain realm receiving tribute,宗主國並接受朝貢
+aw_vassal_status_suzerain,宗主国,Suzerain realm,宗主國
+aw_vassal_status_tributary_suzerain,朝贡宗主国,Tributary suzerain realm,朝貢宗主國
+aw_vassal_status_independent,独立国家,Independent realm,獨立國家
+aw_role_emperor,皇帝,Emperor,皇帝
+aw_identity_none,无,None,無
+aw_decision_target_prefix,目标：,Target: ,目標：
+opinion_aw_succession_split,宗统分裂,Dynastic split,宗統分裂

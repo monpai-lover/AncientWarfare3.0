@@ -910,7 +910,9 @@ namespace AncientWarfare3.core.lineage
                 cmd.Parameters.AddWithValue("@cid", pShi.origin_city_id);
                 cmd.Parameters.AddWithValue("@kid", pShi.origin_kingdom_id);
                 cmd.Parameters.AddWithValue("@sid", pShi.shi_id);
-                cmd.ExecuteNonQuery();
+                HistoricalContentRevision
+                    .AdvanceAfterSuccessfulSynchronousWrite(
+                        () => cmd.ExecuteNonQuery());
             }
             catch { }
         }
@@ -1015,6 +1017,42 @@ namespace AncientWarfare3.core.lineage
             return ReadMembers("SHI_ID=@k", "@k", pShiId);
         }
 
+        public static List<long> GetLivingShiMemberIds(long pShiId,
+            int pLimit)
+        {
+            var result = new List<long>();
+            var db = DB;
+            if (db == null || pShiId < 0 || pLimit <= 0) return result;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText = "SELECT ID FROM " +
+                ActorArchiveTableItem.GetTableName() +
+                " WHERE SHI_ID=@shi AND IS_ALIVE=1 " +
+                "ORDER BY BIRTH_TIME ASC,ID ASC LIMIT @limit";
+            cmd.Parameters.AddWithValue("@shi", pShiId);
+            cmd.Parameters.AddWithValue("@limit", pLimit);
+            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+            while (reader.Read()) result.Add(reader.GetInt64(0));
+            return result;
+        }
+
+        public static List<long> GetLivingLineageMemberIds(long pLineageId,
+            int pLimit)
+        {
+            var result = new List<long>();
+            var db = DB;
+            if (db == null || pLineageId < 0 || pLimit <= 0) return result;
+            using var cmd = new SQLiteCommand(db);
+            cmd.CommandText = "SELECT ID FROM " +
+                ActorArchiveTableItem.GetTableName() +
+                " WHERE LINEAGE_ID=@lineage AND IS_ALIVE=1 " +
+                "ORDER BY BIRTH_TIME ASC,ID ASC LIMIT @limit";
+            cmd.Parameters.AddWithValue("@lineage", pLineageId);
+            cmd.Parameters.AddWithValue("@limit", pLimit);
+            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+            while (reader.Read()) result.Add(reader.GetInt64(0));
+            return result;
+        }
+
         private static List<MemberInfo> ReadMembers(string pWhere, string pParam, object pValue)
         {
             var result = new List<MemberInfo>();
@@ -1057,7 +1095,7 @@ namespace AncientWarfare3.core.lineage
         /// <summary>以 centerActorId 为中心,返回三层节点(父母 / 本人 / 子女)。死者用 SQL 档案。</summary>
         public static FamilyTreeNode GetFamilyTree(long pCenterActorId)
         {
-            var center = BuildNode(pCenterActorId) ?? BuildPlaceholderNode(pCenterActorId);
+            var center = GetFamilyTreeNode(pCenterActorId);
             if (center == null) return null;
 
             // 父母:用 FamilyEdge 反查(child=center 的 parent),活人优先 actor,死人查档案。
@@ -1078,35 +1116,48 @@ namespace AncientWarfare3.core.lineage
             return center;
         }
 
+        public static FamilyTreeNode GetFamilyTreeNode(long pActorId)
+        {
+            return BuildNode(pActorId) ?? BuildPlaceholderNode(pActorId);
+        }
+
         public static List<long> GetParentIds(long pChildId, bool pUseReverseLiveLookup = false)
         {
             var edgeIds = new List<long>();
             var archiveIds = new List<long>();
             var liveIds = new List<long>();
-            var db = DB;
-            if (db != null)
+            LineageBulkSnapshot bulk = LineageBulkSnapshotContext.Current;
+            if (bulk != null && bulk.ContainsNode(pChildId))
             {
-                using (var cmd = new SQLiteCommand(db))
+                edgeIds.AddRange(bulk.ParentIds(pChildId));
+            }
+            else
+            {
+                var db = DB;
+                if (db != null)
                 {
-                    cmd.CommandText =
-                        $"SELECT PARENT_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
-                        $"WHERE CHILD_ID=@c AND PARENT_ID>=0 ORDER BY PARENT_SLOT ASC";
-                    cmd.Parameters.AddWithValue("@c", pChildId);
-                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                    while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
-                }
-
-                using (var cmd = new SQLiteCommand(db))
-                {
-                    cmd.CommandText =
-                        $"SELECT IFNULL(PARENT_ID_1, -1), IFNULL(PARENT_ID_2, -1) " +
-                        $"FROM {ActorArchiveTableItem.GetTableName()} WHERE ID=@id LIMIT 1";
-                    cmd.Parameters.AddWithValue("@id", pChildId);
-                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                    if (reader.Read())
+                    using (var cmd = new SQLiteCommand(db))
                     {
-                        archiveIds.Add(ToLong(reader, 0, -1));
-                        archiveIds.Add(ToLong(reader, 1, -1));
+                        cmd.CommandText =
+                            $"SELECT PARENT_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
+                            $"WHERE CHILD_ID=@c AND PARENT_ID>=0 ORDER BY PARENT_SLOT ASC";
+                        cmd.Parameters.AddWithValue("@c", pChildId);
+                        using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                        while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
+                    }
+
+                    using (var cmd = new SQLiteCommand(db))
+                    {
+                        cmd.CommandText =
+                            $"SELECT IFNULL(PARENT_ID_1, -1), IFNULL(PARENT_ID_2, -1) " +
+                            $"FROM {ActorArchiveTableItem.GetTableName()} WHERE ID=@id LIMIT 1";
+                        cmd.Parameters.AddWithValue("@id", pChildId);
+                        using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                        if (reader.Read())
+                        {
+                            archiveIds.Add(ToLong(reader, 0, -1));
+                            archiveIds.Add(ToLong(reader, 1, -1));
+                        }
                     }
                 }
             }
@@ -1135,28 +1186,36 @@ namespace AncientWarfare3.core.lineage
             var edgeIds = new List<long>();
             var archiveIds = new List<long>();
             var liveIds = new List<long>();
-            var db = DB;
-            if (db != null)
+            LineageBulkSnapshot bulk = LineageBulkSnapshotContext.Current;
+            if (bulk != null && bulk.ContainsNode(pParentId))
             {
-                using (var cmd = new SQLiteCommand(db))
+                edgeIds.AddRange(bulk.ChildIds(pParentId));
+            }
+            else
+            {
+                var db = DB;
+                if (db != null)
                 {
-                    cmd.CommandText =
-                        $"SELECT CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
-                        $"WHERE PARENT_ID=@p ORDER BY CREATED_TIME ASC, CHILD_ID ASC";
-                    cmd.Parameters.AddWithValue("@p", pParentId);
-                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                    while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
-                }
+                    using (var cmd = new SQLiteCommand(db))
+                    {
+                        cmd.CommandText =
+                            $"SELECT CHILD_ID FROM {FamilyEdgeTableItem.GetTableName()} " +
+                            $"WHERE PARENT_ID=@p ORDER BY CREATED_TIME ASC, CHILD_ID ASC";
+                        cmd.Parameters.AddWithValue("@p", pParentId);
+                        using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                        while (reader.Read()) edgeIds.Add(reader.GetInt64(0));
+                    }
 
-                using (var cmd = new SQLiteCommand(db))
-                {
-                    cmd.CommandText =
-                        $"SELECT ID FROM {ActorArchiveTableItem.GetTableName()} " +
-                        $"WHERE PARENT_ID_1=@p OR PARENT_ID_2=@p " +
-                        $"ORDER BY BIRTH_TIME ASC, ID ASC";
-                    cmd.Parameters.AddWithValue("@p", pParentId);
-                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                    while (reader.Read()) archiveIds.Add(reader.GetInt64(0));
+                    using (var cmd = new SQLiteCommand(db))
+                    {
+                        cmd.CommandText =
+                            $"SELECT ID FROM {ActorArchiveTableItem.GetTableName()} " +
+                            $"WHERE PARENT_ID_1=@p OR PARENT_ID_2=@p " +
+                            $"ORDER BY BIRTH_TIME ASC, ID ASC";
+                        cmd.Parameters.AddWithValue("@p", pParentId);
+                        using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                        while (reader.Read()) archiveIds.Add(reader.GetInt64(0));
+                    }
                 }
             }
 
@@ -1359,8 +1418,12 @@ namespace AncientWarfare3.core.lineage
                     LineageService.UsesAwLineageSystem(live)))
             {
                 live.data.get("display_name", out string disp, "");
+                live.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+                live.data.get(LineageKeys.FAMILY_NAME, out string family, "");
                 live.data.get(LineageKeys.LINEAGE_STATUS, out string st, LineageStatus.NONE);
                 live.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+                live.data.get(LineageKeys.NAME_INTEGRATED,
+                    out bool nameIntegrated, false);
                 live.data.get(LineageKeys.SHI_ID, out long shi, -1L);
                 // ⚠ NOBLE_DISTANCE 是用 set(key,int) 写入的(LineageService:111),必须 get<int> 读,
                 //   用 get<long> 会类型失配返默认 99 → 活人 tooltip 永远不显示"距贵族N代"(用户报"只有死人有")。
@@ -1369,7 +1432,12 @@ namespace AncientWarfare3.core.lineage
                 var node = new FamilyTreeNode
                 {
                     id = pId,
-                    display_name = string.IsNullOrEmpty(disp) ? live.getName() : disp,
+                    asset_id = live.asset?.id ?? row?.asset_id ?? "",
+                    display_name = LineageDisplayNameRules.ProjectStored(
+                        string.IsNullOrEmpty(disp) ? live.getName() : disp,
+                        given, family, clan, st == LineageStatus.NOBLE,
+                        live.isSexMale(), nameIntegrated ||
+                            LineageService.IsKingdomIntegrated(live.kingdom)),
                     sex = live.isSexMale() ? 0 : 1,
                     is_alive = true,
                     status = st,
@@ -1404,7 +1472,11 @@ namespace AncientWarfare3.core.lineage
             var archived = new FamilyTreeNode
             {
                 id = pId,
-                display_name = string.IsNullOrEmpty(row.display_name) ? row.given_name : row.display_name,
+                asset_id = row.asset_id ?? "",
+                display_name = LineageDisplayNameRules.ProjectStored(
+                    row.display_name, row.given_name, row.family_name,
+                    row.clan_name, row.status == LineageStatus.NOBLE,
+                    row.sex == 0, row.name_integrated != 0),
                 sex = row.sex,
                 is_alive = archivedAlive,
                 status = row.status,
@@ -1451,6 +1523,7 @@ namespace AncientWarfare3.core.lineage
             var node = new FamilyTreeNode
             {
                 id = pId,
+                asset_id = live.asset?.id ?? row?.asset_id ?? "",
                 display_name = live.getName(),
                 sex = live.isSexMale() ? 0 : 1,
                 is_alive = IsAliveActor(live),
@@ -1585,24 +1658,6 @@ namespace AncientWarfare3.core.lineage
             string color = pNode.kingdom_color;
             if (string.IsNullOrEmpty(color)) color = pLive.kingdom?.getColor()?.color_text ?? "";
 
-            pLive.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
-            if (!string.IsNullOrEmpty(captiveTitle))
-            {
-                pLive.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
-                pNode.social_title = captiveTitle;
-                pNode.social_title_color = string.IsNullOrEmpty(captiveColor) ? color : captiveColor;
-                return;
-            }
-
-            pLive.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
-            if (!string.IsNullOrEmpty(formerTitle))
-            {
-                pLive.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
-                pNode.social_title = formerTitle;
-                pNode.social_title_color = string.IsNullOrEmpty(formerColor) ? color : formerColor;
-                return;
-            }
-
             if (pLive.isKing())
             {
                 string kingdomName = pLive.kingdom?.name ?? pNode.kingdom_name ?? "";
@@ -1621,8 +1676,21 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
+            pLive.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
+            if (!string.IsNullOrEmpty(formerTitle))
+            {
+                pLive.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
+                pNode.social_title = formerTitle;
+                pNode.social_title_color = string.IsNullOrEmpty(formerColor) ? color : formerColor;
+                return;
+            }
+
             var roles = new List<string>();
             string rolesColor = color;
+            string dynasticTitle =
+                DynasticTitleService.ResolveLivingTitle(pLive);
+            if (!string.IsNullOrEmpty(dynasticTitle))
+                roles.Add(dynasticTitle);
             pLive.data.get(LineageKeys.FORMER_HEIR_TITLE, out string formerHeirTitle, "");
             if (!string.IsNullOrEmpty(formerHeirTitle))
             {
@@ -1661,13 +1729,29 @@ namespace AncientWarfare3.core.lineage
 
             pLive.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (!string.IsNullOrEmpty(office))
-                roles.Add(AW_L10n.Text("aw_court_office_" + office, office));
+            {
+                pLive.data.get(LineageKeys.COURT_KINGDOM_ID,
+                    out long courtKingdomId, -1L);
+                Kingdom courtKingdom = World.world?.kingdoms?.get(courtKingdomId) ??
+                                        pLive.kingdom;
+                roles.Add(CourtInstitutionService.OfficeName(
+                    courtKingdom, office));
+            }
 
             string combined = CourtTitleRules.Combine(roles.ToArray());
             if (!string.IsNullOrEmpty(combined))
             {
                 pNode.social_title = combined;
                 pNode.social_title_color = rolesColor;
+                return;
+            }
+
+            pLive.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
+            if (!string.IsNullOrEmpty(captiveTitle))
+            {
+                pLive.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
+                pNode.social_title = captiveTitle;
+                pNode.social_title_color = string.IsNullOrEmpty(captiveColor) ? color : captiveColor;
             }
         }
 

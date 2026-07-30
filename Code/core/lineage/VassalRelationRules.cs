@@ -70,6 +70,42 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool CanSetTributary(bool pBasicValid,
+            bool pTributaryIsRebel, bool pSuzerainIsRebel,
+            bool pSuzerainIndependent, bool pTargetIndependent,
+            bool pCycleDetected, bool pDirectlyAdjacent,
+            out string pReason)
+        {
+            if (!pBasicValid)
+            {
+                pReason = "invalid";
+                return false;
+            }
+            if (pTributaryIsRebel || pSuzerainIsRebel)
+            {
+                pReason = "rebel_blocked";
+                return false;
+            }
+            if (!pSuzerainIndependent || !pTargetIndependent)
+            {
+                pReason = "subject_blocked";
+                return false;
+            }
+            if (pCycleDetected)
+            {
+                pReason = "cycle";
+                return false;
+            }
+            if (!pDirectlyAdjacent)
+            {
+                pReason = "not_adjacent";
+                return false;
+            }
+
+            pReason = "";
+            return true;
+        }
+
         public static bool CanEnforceWarVictory(bool pBasicValid, bool pVassalIsRebel,
             bool pSuzerainIsRebel, bool pCycleDetected)
         {

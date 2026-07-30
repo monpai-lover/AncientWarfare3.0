@@ -45,6 +45,25 @@ namespace AncientWarfare3.core.lineage
         public const int MinimumPhaseYears = 8;
         public const int RenewalYears = 10;
         public const int StableRecoveryYears = 5;
+        public const int ChaosCatalystThreshold = 90;
+
+        public static MandatePhase PhaseAfterMandateEstablished(
+            bool pHadPreviousMandate)
+        {
+            _ = pHadPreviousMandate;
+            return MandatePhase.Renewal;
+        }
+
+        public static string LocalizationKey(MandatePhase pPhase)
+        {
+            return pPhase switch
+            {
+                MandatePhase.Decline => "aw_mandate_phase_decline",
+                MandatePhase.Chaos => "aw_mandate_phase_chaos",
+                MandatePhase.Renewal => "aw_mandate_phase_renewal",
+                _ => "aw_mandate_phase_golden"
+            };
+        }
 
         public static MandatePhase Evaluate(MandatePhaseFacts pFacts)
         {
@@ -68,6 +87,11 @@ namespace AncientWarfare3.core.lineage
                 (pFacts.MandateValue < 40 || pFacts.CatalystScore >= 60))
                 return MandatePhase.Decline;
 
+            if (ShouldEnterChaosAfterCatalyst(pFacts.Phase,
+                    pFacts.CurrentYear, pFacts.PhaseSinceYear,
+                    pFacts.CatalystScore))
+                return MandatePhase.Chaos;
+
             if (pFacts.Phase == MandatePhase.Decline &&
                 pFacts.StableYears >= StableRecoveryYears &&
                 pFacts.MandateValue >= 70 && pFacts.Authority >= 60 &&
@@ -75,6 +99,16 @@ namespace AncientWarfare3.core.lineage
                 return MandatePhase.Golden;
 
             return pFacts.Phase;
+        }
+
+        public static bool ShouldEnterChaosAfterCatalyst(
+            MandatePhase pPhase, int currentYear, int phaseSinceYear,
+            int catalystScore)
+        {
+            return pPhase == MandatePhase.Decline &&
+                   Math.Max(0, currentYear - phaseSinceYear) >=
+                   MinimumPhaseYears &&
+                   catalystScore >= ChaosCatalystThreshold;
         }
 
         public static MandatePhase ResolveRenewalExit(int pMandateValue, int pAuthority,

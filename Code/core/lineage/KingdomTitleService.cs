@@ -25,6 +25,14 @@ namespace AncientWarfare3.core.lineage
             KingdomTitle previous = GetTitle(pKingdom);
             pKingdom.data.set(LineageKeys.KINGDOM_TITLE, (int)pTitle);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            if (previous != pTitle)
+            {
+                Actor heir = HeirService.PeekStoredHeirForMinimap(pKingdom);
+                if (heir?.data != null)
+                    LineageService.ArchiveActor(heir, pAlive: true);
+                FamilyTreeProjectionRevision.Advance(
+                    FamilyTreeProjectionChange.RankOrMandate);
+            }
             if (previous >= KingdomTitle.Emperor || pTitle != KingdomTitle.Emperor ||
                 pKingdom.king?.data == null) return;
 
@@ -33,7 +41,8 @@ namespace AncientWarfare3.core.lineage
             RetrospectiveTitleService.TryAwardFirstImperialAncestors(
                 pKingdom, pKingdom.king, shiId,
                 DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id));
-            YearNameService.TryStartAccessionEra(pKingdom, pKingdom.king);
+            YearNameService.TryStartImperialProclamationEra(
+                pKingdom, pKingdom.king);
         }
 
         public static void PromoteTitle(Kingdom pKingdom)

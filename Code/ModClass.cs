@@ -5,6 +5,12 @@ using System;
 using System.Linq;
 using System.Reflection;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.multiplayer;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.presentation;
+using AncientWarfare3.patch;
 
 namespace AncientWarfare3
 {
@@ -15,19 +21,55 @@ namespace AncientWarfare3
     public class ModClass : BasicMod<ModClass>, IReloadable
     {
         public const string GUID = "ANCIENTWARFARE3";
+        private static readonly TimeSpan RuntimeShutdownTimeout =
+            TimeSpan.FromSeconds(2);
+        private bool _runtimeShutdownComplete;
 
         protected override void OnModLoad()
         {
+            AWFramePriorityGovernor.Initialize();
+            AWSimulationTickBenchmark.Initialize();
+            LogInfo("AW3 simulation scheduler: " +
+                    AWPerformanceSettings.Mode.ToString().ToLowerInvariant() +
+                    " (AW3 performance setting; native/large)." );
+            LogInfo("AW3 Army RTS feature: " +
+                    ArmyRtsRuntimeMode.LogName +
+                    " (AW3_ENABLE_ARMY_RTS setting; restart required)." );
+            LogInfo("AW3 Army RTS scheduler: " +
+                    ArmyRtsSchedulingMode.Current.ToString().ToLowerInvariant() +
+                    " (AW3_USE_AW3_ARMY_RTS_SCHEDULER setting; restart required)." );
+            AWAsyncRuntime.Initialize();
+            LogInfo("AW3 async features: db=" +
+                    (AWAsyncRuntime.DatabaseEnabled ? "on" : "off") +
+                    " ai=" + (AWAsyncRuntime.AiEnabled ? "on" : "off") +
+                    " traversal=" +
+                    (AWAsyncRuntime.TraversalEnabled ? "on" : "off") +
+                    " ui=" + (AWAsyncRuntime.UiEnabled ? "on" : "off") +
+                    " shadow=" +
+                    (AWAsyncRuntime.ShadowEnabled ? "on" : "off") +
+                    " (AW3 performance settings; restart required)." );
+            LogInfo("AW3 pathfinding mode: " +
+                    AWPathfindingRuntimeMode.LogName +
+                    " (AW3_PATHFINDING; restart required).");
             AWPathfindingBootstrap.PrepareOwnership();
             // 注册 Harmony 补丁(扫描本程序集所有 [HarmonyPatch])
             PatchHarmonyByClass();
+            AW_RuntimeBenchmarkAutoLoadPatch.Initialize();
+            LogInfo("AW3 goTo Harmony owner active: " +
+                    (PathfindingOwnershipService.HasAw3MovementPatch()
+                        ? "yes"
+                        : "no"));
             AWPathfindingBootstrap.AfterPatchesRegistered();
+            AW3WorldLoadCoordinator.Initialize();
 
             // 通用夺舍工具:扫描 [MethodReplace] 用 Transpiler 重定向目标方法体(保留 Prefix/Postfix 链)
             utils.HarmonyTools.ReplaceMethods();
 
             // 批A:夏朝 Xia 种族 / 王国 / 贴图
             XiaContent.Init();
+            XiaExpansionDecisionContent.Init();
+            CivMonkeyNamingContent.Init();
+            ArmyRtsContent.Init();
 
 #if 一米_中文名
             // 有中文名时:注册 Xia 中文命名(国名/城名/人名/姓氏)。无中文名则用 clone human 命名。
@@ -42,6 +84,7 @@ namespace AncientWarfare3
 
             // 阶段5:姓族 UI —— 自定义 tab + 入口按钮(窗口靠 Harmony patch + showWindow 打开)
             ui.AW_LineageTab.Init();
+            AW_UiWorldAgeInfoPatch.SpecialPatch();
 
             LogInfo("Ancient Warfare 3.0 loaded — batch A (Xia race).");
         }
@@ -78,6 +121,44 @@ namespace AncientWarfare3
                                        BindingFlags.Static | BindingFlags.Instance;
             return pType.GetMethods(flags)
                 .Any(m => m.GetCustomAttributes(typeof(HarmonyPatch), true).Length > 0);
+        }
+
+        private void OnApplicationQuit()
+        {
+            ShutdownRuntime(pPublishArmyRtsPlans: true);
+        }
+
+        private void OnDestroy()
+        {
+            ShutdownRuntime(pPublishArmyRtsPlans: false);
+        }
+
+        private void ShutdownRuntime(bool pPublishArmyRtsPlans)
+        {
+            if (_runtimeShutdownComplete) return;
+            try
+            {
+                AWCooperativeSimulationRunner.Instance.Abort();
+                AWAuthorityCycleService.Reset();
+                ArmyRtsVisualizationService.Shutdown();
+                ArmyMapInformationService.Shutdown();
+                ArmyRtsAttackSpeechBubbleService.Shutdown();
+                if (pPublishArmyRtsPlans) ArmyRtsPlanSnapshotService.Shutdown();
+                else ArmyRtsPlanSnapshotService.DiscardAndShutdown();
+                AWPathfindingBootstrap.ClearWorld();
+                AW3WorldLoadCoordinator.Shutdown();
+                if (!AWAsyncWorldLifecycle.TryShutdown(
+                        RuntimeShutdownTimeout, out string error))
+                {
+                    LogWarning("AW3 async runtime shutdown failed: " + error);
+                    return;
+                }
+                _runtimeShutdownComplete = true;
+            }
+            catch (Exception error)
+            {
+                LogWarning("AW3 runtime shutdown failed: " + error.Message);
+            }
         }
 
         public void Reload()

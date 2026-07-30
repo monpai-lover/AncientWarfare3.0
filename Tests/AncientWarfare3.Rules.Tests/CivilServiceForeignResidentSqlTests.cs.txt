@@ -1,0 +1,98 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceForeignResidentSqlTests
+{
+    public static void Run()
+    {
+        QualificationFilteringPrecedesTheResultLimit();
+        JurenCannotEnterTheForeignFormalRoster();
+    }
+
+    private static void QualificationFilteringPrecedesTheResultLimit()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Membership (ACTOR_ID INTEGER," +
+            "ACTIVE INTEGER,START_YEAR INTEGER,REPUTATION INTEGER)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER)");
+        Execute(db, "CREATE TABLE Affiliation (ACTOR_ID INTEGER," +
+            "RESIDENCE_CITY_ID INTEGER,LIFECYCLE_STATE TEXT," +
+            "SERVICE_KINGDOM_ID INTEGER,HOME_KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER,ACTIVE INTEGER)");
+        Execute(db, "CREATE TABLE Candidate (ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,STATUS TEXT)");
+
+        Execute(db, "INSERT INTO Membership VALUES " +
+            "(1,1,1,100),(2,1,2,90)");
+        Execute(db, "INSERT INTO Archive VALUES (1,1),(2,1)");
+        Execute(db, "INSERT INTO Affiliation VALUES " +
+            "(1,10,'Resident',-1,99),(2,10,'Resident',-1,99)");
+        Execute(db, "INSERT INTO Session VALUES (100,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(2,7,100,'jinshi')");
+
+        List<long> result = CivilServiceForeignResidentQualificationQuery.Load(
+            db, "Membership", "Archive", "Affiliation", "Officer",
+            "Candidate", "Session", new[] { 10L }, pHostKingdomId: 7L,
+            pYear: 20, pResidentState: "Resident", pLimit: 1);
+
+        Equal(1, result.Count,
+            "one qualified foreign resident is returned");
+        Equal(2L, result[0],
+            "an earlier unqualified resident cannot consume the SQL limit");
+    }
+
+    private static void JurenCannotEnterTheForeignFormalRoster()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Membership (ACTOR_ID INTEGER," +
+            "ACTIVE INTEGER,START_YEAR INTEGER,REPUTATION INTEGER)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER)");
+        Execute(db, "CREATE TABLE Affiliation (ACTOR_ID INTEGER," +
+            "RESIDENCE_CITY_ID INTEGER,LIFECYCLE_STATE TEXT," +
+            "SERVICE_KINGDOM_ID INTEGER,HOME_KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER,ACTIVE INTEGER)");
+        Execute(db, "CREATE TABLE Candidate (ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,STATUS TEXT)");
+        Execute(db, "INSERT INTO Membership VALUES " +
+            "(1,1,1,100),(2,1,2,90)");
+        Execute(db, "INSERT INTO Archive VALUES (1,1),(2,1)");
+        Execute(db, "INSERT INTO Affiliation VALUES " +
+            "(1,10,'Resident',-1,99),(2,10,'Resident',-1,99)");
+        Execute(db, "INSERT INTO Session VALUES " +
+            "(100,'completed'),(101,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(1,7,100,'juren'),(2,7,101,'gongshi')");
+
+        List<long> result = CivilServiceForeignResidentQualificationQuery.Load(
+            db, "Membership", "Archive", "Affiliation", "Officer",
+            "Candidate", "Session", new[] { 10L }, pHostKingdomId: 7L,
+            pYear: 20, pResidentState: "Resident", pLimit: 1);
+
+        Equal(1, result.Count,
+            "one formally qualified foreign resident is returned");
+        Equal(2L, result[0],
+            "foreign juren cannot consume the formal guest roster limit");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+}

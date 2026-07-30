@@ -49,8 +49,11 @@ namespace AncientWarfare3.core.lineage
             int pMandateValue, int pAuthority, int pAnnualMandateDelta)
         {
             if (!BeginAnnualEvaluation(pYear)) return;
+            int courtDelta = MandatePoliticalCatalystService.CourtDelta(
+                MandateService.GetCurrentMandateKingdom());
             ApplyAnnualCatalyst(
-                MandatePhaseRules.CatalystDeltaForMandateChange(pAnnualMandateDelta));
+                MandatePhaseRules.CatalystDeltaForMandateChange(
+                    pAnnualMandateDelta) + courtDelta);
 
             bool stable = pMandateValue >= 70 && pAuthority >= 60 &&
                           _catalystScore <= 20 &&
@@ -72,11 +75,22 @@ namespace AncientWarfare3.core.lineage
         public static void OnMandateEstablished(bool pHadPreviousMandate, int pYear)
         {
             if (!EnsureLoaded()) return;
-            SetPhase(pHadPreviousMandate ? MandatePhase.Renewal : MandatePhase.Golden,
-                pYear);
+            SetPhase(MandatePhaseRules.PhaseAfterMandateEstablished(
+                pHadPreviousMandate), pYear);
             _stableYears = 0;
             _lastYear = pYear;
             Persist(pHadPreviousMandate ? "mandate_renewal" : "first_mandate");
+        }
+
+        public static void EnterRenewal(string pReason)
+        {
+            if (!EnsureLoaded()) return;
+            int year = SafeCurrentYear();
+            SetPhase(MandatePhase.Renewal, year);
+            _catalystScore = MandatePhaseRules.AdjustCatalyst(
+                _catalystScore, -10);
+            _lastYear = year;
+            Persist(pReason ?? "dynastic_renewal");
         }
 
         public static void AdjustCatalyst(int pDelta, string pReason)
@@ -85,6 +99,10 @@ namespace AncientWarfare3.core.lineage
             int adjusted = MandatePhaseRules.AdjustCatalyst(_catalystScore, pDelta);
             if (adjusted == _catalystScore) return;
             _catalystScore = adjusted;
+            int year = SafeCurrentYear();
+            if (MandatePhaseRules.ShouldEnterChaosAfterCatalyst(
+                    _phase, year, PhaseSinceYear, _catalystScore))
+                SetPhase(MandatePhase.Chaos, year);
             Persist(pReason ?? "catalyst_changed");
         }
 
@@ -154,6 +172,7 @@ namespace AncientWarfare3.core.lineage
             _phaseSinceYear = pYear;
             _stableYears = 0;
             CentralizationService.OnPhaseChanged(previous, pPhase, pYear);
+            MandateMilitaryPhaseService.OnPhaseChanged(previous, pPhase);
         }
 
         private static bool EnsureLoaded()

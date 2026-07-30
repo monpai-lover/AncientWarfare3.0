@@ -1,0 +1,105 @@
+key,cz,en,ch
+aw_war_peace_scope_separate,单独和谈,Separate peace,單獨和談
+aw_war_peace_scope_coalition,全面和谈,Comprehensive peace,全面和談
+aw_war_peace_main_war_continues,主战争将继续,The main war continues,主戰爭將繼續
+aw_war_peace_coalition_settlement_notice,全体交战国一并停战，战争结束,All belligerents settle and the war ends,全體交戰國一併停戰，戰爭結束
+aw_war_peace_exit_participants,预计退出：{0},Leaving: {0},預計退出：{0}
+aw_war_peace_detail_city_transfer,{0} -> {1}：{2},{0} -> {1}: {2},{0} -> {1}：{2}
+aw_war_peace_bilateral_exhaustion,厌战度：{0} {1}/100 | {2} {3}/100,Exhaustion: {0} {1}/100 | {2} {3}/100,厭戰度：{0} {1}/100 | {2} {3}/100
+aw_war_peace_negotiation Title,战争谈判,War Negotiation,戰爭談判
+aw_war_peace_negotiation_title,战争谈判,War Negotiation,戰爭談判
+aw_war_peace_belligerent,交战方,Belligerent,交戰方
+aw_war_peace_terms,和平条款,Peace terms,和平條款
+aw_war_peace_summary,条约摘要,Offer summary,條約摘要
+aw_war_peace_score_occupation,占领,Occupation,佔領
+aw_war_peace_score_battle,战斗,Battle,戰鬥
+aw_war_peace_score_objective,目标,Objective,目標
+aw_war_peace_term_cost,花费 {0},Cost {0},花費 {0}
+aw_war_peace_expected_accept,预计接受,Expected to accept,預計接受
+aw_war_peace_expected_reject,预计拒绝,Expected to reject,預計拒絕
+aw_war_peace_forced,彻底战败强制接受,Forced by total defeat,徹底戰敗強制接受
+aw_war_peace_acceptance_margin,接受差值：{0},Acceptance margin: {0},接受差值：{0}
+aw_war_peace_recipient_score,受约方战争分数,Recipient war score,受約方戰爭分數
+aw_war_peace_recipient_term_value,条款对受约方的价值,Value of selected terms,條款對受約方的價值
+aw_war_peace_recipient_resolve,抗战决心,Resolve,抗戰決心
+aw_war_peace_recipient_exhaustion,战争疲惫,War exhaustion,戰爭疲懊
+aw_war_peace_recipient_pressure,军事压力,Military pressure,軍事壓力
+aw_war_peace_disabled_territorial_basis,需占领该地或拥有核心与宣称,Requires occupation or a valid core or claim,需佔領該地或擁有核心與宣稱
+aw_war_peace_disabled_prerequisite,未满足前置条件,Prerequisite not met,未滿足前置條件
+aw_war_peace_disabled_no_terms,至少选择一项和平条款,Select at least one peace term,至少選擇一項和平條款
+aw_war_peace_disabled_war_leader,只有主要交战方可谈判,Only the principal belligerents may negotiate,只有主要交戰方可談判
+aw_war_peace_disabled_invalid,已选条款不再有效,The selected terms are no longer valid,已選條款不再有效
+aw_war_peace_disabled_term_count,和平条款数量超过上限,Too many peace terms are selected,和平條款數量超過上限
+aw_war_peace_disabled_white_peace_mixed,无条件和平不能与其他条款同时提出,White peace cannot be combined with other terms,無條件和平不能與其他條款同時提出
+aw_war_peace_disabled_subject_conflict,附庸与朝贡条款不能同时提出,Vassalage and tributary status cannot both be selected,附庸與朝貢條款不能同時提出
+aw_war_peace_disabled_annexation_survival,完全吞并不能与附庸、朝贡或战争赔款同时提出,Full annexation cannot be combined with vassalage tributary status or war reparations,完全吞併不能與附庸、朝貢或戰爭賠款同時提出
+aw_war_peace_disabled_war_ended,战争已经结束，无法继续谈判,The war has already ended,戰爭已經結束，無法繼續談判
+aw_war_peace_disabled_score_unavailable,当前战争分数不可用,Current war score is unavailable,當前戰爭分數不可用
+aw_war_peace_disabled_payment,请求的支付数额已经不可用,The requested payment is no longer available,請求的支付數額已經不可用
+aw_war_peace_disabled_reparations,请求的赔款数额或期限已经无效,The requested reparations are no longer valid,請求的賠款數額或期限已經無效
+aw_war_peace_disabled_captive,指定俘虏已经不可用,The selected captive is no longer available,指定俘虜已經不可用
+aw_war_peace_disabled_claim,指定宣称已经不可用,The selected claim is no longer available,指定宣稱已經不可用
+aw_war_peace_disabled_city,指定城市已经不可用,The selected city is no longer available,指定城市已經不可用
+aw_war_peace_disabled_subject,请求的宗藩关系已经不可用,The requested subject relationship is no longer valid,請求的宗藩關係已經不可用
+aw_war_peace_unavailable,当前无法进行和谈,Negotiation data is unavailable,當前無法進行和談
+aw_war_peace_offer_ready,条约已可发送,Offer is ready to send,條約已可發送
+aw_war_peace_back_diplomacy,返回外交,Back to diplomacy,返回外交
+aw_war_peace_our_demands,我方要求,Our demands,我方要求
+aw_war_peace_our_concessions,我方让步,Our concessions,我方讓步
+aw_war_peace_category_cities,城市,Cities,城市
+aw_war_peace_category_resources,资源,Resources,資源
+aw_war_peace_category_treaties,条约,Treaties,條約
+aw_war_peace_detail_city,目标城市：{0},Target city: {0},目標城市：{0}
+aw_war_peace_detail_payment,数量：{0} {1},Amount: {0} {1},數量：{0} {1}
+aw_war_peace_detail_reparations,每年 {0} {1}，持续 {2} 年,{0} {1} each year for {2} years,每年 {0} {1}，持續 {2} 年
+aw_war_peace_detail_captive,释放俘虏：{0},Release captive: {0},釋放俘虜：{0}
+aw_war_peace_detail_claim,放弃宣称编号：{0},Renounce claim #{0},放棄宣稱編號：{0}
+aw_war_peace_detail_subject,{0} 臣属于 {1},{0} becomes subject to {1},{0} 臣屬於 {1}
+aw_war_peace_resource_generic,资源,resources,資源
+aw_war_peace_resource_gold,黄金,Gold,黃金
+aw_war_peace_resource_wheat,小麦,Wheat,小麥
+aw_war_peace_resource_bread,面包,Bread,麵包
+aw_war_peace_resource_sushi,寿司,Sushi,壽司
+aw_war_peace_resource_jam,果酱,Jam,果醬
+aw_war_peace_resource_cider,果酒,Cider,果酒
+aw_war_peace_resource_ale,麦酒,Ale,麥酒
+aw_war_peace_resource_burger,肉饼,Burger,肉餅
+aw_war_peace_resource_pie,馅饼,Pie,餡餅
+aw_war_peace_resource_tea,茶,Tea,茶
+aw_war_peace_resource_berries,浆果,Berries,漿果
+aw_war_peace_resource_bananas,香蕉,Bananas,香蕉
+aw_war_peace_resource_coconut,椰子,Coconut,椰子
+aw_war_peace_resource_crystal_salt,晶盐,Crystal Salt,晶鹽
+aw_war_peace_resource_desert_berries,沙漠浆果,Desert Berries,沙漠漿果
+aw_war_peace_resource_evil_beets,邪恶甜菜,Evil Beets,邪惡甜菜
+aw_war_peace_resource_mushrooms,蘑菇,Mushrooms,蘑菇
+aw_war_peace_resource_peppers,辣椒,Peppers,辣椒
+aw_war_peace_resource_herbs,草药,Herbs,草藥
+aw_war_peace_resource_fish,鱼,Fish,魚
+aw_war_peace_resource_candy,糖果,Candy,糖果
+aw_war_peace_resource_worms,虫子,Worms,蟲子
+aw_war_peace_resource_snow_cucumbers,雪黄瓜,Snow Cucumbers,雪黃瓜
+aw_war_peace_resource_celestial_avocado,天界牛油果,Celestial Avocado,天界牛油果
+aw_war_peace_resource_pine_cones,松果,Pine Cones,松果
+aw_war_peace_resource_lemons,柠檬,Lemons,檸檬
+aw_war_peace_resource_meat,肉类,Meat,肉類
+aw_war_peace_resource_honey,蜂蜜,Honey,蜂蜜
+aw_war_peace_submit,发送条约,Send offer,發送條約
+aw_war_peace_term_whitepeace,无条件和平,White peace,無條件和平
+aw_war_peace_term_whitepeace_desc,双方停战且不执行额外要求,End the war without additional demands,雙方停戰且不執行額外要求
+aw_war_peace_term_goldpayment,支付黄金,Gold payment,支付黃金
+aw_war_peace_term_goldpayment_desc,一次性向受益国支付黄金,Make a one-time gold payment,一次性向受益國支付黃金
+aw_war_peace_term_materialpayment,移交物资,Material payment,移交物資
+aw_war_peace_term_materialpayment_desc,一次性向受益国移交指定物资,Transfer the specified supplies once,一次性向受益國移交指定物資
+aw_war_peace_term_reparations,战争赔款,War reparations,戰爭賠款
+aw_war_peace_term_reparations_desc,按年向胜方支付持续赔款,Pay annual reparations to the victor,按年向勝方支付持續賠款
+aw_war_peace_term_releasecaptives,释放俘虏,Release captives,釋放俘虜
+aw_war_peace_term_releasecaptives_desc,释放条款指定的在押人员,Release the captive named by this term,釋放條款指定的在押人員
+aw_war_peace_term_renounceclaims,放弃宣称,Renounce claims,放棄宣稱
+aw_war_peace_term_renounceclaims_desc,撤销对对方领土的有效宣称,Renounce an active claim on the other realm,撤銷對對方領土的有效宣稱
+aw_war_peace_term_forcetributary,强制朝贡,Force tributary,強制朝貢
+aw_war_peace_term_forcetributary_desc,败方成为胜方的朝贡国,Make the defeated realm a tributary,敗方成為勝方的朝貢國
+aw_war_peace_term_cedecity,割让城市,Cede city,割讓城市
+aw_war_peace_term_cedecity_desc,割让已被控制或具有法理依据的城市,Cede an occupied city or one backed by a valid claim,割讓已被控制或具有法理依據的城市
+aw_war_peace_term_forcevassal,强制附庸,Force vassalage,強制附庸
+aw_war_peace_term_forcevassal_desc,败方成为胜方的正式附庸,Make the defeated realm a formal vassal,敗方成為勝方的正式附庸

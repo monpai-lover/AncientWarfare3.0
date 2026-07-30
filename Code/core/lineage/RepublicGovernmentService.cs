@@ -72,7 +72,7 @@ namespace AncientWarfare3.core.lineage
                 return PrepareRepublicLeader(pKingdom, elected);
             }
 
-            Actor hereditaryHeir = HeirService.ReconcileHeir(pKingdom, pForce: true);
+            Actor hereditaryHeir = HeirService.ReconcileHeir(pKingdom, pForce: false);
             if (hereditaryHeir?.data != null) return hereditaryHeir;
 
             bool monarchyEstablished = HasEstablishedMonarchy(pKingdom);
@@ -167,7 +167,7 @@ namespace AncientWarfare3.core.lineage
             HeirService.ClearHeir(pKingdom);
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,
                 HistoryText.Kingdom(pKingdom) +
-                HistoryText.PlainText(" \u91cd\u65b0\u62e5\u7acb\u541b\u4e3b\uff0c\u7ed3\u675f\u5171\u548c\u653f\u4f53"),
+                HistoryLocalizationRules.H("aw_hist_republic_ended"),
                 HistoryTarget.Kingdom(pKingdom));
             if (KingdomTitleService.IsEmperor(pKingdom) && pKingdom.king?.data != null)
                 YearNameService.TryStartRestoredMonarchyEra(pKingdom, pKingdom.king);
@@ -179,7 +179,7 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null || IsRepublic(pKingdom)) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.RULE_CHANGE,
                 HistoryText.Kingdom(pKingdom) +
-                HistoryText.PlainText(" \u5df2\u65e0\u53ef\u7acb\u4e4b\u541b\uff0c\u6539\u4e3a\u5171\u548c\u653f\u4f53"),
+                HistoryLocalizationRules.H("aw_hist_republic_established"),
                 HistoryTarget.Kingdom(pKingdom));
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRepublic);
             YearNameService.EndMonarchicalChronology(pKingdom);

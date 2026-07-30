@@ -57,9 +57,8 @@ namespace AncientWarfare3.patch
 
         private static void RestoreCanonicalName(Actor pActor)
         {
-            if (!HistoricalSchoolDescentService.IsCanonicalMaster(pActor)) return;
-            var definition = HistoricalSchoolDescentService.DefinitionFor(pActor);
-            if (definition == null) return;
+            if (!HistoricalSchoolDescentService.TryGetIndexedDefinition(
+                    pActor, out var definition)) return;
             pActor.data.set(LineageKeys.GIVEN_NAME, definition.CanonicalGivenName);
             if (pActor.data.name != definition.CanonicalName)
                 pActor.setName(definition.CanonicalName);

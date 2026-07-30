@@ -1,0 +1,120 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ActiveMilitaryLifecycleRulesTests
+{
+    internal static void Run()
+    {
+        Equal(true, ActiveMilitaryLifecycleRules.HasWartimeMilitaryLock(
+                actorAlive: true, kingdomAtWar: true, isWarrior: true,
+                hasArmy: false,
+                isCurrentCaptain: false, isGeneral: false,
+                isRoyalGuard: false, hasValidRtsMission: false),
+            "an active warrior owns a wartime military lock");
+        Equal(true, ActiveMilitaryLifecycleRules.HasWartimeMilitaryLock(
+                actorAlive: true, kingdomAtWar: false, isWarrior: false,
+                hasArmy: true,
+                isCurrentCaptain: true, isGeneral: false,
+                isRoyalGuard: false, hasValidRtsMission: true),
+            "a captain with a valid mission remains military during projection repair");
+        Equal(false, ActiveMilitaryLifecycleRules.HasWartimeMilitaryLock(
+                actorAlive: false, kingdomAtWar: true, isWarrior: true,
+                hasArmy: true,
+                isCurrentCaptain: true, isGeneral: true,
+                isRoyalGuard: true, hasValidRtsMission: true),
+            "dead actors do not retain runtime military locks");
+        Equal(false, ActiveMilitaryLifecycleRules.HasWartimeMilitaryLock(
+                actorAlive: true, kingdomAtWar: false, isWarrior: true,
+                hasArmy: false, isCurrentCaptain: false, isGeneral: false,
+                isRoyalGuard: false, hasValidRtsMission: false),
+            "an ordinary peacetime warrior may enter normal retirement");
+        Equal(true, ActiveMilitaryLifecycleRules.HasWartimeMilitaryLock(
+                actorAlive: true, kingdomAtWar: false, isWarrior: true,
+                hasArmy: true, isCurrentCaptain: false, isGeneral: false,
+                isRoyalGuard: true, hasValidRtsMission: false),
+            "royal guards retain permanent military identity in peacetime");
+
+        Equal(false, ActiveMilitaryLifecycleRules.CanBecomeCivilGovernor(
+                actorAlive: true, hasWartimeMilitaryLock: true,
+                isKing: false, isCityLeader: false),
+            "wartime military actors cannot become governors");
+        Equal(true, ActiveMilitaryLifecycleRules.CanBecomeCivilGovernor(
+                actorAlive: true, hasWartimeMilitaryLock: false,
+                isKing: false, isCityLeader: false),
+            "eligible civilians may become governors");
+
+        Equal(false, ActiveMilitaryLifecycleRules.CanCommitRetirement(
+                retirementRequested: true, hasWartimeMilitaryLock: true,
+                remainsWarrior: false, remainsInArmy: false),
+            "active war ownership blocks even hard retirement");
+        Equal(false, ActiveMilitaryLifecycleRules.CanCommitRetirement(
+                retirementRequested: true, hasWartimeMilitaryLock: false,
+                remainsWarrior: true, remainsInArmy: false),
+            "retirement cannot be written when stopBeingWarrior was rejected");
+        Equal(false, ActiveMilitaryLifecycleRules.CanCommitRetirement(
+                retirementRequested: true, hasWartimeMilitaryLock: false,
+                remainsWarrior: false, remainsInArmy: true),
+            "retirement cannot be written while Army membership remains");
+        Equal(true, ActiveMilitaryLifecycleRules.CanCommitRetirement(
+                retirementRequested: true, hasWartimeMilitaryLock: false,
+                remainsWarrior: false, remainsInArmy: false),
+            "fully detached peacetime soldiers may retire");
+        Equal(false, SoldierRetirementRules.CanConsiderForRetirement(
+                isSupportedActor: true, isRekt: false, isWarrior: true,
+                alreadyRetired: false, isGeneral: true,
+                isFiefHolder: false, isRoyalGuard: false,
+                hardRetirement: true),
+            "generals never retire even after hard retirement age");
+        Equal(true, SoldierRetirementRules.CanConsiderForRetirement(
+                isSupportedActor: true, isRekt: false, isWarrior: true,
+                alreadyRetired: false, isGeneral: false,
+                isFiefHolder: false, isRoyalGuard: false,
+                hardRetirement: true),
+            "ordinary peacetime soldiers may hard-retire");
+        Equal(true, SoldierRetirementRules.CanRecallReserve(
+                wartimeMobilization: true, isRetired: true, age: 64f,
+                maximumAge: 65f),
+            "an eligible retired soldier may be recalled after civilians");
+        Equal(false, SoldierRetirementRules.CanRecallReserve(
+                wartimeMobilization: true, isRetired: true, age: 65f,
+                maximumAge: 65f),
+            "hard-age retirees remain outside the reserve pool");
+
+        Equal(true, ActiveMilitaryLifecycleRules.
+                ShouldInvalidateMissionForEndedWar(17L, 17L),
+            "ending war 17 invalidates a war 17 mission");
+        Equal(false, ActiveMilitaryLifecycleRules.
+                ShouldInvalidateMissionForEndedWar(16L, 17L),
+            "ending war 17 preserves a war 16 mission");
+
+        Equal(false, ActiveMilitaryLifecycleRules.CanDemobilizeAtLocation(
+                actorAlive: true, hasActiveWar: false,
+                insideHomeKingdom: false, inFriendlySafeCity: false),
+            "temporary troops abroad return before demobilization");
+        Equal(false, ActiveMilitaryLifecycleRules.CanDemobilizeAtLocation(
+                actorAlive: true, hasActiveWar: true,
+                insideHomeKingdom: true, inFriendlySafeCity: true),
+            "temporary troops remain enlisted while another war is active");
+        Equal(true, ActiveMilitaryLifecycleRules.CanDemobilizeAtLocation(
+                actorAlive: true, hasActiveWar: false,
+                insideHomeKingdom: true, inFriendlySafeCity: true),
+            "temporary troops demobilize after reaching a friendly safe city");
+
+        Equal(false, ActiveMilitaryLifecycleRules.ShouldRepeatRetreatToAnchor(
+                missionGeneration: 4, completedGeneration: 4,
+                candidateAnchorCityId: 12L, completedAnchorCityId: 12L,
+                hasNewThreat: false),
+            "a completed retreat anchor cannot immediately repeat");
+        Equal(true, ActiveMilitaryLifecycleRules.ShouldRepeatRetreatToAnchor(
+                missionGeneration: 5, completedGeneration: 4,
+                candidateAnchorCityId: 12L, completedAnchorCityId: 12L,
+                hasNewThreat: false),
+            "a new mission generation may retreat to the same city");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

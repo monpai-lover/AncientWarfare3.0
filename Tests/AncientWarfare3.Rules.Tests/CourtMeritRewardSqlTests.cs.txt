@@ -1,0 +1,511 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CourtMeritRewardSqlTests
+{
+    private const long KingdomId = 7;
+    private const long RulerLineageId = 100;
+    private const int CurrentYear = 100;
+
+    public static void Run()
+    {
+        DetachedCandidateIsImmutableAndContainsRewardFacts();
+        EligibilityParityMatrixMatchesRulesBeforeLimit();
+        CooldownAndMissingArchiveDoNotConsumeOfficerWindow();
+        FemaleHonorCandidatesDoNotConsumeOfficerWindow();
+        CrossKingdomActiveTitleStillBlocksHonor();
+        CappedOfficerEligibleForLandRemainsInWindow();
+        OfficerAndGeneralWindowsRemainIndependentAndBounded();
+        MissingAndWrongKingdomGeneralProjectionsNeedIndependentRepair();
+        MissingArchiveRepairsAreImmutableAndBounded();
+        ArchiveRepairCursorAdvancesPastIrreparableLowIdsAndWraps();
+    }
+
+    private static void DetachedCandidateIsImmutableAndContainsRewardFacts()
+    {
+        using var db = OpenEligibilityDatabase();
+        InsertOfficer(db, actorId: 10, merit: 4.375d, meritCap: 10,
+            lastRewardYear: 72, lineageId: RulerLineageId, sex: 0);
+        InsertTitle(db, actorId: 10, kingdomId: 99, nobleRank: 6,
+            titleStyle: "male");
+        InsertGeneral(db, actorId: 10, militaryMerit: 45,
+            fiefCityId: -1, active: true);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand: true,
+                martialCourtSupportsLand: true, maximumCandidates: 24);
+
+        Assert(selected.Count == 1,
+            "detached projection returns the eligible officer");
+        CourtMeritRewardDetachedCandidate candidate = selected[0];
+        Assert(candidate.ActorId == 10L && candidate.CivilMerit == 4.375f &&
+               candidate.CivilMeritCap == 10 &&
+               candidate.LastRewardYear == 72,
+            "detached projection contains civil merit and cooldown facts");
+        Assert(candidate.ArchiveKnown &&
+               candidate.ArchiveLineageId == RulerLineageId &&
+               candidate.ArchiveSex == 0,
+            "detached projection contains archive lineage and sex facts");
+        Assert(candidate.CurrentNobleRank == 6 &&
+               candidate.CurrentNobleStyle == "male",
+            "detached projection contains the actor-global active title");
+        Assert(candidate.GeneralProjectionKnown && candidate.GeneralActive &&
+               candidate.MilitaryMerit == 45 && candidate.FiefCityId == -1,
+            "detached projection contains general and fief facts");
+        Assert(candidate.OfficerSource && !candidate.GeneralSource,
+            "officer query identifies its bounded source window");
+        Assert(candidate.RewardKind == CourtMeritRewardKind.Land &&
+               candidate.EligibilityReason ==
+               CourtMeritRewardEligibilityReason.LandMartialCourt,
+            "SQL selects the land reward and its eligibility reason");
+        Assert(typeof(CourtMeritRewardDetachedCandidate).IsValueType &&
+               typeof(CourtMeritRewardDetachedCandidate).GetProperties()
+                   .All(property => !property.CanWrite),
+            "detached candidate DTO is immutable");
+    }
+
+    private static void EligibilityParityMatrixMatchesRulesBeforeLimit()
+    {
+        AssertOfficerCase("civil score 54", civilMerit: 4.25d,
+            civilCap: 10, sex: 0, expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("civil score 55", civilMerit: 4.375d,
+            civilCap: 10, sex: 0, expected: CourtMeritRewardKind.Honor,
+            expectedReason: CourtMeritRewardEligibilityReason.HonorRankAdvance,
+            expectedScore: 55);
+        AssertOfficerCase("military merit below 45", civilMerit: 4.375d,
+            civilCap: 10, sex: 1, generalKnown: true,
+            militaryMerit: 44, hasGrantableLand: true,
+            martialCourtSupportsLand: true,
+            expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("military merit 45 without martial court",
+            civilMerit: 4.375d, civilCap: 10, sex: 1,
+            generalKnown: true, militaryMerit: 45,
+            hasGrantableLand: true, martialCourtSupportsLand: false,
+            expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("military merit 45 with martial court",
+            civilMerit: 4.375d, civilCap: 10, sex: 1,
+            generalKnown: true, militaryMerit: 45,
+            hasGrantableLand: true, martialCourtSupportsLand: true,
+            expected: CourtMeritRewardKind.Land,
+            expectedReason:
+            CourtMeritRewardEligibilityReason.LandMartialCourt);
+        AssertOfficerCase("military merit 80 without martial court",
+            civilMerit: 0d, civilCap: 10, sex: 1,
+            generalKnown: true, militaryMerit: 80,
+            hasGrantableLand: true, martialCourtSupportsLand: false,
+            expected: CourtMeritRewardKind.Land,
+            expectedReason: CourtMeritRewardEligibilityReason.LandHighMerit,
+            expectedScore: 80);
+        AssertOfficerCase("female without land", civilMerit: 10d,
+            civilCap: 10, sex: 1, expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("nonroyal at rank cap", civilMerit: 10d,
+            civilCap: 10, sex: 0, lineageId: 200, nobleRank: 7,
+            expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("royal below realm rank cap", civilMerit: 10d,
+            civilCap: 10, sex: 0, lineageId: RulerLineageId,
+            nobleRank: 7, expected: CourtMeritRewardKind.Honor,
+            expectedReason: CourtMeritRewardEligibilityReason.HonorRankAdvance,
+            expectedScore: 100);
+        AssertOfficerCase("missing archive", civilMerit: 10d,
+            civilCap: 10, includeArchive: false,
+            expected: CourtMeritRewardKind.None);
+        AssertOfficerCase("missing general projection", civilMerit: 10d,
+            civilCap: 10, sex: 0, generalKnown: false,
+            expected: CourtMeritRewardKind.Honor,
+            expectedReason: CourtMeritRewardEligibilityReason.HonorRankAdvance,
+            expectedGeneralProjectionKnown: false, expectedScore: 100);
+    }
+
+    private static void CooldownAndMissingArchiveDoNotConsumeOfficerWindow()
+    {
+        using var db = OpenEligibilityDatabase();
+        for (int actorId = 1; actorId <= 24; actorId++)
+            InsertOfficer(db, actorId, 10d, 10,
+                lastRewardYear: 95, lineageId: 200, sex: 0);
+        for (int actorId = 30; actorId <= 53; actorId++)
+            InsertOfficer(db, actorId, 10d, 10,
+                lastRewardYear: -1, lineageId: 200, sex: 0,
+                includeArchive: false);
+        InsertOfficer(db, actorId: 60, merit: 4.375d, meritCap: 10,
+            lastRewardYear: -1, lineageId: 200, sex: 0);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand: false,
+                martialCourtSupportsLand: false, maximumCandidates: 24);
+
+        Assert(selected.Select(candidate => candidate.ActorId)
+                .SequenceEqual(new long[] { 60L }),
+            "cooldown and missing archive rows are excluded before LIMIT 24");
+    }
+
+    private static void FemaleHonorCandidatesDoNotConsumeOfficerWindow()
+    {
+        using var db = OpenEligibilityDatabase();
+        for (int actorId = 1; actorId <= 24; actorId++)
+            InsertOfficer(db, actorId, 10d, 10, -1, 200, sex: 1);
+        InsertOfficer(db, actorId: 25, merit: 4.375d, meritCap: 10,
+            lastRewardYear: -1, lineageId: 200, sex: 0);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand: false,
+                martialCourtSupportsLand: false, maximumCandidates: 1);
+
+        Assert(selected.Select(candidate => candidate.ActorId)
+                .SequenceEqual(new long[] { 25L }),
+            "female non-land candidates are excluded before the officer limit");
+    }
+
+    private static void CrossKingdomActiveTitleStillBlocksHonor()
+    {
+        using var db = OpenEligibilityDatabase();
+        InsertOfficer(db, actorId: 30, merit: 10d, meritCap: 10,
+            lastRewardYear: -1, lineageId: 200, sex: 0);
+        InsertTitle(db, actorId: 30, kingdomId: 99, nobleRank: 7,
+            titleStyle: "male");
+        InsertOfficer(db, actorId: 31, merit: 9d, meritCap: 10,
+            lastRewardYear: -1, lineageId: 200, sex: 0);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand: false,
+                martialCourtSupportsLand: false, maximumCandidates: 1);
+
+        Assert(selected.Select(candidate => candidate.ActorId)
+                .SequenceEqual(new long[] { 31L }),
+            "an actor-global cap title remains visible after changing kingdoms");
+    }
+
+    private static void CappedOfficerEligibleForLandRemainsInWindow()
+    {
+        using var db = OpenEligibilityDatabase();
+        InsertOfficer(db, actorId: 40, merit: 10d, meritCap: 10,
+            lastRewardYear: -1, lineageId: 200, sex: 1);
+        InsertTitle(db, actorId: 40, kingdomId: 99, nobleRank: 7,
+            titleStyle: "male");
+        InsertGeneral(db, actorId: 40, militaryMerit: 80,
+            fiefCityId: -1, active: true);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand: true,
+                martialCourtSupportsLand: false, maximumCandidates: 1);
+
+        Assert(selected.Count == 1 && selected[0].ActorId == 40L &&
+               selected[0].RewardKind == CourtMeritRewardKind.Land,
+            "honor rank cap cannot remove an officer eligible for land");
+    }
+
+    private static void OfficerAndGeneralWindowsRemainIndependentAndBounded()
+    {
+        using (SQLiteConnection officers = OpenEligibilityDatabase())
+        {
+            for (int actorId = 1; actorId <= 25; actorId++)
+                InsertOfficer(officers, actorId, 10d, 10, -1, 200, sex: 0);
+            IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+                LoadOfficers(officers, hasGrantableLand: false,
+                    martialCourtSupportsLand: false,
+                    maximumCandidates: 24);
+            Assert(selected.Count == 24 && selected.All(candidate =>
+                       candidate.OfficerSource && !candidate.GeneralSource),
+                "officer projection preserves its maximum 24 window");
+        }
+
+        using (SQLiteConnection generals = OpenEligibilityDatabase())
+        {
+            for (int actorId = 1; actorId <= 13; actorId++)
+            {
+                InsertArchive(generals, actorId, lineageId: 200, sex: 0);
+                InsertGeneral(generals, actorId, militaryMerit: 80,
+                    fiefCityId: -1, active: true);
+            }
+            IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+                LoadGenerals(generals, hasGrantableLand: true,
+                    martialCourtSupportsLand: false,
+                    maximumCandidates: 12);
+            Assert(selected.Count == 12 && selected.All(candidate =>
+                       !candidate.OfficerSource && candidate.GeneralSource),
+                "general projection preserves its independent maximum 12 window");
+            Assert(selected.All(candidate => candidate.CivilMerit == 0f &&
+                       candidate.CivilMeritCap == 0 &&
+                       candidate.LastRewardYear == -1),
+                "general projection tolerates a missing career projection");
+        }
+    }
+
+    private static void MissingArchiveRepairsAreImmutableAndBounded()
+    {
+        using var db = OpenEligibilityDatabase();
+        for (int actorId = 1; actorId <= 5; actorId++)
+            InsertOfficer(db, actorId, 10d, 10, -1, 200, sex: 0,
+                includeArchive: false);
+        InsertGeneral(db, actorId: 1, militaryMerit: 80,
+            fiefCityId: -1, active: true);
+        InsertGeneral(db, actorId: 6, militaryMerit: 80,
+            fiefCityId: -1, active: true);
+
+        IReadOnlyList<CourtMeritRewardArchiveRepairCandidate> repairs =
+            CourtMeritRewardCandidateQuery.LoadMissingArchiveRepairs(db,
+                "CourtOfficer", "ActorArchive", "GeneralState", KingdomId,
+                afterActorId: -1L,
+                maximumRepairs: 4);
+
+        Assert(repairs.Count == 4,
+            "missing archive reconciliation is bounded per reward cycle");
+        Assert(repairs[0].ActorId == 1L && repairs[0].OfficerSource &&
+               repairs[0].GeneralSource,
+            "repair DTO merges officer and general source identity");
+        Assert(repairs.All(candidate => candidate.MissingArchive),
+            "repair query only returns missing archive projections");
+        Assert(typeof(CourtMeritRewardArchiveRepairCandidate).IsValueType &&
+               typeof(CourtMeritRewardArchiveRepairCandidate).GetProperties()
+                   .All(property => !property.CanWrite),
+            "archive repair DTO is immutable");
+    }
+
+    private static void MissingAndWrongKingdomGeneralProjectionsNeedIndependentRepair()
+    {
+        using var db = OpenEligibilityDatabase();
+        InsertGeneral(db, actorId: 2, militaryMerit: 80,
+            fiefCityId: -1, active: true, kingdomId: 99);
+        InsertGeneral(db, actorId: 3, militaryMerit: 80,
+            fiefCityId: -1, active: true);
+
+        Assert(CourtMeritRewardCandidateQuery.NeedsGeneralProjectionRepair(
+                db, "GeneralState", actorId: 1, KingdomId,
+                liveActive: true),
+            "an authoritative live non-officer general with no row is repairable");
+        Assert(CourtMeritRewardCandidateQuery.NeedsGeneralProjectionRepair(
+                db, "GeneralState", actorId: 2, KingdomId,
+                liveActive: true),
+            "a wrong-kingdom row is repairable outside the reward query");
+        Assert(!CourtMeritRewardCandidateQuery.NeedsGeneralProjectionRepair(
+                db, "GeneralState", actorId: 3, KingdomId,
+                liveActive: true),
+            "a matching live projection does not consume repair capacity");
+        Assert(!CourtMeritRewardCandidateQuery.NeedsGeneralProjectionRepair(
+                db, "GeneralState", actorId: 4, KingdomId,
+                liveActive: false),
+            "a missing inactive projection does not create a general row");
+        Assert(CourtMeritRewardCandidateQuery.NeedsGeneralProjectionRepair(
+                db, "GeneralState", actorId: 3, KingdomId,
+                liveActive: false),
+            "an active row with a cleared live flag is repaired inactive");
+    }
+
+    private static void ArchiveRepairCursorAdvancesPastIrreparableLowIdsAndWraps()
+    {
+        using var db = OpenEligibilityDatabase();
+        for (int actorId = 1; actorId <= 6; actorId++)
+            InsertOfficer(db, actorId, 10d, 10, -1, 200, sex: 0,
+                includeArchive: false);
+
+        IReadOnlyList<CourtMeritRewardArchiveRepairCandidate> first =
+            CourtMeritRewardCandidateQuery.LoadMissingArchiveRepairs(db,
+                "CourtOfficer", "ActorArchive", "GeneralState", KingdomId,
+                afterActorId: -1L, maximumRepairs: 4);
+        IReadOnlyList<CourtMeritRewardArchiveRepairCandidate> second =
+            CourtMeritRewardCandidateQuery.LoadMissingArchiveRepairs(db,
+                "CourtOfficer", "ActorArchive", "GeneralState", KingdomId,
+                afterActorId: first[^1].ActorId, maximumRepairs: 4);
+        IReadOnlyList<CourtMeritRewardArchiveRepairCandidate> wrapped =
+            CourtMeritRewardCandidateQuery.LoadMissingArchiveRepairs(db,
+                "CourtOfficer", "ActorArchive", "GeneralState", KingdomId,
+                afterActorId: second[^1].ActorId, maximumRepairs: 4);
+
+        Assert(first.Select(item => item.ActorId)
+                .SequenceEqual(new long[] { 1L, 2L, 3L, 4L }),
+            "the first bounded archive inspection starts deterministically");
+        Assert(second.Select(item => item.ActorId)
+                .SequenceEqual(new long[] { 5L, 6L, 1L, 2L }),
+            "four irreparable low IDs cannot starve later repairable IDs");
+        Assert(wrapped.Select(item => item.ActorId)
+                .SequenceEqual(new long[] { 3L, 4L, 5L, 6L }),
+            "archive inspection wraps while remaining bounded");
+    }
+
+    private static void AssertOfficerCase(string name, double civilMerit,
+        int civilCap, int sex = 0, long lineageId = 200,
+        bool includeArchive = true, int nobleRank = 0,
+        bool generalKnown = false, int militaryMerit = 0,
+        bool hasGrantableLand = false,
+        bool martialCourtSupportsLand = false,
+        CourtMeritRewardKind expected = CourtMeritRewardKind.None,
+        CourtMeritRewardEligibilityReason expectedReason =
+            CourtMeritRewardEligibilityReason.None,
+        bool? expectedGeneralProjectionKnown = null,
+        int? expectedScore = null)
+    {
+        using var db = OpenEligibilityDatabase();
+        InsertOfficer(db, actorId: 1, merit: civilMerit,
+            meritCap: civilCap, lastRewardYear: -1, lineageId, sex,
+            includeArchive);
+        if (nobleRank > 0)
+            InsertTitle(db, actorId: 1, kingdomId: KingdomId, nobleRank,
+                titleStyle: "male");
+        if (generalKnown)
+            InsertGeneral(db, actorId: 1, militaryMerit,
+                fiefCityId: -1, active: true);
+
+        IReadOnlyList<CourtMeritRewardDetachedCandidate> selected =
+            LoadOfficers(db, hasGrantableLand,
+                martialCourtSupportsLand, maximumCandidates: 1);
+        if (expected == CourtMeritRewardKind.None)
+        {
+            Assert(selected.Count == 0,
+                name + ": SQL must exclude RewardKind.None before LIMIT");
+            return;
+        }
+
+        Assert(selected.Count == 1,
+            name + ": SQL must return the eligible candidate");
+        CourtMeritRewardDetachedCandidate candidate = selected[0];
+        if (expectedGeneralProjectionKnown.HasValue)
+            Assert(candidate.GeneralProjectionKnown ==
+                   expectedGeneralProjectionKnown.Value,
+                name + ": general projection presence is factual");
+        var facts = new CourtMeritRewardCandidateFacts(candidate.ActorId,
+            eligible: true,
+            royal: candidate.ArchiveLineageId == RulerLineageId,
+            general: candidate.GeneralActive,
+            candidate.CivilMerit, candidate.CivilMeritCap,
+            candidate.MilitaryMerit, candidate.CurrentNobleRank,
+            candidate.FiefCityId >= 0, candidate.LastRewardYear,
+            canReceiveHonor: candidate.ArchiveSex == 0);
+        CourtMeritRewardKind rulesKind = CourtMeritRewardRules.RewardKind(
+            facts, CurrentYear, pKingdomTitle: 4, hasGrantableLand,
+            pCourtWar: martialCourtSupportsLand ? 1.1f : 0f,
+            pCourtAggression: 0f);
+        Assert(candidate.RewardKind == expected && rulesKind == expected,
+            name + ": SQL reward kind must match CourtMeritRewardRules");
+        Assert(candidate.EligibilityReason == expectedReason,
+            name + ": SQL eligibility reason must describe the rule branch");
+        if (expectedScore.HasValue)
+            Assert(CourtMeritRewardRules.Score(facts) == expectedScore.Value,
+                name + ": projected score must preserve the boundary");
+    }
+
+    private static IReadOnlyList<CourtMeritRewardDetachedCandidate>
+        LoadOfficers(SQLiteConnection db, bool hasGrantableLand,
+            bool martialCourtSupportsLand, int maximumCandidates)
+    {
+        return CourtMeritRewardCandidateQuery.LoadOfficerCandidates(db,
+            "CourtOfficer", "OfficialCareerState", "Enfeoffment",
+            "ActorArchive", "GeneralState", KingdomId, RulerLineageId,
+            nonRoyalMaximumNobleRank: 7, realmMaximumNobleRank: 8,
+            hasGrantableLand, martialCourtSupportsLand, CurrentYear,
+            cooldownYears: 12, maximumCandidates);
+    }
+
+    private static IReadOnlyList<CourtMeritRewardDetachedCandidate>
+        LoadGenerals(SQLiteConnection db, bool hasGrantableLand,
+            bool martialCourtSupportsLand, int maximumCandidates)
+    {
+        return CourtMeritRewardCandidateQuery.LoadGeneralCandidates(db,
+            "OfficialCareerState", "Enfeoffment", "ActorArchive",
+            "GeneralState", KingdomId, RulerLineageId,
+            nonRoyalMaximumNobleRank: 7, realmMaximumNobleRank: 8,
+            hasGrantableLand, martialCourtSupportsLand, CurrentYear,
+            cooldownYears: 12, maximumCandidates);
+    }
+
+    private static SQLiteConnection OpenEligibilityDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE CourtOfficer (" +
+                    "KINGDOM_ID INTEGER NOT NULL," +
+                    "ACTOR_ID INTEGER NOT NULL," +
+                    "INFLUENCE REAL NOT NULL," +
+                    "ACTIVE INTEGER NOT NULL)");
+        Execute(db, "CREATE TABLE OfficialCareerState (" +
+                    "KINGDOM_ID INTEGER NOT NULL," +
+                    "ACTOR_ID INTEGER NOT NULL," +
+                    "MERIT REAL NOT NULL," +
+                    "MERIT_CAP INTEGER NOT NULL," +
+                    "LAST_NOBLE_REWARD_YEAR INTEGER NOT NULL)");
+        Execute(db, "CREATE TABLE Enfeoffment (" +
+                    "GRANT_ID INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "ACTOR_ID INTEGER NOT NULL," +
+                    "KINGDOM_ID INTEGER NOT NULL," +
+                    "NOBLE_RANK INTEGER NOT NULL," +
+                    "TITLE_STYLE TEXT NOT NULL," +
+                    "ACTIVE INTEGER NOT NULL)");
+        Execute(db, "CREATE TABLE ActorArchive (ID INTEGER PRIMARY KEY," +
+                    "LINEAGE_ID INTEGER NOT NULL,SEX INTEGER NOT NULL)");
+        Execute(db, "CREATE TABLE GeneralState (ACTOR_ID INTEGER PRIMARY KEY," +
+                    "KINGDOM_ID INTEGER NOT NULL,FIEF_CITY_ID INTEGER NOT NULL," +
+                    "MERIT_SCORE INTEGER NOT NULL,ACTIVE INTEGER NOT NULL)");
+        return db;
+    }
+
+    private static void InsertOfficer(SQLiteConnection db, long actorId,
+        double merit, int meritCap, int lastRewardYear, long lineageId,
+        int sex, bool includeArchive = true, bool active = true,
+        long kingdomId = KingdomId)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO CourtOfficer VALUES(@kingdom,@actor,1.0,@active);" +
+            "INSERT INTO OfficialCareerState VALUES" +
+            "(@kingdom,@actor,@merit,@cap,@lastReward);", db);
+        command.Parameters.AddWithValue("@kingdom", kingdomId);
+        command.Parameters.AddWithValue("@actor", actorId);
+        command.Parameters.AddWithValue("@active", active ? 1 : 0);
+        command.Parameters.AddWithValue("@merit", merit);
+        command.Parameters.AddWithValue("@cap", meritCap);
+        command.Parameters.AddWithValue("@lastReward", lastRewardYear);
+        command.ExecuteNonQuery();
+        if (includeArchive) InsertArchive(db, actorId, lineageId, sex);
+    }
+
+    private static void InsertArchive(SQLiteConnection db, long actorId,
+        long lineageId, int sex)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO ActorArchive VALUES(@actor,@lineage,@sex)", db);
+        command.Parameters.AddWithValue("@actor", actorId);
+        command.Parameters.AddWithValue("@lineage", lineageId);
+        command.Parameters.AddWithValue("@sex", sex);
+        command.ExecuteNonQuery();
+    }
+
+    private static void InsertGeneral(SQLiteConnection db, long actorId,
+        int militaryMerit, long fiefCityId, bool active,
+        long kingdomId = KingdomId)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO GeneralState VALUES" +
+            "(@actor,@kingdom,@fief,@merit,@active)", db);
+        command.Parameters.AddWithValue("@actor", actorId);
+        command.Parameters.AddWithValue("@kingdom", kingdomId);
+        command.Parameters.AddWithValue("@fief", fiefCityId);
+        command.Parameters.AddWithValue("@merit", militaryMerit);
+        command.Parameters.AddWithValue("@active", active ? 1 : 0);
+        command.ExecuteNonQuery();
+    }
+
+    private static void InsertTitle(SQLiteConnection db, long actorId,
+        long kingdomId, int nobleRank, string titleStyle,
+        bool active = true)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO Enfeoffment" +
+            "(ACTOR_ID,KINGDOM_ID,NOBLE_RANK,TITLE_STYLE,ACTIVE)" +
+            " VALUES(@actor,@kingdom,@rank,@style,@active)", db);
+        command.Parameters.AddWithValue("@actor", actorId);
+        command.Parameters.AddWithValue("@kingdom", kingdomId);
+        command.Parameters.AddWithValue("@rank", nobleRank);
+        command.Parameters.AddWithValue("@style", titleStyle ?? "");
+        command.Parameters.AddWithValue("@active", active ? 1 : 0);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(
+            "CourtMeritRewardSqlTests: " + message);
+    }
+}

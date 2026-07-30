@@ -1,0 +1,281 @@
+using AncientWarfare3.core.lineage;
+using System.Reflection;
+
+internal static class WarGoalSettlementRulesTests
+{
+    public static void Run()
+    {
+        GoalTypeNormalizationPreservesEqualityAndHashing();
+        GoalTypeComparisonIsOrdinal();
+        EveryIdentityFieldParticipatesInDuplicateDetection();
+        NullExistingGoalsFailClosed();
+        PersistedGoalsAreBoundedAndUnique();
+        RequiredScoreSnapshotsActualTermCost();
+        RequiredScoreBoundaryIsInclusive();
+        EarlyEnforcementRequiresCompletionAndBoundTerm();
+        DecisiveVictoryRemainsUnconditional();
+        LegacyInvalidGoalDataCannotForceEarlySettlement();
+        SystemGoalsPublishAutomaticSettlementProfiles();
+        AutomaticCessionKeepsItsPersistedGoalScore();
+    }
+
+    private static void GoalTypeNormalizationPreservesEqualityAndHashing()
+    {
+        var defaultIdentity = default(WarGoalIdentity);
+        var nullGoalType = new WarGoalIdentity(null, 0, 0, 0, 0, 0, 0);
+        var emptyGoalType = new WarGoalIdentity("", 0, 0, 0, 0, 0, 0);
+
+        True(defaultIdentity.Equals(nullGoalType),
+            "default and explicit null goal types have equal identity");
+        True(defaultIdentity.Equals(emptyGoalType),
+            "default and empty goal types have equal identity");
+        True(nullGoalType.Equals(emptyGoalType),
+            "explicit null and empty goal types have equal identity");
+        Equal(defaultIdentity.GetHashCode(), nullGoalType.GetHashCode(),
+            "default and explicit null identities have equal hashes");
+        Equal(defaultIdentity.GetHashCode(), emptyGoalType.GetHashCode(),
+            "default and empty identities have equal hashes");
+    }
+
+    private static void GoalTypeComparisonIsOrdinal()
+    {
+        var lower = Goal("take_core_city", targetCityId: 11);
+        var upper = Goal("TAKE_CORE_CITY", targetCityId: 11);
+
+        False(lower.Equals(upper),
+            "goal identity comparison remains ordinal and case-sensitive");
+    }
+
+    private static void EveryIdentityFieldParticipatesInDuplicateDetection()
+    {
+        var baseline = new WarGoalIdentity("goal", 1, 2, 3, 4, 5, 6);
+        var variants = new (string Name, WarGoalIdentity Identity)[]
+        {
+            ("goal type", new WarGoalIdentity("other", 1, 2, 3, 4, 5, 6)),
+            ("target city", new WarGoalIdentity("goal", 11, 2, 3, 4, 5, 6)),
+            ("target kingdom", new WarGoalIdentity("goal", 1, 12, 3, 4, 5, 6)),
+            ("source claim", new WarGoalIdentity("goal", 1, 2, 13, 4, 5, 6)),
+            ("source core", new WarGoalIdentity("goal", 1, 2, 3, 14, 5, 6)),
+            ("source project", new WarGoalIdentity("goal", 1, 2, 3, 4, 15, 6)),
+            ("claimant actor", new WarGoalIdentity("goal", 1, 2, 3, 4, 5, 16))
+        };
+
+        foreach (var variant in variants)
+        {
+            False(baseline.Equals(variant.Identity),
+                variant.Name + " participates in goal identity equality");
+            True(WarGoalSettlementRules.CanPersistGoal(
+                    new[] { baseline }, variant.Identity),
+                "changing only " + variant.Name +
+                " creates a distinct persistable goal identity");
+        }
+    }
+
+    private static void NullExistingGoalsFailClosed()
+    {
+        False(WarGoalSettlementRules.CanPersistGoal(
+                null, Goal("take_core_city", targetCityId: 11)),
+            "missing persisted-goal facts fail closed");
+    }
+
+    private static void PersistedGoalsAreBoundedAndUnique()
+    {
+        var first = Goal("take_core_city", targetCityId: 11);
+        var second = Goal("take_core_city", targetCityId: 12);
+        var third = Goal("restore_kingdom", targetKingdomId: 33,
+            claimantActorId: 44);
+
+        Equal(3, WarGoalSettlementRules.MaximumPersistedGoals,
+            "a war persists at most three goals");
+        True(WarGoalSettlementRules.CanPersistGoal(
+                Array.Empty<WarGoalIdentity>(), first),
+            "the first distinct goal can be persisted");
+        True(WarGoalSettlementRules.CanPersistGoal(
+                new[] { first }, second),
+            "a second goal with the same type and a different target identity can be persisted");
+        True(WarGoalSettlementRules.CanPersistGoal(
+                new[] { first, second }, third),
+            "a third distinct goal can be persisted");
+        False(WarGoalSettlementRules.CanPersistGoal(
+                new[] { first, second }, first),
+            "an existing goal identity cannot be persisted twice");
+        False(WarGoalSettlementRules.CanPersistGoal(
+                new[] { first, second, third },
+                Goal("force_tributary", targetKingdomId: 55)),
+            "a fourth distinct goal is rejected");
+    }
+
+    private static void RequiredScoreSnapshotsActualTermCost()
+    {
+        Equal(17, WarGoalSettlementRules.SnapshotRequiredScore(17),
+            "a cheap term keeps its actual cost instead of a goal-type tier");
+        Equal(73, WarGoalSettlementRules.SnapshotRequiredScore(73),
+            "an expensive term keeps its actual cost instead of a goal-type tier");
+        Equal(1, WarGoalSettlementRules.SnapshotRequiredScore(0),
+            "a new goal snapshot has a minimum required score of one");
+        Equal(100, WarGoalSettlementRules.SnapshotRequiredScore(140),
+            "a new goal snapshot cannot require more than decisive victory");
+    }
+
+    private static void RequiredScoreBoundaryIsInclusive()
+    {
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 39, requiredScore: 40)),
+            "thirty-nine score cannot enforce a forty-cost goal");
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 40, requiredScore: 40)),
+            "forty score can enforce a completed bound forty-cost goal");
+    }
+
+    private static void EarlyEnforcementRequiresCompletionAndBoundTerm()
+    {
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 60, requiredScore: 40,
+                    goalCompleted: false)),
+            "enough score cannot enforce an incomplete goal early");
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 60, requiredScore: 40,
+                    requestedGoalTermWarGoalId: 8)),
+            "a completed goal cannot enforce an unrelated request term early");
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 60, requiredScore: 40,
+                    requestedGoalTermWarGoalId: -1)),
+            "a completed goal cannot enforce an unbound request early");
+    }
+
+    private static void DecisiveVictoryRemainsUnconditional()
+    {
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 100, requiredScore: 0)),
+            "one hundred score overrides a legacy zero required score");
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 100, requiredScore: -1)),
+            "one hundred score overrides a legacy negative required score");
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 100, requiredScore: 40,
+                    warGoalId: -1)),
+            "one hundred score overrides a legacy invalid goal id");
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 100, requiredScore: 40,
+                    requestedGoalTermWarGoalId: -1)),
+            "one hundred score does not require a bound goal term");
+        True(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 100, requiredScore: 40,
+                    goalCompleted: false)),
+            "one hundred score does not require goal completion");
+    }
+
+    private static void LegacyInvalidGoalDataCannotForceEarlySettlement()
+    {
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 99, requiredScore: 0)),
+            "a legacy non-positive required score cannot enforce below one hundred");
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 99, requiredScore: -1)),
+            "a legacy negative required score cannot enforce below one hundred");
+        False(WarGoalSettlementRules.CanForceSettlement(
+                Settlement(score: 99, requiredScore: 40,
+                    warGoalId: -1, requestedGoalTermWarGoalId: -1)),
+            "a legacy invalid goal id cannot appear bound below one hundred");
+    }
+
+    private static void SystemGoalsPublishAutomaticSettlementProfiles()
+    {
+        MethodInfo resolver = typeof(WarGoalSettlementRules).GetMethod(
+            "TryGetAutomaticSettlementProfile",
+            BindingFlags.Public | BindingFlags.Static);
+        True(resolver != null,
+            "system goals expose an automatic-settlement profile resolver");
+
+        AssertProfile(resolver, WarTerritoryService.GOAL_MANDATE_CONQUEST,
+            "CedeCity", "city_control", 1);
+        AssertProfile(resolver, WarTerritoryService.GOAL_TAKE_MANDATE,
+            "TakeMandate", "capital_control", 1);
+        AssertProfile(resolver, WarTerritoryService.GOAL_RESTORE_KINGDOM,
+            "RestoreKingdom", "city_control", 1);
+        AssertProfile(resolver, WarTerritoryService.GOAL_INDEPENDENCE,
+            "Independence", "capital_control", 1);
+        AssertProfile(resolver, WarTerritoryService.GOAL_REUNIFY_SUCCESSION,
+            "ReunifySuccession", "capital_control", 1);
+        AssertProfile(resolver, WarTerritoryService.GOAL_NO_CB,
+            "NoCbOutcome", "capital_control", 1);
+    }
+
+    private static void AutomaticCessionKeepsItsPersistedGoalScore()
+    {
+        MethodInfo resolver = typeof(WarGoalSettlementRules).GetMethod(
+            "ResolveCedeCityCost", BindingFlags.Public |
+            BindingFlags.Static);
+        True(resolver != null,
+            "automatic city cession exposes a persisted-cost resolver");
+
+        int automaticCost = (int)resolver.Invoke(null,
+            new object[] { true, 17, 31 });
+        Equal(17, automaticCost,
+            "a completed automatic city goal keeps its declaration score when city value rises");
+
+        int negotiatedCost = (int)resolver.Invoke(null,
+            new object[] { false, 17, 31 });
+        Equal(31, negotiatedCost,
+            "a normal negotiated city cession keeps its live city value");
+    }
+
+    private static void AssertProfile(MethodInfo resolver, string goalType,
+        string expectedEffect, string expectedCompletionKind,
+        int minimumRequiredScore)
+    {
+        object[] arguments = { goalType, null };
+        bool resolved = (bool)resolver.Invoke(null, arguments);
+        True(resolved, goalType + " has an automatic settlement profile");
+        object profile = arguments[1];
+        Type profileType = profile.GetType();
+        Equal(expectedEffect, profileType.GetProperty("Effect")
+                .GetValue(profile).ToString(),
+            goalType + " preserves its settlement effect");
+        Equal(expectedCompletionKind, profileType.GetProperty(
+                "CompletionKind").GetValue(profile).ToString(),
+            goalType + " completes through persisted city control");
+        int requiredScore = (int)profileType.GetProperty("RequiredWarScore")
+            .GetValue(profile);
+        True(requiredScore >= minimumRequiredScore,
+            goalType + " has a positive required war score");
+    }
+
+    private static WarGoalIdentity Goal(string goalType,
+        long targetCityId = -1, long targetKingdomId = -1,
+        long sourceClaimId = -1, long sourceCoreId = -1,
+        long sourceProjectId = -1, long claimantActorId = -1)
+    {
+        return new WarGoalIdentity(goalType, targetCityId,
+            targetKingdomId, sourceClaimId, sourceCoreId,
+            sourceProjectId, claimantActorId);
+    }
+
+    private static WarGoalSettlementFacts Settlement(int score,
+        int requiredScore, long warGoalId = 7,
+        bool goalCompleted = true,
+        long requestedGoalTermWarGoalId = 7)
+    {
+        return new WarGoalSettlementFacts(score, warGoalId,
+            requiredScore, goalCompleted, requestedGoalTermWarGoalId);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value)
+            throw new InvalidOperationException(name + ": expected false");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

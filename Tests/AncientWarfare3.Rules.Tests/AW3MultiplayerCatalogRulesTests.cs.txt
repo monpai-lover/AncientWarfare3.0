@@ -1,0 +1,858 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.multiplayer.commands;
+
+internal static class AW3MultiplayerCatalogRulesTests
+{
+    public static void Run()
+    {
+        CatalogsAreCompleteUniqueAndImmutable();
+        WindowRequestsValidateDeclaredContext();
+        CommandFactoriesProduceCanonicalPayloads();
+        ModelsAreImmutableAndTransportFree();
+        WindowSourceAndFacadeCoverEveryCurrentId();
+        CommandDispatcherOwnershipIsReferenceBased();
+        CommandDispatchSourceStaysTypedAndTransportFree();
+        PolicyMandateAndRecordsWritesUseDispatcher();
+        CourtInheritanceAndRealmWritesUseDispatcher();
+        DiplomacyAndWarWritesUseDispatcher();
+        AllPlayerFacingUiWritesUseDispatcher();
+    }
+
+    private static void CatalogsAreCompleteUniqueAndImmutable()
+    {
+        IReadOnlyList<AW3WindowDescriptor> windows =
+            AW3MultiplayerCatalog.Windows;
+        IReadOnlyList<AW3CommandDescriptor> commands =
+            AW3MultiplayerCatalog.Commands;
+
+        Equal(29, windows.Count, "current AW3 window count");
+        Equal(29, windows.Select(value => value.WindowId).Distinct(
+                StringComparer.Ordinal).Count(),
+            "window IDs are unique");
+        Equal(Enum.GetValues<AW3WindowKind>().Length, windows.Count,
+            "every window kind has one descriptor");
+        Equal(Enum.GetValues<AW3CommandKind>().Length, commands.Count,
+            "every command kind has one descriptor");
+        Equal(windows.Count,
+            windows.Select(value => value.Kind).Distinct().Count(),
+            "window kinds are unique");
+        Equal(commands.Count,
+            commands.Select(value => value.Kind).Distinct().Count(),
+            "command kinds are unique");
+        True(windows.All(value => value.PayloadSchemaVersion ==
+                                  AW3MultiplayerCatalog.PayloadSchemaVersion),
+            "window descriptors use the catalog schema");
+        True(commands.All(value => value.PayloadSchemaVersion ==
+                                   AW3MultiplayerCatalog.PayloadSchemaVersion),
+            "command descriptors use the catalog schema");
+
+        Throws<NotSupportedException>(() =>
+                ((IList<AW3WindowDescriptor>)windows).Add(windows[0]),
+            "window catalog is immutable");
+        Throws<NotSupportedException>(() =>
+                ((IList<AW3CommandDescriptor>)commands).Add(commands[0]),
+            "command catalog is immutable");
+    }
+
+    private static void WindowRequestsValidateDeclaredContext()
+    {
+        AW3WindowDescriptor policy = AW3MultiplayerCatalog.GetWindow(
+            AW3WindowKind.PolicyTree);
+        var valid = AW3WindowOpenRequest.ForCountry(
+            AW3WindowKind.PolicyTree, 7);
+        True(valid.IsValidFor(policy), "country context is valid");
+        Equal(7L, valid.CountryId, "country identity retained");
+
+        var missing = AW3WindowOpenRequest.Empty(
+            AW3WindowKind.PolicyTree);
+        Equal(false, missing.IsValidFor(policy),
+            "missing country is rejected");
+
+        var diplomacy = AW3WindowOpenRequest.ForCountries(
+            AW3WindowKind.DiplomaticWarDeclaration, 7, 8);
+        True(diplomacy.IsValidFor(AW3MultiplayerCatalog.GetWindow(
+                AW3WindowKind.DiplomaticWarDeclaration)),
+            "source and target country context is valid");
+
+        var history = AW3WindowOpenRequest.ForActor(
+            AW3WindowKind.History, 31, countryId: 7);
+        True(history.IsValidFor(AW3MultiplayerCatalog.GetWindow(
+                AW3WindowKind.History)),
+            "actor history accepts actor and optional country context");
+
+        Equal("aw_diplomatic_marriage",
+            AW3MultiplayerCatalog.GetWindow(
+                AW3WindowKind.DiplomaticMarriage).WindowId,
+            "the current diplomatic marriage window is catalogued");
+    }
+
+    private static void CommandFactoriesProduceCanonicalPayloads()
+    {
+        var requests = new[]
+        {
+            AW3CommandRequest.ConfigurePolicy(7, true, false),
+            AW3CommandRequest.SetPolicyClass(7, "reform"),
+            AW3CommandRequest.StartPolicyNode(7, "tech_iron", true),
+            AW3CommandRequest.TogglePolicyNodeLock(7, "tech_iron"),
+            AW3CommandRequest.StartCoreFabrication(7, 19, "core"),
+            AW3CommandRequest.StartTargetedDecision(7, 8,
+                "absorb_vassal"),
+            AW3CommandRequest.StartMandateDecision(7,
+                "centralization_reform"),
+            AW3CommandRequest.AppointCourtOfficer(7, 31, "chancellor", 33),
+            AW3CommandRequest.SetCourtDisposition(7, 31, "grant_fief", 4,
+                19, "court-op-1"),
+            AW3CommandRequest.ChangeCourtAuxiliaryLaw(7, "term", 2),
+            AW3CommandRequest.ChangeInheritanceLaw(7, "primogeniture"),
+            AW3CommandRequest.RelocateFeudatory(7, 41),
+            AW3CommandRequest.ReclaimFeudatoryCity(7, 41, 19),
+            AW3CommandRequest.AbolishFeudatory(7, 41),
+            AW3CommandRequest.CreateDiplomacyProposal(7, 8,
+                "household_offering", actorId: 31, targetActorId: 32,
+                detailId: "principal_wife"),
+            AW3CommandRequest.RespondDiplomacyProposal(7, 8, 51, true),
+            AW3CommandRequest.StartSpyNetwork(7, 8),
+            AW3CommandRequest.StartForgeDocuments(7, 8, 19,
+                "strong_claim"),
+            AW3CommandRequest.DeclareWar(7, 8, 19, "take_core",
+                "normal", "claim_war", "Press claim"),
+            AW3CommandRequest.ConferPosthumousTitle(7, 31,
+                "posthumous_wu"),
+            AW3CommandRequest.RenameClan(7, 61, "House Yi"),
+            AW3CommandRequest.ChangeEra(7, "Yonghe"),
+            AW3CommandRequest.SetArmyRallyPoint(7, 71, 19),
+            AW3CommandRequest.SetArmyTargetCity(7, 71, 20),
+            AW3CommandRequest.SetArmyPosture(7, 71, "defend"),
+            AW3CommandRequest.CancelArmyOrder(7, 71),
+            AW3CommandRequest.SubmitCivilServiceRanking(7, 81, 91, 92, 93)
+        };
+
+        Equal(Enum.GetValues<AW3CommandKind>().Length, requests.Length,
+            "every current command kind has a request factory example");
+        Equal(requests.Length,
+            requests.Select(value => value.Kind).Distinct().Count(),
+            "request factories cover unique command kinds");
+        True(requests.All(value => value.IsValid),
+            "factory requests are valid");
+        Equal(7L, requests[0].CountryId,
+            "source country retained");
+        Equal(true, requests[0].BoolValue,
+            "primary boolean retained");
+        Equal(false, requests[0].SecondaryBoolValue,
+            "secondary boolean retained");
+        Equal(8L, requests[14].TargetCountryId,
+            "target country retained");
+        Equal(31L, requests[14].ActorId,
+            "household offer retains the offered noblewoman");
+        Equal(32L, requests[14].TargetActorId,
+            "household offer retains the recipient ruler");
+        Equal("principal_wife", requests[14].SecondaryKey,
+            "household offer retains the relationship kind");
+        Equal(33L, requests[7].TargetActorId,
+            "expected incumbent identity retained");
+        Equal(4, requests[8].IntValue,
+            "court disposition integer parameter retained");
+        Equal(19L, requests[8].CityId,
+            "court disposition city parameter retained");
+        Equal("court-op-1", requests[8].SecondaryKey,
+            "court disposition idempotency key retained");
+        AW3CommandRequest ranking = requests.Single(value => value.Kind ==
+            AW3CommandKind.SubmitCivilServiceRanking);
+        Equal(81L, ranking.SecondaryId,
+            "civil-service ranking session retained");
+        Equal(91L, ranking.ActorId,
+            "civil-service first place retained");
+        Equal(92L, ranking.TargetActorId,
+            "civil-service second place retained");
+        Equal(93L, ranking.CityId,
+            "civil-service third place retained");
+        Equal(19L, requests[17].CityId,
+            "forgery target city retained");
+        Equal("strong_claim", requests[17].Key,
+            "forgery project type retained");
+        Equal("Press claim", requests[18].Text,
+            "bounded display text retained");
+        Equal(71L, requests[22].SecondaryId,
+            "Army command retains its Army identity");
+        Equal(19L, requests[22].CityId,
+            "rally command retains its city identity");
+        Equal(20L, requests[23].CityId,
+            "target command retains its city identity");
+        Equal("defend", requests[24].Key,
+            "posture command retains its canonical posture");
+        True(requests.Skip(22).Take(4).All(value => value.ActorId == -1L &&
+                                                   value.TargetActorId == -1L),
+            "Army commands cannot address individual soldiers");
+
+        string maximumPeacePayload = "{\"x\":\"" +
+            new string('a', 8192 - 8) + "\"}";
+        AW3CommandRequest peace = AW3CommandRequest.CreateWarPeaceProposal(
+            7, 8, "peace", 91, maximumPeacePayload);
+        Equal(maximumPeacePayload, peace.Payload,
+            "peace command accepts the core codec maximum payload");
+        Throws<ArgumentException>(() =>
+                AW3CommandRequest.CreateWarPeaceProposal(7, 8, "peace", 91,
+                    maximumPeacePayload + "a"),
+            "peace command rejects payloads beyond the core codec maximum");
+
+        AW3CommandRequest coalition =
+            AW3CommandRequest.CreateDiplomacyProposal(7, 8,
+                "coalition", selectionTargetCountryId: 9);
+        Equal(9L, coalition.SecondaryId,
+            "coalition third-country target retained");
+
+        Throws<ArgumentOutOfRangeException>(() =>
+                AW3CommandRequest.ConfigurePolicy(0, true, false),
+            "country IDs must be positive");
+        Throws<ArgumentException>(() =>
+                AW3CommandRequest.SetPolicyClass(7, "bad token!"),
+            "keys are canonical tokens");
+        Throws<ArgumentException>(() => AW3CommandRequest.ChangeEra(7,
+                new string('x', 65)),
+            "player text is bounded");
+    }
+
+    private static void ModelsAreImmutableAndTransportFree()
+    {
+        Type[] types = typeof(AW3MultiplayerCatalog).Assembly
+            .GetExportedTypes()
+            .Where(type => type.Namespace ==
+                           "AncientWarfare3.api.multiplayer" &&
+                           (type.Name.StartsWith("AW3Window",
+                                StringComparison.Ordinal) ||
+                            type.Name.StartsWith("AW3Command",
+                                StringComparison.Ordinal) ||
+                            type == typeof(AW3MultiplayerCatalog)))
+            .ToArray();
+        foreach (Type type in types)
+        {
+            foreach (PropertyInfo property in type.GetProperties())
+                Equal(null, property.SetMethod,
+                    type.Name + "." + property.Name + " is immutable");
+            foreach (MethodInfo method in type.GetMethods())
+            {
+                AssertTransportFree(method.ReturnType,
+                    type.Name + "." + method.Name + " return type");
+                foreach (ParameterInfo parameter in method.GetParameters())
+                    AssertTransportFree(parameter.ParameterType,
+                        type.Name + "." + method.Name + " parameter");
+            }
+        }
+    }
+
+    private static void WindowSourceAndFacadeCoverEveryCurrentId()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string idsSource = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "AW_LineageWindowIds.cs"));
+        string[] sourceIds = Regex.Matches(idsSource,
+                "public\\s+const\\s+string\\s+[A-Z_]+\\s*=\\s*\"([^\"]+)\"")
+            .Cast<Match>()
+            .Select(match => match.Groups[1].Value)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        string[] catalogIds = AW3MultiplayerCatalog.Windows
+            .Select(value => value.WindowId)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        SequenceEqual(sourceIds, catalogIds,
+            "the live AW3 window constants equal the public catalog");
+
+        string facade = File.ReadAllText(Path.Combine(root, "Code", "api",
+            "multiplayer", "AW3MultiplayerUiFacade.cs"));
+        foreach (AW3WindowKind kind in Enum.GetValues<AW3WindowKind>())
+            Contains(facade, "case AW3WindowKind." + kind + ":",
+                "the UI facade explicitly routes " + kind);
+        Contains(facade, "public static AW3WindowOpenResult TryOpen(",
+            "the UI facade exposes the typed open boundary");
+        Equal(false, facade.Contains("System.Reflection",
+                StringComparison.Ordinal) ||
+            facade.Contains("GetMethod(", StringComparison.Ordinal) ||
+            facade.Contains("MethodInfo", StringComparison.Ordinal) ||
+            facade.Contains(".Invoke(", StringComparison.Ordinal),
+            "the UI facade does not use reflection");
+    }
+
+    private static void CommandDispatcherOwnershipIsReferenceBased()
+    {
+        AW3AuthoritativeCommandRouter.Reset();
+        AW3CommandRequest request = AW3CommandRequest.ConfigurePolicy(
+            7, true, false);
+        var first = new FakeDispatcher();
+        var second = new FakeDispatcher();
+        var throwingSubscription = new ThrowingSubscribeDispatcher();
+
+        AW3CommandResult local =
+            AW3MultiplayerCommandFacade.DispatchFromUi(request);
+        Equal(AW3CommandStatus.Accepted, local.Status,
+            "single-player UI uses the authoritative router");
+        Equal(1, AW3AuthoritativeCommandRouter.DispatchCalls,
+            "the local router executes once");
+
+        Equal(false,
+            AW3MultiplayerCommandFacade.Register(throwingSubscription),
+            "failed provider event subscription rolls registration back");
+        Same(null, AW3MultiplayerCommandFacade.Current,
+            "failed subscription cannot leave a half-registered provider");
+
+        var registrationChanges = 0;
+        Action registrationChanged = () => registrationChanges++;
+        AW3MultiplayerCommandFacade.Changed += registrationChanged;
+        Equal(true, AW3MultiplayerCommandFacade.Register(first),
+            "the first dispatcher owns UI dispatch");
+        Equal(1, registrationChanges,
+            "successful registration immediately refreshes UI subscribers");
+        AW3MultiplayerCommandFacade.Changed -= registrationChanged;
+        Equal(true, AW3MultiplayerCommandFacade.Register(first),
+            "same-reference registration is idempotent");
+        Same(first, AW3MultiplayerCommandFacade.Current,
+            "the current dispatcher is observable");
+        Equal(false, AW3MultiplayerCommandFacade.Register(second),
+            "a second dispatcher cannot replace the owner");
+
+        var changedCount = 0;
+        Action changed = () => changedCount++;
+        AW3MultiplayerCommandFacade.Changed += changed;
+        first.NotifyChanged();
+        Equal(1, changedCount,
+            "provider state changes reach AW3 UI subscribers once");
+
+        AW3CommandResult pending =
+            AW3MultiplayerCommandFacade.DispatchFromUi(request);
+        Equal(AW3CommandStatus.Pending, pending.Status,
+            "registered multiplayer dispatcher receives UI commands");
+        Equal(1, first.DispatchCalls,
+            "the provider receives one command");
+        Equal(1, AW3AuthoritativeCommandRouter.DispatchCalls,
+            "provider UI dispatch does not execute locally");
+
+        first.ThrowOnDispatch = true;
+        AW3CommandResult isolated =
+            AW3MultiplayerCommandFacade.DispatchFromUi(request);
+        Equal(AW3CommandError.ExecutionFailed, isolated.Error,
+            "provider exceptions are isolated");
+
+        AW3CommandResult authoritative =
+            AW3MultiplayerCommandFacade.DispatchAuthoritative(request);
+        Equal(AW3CommandStatus.Accepted, authoritative.Status,
+            "host-authoritative dispatch bypasses the provider");
+        Equal(2, AW3AuthoritativeCommandRouter.DispatchCalls,
+            "authoritative router executes after provider registration");
+
+        var replicaOwner = new object();
+        Equal(true, AW3MultiplayerReplicaScope.Activate(replicaOwner),
+            "test replica session activates");
+        try
+        {
+            AW3CommandResult replicaAuthoritative =
+                AW3MultiplayerCommandFacade.DispatchAuthoritative(request);
+            Equal(AW3CommandError.Unauthorized,
+                replicaAuthoritative.Error,
+                "a replica cannot bypass its dispatcher through the public authoritative API");
+            Equal(2, AW3AuthoritativeCommandRouter.DispatchCalls,
+                "replica authoritative dispatch never mutates local world state");
+        }
+        finally
+        {
+            Equal(true, AW3MultiplayerReplicaScope.Deactivate(replicaOwner),
+                "test replica session deactivates");
+        }
+
+        Equal(false, AW3MultiplayerCommandFacade.Unregister(second),
+            "a non-owner cannot unregister the dispatcher");
+        Equal(true, AW3MultiplayerCommandFacade.Unregister(first),
+            "the owner unregisters");
+        Equal(2, changedCount,
+            "dispatcher removal releases pending AW3 UI state once");
+        first.NotifyChanged();
+        Equal(2, changedCount,
+            "unregistered providers cannot notify AW3 UI");
+        AW3MultiplayerCommandFacade.Changed -= changed;
+        Same(null, AW3MultiplayerCommandFacade.Current,
+            "unregister clears provider ownership");
+        Equal(true,
+            AW3MultiplayerCommandFacade.DispatchFromUi(request).Accepted,
+            "UI returns to local authoritative execution");
+    }
+
+    private static void CommandDispatchSourceStaysTypedAndTransportFree()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string contract = File.ReadAllText(Path.Combine(root, "Code", "api",
+            "multiplayer", "IAW3CommandDispatcher.cs"));
+        string facade = File.ReadAllText(Path.Combine(root, "Code", "api",
+            "multiplayer", "AW3MultiplayerCommandFacade.cs"));
+        string router = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands", "AW3AuthoritativeCommandRouter.cs"));
+        string diplomacyService = File.ReadAllText(Path.Combine(root,
+            "Code", "core", "lineage", "DiplomacyProposalService.cs"));
+        string production = contract + facade + router;
+        Contains(diplomacyService,
+            "AW3MultiplayerReplicaScope.IsReplicaSession",
+            "replica clients do not execute diplomacy response or settlement recovery loops");
+
+        Contains(contract,
+            "AW3CommandResult Dispatch(AW3CommandRequest request);",
+            "dispatcher contract is typed");
+        Contains(contract, "event Action Changed;",
+            "dispatcher reports authoritative command-state changes");
+        Contains(facade, "ReferenceEquals(_dispatcher, dispatcher)",
+            "dispatcher ownership is reference based");
+        Contains(facade,
+            "AW3AuthoritativeCommandRouter.Dispatch(request)",
+            "authoritative dispatch bypasses the optional provider");
+        foreach (AW3CommandKind kind in Enum.GetValues<AW3CommandKind>())
+            Contains(router, "case AW3CommandKind." + kind + ":",
+                "the authoritative router explicitly routes " + kind);
+        Equal(false, production.Contains("System.Reflection",
+                StringComparison.Ordinal) ||
+            production.Contains("GetMethod(", StringComparison.Ordinal) ||
+            production.Contains("Lan", StringComparison.Ordinal) ||
+            production.Contains("Transport", StringComparison.Ordinal),
+            "public dispatch boundary is typed and transport free");
+    }
+
+    private static void PolicyMandateAndRecordsWritesUseDispatcher()
+    {
+        string root = Directory.GetCurrentDirectory();
+        var uiFiles = new[]
+        {
+            "KingdomPolicyWindow.cs",
+            "CentralPowerWindow.cs",
+            "MandateDecisionWindow.cs",
+            "NameDecisionWindow.cs",
+            "ConferredPosthumousTitleWindow.cs",
+            "FamilyTreeWindow.cs"
+        };
+        var forbidden = new[]
+        {
+            "KingdomPolicyService.SetPolicyEnabled(",
+            "KingdomPolicyService.SetPolicyAIEnabled(",
+            "KingdomPolicyService.ForceSetClassState(",
+            "KingdomPolicyService.StartResearch(",
+            "KingdomPolicyService.ForceStartResearch(",
+            "KingdomPolicyService.ToggleNodeLocked(",
+            "KingdomPolicyService.StartFabricationDecision(",
+            "MandateDecisionService.ForceStart(",
+            "YearNameService.TryChangeEra(",
+            "ConferredPosthumousTitleService.TryCommit(",
+            "VisibleClanRenameService.RenameWholeShiTree("
+        };
+
+        foreach (string file in uiFiles)
+        {
+            string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+                "windows", file));
+            Contains(source,
+                "AW3MultiplayerCommandFacade.DispatchFromUi(",
+                file + " submits writes through the dispatcher");
+            foreach (string call in forbidden)
+                Equal(false, source.Contains(call,
+                        StringComparison.Ordinal),
+                    file + " does not call " + call + " directly");
+            Contains(source,
+                "AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;",
+                file + " observes authoritative command completion");
+            Contains(source,
+                "AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;",
+                file + " releases the command completion subscription");
+            Contains(source, "private void OnCommandStateChanged()",
+                file + " owns an explicit command completion callback");
+            Contains(source, "_commandRefreshRequested",
+                file + " defers authoritative refresh through its lifecycle");
+        }
+
+        foreach (string file in new[]
+                 {
+                     "KingdomPolicyWindow.cs",
+                     "CentralPowerWindow.cs",
+                     "MandateDecisionWindow.cs",
+                     "FamilyTreeWindow.cs"
+                 })
+        {
+            string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+                "windows", file));
+            Contains(source, "_commandPending",
+                file + " tracks an outstanding host command");
+            Contains(source, "if (_commandPending)",
+                file + " blocks duplicate submission while pending");
+            Contains(source, "AW3CommandStatus.Pending",
+                file + " enters pending state from dispatcher results");
+        }
+
+        foreach (string file in new[]
+                 {
+                     "NameDecisionWindow.cs",
+                     "ConferredPosthumousTitleWindow.cs"
+                 })
+        {
+            string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+                "windows", file));
+            int refreshStart = source.IndexOf("private void Refresh()",
+                StringComparison.Ordinal);
+            int nextMethod = source.IndexOf("\n        private void ",
+                refreshStart + "private void Refresh()".Length,
+                StringComparison.Ordinal);
+            True(refreshStart >= 0 && nextMethod > refreshStart,
+                file + " has a bounded refresh method");
+            string refreshBody = source.Substring(refreshStart,
+                nextMethod - refreshStart);
+            Equal(false, refreshBody.Contains("_pending = false;",
+                    StringComparison.Ordinal),
+                file + " does not unlock a host command during ordinary refresh");
+        }
+
+        string policyHandler = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "commands",
+            "AW3PolicyCommandHandler.cs"));
+        string recordsHandler = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "commands",
+            "AW3RecordsCommandHandler.cs"));
+        string router = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands",
+            "AW3AuthoritativeCommandRouter.cs"));
+
+        foreach (string call in forbidden.Take(8))
+            Contains(policyHandler, call,
+                "policy handler retains canonical service " + call);
+        foreach (string call in forbidden.Skip(8))
+            Contains(recordsHandler, call,
+                "records handler retains canonical service " + call);
+        Contains(router, "AW3PolicyCommandHandler.Dispatch(request)",
+            "policy kinds route to the policy handler");
+        Contains(router, "AW3RecordsCommandHandler.Dispatch(request)",
+            "records kinds route to the records handler");
+        Contains(recordsHandler, "detailCode:",
+            "domain result codes return through the typed result");
+    }
+
+    private static void CourtInheritanceAndRealmWritesUseDispatcher()
+    {
+        string root = Directory.GetCurrentDirectory();
+        var uiFiles = new[]
+        {
+            Path.Combine("windows", "CourtAppointmentWindow.cs"),
+            Path.Combine("windows", "CourtAuxiliaryLawWindow.cs"),
+            Path.Combine("windows", "CourtDispositionWindow.cs"),
+            Path.Combine("windows", "InheritanceLawWindow.cs"),
+            Path.Combine("windows", "FeudatoryWindow.cs"),
+            Path.Combine("items", "VassalRelationListItem.cs")
+        };
+        var forbidden = new[]
+        {
+            "CourtService.TryManualAppointment(",
+            "CourtAuxiliaryLawService.TryChangeLaw(",
+            "CourtDispositionService.Execute(",
+            "InheritanceLawService.TryChangeLock(",
+            "FeudatoryService.TryRelocateFeudatory(",
+            "FeudatoryService.TryReclaimFeudatoryCity(",
+            "FeudatoryService.TryAbolishFeudatory(",
+            "KingdomPolicyService.StartDecisionWithTarget("
+        };
+
+        foreach (string relative in uiFiles)
+        {
+            string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+                relative));
+            Contains(source,
+                "AW3MultiplayerCommandFacade.DispatchFromUi(",
+                relative + " submits writes through the dispatcher");
+            foreach (string call in forbidden)
+                Equal(false, source.Contains(call, StringComparison.Ordinal),
+                    relative + " does not call " + call + " directly");
+            Contains(source,
+                "AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;",
+                relative + " observes authoritative command completion");
+            Contains(source,
+                "AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;",
+                relative + " releases its command completion subscription");
+            Contains(source, "_commandPending",
+                relative + " tracks pending host execution");
+            Contains(source, "if (_commandPending)",
+                relative + " blocks duplicate host commands");
+            Contains(source, "_commandRefreshRequested",
+                relative + " refreshes after authoritative completion");
+        }
+
+        string dispositionWindow = File.ReadAllText(Path.Combine(root,
+            "Code", "ui", "windows", "CourtDispositionWindow.cs"));
+        Contains(dispositionWindow,
+            "_commandPending = false;\n                _feedback.text = \"\";",
+            "court disposition clears its pending message after host echo");
+        string feudatoryWindow = File.ReadAllText(Path.Combine(root,
+            "Code", "ui", "windows", "FeudatoryWindow.cs"));
+        Equal(3, Regex.Matches(feudatoryWindow,
+                "if \\(_commandPending\\)\\s*\\{\\s*Refresh\\(\\);" +
+                "\\s*return;\\s*\\}").Count,
+            "feudatory actions retain selection while awaiting the host");
+
+        string courtHandler = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "commands",
+            "AW3CourtCommandHandler.cs"));
+        string realmHandler = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "commands",
+            "AW3RealmCommandHandler.cs"));
+        string router = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands",
+            "AW3AuthoritativeCommandRouter.cs"));
+        foreach (string call in forbidden.Take(4))
+            Contains(courtHandler, call,
+                "court handler retains canonical service " + call);
+        foreach (string call in forbidden.Skip(4))
+            Contains(realmHandler, call,
+                "realm handler retains canonical service " + call);
+        Contains(router, "AW3CourtCommandHandler.Dispatch(request)",
+            "court kinds route to the court handler");
+        Contains(router, "AW3RealmCommandHandler.Dispatch(request)",
+            "realm kinds route to the realm handler");
+    }
+
+    private static void DiplomacyAndWarWritesUseDispatcher()
+    {
+        string root = Directory.GetCurrentDirectory();
+        var uiFiles = new[]
+        {
+            "DiplomacyConversationWindow.cs",
+            "DiplomaticMarriageWindow.cs",
+            "DiplomaticWarDeclarationWindow.cs",
+            "WarDecisionTargetWindow.cs"
+        };
+        var forbidden = new[]
+        {
+            "DiplomacyProposalService.TryCreate(",
+            "DiplomacyProposalService.TryCreateWithSelection(",
+            "DiplomacyProposalService.Respond(",
+            "DiplomaticOperationService.TryStartSpyNetwork(",
+            "DiplomaticOperationService.TryStartForgeDocuments(",
+            "DiplomaticWarDeclarationService.Issue(",
+            "KingdomPolicyService.StartDecisionWithTarget("
+        };
+        foreach (string file in uiFiles)
+        {
+            string source = File.ReadAllText(Path.Combine(root, "Code", "ui",
+                "windows", file));
+            Contains(source,
+                "AW3MultiplayerCommandFacade.DispatchFromUi(",
+                file + " submits diplomacy writes through the dispatcher");
+            Contains(source, "AW3MultiplayerCommandFacade.Changed +=",
+                file + " observes authoritative command changes");
+            Contains(source, "AW3MultiplayerCommandFacade.Changed -=",
+                file + " releases the authoritative change subscription");
+            foreach (string call in forbidden)
+                Equal(false, source.Contains(call, StringComparison.Ordinal),
+                    file + " does not call " + call + " directly");
+        }
+
+        string conversation = File.ReadAllText(Path.Combine(root, "Code",
+            "ui", "windows", "DiplomacyConversationWindow.cs"));
+        foreach (string factory in new[]
+                 {
+                     "AW3CommandRequest.CreateDiplomacyProposal(",
+                     "AW3CommandRequest.RespondDiplomacyProposal(",
+                     "AW3CommandRequest.StartSpyNetwork(",
+                     "AW3CommandRequest.StartForgeDocuments(",
+                     "AW3CommandRequest.StartTargetedDecision("
+                 })
+            Contains(conversation, factory,
+                "conversation preserves typed action " + factory);
+        string marriage = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "DiplomaticMarriageWindow.cs"));
+        Contains(marriage, "AW3CommandRequest.CreateDiplomacyProposal(",
+            "marriage preserves the selected royal actor pair");
+        string declaration = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "DiplomaticWarDeclarationWindow.cs"));
+        Contains(declaration, "AW3CommandRequest.DeclareWar(",
+            "war declaration submits the selected option");
+        string targets = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "WarDecisionTargetWindow.cs"));
+        Contains(targets, "AW3CommandRequest.DeclareWar(",
+            "war target list submits the selected option");
+
+        string handler = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands",
+            "AW3DiplomacyCommandHandler.cs"));
+        foreach (string call in forbidden.Where(call => call !=
+                     "KingdomPolicyService.StartDecisionWithTarget("))
+            Contains(handler, call,
+                "diplomacy handler retains canonical service " + call);
+        Contains(handler, "if (optionCityId != cityId) continue;",
+            "war authorization matches the requested city exactly");
+        Equal(false, handler.Contains(
+                "cityId > 0 && optionCityId != cityId",
+                StringComparison.Ordinal),
+            "omitting a city cannot select an arbitrary authoritative target");
+        string router = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "commands",
+            "AW3AuthoritativeCommandRouter.cs"));
+        Contains(router, "AW3DiplomacyCommandHandler.Dispatch(request)",
+            "diplomacy and war kinds route to the diplomacy handler");
+    }
+
+    private static void AllPlayerFacingUiWritesUseDispatcher()
+    {
+        string root = Path.Combine(Directory.GetCurrentDirectory(), "Code",
+            "ui");
+        var writeCall = new Regex(
+            @"\b(?<owner>[A-Za-z_][A-Za-z0-9_]*(?:Service|Writer|Store|Manager))" +
+            @"\s*\.\s*(?<method>(?:Try|Force|Set|Start|Toggle|Rename|" +
+            @"Respond|Issue|Execute|Apply|Change|Create|Delete|Remove|" +
+            @"Grant|Revoke|Declare|Cancel|Commit|Appoint|Abolish|" +
+            @"Relocate|Reclaim)[A-Za-z0-9_]*)\s*\(",
+            RegexOptions.Compiled);
+        var readOnlyExceptions = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "TabManager.CreateTab",
+            "CourtPetitionService.AppointmentFavor",
+            "CourtService.TryProjectManualAppointmentCandidate",
+            "AWHistoricalReadService.TrySchedule",
+            "DiplomacyProposalService.TryGetActiveNonAggression",
+            "DiplomacyProposalService.TryGetActiveTruce",
+            "SuccessionDisputeService.TryGetMaterializedByKingdom",
+            "WarNoticeService.TryGetPreparationSummary",
+            "WarScoreService.TryGetSnapshot",
+            "WarParticipantRosterService.TryBuildReadOnly",
+            "ArmyRtsControllerService.TryGetProjection",
+            "SchoolMapModeService.SetFocus"
+        };
+        var violations = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(root, "*.cs",
+                     SearchOption.AllDirectories).OrderBy(value => value,
+                     StringComparer.Ordinal))
+        {
+            string relative = Path.GetRelativePath(root, file)
+                .Replace('\\', '/');
+            string[] lines = File.ReadAllLines(file);
+            for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            {
+                foreach (Match match in writeCall.Matches(lines[lineIndex]))
+                {
+                    string call = match.Groups["owner"].Value + "." +
+                                  match.Groups["method"].Value;
+                    if (!readOnlyExceptions.Contains(call))
+                        violations.Add(relative + ":" + (lineIndex + 1) +
+                                       ":" + call);
+                }
+            }
+
+            string source = string.Join("\n", lines);
+            foreach ((string token, string label) in new[]
+                     {
+                         ("System.Reflection", "reflection"),
+                         ("MethodInfo", "reflection"),
+                         ("BindingFlags", "reflection"),
+                         ("SQLiteCommand", "database writer"),
+                         ("ExecuteNonQuery(", "database writer"),
+                         (".OperatingDB", "database writer"),
+                         (".setKing(", "direct ruler write"),
+                         ("units.createNewUnit(", "world spawn"),
+                         ("units.spawn(", "world spawn")
+                     })
+                if (source.Contains(token, StringComparison.Ordinal))
+                    violations.Add(relative + ":" + label + ":" + token);
+        }
+
+        if (violations.Count > 0)
+            throw new InvalidOperationException(
+                "unclassified AW3 UI writes:\n" +
+                string.Join("\n", violations));
+    }
+
+    private static void AssertTransportFree(Type type, string message)
+    {
+        Type current = type;
+        while (current.HasElementType) current = current.GetElementType();
+        string fullName = current.FullName ?? string.Empty;
+        Equal(false, fullName.Contains("Unity", StringComparison.Ordinal) ||
+                     fullName.Contains("WorldBox", StringComparison.Ordinal) ||
+                     fullName.Contains("Network", StringComparison.Ordinal) ||
+                     fullName.Contains("Transport", StringComparison.Ordinal),
+            message);
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected={expected}, actual={actual}");
+    }
+
+    private static void Same(object expected, object actual, string message)
+    {
+        if (!ReferenceEquals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void SequenceEqual<T>(IReadOnlyList<T> expected,
+        IReadOnlyList<T> actual, string message)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(message +
+                $": expected={expected.Count}, actual={actual.Count}");
+        for (var index = 0; index < expected.Count; index++)
+            if (!EqualityComparer<T>.Default.Equals(expected[index],
+                    actual[index]))
+                throw new InvalidOperationException(message +
+                    $": index={index}, expected={expected[index]}, " +
+                    $"actual={actual[index]}");
+    }
+
+    private static void Throws<T>(Action action, string message)
+        where T : Exception
+    {
+        try { action(); }
+        catch (T) { return; }
+        throw new InvalidOperationException(message);
+    }
+
+    private sealed class FakeDispatcher : IAW3CommandDispatcher
+    {
+        public event Action Changed;
+        public int DispatchCalls { get; private set; }
+        public bool ThrowOnDispatch { get; set; }
+
+        public AW3CommandResult Dispatch(AW3CommandRequest request)
+        {
+            DispatchCalls++;
+            if (ThrowOnDispatch)
+                throw new InvalidOperationException("provider failure");
+            return AW3CommandResult.Pending("aw3_command_pending");
+        }
+
+        public void NotifyChanged()
+        {
+            Changed?.Invoke();
+        }
+    }
+
+    private sealed class ThrowingSubscribeDispatcher : IAW3CommandDispatcher
+    {
+        public event Action Changed
+        {
+            add => throw new InvalidOperationException("subscribe failure");
+            remove { }
+        }
+
+        public AW3CommandResult Dispatch(AW3CommandRequest request)
+        {
+            return AW3CommandResult.Pending("aw3_command_pending");
+        }
+    }
+}

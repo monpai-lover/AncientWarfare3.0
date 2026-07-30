@@ -1,0 +1,463 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingPerformanceTests
+{
+    public static void Run()
+    {
+        WorkClassesPreserveOperationalCapacityWithFairness();
+        RuntimeSubmittersClassifyPathWorkExplicitly();
+        RequestKeysMatchWithoutAllocating();
+        LatestActorSlotKeepsOneQueuedNode();
+        OwnershipIndexUsesSingleHotLookup();
+        IsUsingPathHotPathOnlyChecksOwnership();
+        RecoveryUsesCultiwayReasonResetAndBackoff();
+        FoodAccessSurvivesDecorativePathFailure();
+        PathStreamUsesCultiwayLifecycle();
+        WarmedSearchWorkspaceAvoidsPerRequestAllocation();
+        CancelledSearchDoesNotContaminateTheNextRequest();
+        BranchingSearchCannotFillTheSparseLabelTable();
+        BoundedMilitaryWaterCrossingIsEnforced();
+        RegionLimitedPathReturnsABoundedSegment();
+        InitialTraversalPublicationCannotStarveOnLiveDirtyChunks();
+    }
+
+    private static void RuntimeSubmittersClassifyPathWorkExplicitly()
+    {
+        string bridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        string armyRoutes = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "ArmyRouteProvider.cs"));
+        Assert(bridge.Contains("AWPathWorkClassRules.Classify("),
+            "actor paths classify operational, essential, and ambient work");
+        Assert(bridge.Contains("HistoricalSchoolContent.EducationTravelTaskId"),
+            "school journeys remain above ambient wandering");
+        Assert(armyRoutes.Contains("AWPathWorkClass.Operational"),
+            "RTS captain routes explicitly reserve operational capacity");
+
+        string diagnostics = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs"));
+        Assert(diagnostics.Contains("path_operational_requests="),
+            "performance logs break path pressure down by work class");
+        Assert(diagnostics.Contains("city_threat_cache_hits="),
+            "performance logs expose RTS city-threat cache effectiveness");
+        Assert(diagnostics.Contains("rts_async_rejected_stale="),
+            "performance logs expose rejected async front snapshots");
+    }
+
+    private static void WorkClassesPreserveOperationalCapacityWithFairness()
+    {
+        Assert(AWPathWorkClassRules.Classify(
+                true, true, false, false, false) ==
+                AWPathWorkClass.Operational,
+            "RTS warriors are operational path work");
+        Assert(AWPathWorkClassRules.Classify(
+                false, false, false, false, true) ==
+                AWPathWorkClass.EssentialTravel,
+            "school journeys outrank ambient wandering");
+        Assert(AWPathWorkClassRules.Classify(
+                false, false, false, false, false) ==
+                AWPathWorkClass.Ambient,
+            "ordinary civilian movement remains ambient");
+
+        Assert(AWPathWorkClassRules.Next(1, 1, 1, 0, 0) ==
+                AWPathWorkClass.Operational,
+            "operational work starts first");
+        Assert(AWPathWorkClassRules.Next(1, 1, 1,
+                AWPathWorkClassRules.MaximumConsecutiveOperational,
+                AWPathWorkClassRules.MaximumConsecutiveNonAmbient) ==
+                AWPathWorkClass.Ambient,
+            "ambient work receives bounded fairness under a permanent war backlog");
+    }
+
+    private static void InitialTraversalPublicationCannotStarveOnLiveDirtyChunks()
+    {
+        Assert(!AWTraversalRules.CanPublishInitialGeneration(
+                tileCaptureComplete: false, pendingDirtyChunkCount: 0),
+            "an incomplete tile capture cannot publish a traversal generation");
+        Assert(AWTraversalRules.CanPublishInitialGeneration(
+                tileCaptureComplete: true, pendingDirtyChunkCount: 37),
+            "live dirty chunks remain queued without starving the first traversal generation");
+    }
+
+    private static void OwnershipIndexUsesSingleHotLookup()
+    {
+        var ownership = new AWPathOwnershipIndex();
+        Assert(!ownership.Contains(42),
+            "ordinary actors miss one ownership index");
+        Assert(ownership.Add(42) && ownership.Contains(42),
+            "accepted custom paths enter the ownership index");
+        Assert(!ownership.Add(42),
+            "reused custom paths do not duplicate ownership state");
+        Assert(ownership.Remove(42) && !ownership.Contains(42),
+            "terminal paths release ownership exactly once");
+        ownership.Add(43);
+        ownership.Clear();
+        Assert(ownership.Count == 0,
+            "world clearing removes every custom path owner");
+
+        for (int i = 0; i < 128; i++) ownership.Contains(i);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++) ownership.Contains(i);
+        Assert(GC.GetAllocatedBytesForCurrentThread() - before == 0,
+            "ownership misses allocate zero bytes on the actor hot path");
+    }
+
+    private static void IsUsingPathHotPathOnlyChecksOwnership()
+    {
+        string patch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        Assert(patch.Contains(
+                "__result = AWPathMovementBridge.HasOwnership(__instance);"),
+            "the per-actor isUsingPath hook performs one ownership lookup");
+        Assert(!patch.Contains(
+                "__result = AWPathMovementBridge.IsUsing(__instance);"),
+            "the per-actor isUsingPath hook does not poll the pathfinder before updatePathMovement");
+    }
+
+    private static void RequestKeysMatchWithoutAllocating()
+    {
+        var key = new AWPathRequestKey(91, true, false, true, -4);
+        Assert(key.RegionLimit == 0, "request key clamps a negative region limit");
+        Assert(key.Matches(91, true, false, true, 0),
+            "request key matches the same normalized inputs");
+        Assert(!key.Matches(92, true, false, true, 0),
+            "request key rejects another target");
+
+        for (int i = 0; i < 128; i++)
+            _ = key.Matches(91, true, false, true, 0);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        bool allMatched = true;
+        for (int i = 0; i < 10_000; i++)
+            allMatched &= key.Matches(91, true, false, true, 0);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert(allMatched && allocated == 0,
+            "10,000 warmed request-key matches allocate zero bytes");
+    }
+
+    private static void LatestActorSlotKeepsOneQueuedNode()
+    {
+        var rules = new AWLatestPathSlotRules();
+        Assert(rules.Submit(pHasPending: false, pHasRunning: false) ==
+               AWPathSlotAction.Enqueue,
+            "the first actor request enqueues one actor ID");
+        Assert(rules.Submit(pHasPending: true, pHasRunning: false) ==
+               AWPathSlotAction.ReplacePending,
+            "retargeting a queued actor replaces pending work");
+        rules.WorkerStarted();
+        Assert(rules.Submit(pHasPending: false, pHasRunning: true) ==
+               AWPathSlotAction.StoreAfterRunning,
+            "retargeting a running actor stores only the latest pending task");
+        Assert(rules.WorkerFinished(),
+            "a worker requeues the actor once when newer work exists");
+        Assert(rules.MaximumQueuedNodes == 1,
+            "one actor slot never owns more than one queued node");
+    }
+
+    private static void RecoveryUsesCultiwayReasonResetAndBackoff()
+    {
+        Assert(AWPathLifecycleRules.RetryLimit(AWPathFailureReason.StepBlocked) == 4,
+            "blocked steps receive four retries");
+        Assert(AWPathLifecycleRules.RetryLimit(AWPathFailureReason.TransportFailed) == 2,
+            "transport failures receive two retries");
+        Assert(AWPathLifecycleRules.AcceptWorldGeneration(7, 7) &&
+               !AWPathLifecycleRules.AcceptWorldGeneration(7, 8),
+            "stale world output is rejected");
+
+        var recovery = new AWPathRecoveryManager();
+        AWPathRetryDecision first = recovery.OnFailure(1,
+            AWPathFailureReason.StepBlocked, 10d);
+        AWPathRetryDecision second = recovery.OnFailure(1,
+            AWPathFailureReason.StepBlocked, 10d);
+        AWPathRetryDecision reset = recovery.OnFailure(1,
+            AWPathFailureReason.GeneratorException, 10d);
+        Assert(first.Attempt == 1 && Near(first.DelaySeconds, 0.3f),
+            "first recovery delay is 0.3 seconds");
+        Assert(second.Attempt == 2 && Near(second.DelaySeconds, 0.6f),
+            "second recovery delay is 0.6 seconds");
+        Assert(reset.Attempt == 1 && Near(reset.DelaySeconds, 0.3f),
+            "a changed failure reason resets the retry series");
+    }
+
+    private static void FoodAccessSurvivesDecorativePathFailure()
+    {
+        Assert(AWPathLifecycleRules.ShouldBypassDecorativePath(
+                "try_to_eat_city_food"),
+            "city food access does not enqueue a cosmetic random walk");
+        Assert(!AWPathLifecycleRules.ShouldBypassDecorativePath(
+                "attack_city"),
+            "real movement tasks still submit a path request");
+        Assert(AWPathLifecycleRules.ShouldContinueBehaviourAfterTerminalFailure(
+                "try_to_eat_city_food"),
+            "a failed decorative food walk must continue to the city-food action");
+        Assert(!AWPathLifecycleRules.ShouldContinueBehaviourAfterTerminalFailure(
+                "attack_city"),
+            "ordinary failed movement still cancels its behaviour task");
+        Assert(!AWPathLifecycleRules.ShouldContinueBehaviourAfterTerminalFailure(null),
+            "an unknown task never bypasses terminal path failure");
+    }
+
+    private static void PathStreamUsesCultiwayLifecycle()
+    {
+        var stream = new AWPathStream();
+        Assert(stream.State == AWPathRequestState.Pending,
+            "an empty unfinished stream is pending");
+        Assert(stream.AddStep(new AWPathStep(5, AWMovementMethod.Walk)),
+            "an unfinished stream accepts a path step");
+        Assert(stream.State == AWPathRequestState.Streaming,
+            "a stream with a pending step is streaming");
+        stream.EnsureCompleted();
+        Assert(stream.State == AWPathRequestState.Succeeded,
+            "ensuring completion finalizes the stream successfully");
+        Assert(stream.TryTake(out AWPathStep step) && step.TileId == 5,
+            "the completed stream retains its queued step");
+        Assert(stream.State == AWPathRequestState.Succeeded && stream.Count == 0,
+            "the successful terminal state remains after consumption");
+    }
+
+    private static void WarmedSearchWorkspaceAvoidsPerRequestAllocation()
+    {
+        using AWTraversalGeneration generation = LinearLandGeneration(128);
+        var generator = new AWStreamingPathGenerator();
+        using (var warm = new AWPathRequest(50, 0, 127,
+                   AWPathRequestOptions.Default,
+                   AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                   generation, 0d))
+        {
+            generator.Generate(warm, CancellationToken.None);
+            Assert(warm.Stream.State == AWPathRequestState.Succeeded,
+                "the workspace warmup request succeeds");
+        }
+
+        using var measured = new AWPathRequest(51, 0, 127,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        generator.Generate(measured, CancellationToken.None);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert(measured.Stream.State == AWPathRequestState.Succeeded,
+            "the measured path succeeds after workspace warmup");
+        Assert(allocated <= 64 * 1024,
+            "a warmed 128-tile search stays below 64 KiB of per-request allocation");
+    }
+
+    private static void CancelledSearchDoesNotContaminateTheNextRequest()
+    {
+        using AWTraversalGeneration generation = LinearLandGeneration(32);
+        var generator = new AWStreamingPathGenerator();
+        using (var cancelled = new AWPathRequest(52, 0, 31,
+                   AWPathRequestOptions.Default,
+                   AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                   generation, 0d))
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            generator.Generate(cancelled, cancellation.Token);
+            Assert(cancelled.Stream.State == AWPathRequestState.Cancelled,
+                "a cancelled search reaches the cancelled terminal state");
+        }
+
+        using var next = new AWPathRequest(53, 4, 20,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        generator.Generate(next, CancellationToken.None);
+        Assert(next.Stream.State == AWPathRequestState.Succeeded &&
+               next.Stream.Count == 16 &&
+               next.Stream.TryTake(out AWPathStep first) && first.TileId == 5,
+            "workspace state is clean after a cancelled request");
+    }
+
+    private static void BranchingSearchCannotFillTheSparseLabelTable()
+    {
+        var tiles = new AWTileTraversalSnapshot[70];
+        for (int i = 0; i < tiles.Length; i++)
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0, ground: true,
+                pNeighbors: Array.Empty<int>());
+        tiles[69] = new AWTileTraversalSnapshot(69, 69, 0, ground: true,
+            pNeighbors: Enumerable.Range(61, 8).ToArray());
+        tiles[68] = new AWTileTraversalSnapshot(68, 68, 0, ground: true,
+            pNeighbors: new[] { 69, 54, 55, 56, 57, 58, 59, 60 });
+        tiles[67] = new AWTileTraversalSnapshot(67, 67, 0, ground: true,
+            pNeighbors: new[] { 69, 46, 47, 48, 49, 50, 51, 52 });
+        tiles[66] = new AWTileTraversalSnapshot(66, 66, 0, ground: true,
+            pNeighbors: new[] { 69, 38, 39, 40, 41, 42, 43, 44 });
+
+        using AWTraversalGeneration generation =
+            AWTraversalGeneration.FromTiles(400, 70, 1, tiles);
+        var config = new AWPathfindingConfig
+        {
+            ShortRangeTiles = 1000,
+            MaxNodesShort = 4,
+            MaxLabelsPerTile = 4
+        };
+        using var request = new AWPathRequest(54, 69, 0,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        Exception workerError = null;
+        var worker = new Thread(() =>
+        {
+            try
+            {
+                new AWStreamingPathGenerator(config).Generate(request,
+                    CancellationToken.None);
+            }
+            catch (Exception error)
+            {
+                workerError = error;
+            }
+        }) { IsBackground = true };
+        worker.Start();
+        Assert(worker.Join(TimeSpan.FromSeconds(2)),
+            "a highly branching search cannot deadlock after filling its initial sparse label table");
+        if (workerError != null) throw workerError;
+        Assert(request.Stream.State == AWPathRequestState.Failed &&
+               request.Stream.FailureReason ==
+               AWPathFailureReason.SearchLimitExceeded,
+            "a highly branching search terminates at its node budget instead of filling the sparse label table");
+    }
+
+    private static void BoundedMilitaryWaterCrossingIsEnforced()
+    {
+        AWPathRequestOptions options = AWPathRequestOptions.Default
+            .WithBoundedMilitaryWater(
+                AWNarrowWaterRecoveryRules.MaximumConsecutiveWaterTiles);
+        Assert(options.BoundedMilitaryWater && options.PathOnWater &&
+               options.MaximumConsecutiveWaterTiles == 5,
+            "narrow-water recovery is explicit request state");
+
+        using (AWTraversalGeneration generation = LinearWaterGeneration(
+                   waterTiles: 5))
+        using (var request = new AWPathRequest(1, 0, 6, options,
+                   Walker(health: 100f, stamina: 100f, waterDamage: 2f),
+                   generation, 0d))
+        {
+            new AWStreamingPathGenerator().Generate(request,
+                CancellationToken.None);
+            Assert(request.Stream.State == AWPathRequestState.Succeeded &&
+                   request.Stream.Count == 6,
+                "five water tiles followed by land are traversable");
+        }
+
+        using (AWTraversalGeneration generation = LinearWaterGeneration(
+                   waterTiles: 6))
+        using (var request = new AWPathRequest(2, 0, 7, options,
+                   Walker(health: 100f, stamina: 100f, waterDamage: 2f),
+                   generation, 0d))
+        {
+            new AWStreamingPathGenerator().Generate(request,
+                CancellationToken.None);
+            Assert(request.Stream.State == AWPathRequestState.Failed,
+                "six consecutive water tiles are rejected");
+        }
+
+        using (AWTraversalGeneration generation = LinearWaterGeneration(
+                   waterTiles: 1))
+        using (var request = new AWPathRequest(3, 0, 2, options,
+                   Walker(health: 1f, stamina: 0f, waterDamage: 100f),
+                   generation, 0d))
+        {
+            new AWStreamingPathGenerator().Generate(request,
+                CancellationToken.None);
+            Assert(request.Stream.State == AWPathRequestState.Failed,
+                "a predicted lethal water step is rejected");
+        }
+
+        using (AWTraversalGeneration generation = LinearWaterGeneration(
+                   waterTiles: 1))
+        using (var request = new AWPathRequest(4, 0, 1, options,
+                   Walker(health: 100f, stamina: 100f, waterDamage: 2f),
+                   generation, 0d))
+        {
+            new AWStreamingPathGenerator().Generate(request,
+                CancellationToken.None);
+            Assert(request.Stream.State == AWPathRequestState.Failed,
+                "bounded recovery never treats an open-water target as an exit");
+        }
+    }
+
+    private static void RegionLimitedPathReturnsABoundedSegment()
+    {
+        var tiles = new AWTileTraversalSnapshot[4];
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < tiles.Length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, regionId: i,
+                pNeighbors: neighbors.ToArray());
+        }
+
+        using var generation = AWTraversalGeneration.FromTiles(95, 4, 1,
+            tiles);
+        var options = new AWPathRequestOptions(false, false, false, 1);
+        using var request = new AWPathRequest(8, 0, 3, options,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+
+        new AWStreamingPathGenerator().Generate(request,
+            CancellationToken.None);
+        Assert(request.Stream.State == AWPathRequestState.Succeeded &&
+               request.Stream.Count == 1 &&
+               request.Stream.TryTake(out AWPathStep step) &&
+               step.TileId == 1,
+            "a one-region request returns the first bounded march segment");
+    }
+
+    private static AWTraversalGeneration LinearWaterGeneration(int waterTiles)
+    {
+        int length = waterTiles + 2;
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            bool water = i > 0 && i <= waterTiles;
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: !water, liquid: water, ocean: water,
+                pNeighbors: neighbors.ToArray());
+        }
+        return AWTraversalGeneration.FromTiles(90 + waterTiles,
+            length, 1, tiles);
+    }
+
+    private static AWTraversalGeneration LinearLandGeneration(int length)
+    {
+        var tiles = new AWTileTraversalSnapshot[length];
+        for (int i = 0; i < length; i++)
+        {
+            var neighbors = new List<int>(2);
+            if (i > 0) neighbors.Add(i - 1);
+            if (i + 1 < length) neighbors.Add(i + 1);
+            tiles[i] = new AWTileTraversalSnapshot(i, i, 0,
+                ground: true, pNeighbors: neighbors.ToArray());
+        }
+        return AWTraversalGeneration.FromTiles(200 + length,
+            length, 1, tiles);
+    }
+
+    private static AWActorTraversalProfile Walker(float health,
+        float stamina, float waterDamage)
+    {
+        return new AWActorTraversalProfile(false, false, false, true,
+            false, true, true, false, false, false,
+            health, health, stamina, Math.Max(1f, stamina), 5f,
+            waterDamage, 0f);
+    }
+
+    private static bool Near(float left, float right) => Math.Abs(left - right) < 0.0001f;
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

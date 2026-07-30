@@ -1,3 +1,4 @@
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using ai.behaviours;
 using HarmonyLib;
@@ -9,13 +10,18 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(KingdomBehCheckKing), nameof(KingdomBehCheckKing.execute))]
-        public static void Execute_Prefix(Kingdom pKingdom)
+        public static bool Execute_Prefix(Kingdom pKingdom,
+            ref BehResult __result)
         {
-            if (!UsesManagedLineage(pKingdom)) return;
-            if (!pKingdom.hasKing()) return;
+            if (!UsesManagedLineage(pKingdom)) return true;
+            if (!pKingdom.hasKing()) return true;
             Actor king = pKingdom.king;
-            if (king?.data == null || king.isAlive()) return;
+            if (king?.data == null || king.isAlive()) return true;
             HeirService.PrepareSuccessionBeforeKingDeath(pKingdom, king);
+            if (!AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king))
+                return true;
+            __result = BehResult.Continue;
+            return false;
         }
 
         private static bool UsesManagedLineage(Kingdom pKingdom)
@@ -31,7 +37,12 @@ namespace AncientWarfare3.patch
         public static bool CheckKingdomChaos_Prefix(Kingdom pMainKingdom)
         {
             bool managed = UsesManagedLineage(pMainKingdom);
-            return !SuccessionTransitionRules.ShouldBlockVanillaMassFragmentation(managed);
+            bool blocked = SuccessionTransitionRules
+                .ShouldBlockVanillaMassFragmentation(managed);
+            if (!blocked) return true;
+            if (MandateService.ShouldBlockPeacefulFellApart(pMainKingdom))
+                MandateService.OnPeacefulFellApartBlocked(pMainKingdom);
+            return false;
         }
     }
 }

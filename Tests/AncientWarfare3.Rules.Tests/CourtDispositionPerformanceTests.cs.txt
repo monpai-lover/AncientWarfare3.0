@@ -1,0 +1,45 @@
+using System.Diagnostics;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
+
+internal static class CourtDispositionPerformanceTests
+{
+    private const int Iterations = 5000;
+    private const double MaximumMilliseconds = 1500d;
+
+    public static void Run()
+    {
+        var rows = new LineageDispositionCandidate[
+            LineageDispositionRules.MaximumMigrants];
+        rows[0] = new LineageDispositionCandidate(1, -1, 0, true, false);
+        for (int i = 1; i < rows.Length; i++)
+            rows[i] = new LineageDispositionCandidate(i + 1, i, 0,
+                true, false);
+
+        int checksum = 0;
+        var stopwatch = Stopwatch.StartNew();
+        for (int i = 0; i < Iterations; i++)
+        {
+            checksum += CourtDispositionRules.Cost(
+                CourtDispositionAction.GrantNobleRank, i % 8 + 1);
+            checksum += (int)CourtDispositionRules.ResistanceRoute(
+                pIsFeudatoryPrince: (i & 3) == 0,
+                pIsLandedGeneral: (i & 3) == 1,
+                pIsChiefMinister: (i & 3) == 2);
+            checksum += LineageDispositionRules.SelectMigrants(rows, 1,
+                LineageDispositionRules.MaximumMigrants).Count;
+        }
+        stopwatch.Stop();
+
+        if (checksum <= 0)
+            throw new InvalidOperationException(
+                "Recent benchmark produced no observable work.");
+        if (stopwatch.Elapsed.TotalMilliseconds > MaximumMilliseconds)
+            throw new InvalidOperationException(
+                $"Recent benchmark exceeded {MaximumMilliseconds:0} ms: " +
+                $"{stopwatch.Elapsed.TotalMilliseconds:0.###} ms");
+        Console.WriteLine("Recent benchmark passed: " +
+                          $"{Iterations} iterations in " +
+                          $"{stopwatch.Elapsed.TotalMilliseconds:0.###} ms.");
+    }
+}

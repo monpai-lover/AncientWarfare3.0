@@ -1,0 +1,33 @@
+using AncientWarfare3.core.policy;
+
+internal static class ActorBatchPerformanceRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(ActorBatchPerformanceStage.Nutrition,
+            ActorBatchPerformanceRules.StageForMethod("updateNutritionDecay"),
+            "nutrition decay has a stable actor batch diagnostic stage");
+        Equal(ActorBatchPerformanceStage.EnemySearch,
+            ActorBatchPerformanceRules.StageForMethod("b3_findEnemyTarget"),
+            "enemy search has a stable actor batch diagnostic stage");
+        Equal(ActorBatchPerformanceStage.SmoothMovement,
+            ActorBatchPerformanceRules.StageForMethod("u10_checkSmoothMovement"),
+            "smooth movement has a stable actor batch diagnostic stage");
+        Equal(ActorBatchPerformanceStage.Unknown,
+            ActorBatchPerformanceRules.StageForMethod("missing"),
+            "unknown actor jobs cannot index the fixed diagnostic table");
+        Equal("nutrition",
+            ActorBatchPerformanceRules.Id(ActorBatchPerformanceStage.Nutrition),
+            "actor batch diagnostics expose stable compact ids");
+        Equal("unknown",
+            ActorBatchPerformanceRules.Id(ActorBatchPerformanceStage.Unknown),
+            "the unknown stage has a safe diagnostic id");
+    }
+}

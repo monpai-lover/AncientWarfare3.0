@@ -19,6 +19,11 @@ war_type_general_rebellion_war,大将叛乱,General Rebellion,大將叛亂
 war_name_general_rebellion_war,大将叛乱,General Rebellion,大將叛亂
 war_type_fief_independence_war,封地独立战争,Fief Independence War,封地獨立戰爭
 war_name_fief_independence_war,封地独立战争,Fief Independence War,封地獨立戰爭
+war_type_jingnan_war,藩王靖难,Feudatory Jingnan,藩王靖難
+war_name_jingnan_war,藩王靖难,Feudatory Jingnan,藩王靖難
+war_type_succession_dispute_war,宗室争位,Dynastic Succession War,宗室爭位
+war_name_succession_dispute_war,宗室争位,Dynastic Succession War,宗室爭位
+aw_hist_label_succession_dispute_war,宗室争位,Dynastic Succession War,宗室爭位
 aw_war_cb_core,核心,Core,核心
 aw_war_cb_weak_claim,弱宣称,Weak Claim,弱宣稱
 aw_war_cb_strong_claim,强宣称,Strong Claim,強宣稱
@@ -31,8 +36,8 @@ aw_war_goal_restore_kingdom,复国,Restoration,復國
 aw_war_goal_no_cb,强宣,No CB,強宣
 aw_war_targets,战争目标,War Targets,戰爭目標
 aw_war_targets Title,战争目标,War Targets,戰爭目標
-aw_war_targets_title,战争目标,War Targets,戰爭目標
-aw_war_targets_desc,宣战理由与战争目标,Casus belli and war goals,宣戰理由與戰爭目標
+aw_war_targets_title,战争理由,War Reasons,戰爭理由
+aw_war_targets_desc,制造并查看核心与宣称等战争理由,Fabricate and review cores claims and other war reasons,製造並查看核心與宣稱等戰爭理由
 aw_war_no_targets,当前没有可用目标,No available targets,目前沒有可用目標
 aw_war_fabricate_core,制造核心,Fabricate Core,製造核心
 aw_war_fabricate_core_desc,在本国控制的非核心城市制造核心,Fabricate a core in a controlled non-core city,在本國控制的非核心城市製造核心
@@ -72,3 +77,21 @@ aw_war_target_action_war,宣战,Declare,宣戰
 aw_war_target_city,目标城市：,Target city:,目標城市：
 aw_war_target_selected_kingdom,目标国：,Target realm:,目標國：
 aw_war_target_selected_city,选中城市：,Selected city:,選中城市：
+aw_war_fabrication_moved_to_diplomacy,新的伪造国书或谱牒请从外交窗口发起,Start new document or genealogy forgery from the diplomacy window,新的偽造國書或譜牒請從外交窗口發起
+aw_war_core_project_active,造核心进行中,Core fabrication in progress,造核心進行中
+aw_war_project_status_read_only,此窗口仅查看已有核心、宣称、复国宣称与筹备项目,This window only displays existing cores claims restoration claims and projects,此窗口僅查看已有核心、宣稱、復國宣稱與籌備項目
+aw_war_restoration_claim_count,复国宣称,Restoration claims,復國宣稱
+war_type_coup_restoration_war,勤王复统战争,Loyalist Restoration War,勤王復統戰爭
+war_name_coup_restoration_war,勤王复统战争,Loyalist Restoration War,勤王復統戰爭
+aw_hist_label_coup_restoration_war,勤王复统战争,Loyalist Restoration War,勤王復統戰爭
+task_unit_aw_army_rts_mission,执行军事命令,Executing military order,執行軍事命令
+task_unit_aw_army_rts_rally,集结部队,Rallying the army,集結部隊
+task_unit_aw_army_rts_replenish,补充兵员,Replenishing the army,補充兵員
+task_unit_aw_army_rts_march,向目标行军,Marching to the objective,向目標行軍
+task_unit_aw_army_rts_deploy,部署进攻阵地,Deploying for battle,部署進攻陣地
+task_unit_aw_army_rts_assault,进攻目标城市,Assaulting the target city,進攻目標城市
+task_unit_aw_army_rts_pursue,追击敌军,Pursuing enemy forces,追擊敵軍
+task_unit_aw_army_rts_retreat,撤退整补,Retreating to recover,撤退整補
+task_unit_aw_army_rts_regroup,重整军队,Regrouping the army,重整軍隊
+task_unit_aw_army_rts_formation,保持军队阵型,Holding army formation,保持軍隊陣型
+task_unit_aw_army_rts_front_hold,前线驻守,Front hold,前線駐守

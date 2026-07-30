@@ -2,6 +2,17 @@ namespace AncientWarfare3.core.lineage
 {
     public static class KingdomNameplateSuffixRules
     {
+        public static string ProjectName(string pCanonicalName,
+            string pSuffix, bool pShouldDisplaySuffix)
+        {
+            string canonical = pCanonicalName ?? "";
+            string suffix = pSuffix ?? "";
+            if (!pShouldDisplaySuffix || suffix.Length == 0 ||
+                canonical.EndsWith(suffix, System.StringComparison.Ordinal))
+                return canonical;
+            return canonical + suffix;
+        }
+
         public static string Resolve(int pTitle, bool pIsMandateKingdom, bool pIsRebelKingdom,
             bool pIsRepublic)
         {

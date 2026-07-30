@@ -1,0 +1,68 @@
+using AncientWarfare3.core.policy;
+
+internal static class ActorRacePerformanceRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void Near(double expected, double actual, double tolerance,
+        string name)
+    {
+        if (Math.Abs(expected - actual) > tolerance)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(15, ActorDeathPerformanceRules.StageCount,
+            "death diagnostics retain one fixed allocation-free stage table");
+        Equal("lineage_archive",
+            ActorDeathPerformanceRules.Id(
+                ActorDeathPerformanceStage.LineageArchive),
+            "lineage archive death work has a stable diagnostic id");
+        Equal("school_death",
+            ActorDeathPerformanceRules.Id(
+                ActorDeathPerformanceStage.SchoolDeath),
+            "school death persistence has a stable diagnostic id");
+        Equal("unknown",
+            ActorDeathPerformanceRules.Id(
+                (ActorDeathPerformanceStage)ActorDeathPerformanceRules.StageCount),
+            "invalid death stages cannot index outside the fixed table");
+
+        Equal(ActorRacePerformanceBucket.Xia,
+            ActorRacePerformanceRules.Classify("Xia"),
+            "the Xia actor asset enters the Xia performance bucket");
+        Equal(ActorRacePerformanceBucket.Other,
+            ActorRacePerformanceRules.Classify("xia"),
+            "asset classification follows WorldBox's ordinal IDs");
+        Equal(ActorRacePerformanceBucket.Other,
+            ActorRacePerformanceRules.Classify("human"),
+            "human actors enter the comparison bucket");
+        Equal(ActorRacePerformanceBucket.Other,
+            ActorRacePerformanceRules.Classify("civ_monkey"),
+            "other modded civilizations remain comparison actors");
+        Equal(ActorRacePerformanceBucket.Other,
+            ActorRacePerformanceRules.Classify(null),
+            "missing assets never masquerade as Xia");
+        Equal(ActorRacePerformanceBucket.Other,
+            ActorRacePerformanceRules.Classify("XIA"),
+            "uppercase variants are not the registered Xia actor asset");
+
+        Near(250000d,
+            ActorRacePerformanceRules.MicrosecondsPerCall(
+                elapsedTicks: 500L, timestampFrequency: 1000L, calls: 2),
+            0.001d,
+            "per-call time converts stopwatch ticks to microseconds");
+        Equal(0d,
+            ActorRacePerformanceRules.MicrosecondsPerCall(500L, 1000L, 0),
+            "an empty bucket reports zero rather than dividing by zero");
+        Equal(0d,
+            ActorRacePerformanceRules.MicrosecondsPerCall(500L, 0L, 2),
+            "an invalid stopwatch frequency reports zero");
+    }
+}

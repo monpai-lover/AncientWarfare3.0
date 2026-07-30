@@ -11,7 +11,6 @@
   <ItemGroup>
     <Compile Include="NobleHeirPregnancyRulesTests.cs" />
     <Compile Include="..\Code\core\lineage\NobleHeirPregnancyRules.cs" Link="NobleHeirPregnancyRules.cs" />
-    <Compile Include="..\Code\core\lineage\DynasticBirthSexRules.cs" Link="DynasticBirthSexRules.cs" />
     <Compile Include="..\Code\core\lineage\DynasticMaleLineContinuityRules.cs" Link="DynasticMaleLineContinuityRules.cs" />
   </ItemGroup>
 </Project>

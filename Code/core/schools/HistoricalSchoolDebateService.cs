@@ -20,13 +20,34 @@ namespace AncientWarfare3.core.schools
 
         private static int _lastProcessedYear = -1;
         private static int _cityCursor;
+        private static DebatePlanningState _planning;
         private static readonly Dictionary<long, int> DebateWins =
             new Dictionary<long, int>();
+
+        private sealed class DebatePlanningState
+        {
+            public DebatePlanningState(int pYear, long[] pCityIds, int pStart,
+                int pCount)
+            {
+                Year = pYear;
+                CityIds = pCityIds ?? Array.Empty<long>();
+                Start = pStart;
+                Cursor = new HistoricalSchoolBoundedWorkCursor(
+                    pStart, pCount, CityIds.Length);
+            }
+
+            public int Year { get; }
+            public long[] CityIds { get; }
+            public int Start { get; }
+            public HistoricalSchoolBoundedWorkCursor Cursor { get; }
+            public int Enqueued { get; set; }
+        }
 
         public static void ClearRuntime()
         {
             _lastProcessedYear = -1;
             _cityCursor = 0;
+            _planning = null;
             DebateWins.Clear();
         }
 
@@ -37,26 +58,63 @@ namespace AncientWarfare3.core.schools
                 if (entry.Key >= 0 && entry.Value > 0) DebateWins[entry.Key] = entry.Value;
         }
 
-        public static void ProcessYear(int pYear)
+        public static bool ProcessYearFrame(int pYear)
         {
-            if (pYear < 0 || World.world == null || pYear == _lastProcessedYear) return;
-            _lastProcessedYear = pYear;
-
-            long[] cityIds = HistoricalSchoolRuntimeIndex.Instance.PresentCityIds();
-            int count = Math.Min(MaxCitiesPerYear, cityIds.Length);
-            if (count == 0) return;
-            int start = _cityCursor % cityIds.Length;
-            int processed = 0;
-            int enqueued = 0;
-            for (; processed < count && enqueued < MaxDebatesPerYear; processed++)
+            if (pYear < 0 || World.world == null || pYear == _lastProcessedYear)
+                return true;
+            if (_planning == null || _planning.Year != pYear)
             {
-                long cityId = cityIds[(start + processed) % cityIds.Length];
-                HistoricalSchoolDebateActorSeed[] seeds = BuildCitySeeds(cityId);
+                long[] cityIds = HistoricalSchoolRuntimeIndex.Instance.PresentCityIds();
+                int count = Math.Min(MaxCitiesPerYear, cityIds.Length);
+                if (count == 0)
+                {
+                    _lastProcessedYear = pYear;
+                    return true;
+                }
+                int start = _cityCursor % cityIds.Length;
+                _planning = new DebatePlanningState(pYear, cityIds, start, count);
+            }
+
+            DebatePlanningState planning = _planning;
+            if (planning.Enqueued >= MaxDebatesPerYear ||
+                !planning.Cursor.TryTake(out int cityIndex))
+                return FinishPlanning(planning);
+
+            try
+            {
+                long cityId = planning.CityIds[cityIndex];
+                long seedDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                HistoricalSchoolDebateActorSeed[] seeds;
+                try { seeds = BuildCitySeeds(cityId); }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "school_debate_seed", seedDiagnostic);
+                }
                 if (seeds.Length >= 2)
                     if (HistoricalSchoolDebateActivityService.TryEnqueueCity(cityId,
-                            pYear, seeds)) enqueued++;
+                            pYear, seeds)) planning.Enqueued++;
             }
-            _cityCursor = (start + Math.Max(1, processed)) % cityIds.Length;
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school debate planning failed: " +
+                                    error.Message);
+            }
+            if (planning.Enqueued >= MaxDebatesPerYear || planning.Cursor.IsComplete)
+                return FinishPlanning(planning);
+            return false;
+        }
+
+        private static bool FinishPlanning(DebatePlanningState pPlanning)
+        {
+            if (pPlanning == null) return true;
+            if (pPlanning.CityIds.Length > 0)
+                _cityCursor = (pPlanning.Start +
+                    Math.Max(1, pPlanning.Cursor.Processed)) %
+                    pPlanning.CityIds.Length;
+            _lastProcessedYear = pPlanning.Year;
+            if (ReferenceEquals(_planning, pPlanning)) _planning = null;
+            return true;
         }
 
         private static HistoricalSchoolDebateActorSeed[] BuildCitySeeds(long pCityId)
@@ -164,18 +222,25 @@ namespace AncientWarfare3.core.schools
         internal static bool TryQueueDebateCommit(
             HistoricalSchoolDebateActivity pActivity)
         {
+            if (!IsDebateCommitValid(pActivity)) return false;
+            return HistoricalSchoolWriteBufferService.TryEnqueue(
+                new DebateWriteOperation(pActivity,
+                    World.world?.getCurWorldTime() ?? 0d));
+        }
+
+        internal static bool IsDebateCommitValid(
+            HistoricalSchoolDebateActivity pActivity)
+        {
             HistoricalSchoolDebateRecord debate = pActivity?.Record;
             if (debate == null) return false;
             Actor first = FindActor(debate.FirstActorId);
             Actor second = FindActor(debate.SecondActorId);
             City city = FindCity(debate.CityId);
-            if (!IsDebateActorValid(first, debate.FirstSchoolId, debate.CityId) ||
-                !IsDebateActorValid(second, debate.SecondSchoolId, debate.CityId) ||
-                city?.data == null || city.isRekt())
-                return false;
-            return HistoricalSchoolWriteBufferService.TryEnqueue(
-                new DebateWriteOperation(pActivity,
-                    World.world?.getCurWorldTime() ?? 0d));
+            return IsDebateActorValid(first, debate.FirstSchoolId,
+                       debate.CityId) &&
+                   IsDebateActorValid(second, debate.SecondSchoolId,
+                       debate.CityId) &&
+                   city?.data != null && !city.isRekt();
         }
 
         private static void ApplyCommittedDebateWrite(
@@ -197,7 +262,8 @@ namespace AncientWarfare3.core.schools
                 debate.DebateYear);
         }
 
-        private sealed class DebateWriteOperation : IHistoricalSchoolWriteOperation
+        private sealed class DebateWriteOperation : IHistoricalSchoolWriteOperation,
+            IHistoricalSchoolAsyncWriteOperation
         {
             private readonly HistoricalSchoolDebateActivity _activity;
             private readonly double _worldTime;
@@ -218,6 +284,13 @@ namespace AncientWarfare3.core.schools
                 return HistoricalSchoolStore.RecordDebateAndLedgerInTransaction(pDb,
                     pTransaction, _activity.Record, _activity.FirstDelta,
                     _activity.SecondDelta, _worldTime);
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return new DebateBackgroundWrite(CopyRecord(_activity.Record),
+                    CopyDelta(_activity.FirstDelta),
+                    CopyDelta(_activity.SecondDelta), _worldTime);
             }
 
             public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
@@ -244,6 +317,54 @@ namespace AncientWarfare3.core.schools
             {
                 HistoricalSchoolDebateActivityService.OnDebateWriteResolved(_activity,
                     HistoricalSchoolTeachingPersistenceOutcome.CleanFailure);
+            }
+
+            private static HistoricalSchoolDebateRecord CopyRecord(
+                HistoricalSchoolDebateRecord pRecord)
+            {
+                if (pRecord == null) return null;
+                return new HistoricalSchoolDebateRecord(pRecord.DebateId,
+                    pRecord.CityId, pRecord.DebateYear, pRecord.TopicId,
+                    pRecord.FirstActorId, pRecord.FirstSchoolId,
+                    pRecord.SecondActorId, pRecord.SecondSchoolId, pRecord.Seed,
+                    pRecord.FirstScore, pRecord.SecondScore, pRecord.Outcome,
+                    pRecord.Resolved, pRecord.Presented, pRecord.UpdatedTime);
+            }
+
+            private static HistoricalSchoolLedgerDelta CopyDelta(
+                HistoricalSchoolLedgerDelta pDelta)
+            {
+                if (pDelta == null) return null;
+                return new HistoricalSchoolLedgerDelta(pDelta.SchoolId,
+                    pDelta.Tradition, pDelta.ActivePresence, pDelta.Momentum,
+                    pDelta.Institutions, pDelta.LastActiveYear);
+            }
+        }
+
+        private sealed class DebateBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly HistoricalSchoolDebateRecord _record;
+            private readonly HistoricalSchoolLedgerDelta _firstDelta;
+            private readonly HistoricalSchoolLedgerDelta _secondDelta;
+            private readonly double _worldTime;
+
+            public DebateBackgroundWrite(HistoricalSchoolDebateRecord pRecord,
+                HistoricalSchoolLedgerDelta pFirstDelta,
+                HistoricalSchoolLedgerDelta pSecondDelta, double pWorldTime)
+            {
+                _record = pRecord;
+                _firstDelta = pFirstDelta;
+                _secondDelta = pSecondDelta;
+                _worldTime = pWorldTime;
+            }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.RecordDebateAndLedgerInTransaction(pDb,
+                    pTransaction, _record, _firstDelta, _secondDelta, _worldTime);
             }
         }
 
@@ -410,8 +531,19 @@ namespace AncientWarfare3.core.schools
 
             string firstName = SafeName(pFirst);
             string secondName = SafeName(pSecond);
-            string text = firstName + " and " + secondName + " debated " + pTopic +
-                          " (" + pOutcome + ")";
+            HistoryText text = HistoryText.Actor(pFirst, firstName) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_school_debated_with") +
+                               HistoryText.Actor(pSecond, secondName) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_school_debated_topic") +
+                               HistoryText.PlainText(DebateTopicLabel(pTopic)) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_school_outcome_open") +
+                               HistoryText.PlainText(
+                                   DebateOutcomeLabel(pOutcome)) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_school_outcome_close");
             try
             {
                 HistoryWriter.RecordPerson(pFirst.data.id,
@@ -436,6 +568,27 @@ namespace AncientWarfare3.core.schools
             if (secondWon) IncrementDebateWins(pSecond);
             CitySchoolSnapshotService.MarkDirty(pCity);
             SchoolMapModeService.DirtyMapIfActive();
+        }
+
+        private static string DebateTopicLabel(string pTopic)
+        {
+            return HistoryLocalizationRules.Text(
+                "aw_hist_school_topic_" + (pTopic ?? ""));
+        }
+
+        private static string DebateOutcomeLabel(
+            SchoolDebateOutcome pOutcome)
+        {
+            string id = pOutcome switch
+            {
+                SchoolDebateOutcome.NarrowFirstWin => "narrow_first",
+                SchoolDebateOutcome.DecisiveFirstWin => "decisive_first",
+                SchoolDebateOutcome.NarrowSecondWin => "narrow_second",
+                SchoolDebateOutcome.DecisiveSecondWin => "decisive_second",
+                _ => "draw"
+            };
+            return HistoryLocalizationRules.Text(
+                "aw_hist_school_outcome_" + id);
         }
 
         private static IEnumerable<string> CityTopics(City pCity)

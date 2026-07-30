@@ -21,6 +21,8 @@ namespace AncientWarfare3.core.db
         public long parent_claim_id = -1;
         public int claim_generation = 0;
         public string claim_origin = "kingdom_fall";
+        public string extinction_cause = "kingdom_fall";
+        public int earliest_autonomous_year = 0;
         public long original_capital_city_id = -1;
         public long original_mandate_period_id = -1;
         public int claim_strength = 0;

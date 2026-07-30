@@ -103,5 +103,36 @@ namespace AncientWarfare3.core.lineage
             long slot2 = ids.Count > 1 ? ids[1] : -1;
             return (slot1, slot2);
         }
+
+        public static bool ShouldIncludeSibling(
+            IEnumerable<long> pCenterParentIds,
+            IEnumerable<long> pSiblingParentIds,
+            IEnumerable<long> pResolvedCenterParentIds,
+            IEnumerable<long> pResolvedSiblingParentIds,
+            bool showHalfSiblings)
+        {
+            HashSet<long> center = RelationSet(pCenterParentIds);
+            HashSet<long> sibling = RelationSet(pSiblingParentIds);
+            if (center.Count == 0 || sibling.Count == 0 ||
+                !center.Overlaps(sibling)) return false;
+            if (showHalfSiblings) return true;
+            if (!center.SetEquals(sibling)) return false;
+
+            HashSet<long> resolvedCenter = RelationSet(
+                pResolvedCenterParentIds);
+            HashSet<long> resolvedSibling = RelationSet(
+                pResolvedSiblingParentIds);
+            return resolvedCenter.SetEquals(center) &&
+                   resolvedSibling.SetEquals(sibling);
+        }
+
+        private static HashSet<long> RelationSet(IEnumerable<long> pIds)
+        {
+            var result = new HashSet<long>();
+            if (pIds == null) return result;
+            foreach (long id in pIds)
+                if (id >= 0L) result.Add(id);
+            return result;
+        }
     }
 }

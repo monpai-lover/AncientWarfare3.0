@@ -83,7 +83,9 @@ namespace AncientWarfare3.core.policy
         public static CityEconomyContribution CalculateContribution(CityEconomyRole role, int population,
             int adoptedTechCount, int totalTechCount, float distanceFromCapital, int slavePopulation,
             bool nonCore, bool activeFief = false, float taxMultiplier = 1f,
-            float manpowerMultiplier = 1f, float unrestReduction = 0f)
+            float manpowerMultiplier = 1f, float unrestReduction = 0f,
+            float feudatoryRemittanceMultiplier = 1f,
+            float policyMultiplier = 1f, float techMultiplier = 1f)
         {
             float pop = Mathf.Max(0, population);
             float techFactor = totalTechCount <= 0 ? 0f : Mathf.Clamp01((float)adoptedTechCount / totalTechCount);
@@ -140,8 +142,13 @@ namespace AncientWarfare3.core.policy
             }
 
             tax *= 1f + slaveFactor * 0.12f;
+            policy *= policyMultiplier;
+            tech *= techMultiplier;
             tax *= taxMultiplier;
             manpower *= manpowerMultiplier;
+            float remittance = Mathf.Clamp01(feudatoryRemittanceMultiplier);
+            policy *= remittance;
+            tax *= remittance;
             unrest -= unrestReduction;
             return new CityEconomyContribution(policy, tech, tax, manpower, food, Mathf.Clamp(unrest, 0f, 100f));
         }

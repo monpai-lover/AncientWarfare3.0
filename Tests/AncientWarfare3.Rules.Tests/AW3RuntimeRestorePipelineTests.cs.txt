@@ -1,0 +1,311 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.core.multiplayer;
+
+internal static class AW3RuntimeRestorePipelineTests
+{
+    public static void Run()
+    {
+        StrictRestoreStopsAtFirstFailure();
+        NormalRestoreContinuesAfterFailure();
+        RejectsBlankStageName();
+        SuccessfulRestorePreservesStageOrder();
+        MissingArchiveRecoveryRespectsStrictLoads();
+        CheckedArchiveInstallationCopiesBeforeOpening();
+        ProductionRestoreOrderAndDeferredHooksAreStable();
+        WorldLoadFacadeAndCoordinatorAreWired();
+    }
+
+    private static void StrictRestoreStopsAtFirstFailure()
+    {
+        var calls = new List<string>();
+        var stages = CreateFailingStages(calls);
+
+        AW3RestoreResult result =
+            AW3RuntimeRestoreStageRunner.Run(stages, strict: true);
+
+        Equal(false, result.Success, "strict restore fails");
+        Equal("mandate", result.FailedStage, "stable failed stage");
+        Equal("broken mandate", result.Detail, "stable failure detail");
+        SequenceEqual(new[] { "archive" }, calls,
+            "strict restore stops before later projections");
+    }
+
+    private static void NormalRestoreContinuesAfterFailure()
+    {
+        var calls = new List<string>();
+        var stages = CreateFailingStages(calls);
+
+        AW3RestoreResult result =
+            AW3RuntimeRestoreStageRunner.Run(stages, strict: false);
+
+        Equal(false, result.Success, "normal restore reports failure");
+        Equal("mandate", result.FailedStage,
+            "normal restore retains first failed stage");
+        SequenceEqual(new[] { "archive", "court" }, calls,
+            "normal restore continues after a failed projection");
+    }
+
+    private static void RejectsBlankStageName()
+    {
+        Throws<ArgumentException>(() => new AW3RestoreStage(" ", () => { }),
+            "blank restore stage name rejected");
+    }
+
+    private static void SuccessfulRestorePreservesStageOrder()
+    {
+        var calls = new List<string>();
+        var stages = new[]
+        {
+            new AW3RestoreStage("archive", () => calls.Add("archive")),
+            new AW3RestoreStage("mandate", () => calls.Add("mandate")),
+            new AW3RestoreStage("court", () => calls.Add("court"))
+        };
+
+        AW3RestoreResult result =
+            AW3RuntimeRestoreStageRunner.Run(stages, strict: true);
+
+        Equal(true, result.Success, "successful restore succeeds");
+        Equal(string.Empty, result.FailedStage,
+            "successful restore has no failed stage");
+        Equal(string.Empty, result.Detail,
+            "successful restore has no failure detail");
+        SequenceEqual(new[] { "archive", "mandate", "court" }, calls,
+            "successful restore preserves stage order");
+    }
+
+    private static AW3RestoreStage[] CreateFailingStages(List<string> calls)
+    {
+        return new[]
+        {
+            new AW3RestoreStage("archive", () => calls.Add("archive")),
+            new AW3RestoreStage("mandate", () =>
+                throw new InvalidOperationException("broken mandate")),
+            new AW3RestoreStage("court", () => calls.Add("court"))
+        };
+    }
+
+    private static void MissingArchiveRecoveryRespectsStrictLoads()
+    {
+        Equal(AW3ArchiveRecoveryAction.InitializeFresh,
+            AW3ArchiveRestoreRules.Resolve(strict: false,
+                archiveMissing: true),
+            "normal local loads may initialize an unpublished missing archive");
+        Equal(AW3ArchiveRecoveryAction.Fail,
+            AW3ArchiveRestoreRules.Resolve(strict: true,
+                archiveMissing: true),
+            "strict multiplayer loads never replace a missing archive");
+        Equal(AW3ArchiveRecoveryAction.Fail,
+            AW3ArchiveRestoreRules.Resolve(strict: false,
+                archiveMissing: false),
+            "non-missing archive failures remain fatal");
+    }
+
+    private static void CheckedArchiveInstallationCopiesBeforeOpening()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "LineageArchiveManager.cs"));
+
+        Contains(source,
+            "public bool TryLoadFromSaveDirectory(string pSaveFolder,",
+            "checked archive installation entry point exists");
+        Contains(source,
+            "TryLoadFromSaveDirectory(pSaveFolder, out string error)",
+            "legacy load delegates to checked installation");
+        Contains(source,
+            "string savedDb = Path.Combine(Path.GetFullPath(pSaveFolder),",
+            "checked installation canonicalizes the source directory");
+        Contains(source, "File.Copy(savedDb, runtime, overwrite: true);",
+            "received archive is copied to runtime storage");
+        Contains(source, "OpenRuntimeDatabase(runtime);",
+            "runtime copy is opened through the checked helper");
+        Contains(source,
+            "new SQLiteConnection(\"data source=\" + pPath)",
+            "the checked helper opens the supplied runtime path");
+        Equal(false, source.Contains(
+                "new SQLiteConnection(\"data source=\" + savedDb)"),
+            "received archive is never opened directly");
+    }
+
+    private static void ProductionRestoreOrderAndDeferredHooksAreStable()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string pipeline = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "AW3RuntimeRestorePipeline.cs"));
+        string savePatch = File.ReadAllText(Path.Combine(root, "Code", "patch",
+            "AW_SavePatch.cs"));
+
+        Equal(false, pipeline.Contains(
+                "new AW3RestoreStage(\"school_indexes\""),
+            "school runtime owns membership index restoration without a duplicate stage");
+
+        OrderedTokens(pipeline, new[]
+        {
+            "new AW3RestoreStage(\"mandate_projection\"",
+            "new AW3RestoreStage(\"world_traits\"",
+            "new AW3RestoreStage(\"figure_state\"",
+            "new AW3RestoreStage(\"kingdom_archive\"",
+            "new AW3RestoreStage(\"ruler_cache\"",
+            "new AW3RestoreStage(\"year_names\"",
+            "new AW3RestoreStage(\"runtime_cache_reset\"",
+            "new AW3RestoreStage(\"feudatories\"",
+            "new AW3RestoreStage(\"mandate_phase\"",
+            "new AW3RestoreStage(\"royal_asylum\"",
+            "new AW3RestoreStage(\"school_runtime\"",
+            "new AW3RestoreStage(\"special_armies\"",
+            "new AW3RestoreStage(\"military_readiness\"",
+            "new AW3RestoreStage(\"military_emergency\"",
+            "new AW3RestoreStage(\"war_notices\"",
+            "new AW3RestoreStage(\"temporary_levies\"",
+            "new AW3RestoreStage(\"wartime_garrisons\"",
+            "new AW3RestoreStage(\"slave_vanguard\"",
+            "new AW3RestoreStage(\"autonomous_restoration\"",
+            "new AW3RestoreStage(\"succession_disputes\"",
+            "new AW3RestoreStage(\"war_plot_redirect\"",
+            "new AW3RestoreStage(\"active_war_archive\""
+        }, "save restore stage order");
+
+        Contains(pipeline,
+            "internal static AW3RestoreResult TryInitializeGeneratedWorld(",
+            "generated-world restoration is deferred through the pipeline");
+        Contains(pipeline,
+            "AW3ArchiveRestoreRules.Resolve(strict, archiveMissing)",
+            "save restore distinguishes missing local archives from strict loads");
+        Contains(pipeline, "archive.CreateDataBase();",
+            "normal missing-archive recovery creates a fresh runtime archive");
+        Contains(savePatch,
+            "AW3WorldLoadCoordinator.ObserveLoadWorldStarted(pPath)",
+            "loadWorld hook forwards start identity");
+        Contains(savePatch,
+            "AW3WorldLoadCoordinator.ObserveWorldDataQueued(pPath)",
+            "loadData hook forwards queued identity");
+        Contains(savePatch,
+            "AW3WorldLoadCoordinator.ObserveGeneratedWorldQueued()",
+            "generated-world hook forwards fallback identity");
+        Equal(false, savePatch.Contains(
+                "LineageArchiveManager.Instance.LoadFromSaveDirectory(pPath)"),
+            "loadWorld hook does not restore before SmoothLoader completes");
+        Equal(false, savePatch.Contains("catch { }"),
+            "save patch no longer hides individual reset failures");
+    }
+
+    private static void WorldLoadFacadeAndCoordinatorAreWired()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string facade = File.ReadAllText(Path.Combine(root, "Code", "api",
+            "multiplayer", "AW3MultiplayerWorldLoadFacade.cs"));
+        string coordinator = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "multiplayer", "AW3WorldLoadCoordinator.cs"));
+        string modClass = File.ReadAllText(Path.Combine(root, "Code",
+            "ModClass.cs"));
+
+        Contains(facade,
+            "public static AW3MultiplayerWorldLoadStartResult " +
+            "TryBeginGenerationLoad(", "public facade exposes load start");
+        Contains(facade, "ThreadHelper.isMainThread()",
+            "load start requires the WorldBox main thread");
+        Contains(facade,
+            "AW3MultiplayerSnapshotFacade.ValidateGeneration(",
+            "load start revalidates the received generation");
+        Contains(facade,
+            "public static AW3MultiplayerWorldLoadSnapshot GetStatus(",
+            "public facade exposes pollable status");
+        Contains(facade, "public static bool Cancel(",
+            "public facade exposes cancellation");
+        Contains(facade, "public static void Tick()",
+            "public facade exposes timeout polling");
+
+        Contains(coordinator, "if (_initialized) return;",
+            "coordinator initialization is idempotent");
+        Contains(coordinator, "MapBox.on_world_loaded += OnWorldLoaded;",
+            "coordinator subscribes to the true load completion callback");
+        Contains(coordinator,
+            "World.world.save_manager.loadWorld(canonicalDirectory, false);",
+            "coordinator uses WorldBox's real load path");
+        Contains(coordinator, ".ObserveWorldLoaded()",
+            "world completion advances the matching operation");
+        Contains(coordinator,
+            "AW3RuntimeRestorePipeline.TryRestoreFromDirectory(",
+            "coordinator restores AW3 after world completion");
+        Contains(coordinator, ".FailWorldLoadFallback(",
+            "generated fallback fails a strict operation");
+        Contains(coordinator, ".TryTimeout(DateTime.UtcNow)",
+            "coordinator polls the strict deadline");
+
+        int patch = modClass.IndexOf("PatchHarmonyByClass();",
+            StringComparison.Ordinal);
+        int initialize = modClass.IndexOf(
+            "AW3WorldLoadCoordinator.Initialize();",
+            StringComparison.Ordinal);
+        Equal(true, patch >= 0 && initialize > patch,
+            "world-load coordinator initializes after Harmony hooks");
+    }
+
+    private static void OrderedTokens(string source,
+        IReadOnlyList<string> tokens, string name)
+    {
+        int offset = 0;
+        for (int index = 0; index < tokens.Count; index++)
+        {
+            int found = source.IndexOf(tokens[index], offset,
+                StringComparison.Ordinal);
+            if (found < 0)
+                throw new InvalidOperationException(name + ": missing or " +
+                    "out of order token " + tokens[index]);
+            offset = found + tokens[index].Length;
+        }
+    }
+
+    private static void Contains(string source, string expected, string name)
+    {
+        if (!source.Contains(expected))
+            throw new InvalidOperationException(name + ": missing " +
+                                                expected);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void SequenceEqual(IReadOnlyList<string> expected,
+        IReadOnlyList<string> actual, string name)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(name + ": expected " +
+                expected.Count + " calls, got " + actual.Count);
+
+        for (int index = 0; index < expected.Count; index++)
+        {
+            if (!string.Equals(expected[index], actual[index],
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException(name + ": mismatch at " +
+                                                    index);
+        }
+    }
+
+    private static void Throws<TException>(Action action, string name)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(name + ": expected " +
+                typeof(TException).Name + ", got " + error.GetType().Name);
+        }
+
+        throw new InvalidOperationException(name + ": expected " +
+                                            typeof(TException).Name);
+    }
+}

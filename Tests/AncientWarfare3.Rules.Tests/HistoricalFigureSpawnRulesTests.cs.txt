@@ -1,0 +1,75 @@
+using System;
+using System.IO;
+using AncientWarfare3.content.figures;
+
+internal static class HistoricalFigureSpawnRulesTests
+{
+    public static void Run()
+    {
+        Equal(false, HistoricalFigureSpawnRules.CanEvaluate(
+                persistenceReady: false),
+            "historical figures wait for durable persistence");
+        Equal(true, HistoricalFigureSpawnRules.CanEvaluate(
+                persistenceReady: true),
+            "historical figures evaluate after persistence is ready");
+        Equal(false, HistoricalFigureSpawnRules.CanMutate(
+                reservationCommitted: false),
+            "failed unique reservation cannot mutate the actor");
+        Equal(true, HistoricalFigureSpawnRules.CanMutate(
+                reservationCommitted: true),
+            "committed unique reservation permits actor mutation");
+
+        string root = Directory.GetCurrentDirectory();
+        string service = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "figures", "HistoricalFigureService.cs"));
+        string store = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "db", "FigureStateTableItem.cs"));
+        string court = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "court", "CourtService.cs"));
+
+        Ordered(service, "FigureStateStore.TryReserveSpawn(",
+            "pActor.addTrait(TRAIT_FIGURE)",
+            "figure state reservation commits before actor mutation");
+        Ordered(service, "pActor.addTrait(TRAIT_FIGURE)",
+            "FigureStateStore.TryCommitSpawn(",
+            "figure state commits only after actor mutation succeeds");
+        Contains(service,
+            "HistoricalFigureSpawnRules.CanEvaluate(FigureStateStore.IsReady)",
+            "spawn hook rejects archive-unavailable attempts before probability work");
+        Contains(store, "public static bool IsReady",
+            "figure state exposes durable readiness");
+        Contains(store, "public static bool TryReserveSpawn(",
+            "figure state exposes durable pending reservation");
+        Contains(store, "public static bool TryCommitSpawn(",
+            "figure state exposes durable final commit");
+        Ordered(store, "transaction.Commit();",
+            "HistoricalFigureSpawnRules.Pending;",
+            "pending memory state changes only after durable reservation");
+        Contains(court,
+            "if (!LineageArchiveManager.Instance.IsOperational) return;",
+            "court annual work waits without consuming its refresh year");
+    }
+
+    private static void Ordered(string source, string first, string second,
+        string name)
+    {
+        int firstIndex = source.IndexOf(first, StringComparison.Ordinal);
+        int secondIndex = source.IndexOf(second, StringComparison.Ordinal);
+        if (firstIndex < 0 || secondIndex <= firstIndex)
+            throw new InvalidOperationException(name + ": expected " + first +
+                                                " before " + second);
+    }
+
+    private static void Contains(string source, string token, string name)
+    {
+        if (!source.Contains(token, StringComparison.Ordinal))
+            throw new InvalidOperationException(name + ": missing " + token);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+}

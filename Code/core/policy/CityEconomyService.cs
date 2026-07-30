@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
@@ -35,6 +36,29 @@ namespace AncientWarfare3.core.policy
         private const int SQL_IN_CHUNK_SIZE = 128;
         private static readonly Dictionary<long, CityEconomyContributionSums> ContributionCache =
             new Dictionary<long, CityEconomyContributionSums>();
+        private static readonly HashSet<long> PendingRealmRefreshes =
+            new HashSet<long>();
+
+        public static void ClearRuntime()
+        {
+            ContributionCache.Clear();
+            PendingRealmRefreshes.Clear();
+        }
+
+        internal static void OnRealmSupplyChanged(City pCity)
+        {
+            Kingdom realm = pCity?.kingdom;
+            if (pCity?.data == null || realm?.data == null) return;
+            PendingRealmRefreshes.Add(realm.id);
+            bool providesToRealm =
+                OccupiedCitySupplyService.CanProvideToRealm(pCity, realm);
+            if (!providesToRealm)
+                ZeroRealmContribution(pCity.id, realm.id);
+            InvalidateContributionCache(realm.id);
+            realm.data.set(LineageKeys.CITY_ECONOMY_LAST_YEAR,
+                int.MinValue);
+            ScheduleRealmRefresh(realm.id);
+        }
 
         public static void OnKingdomYear(Kingdom pKingdom)
         {
@@ -62,20 +86,34 @@ namespace AncientWarfare3.core.policy
                 bool slaveryEnabled = SlaveService.IsSlaveryEnabled(pKingdom);
                 int cityCount = cities.Count;
                 CentralizationEffects effects = CentralizationService.ReadSnapshot(pKingdom).effects;
+                CourtInstitutionEffects institution =
+                    CourtInstitutionEffectService.Read(pKingdom);
                 var sums = new CityEconomyContributionSums { year = year };
                 foreach (City city in cities)
                 {
-                    if (HasForeignLandNeighbour(pKingdom, city))
+                    bool providesToRealm =
+                        OccupiedCitySupplyService.CanProvideToRealm(
+                            city, pKingdom);
+                    if (providesToRealm &&
+                        HasForeignLandNeighbour(pKingdom, city))
                         sums.has_foreign_land_border = true;
-                    if (!UpdateCity(pKingdom, city, year, cityCount, slaveryEnabled, techReports,
-                            storedStates, effects.TaxMultiplier, effects.ManpowerMultiplier,
-                            effects.UnrestReduction, out CityEconomyContribution contribution))
+                    if (!UpdateCity(pKingdom, city, year, cityCount,
+                            slaveryEnabled, providesToRealm, techReports,
+                            storedStates,
+                            effects.TaxMultiplier * institution.TaxMultiplier,
+                            effects.ManpowerMultiplier * institution.ManpowerMultiplier,
+                            effects.UnrestReduction + institution.UnrestReduction,
+                            institution.PolicyOutputMultiplier,
+                            institution.TechOutputMultiplier,
+                            out CityEconomyContribution contribution))
                         continue;
+                    if (!providesToRealm) continue;
                     sums.policy_points += contribution.PolicyPoints;
                     sums.tech_points += contribution.TechPoints;
                     sums.tax_value += contribution.TaxValue;
                 }
                 ContributionCache[pKingdom.id] = sums;
+                PendingRealmRefreshes.Remove(pKingdom.id);
             }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.CityEconomyUpdateCitiesIndex, benchmark); }
 
@@ -103,7 +141,10 @@ namespace AncientWarfare3.core.policy
         {
             pTaxValue = 0f;
             if (pKingdom?.data == null ||
-                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached))
+                PendingRealmRefreshes.Contains(pKingdom.id) ||
+                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached) ||
+                !CityEconomyUpdateRules.ShouldUseContributionCache(true,
+                    cached.year, Date.getCurrentYear()))
                 return false;
             pTaxValue = cached.tax_value;
             return true;
@@ -113,7 +154,10 @@ namespace AncientWarfare3.core.policy
         {
             pHasBorder = false;
             if (pKingdom?.data == null ||
-                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached))
+                PendingRealmRefreshes.Contains(pKingdom.id) ||
+                !ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached) ||
+                !CityEconomyUpdateRules.ShouldUseContributionCache(true,
+                    cached.year, Date.getCurrentYear()))
                 return false;
             pHasBorder = cached.has_foreign_land_border;
             return true;
@@ -150,15 +194,24 @@ namespace AncientWarfare3.core.policy
             return snapshot;
         }
 
-        private static bool UpdateCity(Kingdom pKingdom, City pCity, int pYear, int pCityCount,
-            bool pSlaveryEnabled, Dictionary<long, CityTechReport> pTechReports,
+        private static bool UpdateCity(Kingdom pKingdom, City pCity,
+            int pYear, int pCityCount, bool pSlaveryEnabled,
+            bool pProvidesToRealm,
+            Dictionary<long, CityTechReport> pTechReports,
             Dictionary<long, CityEconomyStoredState> pStoredStates, float pTaxMultiplier,
             float pManpowerMultiplier, float pUnrestReduction,
+            float pPolicyMultiplier, float pTechMultiplier,
             out CityEconomyContribution pContribution)
         {
             pContribution = default;
             if (pCity?.data == null || pCity.isRekt()) return false;
             bool activeFief = FiefService.IsActiveFief(pCity);
+            bool activeFeudatory = FeudatoryService.TryGetByCity(pCity.id,
+                out FeudatorySnapshot feudatory);
+            float feudatoryRemittance = activeFeudatory
+                ? FeudatoryAutonomyRules.CentralRemittanceMultiplier(
+                    feudatory.Autonomy)
+                : 1f;
             long benchmark = UpdateAgeBenchmark.Begin();
             CityTechReport tech = null;
             try
@@ -170,7 +223,8 @@ namespace AncientWarfare3.core.policy
             if (tech == null) tech = new CityTechReport();
             int population = SafePopulation(pCity);
             bool nonCore = IsNonCore(pKingdom, pCity);
-            CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief, tech, population, nonCore, pCityCount);
+            CityEconomyRole role = SelectRole(pKingdom, pCity, activeFief,
+                activeFeudatory, tech, population, nonCore, pCityCount);
             benchmark = UpdateAgeBenchmark.Begin();
             int slavePopulation;
             try
@@ -184,7 +238,21 @@ namespace AncientWarfare3.core.policy
             CityEconomyContribution contribution = CityEconomyRules.CalculateContribution(role, population,
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
                 slavePopulation, nonCore, activeFief, pTaxMultiplier, pManpowerMultiplier,
-                pUnrestReduction);
+                pUnrestReduction, feudatoryRemittance, pPolicyMultiplier,
+                pTechMultiplier);
+            float realmMultiplier = OccupiedCitySupplyRules.
+                RealmContributionMultiplier(
+                    enemyFrozenControl: !pProvidesToRealm);
+            if (realmMultiplier < 1f)
+            {
+                contribution = new CityEconomyContribution(
+                    contribution.PolicyPoints * realmMultiplier,
+                    contribution.TechPoints * realmMultiplier,
+                    contribution.TaxValue * realmMultiplier,
+                    contribution.Manpower * realmMultiplier,
+                    contribution.FoodStability,
+                    contribution.UnrestRisk);
+            }
             benchmark = UpdateAgeBenchmark.Begin();
             try
             {
@@ -197,14 +265,15 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
-        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity, bool pActiveFief,
-            CityTechReport pTech, int pPopulation, bool pNonCore, int pCityCount)
+        private static CityEconomyRole SelectRole(Kingdom pKingdom, City pCity,
+            bool pActiveFief, bool pActiveFeudatory, CityTechReport pTech,
+            int pPopulation, bool pNonCore, int pCityCount)
         {
             return CityEconomyRules.SelectRole(pKingdom.capital == pCity, pPopulation,
                 CountBuildings(pCity, "market"), CountBuildings(pCity, "farm"),
                 CountBuildings(pCity, "barracks"), CountBuildings(pCity, "workshop"),
                 pTech.adopted_count, pTech.total_count, IsBorderCity(pKingdom, pCity, pCityCount),
-                pNonCore, pActiveFief);
+                pNonCore, pActiveFief || pActiveFeudatory);
         }
 
         private static void Upsert(Kingdom pKingdom, City pCity, CityEconomyRole pRole,
@@ -368,6 +437,7 @@ namespace AncientWarfare3.core.policy
         {
             var empty = new CityEconomyContributionSums { year = Date.getCurrentYear() };
             if (pKingdom?.data == null || !Ready) return empty;
+            if (PendingRealmRefreshes.Contains(pKingdom.id)) return empty;
             int year = Date.getCurrentYear();
             if (ContributionCache.TryGetValue(pKingdom.id, out CityEconomyContributionSums cached) &&
                 CityEconomyUpdateRules.ShouldUseContributionCache(true, cached.year, year))
@@ -400,6 +470,48 @@ namespace AncientWarfare3.core.policy
             if (pKingdomId >= 0) ContributionCache.Remove(pKingdomId);
         }
 
+        private static void ZeroRealmContribution(long pCityId,
+            long pKingdomId)
+        {
+            if (!Ready || pCityId < 0 || pKingdomId < 0) return;
+            try
+            {
+                DB.UpdateValue(CityEconomyStateTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("CITY_ID", pCityId),
+                        SimpleColumnConstraint.CreateEq("KINGDOM_ID",
+                            pKingdomId)
+                    },
+                    ColumnVal.Create("POLICY_POINTS", 0f),
+                    ColumnVal.Create("TECH_POINTS", 0f),
+                    ColumnVal.Create("TAX_VALUE", 0f),
+                    ColumnVal.Create("MANPOWER", 0f),
+                    ColumnVal.Create("UPDATED_TIME", LineageService.CurTime()));
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ScheduleRealmRefresh(long pKingdomId)
+        {
+            if (pKingdomId < 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "city_economy_supply:" + pKingdomId,
+                DeferredWorkClass.Runtime,
+                () =>
+                {
+                    Kingdom realm;
+                    try { realm = World.world?.kingdoms?.get(pKingdomId); }
+                    catch { realm = null; }
+                    if (realm?.data == null || realm.isRekt()) return;
+                    realm.data.set(LineageKeys.CITY_ECONOMY_LAST_YEAR,
+                        int.MinValue);
+                    OnKingdomYear(realm);
+                });
+        }
+
         private static float ReadFloat(SQLiteDataReader pReader, int pIndex)
         {
             return pReader.IsDBNull(pIndex) ? 0f : Convert.ToSingle(pReader.GetValue(pIndex));
@@ -419,14 +531,19 @@ namespace AncientWarfare3.core.policy
 
             string roleName = LocalizedRoleName(pRole);
             HistoryText text = HistoryText.City(pCity, pKingdom) +
-                               HistoryText.PlainText(" \u57ce\u5e02\u7ecf\u6d4e\u5b9a\u578b\u4e3a " + roleName +
-                                                     "\uff0c\u7a0e\u6536 " + Math.Round(pContribution.TaxValue, 1));
+                               HistoryLocalizationRules.H("aw_hist_city_economy_role_mid") +
+                               HistoryText.PlainText(roleName) +
+                               HistoryLocalizationRules.H("aw_hist_city_economy_tax_mid") +
+                               HistoryText.PlainText(Math.Round(pContribution.TaxValue, 1).ToString());
             HistoryWriter.RecordCity(pCity, pKingdom, "city_economy_role", text, HistoryTarget.City(pCity));
 
             if (!pExisted || roleChanged)
                 HistoryWriter.RecordKingdom(pKingdom, "city_economy_role",
-                    HistoryText.Kingdom(pKingdom) + HistoryText.PlainText(" \u8c03\u6574\u57ce\u5e02\u7ecf\u6d4e\uff1a") +
-                    HistoryText.City(pCity, pKingdom) + HistoryText.PlainText(" -> " + roleName),
+                    HistoryText.Kingdom(pKingdom) +
+                    HistoryLocalizationRules.H("aw_hist_city_economy_adjusted_mid") +
+                    HistoryText.City(pCity, pKingdom) +
+                    HistoryLocalizationRules.H("aw_hist_city_economy_role_arrow") +
+                    HistoryText.PlainText(roleName),
                     HistoryTarget.City(pCity));
         }
 

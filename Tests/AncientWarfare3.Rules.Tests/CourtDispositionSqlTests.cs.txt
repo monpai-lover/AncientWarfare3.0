@@ -1,0 +1,216 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
+
+internal static class CourtDispositionSqlTests
+{
+    public static void Run()
+    {
+        PendingLedgerRejectsDuplicateAndFinalizesExactlyOnce();
+        FailedBeginLeavesNoPartialLedgerRow();
+        SurnameGrantAndExpulsionCommitAsWholeTransactions();
+        FailedExpulsionRollsBackBranchActorsAndTitles();
+    }
+
+    private static void PendingLedgerRejectsDuplicateAndFinalizesExactlyOnce()
+    {
+        using var db = OpenDatabase();
+        CreateSocialActionTable(db, "POLITICAL_COST INTEGER NOT NULL");
+        IReadOnlyList<CourtDispositionIndexSpec> indexes =
+            CourtDispositionIndexRules.GetRequiredIndexes();
+        Assert(indexes.Count == 2,
+            "court disposition owns two bounded ledger lookup indexes");
+        foreach (CourtDispositionIndexSpec index in indexes)
+            Execute(db, index.BuildSql());
+        Assert(QueryPlan(db,
+                "EXPLAIN QUERY PLAN SELECT * FROM SocialAction " +
+                "WHERE TARGET_ACTOR_ID=71 ORDER BY START_TIME,ACTION_ID")
+                .Contains("idx_SocialAction_target_time"),
+            "target history uses the target-time index");
+        var command = new CourtDispositionCommand(7, 70, 71,
+            CourtDispositionAction.GrantSurname, pOperationKey: "op:grant-surname:7:71");
+
+        long actionId = CourtDispositionPersistence.Begin(db, command, 30, 12, 123.5);
+        Assert(actionId >= 0, "the first operation key creates a pending ledger row");
+        Assert(CourtDispositionPersistence.Begin(db, command, 30, 12, 123.6) == -1,
+            "the same operation key cannot execute twice");
+        Assert(CourtDispositionPersistence.Finalize(db, actionId,
+                CourtDispositionOutcome.Committed, "", 124.0),
+            "one pending row can be finalized");
+        Assert(!CourtDispositionPersistence.Finalize(db, actionId,
+                CourtDispositionOutcome.CleanFailure, "late", 125.0),
+            "a finalized row cannot be overwritten");
+        Assert(CourtDispositionPersistence.ReadOutcome(db, actionId) ==
+               CourtDispositionOutcome.Committed,
+            "readback returns the committed outcome");
+        CourtDispositionLedgerEntry duplicate =
+            CourtDispositionPersistence.ReadByOperationKey(db,
+                command.OperationKey);
+        Assert(duplicate != null && duplicate.ActionId == actionId,
+            "duplicate operation resolves to the original action");
+        Assert(duplicate.Outcome == CourtDispositionOutcome.Committed &&
+               duplicate.Cost == 30 && duplicate.Reason == "",
+            "duplicate operation returns the original finalized result");
+    }
+
+    private static void FailedBeginLeavesNoPartialLedgerRow()
+    {
+        using var db = OpenDatabase();
+        CreateSocialActionTable(db,
+            "POLITICAL_COST INTEGER NOT NULL CHECK(POLITICAL_COST < 0)");
+        var command = new CourtDispositionCommand(7, 70, 71,
+            CourtDispositionAction.GrantSurname, pOperationKey: "op:forced-failure");
+
+        Assert(CourtDispositionPersistence.Begin(db, command, 30, 12, 123.5) == -1,
+            "a failed pending insert reports failure");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM SocialAction") == 0,
+            "a failed pending insert leaves no partial row");
+    }
+
+    private static void SurnameGrantAndExpulsionCommitAsWholeTransactions()
+    {
+        using var db = OpenDatabase();
+        CreateLineageDispositionSchema(db, rejectCommonStatus: false);
+        SeedLineageDispositionRows(db);
+        long[] migrants = { 10, 11, 13 };
+
+        Assert(LineageDispositionPersistence.GrantSurname(db, migrants,
+                5, 50, "姬", "王", 123.0),
+            "surname grant commits the selected patrilineal set");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM ActorArchive WHERE " +
+                          "ID IN (10,11,13) AND LINEAGE_ID=5 AND SHI_ID=50 " +
+                          "AND FAMILY_NAME='姬' AND CLAN_NAME='王' AND STATUS='noble'") == 3,
+            "surname grant updates all selected archive rows");
+        Assert(Scalar(db, "SELECT LINEAGE_ID FROM ActorArchive WHERE ID=12") == 1,
+            "surname grant does not move an excluded married daughter");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM FamilyEdge WHERE " +
+                          "CHILD_ID IN (11,13) AND CHILD_LINEAGE_ID=5") == 2,
+            "surname grant keeps family edges in the new lineage");
+
+        Assert(LineageDispositionPersistence.Expel(db, migrants,
+                newShiId: 99, lineageId: 5, parentShiId: 50,
+                clanName: "王", founderActorId: 10,
+                originKingdomId: 7, originCityId: 70,
+                originOriginalClanId: 700, year: 12, worldTime: 124.0),
+            "expulsion commits the independent branch and title closure");
+        Assert(Scalar(db, "SELECT PARENT_SHI_ID FROM ShiBranch WHERE SHI_ID=99") == 50,
+            "expulsion preserves the source Shi");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM ActorArchive WHERE " +
+                          "ID IN (10,11,13) AND SHI_ID=99 " +
+                          "AND STATUS='common_lineage' AND NOBLE_DISTANCE=99") == 3,
+            "expulsion moves the selected set into a common branch");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM Enfeoffment WHERE " +
+                          "ACTOR_ID IN (10,11,13) AND ACTIVE=0") == 2,
+            "expulsion closes every active title in the selected set");
+    }
+
+    private static void FailedExpulsionRollsBackBranchActorsAndTitles()
+    {
+        using var db = OpenDatabase();
+        CreateLineageDispositionSchema(db, rejectCommonStatus: true);
+        SeedLineageDispositionRows(db);
+
+        Assert(!LineageDispositionPersistence.Expel(db, new long[] { 10, 11 },
+                newShiId: 99, lineageId: 1, parentShiId: 10,
+                clanName: "旧", founderActorId: 10,
+                originKingdomId: 7, originCityId: 70,
+                originOriginalClanId: 700, year: 12, worldTime: 124.0),
+            "a rejected actor update reports clean failure");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM ShiBranch") == 0,
+            "failed expulsion removes its inserted branch");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM ActorArchive WHERE SHI_ID=10") == 4,
+            "failed expulsion preserves actor branches");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM Enfeoffment WHERE ACTIVE=1") == 2,
+            "failed expulsion preserves active titles");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        return db;
+    }
+
+    private static void CreateSocialActionTable(SQLiteConnection db,
+        string politicalCostColumn)
+    {
+        Execute(db, "CREATE TABLE SocialAction (" +
+                    "ACTION_ID INTEGER PRIMARY KEY," +
+                    "OPERATION_KEY TEXT NOT NULL UNIQUE," +
+                    "KINGDOM_ID INTEGER NOT NULL," +
+                    "RULER_ACTOR_ID INTEGER NOT NULL," +
+                    "TARGET_ACTOR_ID INTEGER NOT NULL," +
+                    "ACTION_TYPE TEXT NOT NULL," +
+                    "INT_PARAMETER INTEGER NOT NULL," +
+                    "LONG_PARAMETER INTEGER NOT NULL," +
+                    politicalCostColumn + "," +
+                    "RESULT TEXT NOT NULL," +
+                    "REASON TEXT NOT NULL," +
+                    "START_YEAR INTEGER NOT NULL," +
+                    "START_TIME REAL NOT NULL," +
+                    "END_TIME REAL NOT NULL)");
+    }
+
+    private static void CreateLineageDispositionSchema(SQLiteConnection db,
+        bool rejectCommonStatus)
+    {
+        string statusCheck = rejectCommonStatus
+            ? " CHECK(STATUS<>'common_lineage')"
+            : "";
+        Execute(db, "CREATE TABLE ActorArchive (" +
+                    "ID INTEGER PRIMARY KEY,FAMILY_NAME TEXT,CLAN_NAME TEXT," +
+                    "LINEAGE_ID INTEGER,SHI_ID INTEGER,STATUS TEXT" + statusCheck + "," +
+                    "NOBLE_DISTANCE INTEGER,IS_ALIVE INTEGER)");
+        Execute(db, "CREATE TABLE FamilyEdge (EDGE_ID INTEGER PRIMARY KEY," +
+                    "CHILD_ID INTEGER,PARENT_ID INTEGER,CHILD_LINEAGE_ID INTEGER)");
+        Execute(db, "CREATE TABLE ShiBranch (SHI_ID INTEGER PRIMARY KEY," +
+                    "LINEAGE_ID INTEGER,CLAN_NAME TEXT,PARENT_SHI_ID INTEGER," +
+                    "SOURCE_TYPE TEXT,FOUNDER_ACTOR_ID INTEGER," +
+                    "ORIGIN_KINGDOM_ID INTEGER,ORIGIN_CITY_ID INTEGER," +
+                    "ORIGIN_ORIGINAL_CLAN_ID INTEGER,CREATED_TIME REAL," +
+                    "IS_EXTINCT INTEGER)");
+        Execute(db, "CREATE TABLE Enfeoffment (GRANT_ID INTEGER PRIMARY KEY," +
+                    "ACTOR_ID INTEGER,ACTIVE INTEGER,END_YEAR INTEGER," +
+                    "END_TIME REAL,END_REASON TEXT)");
+    }
+
+    private static void SeedLineageDispositionRows(SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO ActorArchive VALUES" +
+                    "(10,'旧姓','旧',1,10,'noble',0,1)," +
+                    "(11,'旧姓','旧',1,10,'noble',1,1)," +
+                    "(12,'旧姓','旧',1,10,'noble',1,1)," +
+                    "(13,'旧姓','旧',1,10,'noble',2,1)");
+        Execute(db, "INSERT INTO FamilyEdge VALUES" +
+                    "(111,11,10,1),(121,12,10,1),(131,13,11,1)");
+        Execute(db, "INSERT INTO Enfeoffment VALUES" +
+                    "(1,10,1,-1,-1,''),(2,11,1,-1,-1,'')");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string QueryPlan(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        var parts = new List<string>();
+        while (reader.Read()) parts.Add(reader.GetString(3));
+        return string.Join("\n", parts);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

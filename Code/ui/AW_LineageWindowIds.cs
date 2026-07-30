@@ -10,16 +10,27 @@ namespace AncientWarfare3.ui
         public const string POLICY_TREE = "aw_policy_tree";
         public const string ANCESTRY = "aw_ancestry_analysis";
         public const string MANDATE_DYNASTY = "aw_mandate_dynasty";
+        public const string MANDATE_CYCLE = "aw_mandate_cycle";
         public const string MANDATE_DECISIONS = "aw_mandate_decisions";
         public const string VASSAL_RELATIONS = "aw_vassal_relations";
         public const string WAR_TARGETS = "aw_war_targets";
         public const string COURT = "aw_court";
+        public const string HAREM = "aw_ruler_household";
+        public const string HOUSEHOLD_OFFER = "aw_ruler_household_offer";
+        public const string CIVIL_SERVICE_EXAM = "aw_civil_service_exam";
         public const string COURT_APPOINTMENT = "aw_court_appointment";
+        public const string COURT_DISPOSITION = "aw_court_disposition";
+        public const string COURT_AUXILIARY_LAWS = "aw_court_auxiliary_laws";
+        public const string INHERITANCE_LAWS = "aw_inheritance_laws";
         public const string SCHOOL = "aw_school_browser";
         public const string SCHOOL_ROSTER = "aw_school_roster";
         public const string NAME_DECISION = "aw_name_decision";
+        public const string CONFERRED_POSTHUMOUS = "aw_conferred_posthumous";
         public const string CENTRAL_POWER = "aw_central_power";
         public const string FEUDATORIES = "aw_feudatories";
+        public const string DIPLOMACY_CONVERSATIONS = "aw_diplomacy_conversations";
+        public const string DIPLOMATIC_WAR_DECLARATION = "aw_diplomatic_war_declaration";
+        public const string DIPLOMATIC_MARRIAGE = "aw_diplomatic_marriage";
 
         public static void SafeShow(string pWindowId, System.Action pRefreshIfCurrent = null)
         {
@@ -33,6 +44,15 @@ namespace AncientWarfare3.ui
 
             bool hasCurrent = ScrollWindow.getCurrentWindow() != null;
             ScrollWindow.showWindow(pWindowId, false, hasCurrent);
+        }
+
+        public static bool ShowKingdom(long pKingdomId)
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(pKingdomId);
+            if (kingdom?.data == null || kingdom.isRekt()) return false;
+            ScrollWindow.finishAnimations();
+            MetaType.Kingdom.getAsset().selectAndInspect(kingdom);
+            return true;
         }
     }
 }

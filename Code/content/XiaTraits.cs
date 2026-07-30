@@ -10,8 +10,8 @@ namespace AncientWarfare3.content
     ///
     ///     ⚠️ 属性 key 适配新版 base_stats_library(AW2 旧 key 部分已删):
     ///        mod_health → health(直接加血)、knockback_reduction → knockback、fertility → birth_rate。
-    ///     ⚠️ special_effect 留桩:天命/first/formerking/rebel/slave 的主动效果依赖
-    ///        天命(批F)/政策(批G)/Plot 篡位/奴隶(批I)系统,等对应批次回填(见 TODO)。
+    ///     天命、旧君、义军与奴隶行为由各自的年度/事务服务管理，特质仅保存身份和属性，
+    ///     不再挂逐 actor 的 special_effect，避免重复扫描。
     ///
     ///     新版 API:AssetManager.traits(ActorTraitLibrary),add(new ActorTrait{...}),
     ///        base_stats["key"]=val,opposite_list/addOpposite,action_special_effect(WorldAction)。
@@ -33,25 +33,22 @@ namespace AncientWarfare3.content
             figure.base_stats["health"] = 15f;      // 旧 mod_health +15
             figure.base_stats["stewardship"] = 10f;
 
-            // 天命:政务+150、外交+15、战争+14、智力+14。special_effect=天命状态检定(批F)
+            // 天命:政务+150、外交+15、战争+14、智力+14；状态检定由 MandateService 统一执行。
             var tianming = NewTrait("天命", "ui/Icons/traits/iconTianming", XiaTraitGroups.AW2);
             tianming.base_stats["stewardship"] = 150f;
             tianming.base_stats["diplomacy"] = 15f;
             tianming.base_stats["warfare"] = 14f;
             tianming.base_stats["intelligence"] = 14f;
-            // TODO[批F-天命]: action_special_effect = Actionlib.checkP(天命兴衰状态检定)
 
-            // first 天命之子:外交+15、战争+14、智力+14。special_effect=自动篡位驱动天命继承(批F)
+            // first 天命之子:外交+15、战争+14、智力+14；不再通过特质自动篡位。
             var first = NewTrait("first", "ui/Icons/traits/iconfirst", XiaTraitGroups.AW2);
             first.base_stats["diplomacy"] = 15f;
             first.base_stats["warfare"] = 14f;
             first.base_stats["intelligence"] = 14f;
-            // TODO[批F-天命]: action_special_effect = tianmingP(>17岁非国王尝试篡位,全种族只留1个first,10年冷却)
 
-            // formerking 亡国之君。special_effect=残部逻辑(批F)
+            // formerking 亡国之君；身份与复国宣称由亡国/复国服务管理。
             var formerking = NewTrait(LineageKeys.TRAIT_FORMER_KING,
                 TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_FORMER_KING), XiaTraitGroups.AW2);
-            // TODO[批F-天命]: action_special_effect = Actionlib.former
 
             var general = NewTrait(LineageKeys.TRAIT_GENERAL,
                 TraitIconUsageRules.IconForTrait(LineageKeys.TRAIT_GENERAL), XiaTraitGroups.AW2);
@@ -80,16 +77,15 @@ namespace AncientWarfare3.content
             var heirUrge = NewTrait(LineageKeys.TRAIT_HEIR_URGE, "ui/Icons/traits/iconguizu", XiaTraitGroups.AW2);
             heirUrge.needs_to_be_explored = false;
             heirUrge.unlocked_with_achievement = false;
-            heirUrge.base_stats["birth_rate"] = 8f; // Xia 4 + 8 = 12,取整多子
+            heirUrge.base_stats["birth_rate"] = 0f;
 
-            // rebel 反抗者:血+2、外交+35、政务+35、战争+4、同特质聚集。special_effect=义军抱团(批F)
+            // rebel 反抗者:血+2、外交+35、政务+35、战争+4、同特质聚集；义军由叛乱服务管理。
             var rebel = NewTrait("rebel", "ui/Icons/traits/iconrebel", XiaTraitGroups.AW2);
             rebel.same_trait_mod = 20;
             rebel.base_stats["health"] = 2f;        // 旧 mod_health +2
             rebel.base_stats["diplomacy"] = 35f;
             rebel.base_stats["stewardship"] = 35f;
             rebel.base_stats["warfare"] = 4f;
-            // TODO[批F-天命]: action_special_effect = Actionlib.rebelkingdom(义军抱团)
 
             // ===== aw_social_identity 组:社会身份(互斥) =====
 
@@ -106,6 +102,7 @@ namespace AncientWarfare3.content
             //   贵族再 +2 = 6,取整 6 → 贵族多子)。小数一律不能用于 birth_rate。
             var guizu = NewSocialIdentity("guizu", "ui/Icons/traits/iconguizu");
             guizu.base_stats["birth_rate"] = 2f;
+            guizu.base_stats["health"] = 500f;
 
             // slave 奴隶:不出生(rate_birth=0)、世袭(rate_inherit=100)、周期强制职业=Slave
             var slave = NewSocialIdentity("slave", "ui/policy/start_slaves");
@@ -140,7 +137,6 @@ namespace AncientWarfare3.content
                 stewardship: 2f, diplomacy: 0f, warfare: 1f, intelligence: 2f);
             RegisterCourtSchoolTrait(CourtTraitId.Historian, "ui/Icons/traits/iconshijia",
                 stewardship: 1f, diplomacy: 2f, warfare: 0f, intelligence: 2f);
-            // TODO[批I-奴隶]: action_special_effect = 周期性强制 setProfession(Slave)
         }
 
         /// <summary>建普通特质(默认 birth/inherit=0,即不随机生成/不遗传,只能主动赋予)。</summary>

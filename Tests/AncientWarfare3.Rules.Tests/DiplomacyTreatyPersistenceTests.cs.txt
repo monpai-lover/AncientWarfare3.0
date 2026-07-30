@@ -1,0 +1,134 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyTreatyPersistenceTests
+{
+    public static void Run()
+    {
+        CommitsBreakAndFiveYearTruceTogether();
+        RollsBackPactClosureWhenTruceInsertFails();
+    }
+
+    private static void CommitsBreakAndFiveYearTruceTogether()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedPact(db, 48);
+        DiplomacyTreatyBreakOutcome outcome =
+            DiplomacyTreatyPersistence.BreakNonAggression(db, "Proposal",
+                Request(), out long truceId);
+        Equal(DiplomacyTreatyBreakOutcome.Committed, outcome,
+            "breaking a pact commits");
+        True(truceId > 1, "the committed truce receives a new proposal id");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='non_aggression' AND TREATY_UNTIL_YEAR>=38"),
+            "the old pact is no longer active");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='truce' AND STATUS='accepted' AND " +
+            "TREATY_UNTIL_YEAR=43"),
+            "the same transaction creates a five-year truce");
+        Equal("suzerain", ScalarText(db,
+                "SELECT REQUEST_STYLE FROM Proposal WHERE PROPOSAL_TYPE='truce'"),
+            "the broken-pact record keeps the sender relationship snapshot");
+        Equal("cold", ScalarText(db,
+                "SELECT REQUEST_TONE FROM Proposal WHERE PROPOSAL_TYPE='truce'"),
+            "the broken-pact record keeps the sender tone snapshot");
+
+        outcome = DiplomacyTreatyPersistence.BreakNonAggression(db,
+            "Proposal", Request(), out _);
+        Equal(DiplomacyTreatyBreakOutcome.NoActivePact, outcome,
+            "replaying a break does not create another truce");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='truce'"),
+            "an idempotent replay leaves exactly one truce");
+    }
+
+    private static void RollsBackPactClosureWhenTruceInsertFails()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedPact(db, 48);
+        using (var trigger = new SQLiteCommand(
+            "CREATE TRIGGER reject_truce BEFORE INSERT ON Proposal " +
+            "WHEN NEW.PROPOSAL_TYPE='truce' BEGIN " +
+            "SELECT RAISE(ABORT,'injected truce failure'); END;", db))
+            trigger.ExecuteNonQuery();
+
+        DiplomacyTreatyBreakOutcome outcome =
+            DiplomacyTreatyPersistence.BreakNonAggression(db, "Proposal",
+                Request(), out _);
+        Equal(DiplomacyTreatyBreakOutcome.Failed, outcome,
+            "an injected truce failure rejects the operation");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='non_aggression' AND TREATY_UNTIL_YEAR=48"),
+            "a failed operation restores the original active pact");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='truce'"),
+            "a failed operation leaves no partial truce row");
+    }
+
+    private static DiplomacyTreatyBreakRequest Request()
+    {
+        return new DiplomacyTreatyBreakRequest(1, "周", 2, "唐", 38, 43,
+            100d, "周伯", "周伯发三十八年", "suzerain", "cold", true);
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using var schema = new SQLiteCommand(
+            "CREATE TABLE Proposal(" +
+            "PROPOSAL_ID INTEGER PRIMARY KEY,REQUESTER_KINGDOM_ID INTEGER," +
+            "REQUESTER_NAME TEXT,RESPONDER_KINGDOM_ID INTEGER," +
+            "RESPONDER_NAME TEXT,PROPOSAL_TYPE TEXT,STATUS TEXT,WAR_ID INTEGER," +
+            "PLAYER_INITIATED INTEGER,CREATED_YEAR INTEGER,EXPIRY_YEAR INTEGER," +
+            "RESPONSE_YEAR INTEGER,TREATY_UNTIL_YEAR INTEGER,CREATED_TIME REAL," +
+            "RESPONSE_DUE_TIME REAL,RESPONSE_TIME REAL,RESPONSE_REASON TEXT," +
+            "REQUESTER_TITLE TEXT,RESPONDER_TITLE TEXT,REQUEST_YEAR_PREFIX TEXT," +
+            "RESPONSE_YEAR_PREFIX TEXT,REQUEST_STYLE TEXT DEFAULT 'peer'," +
+            "REQUEST_TONE TEXT DEFAULT 'neutral',RESPONSE_STYLE TEXT DEFAULT 'peer'," +
+            "RESPONSE_TONE TEXT DEFAULT 'neutral');", db);
+        schema.ExecuteNonQuery();
+        return db;
+    }
+
+    private static void SeedPact(SQLiteConnection db, int untilYear)
+    {
+        using var insert = new SQLiteCommand(
+            "INSERT INTO Proposal(PROPOSAL_ID,REQUESTER_KINGDOM_ID," +
+            "REQUESTER_NAME,RESPONDER_KINGDOM_ID,RESPONDER_NAME," +
+            "PROPOSAL_TYPE,STATUS,WAR_ID,PLAYER_INITIATED,CREATED_YEAR," +
+            "EXPIRY_YEAR,RESPONSE_YEAR,TREATY_UNTIL_YEAR,CREATED_TIME," +
+            "RESPONSE_DUE_TIME,RESPONSE_TIME,RESPONSE_REASON," +
+            "REQUESTER_TITLE,RESPONDER_TITLE,REQUEST_YEAR_PREFIX," +
+            "RESPONSE_YEAR_PREFIX) VALUES(1,1,'周',2,'唐','non_aggression'," +
+            "'accepted',-1,1,38,42,38,@until,100,100,100,'accepted'," +
+            "'周伯','唐侯','周伯发三十八年','唐侯某三十八年');", db);
+        insert.Parameters.AddWithValue("@until", untilYear);
+        insert.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

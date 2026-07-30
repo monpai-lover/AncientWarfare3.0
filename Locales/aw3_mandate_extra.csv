@@ -1,4 +1,7 @@
 key,cz,en,ch
+aw_mandate_era_sequence,年号沿革,Era sequence,年號沿革
+aw_mandate_origin_feudatory_restoration,宗室中兴受命,Dynastic Restoration,宗室中興受命
+aw_mandate_claimant_dynastic_restoration,中兴宗室,Restoring Dynast,中興宗室
 aw_mandate_origin,来源,Origin,來源
 aw_mandate_origin_native,正统受命,Orthodox Mandate,正統受命
 aw_mandate_origin_rebel,义军受命,Rebel Mandate,義軍受命
@@ -14,3 +17,6 @@ aw_mandate_rebels,义军,Rebels,義軍
 aw_mandate_rebels_none,无,None,無
 aw_mandate_occupation,外族占领,Foreign Occupation,外族佔領
 aw_mandate_occupation_none,无,None,無
+aw_mandate_marker_rebel,义军天命,Rebel Mandate,義軍天命
+aw_mandate_marker_pseudo,伪朝天命,Pseudo-dynastic Mandate,偽朝天命
+aw_mandate_marker_true,真天命,True Mandate,真天命

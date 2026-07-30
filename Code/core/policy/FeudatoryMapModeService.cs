@@ -55,7 +55,15 @@ namespace AncientWarfare3.core.policy
             string prince = string.IsNullOrEmpty(snapshot.PrinceName)
                 ? "#" + snapshot.PrinceActorId
                 : snapshot.PrinceName;
-            return seat + AW_L10n.Text("aw_feudatory_name_suffix", " Feudatory") +
+            string princeTitle = DynasticTitleService.ResolveLivingTitle(
+                snapshot.PrinceActorId);
+            if (!string.IsNullOrEmpty(princeTitle))
+                prince = princeTitle + "  " + prince;
+            string feudatoryName = string.IsNullOrEmpty(
+                snapshot.FeudatoryName)
+                ? seat
+                : snapshot.FeudatoryName;
+            return feudatoryName +
                    "\n" + AW_L10n.Text("aw_feudatory_mapmode_prince", "Prince") +
                    ": " + prince +
                    "\n" + AW_L10n.Text("aw_feudatory_mapmode_seat", "Seat") +
@@ -68,14 +76,40 @@ namespace AncientWarfare3.core.policy
                    ": " + snapshot.Loyalty;
         }
 
+        public static bool SelectPrince(WorldTile pTile,
+            string pPowerId = null)
+        {
+            City city = pTile?.zone?.city;
+            if (!TryGetSnapshot(city, out FeudatorySnapshot snapshot))
+                return false;
+            Actor prince;
+            try { prince = World.world?.units?.get(snapshot.PrinceActorId); }
+            catch { prince = null; }
+            if (prince?.data == null || prince.isRekt() ||
+                !prince.isAlive())
+                return false;
+            MetaTypeAsset unitMeta = MetaType.Unit.getAsset();
+            if (unitMeta == null) return false;
+            ScrollWindow.finishAnimations();
+            unitMeta.selectAndInspect(prince, pFromNameplate: false,
+                pCheckNameplate: false, pClearAction: false);
+            return true;
+        }
+
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void DirtyMapIfActive()
@@ -86,6 +120,11 @@ namespace AncientWarfare3.core.policy
                 return;
             _lastDirtyTime = now;
             DirtyMap();
+        }
+
+        internal static void ResetRuntime()
+        {
+            _lastDirtyTime = -1.0;
         }
     }
 }

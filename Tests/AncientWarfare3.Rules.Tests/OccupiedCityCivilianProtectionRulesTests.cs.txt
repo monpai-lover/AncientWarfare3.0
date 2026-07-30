@@ -1,0 +1,166 @@
+using AncientWarfare3.core.lineage;
+
+internal static class OccupiedCityCivilianProtectionRulesTests
+{
+    public static void Run()
+    {
+        True(OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: true,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: true,
+                    targetIsCivilian: true,
+                    targetIsCivilianBuilding: false),
+            "enemy soldiers cannot target civilians immediately after entering a hostile city");
+
+        True(OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: true,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: true,
+                    targetIsCivilian: false,
+                    targetIsCivilianBuilding: true),
+            "enemy soldiers cannot target civilian buildings before capture begins");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: true,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: true,
+                    targetIsCivilian: false,
+                    targetIsCivilianBuilding: false),
+            "defending soldiers and military buildings remain valid targets");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: false,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: true,
+                    targetIsCivilian: true,
+                    targetIsCivilianBuilding: false),
+            "the protection does not rewrite non-war hostility rules");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: true,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: false,
+                    targetIsCivilian: true,
+                    targetIsCivilianBuilding: false),
+            "the guard is scoped to civilians inside their own city");
+
+        int directlyAttackable = 0;
+        for (int i = 0; i < 200; i++)
+        {
+            bool civilian = i < 180;
+            bool protectedFromDirectCombat = OccupiedCityCivilianProtectionRules.
+                ShouldSuppressWartimeHostility(
+                    activeWar: true,
+                    attackerIsMilitary: true,
+                    attackerBelongsToCityOwner: false,
+                    targetBelongsToCityOwner: true,
+                    targetInsideHomeCity: true,
+                    targetIsCivilian: civilian,
+                    targetIsCivilianBuilding: false);
+            if (!protectedFromDirectCombat) directlyAttackable++;
+        }
+
+        Equal(20, directlyAttackable,
+            "a 200-person city exposes only its 20 military defenders to direct soldier attacks");
+
+        True(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: true,
+                    residentInsideCity: true,
+                    cityPopulation: 1),
+            "one remaining occupied resident must be protected");
+
+        True(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: true,
+                    residentInsideCity: true,
+                    cityPopulation: 10),
+            "the tenth remaining occupied resident must be protected");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: true,
+                    residentInsideCity: true,
+                    cityPopulation: 11),
+            "the emergency sanctuary must stop above ten residents");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: true,
+                    residentInsideCity: true,
+                    cityPopulation: 0),
+            "an empty city has no resident to protect");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: true,
+                    residentInsideCity: false,
+                    cityPopulation: 8),
+            "residents outside their occupied city are not protected");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldApplyEmergencySanctuary(
+                    frozenControlled: false,
+                    residentInsideCity: true,
+                    cityPopulation: 8),
+            "the emergency sanctuary ends when hostile occupation ends");
+
+        True(OccupiedCityCivilianProtectionRules.
+                ShouldRestoreOccupiedResident(
+                    frozenControlled: true,
+                    residentAlive: true,
+                    residentInsideCity: true,
+                    cityPopulation: 7),
+            "a living resident below the floor receives recovery");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldRestoreOccupiedResident(
+                    frozenControlled: true,
+                    residentAlive: false,
+                    residentInsideCity: true,
+                    cityPopulation: 7),
+            "a dead resident cannot be restored");
+
+        False(OccupiedCityCivilianProtectionRules.
+                ShouldRestoreOccupiedResident(
+                    frozenControlled: true,
+                    residentAlive: true,
+                    residentInsideCity: true,
+                    cityPopulation: 11),
+            "recovery stops above the emergency floor");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value)
+            throw new InvalidOperationException(name + ": expected false");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

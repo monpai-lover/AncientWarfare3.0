@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.content;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
@@ -53,6 +55,16 @@ namespace AncientWarfare3.core.lineage
             return pActor?.asset != null && pActor.asset.id == HUMAN_ASSET_ID;
         }
 
+        private static bool IsCivilizedMonkey(Actor pActor)
+        {
+            return CivMonkeyNamingRules.IsCivilizedMonkey(pActor?.asset?.id);
+        }
+
+        public static bool IsNativeXiaCultureActor(Actor pActor)
+        {
+            return IsXia(pActor) || IsCivilizedMonkey(pActor);
+        }
+
         public static bool IsXiaHumanPair(Actor pA, Actor pB)
         {
             return (IsXia(pA) && IsHuman(pB)) || (IsHuman(pA) && IsXia(pB));
@@ -60,14 +72,17 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasOriginalClan(Actor pActor)
         {
-            return IsXia(pActor) && pActor.hasClan() && pActor.clan?.data != null;
+            return IsNativeXiaCultureActor(pActor) && pActor.hasClan() &&
+                   pActor.clan?.data != null;
         }
 
         public static bool HasTraceableFamily(Actor pActor)
         {
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
-            return UsesAwLineageSystem(pActor) || (IsXia(pActor) && (lineageId >= 0 || HasOriginalClan(pActor)));
+            return UsesAwLineageSystem(pActor) ||
+                   (IsNativeXiaCultureActor(pActor) &&
+                    (lineageId >= 0 || HasOriginalClan(pActor)));
         }
 
         public static bool UsesAwLineageSystem(Actor pActor)
@@ -75,16 +90,17 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             return ForeignPseudoLineageRules.ShouldUseAwLineageSystem(
-                IsXia(pActor),
+                IsNativeXiaCultureActor(pActor),
                 XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom),
-                IsXiaKingdom(pActor.kingdom),
+                XiaizationService.IsNativePolicyKingdom(pActor.kingdom),
                 lineageId >= 0);
         }
 
         private static bool CanUseXiaizedLineageGovernment(Actor pActor)
         {
             if (pActor?.data == null) return false;
-            return IsXia(pActor) || IsXiaKingdom(pActor.kingdom) ||
+            return IsNativeXiaCultureActor(pActor) ||
+                   XiaizationService.IsNativePolicyKingdom(pActor.kingdom) ||
                    XiaizationService.UsesXiaizedInstitutionSystem(pActor.kingdom);
         }
 
@@ -105,7 +121,7 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         public static void OnActorBorn(Actor pActor)
         {
-            if (!IsXia(pActor)) return;
+            if (!IsNativeXiaCultureActor(pActor)) return;
 
             EnsureGivenName(pActor);
             ApplyDisplayName(pActor);
@@ -121,6 +137,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (!ShouldUseLineageBirth(pBaby, pParent1, pParent2)) return;
 
+            ArchiveTraceableActor(pParent1, pAlive: true);
+            ArchiveTraceableActor(pParent2, pAlive: true);
             string originalForeignName = IsXia(pBaby) ? null : pBaby.getName();
             if (IsXia(pBaby)) EnsureGivenName(pBaby);
             InheritFromParents(pBaby, pParent1, pParent2);
@@ -153,7 +171,7 @@ namespace AncientWarfare3.core.lineage
 
         public static void ArchiveTraceableActor(Actor pActor, bool pAlive)
         {
-            if (!IsXia(pActor) && !IsHuman(pActor)) return;
+            if (!IsNativeXiaCultureActor(pActor) && !IsHuman(pActor)) return;
             LineageArchiveWriter.Upsert(pActor, pAlive, pTraceOnly: true);
         }
 
@@ -170,7 +188,8 @@ namespace AncientWarfare3.core.lineage
             bool parentHasLineage = HasLineageData(pParent1) || HasLineageData(pParent2) ||
                                     UsesAwLineageSystem(pParent1) || UsesAwLineageSystem(pParent2);
             return ForeignPseudoLineageRules.ShouldUseLineageBirth(
-                IsXia(pBaby), pBaby.asset?.civ == true, parentHasLineage);
+                IsNativeXiaCultureActor(pBaby), pBaby.asset?.civ == true,
+                parentHasLineage);
         }
 
         /// <summary>入谱贵族出生 → PersonBiography 记一条 birth 事件(无谱系者不记)。</summary>
@@ -182,7 +201,7 @@ namespace AncientWarfare3.core.lineage
 
             string name = pActor.getName();
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, name, "birth",
-                HistoryText.Actor(pActor, name) + " 出生");
+                HistoryText.Actor(pActor, name) + HistoryLocalizationRules.H("aw_hist_person_born"));
         }
 
         /// <summary>
@@ -510,22 +529,30 @@ namespace AncientWarfare3.core.lineage
             long edgeId = pChildId * 10 + pSlot;
             string table = FamilyEdgeTableItem.GetTableName();
 
-            if (db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("EDGE_ID", edgeId)))
-            {
-                db.UpdateValue(table,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("EDGE_ID", edgeId) },
-                    ColumnVal.Create("PARENT_ID", pParentId),
-                    ColumnVal.Create("CHILD_LINEAGE_ID", pChildLineage));
-                return;
-            }
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () =>
+                {
+                    if (db.CheckKeyExist(table,
+                            SimpleColumnConstraint.CreateEq("EDGE_ID", edgeId)))
+                    {
+                        db.UpdateValue(table,
+                            new List<SimpleColumnConstraint>
+                            {
+                                SimpleColumnConstraint.CreateEq("EDGE_ID", edgeId)
+                            },
+                            ColumnVal.Create("PARENT_ID", pParentId),
+                            ColumnVal.Create("CHILD_LINEAGE_ID", pChildLineage));
+                        return;
+                    }
 
-            db.Insert(table,
-                ColumnVal.Create("EDGE_ID", edgeId),
-                ColumnVal.Create("CHILD_ID", pChildId),
-                ColumnVal.Create("PARENT_ID", pParentId),
-                ColumnVal.Create("PARENT_SLOT", pSlot),
-                ColumnVal.Create("CHILD_LINEAGE_ID", pChildLineage),
-                ColumnVal.Create("CREATED_TIME", CurTime()));
+                    db.Insert(table,
+                        ColumnVal.Create("EDGE_ID", edgeId),
+                        ColumnVal.Create("CHILD_ID", pChildId),
+                        ColumnVal.Create("PARENT_ID", pParentId),
+                        ColumnVal.Create("PARENT_SLOT", pSlot),
+                        ColumnVal.Create("CHILD_LINEAGE_ID", pChildLineage),
+                        ColumnVal.Create("CREATED_TIME", CurTime()));
+                });
         }
 
         // ───────────────────────────── 晋升 ─────────────────────────────
@@ -585,6 +612,12 @@ namespace AncientWarfare3.core.lineage
             string pOfficeId = null)
         {
             if (pActor?.data == null) return;
+            if (IsCivilizedMonkey(pActor))
+            {
+                EnsureForeignPseudoOfficialLineage(pActor, pTrigger,
+                    pOfficeId: pOfficeId);
+                return;
+            }
             pActor.data.get(LineageKeys.LINEAGE_ID, out long existing, -1);
             pActor.data.get(LineageKeys.SHI_ID, out long existingShi, -1L);
             if (HasCompleteLineageData(pActor)) return;
@@ -812,12 +845,23 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.FAMILY_NAME, out string existingFamily, "");
             pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out string chineseFamily, "");
             pActor.data.get(LineageKeys.CLAN_NAME, out string existingClan, "");
+            pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
+            pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
+            bool civilizedMonkey = IsCivilizedMonkey(pActor);
+            CivMonkeyLineageIdentity monkeyIdentity = default;
+            if (civilizedMonkey)
+            {
+                string inheritedOrExistingShi = CivMonkeyNamingRules.ResolveLineageSurname(
+                    existingShiId >= 0, existingClan, chineseFamily, existingFamily);
+                monkeyIdentity = CivMonkeyNamingContent.ResolveLineageIdentity(
+                    inheritedOrExistingShi, pActor.data.id);
+            }
             ForeignPseudoNameParts parts = ForeignPseudoLineageRules.ResolveNameParts(
                 rawName, pActor.clan?.data?.name, existingGiven, existingFamily,
                 chineseFamily, existingClan, pActor.kingdom?.name);
-
-            pActor.data.get(LineageKeys.LINEAGE_ID, out long existingLineageId, -1L);
-            pActor.data.get(LineageKeys.SHI_ID, out long existingShiId, -1L);
+            if (civilizedMonkey)
+                parts = new ForeignPseudoNameParts(parts.GivenName,
+                    monkeyIdentity.FamilyName, monkeyIdentity.ClanName);
             if (existingLineageId >= 0 && existingShiId < 0 && pTrigger == NobleTrigger.Official)
             {
                 GrantOfficialShiBranch(pActor, existingLineageId, pOfficeId);
@@ -825,6 +869,18 @@ namespace AncientWarfare3.core.lineage
                 pActor.data.get(LineageKeys.CLAN_NAME, out string grantedClan, "");
                 if (existingShiId < 0) return;
                 parts = new ForeignPseudoNameParts(parts.GivenName, parts.FamilyName, grantedClan);
+            }
+            else if (civilizedMonkey && existingLineageId >= 0 && existingShiId < 0)
+            {
+                long shiId = LineageIdAllocator.NextShiId();
+                if (shiId < 0 || string.IsNullOrEmpty(monkeyIdentity.ClanName)) return;
+                InsertShiBranch(shiId, existingLineageId, monkeyIdentity.ClanName,
+                    pActor, ShiSourceType.RANDOM);
+                pActor.data.set(LineageKeys.SHI_ID, shiId);
+                pActor.data.set(LineageKeys.CLAN_NAME, monkeyIdentity.ClanName);
+                existingShiId = shiId;
+                parts = new ForeignPseudoNameParts(parts.GivenName,
+                    monkeyIdentity.FamilyName, monkeyIdentity.ClanName);
             }
             if (existingLineageId < 0 || existingShiId < 0)
             {
@@ -862,15 +918,28 @@ namespace AncientWarfare3.core.lineage
 
             if (string.IsNullOrEmpty(existingGiven))
                 pActor.data.set(LineageKeys.GIVEN_NAME, parts.GivenName);
-            pActor.data.get(LineageKeys.FAMILY_NAME, out existingFamily, "");
-            if (string.IsNullOrEmpty(existingFamily))
-                pActor.data.set(LineageKeys.FAMILY_NAME, parts.FamilyName);
-            pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out chineseFamily, "");
-            if (string.IsNullOrEmpty(chineseFamily))
-                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, parts.FamilyName);
-            pActor.data.get(LineageKeys.CLAN_NAME, out existingClan, "");
-            if (string.IsNullOrEmpty(existingClan))
-                pActor.data.set(LineageKeys.CLAN_NAME, parts.ClanName);
+            if (civilizedMonkey)
+            {
+                string resolvedShi = parts.ClanName;
+                monkeyIdentity = CivMonkeyNamingContent.ResolveLineageIdentity(
+                    resolvedShi, pActor.data.id);
+                pActor.data.set(LineageKeys.FAMILY_NAME, monkeyIdentity.FamilyName);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
+                    monkeyIdentity.ChineseFamilyName);
+                pActor.data.set(LineageKeys.CLAN_NAME, monkeyIdentity.ClanName);
+            }
+            else
+            {
+                pActor.data.get(LineageKeys.FAMILY_NAME, out existingFamily, "");
+                if (string.IsNullOrEmpty(existingFamily))
+                    pActor.data.set(LineageKeys.FAMILY_NAME, parts.FamilyName);
+                pActor.data.get(LineageKeys.CHINESE_FAMILY_NAME, out chineseFamily, "");
+                if (string.IsNullOrEmpty(chineseFamily))
+                    pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, parts.FamilyName);
+                pActor.data.get(LineageKeys.CLAN_NAME, out existingClan, "");
+                if (string.IsNullOrEmpty(existingClan))
+                    pActor.data.set(LineageKeys.CLAN_NAME, parts.ClanName);
+            }
             pActor.data.set(LineageKeys.NAME_INTEGRATED, true);
             pActor.data.set(LineageKeys.NOBLE_DISTANCE, 0);
             pActor.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
@@ -925,6 +994,70 @@ namespace AncientWarfare3.core.lineage
             SyncExistingChildrenAfterLineageChange(pChild);
         }
 
+        internal static long EnsureFeudatoryShiBranch(Actor pPrince,
+            string pTitleName, City pSeat,
+            bool pReuseInheritedFeudatoryBranch = false)
+        {
+            if (pPrince?.data == null) return -1L;
+            EnsureLineageForNoble(pPrince, NobleTrigger.King);
+            pPrince.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
+            pPrince.data.get(LineageKeys.SHI_ID, out long currentShiId, -1L);
+            pPrince.data.get(LineageKeys.CLAN_NAME, out string clanName, "");
+            if (lineageId < 0 || currentShiId < 0 ||
+                string.IsNullOrWhiteSpace(clanName))
+                return -1L;
+
+            ShiBranchInfo current = LineageQuery.GetShiBranchInfo(currentShiId);
+            if (current?.source_type == ShiSourceType.FEUDATORY &&
+                (current.founder_actor_id == pPrince.data.id ||
+                 pReuseInheritedFeudatoryBranch))
+            {
+                pPrince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID,
+                    currentShiId);
+                return currentShiId;
+            }
+
+            pPrince.data.get(LineageKeys.FEUDATORY_BRANCH_SHI_ID,
+                out long recordedShiId, -1L);
+            ShiBranchInfo recorded = LineageQuery.GetShiBranchInfo(
+                recordedShiId);
+            if (recorded?.source_type == ShiSourceType.FEUDATORY &&
+                (recorded.founder_actor_id == pPrince.data.id ||
+                 pReuseInheritedFeudatoryBranch))
+            {
+                pPrince.data.set(LineageKeys.SHI_ID, recordedShiId);
+                if (!string.IsNullOrWhiteSpace(recorded.clan_name))
+                    pPrince.data.set(LineageKeys.CLAN_NAME,
+                        recorded.clan_name);
+                return recordedShiId;
+            }
+
+            string titleName = (pTitleName ?? "").Trim();
+            if (titleName.EndsWith("藩", StringComparison.Ordinal))
+                titleName = titleName.Substring(0, titleName.Length - 1)
+                    .Trim();
+            long newShiId = LineageIdAllocator.NextShiId();
+            if (newShiId < 0 || titleName.Length == 0) return -1L;
+            InsertShiBranch(newShiId, lineageId, clanName, pPrince,
+                ShiSourceType.FEUDATORY, currentShiId, titleName,
+                ShiSourceType.FEUDATORY,
+                pOriginKingdomId: pPrince.kingdom?.id ?? -1L,
+                pOriginCityId: pSeat?.data?.id ?? -1L);
+
+            pPrince.data.set(LineageKeys.SHI_ID, newShiId);
+            pPrince.data.set(LineageKeys.FEUDATORY_BRANCH_SHI_ID, newShiId);
+            pPrince.data.set(LineageKeys.NOBLE_DISTANCE, 0);
+            pPrince.data.set(LineageKeys.LINEAGE_STATUS, LineageStatus.NOBLE);
+            if (!pPrince.hasTrait(LineageKeys.TRAIT_GUIZU))
+                pPrince.addTrait(LineageKeys.TRAIT_GUIZU);
+            MoveExistingDescendantsToBranch(pPrince, lineageId, currentShiId,
+                newShiId, clanName);
+            ApplyDisplayName(pPrince);
+            ArchiveActor(pPrince, pAlive: true);
+            SyncExistingChildrenAfterLineageChange(pPrince);
+            return newShiId;
+        }
+
         /// <summary>
         ///     称王分封:某人称王且**建新国/夺别国**(新王所在国 ≠ 其当前氏支的 origin_kingdom_id)时,
         ///     从原氏支 + 原版 clan 脱离,**开一个新氏支**(KING_FOUNDED)成为新支始祖;子嗣此后继承新 SHI_ID 只进新支。
@@ -944,7 +1077,8 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static void OnKingFoundBranch(Kingdom pKingdom, Actor pKing, Actor pPreviousKing,
-            bool pWasRegisteredHeir, int pPreNobleDistance)
+            bool pWasRegisteredHeir, int pPreNobleDistance,
+            string pSuccessionMode = null)
         {
             if (pKingdom?.data == null || pKing?.data == null) return;
             if (KingdomIdentityContinuityService.ShouldSuppressNewKingdomEffects(pKingdom)) return;
@@ -965,7 +1099,10 @@ namespace AncientWarfare3.core.lineage
                                         recordedPreviousKingId);
             pKing.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             pKing.data.get(LineageKeys.SHI_ID, out long curShiId, -1);
-            pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE, out string successionMode, SuccessionMode.NONE);
+            string successionMode = pSuccessionMode;
+            if (string.IsNullOrEmpty(successionMode))
+                pKingdom.data.get(LineageKeys.KINGDOM_SUCCESSION_MODE,
+                    out successionMode, SuccessionMode.NONE);
             if (LineageBranchRules.ShouldApplyCollateralRestoration(
                     successionMode,
                     registeredHeir,
@@ -980,27 +1117,29 @@ namespace AncientWarfare3.core.lineage
             pKing.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedShi, -1);
             bool alreadyFoundedForKingdom = foundedShi >= 0 && LineageQuery.GetShiOriginKingdom(foundedShi) == pKingdom.id;
             // 成王前的"非嫡系代际距离"(距最近贵族祖先的代数)。setKing 前捕获;未知则回退现读(已归零→保守不建支)。
-            int cadetDistance = pPreNobleDistance;
-            if (cadetDistance < 0)
-                pKing.data.get(LineageKeys.NOBLE_DISTANCE, out cadetDistance, 0);
-            bool shouldFound = LineageBranchRules.ShouldFoundKingBranch(
-                validKingdom: pKingdom.data != null,
-                isXiaKing: IsXia(pKing) || UsesAwLineageSystem(pKing),
-                wasHeir: registeredHeir,
-                isCurrentHeir: currentHeir,
-                isDirectSuccessionFromPreviousKing: directSuccession,
-                isCollateralRestoration: successionMode == SuccessionMode.COLLATERAL_RESTORE,
-                hasLineage: lineageId >= 0,
-                hasShi: curShiId >= 0,
-                isHistoricalFigure: IsHistoricalFigure(pKing),
-                isLineageRootFounder: IsLineageRootFounder(pKing, lineageId),
-                aliveInCurrentShi: curShiId < 0 ? 0 : LineageQuery.CountAliveInShi(curShiId),
-                minAliveForNewBranch: MIN_SHI_ALIVE_FOR_NEW_BRANCH,
-                currentKingdomId: pKingdom.id,
-                originKingdomId: originKingdom,
-                alreadyFoundedForKingdom: alreadyFoundedForKingdom,
-                cadetGenerationDistance: cadetDistance,
-                minCadetDistanceForBranch: MIN_CADET_DISTANCE_FOR_NEW_BRANCH);
+            bool directHeir = registeredHeir || currentHeir;
+            bool hasTraceableAncestor = pKing.data.parent_id_1 >= 0 ||
+                                        pKing.data.parent_id_2 >= 0;
+            bool newDynastyFromPreBranchIdentity =
+                DynastyRecordWriter.WouldCreateNewDynasty(pKingdom, pKing, curShiId);
+            bool isEmpireOrMandate = KingdomTitleService.IsEmperor(pKingdom) ||
+                                     MandateService.IsMandateKingdom(pKingdom);
+            bool shouldFound = (IsXia(pKing) || UsesAwLineageSystem(pKing)) &&
+                lineageId >= 0 && curShiId >= 0 &&
+                !IsHistoricalFigure(pKing) &&
+                !IsLineageRootFounder(pKing, lineageId) &&
+                successionMode != SuccessionMode.COLLATERAL_RESTORE &&
+                LineageBranchRules.ShouldFoundCollateralBranch(
+                    newDynastyCreatedFromPreBranchIdentity:
+                        newDynastyFromPreBranchIdentity,
+                    isEmpireOrMandate: isEmpireOrMandate,
+                    collateral: !directHeir && !directSuccession,
+                    hasTraceableAncestor: hasTraceableAncestor,
+                    foreignThrone: originKingdom >= 0 && originKingdom != pKingdom.id,
+                    highInfluenceElsewhere: false,
+                    directHeir: directHeir,
+                    previousKingDirectChild: directSuccession,
+                    alreadyFoundedForDestination: alreadyFoundedForKingdom);
             if (!shouldFound) return;
 
             // Resolve the cadet branch before vanilla creates and names its visible Clan.
@@ -1014,7 +1153,9 @@ namespace AncientWarfare3.core.lineage
             long newShiId = LineageIdAllocator.NextShiId();
             if (newShiId < 0 || string.IsNullOrEmpty(seed.ClanName)) return;
             InsertShiBranch(newShiId, lineageId, seed.ClanName, pKing,
-                ShiSourceType.KING_FOUNDED, seed.ParentShiId);
+                ShiSourceType.KING_FOUNDED, seed.ParentShiId,
+                pOriginKingdomId: pKingdom.id,
+                pOriginCityId: pKingdom.capital?.data?.id ?? -1L);
 
             pKing.data.set(LineageKeys.SHI_ID, newShiId);
             pKing.data.set(LineageKeys.CLAN_NAME, seed.ClanName);
@@ -1250,15 +1391,20 @@ namespace AncientWarfare3.core.lineage
                 ? LineageStatus.COMMON
                 : LineageStatus.NOBLE;
 
-            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
-                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pChild.id) },
-                ColumnVal.Create("LINEAGE_ID", pChild.lineage_id),
-                ColumnVal.Create("SHI_ID", pChild.shi_id),
-                ColumnVal.Create("FAMILY_NAME", pChild.family_name),
-                ColumnVal.Create("CLAN_NAME", pChild.clan_name),
-                ColumnVal.Create("NOBLE_DISTANCE", pChild.noble_distance),
-                ColumnVal.Create("STATUS", pChild.status),
-                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pChild, pChild.clan_name)));
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("ID", pChild.id)
+                    },
+                    ColumnVal.Create("LINEAGE_ID", pChild.lineage_id),
+                    ColumnVal.Create("SHI_ID", pChild.shi_id),
+                    ColumnVal.Create("FAMILY_NAME", pChild.family_name),
+                    ColumnVal.Create("CLAN_NAME", pChild.clan_name),
+                    ColumnVal.Create("NOBLE_DISTANCE", pChild.noble_distance),
+                    ColumnVal.Create("STATUS", pChild.status),
+                    ColumnVal.Create("DISPLAY_NAME",
+                        BuildArchivedDisplayName(pChild, pChild.clan_name))));
             return true;
         }
 
@@ -1325,11 +1471,16 @@ namespace AncientWarfare3.core.lineage
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || pRow == null) return;
 
-            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
-                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pRow.id) },
-                ColumnVal.Create("SHI_ID", pNewShiId),
-                ColumnVal.Create("CLAN_NAME", pClanName),
-                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pRow, pClanName)));
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("ID", pRow.id)
+                    },
+                    ColumnVal.Create("SHI_ID", pNewShiId),
+                    ColumnVal.Create("CLAN_NAME", pClanName),
+                    ColumnVal.Create("DISPLAY_NAME",
+                        BuildArchivedDisplayName(pRow, pClanName))));
         }
 
         private static string BuildArchivedDisplayName(ActorArchiveTableItem pRow, string pClanName)
@@ -1338,20 +1489,9 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(given)) given = pRow.display_name ?? "";
             if (string.IsNullOrEmpty(given)) return "";
 
-            string family = pRow.family_name ?? "";
-            string status = pRow.status ?? LineageStatus.NONE;
-            if (status == LineageStatus.NOBLE)
-            {
-                if (pRow.sex == 0)
-                {
-                    string prefix = !string.IsNullOrEmpty(pClanName) ? pClanName : family;
-                    return !string.IsNullOrEmpty(prefix) ? prefix + given : given;
-                }
-
-                return !string.IsNullOrEmpty(family) ? given + family : given;
-            }
-
-            return !string.IsNullOrEmpty(pClanName) ? pClanName + given : given;
+            return LineageDisplayNameRules.Build(given, pRow.family_name,
+                pClanName, pRow.status == LineageStatus.NOBLE,
+                pRow.sex == 0, pRow.name_integrated != 0);
         }
 
         private static bool IsHistoricalFigure(Actor pActor)
@@ -1475,6 +1615,10 @@ namespace AncientWarfare3.core.lineage
         /// </summary>
         private static (string clanName, string sourceType) GenerateShiName(Actor pActor)
         {
+            if (IsCivilizedMonkey(pActor))
+                return (CivMonkeyNamingContent.ResolveLineageIdentity("",
+                    pActor.data.id).ClanName, ShiSourceType.RANDOM);
+
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
 
             bool useCityName = LineageNamePool.Rng.NextDouble() < 0.5; // 私有RNG,避免全局序列被固定播种
@@ -1493,6 +1637,10 @@ namespace AncientWarfare3.core.lineage
         private static (string clanName, string sourceType) GenerateOfficialShiName(
             Actor pActor, string pOfficeId)
         {
+            if (IsCivilizedMonkey(pActor))
+                return (CivMonkeyNamingContent.ResolveLineageIdentity("",
+                    pActor.data.id).ClanName, ShiSourceType.OFFICIAL_GRANT);
+
             int roll = LineageNamePool.Rng.Next(100);
             if (OfficialShiRules.ShouldUseHistoricalOfficeShi(roll, pOfficeId))
                 return (OfficialShiRules.HistoricalOfficeShi(pOfficeId), ShiSourceType.OFFICIAL_GRANT);
@@ -1627,34 +1775,14 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
             pActor.data.get(LineageKeys.CLAN_NAME, out string clan, "");
             pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
+            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
+                false);
 
             if (string.IsNullOrEmpty(given)) given = pActor.getName();
 
-            string display;
-
-            if (status == LineageStatus.NOBLE)
-            {
-                // 贵族沿用旧规则:男用氏(无氏则姓)+名,女用名+姓。
-                if (pActor.isSexMale())
-                {
-                    string prefix = !string.IsNullOrEmpty(clan) ? clan : family;
-                    display = !string.IsNullOrEmpty(prefix) ? prefix + given : given;
-                }
-                else
-                {
-                    display = !string.IsNullOrEmpty(family) ? given + family : given;
-                }
-            }
-            else if (!string.IsNullOrEmpty(clan))
-            {
-                // 有氏的平民/奴隶:男女一致 氏+名。
-                display = clan + given;
-            }
-            else
-            {
-                // 无氏平民 / 奴隶 / 无谱系:单名
-                display = given;
-            }
+            string display = LineageDisplayNameRules.Build(given, family,
+                clan, status == LineageStatus.NOBLE, pActor.isSexMale(),
+                integrated || IsKingdomIntegrated(pActor.kingdom));
 
             pActor.data.set("display_name", display);
 
@@ -1670,6 +1798,9 @@ namespace AncientWarfare3.core.lineage
         public static void ArchiveActor(Actor pActor, bool pAlive)
         {
             LineageArchiveWriter.Upsert(pActor, pAlive);
+            if (!pAlive)
+                FamilyTreeProjectionRevision.Advance(
+                    FamilyTreeProjectionChange.LifeStatus);
         }
 
         // ──────────────────────────── 合流国策 ────────────────────────────
@@ -1771,12 +1902,16 @@ namespace AncientWarfare3.core.lineage
 
         internal static void InsertShiBranch(long pShiId, long pLineageId, string pClanName, Actor pFounder,
             string pSourceType, long pParentShiId = -1, string pStateName = "",
-            string pStateNameSource = "")
+            string pStateNameSource = "", long pOriginKingdomId = -1L,
+            long pOriginCityId = -1L)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
             var origin = ResolveOriginIds(pFounder);
-            db.Insert(ShiBranchTableItem.GetTableName(),
+            if (pOriginKingdomId >= 0) origin.kingdomId = pOriginKingdomId;
+            if (pOriginCityId >= 0) origin.cityId = pOriginCityId;
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => db.Insert(ShiBranchTableItem.GetTableName(),
                 ColumnVal.Create("SHI_ID", pShiId),
                 ColumnVal.Create("LINEAGE_ID", pLineageId),
                 ColumnVal.Create("CLAN_NAME", pClanName),
@@ -1790,7 +1925,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("ORIGIN_CITY_ID", origin.cityId),
                 ColumnVal.Create("ORIGIN_ORIGINAL_CLAN_ID", pFounder.clan?.data?.id ?? -1),
                 ColumnVal.Create("CREATED_TIME", CurTime()),
-                ColumnVal.Create("IS_EXTINCT", 0));
+                ColumnVal.Create("IS_EXTINCT", 0)));
             if (pParentShiId >= 0)
                 RecordCadetBranchHistory(pFounder, pClanName, pShiId);
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -16,6 +17,8 @@ namespace AncientWarfare3.core.schools
 
         public static void LoadState()
         {
+            SchoolMembershipService.LoadIndexes();
+            HistoricalSchoolStore.ClearLedgerReadCache();
             HistoricalSchoolAcademyConstructionService.ClearRuntime();
             HistoricalSchoolStore.LoadRuntimeState(
                 out int eligibleYear, out int lastWorldYear);
@@ -25,11 +28,15 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolDescentService.LoadState();
             HistoricalAffiliationService.EnsureMembershipAffiliations();
             SchoolLineageService.LoadState();
+            HistoricalSchoolEliteEnrollmentService.ClearRuntime();
+            HistoricalSchoolEducationJourneyService.ClearRuntime();
+            HistoricalSchoolPopulationRecoveryService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
             HistoricalSchoolActivityQueue.LoadState();
             SchoolGuestOfficeService.LoadState();
             SchoolLandmarkService.Clear();
             HistoricalSchoolTravelService.ClearRuntime();
+            HistoricalSchoolEducationJourneyService.BeginLoadRecovery();
             HistoricalSchoolDebateService.LoadState();
             RebuildLivingXiaCityIndex();
             _lastQuarterKey = -1;
@@ -38,11 +45,16 @@ namespace AncientWarfare3.core.schools
 
         public static void ClearRuntime()
         {
+            HistoricalSchoolDiagnostics.ClearRuntime();
+            HistoricalSchoolStore.ClearLedgerReadCache();
             _lastQuarterKey = -1;
             HistoricalSchoolScheduler.Clear();
             SchoolMembershipService.ClearRuntime();
             HistoricalAffiliationService.ClearRuntime();
             SchoolLineageService.ClearRuntime();
+            HistoricalSchoolEliteEnrollmentService.ClearRuntime();
+            HistoricalSchoolEducationJourneyService.ClearRuntime();
+            HistoricalSchoolPopulationRecoveryService.ClearRuntime();
             HistoricalSchoolActionService.ClearRuntime();
             HistoricalSchoolActivityQueue.ClearRuntime();
             HistoricalSchoolWriteBufferService.Clear();
@@ -61,15 +73,64 @@ namespace AncientWarfare3.core.schools
             if (World.world == null) return;
             HistoricalSchoolScheduler.ProcessFrame();
             if (!_loaded) return;
-            HistoricalSchoolDescentService.ProcessPendingDescentReconciliations();
-            SchoolGuestOfficeService.ProcessPendingFrame();
+            HistoricalSchoolEducationJourneyService.
+                ProcessLoadRecoveryFrame();
+            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try
+            {
+                HistoricalSchoolDescentService.
+                    ProcessPendingDescentReconciliations();
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail("school_descent",
+                    diagnostic);
+            }
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { SchoolGuestOfficeService.ProcessPendingFrame(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail("school_guest_office",
+                    diagnostic);
+            }
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { HistoricalSchoolActionService.ProcessDeferredFrame(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "school_deferred_actions", diagnostic);
+            }
             HistoricalSchoolActivityQueue.ProcessFrame();
-            HistoricalSchoolWriteBufferService.ProcessFrame();
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { HistoricalSchoolWriteBufferService.ProcessFrame(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail("school_write_buffer",
+                    diagnostic);
+            }
             int month = Math.Max(1, Math.Min(12, Date.getCurrentMonth()));
             int quarterKey = Date.getCurrentYear() * 4 + (month - 1) / 3;
-            if (quarterKey == _lastQuarterKey) return;
-            _lastQuarterKey = quarterKey;
-            HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
+            if (quarterKey != _lastQuarterKey)
+            {
+                _lastQuarterKey = quarterKey;
+                diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try
+                {
+                    HistoricalSchoolTravelService.ProcessQuarter(quarterKey);
+                }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "school_travel_quarter", diagnostic);
+                }
+            }
+            diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { HistoricalSchoolTravelService.ProcessFrame(); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail("school_travel_frame",
+                    diagnostic);
+            }
         }
 
         internal static bool FlushPendingStateForSave()

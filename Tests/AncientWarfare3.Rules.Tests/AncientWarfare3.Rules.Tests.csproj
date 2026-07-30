@@ -1,0 +1,438 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs.txt" />
+    <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
+    <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
+    <Compile Include="PathfindingCursorTests.cs.txt" />
+    <Compile Include="PathfindingPerformanceTests.cs.txt" />
+    <Compile Include="RuntimePerformanceBudgetRulesTests.cs.txt" />
+    <Compile Include="CourtReplacementSqlTests.cs.txt" />
+    <Compile Include="CourtMeritRewardSqlTests.cs.txt" />
+    <Compile Include="CourtMeritRewardFlowTests.cs.txt" />
+    <Compile Include="NobleDeathSuccessionRetrySqlTests.cs.txt" />
+    <Compile Include="NobleDeathSuccessionPersistenceSqlTests.cs.txt" />
+    <Compile Include="OfficialCareerRewardCooldownPersistenceSqlTests.cs.txt" />
+    <Compile Include="OfficialCareerClosePersistenceSqlTests.cs.txt" />
+    <Compile Include="OfficialCareerActingAtomicPersistenceSqlTests.cs.txt" />
+    <Compile Include="OfficialCareerCrossLayerPersistenceSqlTests.cs.txt" />
+    <Compile Include="CivilServiceExamRulesTests.cs.txt" />
+    <Compile Include="SchoolGuestOfficeRulesTests.cs.txt" />
+    <Compile Include="CivilServiceForeignResidentSqlTests.cs.txt" />
+    <Compile Include="CivilServiceFormalCandidateSqlTests.cs.txt" />
+    <Compile Include="CivilServiceCandidatePoolSqlTests.cs.txt" />
+    <Compile Include="CivilServiceCenturySimulationSqlTests.cs.txt" />
+    <Compile Include="HistoricalSchoolEliteEnrollmentRulesTests.cs.txt" />
+    <Compile Include="HistoricalSchoolEducationCandidateSqlTests.cs.txt" />
+    <Compile Include="..\..\Code\core\court\CivilServiceExamCandidatePoolQuery.cs" Link="Production\CivilServiceExamCandidatePoolQuery.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolEliteEnrollmentRules.cs" Link="Production\HistoricalSchoolEliteEnrollmentRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolEducationCandidateQuery.cs" Link="Production\HistoricalSchoolEducationCandidateQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageKeys.cs" Link="Production\LineageKeys.cs" />
+    <Compile Include="TestOfficialCareerPersistenceStubs.cs.txt" />
+    <Compile Include="..\..\Code\core\lineage\NobleDeathSuccessionPersistence.cs" Link="Production\NobleDeathSuccessionPersistence.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerRewardCooldownPersistence.cs" Link="Production\OfficialCareerRewardCooldownPersistence.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerPersistence.cs" Link="Production\OfficialCareerPersistence.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerAppointmentResult.cs" Link="Production\OfficialCareerAppointmentResult.cs" />
+    <Compile Include="..\..\Code\core\court\CourtOfficerRecordRules.cs" Link="Production\CourtOfficerRecordRules.cs" />
+    <Compile Include="CourtDispositionSqlTests.cs.txt" />
+    <Compile Include="CourtDispositionPerformanceTests.cs.txt" />
+    <Compile Include="NameSystemRulesTests.cs.txt" />
+    <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
+    <Compile Include="TitleAtomicSqlTests.cs.txt" />
+    <Compile Include="DiplomacyTreatyPersistenceTests.cs.txt" />
+    <Compile Include="ConferredPosthumousTitleRulesTests.cs.txt" />
+    <Compile Include="ConferredPosthumousTitleSqlTests.cs.txt" />
+    <Compile Include="DiplomacyActionExpansionRulesTests.cs.txt" />
+    <Compile Include="RulerHouseholdRulesTests.cs.txt" />
+    <Compile Include="WarPeaceSettlementScopeRulesTests.cs.txt" />
+    <Compile Include="SeparatePeaceRuntimeFactsRulesTests.cs.txt" />
+    <Compile Include="WarParticipantRosterRulesTests.cs.txt" />
+    <Compile Include="DiplomacyActionSqlTests.cs.txt" />
+    <Compile Include="DiplomacyExtinctionPersistenceTests.cs.txt" />
+    <Compile Include="DiplomaticRelationModifierCacheTests.cs.txt" />
+    <Compile Include="InheritanceLawRulesTests.cs.txt" />
+    <Compile Include="SuccessionDisputeRulesTests.cs.txt" />
+    <Compile Include="SuccessionDisputeSqlTests.cs.txt" />
+    <Compile Include="GanzhiChronologyRulesTests.cs.txt" />
+    <Compile Include="HistoryUiRulesTests.cs.txt" />
+    <Compile Include="FamilyTreeLabelLayoutRulesTests.cs.txt" />
+    <Compile Include="DeferredRuntimeWorkRulesTests.cs.txt" />
+    <Compile Include="PathfindingRuntimeModeRulesTests.cs.txt" />
+    <Compile Include="ActorRacePerformanceRulesTests.cs.txt" />
+    <Compile Include="ActorBatchPerformanceRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsControllerPerformanceRulesTests.cs.txt" />
+    <Compile Include="CityMilitaryThreatFactsRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsAsyncPlanningRulesTests.cs.txt" />
+    <Compile Include="ActorKingdomSafetyRulesTests.cs.txt" />
+    <Compile Include="SchedulerLoadSafetyRulesTests.cs.txt" />
+    <Compile Include="TestArmyRtsSchedulingSettingsStub.cs.txt" />
+    <Compile Include="ActorDeathInvocationRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsAttackSpeechBubbleRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsPreDepartureDeadlineRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsReplenishmentArrivalRulesTests.cs.txt" />
+    <Compile Include="ArmyLogisticsSustainmentRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsRouteChoiceRulesTests.cs.txt" />
+    <Compile Include="TemporaryLevyRulesTests.cs.txt" />
+    <Compile Include="TemporaryLevyRecoveryRulesTests.cs.txt" />
+    <Compile Include="GarrisonSortieRuntimeIndexRulesTests.cs.txt" />
+    <Compile Include="XiaPopulationRecoveryRulesTests.cs.txt" />
+    <Compile Include="WarAiGoalSelectionRulesTests.cs.txt" />
+    <Compile Include="WarGoalSettlementRulesTests.cs.txt" />
+    <Compile Include="WarScoreBudgetRulesTests.cs.txt" />
+    <Compile Include="WarScoreBudgetServiceTests.cs.txt" />
+    <Compile Include="OccupiedCityCivilianProtectionRulesTests.cs.txt" />
+    <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
+    <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
+    <Compile Include="Regression20260721Tests.cs.txt" />
+    <Compile Include="AW3MultiplayerWorldLoadRulesTests.cs.txt" />
+    <Compile Include="AW3RuntimeRestorePipelineTests.cs.txt" />
+    <Compile Include="HistoricalFigureSpawnRulesTests.cs.txt" />
+    <Compile Include="AW3MultiplayerStrategicStateRulesTests.cs.txt" />
+    <Compile Include="AW3MultiplayerReplicationRulesTests.cs.txt" />
+    <Compile Include="AW3DiplomacyChatProviderRulesTests.cs.txt" />
+    <Compile Include="AW3MultiplayerSuccessionRulesTests.cs.txt" />
+    <Compile Include="AW3MultiplayerCatalogRulesTests.cs.txt" />
+    <Compile Include="LineageRuntimePathRulesTests.cs.txt" />
+    <Compile Include="ArmyRtsPlanPngTests.cs.txt" />
+    <Compile Include="TestLocalizationStubs.cs.txt" />
+    <Compile Include="TestModClassStub.cs.txt" />
+    <Compile Include="TestHistoricalWriteServiceStub.cs.txt" />
+    <Compile Include="TestWarTerritoryServiceStubs.cs.txt" />
+    <Compile Include="TestAw3CommandRouterStub.cs.txt" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCatalogModels.cs" Link="Production\AW3MultiplayerCatalogModels.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureDef.cs" Link="Production\HistoricalFigureDef.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureSpawnRules.cs" Link="Production\HistoricalFigureSpawnRules.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCatalog.cs" Link="Production\AW3MultiplayerCatalog.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\IAW3CommandDispatcher.cs" Link="Production\IAW3CommandDispatcher.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCommandFacade.cs" Link="Production\AW3MultiplayerCommandFacade.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerReplicaScope.cs" Link="Production\AW3MultiplayerReplicaScope.cs" />
+    <Reference Include="System.Data.SQLite">
+      <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>D:\SteamLibrary\steamapps\common\worldbox\worldbox_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Code\core\lineage\ShiBranchRules.cs" Link="Production\ShiBranchRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageDisplayNameRules.cs" Link="Production\LineageDisplayNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageBranchRules.cs" Link="Production\LineageBranchRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirTitleSelectionRules.cs" Link="Production\HeirTitleSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeProjectionRevision.cs" Link="Production\FamilyTreeProjectionRevision.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerTitleFacts.cs" Link="Production\RulerTitleFacts.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerTitleFactRules.cs" Link="Production\RulerTitleFactRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PosthumousTitleDefs.cs" Link="Production\PosthumousTitleDefs.cs" />
+    <Compile Include="..\..\Code\core\lineage\PosthumousTitleRules.cs" Link="Production\PosthumousTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FormerRulerPosthumousRules.cs" Link="Production\FormerRulerPosthumousRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\TempleTitleRules.cs" Link="Production\TempleTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\StateNameRules.cs" Link="Production\StateNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\EraNameRules.cs" Link="Production\EraNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RegnalChronologyRules.cs" Link="Production\RegnalChronologyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ReignHeaderChronologyRules.cs" Link="Production\ReignHeaderChronologyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\EraChronologyPeriodRules.cs" Link="Production\EraChronologyPeriodRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\EraAtomicPersistence.cs" Link="Production\EraAtomicPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateEraHistoryPersistence.cs" Link="Production\MandateEraHistoryPersistence.cs" />
+    <Compile Include="..\..\Code\core\db\HistoricalSynchronousWriteCoordinator.cs" Link="Production\HistoricalSynchronousWriteCoordinator.cs" />
+    <Compile Include="..\..\Code\core\lineage\PoliticalPointReservationLedger.cs" Link="Production\PoliticalPointReservationLedger.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomDecisionPriorityRules.cs" Link="Production\KingdomDecisionPriorityRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomPolicyTechOrderRules.cs" Link="Production\KingdomPolicyTechOrderRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerAppellationRules.cs" Link="Production\RulerAppellationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NameDecisionViewModel.cs" Link="Production\NameDecisionViewModel.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalRestorationRules.cs" Link="Production\RoyalRestorationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RestorationSettlementRules.cs" Link="Production\RestorationSettlementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RestorationCampaignRules.cs" Link="Production\RestorationCampaignRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RestorationUprisingRules.cs" Link="Production\RestorationUprisingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateStartRecordRules.cs" Link="Production\MandateStartRecordRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateNameProjectionRules.cs" Link="Production\MandateNameProjectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandatePhaseRules.cs" Link="Production\MandatePhaseRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateDeclineRebellionRules.cs" Link="Production\MandateDeclineRebellionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateFeudatoryCompletionRules.cs" Link="Production\MandateFeudatoryCompletionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateMilitaryPhaseRules.cs" Link="Production\MandateMilitaryPhaseRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CentralizationRules.cs" Link="Production\CentralizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FiefMilitaryRules.cs" Link="Production\FiefMilitaryRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateRitesRules.cs" Link="Production\MandateRitesRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateDeclarationRules.cs" Link="Production\MandateDeclarationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateWarDefenseRules.cs" Link="Production\MandateWarDefenseRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalFiscalRules.cs" Link="Production\VassalFiscalRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RitualDiplomacyOpinionRules.cs" Link="Production\RitualDiplomacyOpinionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarDecisionQueueRules.cs" Link="Production\WarDecisionQueueRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalObligationDecisionCodec.cs" Link="Production\VassalObligationDecisionCodec.cs" />
+    <Compile Include="..\..\Code\core\policy\CityEconomyRules.cs" Link="Production\CityEconomyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateSacrificeRules.cs" Link="Production\MandateSacrificeRules.cs" />
+    <Compile Include="..\..\Code\core\policy\RestorationInstitutionRules.cs" Link="Production\RestorationInstitutionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AristocraticSuccessionRules.cs" Link="Production\AristocraticSuccessionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\GeneralRebellionRules.cs" Link="Production\GeneralRebellionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\PeaceSettlementRules.cs" Link="Production\PeaceSettlementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarGoalSettlementRules.cs" Link="Production\WarGoalSettlementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarParticipantCityBaselineRules.cs" Link="Production\WarParticipantCityBaselineRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarParticipantMobilizationBaselineRules.cs" Link="Production\WarParticipantMobilizationBaselineRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarVictoryExhaustionRules.cs" Link="Production\WarVictoryExhaustionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarScorePersistence.cs" Link="Production\WarScorePersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarScoreService.cs" Link="Production\WarScoreService.cs" />
+    <Compile Include="..\..\Code\core\lineage\InheritanceLawRules.cs" Link="Production\InheritanceLawRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryListLayoutRules.cs" Link="Production\HistoryListLayoutRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs" Link="Production\HistoryLocalizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\InheritanceCandidateRules.cs" Link="Production\InheritanceCandidateRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirDirectSonRules.cs" Link="Production\HeirDirectSonRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SuccessionDisputeRules.cs" Link="Production\SuccessionDisputeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SuccessionDisputeDisplayRules.cs" Link="Production\SuccessionDisputeDisplayRules.cs" />
+    <Compile Include="..\..\Code\core\db\SuccessionDisputeIndexRules.cs" Link="Production\SuccessionDisputeIndexRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirMinimapScaleRules.cs" Link="Production\HeirMinimapScaleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirMinimapVisualRules.cs" Link="Production\HeirMinimapVisualRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirRegistrationRules.cs" Link="Production\HeirRegistrationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MinimapActorMarkerRules.cs" Link="Production\MinimapActorMarkerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMapInformationRules.cs" Link="Production\ArmyMapInformationRules.cs" />
+    <Compile Include="..\..\Code\core\court\CityGovernorPlacementRules.cs" Link="Production\CityGovernorPlacementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomExtinctionRules.cs" Link="Production\KingdomExtinctionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleCaptureRules.cs" Link="Production\NobleCaptureRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyCreationSafetyRules.cs" Link="Production\ArmyCreationSafetyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AllianceConversationRules.cs" Link="Production\AllianceConversationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryDynastyAssignmentRules.cs" Link="Production\HistoryDynastyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyLogisticsRules.cs" Link="Production\ArmyLogisticsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyLogisticsService.cs" Link="Production\ArmyLogisticsService.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsObjectiveRules.cs" Link="Production\ArmyRtsObjectiveRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsModels.cs" Link="Production\ArmyRtsModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsRouteChoiceRules.cs" Link="Production\ArmyRtsRouteChoiceRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsAttackSpeechBubbleRules.cs" Link="Production\ArmyRtsAttackSpeechBubbleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\GarrisonSortieRules.cs" Link="Production\GarrisonSortieRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\GarrisonSortieService.cs" Link="Production\GarrisonSortieService.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsRules.cs" Link="Production\ArmyRtsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsReplenishmentArrivalRules.cs" Link="Production\ArmyRtsReplenishmentArrivalRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyCaptainContinuityRules.cs" Link="Production\ArmyCaptainContinuityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsRuntimeMode.cs" Link="Production\ArmyRtsRuntimeMode.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsTaskOwnershipRules.cs" Link="Production\ArmyRtsTaskOwnershipRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyStallWatchdogRules.cs" Link="Production\ArmyStallWatchdogRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyFormationRules.cs" Link="Production\ArmyFormationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRetreatRules.cs" Link="Production\ArmyRetreatRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AWArmyRole.cs" Link="Production\AWArmyRole.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardArmyAssignmentRules.cs" Link="Production\RoyalGuardArmyAssignmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtManualAppointmentRules.cs" Link="Production\CourtManualAppointmentRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtDispositionRules.cs" Link="Production\CourtDispositionRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtDispositionModels.cs" Link="Production\CourtDispositionModels.cs" />
+    <Compile Include="..\..\Code\core\court\CourtDispositionPersistence.cs" Link="Production\CourtDispositionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageDispositionRules.cs" Link="Production\LineageDispositionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageDispositionPersistence.cs" Link="Production\LineageDispositionPersistence.cs" />
+    <Compile Include="..\..\Code\core\db\HistoricalContentRevision.cs" Link="Production\HistoricalContentRevision.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleRankRevocationPersistence.cs" Link="Production\NobleRankRevocationPersistence.cs" />
+    <Compile Include="..\..\Code\core\db\CourtDispositionIndexRules.cs" Link="Production\CourtDispositionIndexRules.cs" />
+    <Compile Include="..\..\Code\core\court\FeudatoryOfficeRules.cs" Link="Production\FeudatoryOfficeRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerRankRules.cs" Link="Production\OfficialCareerRankRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerBiographyRules.cs" Link="Production\OfficialCareerBiographyRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtAuxiliaryLawRules.cs" Link="Production\CourtAuxiliaryLawRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
+    <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolGuestOfficeRules.cs" Link="Production\SchoolGuestOfficeRules.cs" />
+    <Compile Include="..\..\Code\core\court\NineRankRules.cs" Link="Production\NineRankRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtPetitionRules.cs" Link="Production\CourtPetitionRules.cs" />
+    <Compile Include="..\..\Code\core\court\MinisterialPowerRules.cs" Link="Production\MinisterialPowerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AccessionIdentityRules.cs" Link="Production\AccessionIdentityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CoupRestorationRules.cs" Link="Production\CoupRestorationRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />
+    <Compile Include="..\..\Code\core\court\CourtTierRules.cs" Link="Production\CourtTierRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtInstitutionRules.cs" Link="Production\CourtInstitutionRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtInstitutionEffectRules.cs" Link="Production\CourtInstitutionEffectRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtAristocraticGroupRules.cs" Link="Production\CourtAristocraticGroupRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\OfficialShiRules.cs" Link="Production\OfficialShiRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtInfluenceRules.cs" Link="Production\CourtInfluenceRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalGuardMaintenanceRules.cs" Link="Production\RoyalGuardMaintenanceRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\StandingArmyRules.cs" Link="Production\StandingArmyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SoldierRetirementRules.cs" Link="Production\SoldierRetirementRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActiveMilitaryLifecycleRules.cs" Link="Production\ActiveMilitaryLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MilitaryRecruitmentScope.cs" Link="Production\MilitaryRecruitmentScope.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessRules.cs" Link="Production\KingdomMilitaryReadinessRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessIndex.cs" Link="Production\KingdomMilitaryReadinessIndex.cs" />
+    <Compile Include="..\..\Code\content\XiaFertilityRules.cs" Link="Production\XiaFertilityRules.cs" />
+    <Compile Include="..\..\Code\content\CivMonkeyNamingRules.cs" Link="Production\CivMonkeyNamingRules.cs" />
+    <Compile Include="..\..\Code\core\policy\CivMonkeyPolicyRules.cs" Link="Production\CivMonkeyPolicyRules.cs" />
+    <Compile Include="..\..\Code\core\policy\XiaExpansionDecisionRules.cs" Link="Production\XiaExpansionDecisionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarNoticeRules.cs" Link="Production\WarNoticeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\TemporaryLevyRules.cs" Link="Production\TemporaryLevyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\TemporaryLevyDiagnosticRules.cs" Link="Production\TemporaryLevyDiagnosticRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WartimeRecruitmentPopulationRules.cs" Link="Production\WartimeRecruitmentPopulationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyDeploymentRules.cs" Link="Production\ArmyDeploymentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveArmyFormationRules.cs" Link="Production\SlaveArmyFormationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveVanguardAssaultRules.cs" Link="Production\SlaveVanguardAssaultRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SlaveCaptureScanRules.cs" Link="Production\SlaveCaptureScanRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AWArmyRoleRules.cs" Link="Production\AWArmyRoleRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomDecisionQueueCodec.cs" Link="Production\KingdomDecisionQueueCodec.cs" />
+    <Compile Include="..\..\Code\core\policy\PoliticalPointSpendingRules.cs" Link="Production\PoliticalPointSpendingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityOccupationAccelerationRules.cs" Link="Production\CityOccupationAccelerationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\OccupiedCityCivilianProtectionRules.cs" Link="Production\OccupiedCityCivilianProtectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityOwnershipTransferRules.cs" Link="Production\CityOwnershipTransferRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RoyalAsylumRules.cs" Link="Production\RoyalAsylumRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityAttackZoneRules.cs" Link="Production\CityAttackZoneRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CityMilitaryThreatFactsRules.cs" Link="Production\CityMilitaryThreatFactsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsAsyncPlanningRules.cs" Link="Production\ArmyRtsAsyncPlanningRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyAiSafetyRules.cs" Link="Production\ArmyAiSafetyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarGoalControlRules.cs" Link="Production\WarGoalControlRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalRelationRules.cs" Link="Production\VassalRelationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalCaptureRules.cs" Link="Production\VassalCaptureRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalAnnexDecisionRules.cs" Link="Production\VassalAnnexDecisionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalAIActionRules.cs" Link="Production\VassalAIActionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarAiGoalSelectionRules.cs" Link="Production\WarAiGoalSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarTargetSelectionRules.cs" Link="Production\WarTargetSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomTitleProgressionRules.cs" Link="Production\KingdomTitleProgressionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\VassalMapModeRules.cs" Link="Production\VassalMapModeRules.cs" />
+    <Compile Include="..\..\Code\core\policy\DecisionQueueRules.cs" Link="Production\DecisionQueueRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalWarSupportRules.cs" Link="Production\VassalWarSupportRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalWarPermissionRules.cs" Link="Production\VassalWarPermissionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalNameplateFlagStateRules.cs" Link="Production\VassalNameplateFlagStateRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FormerHeirTitleRules.cs" Link="Production\FormerHeirTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FormerKingTraitRules.cs" Link="Production\FormerKingTraitRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeRelationRules.cs" Link="Production\FamilyTreeRelationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeBiographyButtonRules.cs" Link="Production\FamilyTreeBiographyButtonRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeLabelLayoutRules.cs" Link="Production\FamilyTreeLabelLayoutRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeSnapshotOverlayRules.cs" Link="Production\FamilyTreeSnapshotOverlayRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DeferredRuntimeWorkRules.cs" Link="Production\DeferredRuntimeWorkRules.cs" />
+    <Compile Include="..\..\Code\core\performance\ArmyRtsSchedulingMode.cs" Link="Production\ArmyRtsSchedulingMode.cs" />
+    <Compile Include="..\..\Code\content\XiaNameRepairRules.cs" Link="Production\XiaNameRepairRules.cs" />
+    <Compile Include="..\..\Code\content\XiaPreQinKingdomNameRules.cs" Link="Production\XiaPreQinKingdomNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizedKingdomNamingRules.cs" Link="Production\XiaizedKingdomNamingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomNameplateSuffixRules.cs" Link="Production\KingdomNameplateSuffixRules.cs" />
+    <Compile Include="..\..\Code\content\figures\HistoricalFigureMinimapRules.cs" Link="Production\HistoricalFigureMinimapRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolActivityQueueRules.cs" Link="Production\HistoricalSchoolActivityQueueRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolRecruitCandidateRules.cs" Link="Production\HistoricalSchoolRecruitCandidateRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolRecoveryRules.cs" Link="Production\HistoricalSchoolRecoveryRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolTeachingPersistenceOutcome.cs" Link="Production\HistoricalSchoolTeachingPersistenceOutcome.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolVenueRules.cs" Link="Production\HistoricalSchoolVenueRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolActiveMasterSlots.cs" Link="Production\HistoricalSchoolActiveMasterSlots.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolSchedulerRules.cs" Link="Production\HistoricalSchoolSchedulerRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolLectureRules.cs" Link="Production\HistoricalSchoolLectureRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolRevisionRules.cs" Link="Production\HistoricalSchoolRevisionRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolStandingRules.cs" Link="Production\HistoricalSchoolStandingRules.cs" />
+    <Compile Include="..\..\Code\core\schools\FormalAffiliationTransferScope.cs" Link="Production\FormalAffiliationTransferScope.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolAffiliationTransferRules.cs" Link="Production\SchoolAffiliationTransferRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolRuntimeIndex.cs" Link="Production\HistoricalSchoolRuntimeIndex.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolTaskLeaseRules.cs" Link="Production\HistoricalSchoolTaskLeaseRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolCacheRules.cs" Link="Production\HistoricalSchoolCacheRules.cs" />
+    <Compile Include="..\..\Code\core\court\CitySchoolDirtyQueue.cs" Link="Production\CitySchoolDirtyQueue.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolDiagnostics.cs" Link="Production\HistoricalSchoolDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolWriteBuffer.cs" Link="Production\HistoricalSchoolWriteBuffer.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolTravelPersistenceRules.cs" Link="Production\HistoricalSchoolTravelPersistenceRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolLedgerDecayRules.cs" Link="Production\HistoricalSchoolLedgerDecayRules.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolMembershipPersistenceRules.cs" Link="Production\SchoolMembershipPersistenceRules.cs" />
+    <Compile Include="..\..\Code\core\schools\SchoolAcademyConstructionRules.cs" Link="Production\SchoolAcademyConstructionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\SchoolMapSelectionRules.cs" Link="Production\SchoolMapSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\MandateMapMarkerRules.cs" Link="Production\MandateMapMarkerRules.cs" />
+    <Compile Include="..\..\Code\core\policy\SchoolNameplateRenderRules.cs" Link="Production\SchoolNameplateRenderRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathTypes.cs" Link="Production\AWPathTypes.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathLifecycleRules.cs" Link="Production\AWPathLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\performance\RuntimePerformanceBudgetRules.cs" Link="Production\RuntimePerformanceBudgetRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathStream.cs" Link="Production\AWPathStream.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWTraversalSnapshot.cs" Link="Production\AWTraversalSnapshot.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathRequest.cs" Link="Production\AWPathRequest.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathfindingConfig.cs" Link="Production\AWPathfindingConfig.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathfindingRuntimeMode.cs" Link="Production\AWPathfindingRuntimeMode.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWBinaryHeap.cs" Link="Production\AWBinaryHeap.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWTraversalRules.cs" Link="Production\AWTraversalRules.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWStreamingPathGenerator.cs" Link="Production\AWStreamingPathGenerator.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathDiagnostics.cs" Link="Production\AWPathDiagnostics.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathFinder.cs" Link="Production\AWPathFinder.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWPathRecoveryManager.cs" Link="Production\AWPathRecoveryManager.cs" />
+    <Compile Include="..\..\Code\core\pathfinding\AWNarrowWaterRecoveryRules.cs" Link="Production\AWNarrowWaterRecoveryRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryRules.cs" Link="Production\FeudatoryRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatorySuccessionRules.cs" Link="Production\FeudatorySuccessionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynasticTitleRules.cs" Link="Production\DynasticTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DynasticReproductionRules.cs" Link="Production\DynasticReproductionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleRankRules.cs" Link="Production\NobleRankRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleTitleNameRules.cs" Link="Production\NobleTitleNameRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\CeremonialHistoryRules.cs" Link="Production\CeremonialHistoryRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyMarchRules.cs" Link="Production\ArmyMarchRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmySharedPathRules.cs" Link="Production\ArmySharedPathRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ArmyRtsTransportRules.cs" Link="Production\ArmyRtsTransportRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WartimeGarrisonRules.cs" Link="Production\WartimeGarrisonRules.cs" />
+    <Compile Include="..\..\Code\core\policy\RecentFeatureBenchmarkRules.cs" Link="Production\RecentFeatureBenchmarkRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ActorRacePerformanceRules.cs" Link="Production\ActorRacePerformanceRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ActorBatchPerformanceRules.cs" Link="Production\ActorBatchPerformanceRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ArmyRtsControllerPerformanceRules.cs" Link="Production\ArmyRtsControllerPerformanceRules.cs" />
+    <Compile Include="..\..\Code\core\performance\AWFrameSchedulerRules.cs" Link="Production\AWFrameSchedulerRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryWriteTimingRules.cs" Link="Production\HistoryWriteTimingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorProfessionLoadSafetyRules.cs" Link="Production\ActorProfessionLoadSafetyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ActorKingdomSafetyRules.cs" Link="Production\ActorKingdomSafetyRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ActorDeathPerformanceRules.cs" Link="Production\ActorDeathPerformanceRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomFoodReliefRules.cs" Link="Production\KingdomFoodReliefRules.cs" />
+    <Compile Include="..\..\Code\core\policy\CityMaintenanceBenchmarkRules.cs" Link="Production\CityMaintenanceBenchmarkRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomAnnualWorkRules.cs" Link="Production\KingdomAnnualWorkRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryFavorRules.cs" Link="Production\FeudatoryFavorRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryAutonomyRules.cs" Link="Production\FeudatoryAutonomyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryRevocationRules.cs" Link="Production\FeudatoryRevocationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryJingnanRules.cs" Link="Production\FeudatoryJingnanRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatoryJingnanRiskRules.cs" Link="Production\FeudatoryJingnanRiskRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyConversationRules.cs" Link="Production\DiplomacyConversationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyOpinionRules.cs" Link="Production\DiplomacyOpinionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyProposalRules.cs" Link="Production\DiplomacyProposalRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyActionExpansionRules.cs" Link="Production\DiplomacyActionExpansionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerHouseholdRules.cs" Link="Production\RulerHouseholdRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPeaceSettlementScopeRules.cs" Link="Production\WarPeaceSettlementScopeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SeparatePeaceRuntimeFactsRules.cs" Link="Production\SeparatePeaceRuntimeFactsRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarParticipantRosterRules.cs" Link="Production\WarParticipantRosterRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarParticipantLifecycleRules.cs" Link="Production\WarParticipantLifecycleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomaticRelationModifierCache.cs" Link="Production\DiplomaticRelationModifierCache.cs" />
+    <Compile Include="..\..\Code\core\db\DiplomacyActionIndexRules.cs" Link="Production\DiplomacyActionIndexRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomaticMarriageQuery.cs" Link="Production\DiplomaticMarriageQuery.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyTreatyPersistence.cs" Link="Production\DiplomacyTreatyPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyExtinctionPersistence.cs" Link="Production\DiplomacyExtinctionPersistence.cs" />
+    <Compile Include="..\..\Code\ui\AWWindowCreationRules.cs" Link="Production\AWWindowCreationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarPlotRedirectRules.cs" Link="Production\WarPlotRedirectRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatorySnapshot.cs" Link="Production\FeudatorySnapshot.cs" />
+    <Compile Include="..\..\Code\core\lineage\FeudatorySelectionRules.cs" Link="Production\FeudatorySelectionRules.cs" />
+    <Compile Include="..\..\Code\core\policy\FeudatoryMapModeRules.cs" Link="Production\FeudatoryMapModeRules.cs" />
+    <Compile Include="..\..\Code\ui\AWLineageTabLayoutRules.cs" Link="Production\AWLineageTabLayoutRules.cs" />
+    <Compile Include="..\..\Code\ui\AWPowerButtonVisualRules.cs" Link="Production\AWPowerButtonVisualRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ConferredPosthumousTitleRules.cs" Link="Production\ConferredPosthumousTitleRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ConferredPosthumousTitleQuery.cs" Link="Production\ConferredPosthumousTitleQuery.cs" />
+    <Compile Include="..\..\Code\core\lineage\ConferredPosthumousFactRules.cs" Link="Production\ConferredPosthumousFactRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ConferredPosthumousTitleFactService.cs" Link="Production\ConferredPosthumousTitleFactService.cs" />
+    <Compile Include="..\..\Code\core\lineage\GanzhiChronologyRules.cs" Link="Production\GanzhiChronologyRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\MandateDecisionAiRules.cs" Link="Production\MandateDecisionAiRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtMeritRewardRules.cs" Link="Production\CourtMeritRewardRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtMeritRewardCandidateQuery.cs" Link="Production\CourtMeritRewardCandidateQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CourtRepairOrchestration.cs" Link="Production\CourtRepairOrchestration.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleDeathSuccessionRetryQueue.cs" Link="Production\NobleDeathSuccessionRetryQueue.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyProposalAiRules.cs" Link="Production\DiplomacyProposalAiRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOrderRules.cs" Link="Production\DiplomacyProposalOrderRules.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadModels.cs" Link="Production\AW3MultiplayerWorldLoadModels.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerWorldLoadOperation.cs" Link="Production\AW3MultiplayerWorldLoadOperation.cs" />
+    <Compile Include="..\..\Code\core\multiplayer\AW3RuntimeRestorePipeline.cs" Link="Production\AW3RuntimeRestorePipeline.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerStrategicStateModels.cs" Link="Production\AW3MultiplayerStrategicStateModels.cs" />
+    <Compile Include="..\..\Code\core\multiplayer\AW3MultiplayerStrategicStateCoordinator.cs" Link="Production\AW3MultiplayerStrategicStateCoordinator.cs" />
+    <Compile Include="..\..\Code\api\commands\ArmyRtsCommandModels.cs" Link="Production\ArmyRtsCommandModels.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerReplicationModels.cs" Link="Production\AW3MultiplayerReplicationModels.cs" />
+    <Compile Include="..\..\Code\core\multiplayer\AW3MultiplayerReplicationCoordinator.cs" Link="Production\AW3MultiplayerReplicationCoordinator.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\IAW3DiplomacyChatProvider.cs" Link="Production\IAW3DiplomacyChatProvider.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerDiplomacyChatFacade.cs" Link="Production\AW3MultiplayerDiplomacyChatFacade.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\IAW3MultiplayerSuccessionProvider.cs" Link="Production\IAW3MultiplayerSuccessionProvider.cs" />
+    <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerSuccessionFacade.cs" Link="Production\AW3MultiplayerSuccessionFacade.cs" />
+    <Compile Include="..\..\Code\core\db\LineageRuntimePathRules.cs" Link="Production\LineageRuntimePathRules.cs" />
+    <Compile Include="..\..\Code\core\policy\ActorDeathInvocationRules.cs" Link="Production\ActorDeathInvocationRules.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanModels.cs" Link="Production\ArmyRtsPlanModels.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanRules.cs" Link="Production\ArmyRtsPlanRules.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanPalette.cs" Link="Production\ArmyRtsPlanPalette.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanTerrainBuilder.cs" Link="Production\ArmyRtsPlanTerrainBuilder.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanRasterizer.cs" Link="Production\ArmyRtsPlanRasterizer.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanGifEncoder.cs" Link="Production\ArmyRtsPlanGifEncoder.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanSequenceLedger.cs" Link="Production\ArmyRtsPlanSequenceLedger.cs" />
+    <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkQueue.cs" Link="Production\AWAsyncWorkQueue.cs" />
+    <Compile Include="..\..\Code\core\presentation\ArmyRtsPlanArtifactWriter.cs" Link="Production\ArmyRtsPlanArtifactWriter.cs" />
+  </ItemGroup>
+</Project>

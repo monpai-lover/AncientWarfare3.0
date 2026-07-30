@@ -4,6 +4,37 @@ using System.Threading;
 
 namespace AncientWarfare3.core.pathfinding
 {
+    public static class AWTraversalCacheBudgetRules
+    {
+        public const int DirtyPublishIntervalFrames = 4;
+        public const int DirtyChunkBudget = 8;
+        public const int AverageDirtyChunkBudgetPerFrame =
+            DirtyChunkBudget / DirtyPublishIntervalFrames;
+        public const int ConsistencySweepIntervalFrames = 16;
+        public const int ConsistencyTileBudget = 16;
+        public const int MaximumDirtyTilesPerFrame = AverageDirtyChunkBudgetPerFrame *
+                                                    AWTraversalGeneration.DefaultChunkSize *
+                                                    AWTraversalGeneration.DefaultChunkSize;
+
+        public static bool ShouldProcessDirty(long frame, int dirtyChunkCount)
+        {
+            return dirtyChunkCount > 0 &&
+                   frame > 0 &&
+                   frame % DirtyPublishIntervalFrames == 0;
+        }
+
+        public static int DirtyChunkBudgetForFrame(int dirtyChunkCount)
+        {
+            return Math.Min(DirtyChunkBudget, Math.Max(0, dirtyChunkCount));
+        }
+
+        public static bool ShouldRunConsistencySweep(long frame)
+        {
+            return frame > 0 &&
+                   frame % ConsistencySweepIntervalFrames == 0;
+        }
+    }
+
     public readonly struct AWTileTraversalSnapshot
     {
         private readonly int _neighbor0;
@@ -98,7 +129,8 @@ namespace AncientWarfare3.core.pathfinding
             bool pForceLandCreature, bool pImmuneToFire, bool pDamagedByOcean,
             bool pDiesInLava, bool pBurning, bool pStartsInLiquid, bool pStartsInWater,
             float pHealth, float pMaxHealth, float pStamina, float pMaxStamina,
-            float pMovementSpeed, float pWaterDamage, float pStaminaRegeneration)
+            float pMovementSpeed, float pWaterDamage, float pStaminaRegeneration,
+            bool pIsMilitary = false)
         {
             CanFly = pCanFly;
             IsBoat = pIsBoat;
@@ -117,6 +149,7 @@ namespace AncientWarfare3.core.pathfinding
             MovementSpeed = Math.Max(0.01f, pMovementSpeed);
             WaterDamage = Math.Max(0f, pWaterDamage);
             StaminaRegeneration = Math.Max(0f, pStaminaRegeneration);
+            IsMilitary = pIsMilitary;
         }
 
         public bool CanFly { get; }
@@ -136,6 +169,7 @@ namespace AncientWarfare3.core.pathfinding
         public float MovementSpeed { get; }
         public float WaterDamage { get; }
         public float StaminaRegeneration { get; }
+        public bool IsMilitary { get; }
 
         public static AWActorTraversalProfile CreateWalker(float health, float stamina, float speed)
         {
@@ -146,7 +180,7 @@ namespace AncientWarfare3.core.pathfinding
 
     public sealed class AWTraversalGeneration : IDisposable
     {
-        public const int DefaultChunkSize = 32;
+        public const int DefaultChunkSize = 8;
 
         private readonly AWTileTraversalSnapshot[][] _chunks;
         private int _references = 1;

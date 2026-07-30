@@ -30,6 +30,24 @@ namespace AncientWarfare3.core.lineage
             return homeAlive && monarchy && hasDefensiveWar && hostAvailable;
         }
 
+        public static bool NeedsAnnualProcessing(bool hasDefensiveWar,
+            int rosterCount)
+        {
+            return hasDefensiveWar || rosterCount > 0;
+        }
+
+        public static bool NeedsProtectedFamilyScan(bool homeAlive,
+            bool monarchy, bool hasDefensiveWar)
+        {
+            return homeAlive && monarchy && hasDefensiveWar;
+        }
+
+        public static bool ShouldBuildHostCandidates(bool hasPendingEvacuee,
+            bool hostCandidatesBuilt)
+        {
+            return hasPendingEvacuee && !hostCandidatesBuilt;
+        }
+
         public static bool ShouldReturn(bool homeRealmAlive, bool hasDefensiveWar)
         {
             return homeRealmAlive && !hasDefensiveWar;

@@ -1,0 +1,69 @@
+key,cz,en,ch
+aw_ruler_household,后宫,Ruler Household,後宮
+aw_ruler_household_offer,提供后妃,Offer Consort,提供後妃
+aw_household_button,后宫,Household,後宮
+aw_household_button_desc,查看君主的正妻、妾室及子女情况,View the ruler's principal wife consorts and children,查看君主的正妻、妾室及子女情況
+aw_diplomacy_action_household_offering,提供后妃,Offer Consort,提供後妃
+aw_household_kind_principal_wife,正妻,Principal Wife,正妻
+aw_household_kind_consort,妾室,Consort,妾室
+aw_household_offer_our_noblewomen,本国贵族宗族女子,Our Noblewomen,本國貴族宗族女子
+aw_household_offer_recipient_ruler,受纳君主,Recipient Ruler,受納君主
+aw_household_offer_confirm,发出后妃提议,Send Household Proposal,發出後妃提議
+aw_household_offer_back_diplomacy,返回外交,Back to Diplomacy,返回外交
+aw_household_offer_no_candidate,无合适女子,No Eligible Candidate,無合適女子
+aw_household_offer_ready,选择一名贵族宗族女子并发出提议,Select a noblewoman and send the proposal,選擇一名貴族宗族女子並發出提議
+aw_household_consort_capacity,妾室,Consorts,妾室
+aw_household_section_principal_wife,正妻,Principal Wife,正妻
+aw_household_section_consorts,妾室,Consorts,妾室
+aw_household_empty_principal_wife,尚无正妻,No Principal Wife,尚無正妻
+aw_household_empty_consorts,尚无妾室,No Consorts,尚無妾室
+aw_household_unavailable,后宫档案不可用,Household Unavailable,後宮檔案不可用
+aw_household_unknown,不详,Unknown,不詳
+aw_household_age,年龄,Age,年齡
+aw_household_origin,出身国,Origin Realm,出身國
+aw_household_lineage,宗族,Lineage,宗族
+aw_household_entry_year,入宫年,Entry Year,入宮年
+aw_household_living_children,在世子女,Living Children,在世子女
+aw_household_status_active,在宫,In Household,在宮
+aw_household_status_unavailable,情况不明,Unavailable,情況不明
+aw_household_title_empress,皇后,Empress,皇后
+aw_household_title_queen,王后,Queen,王后
+aw_household_title_principal_wife,正妻,Principal Wife,正妻
+aw_household_title_imperial_consort,帝妃,Imperial Consort,帝妃
+aw_household_title_royal_consort,王妃,Royal Consort,王妃
+aw_household_title_secondary_consort,妾室,Consort,妾室
+aw_diplomacy_household_unknown_person,宫中人,Court Member,宮中人
+aw_diplomacy_household_offer_subject,{0}：拟以{1}为{2}之{3},{0}: offer {1} to {2} as {3},{0}：擬以{1}為{2}之{3}
+aw_household_reply_principal_accept,{0}答复：纳其为正妻。,{0} replies: We accept her as principal wife.,{0}答覆：納其為正妻。
+aw_household_reply_principal_reject,{0}答复：正妻之议不纳。,{0} replies: We decline this principal-wife offer.,{0}答覆：正妻之議不納。
+aw_household_reply_consort_accept,{0}答复：纳其为妾室。,{0} replies: We accept her as consort.,{0}答覆：納其為妾室。
+aw_household_reply_consort_reject,{0}答复：妾室之议不纳。,{0} replies: We decline this consort offer.,{0}答覆：妾室之議不納。
+aw_household_failure_not_ready,谱牒与后宫档案尚未就绪,The household archive is not ready,譜牒與後宮檔案尚未就緒
+aw_household_failure_realms,两国当前不能进行后妃提议,The two realms cannot make this household offer,兩國當前不能進行後妃提議
+aw_household_failure_ruler,受纳君主已不符合条件,The recipient ruler is no longer eligible,受納君主已不符合條件
+aw_household_failure_candidate_domestic,所选女子必须属于本国,The offered woman must belong to our realm,所選女子必須屬於本國
+aw_household_failure_candidate_female,只能选择女子,Only a woman may be offered,只能選擇女子
+aw_household_failure_candidate_age,只能选择18至33岁的适龄女子,The noblewoman must be 18 to 33 years old,只能選擇18至33歲的適齡女子
+aw_household_failure_candidate_not_noble_lineage,只能从已有姓族与氏支的贵族宗族女子中选择,The woman must belong to an established noble clan,只能從已有姓族與氏支的貴族宗族女子中選擇
+aw_household_failure_candidate_ruler,不能把在位君主作为后妃人选,A reigning ruler cannot be offered,不能把在位君主作為後妃人選
+aw_household_failure_candidate_slave,奴隶不能作为后妃人选,A slave cannot be offered,奴隸不能作為後妃人選
+aw_household_failure_candidate_married,所选女子已经婚配,The noblewoman is already married,所選女子已經婚配
+aw_household_failure_candidate_household,所选女子已经属于其他君主后宫,The noblewoman already belongs to a ruler household,所選女子已經屬於其他君主後宮
+aw_household_failure_related,所选女子与受纳君主血缘过近,The woman is too closely related to the ruler,所選女子與受納君主血緣過近
+aw_household_failure_principal_wife_exists,该君主已有正妻,The ruler already has a principal wife,該君主已有正妻
+aw_household_failure_consort_capacity_full,该君主的妾室名额已满,The ruler household has no open consort position,該君主的妾室名額已滿
+aw_household_failure_no_candidate,本国没有符合条件的贵族宗族适龄女子,Our realm has no eligible noblewoman,本國沒有符合條件的貴族宗族適齡女子
+aw_household_failure_migration,所选女子无法迁入受纳国都,The noblewoman could not enter the recipient capital,所選女子無法遷入受納國都
+aw_hist_household_principal_wife_accepted,入宫为正妻，配于, entered the court as principal wife of ,入宮為正妻，配於
+aw_hist_household_consort_accepted,入宫为妾室，侍于, entered the court as consort of ,入宮為妾室，侍於
+aw_ruler_household_request_select,择女应请,Select Requested Consort,擇女應請
+aw_household_request_select_ready,选择一名贵族宗族女子回应对方求妃,Select a noblewoman to answer the consort request,選擇一名貴族宗族女子回應對方求妃
+aw_household_request_confirm,提供妃子,Provide Consort,提供妃子
+aw_diplomacy_action_consort_request,请求妃子,Request Consort,請求妃子
+aw_diplomacy_consort_request_subject,{0}：请贵国择一宗族女子入侍{1}为妾室,{0}: choose a noblewoman to serve {1} as consort,{0}：請貴國擇一宗族女子入侍{1}為妾室
+aw_household_reply_request_accept,{0}答复：愿择宗族女子入侍。,{0} replies: We shall provide a consort.,{0}答覆：願擇宗族女子入侍。
+aw_household_reply_request_reject,{0}答复：求妃之请不纳。,{0} replies: We cannot provide a consort.,{0}答覆：求妃之請不納。
+aw_household_failure_request_independence,仅独立国家之间可以请求提供妃子,Only independent realms may exchange a requested consort,僅獨立國家之間可以請求提供妃子
+aw_household_failure_request_relation,两国关系尚不足以提出求妃,Relations are not close enough for this request,兩國關係尚不足以提出求妃
+aw_household_failure_request_selection,接受前须先选择一名合适女子,Select an eligible noblewoman before accepting,接受前須先選擇一名合適女子
+aw_household_failure_candidate_selected,该请求已经选定其他女子,Another candidate has already been selected,該請求已經選定其他女子

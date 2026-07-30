@@ -1,0 +1,45 @@
+using AncientWarfare3.core.lineage;
+
+internal static class HistoryUiRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(8, HistoryListLayoutRules.BodyFontSize,
+            "chronicle body text uses compact readable typography");
+        Equal(22f, HistoryListLayoutRules.BaseRowHeight,
+            "single-line chronicle rows avoid oversized padding");
+        Equal(30f, HistoryListLayoutRules.EstimateHeight(
+                "<color=#00FF00>二十五字长度的编年史条目会被紧凑地排成两行显示</color>",
+                220f),
+            "wrapped chronicle rows use compact line spacing");
+        Equal(48, ReignHeaderChronologyRules.CalculateReignYear(
+                1, 8, 1, 49, 5, 9),
+            "a reign ending before its anniversary does not overcount");
+        Equal("\u7532\u5b50 \u5468\u4f2f\u53d1\u5143\u5e74-" +
+              "\u58ec\u5b50 \u5468\u4f2f\u53d1\u56db\u5341\u516b\u5e74",
+            ReignHeaderChronologyRules.FormatSpan(
+                "\u7532\u5b50", "\u5468\u4f2f\u53d1\u5143\u5e74",
+                "\u58ec\u5b50", "\u5468\u4f2f\u53d1\u56db\u5341\u516b\u5e74"),
+            "reign headers contain only ganzhi and regnal chronology");
+        Equal("\u7532\u5b50 \u54b8\u4ea8\u5143\u5e74",
+            ReignHeaderChronologyRules.FormatSpan(
+                "\u7532\u5b50", "\u54b8\u4ea8\u5143\u5e74",
+                "\u7532\u5b50", "\u54b8\u4ea8\u5143\u5e74"),
+            "a single-year chronology endpoint is rendered once");
+        Equal(false, EraChronologyPeriodRules.OverlapsReign(
+                pEraStart: 20d, pEraEnd: 30d,
+                pReignStart: 10d, pReignEnd: 20d),
+            "an era beginning at the previous reign end belongs only to the later interval");
+        Equal(true, EraChronologyPeriodRules.OverlapsReign(
+                pEraStart: 20d, pEraEnd: 30d,
+                pReignStart: 20d, pReignEnd: 40d),
+            "the same boundary is included by the later half-open interval");
+    }
+}

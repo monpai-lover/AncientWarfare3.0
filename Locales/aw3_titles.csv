@@ -1,4 +1,45 @@
 key,cz,en,ch
+aw_name_decision Title,国号决议,State Name Decision,國號決議
+aw_conferred_posthumous Title,追谥赠谥,Confer Posthumous Title,追諡贈諡
+aw_hist_event_conferred_posthumous,赠谥,Posthumous Conferment,贈諡
+aw_hist_conferred_posthumous_edict,故{0}，{1}，赠谥{2}。,The late {0}; {1}; is posthumously titled {2}.,故{0}，{1}，贈諡{2}。
+aw3_year_conferred_posthumous,年度赠谥,Annual posthumous conferment,年度贈諡
+aw_conferred_window_title,追谥赠谥,Confer Posthumous Title,追諡贈諡
+aw_conferred_action,赠谥,Confer posthumous title,贈諡
+aw_conferred_action_desc,审阅系统依生平事实评定的谥号,Review the title evaluated from recorded life facts,審閱系統依生平事實評定的諡號
+aw_conferred_unavailable,当前不可赠谥,Conferment unavailable,目前不可贈諡
+aw_conferred_confirm,颁诏,Issue decree,頒詔
+aw_conferred_unknown_actor,佚名,Unknown person,佚名
+aw_conferred_relationship,与本国关系,Relationship to this realm,與本國關係
+aw_conferred_proposed,拟授谥号,Proposed title,擬授諡號
+aw_conferred_title_meaning,谥义,Title meaning,諡義
+aw_conferred_major_deeds,主要功绩,Major deeds,主要功績
+aw_conferred_highest_office,最高官职,Highest office,最高官職
+aw_conferred_noble_title,正式爵号,Noble title,正式爵號
+aw_conferred_none,无,None,無
+aw_conferred_existing,已有谥号,Existing posthumous title,已有諡號
+aw_conferred_deeds_civil,文治,Civil merit,文治
+aw_conferred_deeds_military,武功,Military merit,武功
+aw_conferred_deeds_tenure,任职年数,Years served,任職年數
+aw_conferred_role_former_king,本国故君,Former ruler of this realm,本國故君
+aw_conferred_role_royal_clan,本国宗室,Royal clan of this realm,本國宗室
+aw_conferred_role_general,本国故将,Former general of this realm,本國故將
+aw_conferred_role_official,本国故臣,Former official of this realm,本國故臣
+aw_conferred_result_invalid_kingdom,当前王国不存在或没有在位君主,The granting realm is unavailable or has no ruler,目前王國不存在或沒有在位君主
+aw_conferred_result_missing_context,必须由所属王国的历史关系进入人物传记,Open the biography through a recorded realm relationship,必須由所屬王國的歷史關係進入人物傳記
+aw_conferred_result_missing_archive,没有找到该人物的死亡档案,The archived death record is missing,沒有找到該人物的死亡檔案
+aw_conferred_result_target_living,在世人物不能追赠谥号,A living person cannot receive a posthumous title,在世人物不能追贈諡號
+aw_conferred_result_no_relationship,没有可核验的本国宗室仕途或军功记录,No verified royal civil or military service exists in this realm,沒有可核驗的本國宗室仕途或軍功記錄
+aw_conferred_result_already_titled,该人物已有正式谥号,This person already has a formal posthumous title,該人物已有正式諡號
+aw_conferred_result_cooldown,本国尚需等待{0}年方可再次赠谥,This realm must wait {0} more years before another conferment,本國尚需等待{0}年方可再次贈諡
+aw_conferred_result_no_title,没有可用且符合生平评价的谥号,No suitable unused posthumous title is available,沒有可用且符合生平評價的諡號
+aw_conferred_result_stale,人物或王国状态已经变化请重新审阅,The person or realm changed; review the title again,人物或王國狀態已經變化請重新審閱
+aw_conferred_result_persistence_failed,赠谥事务写入失败且未改变任何记录,The conferment transaction failed without changing records,贈諡事務寫入失敗且未改變任何記錄
+aw_conferred_result_unavailable,当前不符合赠谥条件,The current conditions do not permit conferment,目前不符合贈諡條件
+aw_hist_event_accession_book,册书即位,Accession Book,冊書即位
+aw_hist_accession_book_prefix,册曰：惟尔,Accession book: ,冊曰：惟爾
+aw_hist_accession_book_mid,承宗庙社稷，入奉, is charged to inherit the ancestral rites and assume the rule of ,承宗廟社稷，入奉
+aw_hist_accession_book_suffix,之祀，谨承大统，布政安民。, and govern the people.,之祀，謹承大統，布政安民。
 aw_title_era_window,改元,Change Era,改元
 aw_title_preview,最终称呼,Appellation Preview,最終稱呼
 aw_title_era_candidates,未用历史年号：{0},Unused historical eras: {0},未用歷史年號：{0}
@@ -9,7 +50,7 @@ aw_title_confirm,确认改元,Confirm,確認改元
 aw_title_cancel,取消,Cancel,取消
 aw_title_committing,正在颁诏,Committing,正在頒詔
 aw_ruler_appellation,礼制称呼,Ritual Appellation,禮制稱呼
-aw_ruler_real_name,君主本名,Ruler Name,君主本名
+aw_ruler_real_name,本名,Personal Name,本名
 aw_title_rank_bo,伯,Count,伯
 aw_title_rank_hou,侯,Marquis,侯
 aw_title_rank_gong,公,Duke,公
@@ -17,6 +58,7 @@ aw_title_rank_king,王,King,王
 aw_title_rank_emperor,皇帝,Emperor,皇帝
 aw_title_rank_republic,元首,Head of State,元首
 aw_parent_shi_label,父氏支：,Parent Shi: ,父氏支：
+aw_branch_shi_label,分支氏：,Branch Shi: ,分支氏：
 aw_root_shi_label,本家：,Root Shi: ,本家：
 aw_shi_origin_city_label,发祥城：,Origin city: ,發祥城：
 aw_state_name_label,国号：,State name: ,國號：
@@ -39,10 +81,115 @@ aw_title_error_unknown,当前不能改元,The era cannot be changed,目前不能
 aw_hist_title_awarded,{0}获赐称号{1},{0} received the title {1},{0}獲賜稱號{1}
 aw_hist_title_accession_era,{0}即位并建元{1}称{2},{0} acceded and proclaimed the {1} era as {2},{0}即位並建元{1}稱{2}
 aw_hist_title_voluntary_era,{0}以{1}改元{2},{0} changed the era to {2} because of {1},{0}以{1}改元{2}
+aw_hist_edict_accession_era,{0}践祚，改元{1}，大赦天下；自今称{2}。,{0} ascended the throne and proclaimed the {1} era; a general amnesty followed and the ruler would henceforth be styled {2}.,{0}踐祚，改元{1}，大赦天下；自今稱{2}。
+aw_hist_edict_imperial_proclamation,制曰：{0}应天受命，称帝建元{1}；自今称{2}。,Edict: {0} received Heaven's charge and proclaimed the imperial title with the {1} era; henceforth styled {2}.,制曰：{0}應天受命，稱帝建元{1}；自今稱{2}。
+aw_hist_edict_voluntary_era,制曰：{0}因{1}，改元{2}，与民更始。,Edict: {0} proclaimed the {2} era on account of {1}; the realm shall begin anew.,制曰：{0}因{1}，改元{2}，與民更始。
 aw_hist_title_state_name,{0}立国号为{1},{0} established the state name {1},{0}立國號為{1}
 aw_hist_title_retrospective,{0}追尊{1}为{2},{0} retrospectively honored {1} as {2},{0}追尊{1}為{2}
 aw_hist_title_shi_branch,{0}由{1}分出{2},{0} founded {2} from {1},{0}由{1}分出{2}
+aw_hist_edict_temple_posthumous,先君{0}，{1}；考其行而议其谥：{2}。今上尊号{3}，庙号{4}。,Former ruler {0}: {1}. The posthumous canon records: {2}. We confer {3} with temple name {4}.,先君{0}，{1}；考其行而議其諡：{2}。今上尊號{3}，廟號{4}。
+aw_hist_edict_posthumous,先君{0}，{1}；考其行而议其谥：{2}。今上尊号{3}。,Former ruler {0}: {1}. The posthumous canon records: {2}. We confer {3}.,先君{0}，{1}；考其行而議其諡：{2}。今上尊號{3}。
+aw_hist_edict_abdication,{0}逊位退居，{1}；考其行曰：{2}。今尊为{3}，以全终始之礼。,{0} abdicated and withdrew: {1}. The canon records: {2}. We honor the former ruler as {3}.,{0}遜位退居，{1}；考其行曰：{2}。今尊為{3}，以全終始之禮。
+aw_hist_edict_deposed,{0}失德废位，{1}；据其行迹曰：{2}。今黜号为{3}，以示褒贬。,{0} was deposed for failed rule: {1}. The record states: {2}. The censured title shall be {3}.,{0}失德廢位，{1}；據其行跡曰：{2}。今黜號為{3}，以示褒貶。
+aw_hist_edict_evaluation,考课,Assessment,考課
+aw_hist_edict_life_civil_positive,经纬邦国，明德慎罚,Ordered the realm with enlightened virtue and measured punishments,經緯邦國，明德慎罰
+aw_hist_edict_life_civil_neutral,守成循旧，得失相参,Preserved established rule with mixed merits and faults,守成循舊，得失相參
+aw_hist_edict_life_civil_negative,政令多舛，纲纪渐弛,Issued troubled decrees as institutions declined,政令多舛，綱紀漸弛
+aw_hist_edict_life_territory_positive,拓土绥民，疆宇日广,Expanded the realm while pacifying its people,拓土綏民，疆宇日廣
+aw_hist_edict_life_territory_neutral,疆域有守，进退相仍,Held the borders with gains and losses in balance,疆域有守，進退相仍
+aw_hist_edict_life_territory_negative,失地废守，封疆日蹙,Lost defended lands as the frontiers contracted,失地廢守，封疆日蹙
+aw_hist_edict_life_war_positive,戡乱却敌，武功克著,Suppressed disorder and repelled enemies with manifest martial merit,戡亂卻敵，武功克著
+aw_hist_edict_life_war_neutral,兵戎互有胜负，功过相半,Met victory and defeat in war with merit and fault alike,兵戎互有勝負，功過相半
+aw_hist_edict_life_war_negative,师旅屡衄，生民罹兵,Suffered repeated defeats while the people bore the wars,師旅屢衄，生民罹兵
+aw_hist_edict_life_order_positive,内辑百姓，外和邦国,United the people within and kept peace among realms,內輯百姓，外和邦國
+aw_hist_edict_life_order_neutral,治乱相杂，群情未一,Left order and disorder intertwined with divided loyalties,治亂相雜，群情未一
+aw_hist_edict_life_order_negative,法度陵夷，群情离散,Allowed law and institutions to decay as loyalties scattered,法度陵夷，群情離散
+aw_hist_edict_life_ending_positive,善始克终，身后称颂,Began well and ended well and was praised thereafter,善始克終，身後稱頌
+aw_hist_edict_life_ending_neutral,终局平常，哀荣如制,Met an ordinary end and received the customary honors,終局平常，哀榮如制
+aw_hist_edict_life_ending_negative,国遭忧患，身罹非命,Met calamity in the realm and an untimely end,國遭憂患，身罹非命
+aw_hist_edict_life_balanced_positive,功德兼隆，文武并著,Joined civil virtue and martial achievement in high renown,功德兼隆，文武並著
+aw_hist_edict_life_balanced_neutral,功过并陈，是非相半,Left merit and fault together with praise and blame balanced,功過並陳，是非相半
+aw_hist_edict_life_balanced_negative,悖礼败度，失德于天下,Violated rites and institutions and lost virtue before the realm,悖禮敗度，失德於天下
+aw_hist_posthumous_meaning_6587,经纬天地曰文,Ordering Heaven and Earth is called Wen,經緯天地曰文
+aw_hist_posthumous_meaning_660e,照临四方曰明,Illuminating the four quarters is called Ming,照臨四方曰明
+aw_hist_posthumous_meaning_777f,圣哲周闻曰睿,Sage wisdom known throughout is called Rui,聖哲周聞曰睿
+aw_hist_posthumous_meaning_5ba3,圣善周闻曰宣,Sacred goodness widely known is called Xuan,聖善周聞曰宣
+aw_hist_posthumous_meaning_662d,圣闻周达曰昭,Sacred fame reaching everywhere is called Zhao,聖聞周達曰昭
+aw_hist_posthumous_meaning_666f,由义而济曰景,Achieving through righteousness is called Jing,由義而濟曰景
+aw_hist_posthumous_meaning_5fb7,绥柔士民曰德,Gently pacifying officers and people is called De,綏柔士民曰德
+aw_hist_posthumous_meaning_60e0,爱民好与曰惠,Loving the people and giving freely is called Hui,愛民好與曰惠
+aw_hist_posthumous_meaning_4ec1,慈民爱物曰仁,Cherishing people and all living things is called Ren,慈民愛物曰仁
+aw_hist_posthumous_meaning_5b5d,慈惠爱亲曰孝,Kindness and love of kin is called Xiao,慈惠愛親曰孝
+aw_hist_posthumous_meaning_5eb7,安乐抚民曰康,Bringing peace and comfort to the people is called Kang,安樂撫民曰康
+aw_hist_posthumous_meaning_61ff,温柔圣善曰懿,Gentle sacred goodness is called Yi,溫柔聖善曰懿
+aw_hist_posthumous_meaning_7aef,守礼执义曰端,Holding rites and righteousness is called Duan,守禮執義曰端
+aw_hist_posthumous_meaning_606a,敬共官次曰恪,Reverently fulfilling official duty is called Ke,敬共官次曰恪
+aw_hist_posthumous_meaning_52e4,能修其官曰勤,Diligently fulfilling office is called Qin,能修其官曰勤
+aw_hist_posthumous_meaning_5baa,博闻多能曰宪,Broad learning and many abilities is called Xian,博聞多能曰憲
+aw_hist_posthumous_meaning_654f,应事有功曰敏,Responding ably to affairs is called Min,應事有功曰敏
+aw_hist_posthumous_meaning_6210,安民立政曰成,Settling the people and establishing government is called Cheng,安民立政曰成
+aw_hist_posthumous_meaning_5143,行义悦民曰元,Acting righteously to please the people is called Yuan,行義悅民曰元
+aw_hist_posthumous_meaning_5b9a,纯行不爽曰定,Unswerving purity in conduct is called Ding,純行不爽曰定
+aw_hist_posthumous_meaning_8944,辟地有德曰襄,Expanding lands with virtue is called Xiang,闢地有德曰襄
+aw_hist_posthumous_meaning_732e,聪明睿哲曰献,Brilliant sagely wisdom is called Xian,聰明睿哲曰獻
+aw_hist_posthumous_meaning_7a46,布德执义曰穆,Spreading virtue and holding righteousness is called Mu,布德執義曰穆
+aw_hist_posthumous_meaning_5e84,胜敌志强曰庄,Strong resolve in defeating enemies is called Zhuang,勝敵志強曰莊
+aw_hist_posthumous_meaning_8083,刚德克就曰肃,Firm virtue brought to completion is called Su,剛德克就曰肅
+aw_hist_posthumous_meaning_9756,柔德安众曰靖,Gentle virtue settling the multitude is called Jing,柔德安眾曰靖
+aw_hist_posthumous_meaning_5b81,裕以安民曰宁,Generous ease bringing peace to the people is called Ning,裕以安民曰寧
+aw_hist_posthumous_meaning_7ee5,安民和众曰绥,Pacifying the people and harmonizing the multitude is called Sui,安民和眾曰綏
+aw_hist_posthumous_meaning_8d1e,清白守节曰贞,Maintaining purity and principle is called Zhen,清白守節曰貞
+aw_hist_posthumous_meaning_6b66,克定祸乱曰武,Overcoming calamity and disorder is called Wu,克定禍亂曰武
+aw_hist_posthumous_meaning_6853,辟土服远曰桓,Expanding lands and subduing the distant is called Huan,闢土服遠曰桓
+aw_hist_posthumous_meaning_70c8,有功安民曰烈,Meritorious service that settles the people is called Lie,有功安民曰烈
+aw_hist_posthumous_meaning_5a01,猛以刚果曰威,Fierce firmness and decisiveness is called Wei,猛以剛果曰威
+aw_hist_posthumous_meaning_6bc5,致果杀敌曰毅,Resolute success against enemies is called Yi,致果殺敵曰毅
+aw_hist_posthumous_meaning_52c7,胜敌壮志曰勇,Courageous resolve in defeating enemies is called Yong,勝敵壯志曰勇
+aw_hist_posthumous_meaning_58ee,威德刚武曰壮,Majestic virtue and firm martial power is called Zhuang,威德剛武曰壯
+aw_hist_posthumous_meaning_521a,强毅果敢曰刚,Strong resolve and bold decision is called Gang,強毅果敢曰剛
+aw_hist_posthumous_meaning_96c4,威武称雄曰雄,Martial might and heroic eminence is called Xiong,威武稱雄曰雄
+aw_hist_posthumous_meaning_80dc,克敌制胜曰胜,Mastering enemies and attaining victory is called Sheng,克敵制勝曰勝
+aw_hist_posthumous_meaning_5e73,治而无眚曰平,Rule without calamity is called Ping,治而無眚曰平
+aw_hist_posthumous_meaning_5b89,好和不争曰安,Loving harmony without contention is called An,好和不爭曰安
+aw_hist_posthumous_meaning_987a,慈和遍服曰顺,Kind harmony winning universal submission is called Shun,慈和遍服曰順
+aw_hist_posthumous_meaning_606d,尊贤贵义曰恭,Honoring the worthy and esteeming righteousness is called Gong,尊賢貴義曰恭
+aw_hist_posthumous_meaning_7b80,一德不懈曰简,Unfailing constancy in virtue is called Jian,一德不懈曰簡
+aw_hist_posthumous_meaning_656c,夙夜警戒曰敬,Vigilance by day and night is called Jing,夙夜警戒曰敬
+aw_hist_posthumous_meaning_9759,柔德教众曰静,Teaching the multitude with gentle virtue is called Jing,柔德教眾曰靜
+aw_hist_posthumous_meaning_548c,不刚不柔曰和,Neither harsh nor weak is called He,不剛不柔曰和
+aw_hist_posthumous_meaning_8d28,名实不爽曰质,Name and reality without discrepancy is called Zhi,名實不爽曰質
+aw_hist_posthumous_meaning_9690,隐拂不成曰隐,Obscured purpose left unfulfilled is called Yin,隱拂不成曰隱
+aw_hist_posthumous_meaning_50d6,小心畏忌曰僖,Caution and reverent restraint is called Xi,小心畏忌曰僖
+aw_hist_posthumous_meaning_8282,好廉自克曰节,Loving integrity and mastering oneself is called Jie,好廉自克曰節
+aw_hist_posthumous_meaning_54c0,恭仁短折曰哀,Humane virtue cut short is called Ai,恭仁短折曰哀
+aw_hist_posthumous_meaning_95f5,在国遭忧曰闵,Suffering calamity in the state is called Min,在國遭憂曰閔
+aw_hist_posthumous_meaning_60bc,年中早夭曰悼,Dying before full years is called Dao,年中早夭曰悼
+aw_hist_posthumous_meaning_6000,慈仁短折曰怀,Benevolent kindness cut short is called Huai,慈仁短折曰懷
+aw_hist_posthumous_meaning_6b87,短折不成曰殇,Dying young without fulfillment is called Shang,短折不成曰殤
+aw_hist_posthumous_meaning_51b2,幼少在位曰冲,Reigning in youth is called Chong,幼少在位曰沖
+aw_hist_posthumous_meaning_610d,在国逢难曰愍,Meeting disaster in the state is called Min,在國逢難曰愍
+aw_hist_posthumous_meaning_601d,谋虑不愆曰思,Planning without error is called Si,謀慮不愆曰思
+aw_hist_posthumous_meaning_5389,杀戮无辜曰厉,Slaughtering the innocent is called Li,殺戮無辜曰厲
+aw_hist_posthumous_meaning_5e7d,壅遏不通曰幽,Blocking counsel and communication is called You,壅遏不通曰幽
+aw_hist_posthumous_meaning_8352,好乐怠政曰荒,Indulgence in pleasure and neglect of rule is called Huang,好樂怠政曰荒
+aw_hist_posthumous_meaning_5e9f,失位无功曰废,Losing the throne without achievement is called Fei,失位無功曰廢
+aw_hist_posthumous_meaning_7080,好内远礼曰炀,Indulging the inner chambers and rejecting rites is called Yang,好內遠禮曰煬
+aw_hist_posthumous_meaning_7075,乱而不损曰灵,Disorder without remorse is called Ling,亂而不損曰靈
+aw_hist_posthumous_meaning_623e,不悔前过曰戾,Refusing to repent former faults is called Li,不悔前過曰戾
+aw_hist_posthumous_meaning_523a,暴慢无亲曰刺,Violent arrogance without affection is called Ci,暴慢無親曰刺
+aw_hist_posthumous_meaning_8c2c,名实相爽曰谬,Name and reality contradicting is called Miu,名實相爽曰謬
+aw_hist_posthumous_meaning_60d1,满志多穷曰惑,Self-satisfaction ending in repeated failure is called Huo,滿志多窮曰惑
+aw_hist_posthumous_meaning_86ca,淫溺惑乱曰蛊,Dissolution and delusion causing disorder is called Gu,淫溺惑亂曰蠱
+aw_hist_posthumous_meaning_9669,居心倾危曰险,Harboring dangerous and treacherous intent is called Xian,居心傾危曰險
+aw_hist_posthumous_meaning_6096,违礼乱常曰悖,Violating rites and overturning order is called Bei,違禮亂常曰悖
+aw_hist_posthumous_meaning_50b2,轻贤慢士曰傲,Scorning the worthy and slighting officers is called Ao,輕賢慢士曰傲
+aw_hist_posthumous_meaning_9006,背义反常曰逆,Betraying righteousness and opposing order is called Ni,背義反常曰逆
+aw_hist_posthumous_meaning_66b4,残义损善曰暴,Destroying righteousness and harming goodness is called Bao,殘義損善曰暴
+aw_hist_posthumous_meaning_8650,苛政害民曰虐,Cruel government harming the people is called Nue,苛政害民曰虐
+aw_hist_posthumous_meaning_660f,闇于政事曰昏,Darkness in affairs of rule is called Hun,闇於政事曰昏
+aw_hist_posthumous_meaning_610e,刚愎自用曰愎,Obstinate self-will is called Bi,剛愎自用曰愎
 aw_title_reason_accession,即位,accession,即位
+aw_title_reason_imperial_proclamation,称帝建元,imperial proclamation,稱帝建元
 aw_title_reason_restored_mandate,重受天命,restoration of the Mandate,重受天命
 aw_title_reason_autonomous_restoration,自主复国,autonomous restoration,自主復國
 aw_title_reason_major_victory,大胜,a major victory,大勝

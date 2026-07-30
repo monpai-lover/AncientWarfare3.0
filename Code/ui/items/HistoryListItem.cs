@@ -16,13 +16,13 @@ namespace AncientWarfare3.ui.items
     internal class HistoryListItem : AbstractListWindowItem<HistoryRow>
     {
         private const float ROW_W = 220f;
-        private const float CHARS_PER_LINE = 22f;
         public static Action<long> OnActorFamilyTree;
 
         public static Action<int>    OnHeaderToggle;  // window 注入:点王段段头 → toggle reign_index
         public static Action<int>    OnDynastyToggle; // window 注入:点朝代段头 → toggle dynasty_index
         public static Action<string> OnFilterToggle;  // window 注入:点分类按钮 → toggle category
-        public static Action<long>   OnActorBiography; // window 注入:点操作行 → 打开人物传记
+        public static Action<long, long> OnActorBiography;
+        public static Action<long, long> OnConferredPosthumous;
 
         private Text _label;
         private LayoutElement _layout;
@@ -31,6 +31,8 @@ namespace AncientWarfare3.ui.items
         private int  _reignIndex   = -1;
         private int  _dynastyIndex = -1;
         private long _actionActorId = -1;
+        private long _actionKingdomId = -1;
+        private bool _actionEnabled = true;
         private string _actionKind = "";
         private string _filterKey = "";
         private string _targetType = "";
@@ -49,6 +51,8 @@ namespace AncientWarfare3.ui.items
             _reignIndex   = pObject.reign_index;
             _dynastyIndex = pObject.dynasty_index;
             _actionActorId = pObject.action_actor_id;
+            _actionKingdomId = pObject.action_kingdom_id;
+            _actionEnabled = pObject.action_enabled;
             _actionKind = pObject.action_kind ?? "";
             _filterKey = pObject.filter_key ?? "";
             _targetType = pObject.target_type ?? "";
@@ -56,6 +60,9 @@ namespace AncientWarfare3.ui.items
             SetTip(pObject.tooltip_title, pObject.tooltip_desc);
 
             var bg = gameObject.GetComponent<Image>();
+            Button rowButton = gameObject.GetComponent<Button>();
+            if (rowButton != null)
+                rowButton.interactable = !_isAction || _actionEnabled;
 
             if (pObject.is_filter)
             {
@@ -72,9 +79,11 @@ namespace AncientWarfare3.ui.items
             {
                 _label.text = pObject.text;
                 _label.fontStyle = FontStyle.Bold;
-                _label.color = Color.white;
+                _label.color = _actionEnabled
+                    ? Color.white
+                    : new Color(0.62f, 0.62f, 0.58f, 1f);
                 _label.alignment = TextAnchor.MiddleCenter;
-                AW_UIStyle.ApplyButton(bg, 0.95f);
+                AW_UIStyle.ApplyButton(bg, _actionEnabled ? 0.95f : 0.45f);
                 ApplyRowHeight(false);
                 return;
             }
@@ -117,12 +126,14 @@ namespace AncientWarfare3.ui.items
 
             var rect = gameObject.GetComponent<RectTransform>();
             if (rect == null) rect = gameObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(_rowWidth, 24);
+            rect.sizeDelta = new Vector2(_rowWidth,
+                HistoryListLayoutRules.BaseRowHeight);
 
             var le = gameObject.GetComponent<LayoutElement>();
             if (le == null) le = gameObject.AddComponent<LayoutElement>();
             _layout = le;
-            le.minHeight = 24; le.preferredHeight = 24;
+            le.minHeight = HistoryListLayoutRules.BaseRowHeight;
+            le.preferredHeight = HistoryListLayoutRules.BaseRowHeight;
 
             var bg = gameObject.GetComponent<Image>();
             if (bg == null) bg = gameObject.AddComponent<Image>();
@@ -142,7 +153,7 @@ namespace AncientWarfare3.ui.items
             trect.offsetMin = new Vector2(6, 0); trect.offsetMax = new Vector2(-6, 0);
             _label = textObj.GetComponent<Text>();
             _label.font = LocalizedTextManager.current_font;
-            _label.fontSize = 10;
+            _label.fontSize = HistoryListLayoutRules.BodyFontSize;
             _label.color = Color.white;
             _label.alignment = TextAnchor.MiddleLeft;
             _label.supportRichText = true;
@@ -153,7 +164,9 @@ namespace AncientWarfare3.ui.items
 
         private void ApplyRowHeight(bool pAllowWrap)
         {
-            float height = pAllowWrap ? EstimateHeight(_label.text, _rowWidth) : 24f;
+            float height = pAllowWrap
+                ? HistoryListLayoutRules.EstimateHeight(_label.text, _rowWidth)
+                : HistoryListLayoutRules.BaseRowHeight;
             var rect = gameObject.GetComponent<RectTransform>();
             if (rect != null) rect.sizeDelta = new Vector2(_rowWidth, height);
             if (_layout != null)
@@ -165,40 +178,14 @@ namespace AncientWarfare3.ui.items
             var trect = _label.GetComponent<RectTransform>();
             if (trect != null)
             {
-                bool padded = height > 24.5f;
-                trect.offsetMin = new Vector2(6, padded ? 4 : 0);
-                trect.offsetMax = new Vector2(-6, padded ? -4 : 0);
+                bool padded = height > HistoryListLayoutRules.BaseRowHeight + 0.5f;
+                trect.offsetMin = new Vector2(6, padded ? 3 : 0);
+                trect.offsetMax = new Vector2(-6, padded ? -3 : 0);
             }
-            if (pAllowWrap && height > 24.5f && _label.alignment == TextAnchor.MiddleLeft)
+            if (pAllowWrap &&
+                height > HistoryListLayoutRules.BaseRowHeight + 0.5f &&
+                _label.alignment == TextAnchor.MiddleLeft)
                 _label.alignment = TextAnchor.UpperLeft;
-        }
-
-        private static float EstimateHeight(string pText, float pWidth)
-        {
-            string plain = StripRich(pText ?? "");
-            float charsPerLine = Mathf.Max(18f, pWidth / 10f);
-            int lines = 0;
-            string[] parts = plain.Split('\n');
-            foreach (string part in parts)
-            {
-                int len = string.IsNullOrEmpty(part) ? 1 : part.Length;
-                lines += Mathf.Max(1, Mathf.CeilToInt(len / charsPerLine));
-            }
-            return Mathf.Max(24f, lines * 14f + 8f);
-        }
-
-        private static string StripRich(string pText)
-        {
-            if (string.IsNullOrEmpty(pText)) return "";
-            var sb = new System.Text.StringBuilder(pText.Length);
-            bool inTag = false;
-            foreach (char c in pText)
-            {
-                if (c == '<') { inTag = true; continue; }
-                if (c == '>') { inTag = false; continue; }
-                if (!inTag) sb.Append(c);
-            }
-            return sb.ToString();
         }
 
         private void OnClick()
@@ -212,8 +199,13 @@ namespace AncientWarfare3.ui.items
             }
             if (_isAction)
             {
+                if (!_actionEnabled) return;
                 if (_actionKind == "family_tree") OnActorFamilyTree?.Invoke(_actionActorId);
-                else OnActorBiography?.Invoke(_actionActorId);
+                else if (_actionKind == "conferred_posthumous")
+                    OnConferredPosthumous?.Invoke(
+                        _actionActorId, _actionKingdomId);
+                else OnActorBiography?.Invoke(
+                    _actionActorId, _actionKingdomId);
                 return;
             }
             if (_isHeader && _dynastyIndex >= 0) { OnDynastyToggle?.Invoke(_dynastyIndex); return; }

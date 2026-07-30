@@ -7,10 +7,19 @@ namespace AncientWarfare3.core.court
         public const string City = "city";
         public const string Military = "military";
         public const string Censor = "censor";
+        public const string Feudatory = "feudatory";
     }
 
     public static class CourtOfficeId
     {
+        // 东周六卿
+        public const string TaiZai = "taizai";
+        public const string SiTu = "situ";
+        public const string ZongBo = "zongbo";
+        public const string SiMa = "sima";
+        public const string SiKou = "sikou";
+        public const string SiKong = "sikong";
+
         public const string Chancellor = "chancellor";
         public const string Censor = "censor";
         public const string Marshal = "marshal";
@@ -33,11 +42,13 @@ namespace AncientWarfare3.core.court
         public const string Gongbu = "gongbu";     // 工部
         public const string ImperialPhysician = "imperial_physician";
         public const string ImperialAstrologer = "imperial_astrologer";
+        public const string FeudatoryChiefClerk = "feudatory_changshi";
     }
 
-    // 官场按科技分历史层级:原始朝会 → 三公九卿 → 三省六部。
+    // 官场按科技分历史层级:东周六卿 → 三公九卿 → 三省六部。
     public static class CourtTier
     {
+        public const string EasternZhou = "eastern_zhou";
         public const string Primitive = "primitive";
         public const string SanGongJiuQing = "san_gong_jiu_qing"; // 三公九卿
         public const string SanShengLiuBu = "san_sheng_liu_bu";   // 三省六部

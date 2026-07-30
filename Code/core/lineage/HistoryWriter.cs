@@ -1,6 +1,7 @@
 using System;
-using System.Data.SQLite;
+using System.Collections.Generic;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 
 namespace AncientWarfare3.core.lineage
@@ -205,7 +206,7 @@ namespace AncientWarfare3.core.lineage
                     return GovernmentTitleRules.RoleSnapshot(
                         RepublicGovernmentService.IsRepublic(pActor.kingdom),
                         pIsRuler: true, pIsSuccessor: false,
-                        MandateService.IsMandateKingdom(pActor.kingdom));
+                        HeirTitleRules.IsImperialOrMandate(pActor.kingdom));
             }
             catch { }
             try
@@ -215,7 +216,7 @@ namespace AncientWarfare3.core.lineage
                     return GovernmentTitleRules.RoleSnapshot(
                         RepublicGovernmentService.IsRepublic(pActor.kingdom),
                         pIsRuler: false, pIsSuccessor: true,
-                        MandateService.IsMandateKingdom(pActor.kingdom));
+                        HeirTitleRules.IsImperialOrMandate(pActor.kingdom));
             }
             catch { }
             try
@@ -256,22 +257,24 @@ namespace AncientWarfare3.core.lineage
         {
             switch (pRole)
             {
-                case "king": return "\u541b\u4e3b";
-                case "heir_shizi": return "\u4e16\u5b50";
-                case "heir_taizi": return "\u592a\u5b50";
-                case "republic_head": return "\u5143\u9996";
-                case "republic_elder": return "\u5143\u8001";
-                case "city_leader": return "\u57ce\u4e3b";
-                case "clan_chief": return "\u6c0f\u65cf\u5bb6\u4e3b";
-                case "royal_guard_captain": return "\u7981\u536b\u519b\u7edf\u9886";
-                case "royal_guard": return "\u7981\u536b\u519b";
-                case "fief_holder": return "\u5c01\u5730\u5927\u5c06";
-                case "general": return "\u5927\u5c06";
-                case "slave": return "\u5974\u96b6";
-                case "warrior": return "\u58eb\u5175";
-                case "noble": return "\u8d35\u65cf";
-                case "common_lineage": return "\u6709\u6c0f\u5e73\u6c11";
-                case "common": return "\u5e73\u6c11";
+                case "king": return AW_L10n.Text("aw_role_king", "Ruler");
+                case "heir_shizi": return AW_L10n.Text("aw_heir_shizi", "Heir apparent");
+                case "heir_taizi": return AW_L10n.Text("aw_heir_taizi", "Crown prince");
+                case "republic_head": return AW_L10n.Text("aw_republic_head", "Head of state");
+                case "republic_elder": return AW_L10n.Text("aw_republic_elder", "Elder");
+                case "city_leader": return AW_L10n.Text("aw_role_city_leader", "City leader");
+                case "clan_chief": return AW_L10n.Text("aw_role_clan_chief", "Clan chief");
+                case "royal_guard_captain":
+                    return AW_L10n.Text("aw_role_royal_guard_captain", "Royal guard captain");
+                case "royal_guard": return AW_L10n.Text("aw_role_royal_guard", "Royal guard");
+                case "fief_holder": return AW_L10n.Text("aw_role_fief_holder", "Fief general");
+                case "general": return AW_L10n.Text("aw_role_general", "General");
+                case "slave": return AW_L10n.Text("aw_role_slave", "Slave");
+                case "warrior": return AW_L10n.Text("aw_role_warrior", "Soldier");
+                case "noble": return AW_L10n.Text("aw_role_noble", "Noble");
+                case "common_lineage":
+                    return AW_L10n.Text("aw_role_common_lineage", "Lineage commoner");
+                case "common": return AW_L10n.Text("aw_role_common", "Commoner");
                 default: return "";
             }
         }
@@ -318,9 +321,11 @@ namespace AncientWarfare3.core.lineage
 
         internal static string BuildYearPrefix(double pTime, Kingdom pKingdom)
         {
-            string date = FormatDate(pTime);
+            int[] raw = Date.getRawDate(pTime); // [day, month, year]
+            string date = ChronicleFormatRules.FormatDateParts(
+                raw[2], raw[1], raw[0]);
             string era = pKingdom != null ? YearNameService.GetYearName(pKingdom) : "";
-            return string.IsNullOrEmpty(era) ? date : era + "(" + date + ")";
+            return GanzhiChronologyRules.FormatPrefix(era, date, raw[2]);
         }
 
         internal static string BuildYearPrefixRich(double pTime, Kingdom pKingdom)
@@ -340,27 +345,36 @@ namespace AncientWarfare3.core.lineage
 
         internal static string NormalizeYearPrefix(string pYearPrefixSnapshot, double pTime)
         {
-            string date = FormatDate(pTime);
-            if (string.IsNullOrEmpty(pYearPrefixSnapshot)) return date;
-            if (pYearPrefixSnapshot.Contains("(")) return pYearPrefixSnapshot;
+            int[] raw = Date.getRawDate(pTime); // [day, month, year]
+            string date = ChronicleFormatRules.FormatDateParts(
+                raw[2], raw[1], raw[0]);
+            if (string.IsNullOrEmpty(pYearPrefixSnapshot))
+                return GanzhiChronologyRules.FormatPrefix("", date, raw[2]);
+            if (GanzhiChronologyRules.IsCanonicalPrefix(
+                    pYearPrefixSnapshot))
+                return pYearPrefixSnapshot;
 
             string trimmed = pYearPrefixSnapshot.Trim();
             string yearOnly = Date.getYear(pTime) + "\u5e74";
-            if (trimmed == yearOnly) return date;
+            if (trimmed == yearOnly)
+                return GanzhiChronologyRules.FormatPrefix("", date, raw[2]);
 
             int space = trimmed.LastIndexOf(' ');
             if (space >= 0 && space < trimmed.Length - 1)
             {
                 string era = trimmed.Substring(space + 1);
-                return era + "(" + date + ")";
+                return GanzhiChronologyRules.FormatPrefix(era, date, raw[2]);
             }
-            return trimmed + "(" + date + ")";
+            return GanzhiChronologyRules.FormatPrefix(trimmed, date, raw[2]);
         }
 
         private static void Insert(string pTable, Kingdom pContextKingdom,
             string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget,
             params ColumnVal[] pExtraCols)
         {
+            if (!HistoryWriteTimingRules.ShouldRecord(Config.game_loaded,
+                    SmoothLoader.isLoading()))
+                return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null)
             {
@@ -371,16 +385,14 @@ namespace AncientWarfare3.core.lineage
             double t = World.world.getCurWorldTime();
             string prefix = BuildYearPrefix(t, pContextKingdom);
             string prefixRich = BuildYearPrefixRich(t, pContextKingdom);
-            long eventId = NextEventId(db, pTable);
             string contextName = pContextKingdom?.data != null ? pContextKingdom.name : "";
             string contextColor = HistoryColors.FromKingdom(pContextKingdom);
             HistoryTarget target = ResolveTarget(pTarget, pContent);
 
             try
             {
-                var cols = new System.Collections.Generic.List<ColumnVal>
+                var cols = new List<ColumnVal>
                 {
-                    ColumnVal.Create("EVENT_ID", eventId),
                     ColumnVal.Create("WORLD_TIME", t),
                     ColumnVal.Create("YEAR_PREFIX", prefix ?? ""),
                     ColumnVal.Create("YEAR_PREFIX_RICH", prefixRich ?? ""),
@@ -396,7 +408,7 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("TARGET_ID", target.IsValid ? target.id : -1L)
                 };
                 if (pExtraCols != null) cols.AddRange(pExtraCols);
-                db.Insert(pTable, cols.ToArray());
+                InsertCaptured(pTable, db, cols, pThrowOnFailure: false);
             }
             catch (Exception e)
             {
@@ -408,14 +420,15 @@ namespace AncientWarfare3.core.lineage
             string pEventType, HistoryText pContent, string pSubjectName, HistoryTarget pTarget,
             params ColumnVal[] pExtraCols)
         {
+            if (!HistoryWriteTimingRules.ShouldRecord(Config.game_loaded,
+                    SmoothLoader.isLoading()))
+                return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) throw new InvalidOperationException("History archive is unavailable.");
 
-            long eventId = NextEventId(db, pTable);
             HistoryTarget target = ResolveTarget(pTarget, pContent);
-            var cols = new System.Collections.Generic.List<ColumnVal>
+            var cols = new List<ColumnVal>
             {
-                ColumnVal.Create("EVENT_ID", eventId),
                 ColumnVal.Create("WORLD_TIME", pContext.world_time),
                 ColumnVal.Create("YEAR_PREFIX", pContext.year_prefix),
                 ColumnVal.Create("YEAR_PREFIX_RICH", pContext.year_prefix_rich),
@@ -431,22 +444,46 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("TARGET_ID", target.IsValid ? target.id : -1L)
             };
             if (pExtraCols != null) cols.AddRange(pExtraCols);
-            db.Insert(pTable, cols.ToArray());
+            InsertCaptured(pTable, db, cols, pThrowOnFailure: true);
         }
 
-        private static long NextEventId(SQLiteConnection pDb, string pTable)
+        private static void InsertCaptured(string pTable,
+            System.Data.SQLite.SQLiteConnection pDatabase,
+            List<ColumnVal> pColumns, bool pThrowOnFailure)
         {
+            long eventId = 0L;
             try
             {
-                using var cmd = new SQLiteCommand(pDb);
-                cmd.CommandText = "SELECT IFNULL(MAX(EVENT_ID), 0) FROM " + pTable;
-                object result = cmd.ExecuteScalar();
-                long max = (result == null || result == DBNull.Value) ? 0L : Convert.ToInt64(result);
-                return max + 1;
+                var captured = new HistoricalSqlColumn[pColumns.Count];
+                for (int index = 0; index < pColumns.Count; index++)
+                {
+                    ColumnVal column = pColumns[index];
+                    captured[index] = new HistoricalSqlColumn(
+                        column.Name, column.Value);
+                }
+                if (!HistoricalSynchronousWriteCoordinator.TryAppendOrExecute(
+                        TimeSpan.FromSeconds(5),
+                        (out long allocatedId, out string appendError) =>
+                            HistoricalWriteService.TryAppendHistory(pTable,
+                                captured, out allocatedId, out appendError),
+                        HistoricalWriteService.FlushForSynchronousFallback,
+                        allocatedId =>
+                        {
+                            var synchronous = new List<ColumnVal>(
+                                pColumns.Count + 1)
+                            {
+                                ColumnVal.Create("EVENT_ID", allocatedId)
+                            };
+                            synchronous.AddRange(pColumns);
+                            pDatabase.Insert(pTable, synchronous.ToArray());
+                        }, out eventId, out string writeError))
+                    throw new InvalidOperationException(writeError);
             }
-            catch
+            catch (Exception error)
             {
-                return 1;
+                if (pThrowOnFailure) throw;
+                ModClass.LogWarning("HistoryWriter.Insert failed (" + pTable +
+                                    "/" + eventId + "): " + error.Message);
             }
         }
 

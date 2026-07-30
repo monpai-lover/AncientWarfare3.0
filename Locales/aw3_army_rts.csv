@@ -1,0 +1,43 @@
+key,cz,en,ch
+aw_army_rts_operation,军事行动,Military operation,军事行动
+aw_army_rts_player_order,玩家命令,Player order,玩家命令
+aw_army_rts_target_unknown,未知目标,Unknown target,未知目标
+aw_army_rts_state_idle,待命,Idle,待命
+aw_army_rts_state_rally,集结,Rallying,集结
+aw_army_rts_state_march,行军,Marching,行军
+aw_army_rts_state_deploy,展开,Deploying,展开
+aw_army_rts_state_assault,进攻,Assaulting,进攻
+aw_army_rts_state_hold,固守,Holding,固守
+aw_army_rts_state_pursue,追击,Pursuing,追击
+aw_army_rts_state_retreat,撤退,Retreating,撤退
+aw_army_rts_state_regroup,重整,Regrouping,重整
+aw_army_rts_state_replenish,补员,Replenishing,补员
+aw_army_rts_role_assault,攻击军,Assault,攻击军
+aw_army_rts_role_defense,防御军,Defense,防御军
+aw_army_rts_role_reserve,预备军,Reserve,预备军
+aw_army_rts_role_reinforcement,增援军,Reinforcement,增援军
+aw_army_rts_role_temporarygarrisonsortie,卫戍出击,Garrison sortie,卫戍出击
+aw_army_rts_attack_oath,战至最后一刻，自刎归天,Fight to the last moment; accept death before surrender.,战至最后一刻，自刎归天
+aw_army_rts_speech_great_axe,我的大斧早就饥渴难耐,My great axe has long thirsted for battle.,我的大斧早就饥渴难耐
+aw_army_rts_speech_calm_wisdom,不要愤怒，愤怒会降低我的智慧,Do not be angry; anger dulls my wisdom.,不要愤怒，愤怒会降低我的智慧
+aw_army_rts_speech_impossible,不可能，绝对不可能,Impossible. Absolutely impossible.,不可能，绝对不可能
+aw_army_rts_speech_crossing_river,他过江，我也过江,If he crosses the river; so will I.,他过江，我也过江
+aw_army_rts_speech_proud_army,胜兵必骄，骄兵必败,Victorious troops grow proud; proud troops are defeated.,胜兵必骄，骄兵必败
+aw_army_rts_speech_no_courtesy,我是不会客气的,I will show no courtesy.,我是不会客气的
+aw_army_rts_speech_brother_invincible,我二弟天下无敌,My second brother is invincible.,我二弟天下无敌
+aw_army_rts_speech_xuzhou_pass,徐州城不愧是中原第一雄关,Xuzhou truly is the mightiest pass of the central plains.,徐州城不愧是中原第一雄关
+aw_army_rts_speech_throw_out,叉出去,Throw him out.,叉出去
+aw_army_rts_speech_look_at_your_head,我看你的头,I have my eye on your head.,我看你的头
+aw_army_rts_speech_cao_traitor,曹贼！奸贼！恶贼！逆贼！,Cao traitor! Knave! Villain! Rebel!,曹贼！奸贼！恶贼！逆贼！
+aw_army_rts_speech_three_surname_slave,堂堂吕布，为何成了三姓家奴,How did mighty Lu Bu become a slave of three surnames?,堂堂吕布，为何成了三姓家奴
+aw_army_rts_speech_four_fathers,吕布有四个爹,Lu Bu has four fathers.,吕布有四个爹
+aw_army_rts_speech_dong_zhuo_traitor,国贼董卓,The traitor Dong Zhuo.,国贼董卓
+aw_army_rts_speech_death_unclear,生死不明，那就是死了,His fate is unknown; that means he is dead.,生死不明，那就是死了
+aw_army_rts_speech_command_table,我看你是舍不得这张帅案吧,You cannot bear to leave that command table.,我看你是舍不得这张帅案吧
+aw_army_rts_speech_five_hundred_years,此战将决定今后五百年的历史,This battle will decide the next five hundred years.,此战将决定今后五百年的历史
+aw_army_rts_speech_no_second_ambush,已经有了一次伏击，就绝不会再有第二次伏击,There was one ambush; there cannot possibly be another.,已经有了一次伏击，就绝不会再有第二次伏击
+aw_army_rts_speech_ten_myriad_troops,他马上会变出十万精兵来,He will conjure one hundred thousand elite troops at once.,他马上会变出十万精兵来
+aw_army_rts_speech_xu_huang_heroes,徐晃是我的韩信、白起、周亚夫,Xu Huang is my Han Xin; Bai Qi; and Zhou Yafu.,徐晃是我的韩信、白起、周亚夫
+aw_army_rts_speech_liu_sandao,我部悍将刘三刀，三刀之内必斩吕布,My fierce general Liu Sandao will slay Lu Bu within three blows.,我部悍将刘三刀，三刀之内必斩吕布
+aw_army_rts_speech_pan_feng,我有上将潘凤，可斩华雄,I have General Pan Feng; he can slay Hua Xiong.,我有上将潘凤，可斩华雄
+aw_army_rts_speech_dragon_tiger,风从虎，云从龙，龙虎英雄傲苍穹,Wind follows the tiger; clouds follow the dragon; heroes tower over all.,风从虎，云从龙，龙虎英雄傲苍穹

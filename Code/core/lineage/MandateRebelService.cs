@@ -27,6 +27,13 @@ namespace AncientWarfare3.core.lineage
         private static int _activeClaimantCacheKingdomCount = -1;
         private static bool _activeClaimantCacheValue;
 
+        public static void ClearRuntime()
+        {
+            _activeClaimantCacheYear = int.MinValue;
+            _activeClaimantCacheKingdomCount = -1;
+            _activeClaimantCacheValue = false;
+        }
+
         public static bool IsRebelKingdom(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
@@ -149,25 +156,32 @@ namespace AncientWarfare3.core.lineage
             StartRebelWar(pOriginKingdom, rebel);
 
             HistoryWriter.RecordKingdom(rebel, KingdomEvent.MANDATE_REBELLION,
-                HistoryText.Kingdom(rebel) + " \u4E8E " + HistoryText.City(pCity, rebel) +
-                " \u8D77\u5175\uFF0C\u79F0\u4E49\u519B",
+                HistoryText.Kingdom(rebel) +
+                HistoryLocalizationRules.H("aw_hist_mandate_rebel_rose_mid") +
+                HistoryText.City(pCity, rebel) +
+                HistoryLocalizationRules.H("aw_hist_mandate_rebel_rose_suffix"),
                 HistoryTarget.Kingdom(pOriginKingdom));
             HistoryWriter.RecordCity(pCity, rebel, CityEvent.CITY_TRANSFER,
-                HistoryText.City(pCity, rebel) + " \u8D77\u5175\u53CD\u6297 " +
+                HistoryText.City(pCity, rebel) +
+                HistoryLocalizationRules.H("aw_hist_mandate_rebel_city_mid") +
                 HistoryText.Kingdom(pOriginKingdom),
                 HistoryTarget.Kingdom(rebel));
             if (pFounder.data != null)
             {
                 HistoryWriter.RecordPerson(pFounder.data.id, rebel, pFounder.getName(),
                     PersonEvent.MANDATE_REBEL_LEADER,
-                    HistoryText.Actor(pFounder) + " \u88AB\u63A8\u4E3A\u4E49\u519B\u9886\u8896",
+                    HistoryText.Actor(pFounder) +
+                    HistoryLocalizationRules.H("aw_hist_mandate_rebel_leader"),
                     ChronicleCategory.WAR,
                     HistoryTarget.Kingdom(rebel));
             }
 
             MandateService.RecordMandateEvent("mandate_rebellion", rebel, pFounder, pCity, -8,
                 MandateService.ReadReport().mandate_value,
-                (rebel.name ?? "") + " \u4E8E " + (pCity.data.name ?? "") + " \u8D77\u4E49");
+                (rebel.name ?? "") +
+                HistoryLocalizationRules.Text("aw_hist_mandate_rebel_rose_mid") +
+                (pCity.data.name ?? "") +
+                HistoryLocalizationRules.Text("aw_hist_mandate_rebel_rose_suffix"));
             return rebel;
         }
 
@@ -179,6 +193,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_CLAIMANT_KIND, "rebel");
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, "rebel_claimant");
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassRebel);
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                pOriginKingdom?.id ?? -1L);
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, Date.getCurrentYear() + REBEL_BUFF_YEARS);
             VassalService.EnforceNoVassalRelationsForRebel(pKingdom, "rebel_government");
 
@@ -196,25 +212,34 @@ namespace AncientWarfare3.core.lineage
 
         private static void TryClaimMandate(Kingdom pKingdom)
         {
-            if (MandateService.Exists) return;
-            float ratio = MandateService.GetCoreControlRatioFor(pKingdom);
-            if (ratio < CLAIM_THRESHOLD) return;
-
+            MandateReport previous = MandateService.ReadReport();
+            pKingdom.data.get(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out long originId, -1L);
             Kingdom origin = FindKingdomFromRebelOrigin(pKingdom);
+            float ratio = MandateService.GetCoreControlRatioFor(pKingdom);
+            bool originAlive = origin?.data != null && !origin.isRekt() &&
+                               origin.isCiv() && !origin.isNeutral() &&
+                               SafeCountCities(origin) > 0;
+            if (!MandateRebelStateRules.CanClaimFormerDynastyMandate(
+                    previous.active, previous.kingdom_id, originId,
+                    originAlive, IsActiveRebellionAgainst(pKingdom, origin),
+                    previous.core_count, ratio, CLAIM_THRESHOLD)) return;
             if (!MandateService.TryDeclareMandate(pKingdom, "rebel_claim", "rebel", "rebel", origin)) return;
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_CLAIMED,
-                HistoryText.Kingdom(pKingdom) + " \u4E49\u519B\u53D7\u547D\uFF0C\u5EFA\u7ACB\u5929\u671D",
+                HistoryText.Kingdom(pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_mandate_rebel_claimed"),
                 HistoryTarget.Kingdom(pKingdom));
             if (pKingdom.king?.data != null)
                 HistoryWriter.RecordPerson(pKingdom.king.data.id, pKingdom, pKingdom.king.getName(),
                     PersonEvent.MANDATE_REBEL_LEADER,
-                    HistoryText.Actor(pKingdom.king) + " \u4EE5\u4E49\u519B\u9886\u8896\u8EAB\u4EFD\u53D7\u547D\u79F0\u5E1D",
+                    HistoryText.Actor(pKingdom.king) +
+                    HistoryLocalizationRules.H("aw_hist_mandate_rebel_emperor"),
                     ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
             MandateService.RecordMandateEvent("mandate_rebel_claimed", pKingdom, pKingdom.king, pKingdom.capital,
                 20, MandateService.ReadReport().mandate_value,
-                pKingdom.name + " \u4E49\u519B\u53D7\u547D\u5EFA\u7ACB\u5929\u671D");
+                pKingdom.name + HistoryLocalizationRules.Text("aw_hist_mandate_rebel_claimed"));
             SettleRebelGovernment(pKingdom, "mandate_claimed");
         }
 
@@ -241,6 +266,8 @@ namespace AncientWarfare3.core.lineage
             if (!MandateRebelStateRules.IsCurrentRebelGovernment(rebel, classState, origin, claimant)) return;
 
             pKingdom.data.set(LineageKeys.MANDATE_REBEL, false);
+            pKingdom.data.set(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                -1L);
             pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE,
                 MandateRebelStateRules.SettledClassAfterRebellion(classState));
             pKingdom.data.set(LineageKeys.MANDATE_REBEL_BUFF_UNTIL, 0);
@@ -257,7 +284,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
-                HistoryText.Kingdom(pKingdom) + " \u4E49\u519B\u6218\u4E8B\u7ED3\u675F\uFF0C\u6062\u590D\u666E\u901A\u653F\u4F53",
+                HistoryText.Kingdom(pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_mandate_rebel_settled"),
                 HistoryTarget.Kingdom(pKingdom));
             RulerAppellationService.RefreshLivingProjection(pKingdom);
         }
@@ -373,7 +401,14 @@ namespace AncientWarfare3.core.lineage
             War war = FindExistingRebelWar(pOld, asset);
             if (war != null)
             {
-                try { war.joinDefenders(pRebel); } catch { }
+                try
+                {
+                    using (WarParticipantEntrySourceScope.Open(war, pRebel,
+                               WarParticipantEntrySourceKind.ScriptedJoin,
+                               pOld))
+                        war.joinDefenders(pRebel);
+                }
+                catch { }
                 return;
             }
 
@@ -385,7 +420,15 @@ namespace AncientWarfare3.core.lineage
                     foreach (Kingdom ally in pOld.getAlliance().kingdoms_hashset)
                     {
                         if (ally == pOld || ally?.data == null || !ally.isOpinionTowardsKingdomGood(pOld)) continue;
-                        try { war?.joinAttackers(ally); } catch { }
+                        try
+                        {
+                            using (WarParticipantEntrySourceScope.Open(war,
+                                       ally,
+                                       WarParticipantEntrySourceKind.AllianceCall,
+                                       pOld))
+                                war?.joinAttackers(ally);
+                        }
+                        catch { }
                     }
                 }
             }
@@ -450,7 +493,10 @@ namespace AncientWarfare3.core.lineage
 
             if (changed > 0)
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.MANDATE_REBELLION,
-                    HistoryText.Kingdom(pKingdom) + HistoryText.PlainText(" \u52A8\u5458\u4E49\u519B " + changed + " \u540D"),
+                    HistoryText.Kingdom(pKingdom) +
+                    HistoryLocalizationRules.H("aw_hist_mandate_rebel_mobilized_mid") +
+                    HistoryText.PlainText(changed.ToString()) +
+                    HistoryLocalizationRules.H("aw_hist_mandate_rebel_mobilized_suffix"),
                     HistoryTarget.Kingdom(pKingdom));
         }
 
@@ -482,12 +528,37 @@ namespace AncientWarfare3.core.lineage
         private static Kingdom FindKingdomFromRebelOrigin(Kingdom pRebel)
         {
             long id = -1L;
-            pRebel?.data?.get(LineageKeys.VASSAL_SUZERAIN_ID, out id, -1L);
+            pRebel?.data?.get(LineageKeys.MANDATE_REBEL_ORIGIN_KINGDOM_ID,
+                out id, -1L);
             if (id >= 0)
             {
                 try { return World.world?.kingdoms?.get(id); } catch { }
             }
             return null;
+        }
+
+        private static bool IsActiveRebellionAgainst(Kingdom pRebel,
+            Kingdom pOrigin)
+        {
+            if (pRebel?.data == null || pOrigin?.data == null ||
+                pRebel == pOrigin) return false;
+            try
+            {
+                foreach (War war in pRebel.getWars())
+                {
+                    if (war?.data == null || war.hasEnded()) continue;
+                    bool pair = (war.isAttacker(pRebel) &&
+                                 war.isDefender(pOrigin)) ||
+                                (war.isDefender(pRebel) &&
+                                 war.isAttacker(pOrigin));
+                    if (!pair) continue;
+                    WarTypeAsset asset = war.getAsset();
+                    if (asset?.id == MandateService.WAR_TIANMING_REBEL ||
+                        asset?.rebellion == true) return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         private static City FindCity(long pId)

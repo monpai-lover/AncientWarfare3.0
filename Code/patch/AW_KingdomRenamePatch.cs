@@ -18,8 +18,11 @@ namespace AncientWarfare3.patch
         public static void SetName_Postfix(NanoObject __instance, string pName, bool pTrack, string __state)
         {
             if (__instance is not Kingdom kingdom) return;
-            KingdomRenameSyncService.OnKingdomNameChanged(kingdom, __state, pName, pTrack);
-            RulerAppellationService.RefreshLivingProjection(kingdom);
+            string committedName = kingdom.name ?? kingdom.data?.name ??
+                                   pName ?? "";
+            KingdomRenameSyncService.OnKingdomNameChanged(kingdom, __state,
+                committedName, pTrack);
+            KingdomRenameProjectionService.Refresh(kingdom);
         }
     }
 }

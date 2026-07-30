@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
-using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -10,52 +9,23 @@ namespace AncientWarfare3.core.lineage
     {
         private static readonly FieldInfo CaptureTicksField = AccessTools.Field(typeof(City), "_capture_ticks");
         private static readonly FieldInfo CapturingUnitsField = AccessTools.Field(typeof(City), "_capturing_units");
-        private static readonly Dictionary<string, GoalCache> GoalCacheByCityAndAttacker =
-            new Dictionary<string, GoalCache>();
+        private static readonly MethodInfo ClearCaptureMethod =
+            AccessTools.Method(typeof(City), "clearCapture");
         private static readonly Dictionary<long, HashSet<long>> ActiveMilitaryKingdomsByCity =
             new Dictionary<long, HashSet<long>>();
-        private static readonly Dictionary<long, EngagementState> EngagementByCity =
-            new Dictionary<long, EngagementState>();
+        private static readonly Dictionary<long, PendingSettlement> PendingSettlementByCity =
+            new Dictionary<long, PendingSettlement>();
 
         public static void ClearRuntime()
         {
-            GoalCacheByCityAndAttacker.Clear();
             ActiveMilitaryKingdomsByCity.Clear();
-            EngagementByCity.Clear();
-        }
-
-        public static void OnWarEnded(War pWar)
-        {
-            if (pWar?.data == null || EngagementByCity.Count == 0) return;
-            var attackers = new HashSet<long>();
-            var defenders = new HashSet<long>();
-            try
-            {
-                foreach (Kingdom kingdom in pWar.getAttackers())
-                    if (kingdom?.data != null) attackers.Add(kingdom.id);
-                foreach (Kingdom kingdom in pWar.getDefenders())
-                    if (kingdom?.data != null) defenders.Add(kingdom.id);
-            }
-            catch { return; }
-
-            var emptyCities = new List<long>();
-            foreach (KeyValuePair<long, EngagementState> item in EngagementByCity)
-            {
-                EngagementState state = item.Value;
-                state.AttackerKingdomIds.RemoveWhere(attackerId =>
-                    (attackers.Contains(state.OwnerKingdomId) && defenders.Contains(attackerId)) ||
-                    (defenders.Contains(state.OwnerKingdomId) && attackers.Contains(attackerId)));
-                if (state.AttackerKingdomIds.Count == 0) emptyCities.Add(item.Key);
-            }
-            for (int i = 0; i < emptyCities.Count; i++)
-                EngagementByCity.Remove(emptyCities[i]);
+            PendingSettlementByCity.Clear();
         }
 
         public static void ClearActiveMilitaryPresence(City pCity)
         {
             if (pCity?.data == null) return;
             ActiveMilitaryKingdomsByCity.TryGetValue(pCity.id, out HashSet<long> kingdoms);
-            ReconcileCompletedPresenceCycle(pCity, kingdoms);
             kingdoms?.Clear();
         }
 
@@ -80,129 +50,152 @@ namespace AncientWarfare3.core.lineage
                 ActiveMilitaryKingdomsByCity[pCity.id] = kingdoms;
             }
             kingdoms.Add(actor.kingdom.id);
-            TryLatchDefenderEngagement(pCity, actor.kingdom, kingdoms);
         }
 
-        public static bool TryCompleteAfterDefenderDefeat(City pCity)
+        public static bool TryQueueNonTerritorialSettlementAtCaptureLimit(
+            City pCity, Kingdom pCapturer)
         {
-            if (pCity?.data == null || pCity.kingdom?.data == null) return false;
-            Kingdom oldOwner = pCity.kingdom;
-            Kingdom capturer = ResolveDominantCapturer(pCity);
-            if (capturer?.data == null || capturer == oldOwner || capturer.isRekt()) return false;
+            if (pCity?.data == null || pCity.kingdom?.data == null ||
+                pCapturer?.data == null || pCapturer == pCity.kingdom) return false;
+            if (PendingSettlementByCity.ContainsKey(pCity.id)) return true;
+
+            bool enemy;
+            try { enemy = pCapturer.isEnemy(pCity.kingdom); }
+            catch { enemy = false; }
+            bool nonTerritorialSettlement = enemy && WarTerritoryService.
+                HasOpenNonTerritorialSettlementGoal(pCity, pCapturer);
+            if (!nonTerritorialSettlement) return false;
+
+            bool cityManagerLocked = true;
+            try
+            {
+                cityManagerLocked = World.world?.cities == null ||
+                                    World.world.cities.isLocked();
+            }
+            catch { }
+            if (CityOccupationAccelerationRules.
+                    ShouldAttemptControlledSettlementImmediately(
+                        nonTerritorialSettlement, cityManagerLocked) &&
+                WarTerritoryService.TryResolveControlledSettlementGoal(
+                    pCity, pCapturer))
+            {
+                ClearCaptureProgress(pCity);
+                return true;
+            }
+            QueueSettlement(pCity, pCity.kingdom, pCapturer);
+            return true;
+        }
+
+        private static void QueueSettlement(City pCity, Kingdom pOldOwner,
+            Kingdom pCapturer)
+        {
+            if (pCity?.data == null || pOldOwner?.data == null ||
+                pCapturer?.data == null) return;
+            if (!PendingSettlementByCity.TryGetValue(pCity.id,
+                    out PendingSettlement pending))
+            {
+                pending = new PendingSettlement
+                {
+                    CityId = pCity.id,
+                    OldOwnerId = pOldOwner.id,
+                    CapturerId = pCapturer.id
+                };
+                PendingSettlementByCity[pCity.id] = pending;
+            }
+            pending.Authorized = true;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "occupation_complete", pCity.id),
+                DeferredWorkClass.Runtime,
+                () => ProcessPendingSettlement(pCity.id));
+        }
+
+        private static void ProcessPendingSettlement(long pCityId)
+        {
+            if (!PendingSettlementByCity.TryGetValue(pCityId,
+                    out PendingSettlement pending)) return;
+            City city = FindCity(pCityId);
+            Kingdom oldOwner = FindKingdom(pending.OldOwnerId);
+            Kingdom capturer = FindKingdom(pending.CapturerId);
+            if (city?.data == null || city.isRekt() || oldOwner?.data == null ||
+                capturer?.data == null || city.kingdom != oldOwner)
+            {
+                ClearCityRuntimeState(pCityId);
+                return;
+            }
 
             bool enemyCapturer;
-            bool activeCaptureUnits;
             try
             {
                 enemyCapturer = capturer.isEnemy(oldOwner);
-                activeCaptureUnits = pCity.isGettingCapturedBy(capturer);
             }
-            catch { return false; }
-
-            bool activeDefenders = HasActiveDefenders(pCity);
-            DescribeCaptureFor(pCity, capturer,
-                out bool capturerIsDominant, out bool hostileRivalActive);
-            activeCaptureUnits &= capturerIsDominant &&
-                                  HasActiveMilitaryPresence(pCity, capturer);
-
-            bool cityManagerLocked = true;
-            try { cityManagerLocked = World.world?.cities == null || World.world.cities.isLocked(); }
-            catch { }
-            bool ownershipChanged = pCity.kingdom == capturer;
-            bool defenderEngagementObserved =
-                HasDefenderEngagement(pCity, oldOwner, capturer);
-            if (!CityOccupationAccelerationRules.ShouldCompleteAfterDefenderDefeat(
-                    enemyCapturer,
-                    activeCaptureUnits,
-                    activeDefenders,
-                    hostileRivalActive,
-                    ownershipChanged,
-                    cityManagerLocked,
-                    defenderEngagementObserved))
-                return false;
-
-            try { pCity.finishCapture(capturer); }
-            catch (Exception e)
+            catch
             {
-                ModClass.LogWarning("Immediate city capture failed city=" + pCity.id +
-                                    " capturer=" + capturer.id + ": " + e.Message);
-                return false;
+                PendingSettlementByCity.Remove(pCityId);
+                return;
             }
-            ClearCityRuntimeState(pCity.id);
-            return pCity.kingdom != oldOwner;
+            bool goalOpen = WarTerritoryService.
+                HasOpenNonTerritorialSettlementGoal(city, capturer);
+            if (!goalOpen)
+            {
+                ClearCaptureProgress(city);
+                return;
+            }
+            if (!CityOccupationAccelerationRules.
+                    ShouldHonorQueuedCompletion(pending.Authorized,
+                        city.kingdom == oldOwner, enemyCapturer))
+            {
+                PendingSettlementByCity.Remove(pCityId);
+                return;
+            }
+            bool settled = WarTerritoryService.
+                TryResolveControlledSettlementGoal(city, capturer);
+            if (settled)
+            {
+                ClearCaptureProgress(city);
+                return;
+            }
+            if (CityOccupationAccelerationRules.
+                ShouldRetryQueuedSettlement(settled, goalOpen))
+            {
+                DeferredRuntimeWorkService.EnqueueCoalesced(
+                    DeferredRuntimeWorkRules.CoalescingKey(
+                        "occupation_complete", pCityId),
+                    DeferredWorkClass.Runtime,
+                    () => ProcessPendingSettlement(pCityId));
+                return;
+            }
+            PendingSettlementByCity.Remove(pCityId);
         }
 
-        public static void BeforeUpdateCapture(City pCity, float pElapsed)
+        private static void ClearCaptureProgress(City pCity)
         {
-            if (pCity?.data == null || pCity.kingdom?.data == null) return;
-            Kingdom capturer = ResolveDominantCapturer(pCity);
-            if (capturer?.data == null || capturer == pCity.kingdom) return;
+            if (pCity?.data == null) return;
+            try { ClearCaptureMethod?.Invoke(pCity, null); }
+            catch { pCity.being_captured_by = null; }
+            ClearCityRuntimeState(pCity.id);
+        }
 
-            bool hasActiveCaptureUnits;
-            try { hasActiveCaptureUnits = pCity.isGettingCapturedBy(capturer); }
-            catch { hasActiveCaptureUnits = false; }
-            if (!hasActiveCaptureUnits) return;
+        private static float ReadCaptureProgress(City pCity)
+        {
+            if (pCity == null || CaptureTicksField == null) return 0f;
+            try { return Convert.ToSingle(CaptureTicksField.GetValue(pCity)); }
+            catch { return 0f; }
+        }
 
-            Kingdom currentCaptureOwner = pCity.being_captured_by;
-            bool dominantEnemy;
-            try { dominantEnemy = capturer.isEnemy(pCity.kingdom); }
-            catch { dominantEnemy = false; }
-            if (!dominantEnemy) return;
-
-            bool hasCaptureOwner = currentCaptureOwner?.data != null;
-            bool captureOwnerAlive = false;
-            bool captureOwnerStillEnemyOfCity = false;
-            if (hasCaptureOwner)
-            {
-                try { captureOwnerAlive = currentCaptureOwner.isAlive(); }
-                catch { }
-                if (captureOwnerAlive)
-                {
-                    try { captureOwnerStillEnemyOfCity = currentCaptureOwner.isEnemy(pCity.kingdom); }
-                    catch { }
-                }
-            }
-
-            if (CityOccupationAccelerationRules.ShouldAdoptDominantCapturer(
-                    dominantEnemy, hasCaptureOwner, captureOwnerAlive, captureOwnerStillEnemyOfCity))
-            {
-                pCity.being_captured_by = capturer;
-                currentCaptureOwner = capturer;
-            }
-
-            bool canAdvanceCurrentCapture = currentCaptureOwner == null || currentCaptureOwner == capturer;
-            if (!canAdvanceCurrentCapture && currentCaptureOwner?.data != null)
-            {
-                try { canAdvanceCurrentCapture = !capturer.isEnemy(currentCaptureOwner); }
-                catch { canAdvanceCurrentCapture = false; }
-            }
-            Kingdom captureOwner = currentCaptureOwner ?? capturer;
-
-            bool enemyCapture;
-            try { enemyCapture = captureOwner.isEnemy(pCity.kingdom); }
-            catch { enemyCapture = false; }
-            if (!enemyCapture) return;
-
-            bool hasDefenders = HasActiveDefenders(pCity);
-            bool hasGoal = HasCityControlGoal(pCity, captureOwner);
-            int towers = SafeCountWatchTowers(pCity);
-            float extra = CityOccupationAccelerationRules.ExtraCapturePoints(
-                enemyCapture,
-                hasActiveCaptureUnits,
-                canAdvanceCurrentCapture,
-                hasDefenders,
-                hasGoal,
-                towers,
-                MandatePhaseService.OccupationMultiplier);
-            if (extra <= 0f) return;
-
-            AddCaptureTicks(pCity, extra * Mathf.Max(0.25f, pElapsed * 10f));
+        public static bool HasReachedNaturalCaptureLimit(City pCity)
+        {
+            return CityOccupationAccelerationRules.HasReachedNaturalCaptureLimit(
+                ReadCaptureProgress(pCity));
         }
 
         internal static bool HasActiveDefenders(City pCity)
         {
-            return pCity?.kingdom?.data != null &&
-                   HasActiveMilitaryPresence(pCity, pCity.kingdom);
+            if (pCity?.kingdom?.data == null) return false;
+            return CityOccupationAccelerationRules.HasActiveDefenderSignal(
+                HasActiveMilitaryPresence(pCity, pCity.kingdom),
+                WartimeGarrisonService.HasIndexedDefender(pCity,
+                    pCity.kingdom));
         }
 
         private static bool HasActiveMilitaryPresence(City pCity, Kingdom pKingdom)
@@ -213,99 +206,6 @@ namespace AncientWarfare3.core.lineage
                    kingdoms.Contains(pKingdom.id);
         }
 
-        private static void TryLatchDefenderEngagement(City pCity, Kingdom pObservedKingdom,
-            HashSet<long> pActiveKingdoms)
-        {
-            Kingdom owner = pCity?.kingdom;
-            if (pCity?.data == null || owner?.data == null ||
-                pObservedKingdom?.data == null || pActiveKingdoms == null ||
-                !pActiveKingdoms.Contains(owner.id)) return;
-
-            if (pObservedKingdom != owner)
-            {
-                TryAddEngagedAttacker(pCity, owner, pObservedKingdom, pActiveKingdoms);
-                return;
-            }
-
-            foreach (long kingdomId in pActiveKingdoms)
-            {
-                if (kingdomId == owner.id) continue;
-                Kingdom attacker = FindKingdom(kingdomId);
-                TryAddEngagedAttacker(pCity, owner, attacker, pActiveKingdoms);
-            }
-        }
-
-        private static void TryAddEngagedAttacker(City pCity, Kingdom pOwner,
-            Kingdom pAttacker, HashSet<long> pActiveKingdoms)
-        {
-            if (pAttacker?.data == null || pAttacker == pOwner) return;
-            bool attackerIsEnemy;
-            try { attackerIsEnemy = pAttacker.isEnemy(pOwner); }
-            catch { attackerIsEnemy = false; }
-            if (!CityOccupationAccelerationRules.ShouldLatchDefenderEngagement(
-                    pActiveKingdoms.Contains(pOwner.id),
-                    pActiveKingdoms.Contains(pAttacker.id),
-                    attackerIsEnemy)) return;
-
-            if (!EngagementByCity.TryGetValue(pCity.id, out EngagementState state) ||
-                state.OwnerKingdomId != pOwner.id)
-            {
-                if (EngagementByCity.Count > 4096) EngagementByCity.Clear();
-                state = new EngagementState
-                {
-                    OwnerKingdomId = pOwner.id,
-                    AttackerKingdomIds = new HashSet<long>()
-                };
-                EngagementByCity[pCity.id] = state;
-            }
-            state.AttackerKingdomIds.Add(pAttacker.id);
-        }
-
-        private static bool HasDefenderEngagement(City pCity, Kingdom pOwner,
-            Kingdom pAttacker)
-        {
-            if (pCity?.data == null || pOwner?.data == null || pAttacker?.data == null ||
-                !EngagementByCity.TryGetValue(pCity.id, out EngagementState state))
-                return false;
-
-            bool attackerStillEnemy;
-            try { attackerStillEnemy = pAttacker.isEnemy(pOwner); }
-            catch { attackerStillEnemy = false; }
-            return CityOccupationAccelerationRules.ShouldRetainDefenderEngagement(
-                state.OwnerKingdomId == pOwner.id,
-                state.AttackerKingdomIds.Contains(pAttacker.id),
-                attackerStillEnemy,
-                HasActiveMilitaryPresence(pCity, pAttacker));
-        }
-
-        private static void ReconcileCompletedPresenceCycle(City pCity,
-            HashSet<long> pCompletedActiveKingdoms)
-        {
-            if (pCity?.data == null || !EngagementByCity.TryGetValue(pCity.id,
-                    out EngagementState state)) return;
-            Kingdom owner = pCity.kingdom;
-            if (owner?.data == null || state.OwnerKingdomId != owner.id)
-            {
-                EngagementByCity.Remove(pCity.id);
-                return;
-            }
-
-            state.AttackerKingdomIds.RemoveWhere(attackerId =>
-            {
-                Kingdom attacker = FindKingdom(attackerId);
-                bool attackerStillEnemy;
-                try { attackerStillEnemy = attacker?.data != null && attacker.isEnemy(owner); }
-                catch { attackerStillEnemy = false; }
-                return !CityOccupationAccelerationRules.ShouldRetainDefenderEngagement(
-                    ownerMatches: state.OwnerKingdomId == owner.id,
-                    attackerMatches: attacker?.data != null && attacker.id == attackerId,
-                    attackerStillEnemy: attackerStillEnemy,
-                    attackerPresentInCompletedCycle:
-                        pCompletedActiveKingdoms?.Contains(attackerId) == true);
-            });
-            if (state.AttackerKingdomIds.Count == 0) EngagementByCity.Remove(pCity.id);
-        }
-
         private static Kingdom FindKingdom(long pKingdomId)
         {
             if (pKingdomId < 0) return null;
@@ -313,10 +213,17 @@ namespace AncientWarfare3.core.lineage
             catch { return null; }
         }
 
+        private static City FindCity(long pCityId)
+        {
+            if (pCityId < 0) return null;
+            try { return World.world?.cities?.get(pCityId); }
+            catch { return null; }
+        }
+
         private static void ClearCityRuntimeState(long pCityId)
         {
             ActiveMilitaryKingdomsByCity.Remove(pCityId);
-            EngagementByCity.Remove(pCityId);
+            PendingSettlementByCity.Remove(pCityId);
         }
 
         internal static void DescribeCaptureFor(City pCity, Kingdom pAttacker,
@@ -370,52 +277,12 @@ namespace AncientWarfare3.core.lineage
             return pCity?.being_captured_by;
         }
 
-        private static bool HasCityControlGoal(City pCity, Kingdom pCapturer)
+        private sealed class PendingSettlement
         {
-            if (pCity?.data == null || pCapturer?.data == null) return false;
-            int year = Date.getCurrentYear();
-            string key = pCity.id + ":" + pCapturer.id;
-            if (GoalCacheByCityAndAttacker.TryGetValue(key, out GoalCache cache) && cache.year == year)
-                return cache.has_goal;
-
-            bool result = false;
-            try { result = WarTerritoryService.HasOpenCityControlGoalForAttacker(pCity, pCapturer); }
-            catch { }
-
-            if (GoalCacheByCityAndAttacker.Count > 2048)
-                GoalCacheByCityAndAttacker.Clear();
-            GoalCacheByCityAndAttacker[key] = new GoalCache { year = year, has_goal = result };
-            return result;
-        }
-
-        private static void AddCaptureTicks(City pCity, float pExtra)
-        {
-            if (CaptureTicksField == null || pExtra <= 0f) return;
-            try
-            {
-                float current = Convert.ToSingle(CaptureTicksField.GetValue(pCity));
-                if (current <= 0f || current >= 99.5f) return;
-                CaptureTicksField.SetValue(pCity, Mathf.Min(99.5f, current + pExtra));
-            }
-            catch { }
-        }
-
-        private static int SafeCountWatchTowers(City pCity)
-        {
-            try { return pCity.countBuildingsType("type_watch_tower"); }
-            catch { return 0; }
-        }
-
-        private struct GoalCache
-        {
-            public int year;
-            public bool has_goal;
-        }
-
-        private sealed class EngagementState
-        {
-            public long OwnerKingdomId;
-            public HashSet<long> AttackerKingdomIds;
+            public long CityId;
+            public long OldOwnerId;
+            public long CapturerId;
+            public bool Authorized;
         }
     }
 }

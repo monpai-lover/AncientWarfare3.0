@@ -2,30 +2,37 @@
 
 ## Goal
 
-Remove isolated unowned land Zones that are fully enclosed by one kingdom,
+Remove isolated connected regions of unowned land Zones that are fully
+enclosed by one kingdom,
 without changing disputed borders or adding an annual full-map scan.
 
 ## Enclosure Rule
 
-A Zone is eligible only when all of the following are true:
+A connected unowned component is eligible only when all of the following are
+true:
 
-- it currently has no city;
-- it is not on the world edge;
-- it contains ground tiles;
-- it has all four cardinal neighbours;
-- every cardinal neighbour belongs to a live city and live kingdom;
-- all four neighbouring cities belong to the same kingdom.
+- every Zone in it currently has no city and contains ground tiles;
+- no Zone in it is on the world edge or lacks a cardinal neighbour;
+- every cardinal neighbour outside the component belongs to a live city and
+  live kingdom;
+- all cities on the complete component boundary belong to the same kingdom;
+- the component contains no more than 64 Zones in one bounded repair attempt.
 
-Diagonal neighbours do not determine enclosure. A Zone with an unowned cardinal
-exit, a dead owner, or neighbours from different kingdoms remains unowned.
+Diagonal neighbours do not determine enclosure. Cardinally connected unowned
+Zones are evaluated as one component, so a two-Zone internal hole is not
+mistaken for two open exits. A component reaching the map edge, containing a
+groundless Zone, exceeding the fixed traversal budget, touching a dead owner,
+or bordering different kingdoms remains unowned.
 
 ## Target City
 
-The eligible Zone is assigned to a neighbouring city in the enclosing kingdom.
+The eligible component is assigned to a neighbouring city in the enclosing
+kingdom.
 Candidates are ranked deterministically by:
 
-1. number of cardinal sides shared with the Zone;
-2. shortest squared Zone distance from the candidate city's centre;
+1. number of cardinal sides shared with the complete component boundary;
+2. shortest squared distance from the component centre to the candidate city's
+   centre;
 3. lowest stable city id.
 
 This permits two or more cities of the same kingdom to close an internal hole.
@@ -53,9 +60,13 @@ its scan is pending, its coalesced record is marked for rescan and restarts at
 Zone index zero on its next pass.
 
 The authoritative simulation cycle drains a fixed number of queued candidates.
-If a repair succeeds, the original ownership mutation hook queues the newly
-affected neighbours, allowing adjacent holes to settle over later cycles
-without recursive mutation.
+Candidates with fewer than two owned cardinal neighbours are rejected before
+allocating traversal state; every finite orthogonally enclosed component has at
+least one corner satisfying this seed condition.
+Each candidate uses an iterative, non-recursive traversal capped at 64 Zones.
+If a repair succeeds, all Zones in the verified component are assigned through
+the original ownership API; the ownership hook coalesces the resulting local
+events.
 
 World clear and load reset the runtime queue. Once the world-loaded event fires,
 the service performs one bounded initial sweep over the current Zone list so
@@ -73,6 +84,10 @@ are already excluded by the authority-cycle gate.
   duplicate work for the same coordinates.
 - Candidate processing and initial-sweep advancement both have fixed per-cycle
   limits.
+- A candidate examines at most 64 connected unowned Zones and never recursively
+  traverses the map.
+- Ordinary one-sided borders and open wilderness do not allocate component
+  traversal collections.
 - No work runs from `MapBox.Update`, actor updates, city annual updates, or a
   recurring global Zone scan.
 - Stale coordinates, destroyed cities, changed ownership, and a cleared world
@@ -87,6 +102,8 @@ Pure rule tests must prove:
 - multiple cities in the same kingdom are eligible;
 - mixed kingdoms are ineligible;
 - an unowned cardinal exit is ineligible;
+- a multi-Zone hole enclosed by one kingdom is eligible as one component;
+- a multi-Zone component on a mixed border remains ineligible;
 - world-edge and groundless Zones are ineligible;
 - shared-side count wins, then distance, then stable city id;
 - the queue and initial sweep stop at their configured per-cycle budgets.

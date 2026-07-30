@@ -1,5 +1,5 @@
 key,cz,en,ch
 aw_decision_absorb_vassal,吞并附庸,Absorb Vassal,吞併附庸
-aw_decision_absorb_vassal_desc,将直属附庸并入本国,Absorb a direct vassal into this kingdom,將直屬附庸併入本國
+aw_decision_absorb_vassal_desc,先在直属附庸内成功建立间谍网，再谋划将其并入本国；双方交战时不可执行,First establish a successful spy network in a direct vassal then plan its annexation; neither realm may be at war,先在直屬附庸內成功建立間諜網，再謀劃將其併入本國；雙方交戰時不可執行
 aw_vassal_absorb_action,目标,Target,目標
-aw_vassal_absorb_action_desc,选择为吞并附庸决策目标，实际吞并在国家决策完成时执行,Select as the annex-vassal decision target; annexation happens when the kingdom decision completes,選擇為吞併附庸決策目標，實際吞併在國家決策完成時執行
+aw_vassal_absorb_action_desc,仅在间谍网建立成功后可选择为吞并目标，实际吞并在国家决策完成时执行,This target becomes available only after a spy network succeeds; annexation happens when the kingdom decision completes,僅在間諜網建立成功後可選擇為吞併目標，實際吞併在國家決策完成時執行

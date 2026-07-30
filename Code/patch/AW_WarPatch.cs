@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.presentation;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -12,6 +16,50 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_WarPatch
     {
+        private sealed class WarEndParticipantSnapshot
+        {
+            public readonly List<long> ParticipantIds = new List<long>();
+            public readonly List<Kingdom> Attackers = new List<Kingdom>();
+            public readonly List<Kingdom> Defenders = new List<Kingdom>();
+        }
+
+        public readonly struct WarJoinState
+        {
+            public WarJoinState(bool pWasOnSide, bool pHasSource,
+                WarParticipantEntrySourceKind pSourceKind,
+                long pSourceKingdomId)
+            {
+                WasOnSide = pWasOnSide;
+                HasSource = pHasSource;
+                SourceKind = pSourceKind;
+                SourceKingdomId = pSourceKingdomId;
+            }
+
+            public bool WasOnSide { get; }
+            public bool HasSource { get; }
+            public WarParticipantEntrySourceKind SourceKind { get; }
+            public long SourceKingdomId { get; }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(War), nameof(War.newWar))]
+        private static void NewWarJoinScope_Prefix(War __instance,
+            Kingdom pAttacker, Kingdom pDefender,
+            out WarInitializationJoinScope __state)
+        {
+            __state = WarInitializationJoinScope.Open(__instance,
+                pAttacker, pDefender);
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(War), nameof(War.newWar))]
+        private static Exception NewWarJoinScope_Finalizer(
+            WarInitializationJoinScope __state, Exception __exception)
+        {
+            __state?.Dispose();
+            return __exception;
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(DiplomacyManager), "startWar",
             new[] { typeof(Kingdom), typeof(Kingdom), typeof(WarTypeAsset), typeof(bool) })]
@@ -37,15 +85,26 @@ namespace AncientWarfare3.patch
         public static void NewWar_Postfix(War __result)
         {
             if (__result?.data == null) return;
+            RecordMainBelligerents(__result);
             WarRecordWriter.OnWarStart(__result);
+            WarScoreService.StartWar(__result);
+            KingdomWarDirectorService.OnWarStarted(__result);
+            ArmyLogisticsService.OnWarStarted(__result);
+            DiplomacyProposalService.RegisterWarSettlementBaseline(__result);
             VassalService.OnWarStarted(__result);
             CentralizationBorderDeploymentService.OnWarStarted(__result);
             MandateService.OnWarStarted(__result);
             RoyalAsylumService.OnWarStarted(__result);
             MilitaryEmergencyService.OnWarStarted(__result);
             TemporaryLevyService.OnWarStarted(__result, WarNoticeService.FindSignatureForWar(__result));
+            WartimeGarrisonService.OnWarStarted(__result);
             TemporarySlaveVanguardService.OnWarStarted(__result);
             WarNoticeService.OnWarStarted(__result);
+            DiplomaticCoalitionService.OnWarStarted(__result);
+            CoalitionWarTaskService.OnWarStarted(__result);
+            DiplomacyConversationService.RecordWarStarted(__result);
+            VassalMapModeService.DirtyMapIfActive();
+            ArmyRtsPlanSnapshotService.OnWarStarted(__result);
 
             Kingdom atk = __result.getMainAttacker();
             Kingdom def = __result.getMainDefender();
@@ -56,83 +115,121 @@ namespace AncientWarfare3.patch
                 ChronicleEvents.OnWarStart(def, atk, atk?.name ?? "未知", warTypeName);
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.increaseDeathsAttackers))]
+        public static void IncreaseDeathsAttackers_Postfix(War __instance)
+        {
+            WarScoreService.RecordDeath(__instance,
+                casualtyWasAttacker: true);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(War), nameof(War.increaseDeathsDefenders))]
+        public static void IncreaseDeathsDefenders_Postfix(War __instance)
+        {
+            WarScoreService.RecordDeath(__instance,
+                casualtyWasAttacker: false);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(War), nameof(War.joinAttackers))]
-        public static void JoinAttackers_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        public static bool JoinAttackers_Prefix(War __instance,
+            Kingdom pKingdom, out WarJoinState __state)
         {
-            __state = __instance?.data != null && pKingdom?.data != null &&
-                      !__instance.isAttacker(pKingdom);
+            return CanJoin(__instance, pKingdom, pDefender: false,
+                out __state);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(War), nameof(War.joinAttackers))]
-        public static void JoinAttackers_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        public static void JoinAttackers_Postfix(War __instance,
+            Kingdom pKingdom, WarJoinState __state)
         {
-            if (!__state || __instance?.data == null || pKingdom?.data == null ||
-                !__instance.isAttacker(pKingdom)) return;
-            OnKingdomJoinedWar(__instance, pKingdom, pDefender: false);
+            CompleteJoin(__instance, pKingdom, pDefender: false, __state);
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(War), nameof(War.joinDefenders))]
-        public static void JoinDefenders_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        public static bool JoinDefenders_Prefix(War __instance,
+            Kingdom pKingdom, out WarJoinState __state)
         {
-            __state = __instance?.data != null && pKingdom?.data != null &&
-                      !__instance.isDefender(pKingdom);
+            return CanJoin(__instance, pKingdom, pDefender: true,
+                out __state);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(War), nameof(War.joinDefenders))]
-        public static void JoinDefenders_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        public static void JoinDefenders_Postfix(War __instance,
+            Kingdom pKingdom, WarJoinState __state)
         {
-            if (!__state || __instance?.data == null || pKingdom?.data == null ||
-                !__instance.isDefender(pKingdom)) return;
-            OnKingdomJoinedWar(__instance, pKingdom, pDefender: true);
+            CompleteJoin(__instance, pKingdom, pDefender: true, __state);
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(War), nameof(War.removeAttacker))]
-        public static void RemoveAttacker_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        [HarmonyPatch(typeof(War), "removeFromWar")]
+        private static void RemoveFromWar_Prefix(War __instance,
+            Kingdom pKingdom, out bool __state)
         {
-            __state = __instance?.data != null && pKingdom?.data != null &&
-                      __instance.isAttacker(pKingdom);
+            __state = false;
+            try
+            {
+                __state = __instance?.data != null &&
+                          pKingdom?.data != null &&
+                          __instance.hasKingdom(pKingdom);
+            }
+            catch { }
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(War), nameof(War.removeAttacker))]
-        public static void RemoveAttacker_Postfix(War __instance, Kingdom pKingdom, bool __state)
+        [HarmonyPatch(typeof(War), "removeFromWar")]
+        private static void RemoveFromWar_Postfix(War __instance,
+            Kingdom pKingdom, bool __state)
         {
-            if (!__state || __instance?.data == null || pKingdom?.data == null ||
-                __instance.isAttacker(pKingdom)) return;
+            bool remainsOnSide;
+            try
+            {
+                remainsOnSide = __instance?.data != null &&
+                                pKingdom?.data != null &&
+                                __instance.hasKingdom(pKingdom);
+            }
+            catch { return; }
+            if (!WarParticipantLifecycleRules.ShouldNotifyDeparture(
+                    __state,
+                    remainsOnSideAfterRemove: remainsOnSide) ||
+                __instance?.data == null || pKingdom?.data == null) return;
             OnKingdomLeftWar(__instance, pKingdom);
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(War), nameof(War.removeDefender))]
-        public static void RemoveDefender_Prefix(War __instance, Kingdom pKingdom, out bool __state)
+        [HarmonyPatch(typeof(WarManager), nameof(WarManager.endWar))]
+        private static void EndWar_Prefix(War pWar,
+            out WarEndParticipantSnapshot __state)
         {
-            __state = __instance?.data != null && pKingdom?.data != null &&
-                      __instance.isDefender(pKingdom);
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(War), nameof(War.removeDefender))]
-        public static void RemoveDefender_Postfix(War __instance, Kingdom pKingdom, bool __state)
-        {
-            if (!__state || __instance?.data == null || pKingdom?.data == null ||
-                __instance.isDefender(pKingdom)) return;
-            OnKingdomLeftWar(__instance, pKingdom);
+            __state = CaptureParticipants(pWar);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.endWar))]
-        public static void EndWar_Postfix(War pWar, WarWinner pWinner)
+        private static void EndWar_Postfix(War pWar, WarWinner pWinner,
+            WarEndParticipantSnapshot __state)
         {
             if (pWar?.data == null) return;
-            CityOccupationAccelerationService.OnWarEnded(pWar);
+            WarParticipantEntrySourceService.Instance.
+                TryEndAllActiveSourcesForWar(pWar.data.id,
+                    LineageService.CurTime());
+            CloseParticipantSources(pWar.data.id,
+                __state?.ParticipantIds);
+            KingdomWarDirectorService.OnWarEnded(pWar);
+            CoalitionWarTaskService.OnWarEnded(pWar);
+            WarMilitaryFactsService.OnWarEnded(pWar);
+            ArmyLogisticsService.OnWarEnded(pWar);
+            ArmyStallWatchdogService.OnWarEnded(pWar);
+            WarBattleEpisodeService.OnWarEnded(pWar);
+            WarScoreService.EndWar(pWar, pWinner);
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
             TemporaryLevyService.OnWarEnded(pWar);
+            WartimeGarrisonService.OnWarEnded(pWar);
             TemporarySlaveVanguardService.OnWarEnded(pWar);
             WarRecordWriter.OnWarEnd(pWar, pWinner);
             WarTerritoryService.OnWarEnded(pWar, pWinner);
@@ -140,7 +237,17 @@ namespace AncientWarfare3.patch
             ApplyDiplomacyWarResult(pWar, pWinner);
             MandateService.OnWarEnded(pWar, pWinner);
             MandateRebelService.OnWarEnded(pWar, pWinner);
+            FeudatoryJingnanService.OnWarEnded(pWar, pWinner);
+            CoupRestorationService.OnWarEnded(pWar, pWinner);
+            SuccessionDisputeService.OnWarEnded(pWar, pWinner);
             GeneralService.OnWarEnded(pWar, pWinner);
+            DiplomacyConversationService.RecordWarEnded(pWar, pWinner);
+            if (!DiplomacyProposalService.RegisterCoalitionTruces(pWar,
+                    __state?.Attackers, __state?.Defenders))
+                ModClass.LogWarning("Coalition truce registration failed for war " +
+                                    pWar.data.id + ".");
+            VassalMapModeService.DirtyMapIfActive();
+            ArmyRtsPlanSnapshotService.OnWarEnded(pWar);
 
             Kingdom atk = pWar.getMainAttacker();
             Kingdom def = pWar.getMainDefender();
@@ -153,16 +260,267 @@ namespace AncientWarfare3.patch
 
         private static void OnKingdomJoinedWar(War pWar, Kingdom pKingdom, bool pDefender)
         {
+            WarScoreService.RegisterParticipantMobilization(pWar, pKingdom);
+            KingdomWarDirectorService.OnWarParticipantChanged(pWar,
+                pKingdom);
+            CoalitionWarTaskService.OnWarParticipantChanged(pWar,
+                pKingdom);
+            ArmyLogisticsService.OnWarParticipantJoined(pWar, pKingdom,
+                pDefender ? false : true);
+            WarParticipantCityBaselineService.RegisterParticipant(pWar, pKingdom);
             MilitaryEmergencyService.OnKingdomJoinedWar(pWar, pKingdom, pDefender);
             TemporaryLevyService.OnEmergencyChanged(pKingdom);
+            WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
+            VassalMapModeService.DirtyMapIfActive();
         }
 
         private static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
         {
+            WarParticipantEntrySourceService.Instance.TryEndAllActiveSources(
+                pWar?.data?.id ?? -1L, pKingdom?.data?.id ?? -1L,
+                LineageService.CurTime());
+            KingdomWarDirectorService.OnWarParticipantChanged(pWar,
+                pKingdom);
+            CoalitionWarTaskService.OnWarParticipantChanged(pWar,
+                pKingdom);
+            ArmyLogisticsService.OnWarParticipantLeft(pWar, pKingdom);
+            WarScoreService.ClearDepartedParticipantControls(pWar, pKingdom);
             MilitaryEmergencyService.OnKingdomLeftWar(pWar, pKingdom);
             TemporaryLevyService.OnEmergencyChanged(pKingdom);
+            WartimeGarrisonService.OnKingdomWarStateChanged(pKingdom);
             TemporarySlaveVanguardService.OnEmergencyChanged(pKingdom);
+            VassalMapModeService.DirtyMapIfActive();
+        }
+
+        private static bool CanJoin(War pWar, Kingdom pKingdom,
+            bool pDefender, out WarJoinState pState)
+        {
+            bool wasOnSide = false;
+            try
+            {
+                wasOnSide = pWar?.data != null && pKingdom?.data != null &&
+                            (pDefender
+                                ? pWar.isDefender(pKingdom)
+                                : pWar.isAttacker(pKingdom));
+            }
+            catch { }
+            bool hasSource = WarParticipantEntrySourceScope.TryCurrent(
+                pWar, pKingdom, out WarParticipantEntrySourceKind sourceKind,
+                out long sourceKingdomId);
+            bool initializingMainBelligerent =
+                WarInitializationJoinScope.Contains(pWar, pKingdom);
+            if (!hasSource && initializingMainBelligerent)
+            {
+                hasSource = true;
+                sourceKind = WarParticipantEntrySourceKind.MainBelligerent;
+                sourceKingdomId = pKingdom?.data?.id ?? -1L;
+            }
+            pState = new WarJoinState(wasOnSide, hasSource, sourceKind,
+                sourceKingdomId);
+            if (pWar?.data == null || pKingdom?.data == null || wasOnSide)
+                return true;
+            bool lookupSucceeded =
+                WarParticipantEntrySourceService.Instance.TryCanJoinWar(
+                    pWar.data.id, pKingdom.id, out bool sourceAllowsJoin);
+            return WarParticipantLifecycleRules.CanJoin(wasOnSide,
+                initializingMainBelligerent, lookupSucceeded,
+                hasSeparatePeaceExit: !sourceAllowsJoin);
+        }
+
+        private static void CompleteJoin(War pWar, Kingdom pKingdom,
+            bool pDefender, WarJoinState pState)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return;
+            bool joined;
+            try
+            {
+                joined = pDefender
+                    ? pWar.isDefender(pKingdom)
+                    : pWar.isAttacker(pKingdom);
+            }
+            catch { return; }
+            if (!joined) return;
+            bool sourceWriteSucceeded = true;
+            if (pState.HasSource)
+                sourceWriteSucceeded = WarParticipantEntrySourceService.
+                    Instance.TryRecordSource(
+                    pWar.data.id, pKingdom.id, pState.SourceKind,
+                    pState.SourceKingdomId, LineageService.CurTime());
+            if (WarParticipantLifecycleRules.ShouldRollbackJoin(
+                    pState.WasOnSide, joined,
+                    sourceRequired: WarParticipantLifecycleRules.RequiresDurableJoinSource(
+                        pState.HasSource, pState.SourceKind),
+                    sourceWriteSucceeded: sourceWriteSucceeded))
+            {
+                bool rollbackVerified = TryRollbackJoin(pWar, pKingdom,
+                    pDefender);
+                bool lookupSucceeded = TryIsKingdomInWar(pWar, pKingdom,
+                    out bool remainsOnSide);
+                if (WarParticipantLifecycleRules.ShouldQueueRollbackRepair(
+                        rollbackVerified, lookupSucceeded, remainsOnSide))
+                {
+                    bool participantServicesStarted = !rollbackVerified;
+                    if (participantServicesStarted)
+                        OnKingdomJoinedWar(pWar, pKingdom, pDefender);
+                    QueueRollbackJoin(pWar, pKingdom, pDefender,
+                        participantServicesStarted);
+                }
+                return;
+            }
+            if (!pState.WasOnSide)
+                OnKingdomJoinedWar(pWar, pKingdom, pDefender);
+        }
+
+        private static bool TryRollbackJoin(War pWar, Kingdom pKingdom,
+            bool pDefender)
+        {
+            if (pWar?.data == null || pKingdom?.data == null) return true;
+            try
+            {
+                if (!pWar.hasKingdom(pKingdom)) return true;
+                if (pDefender)
+                {
+                    pWar.removeDefender(pKingdom, pInPeace: true);
+                    pWar.data.past_defenders.Remove(pKingdom.id);
+                    pWar.data.died_defenders.Remove(pKingdom.id);
+                }
+                else
+                {
+                    pWar.removeAttacker(pKingdom, pInPeace: true);
+                    pWar.data.past_attackers.Remove(pKingdom.id);
+                    pWar.data.died_attackers.Remove(pKingdom.id);
+                }
+                pWar.prepare();
+                return !pWar.hasKingdom(pKingdom);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "War join provenance rollback failed: war=" +
+                    (pWar?.data?.id ?? -1L) + " kingdom=" +
+                    (pKingdom?.data?.id ?? -1L) + " " + error.Message);
+                return false;
+            }
+        }
+
+        private static void QueueRollbackJoin(War pWar, Kingdom pKingdom,
+            bool pDefender, bool pParticipantServicesStarted)
+        {
+            long warId = pWar?.data?.id ?? -1L;
+            long kingdomId = pKingdom?.data?.id ?? -1L;
+            QueueRollbackJoin(warId, kingdomId, pDefender,
+                pParticipantServicesStarted);
+        }
+
+        private static void QueueRollbackJoin(long pWarId, long pKingdomId,
+            bool pDefender, bool pParticipantServicesStarted)
+        {
+            if (pWarId < 0 || pKingdomId < 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                "war_join_rollback:" + pWarId + ":" + pKingdomId,
+                DeferredWorkClass.CriticalRuntime,
+                () => RetryRollbackJoin(pWarId, pKingdomId, pDefender,
+                    pParticipantServicesStarted));
+        }
+
+        private static void RetryRollbackJoin(long pWarId, long pKingdomId,
+            bool pDefender, bool pParticipantServicesStarted)
+        {
+            War war = WarPeaceSettlementWorld.FindWar(pWarId);
+            Kingdom kingdom = WarPeaceSettlementWorld.FindKingdom(pKingdomId);
+            if (war?.data == null || kingdom?.data == null || war.hasEnded())
+                return;
+            if (!TryIsKingdomInWar(war, kingdom, out bool remainsOnSide))
+            {
+                QueueRollbackJoin(pWarId, pKingdomId, pDefender,
+                    pParticipantServicesStarted);
+                return;
+            }
+            if (remainsOnSide)
+                TryRollbackJoin(war, kingdom, pDefender);
+            bool lookupSucceeded = TryIsKingdomInWar(war, kingdom,
+                out remainsOnSide);
+            if (!lookupSucceeded || remainsOnSide)
+            {
+                QueueRollbackJoin(pWarId, pKingdomId, pDefender,
+                    pParticipantServicesStarted);
+                return;
+            }
+            if (WarParticipantLifecycleRules.ShouldNotifyRollbackDeparture(
+                    participantServicesStarted: pParticipantServicesStarted,
+                    membershipLookupSucceeded: lookupSucceeded,
+                    remainsOnSideAfterRollback: remainsOnSide))
+                OnKingdomLeftWar(war, kingdom);
+        }
+
+        private static bool TryIsKingdomInWar(War pWar, Kingdom pKingdom,
+            out bool pRemainsOnSide)
+        {
+            pRemainsOnSide = false;
+            if (pWar?.data == null || pKingdom?.data == null) return true;
+            try
+            {
+                pRemainsOnSide = pWar.hasKingdom(pKingdom);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static void RecordMainBelligerents(War pWar)
+        {
+            Kingdom attacker = pWar?.getMainAttacker();
+            Kingdom defender = pWar?.getMainDefender();
+            double time = LineageService.CurTime();
+            if (attacker?.data != null)
+                WarParticipantEntrySourceService.Instance.TryRecordSource(
+                    pWar.data.id, attacker.id,
+                    WarParticipantEntrySourceKind.MainBelligerent,
+                    attacker.id, time);
+            if (defender?.data != null)
+                WarParticipantEntrySourceService.Instance.TryRecordSource(
+                    pWar.data.id, defender.id,
+                    WarParticipantEntrySourceKind.MainBelligerent,
+                    defender.id, time);
+        }
+
+        private static WarEndParticipantSnapshot CaptureParticipants(War pWar)
+        {
+            var result = new WarEndParticipantSnapshot();
+            if (pWar?.data == null) return result;
+            var seen = new HashSet<long>();
+            try
+            {
+                foreach (Kingdom kingdom in pWar.getAttackers())
+                    AddParticipant(kingdom, result.Attackers,
+                        result.ParticipantIds, seen);
+                foreach (Kingdom kingdom in pWar.getDefenders())
+                    AddParticipant(kingdom, result.Defenders,
+                        result.ParticipantIds, seen);
+            }
+            catch { }
+            return result;
+        }
+
+        private static void AddParticipant(Kingdom pKingdom,
+            List<Kingdom> pSide, List<long> pParticipantIds,
+            HashSet<long> pSeen)
+        {
+            long id = pKingdom?.data?.id ?? -1L;
+            if (id < 0 || !pSeen.Add(id)) return;
+            pSide.Add(pKingdom);
+            pParticipantIds.Add(id);
+        }
+
+        private static void CloseParticipantSources(long pWarId,
+            IReadOnlyList<long> pParticipantIds)
+        {
+            if (pWarId < 0 || pParticipantIds == null) return;
+            double endedTime = LineageService.CurTime();
+            for (int i = 0; i < pParticipantIds.Count; i++)
+                WarParticipantEntrySourceService.Instance.
+                    TryEndAllActiveSources(pWarId, pParticipantIds[i],
+                        endedTime);
         }
 
         private static void ApplyDiplomacyWarResult(War pWar, WarWinner pWinner)

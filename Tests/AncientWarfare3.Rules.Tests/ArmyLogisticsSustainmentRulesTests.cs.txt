@@ -1,0 +1,111 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyLogisticsSustainmentRulesTests
+{
+    public static void Run()
+    {
+        AConfirmedMissionCorridorKeepsMarchSupplyConnected();
+        ACurrentCorridorCityAndRouteAnchorPreventFalseIsolation();
+        AStalledMarchDoesNotConsumeSupply();
+        LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod();
+    }
+
+    private static void AConfirmedMissionCorridorKeepsMarchSupplyConnected()
+    {
+        ArmyConnectivityResult connectivity =
+            ArmyLogisticsRules.ResolveConnectivity(
+                new ArmyConnectivityFacts
+                {
+                    MissionConnected = true,
+                    CurrentCityInCorridor = false,
+                    NearRouteAnchor = false,
+                    FriendlySupplyCity = false,
+                    AlliedSupplyCity = false,
+                    FrozenControlledSupplyCity = false
+                });
+
+        Equal(true, connectivity.InCorridor,
+            "a director-confirmed corridor persists between city zones");
+        Equal(false, connectivity.ConnectedSupply,
+            "marching through a corridor does not fabricate a supply depot");
+        Equal(99, ArmyLogisticsRules.UpdateSupply(100,
+                ArmyRtsState.March, connectivity.ConnectedSupply,
+                connectivity.InCorridor),
+            "a corridor march pays only its normal movement supply cost");
+    }
+
+    private static void LogisticsSchedulerDoesNotRequestASecondSnapshotWithinSamePeriod()
+    {
+        var scheduler = new ArmyStrategicDayScheduler();
+
+        Equal(true, scheduler.ShouldBeginDay(12L),
+            "the first logistics period requires an active-kingdom snapshot");
+        scheduler.BeginDay(12L, new long[] { 7L });
+        scheduler.TakeKingdom();
+        Equal(false, scheduler.ShouldBeginDay(12L),
+            "the same logistics period never rebuilds its snapshot every frame");
+        Equal(true, scheduler.ShouldBeginDay(13L),
+            "the next logistics period may build a fresh snapshot");
+    }
+
+    private static void ACurrentCorridorCityAndRouteAnchorPreventFalseIsolation()
+    {
+        ArmyConnectivityResult corridorCity =
+            ArmyLogisticsRules.ResolveConnectivity(
+                new ArmyConnectivityFacts
+                {
+                    MissionConnected = false,
+                    CurrentCityInCorridor = true,
+                    NearRouteAnchor = false,
+                    FriendlySupplyCity = false,
+                    AlliedSupplyCity = false,
+                    FrozenControlledSupplyCity = false
+                });
+        Equal(true, corridorCity.InCorridor,
+            "an Army inside a registered corridor city must not become isolated because its next target changed");
+        Equal(false, corridorCity.ConnectedSupply,
+            "an enemy corridor city is a route connection, not an instant supply depot");
+        Equal(97, ArmyLogisticsRules.UpdateSupply(100,
+                ArmyRtsState.Assault, corridorCity.ConnectedSupply,
+                corridorCity.InCorridor),
+            "a connected front assault pays only its ordinary supply cost");
+
+        ArmyConnectivityResult routeAnchor =
+            ArmyLogisticsRules.ResolveConnectivity(
+                new ArmyConnectivityFacts
+                {
+                    MissionConnected = false,
+                    CurrentCityInCorridor = false,
+                    NearRouteAnchor = true,
+                    FriendlySupplyCity = false,
+                    AlliedSupplyCity = false,
+                    FrozenControlledSupplyCity = false
+                });
+        Equal(true, routeAnchor.InCorridor,
+            "an Army that has reached its active route anchor must remain in the mission corridor");
+        Equal(99, ArmyLogisticsRules.UpdateSupply(100,
+                ArmyRtsState.March, routeAnchor.ConnectedSupply,
+                routeAnchor.InCorridor),
+            "a route-connected march must not receive the isolated-army penalty");
+    }
+
+    private static void AStalledMarchDoesNotConsumeSupply()
+    {
+        Equal(71, ArmyLogisticsRules.UpdateSupply(71,
+                ArmyRtsState.March, connectedSupply: false,
+                inCorridor: true, strategicMovementProgressed: false),
+            "a stalled March with no positional progress must not consume supply");
+        Equal(70, ArmyLogisticsRules.UpdateSupply(71,
+                ArmyRtsState.March, connectedSupply: false,
+                inCorridor: true, strategicMovementProgressed: true),
+            "an actual March step still consumes its ordinary supply");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+}

@@ -1,0 +1,267 @@
+using AncientWarfare3.core.lineage;
+using System.IO;
+
+internal static class RulerHouseholdRulesTests
+{
+    public static void Run()
+    {
+        Equal(15, (int)DiplomacyProposalType.HouseholdOffering,
+            "household offering keeps its stable proposal identifier");
+
+        Equal(8, RulerHouseholdRules.ConsortCapacity(
+                RulerHouseholdRealmTier.Empire),
+            "an empire may maintain eight active consorts");
+        Equal(4, RulerHouseholdRules.ConsortCapacity(
+                RulerHouseholdRealmTier.Kingdom),
+            "a kingdom may maintain four active consorts");
+        Equal(2, RulerHouseholdRules.ConsortCapacity(
+                RulerHouseholdRealmTier.Lower),
+            "a lower realm may maintain two active consorts");
+
+        Equal("aw_household_title_empress", RulerHouseholdRules.TitleKey(
+                RulerHouseholdRealmTier.Empire,
+                RulerHouseholdKind.PrincipalWife),
+            "an imperial principal wife is the empress");
+        Equal("aw_household_title_imperial_consort",
+            RulerHouseholdRules.TitleKey(RulerHouseholdRealmTier.Empire,
+                RulerHouseholdKind.Consort),
+            "an imperial consort uses the imperial consort title");
+        Equal("aw_household_title_queen", RulerHouseholdRules.TitleKey(
+                RulerHouseholdRealmTier.Kingdom,
+                RulerHouseholdKind.PrincipalWife),
+            "a royal principal wife is the queen");
+        Equal("aw_household_title_secondary_consort",
+            RulerHouseholdRules.TitleKey(RulerHouseholdRealmTier.Lower,
+                RulerHouseholdKind.Consort),
+            "a lower-rank consort is a secondary consort");
+
+        True(RulerHouseholdRules.IsRoyalMarriageCandidate(
+                otherwiseEligible: true, reigningRuler: false),
+            "an eligible non-ruler remains available for royal marriage");
+        Equal(false, RulerHouseholdRules.IsRoyalMarriageCandidate(
+                otherwiseEligible: true, reigningRuler: true),
+            "a reigning ruler is excluded from royal marriage");
+        Equal(false, RulerHouseholdRules.IsHouseholdCandidateAge(17),
+            "a seventeen-year-old cannot be offered to a ruler household");
+        True(RulerHouseholdRules.IsHouseholdCandidateAge(18),
+            "the minimum household candidate age is eighteen");
+        True(RulerHouseholdRules.IsHouseholdCandidateAge(33),
+            "the maximum household candidate age is thirty-three");
+        Equal(false, RulerHouseholdRules.IsHouseholdCandidateAge(34),
+            "a thirty-four-year-old cannot be offered to a ruler household");
+        True(RulerHouseholdRules.HouseholdCandidatePriority(
+                 memberOfRulingLineage: true) <
+             RulerHouseholdRules.HouseholdCandidatePriority(
+                 memberOfRulingLineage: false),
+            "women of the reigning lineage are listed before other nobles");
+        True(RulerHouseholdRules.HouseholdCandidatePriority(
+                 memberOfRulingLineage: true,
+                 directChildOfRuler: true) <
+             RulerHouseholdRules.HouseholdCandidatePriority(
+                 memberOfRulingLineage: true,
+                 directChildOfRuler: false),
+            "a ruler's daughter is preferred within the reigning lineage");
+
+        True(RulerHouseholdRules.CanOffer(new RulerHouseholdOfferFacts(
+                    candidateEligible: true, rulerEligible: true,
+                    related: false, hasPrincipalWife: false,
+                    activeConsorts: 0, consortCapacity: 8),
+                RulerHouseholdKind.PrincipalWife),
+            "an eligible unmarried ruler may receive a principal wife");
+        Equal(false, RulerHouseholdRules.CanOffer(
+                new RulerHouseholdOfferFacts(true, true, false, true, 0, 8),
+                RulerHouseholdKind.PrincipalWife),
+            "a ruler with a principal wife cannot receive another one");
+        Equal(false, RulerHouseholdRules.CanOffer(
+                new RulerHouseholdOfferFacts(true, true, false, false, 8, 8),
+                RulerHouseholdKind.Consort),
+            "a full household cannot receive another consort");
+        Equal(false, RulerHouseholdRules.CanOffer(
+                new RulerHouseholdOfferFacts(true, true, true, false, 0, 8),
+                RulerHouseholdKind.Consort),
+            "a close relative cannot enter the ruler household");
+
+        Equal(12, RulerHouseholdRules.RelationshipBonus(
+                RulerHouseholdKind.PrincipalWife),
+            "principal-wife diplomacy has the larger relation bonus");
+        Equal(6, RulerHouseholdRules.RelationshipBonus(
+                RulerHouseholdKind.Consort),
+            "consort diplomacy has the smaller relation bonus");
+        True(RulerHouseholdRules.ShouldCloseRelationship(
+                active: true, rulerAlive: false, partnerAlive: true,
+                rulerStillReigning: true, sameRecipientRealm: true),
+            "a ruler death closes an active household relation");
+        True(RulerHouseholdRules.ShouldCloseRelationship(
+                active: true, rulerAlive: true, partnerAlive: true,
+                rulerStillReigning: false, sameRecipientRealm: true),
+            "a deposed ruler no longer owns the active household");
+        Equal(false, RulerHouseholdRules.ShouldCloseRelationship(
+                active: true, rulerAlive: true, partnerAlive: true,
+                rulerStillReigning: true, sameRecipientRealm: true),
+            "a valid active household remains open");
+        Equal(2, RulerHouseholdRules.PregnancyStartsForYear(
+                eligibleConsorts: 9),
+            "annual consort conception work is bounded");
+        Equal(1, RulerHouseholdRules.PregnancyStartsForYear(
+                eligibleConsorts: 1),
+            "annual conception work does not invent candidates");
+        Equal(24324, RulerHouseholdPregnancyRules.ToMonthKey(2027, 1),
+            "consort retry scheduling uses a stable calendar month key");
+        True(RulerHouseholdPregnancyRules.ShouldProcessMonth(
+                currentMonthKey: 24324, lastProcessedMonthKey: 24323),
+            "a new month admits a consort retry pass");
+        Equal(false, RulerHouseholdPregnancyRules.ShouldProcessMonth(
+                currentMonthKey: 24324, lastProcessedMonthKey: 24324),
+            "repeated authority cycles in one month do not retry consorts");
+        Equal(1, RulerHouseholdPregnancyRules.PregnancyStartsForMonth(
+                eligibleConsorts: 4),
+            "monthly consort conception starts remain bounded per kingdom");
+        Equal(0, RulerHouseholdPregnancyRules.PregnancyStartsForMonth(
+                eligibleConsorts: 0),
+            "monthly conception work does not invent candidates");
+        Equal(2, RulerHouseholdPregnancyRules.RotatingCandidateIndex(
+                monthKey: 24324, rulerActorId: 2L, candidateCount: 4),
+            "monthly conception begins from a deterministic rotating consort");
+        Equal(3, RulerHouseholdPregnancyRules.RotatingCandidateIndex(
+                monthKey: 24325, rulerActorId: 2L, candidateCount: 4),
+            "the next month advances to the next consort");
+        string authorityCycle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "performance",
+            "AWAuthorityCycleService.cs"));
+        True(authorityCycle.Contains(
+                "RulerHouseholdPregnancyService.ProcessAuthorityCycle()"),
+            "consort conception retries run from the authority cycle");
+        string annualWork = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "KingdomAnnualWorkService.cs"));
+        Equal(false, annualWork.Contains(
+                "RulerHouseholdPregnancyService.OnKingdomYear"),
+            "annual court work no longer gives consorts one instant-only chance");
+
+        var principalFacts = new DiplomacyProposalScoreFacts(
+            opinion: 60, requesterPower: 100, responderPower: 100,
+            sharedEnemy: false, responderLosingWar: false, allied: false,
+            requesterIsMandate: false, requesterDiplomacy: 20,
+            responderDiplomacy: 10, proposedPrincipalWife: true);
+        var consortFacts = new DiplomacyProposalScoreFacts(
+            opinion: 60, requesterPower: 100, responderPower: 100,
+            sharedEnemy: false, responderLosingWar: false, allied: false,
+            requesterIsMandate: false, requesterDiplomacy: 20,
+            responderDiplomacy: 10, proposedPrincipalWife: false);
+        int principalScore = DiplomacyProposalRules.AcceptanceScore(
+            DiplomacyProposalType.HouseholdOffering, principalFacts);
+        int consortScore = DiplomacyProposalRules.AcceptanceScore(
+            DiplomacyProposalType.HouseholdOffering, consortFacts);
+        int marriageScore = DiplomacyProposalRules.AcceptanceScore(
+            DiplomacyProposalType.RoyalMarriage, principalFacts);
+        True(principalScore > consortScore,
+            "a principal-wife offer is valued above a consort offer");
+        True(principalScore < marriageScore,
+            "a household offer is less binding than a royal marriage");
+        Equal(false, DiplomacyProposalRules.IsUnilateral(
+                DiplomacyProposalType.HouseholdOffering),
+            "a household offer requires the recipient's acceptance");
+        var friendlyRequestFacts = new DiplomacyProposalScoreFacts(
+            opinion: RulerHouseholdRules.MinimumConsortRequestOpinion,
+            requesterPower: 100, responderPower: 100,
+            sharedEnemy: false, responderLosingWar: false, allied: false,
+            requesterIsMandate: false, requesterDiplomacy: 10,
+            responderDiplomacy: 10, proposedConsortRequest: true);
+        True(DiplomacyProposalRules.Assess(
+                DiplomacyProposalType.HouseholdOffering,
+                friendlyRequestFacts).ExpectedAccepted,
+            "a friendly realm can reasonably accept a consort request");
+
+        True(RulerHouseholdRules.TrySelectAiOfferKind(
+                hasPrincipalWife: false, activeConsorts: 3,
+                consortCapacity: 4, out RulerHouseholdKind missingWifeKind),
+            "AI may prepare a household offer for an unmarried ruler");
+        Equal(RulerHouseholdKind.PrincipalWife, missingWifeKind,
+            "AI prefers filling the principal-wife position first");
+        True(RulerHouseholdRules.TrySelectAiOfferKind(
+                hasPrincipalWife: true, activeConsorts: 2,
+                consortCapacity: 4, out RulerHouseholdKind consortKind),
+            "AI may offer a consort below capacity");
+        Equal(RulerHouseholdKind.Consort, consortKind,
+            "AI uses a consort offer after the principal-wife position is filled");
+        Equal(false, RulerHouseholdRules.TrySelectAiOfferKind(
+                hasPrincipalWife: true, activeConsorts: 4,
+                consortCapacity: 4, out _),
+            "AI does not propose to a full ruler household");
+
+        Equal("consort_request", RulerHouseholdRules.ConsortRequestDetailId,
+            "reverse consort requests keep a stable proposal detail");
+        True(RulerHouseholdRules.IsConsortRequestDetail("consort_request"),
+            "the reverse request detail is recognized");
+        Equal(false, RulerHouseholdRules.IsConsortRequestDetail("consort"),
+            "a direct consort offering is not a reverse request");
+
+        var eligibleRequest = new RulerHouseholdConsortRequestFacts(
+            rulerEligible: true, activeConsorts: 1, consortCapacity: 4,
+            requesterIndependent: true, supplierIndependent: true,
+            opinion: RulerHouseholdRules.MinimumConsortRequestOpinion,
+            supplierHasCandidate: true, equivalentPending: false,
+            rejectionCooldown: false);
+        True(RulerHouseholdRules.CanRequestConsort(eligibleRequest),
+            "a friendly independent realm may be asked to provide a consort");
+        Equal(false, RulerHouseholdRules.CanRequestConsort(
+                new RulerHouseholdConsortRequestFacts(
+                    true, 4, 4, true, true, 100, true, false, false)),
+            "a full ruler household cannot request another consort");
+        Equal(false, RulerHouseholdRules.CanRequestConsort(
+                new RulerHouseholdConsortRequestFacts(
+                    true, 0, 4, true, true,
+                    RulerHouseholdRules.MinimumConsortRequestOpinion - 1,
+                    true, false, false)),
+            "a realm below the friendship threshold is not asked");
+        Equal(false, RulerHouseholdRules.CanRequestConsort(
+                new RulerHouseholdConsortRequestFacts(
+                    true, 0, 4, false, true, 100, true, false, false)),
+            "a formal subject cannot send a consort request");
+        Equal(false, RulerHouseholdRules.CanRequestConsort(
+                new RulerHouseholdConsortRequestFacts(
+                    true, 0, 4, true, true, 100, true, true, false)),
+            "an equivalent pending request suppresses duplicates");
+        Equal(false, RulerHouseholdRules.CanRequestConsort(
+                new RulerHouseholdConsortRequestFacts(
+                    true, 0, 4, true, true, 100, true, false, true)),
+            "a rejected request observes the ordinary AI cooldown");
+        True(RulerHouseholdRules.ShouldDeferConsortRequestAcceptance(
+                playerResponse: true, candidateSelected: false),
+            "player acceptance waits for candidate selection");
+        Equal(false, RulerHouseholdRules.ShouldDeferConsortRequestAcceptance(
+                playerResponse: false, candidateSelected: false),
+            "AI acceptance selects its candidate in the authority service");
+        Equal(false, RulerHouseholdRules.ShouldDeferConsortRequestAcceptance(
+                playerResponse: true, candidateSelected: true),
+            "player confirmation may execute after a candidate is attached");
+        True(RulerHouseholdRules.IsBetterConsortRequestTarget(
+                candidateDistance: 40f, candidateOpinion: 60,
+                candidateKingdomId: 8L, currentDistance: 80f,
+                currentOpinion: 100, currentKingdomId: 2L),
+            "the nearest eligible friendly realm is preferred");
+        True(RulerHouseholdRules.IsBetterConsortRequestTarget(
+                candidateDistance: 40f, candidateOpinion: 80,
+                candidateKingdomId: 8L, currentDistance: 40f,
+                currentOpinion: 60, currentKingdomId: 2L),
+            "opinion breaks equal-distance request target ties");
+        Equal(false, RulerHouseholdRules.IsBetterConsortRequestTarget(
+                candidateDistance: 40f, candidateOpinion: 80,
+                candidateKingdomId: 8L, currentDistance: 40f,
+                currentOpinion: 80, currentKingdomId: 2L),
+            "kingdom identity provides a deterministic final tie break");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException($"{name}: expected true");
+    }
+}

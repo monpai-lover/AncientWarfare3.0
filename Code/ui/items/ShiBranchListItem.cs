@@ -21,7 +21,8 @@ namespace AncientWarfare3.ui.items
             _shiId = pObject.shi_id;
             int years = Date.getYearsSince(pObject.created_time);
             string displayName = ShiBranchRules.BuildDisplayName(
-                pObject.origin_city_name, pObject.clan_name);
+                pObject.origin_city_name, pObject.clan_name,
+                pObject.source_type, pObject.state_name);
             _label.text =
                 $"{displayName}   {AW_L10n.Text("aw_total", "\u603B")}{pObject.total} {AW_L10n.Text("aw_alive_short", "\u6D3B")}{pObject.alive} {AW_L10n.Text("aw_established_short", "\u7ACB")}{years}{AW_L10n.Text("aw_year_suffix", "\u5E74")} {AW_L10n.Text("aw_noble_short", "\u8D35")}{pObject.noble}" +
                 BuildOriginText(pObject);
@@ -84,7 +85,8 @@ namespace AncientWarfare3.ui.items
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
             string title = ShiBranchRules.BuildDisplayName(
-                pObject.origin_city_name, pObject.clan_name);
+                pObject.origin_city_name, pObject.clan_name,
+                pObject.source_type, pObject.state_name);
             if (string.IsNullOrEmpty(title))
                 title = AW_L10n.Text("aw_shi_branch", "\u6C0F\u652F");
             string desc = BuildTip(pObject);

@@ -5,32 +5,38 @@ namespace AncientWarfare3.core.lineage
         public static bool CanDeclareWar(bool pAttackerIsVassal, bool pDefenderIsSuzerain,
             bool pSameRootSuzerain, bool pBlockInternalWar, string pWarType, out string pReason)
         {
-            if (!pAttackerIsVassal)
-            {
-                pReason = "";
-                return true;
-            }
+            return CanDeclareWar(pAttackerIsVassal, false,
+                pDefenderIsSuzerain, pSameRootSuzerain, pBlockInternalWar,
+                pWarType, out pReason);
+        }
 
+        public static bool CanDeclareWar(bool pAttackerIsVassal,
+            bool pDefenderIsSubject, bool pDefenderIsSuzerain,
+            bool pSameRootSuzerain, bool pBlockInternalWar, string pWarType,
+            out string pReason)
+        {
             if (pDefenderIsSuzerain && pWarType == "independence_war")
             {
                 pReason = "";
                 return true;
             }
 
-            if (pSameRootSuzerain && pBlockInternalWar)
+            _ = pSameRootSuzerain;
+            _ = pBlockInternalWar;
+            if (pAttackerIsVassal || pDefenderIsSubject)
             {
-                pReason = "centralization_internal_war_blocked";
+                pReason = "vassal_external_war_blocked";
                 return false;
             }
 
-            if (pSameRootSuzerain)
-            {
-                pReason = "";
-                return true;
-            }
+            pReason = "";
+            return true;
+        }
 
-            pReason = "vassal_external_war_blocked";
-            return false;
+        public static bool CanUseOrdinaryWarDecision(bool pSourceIsSubject,
+            bool pTargetIsSubject)
+        {
+            return !pSourceIsSubject && !pTargetIsSubject;
         }
 
         public static bool CanCreateAlliance(bool pActorIsVassal, out string pReason)

@@ -14,11 +14,14 @@ namespace AncientWarfare3.patch
         {
             public readonly Actor Mother;
             public readonly long FatherId;
+            public readonly RulerHouseholdConceptionKind ConceptionKind;
 
-            public PregnancyStartState(Actor pMother, long pFatherId)
+            public PregnancyStartState(Actor pMother, long pFatherId,
+                RulerHouseholdConceptionKind pConceptionKind)
             {
                 Mother = pMother;
                 FatherId = pFatherId;
+                ConceptionKind = pConceptionKind;
             }
 
             public bool IsManaged => Mother?.data != null && FatherId >= 0L;
@@ -35,11 +38,13 @@ namespace AncientWarfare3.patch
             if (NonSexualPregnancyDepth > 0 || pID != "pregnant" ||
                 !(__instance is Actor mother) ||
                 !NobleHeirPregnancyService.TryPreparePregnancy(mother,
-                    out long fatherId))
+                    out long fatherId,
+                    out RulerHouseholdConceptionKind conceptionKind))
                 return;
 
             pOverrideTimer = NobleHeirPregnancyRules.TenMonthPregnancySeconds;
-            __state = new PregnancyStartState(mother, fatherId);
+            __state = new PregnancyStartState(mother, fatherId,
+                conceptionKind);
         }
 
         [HarmonyPostfix]
@@ -50,7 +55,17 @@ namespace AncientWarfare3.patch
         {
             if (__result && __state.IsManaged)
                 NobleHeirPregnancyService.OnPregnancyStarted(
-                    __state.Mother, __state.FatherId);
+                    __state.Mother, __state.FatherId,
+                    __state.ConceptionKind);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BabyMaker),
+            nameof(BabyMaker.makeBabyFromPregnancy))]
+        private static bool PregnancyDelivery_Prefix(Actor pActor)
+        {
+            return !RulerHouseholdPregnancyService
+                .TryDeliverConsortPregnancy(pActor);
         }
 
         [HarmonyPostfix]
@@ -67,6 +82,7 @@ namespace AncientWarfare3.patch
         {
             NobleHeirPregnancyService.OnActorLoaded(__result);
             DynasticMaleLineContinuityService.OnActorLoaded(__result);
+            RulerHouseholdService.OnActorLoaded(__result);
         }
 
         [HarmonyPrefix]

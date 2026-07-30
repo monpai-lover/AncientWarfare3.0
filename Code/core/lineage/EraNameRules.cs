@@ -6,6 +6,7 @@ namespace AncientWarfare3.core.lineage
     public enum EraChangeKind
     {
         Accession,
+        ImperialProclamation,
         Voluntary,
         AiMajorEvent
     }
@@ -31,6 +32,7 @@ namespace AncientWarfare3.core.lineage
     {
         None,
         Accession,
+        ImperialProclamation,
         RestoredMandate,
         AutonomousRestoration,
         MajorVictory,
@@ -223,9 +225,29 @@ namespace AncientWarfare3.core.lineage
         public static EraChangeBlockReason Validate(EraChangeContext pContext,
             EraChangeKind pKind)
         {
-            return pKind == EraChangeKind.Accession
+            return pKind == EraChangeKind.Accession ||
+                   pKind == EraChangeKind.ImperialProclamation
                 ? ValidateAccessionChange(pContext)
                 : ValidateVoluntaryChange(pContext);
+        }
+
+        public static bool RequiresPoliticalPoints(EraChangeKind pKind)
+        {
+            return pKind != EraChangeKind.Accession &&
+                   pKind != EraChangeKind.ImperialProclamation;
+        }
+
+        public static string KindId(EraChangeKind pKind)
+        {
+            return pKind switch
+            {
+                EraChangeKind.Accession => "accession",
+                EraChangeKind.ImperialProclamation =>
+                    "imperial_proclamation",
+                EraChangeKind.Voluntary => "voluntary",
+                EraChangeKind.AiMajorEvent => "ai_major_event",
+                _ => ""
+            };
         }
 
         public static bool IsMajorAiReason(EraChangeReason pReason)

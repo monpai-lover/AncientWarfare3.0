@@ -14,8 +14,16 @@ namespace AncientWarfare3.core.lineage
                    !pHasCity ||
                    !pHasAttackZone ||
                    !pHasArmy ||
-                   !pHasCurrentTile ||
-                   !pHasCurrentZone;
+                   !pHasCurrentTile;
+        }
+
+        public static bool ShouldRouteCrossIslandAttackThroughAw3(
+            bool pHasAttackTarget,
+            bool pSameIsland,
+            bool pAw3OwnsPathfinding)
+        {
+            return pHasAttackTarget && !pSameIsland &&
+                   pAw3OwnsPathfinding;
         }
     }
 }

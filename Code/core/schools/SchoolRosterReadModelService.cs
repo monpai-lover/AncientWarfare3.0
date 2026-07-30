@@ -51,16 +51,65 @@ namespace AncientWarfare3.core.schools
         public int TeacherCount { get; }
     }
 
+    internal sealed class SchoolRosterCapture
+    {
+        public SchoolRosterCapture(string pSchoolId,
+            HistoricalSchoolRosterRevisionStamp pRevisionStamp,
+            SchoolRosterCandidate[] pCandidates,
+            Dictionary<long, SchoolRosterActorMetadata> pMetadata)
+        {
+            SchoolId = pSchoolId ?? "";
+            RevisionStamp = pRevisionStamp;
+            Candidates = pCandidates ?? Array.Empty<SchoolRosterCandidate>();
+            Metadata = pMetadata ??
+                new Dictionary<long, SchoolRosterActorMetadata>();
+        }
+
+        public string SchoolId { get; }
+        public HistoricalSchoolRosterRevisionStamp RevisionStamp { get; }
+        public SchoolRosterCandidate[] Candidates { get; }
+        internal Dictionary<long, SchoolRosterActorMetadata> Metadata { get; }
+    }
+
+    internal sealed class SchoolRosterActorMetadata
+    {
+        public SchoolRosterActorMetadata(Actor pActor,
+            SchoolMembershipRecord pMembership, Kingdom pDisplayKingdom,
+            City pResidenceCity, string pActorName)
+        {
+            Actor = pActor;
+            Membership = pMembership;
+            DisplayKingdom = pDisplayKingdom;
+            ResidenceCity = pResidenceCity;
+            ActorName = pActorName ?? "";
+        }
+
+        public Actor Actor { get; }
+        public SchoolMembershipRecord Membership { get; }
+        public Kingdom DisplayKingdom { get; }
+        public City ResidenceCity { get; }
+        public string ActorName { get; }
+    }
+
     internal static class SchoolRosterReadModelService
     {
         public static SchoolRosterReadModel Build(string pSchoolId,
             float pHorizontalSpacing, float pVerticalSpacing, int pColumnsPerRow)
         {
+            SchoolRosterCapture capture = Capture(pSchoolId);
+            SchoolRosterLayout layout = SchoolRosterRules.Build(
+                capture.SchoolId, capture.Candidates, pHorizontalSpacing,
+                pVerticalSpacing, pColumnsPerRow);
+            return Materialize(capture, layout);
+        }
+
+        public static SchoolRosterCapture Capture(string pSchoolId)
+        {
             long[] memberIds = SchoolMembershipService.Members(pSchoolId);
             Dictionary<long, SchoolLectureSeniority> lectureSeniority =
                 HistoricalSchoolStore.LoadEarliestLectureSeniority(pSchoolId);
             var candidates = new List<SchoolRosterCandidate>(memberIds.Length);
-            var metadata = new Dictionary<long, RosterActorMetadata>();
+            var metadata = new Dictionary<long, SchoolRosterActorMetadata>();
 
             foreach (long actorId in memberIds)
             {
@@ -97,37 +146,52 @@ namespace AncientWarfare3.core.schools
                 City residence = HistoricalAffiliationService.ResidenceCity(actor) ?? actor.city;
                 Kingdom displayKingdom = HistoricalAffiliationService.ServiceKingdom(actor) ??
                                          residence?.kingdom ?? actor.kingdom;
-                metadata[actorId] = new RosterActorMetadata(actor, membership,
+                metadata[actorId] = new SchoolRosterActorMetadata(actor,
+                    membership,
                     displayKingdom, residence, SafeName(actor));
             }
 
-            SchoolRosterLayout layout = SchoolRosterRules.Build(pSchoolId, candidates,
-                pHorizontalSpacing, pVerticalSpacing, pColumnsPerRow);
-            var nodes = new List<SchoolRosterReadNode>(layout.Nodes.Count);
-            foreach (SchoolRosterNode node in layout.Nodes)
+            HistoricalSchoolRosterRevisionStamp revisionStamp =
+                HistoricalSchoolRosterRevisionStamp.Capture(pSchoolId,
+                    metadata.Values.Select(p =>
+                        p.ResidenceCity?.data?.id ?? -1L),
+                    HistoricalSchoolRevisionService.Source);
+            return new SchoolRosterCapture(pSchoolId, revisionStamp,
+                candidates.ToArray(), metadata);
+        }
+
+        public static SchoolRosterReadModel Materialize(
+            SchoolRosterCapture pCapture, SchoolRosterLayout pLayout)
+        {
+            if (pCapture == null || pLayout == null)
+                return new SchoolRosterReadModel("", null,
+                    Array.Empty<SchoolRosterReadNode>(),
+                    Array.Empty<SchoolRosterLink>(), 0, 0);
+            Dictionary<long, SchoolRosterActorMetadata> metadata =
+                pCapture.Metadata;
+            var nodes = new List<SchoolRosterReadNode>(pLayout.Nodes.Count);
+            foreach (SchoolRosterNode node in pLayout.Nodes)
             {
-                if (!metadata.TryGetValue(node.ActorId, out RosterActorMetadata value))
+                if (!metadata.TryGetValue(node.ActorId,
+                        out SchoolRosterActorMetadata value))
                     continue;
                 string teacherName = node.TeacherActorId < 0
                     ? ""
                     : metadata.TryGetValue(node.TeacherActorId,
-                        out RosterActorMetadata teacher)
+                        out SchoolRosterActorMetadata teacher)
                         ? teacher.ActorName
                         : SafeName(FindActor(node.TeacherActorId));
                 nodes.Add(new SchoolRosterReadNode(node, value.Actor, value.Membership,
                     value.DisplayKingdom, value.ResidenceCity, value.ActorName, teacherName));
             }
 
-            int teacherCount = layout.Nodes.Count(p =>
+            int teacherCount = pLayout.Nodes.Count(p =>
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.CanonicalMaster ||
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.Leader ||
                 p.Candidate.PersistedStanding == HistoricalSchoolStanding.Teacher);
-            HistoricalSchoolRosterRevisionStamp revisionStamp =
-                HistoricalSchoolRosterRevisionStamp.Capture(pSchoolId,
-                    nodes.Select(p => p.ResidenceCity?.data?.id ?? -1L),
-                    HistoricalSchoolRevisionService.Source);
-            return new SchoolRosterReadModel(pSchoolId, revisionStamp, nodes, layout.Links,
-                layout.ExcludedCount, teacherCount);
+            return new SchoolRosterReadModel(pCapture.SchoolId,
+                pCapture.RevisionStamp, nodes, pLayout.Links,
+                pLayout.ExcludedCount, teacherCount);
         }
 
         private static Actor FindActor(long pActorId)
@@ -167,23 +231,5 @@ namespace AncientWarfare3.core.schools
             catch { return pActor?.data?.name ?? ""; }
         }
 
-        private sealed class RosterActorMetadata
-        {
-            public RosterActorMetadata(Actor pActor, SchoolMembershipRecord pMembership,
-                Kingdom pDisplayKingdom, City pResidenceCity, string pActorName)
-            {
-                Actor = pActor;
-                Membership = pMembership;
-                DisplayKingdom = pDisplayKingdom;
-                ResidenceCity = pResidenceCity;
-                ActorName = pActorName ?? "";
-            }
-
-            public Actor Actor { get; }
-            public SchoolMembershipRecord Membership { get; }
-            public Kingdom DisplayKingdom { get; }
-            public City ResidenceCity { get; }
-            public string ActorName { get; }
-        }
     }
 }

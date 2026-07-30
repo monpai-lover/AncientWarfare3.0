@@ -54,5 +54,12 @@ namespace AncientWarfare3.core.pathfinding
             _items[index] = tail;
             return result;
         }
+
+        public void Clear()
+        {
+            if (Count <= 0) return;
+            Array.Clear(_items, 0, Count);
+            Count = 0;
+        }
     }
 }

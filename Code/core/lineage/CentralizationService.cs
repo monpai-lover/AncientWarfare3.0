@@ -51,6 +51,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.CENTRALIZATION_LEVEL, pTargetLevel);
             pKingdom.data.set(LineageKeys.CENTRALIZATION_REFORM_READY_YEAR,
                 readyYear);
+            FeudatoryService.ApplyAutonomyCap(pKingdom,
+                CentralizationRules.Effects(pTargetLevel).AutonomyCap);
             HistoryWriter.RecordKingdom(pKingdom, "centralization_reformed",
                 HistoryLocalizationRules.Text("aw_hist_centralization_reformed_text") +
                 pTargetLevel);

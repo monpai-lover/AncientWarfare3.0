@@ -212,20 +212,7 @@ namespace AncientWarfare3.utils
 
                 if (col.IsNotNull) cmd_builder.Append(" NOT NULL");
 
-                if (!string.IsNullOrEmpty(col.Default))
-                {
-                    cmd_builder.Append(" DEFAULT ");
-                    if (col.ValueType == ColumnType.TEXT)
-                    {
-                        cmd_builder.Append('\'');
-                        cmd_builder.Append(col.Default);
-                        cmd_builder.Append('\'');
-                    }
-                    else
-                    {
-                        cmd_builder.Append(col.Default);
-                    }
-                }
+                AppendDefault(cmd_builder, col);
 
                 if (!string.IsNullOrEmpty(col.Check))
                 {
@@ -285,9 +272,31 @@ namespace AncientWarfare3.utils
                 if (existing.Contains(col.Name)) continue;
                 if (col.IsPrimary) continue; // 主键不能 ADD COLUMN
                 using var cmd = new SQLiteCommand(pThis);
-                cmd.CommandText = $"ALTER TABLE {pTableName} ADD COLUMN {col.Name} {col.ValueType}";
+                var definition = new StringBuilder();
+                definition.Append($"ALTER TABLE {pTableName} ADD COLUMN {col.Name} {col.ValueType}");
+                AppendDefault(definition, col);
+                cmd.CommandText = definition.ToString();
                 cmd.ExecuteNonQuery();
             }
+        }
+
+        private static void AppendDefault(StringBuilder pBuilder,
+            ColumnDef pCol)
+        {
+            bool hasDefault = !string.IsNullOrEmpty(pCol.Default) ||
+                              pCol.ValueType == ColumnType.TEXT;
+            if (!hasDefault) return;
+
+            pBuilder.Append(" DEFAULT ");
+            if (pCol.ValueType != ColumnType.TEXT)
+            {
+                pBuilder.Append(pCol.Default);
+                return;
+            }
+
+            pBuilder.Append('\'');
+            pBuilder.Append((pCol.Default ?? "").Replace("'", "''"));
+            pBuilder.Append('\'');
         }
 
         private class TableInfo

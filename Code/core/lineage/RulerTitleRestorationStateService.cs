@@ -66,11 +66,29 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("REGAINED_MANDATE_ACTOR_ID", -1L));
         }
 
+        public static void MarkDynasticRestorationCompleted(Kingdom pKingdom,
+            Actor pRuler)
+        {
+            if (pKingdom?.data == null || pRuler?.data == null ||
+                pKingdom.king != pRuler) return;
+            long shiId = ResolveShiId(pKingdom);
+            if (shiId < 0) return;
+            Update(shiId,
+                ColumnVal.Create("WAS_FORMER_MANDATE", 1),
+                ColumnVal.Create("RESTORED_PENDING", 1),
+                ColumnVal.Create("SELF_RESTORATION_COMPLETED", 1),
+                ColumnVal.Create("REGAINED_MANDATE", 0),
+                ColumnVal.Create("SELF_RESTORATION_ACTOR_ID", pRuler.data.id),
+                ColumnVal.Create("REGAINED_MANDATE_ACTOR_ID", -1L));
+        }
+
         public static void MarkMandateRegained(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
             pKingdom.data.get(LineageKeys.MANDATE_ORIGIN_TYPE, out string origin, "");
-            if (origin != "self_restoration") return;
+            if (origin != "self_restoration" &&
+                origin != MandateFeudatoryCompletionRules.RestorationOrigin)
+                return;
             long shiId = ResolveShiId(pKingdom);
             RulerTitleRestorationState state = Read(shiId);
             if (shiId < 0 || !state.WasFormerMandateShi ||
@@ -139,12 +157,16 @@ namespace AncientWarfare3.core.lineage
             if (!Ready || pShiId < 0 || pValues == null || pValues.Length == 0) return;
             try
             {
-                DB.UpdateValue(ShiBranchTableItem.GetTableName(),
-                    new List<SimpleColumnConstraint>
-                    {
-                        SimpleColumnConstraint.CreateEq("SHI_ID", pShiId)
-                    },
-                    pValues);
+                HistoricalContentRevision
+                    .AdvanceAfterSuccessfulSynchronousWrite(
+                        () => DB.UpdateValue(
+                            ShiBranchTableItem.GetTableName(),
+                            new List<SimpleColumnConstraint>
+                            {
+                                SimpleColumnConstraint.CreateEq(
+                                    "SHI_ID", pShiId)
+                            },
+                            pValues));
             }
             catch (Exception error)
             {

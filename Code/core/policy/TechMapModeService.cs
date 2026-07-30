@@ -81,6 +81,7 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 ClearCache();
@@ -91,6 +92,11 @@ namespace AncientWarfare3.core.policy
             catch
             {
             }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void ClearCache()
@@ -100,6 +106,13 @@ namespace AncientWarfare3.core.policy
             _rangeResolved = false;
             _rangeMin = 0f;
             _rangeMax = 1f;
+        }
+
+        internal static void ResetRuntime()
+        {
+            ClearCache();
+            _colorAssetCache.Clear();
+            _lastDirtyTime = -1.0;
         }
 
         public static void DirtyMapIfActive()

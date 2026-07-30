@@ -1,0 +1,46 @@
+using AncientWarfare3.core.policy;
+
+internal static class XiaPopulationRecoveryRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(100, KingdomFoodReliefRules.EmergencyTarget(200),
+            "a city keeps half a unit of emergency food per resident");
+        Equal(200, KingdomFoodReliefRules.DonorReserve(200),
+            "a donor retains one full unit of food per resident");
+        Equal(80, KingdomFoodReliefRules.TransferAmount(
+                receiverFood: 20, receiverPopulation: 200,
+                donorFood: 300, donorPopulation: 200,
+                remainingKingdomBudget: 512),
+            "relief fills the receiver target without consuming donor reserve");
+        Equal(0, KingdomFoodReliefRules.TransferAmount(
+                receiverFood: 100, receiverPopulation: 200,
+                donorFood: 300, donorPopulation: 200,
+                remainingKingdomBudget: 512),
+            "a city at its emergency target does not request relief");
+        Equal(32, KingdomFoodReliefRules.TransferAmount(
+                receiverFood: 0, receiverPopulation: 200,
+                donorFood: 232, donorPopulation: 200,
+                remainingKingdomBudget: 512),
+            "relief never takes the donor below its reserve");
+        Equal(18, KingdomFoodReliefRules.TransferAmount(
+                receiverFood: 0, receiverPopulation: 200,
+                donorFood: 500, donorPopulation: 200,
+                remainingKingdomBudget: 18),
+            "the annual kingdom budget hard-caps relief work");
+
+        string root = Path.Combine(AppContext.BaseDirectory, "..", "..",
+            "..", "..", "..");
+        string legacyPatch = Path.Combine(root, "Code", "patch",
+            "AW_BirthLimitPatch.cs");
+        Equal(false, File.Exists(legacyPatch),
+            "Xia reproduction no longer installs a second database-backed child cap");
+    }
+}

@@ -1,0 +1,86 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsReplenishmentArrivalRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyRtsReplenishmentArrivalRules.
+                ShouldReleaseReplenishmentAfterArrival(
+                    arrivalTeleported: true,
+                    departureStrengthReady: true),
+            "a replenished army at the departure quorum must release its full-strength request and resume its mission");
+        Assert(!ArmyRtsReplenishmentArrivalRules.
+                ShouldReleaseReplenishmentAfterArrival(
+                    arrivalTeleported: false,
+                    departureStrengthReady: true),
+            "normal movement before the arrival deadline must not cancel an active replenishment request");
+        Assert(!ArmyRtsReplenishmentArrivalRules.
+                ShouldReleaseReplenishmentAfterArrival(
+                    arrivalTeleported: true,
+                    departureStrengthReady: false),
+            "an army below the departure quorum must remain in replenishment after a partial arrival");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: true, atFormation: false,
+                combatActive: false, transportActive: false,
+                elapsedRealtime: 0d) ==
+               ArmyRtsReplenishmentArrivalAction.Teleport,
+            "a new reinforcement must join its target formation immediately");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: true, atFormation: false,
+                combatActive: false, transportActive: false,
+                elapsedRealtime:
+                    ArmyRtsReplenishmentArrivalRules.TeleportAfterSeconds) ==
+               ArmyRtsReplenishmentArrivalAction.Teleport,
+            "a reinforcement that has missed the bounded arrival deadline must be teleported to formation");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: true, atFormation: false,
+                combatActive: true, transportActive: false,
+                elapsedRealtime: 60d) ==
+               ArmyRtsReplenishmentArrivalAction.Wait,
+            "an engaged reinforcement must not be teleported out of combat");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: true, atFormation: false,
+                combatActive: false, transportActive: true,
+                elapsedRealtime: 60d) ==
+               ArmyRtsReplenishmentArrivalAction.Wait,
+            "a transported reinforcement must retain transport ownership until the voyage ends");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: true, atFormation: true,
+                combatActive: false, transportActive: false,
+                elapsedRealtime: 60d) ==
+               ArmyRtsReplenishmentArrivalAction.Complete,
+            "an arrival already inside formation must release its pending record");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: false,
+                memberStillEligible: true, atFormation: false,
+                combatActive: false, transportActive: false,
+                elapsedRealtime: 60d) ==
+               ArmyRtsReplenishmentArrivalAction.Discard,
+            "a reinforcement whose target mission ended must not survive in the arrival queue");
+
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: true, targetArmyActive: true,
+                memberStillEligible: false, atFormation: false,
+                combatActive: false, transportActive: false,
+                elapsedRealtime: 60d) ==
+               ArmyRtsReplenishmentArrivalAction.Discard,
+            "a reinforcement that left the target army must be discarded instead of teleported");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

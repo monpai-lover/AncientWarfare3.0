@@ -1,0 +1,49 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingRuntimeModeRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(AWPathfindingMode.Aw3,
+            AWPathfindingRuntimeModeRules.Parse(null),
+            "an unset switch keeps AW3 global pathfinding enabled");
+        Equal(AWPathfindingMode.Aw3,
+            AWPathfindingRuntimeModeRules.Parse("on"),
+            "on enables AW3 global pathfinding");
+        Equal(AWPathfindingMode.Aw3,
+            AWPathfindingRuntimeModeRules.Parse(" TRUE "),
+            "true is accepted without case or whitespace sensitivity");
+        Equal(AWPathfindingMode.Aw3,
+            AWPathfindingRuntimeModeRules.Parse("1"),
+            "one enables AW3 global pathfinding");
+
+        Equal(AWPathfindingMode.Vanilla,
+            AWPathfindingRuntimeModeRules.Parse("off"),
+            "off restores vanilla pathfinding");
+        Equal(AWPathfindingMode.Vanilla,
+            AWPathfindingRuntimeModeRules.Parse(" FALSE "),
+            "false restores vanilla pathfinding");
+        Equal(AWPathfindingMode.Vanilla,
+            AWPathfindingRuntimeModeRules.Parse("0"),
+            "zero restores vanilla pathfinding");
+        Equal(AWPathfindingMode.Vanilla,
+            AWPathfindingRuntimeModeRules.Parse("vanilla"),
+            "vanilla explicitly restores the original implementation");
+
+        Equal(AWPathfindingMode.Aw3,
+            AWPathfindingRuntimeModeRules.Parse("unexpected"),
+            "unknown values fail closed to the shipped AW3 mode");
+        Equal("aw3", AWPathfindingRuntimeModeRules.LogName(AWPathfindingMode.Aw3),
+            "AW3 mode has a stable log label");
+        Equal("vanilla",
+            AWPathfindingRuntimeModeRules.LogName(AWPathfindingMode.Vanilla),
+            "vanilla mode has a stable log label");
+    }
+}

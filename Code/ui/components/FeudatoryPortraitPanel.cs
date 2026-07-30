@@ -24,10 +24,14 @@ namespace AncientWarfare3.ui.components
             return panel;
         }
 
-        public void Bind(long pActorId, string pName, string pShiLabel)
+        public void Bind(long pActorId, string pName, string pTitle,
+            string pShiLabel)
         {
             _actorId = pActorId;
-            _name.text = string.IsNullOrEmpty(pName) ? "#" + pActorId : pName;
+            string name = string.IsNullOrEmpty(pName) ? "#" + pActorId : pName;
+            _name.text = string.IsNullOrEmpty(pTitle)
+                ? name
+                : pTitle + "  " + name;
             _shi.text = string.IsNullOrEmpty(pShiLabel)
                 ? AW_L10n.Text("aw_feudatory_shi_unknown", "Shi unknown")
                 : pShiLabel;

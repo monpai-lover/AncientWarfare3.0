@@ -1,3 +1,4 @@
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 using HarmonyLib;
@@ -168,7 +169,10 @@ namespace AncientWarfare3.patch
             if (pTooltip.stats_container != null) pTooltip.stats_container.SetActive(false);
 
             string body = StripDuplicateHeader(pBody, title);
-            string text = string.IsNullOrEmpty(body) ? pKingdom.name : pKingdom.name + "\n" + body;
+            string kingdomName = SuccessionDisputeService.GetDisplayName(pKingdom);
+            string text = string.IsNullOrEmpty(body)
+                ? kingdomName
+                : kingdomName + "\n" + body;
             pTooltip.setDescription(text);
         }
 
@@ -191,7 +195,9 @@ namespace AncientWarfare3.patch
 
             string body = StripDuplicateHeader(pBody, title);
             string cityName = pCity?.data?.name ?? "";
-            string kingdomName = kingdom?.name ?? "";
+            string kingdomName = kingdom?.data == null
+                ? ""
+                : SuccessionDisputeService.GetDisplayName(kingdom);
             string header = string.IsNullOrEmpty(kingdomName) ? cityName : cityName + " - " + kingdomName;
             string text = string.IsNullOrEmpty(body) ? header : header + "\n" + body;
             pTooltip.setDescription(text);

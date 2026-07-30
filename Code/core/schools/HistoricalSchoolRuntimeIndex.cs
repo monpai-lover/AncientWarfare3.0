@@ -64,6 +64,9 @@ namespace AncientWarfare3.core.schools
         private readonly Dictionary<long, Dictionary<string, HashSet<long>>>
             _presentByCitySchool =
                 new Dictionary<long, Dictionary<string, HashSet<long>>>();
+        private readonly Dictionary<long, Dictionary<string, HashSet<long>>>
+            _presentTeachersByCitySchool =
+                new Dictionary<long, Dictionary<string, HashSet<long>>>();
         private readonly Dictionary<int, HashSet<long>> _travelEligibleByBucket =
             new Dictionary<int, HashSet<long>>();
         private readonly Dictionary<long, HashSet<long>> _servingByKingdom =
@@ -85,12 +88,18 @@ namespace AncientWarfare3.core.schools
 
             _byActor[pEntry.ActorId] = pEntry;
             Add(_membersBySchool, pEntry.SchoolId, pEntry.ActorId);
-            if (IsTeacher(pEntry.Standing))
+            bool teacher = IsTeacher(pEntry.Standing);
+            if (teacher)
                 Add(_teachersBySchool, pEntry.SchoolId, pEntry.ActorId);
             if (IsLeader(pEntry.Standing))
                 Add(_leadersBySchool, pEntry.SchoolId, pEntry.ActorId);
             if (pEntry.Present && pEntry.ResidenceCityId >= 0)
+            {
                 AddPresent(pEntry.ResidenceCityId, pEntry.SchoolId, pEntry.ActorId);
+                if (teacher)
+                    AddPresentTeacher(pEntry.ResidenceCityId, pEntry.SchoolId,
+                        pEntry.ActorId);
+            }
             if (pEntry.TravelEligible && pEntry.TravelBucket >= 0)
                 Add(_travelEligibleByBucket, pEntry.TravelBucket, pEntry.ActorId);
             if (pEntry.ServiceKingdomId >= 0)
@@ -108,12 +117,18 @@ namespace AncientWarfare3.core.schools
 
             _byActor.Remove(pActorId);
             Remove(_membersBySchool, old.SchoolId, pActorId);
-            if (IsTeacher(old.Standing))
+            bool teacher = IsTeacher(old.Standing);
+            if (teacher)
                 Remove(_teachersBySchool, old.SchoolId, pActorId);
             if (IsLeader(old.Standing))
                 Remove(_leadersBySchool, old.SchoolId, pActorId);
             if (old.Present && old.ResidenceCityId >= 0)
+            {
                 RemovePresent(old.ResidenceCityId, old.SchoolId, pActorId);
+                if (teacher)
+                    RemovePresentTeacher(old.ResidenceCityId, old.SchoolId,
+                        pActorId);
+            }
             if (old.TravelEligible && old.TravelBucket >= 0)
                 Remove(_travelEligibleByBucket, old.TravelBucket, pActorId);
             if (old.ServiceKingdomId >= 0)
@@ -154,6 +169,15 @@ namespace AncientWarfare3.core.schools
             return actors.Count;
         }
 
+        public int ResidentTeacherCount(long pCityId, string pSchoolId)
+        {
+            if (!_presentTeachersByCitySchool.TryGetValue(pCityId,
+                    out var schools) || string.IsNullOrEmpty(pSchoolId) ||
+                !schools.TryGetValue(pSchoolId, out HashSet<long> actors))
+                return 0;
+            return actors.Count;
+        }
+
         public long[] MemberIds(string pSchoolId) =>
             CopyStable(_membersBySchool, pSchoolId);
 
@@ -185,19 +209,12 @@ namespace AncientWarfare3.core.schools
 
         public long[] ResidentTeacherIds(long pCityId, string pSchoolId)
         {
-            if (!_presentByCitySchool.TryGetValue(pCityId, out var schools) ||
+            if (!_presentTeachersByCitySchool.TryGetValue(pCityId,
+                    out var schools) ||
                 string.IsNullOrEmpty(pSchoolId) ||
-                !schools.TryGetValue(pSchoolId, out HashSet<long> residents) ||
-                !_teachersBySchool.TryGetValue(pSchoolId, out HashSet<long> teachers))
+                !schools.TryGetValue(pSchoolId, out HashSet<long> teachers))
                 return Array.Empty<long>();
-            var result = new List<long>(Math.Min(residents.Count, teachers.Count));
-            HashSet<long> smaller = residents.Count <= teachers.Count ? residents : teachers;
-            HashSet<long> larger = ReferenceEquals(smaller, residents) ? teachers : residents;
-            foreach (long actorId in smaller)
-                if (larger.Contains(actorId)) result.Add(actorId);
-            long[] ids = result.ToArray();
-            Array.Sort(ids);
-            return ids;
+            return CopyStable(teachers);
         }
 
         public long[] PresentCityIds()
@@ -263,6 +280,7 @@ namespace AncientWarfare3.core.schools
             _teachersBySchool.Clear();
             _leadersBySchool.Clear();
             _presentByCitySchool.Clear();
+            _presentTeachersByCitySchool.Clear();
             _travelEligibleByBucket.Clear();
             _servingByKingdom.Clear();
             _promotionByYear.Clear();
@@ -299,6 +317,29 @@ namespace AncientWarfare3.core.schools
             if (!_presentByCitySchool.TryGetValue(pCityId, out var schools)) return;
             Remove(schools, pSchoolId, pActorId);
             if (schools.Count == 0) _presentByCitySchool.Remove(pCityId);
+        }
+
+        private void AddPresentTeacher(long pCityId, string pSchoolId,
+            long pActorId)
+        {
+            if (!_presentTeachersByCitySchool.TryGetValue(pCityId,
+                    out var schools))
+            {
+                schools = new Dictionary<string, HashSet<long>>(
+                    StringComparer.Ordinal);
+                _presentTeachersByCitySchool.Add(pCityId, schools);
+            }
+            Add(schools, pSchoolId, pActorId);
+        }
+
+        private void RemovePresentTeacher(long pCityId, string pSchoolId,
+            long pActorId)
+        {
+            if (!_presentTeachersByCitySchool.TryGetValue(pCityId,
+                    out var schools)) return;
+            Remove(schools, pSchoolId, pActorId);
+            if (schools.Count == 0)
+                _presentTeachersByCitySchool.Remove(pCityId);
         }
 
         private static void Add<TKey>(

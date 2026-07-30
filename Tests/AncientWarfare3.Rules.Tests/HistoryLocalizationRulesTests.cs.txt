@@ -1,0 +1,102 @@
+using AncientWarfare3.core.lineage;
+
+internal static class HistoryLocalizationRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal("世子", HistoryLocalizationRules.Text("aw_heir_shizi", "cz"),
+            "heir designation history resolves Shizi instead of leaking a key");
+        Equal("太子", HistoryLocalizationRules.Text("aw_heir_taizi", "cz"),
+            "heir designation history resolves Taizi");
+        Equal("留后", HistoryLocalizationRules.Text("aw_heir_liuhou", "cz"),
+            "military-acclaim history resolves Liuhou");
+        Equal("嗣君", HistoryLocalizationRules.Text("aw_heir_sijun", "cz"),
+            "civil-acclaim history resolves Sijun");
+        Equal("无学派",
+            HistoryLocalizationRules.Text("aw_court_school_none", "cz"),
+            "empty court school uses the explicit no-school label");
+        Equal("师从",
+            HistoryLocalizationRules.Text("aw_hist_school_studied_under", "cz"),
+            "disciple biography uses a localized Chinese relation");
+        Equal(" studied under ",
+            HistoryLocalizationRules.Text("aw_hist_school_studied_under", "en"),
+            "disciple biography keeps the English relation in English only");
+        Equal("師從",
+            HistoryLocalizationRules.Text("aw_hist_school_studied_under", "ch"),
+            "disciple biography uses a localized traditional Chinese relation");
+        Equal(" is first granted ",
+            HistoryLocalizationRules.Text("aw_hist_official_rank_grant_mid", "en"),
+            "first official rank grant history resolves its middle fragment");
+        Equal(" and is entered upon the official register.",
+            HistoryLocalizationRules.Text("aw_hist_official_rank_grant_suffix", "en"),
+            "first official rank grant history resolves its suffix");
+
+        foreach ((string key, string expected) in new[]
+                 {
+                     ("aw_hist_school_authored", "著成"),
+                     ("aw_hist_school_preserved", "传于此城"),
+                     ("aw_hist_school_converted_from", "由"),
+                     ("aw_hist_school_converted_to", "转入"),
+                     ("aw_hist_school_rediscovered", "重得"),
+                     ("aw_hist_school_revived", "复兴"),
+                     ("aw_hist_school_debated_with", "与"),
+                     ("aw_hist_school_debated_topic", "论辩"),
+                     ("aw_hist_school_master_died", "逝世"),
+                     ("aw_hist_school_descended_at", "降临于"),
+                     ("aw_hist_school_travelled_to", "游学至"),
+                     ("aw_hist_school_arrived_to_study", "来此游学"),
+                     ("aw_hist_school_served_as", "出任"),
+                     ("aw_hist_school_served_court", "入朝为客卿")
+                 })
+            Equal(expected, HistoryLocalizationRules.Text(key, "cz"),
+                "school chronicle fragment localizes " + key);
+
+        string schoolSources = string.Join("\n", new[]
+        {
+            "HistoricalSchoolActionService.cs",
+            "HistoricalSchoolDebateService.cs",
+            "SchoolGuestOfficeService.cs"
+        }.Select(file => File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools", file))));
+        foreach (string literal in new[]
+                 {
+                     " authored ", " preserved ", "Converted from ",
+                     "Rediscovered ", " revived ", " debated ",
+                     " served as ", " served the court"
+                 })
+            Equal(false, schoolSources.Contains(literal),
+                "school chronicle source contains no hard-coded English: " + literal);
+
+        foreach ((string id, string expected) in new[]
+                 {
+                     ("livelihood", "民生"), ("famine", "饥荒"),
+                     ("war", "战争"), ("defense", "守御"),
+                     ("aggression", "征伐"), ("peace", "议和"),
+                     ("diplomacy", "外交"), ("order", "治序"),
+                     ("commerce", "商贸"), ("technology", "技艺"),
+                     ("institutions", "制度"), ("medicine", "医道"),
+                     ("epidemic", "疫病")
+                 })
+            Equal(expected, HistoryLocalizationRules.Text(
+                    "aw_hist_school_topic_" + id, "cz"),
+                "school debate topic localizes " + id);
+        foreach ((string id, string expected) in new[]
+                 {
+                     ("draw", "未分胜负"),
+                     ("narrow_first", "前者小胜"),
+                     ("decisive_first", "前者大胜"),
+                     ("narrow_second", "后者小胜"),
+                     ("decisive_second", "后者大胜")
+                 })
+            Equal(expected, HistoryLocalizationRules.Text(
+                    "aw_hist_school_outcome_" + id, "cz"),
+                "school debate outcome localizes " + id);
+    }
+}

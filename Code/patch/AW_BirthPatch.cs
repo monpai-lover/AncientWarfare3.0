@@ -1,3 +1,4 @@
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
@@ -24,9 +25,10 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "newCreature")]
         public static void NewCreature_Postfix(Actor __instance)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
-            if (!LineageService.IsXia(__instance)) return;
+            if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
 
             LineageService.OnActorBorn(__instance);
         }
@@ -35,7 +37,10 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(BabyHelper), nameof(BabyHelper.applyParentsMeta))]
         public static void ApplyParentsMeta_Postfix(Actor pParent1, Actor pParent2, Actor pBaby)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pBaby?.data == null) return;
+            RulerHouseholdPregnancyService.ApplyBirthLegitimacy(pBaby,
+                pParent1, pParent2);
             LineageService.OnActorBornWithParents(pBaby, pParent1, pParent2);
             try { RoyalClaimService.OnActorBornWithParents(pBaby, pParent1, pParent2); }
             catch (System.Exception e) { ModClass.LogWarning("Royal claim birth inheritance failed: " + e.Message); }

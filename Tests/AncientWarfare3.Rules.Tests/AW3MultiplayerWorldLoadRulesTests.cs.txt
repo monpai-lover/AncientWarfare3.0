@@ -1,0 +1,277 @@
+using System;
+using System.IO;
+using AncientWarfare3.api.multiplayer;
+
+internal static class AW3MultiplayerWorldLoadRulesTests
+{
+    public static void Run()
+    {
+        CompletesOnlyAfterMatchingWorldDataAndRestore();
+        RejectsInvalidOperationIdentity();
+        RejectsWorldLoadedBeforeMatchingData();
+        FallbackFailureIsStableAndTerminal();
+        TimeoutUsesInclusiveDeadline();
+        CancellationAndTerminalCallbacksAreIdempotent();
+        DuplicateWorldLoadedCallbackIsIgnored();
+        TimeoutAndCancellationRaceHasOneWinner();
+        RestoreFailureIsStableAndTerminal();
+        CoordinatorLoadsTheOperationCanonicalPath();
+    }
+
+    private static void CompletesOnlyAfterMatchingWorldDataAndRestore()
+    {
+        Guid operationId = Guid.NewGuid();
+        string root = Path.GetFullPath(@"C:\snapshots\verified");
+        var operation = new AW3MultiplayerWorldLoadOperation(
+            operationId, root,
+            deadlineUtc: new DateTime(2030, 1, 1, 0, 2, 0,
+                DateTimeKind.Utc));
+
+        Equal(false, operation.ObserveWorldDataQueued(@"C:\other"),
+            "wrong world path is ignored");
+        Equal(0L, operation.Snapshot.Revision,
+            "wrong world path does not advance revision");
+        Equal(true, operation.ObserveWorldDataQueued(
+                @"C:\snapshots\verified\"),
+            "canonical target path is accepted");
+        Equal(true, operation.ObserveWorldLoaded(),
+            "world-loaded callback enters restoration");
+        Equal(AW3MultiplayerWorldLoadState.RestoringAw3,
+            operation.Snapshot.State, "restore state");
+        Equal(true, operation.CompleteRestore(), "restore completes once");
+        Equal(false, operation.CompleteRestore(),
+            "duplicate completion ignored");
+
+        AW3MultiplayerWorldLoadSnapshot snapshot = operation.Snapshot;
+        Equal(operationId, snapshot.OperationId, "operation ID retained");
+        Equal(root, snapshot.GenerationDirectory,
+            "canonical generation directory retained");
+        Equal(AW3MultiplayerWorldLoadState.Completed, snapshot.State,
+            "completed terminal state");
+        Equal(AW3MultiplayerWorldLoadError.None, snapshot.Error,
+            "successful operation has no error");
+        Equal(3L, snapshot.Revision,
+            "three accepted transitions advance revision");
+    }
+
+    private static void RejectsInvalidOperationIdentity()
+    {
+        DateTime deadline = new DateTime(2030, 1, 1, 0, 2, 0,
+            DateTimeKind.Utc);
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerWorldLoadOperation(Guid.Empty,
+                    Path.GetFullPath(@"C:\verified"), deadline),
+            "empty operation ID rejected");
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
+                    @"relative\verified", deadline),
+            "relative generation directory rejected");
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
+                    @"C:\verified\..\verified", deadline),
+            "noncanonical generation directory rejected");
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
+                    Path.GetFullPath(@"C:\verified"),
+                    DateTime.SpecifyKind(deadline, DateTimeKind.Local)),
+            "non-UTC deadline rejected");
+    }
+
+    private static void RejectsWorldLoadedBeforeMatchingData()
+    {
+        var operation = CreateOperation(out _);
+
+        Equal(false, operation.ObserveWorldLoaded(),
+            "world loaded before matching loadData is stale");
+        Equal(false, operation.ObserveWorldDataQueued(null),
+            "blank loadData path is ignored");
+        Equal(AW3MultiplayerWorldLoadState.AwaitingWorldData,
+            operation.Snapshot.State, "operation still awaits matching data");
+        Equal(0L, operation.Snapshot.Revision,
+            "stale callbacks leave revision unchanged");
+    }
+
+    private static void FallbackFailureIsStableAndTerminal()
+    {
+        var operation = CreateOperation(out _);
+
+        Equal(true, operation.FailWorldLoadFallback("generated fallback"),
+            "fallback failure accepted");
+        long revision = operation.Snapshot.Revision;
+        Equal(false, operation.ObserveWorldDataQueued(
+                operation.Snapshot.GenerationDirectory),
+            "terminal fallback ignores late loadData");
+        Equal(false, operation.Cancel(),
+            "terminal fallback cannot become cancelled");
+        Equal(AW3MultiplayerWorldLoadError.WorldLoadFallback,
+            operation.Snapshot.Error, "stable fallback error");
+        Equal("generated fallback", operation.Snapshot.Detail,
+            "stable fallback detail");
+        Equal(revision, operation.Snapshot.Revision,
+            "late callbacks do not advance fallback revision");
+    }
+
+    private static void TimeoutUsesInclusiveDeadline()
+    {
+        var operation = CreateOperation(out DateTime deadline);
+
+        Equal(false, operation.TryTimeout(deadline.AddTicks(-1)),
+            "operation remains live before deadline");
+        Equal(true, operation.TryTimeout(deadline),
+            "deadline itself expires operation");
+        Equal(AW3MultiplayerWorldLoadState.Failed,
+            operation.Snapshot.State, "timeout is failed state");
+        Equal(AW3MultiplayerWorldLoadError.WorldLoadTimeout,
+            operation.Snapshot.Error, "stable timeout error");
+        Equal(false, operation.TryTimeout(deadline.AddMinutes(1)),
+            "duplicate timeout ignored");
+    }
+
+    private static void CancellationAndTerminalCallbacksAreIdempotent()
+    {
+        var cancelled = CreateOperation(out _);
+        Equal(true, cancelled.Cancel(), "cancellation accepted");
+        long revision = cancelled.Snapshot.Revision;
+        Equal(false, cancelled.Cancel(), "duplicate cancellation ignored");
+        Equal(false, cancelled.FailWorldLoadFallback("late fallback"),
+            "cancelled operation ignores later failure");
+        Equal(AW3MultiplayerWorldLoadState.Cancelled,
+            cancelled.Snapshot.State, "cancelled terminal state");
+        Equal(AW3MultiplayerWorldLoadError.Cancelled,
+            cancelled.Snapshot.Error, "cancelled terminal error");
+        Equal(revision, cancelled.Snapshot.Revision,
+            "duplicate terminal callbacks leave revision stable");
+
+        var completed = CreateOperation(out DateTime deadline);
+        string root = completed.Snapshot.GenerationDirectory;
+        completed.ObserveWorldDataQueued(root);
+        completed.ObserveWorldLoaded();
+        completed.CompleteRestore();
+        long completedRevision = completed.Snapshot.Revision;
+        Equal(false, completed.TryTimeout(deadline.AddHours(1)),
+            "completed operation ignores timeout");
+        Equal(false, completed.FailWorldLoadFallback("late failure"),
+            "completed operation ignores fallback");
+        Equal(AW3MultiplayerWorldLoadError.None,
+            completed.Snapshot.Error, "completion error remains none");
+        Equal(string.Empty, completed.Snapshot.Detail,
+            "completion detail remains empty");
+        Equal(completedRevision, completed.Snapshot.Revision,
+            "completed revision remains stable");
+    }
+
+    private static void DuplicateWorldLoadedCallbackIsIgnored()
+    {
+        var operation = CreateOperation(out _);
+        operation.ObserveWorldDataQueued(
+            operation.Snapshot.GenerationDirectory);
+
+        Equal(true, operation.ObserveWorldLoaded(),
+            "first world-loaded callback begins restore");
+        Equal(false, operation.ObserveWorldLoaded(),
+            "duplicate world-loaded callback is stale");
+        Equal(AW3MultiplayerWorldLoadState.RestoringAw3,
+            operation.Snapshot.State,
+            "duplicate callback cannot complete or regress restore");
+    }
+
+    private static void TimeoutAndCancellationRaceHasOneWinner()
+    {
+        for (var iteration = 0; iteration < 100; iteration++)
+        {
+            var operation = CreateOperation(out DateTime deadline);
+            bool timeout = false;
+            bool cancelled = false;
+            System.Threading.Tasks.Task first =
+                System.Threading.Tasks.Task.Run(() =>
+                    timeout = operation.TryTimeout(deadline));
+            System.Threading.Tasks.Task second =
+                System.Threading.Tasks.Task.Run(() =>
+                    cancelled = operation.Cancel());
+            System.Threading.Tasks.Task.WaitAll(first, second);
+
+            Equal(true, timeout ^ cancelled,
+                "timeout/cancellation race has one accepted winner");
+            AW3MultiplayerWorldLoadSnapshot snapshot = operation.Snapshot;
+            Equal(true, snapshot.State ==
+                        AW3MultiplayerWorldLoadState.Failed ||
+                        snapshot.State ==
+                        AW3MultiplayerWorldLoadState.Cancelled,
+                "timeout/cancellation race has one terminal state");
+            Equal(1L, snapshot.Revision,
+                "timeout/cancellation race advances exactly once");
+        }
+    }
+
+    private static void RestoreFailureIsStableAndTerminal()
+    {
+        var operation = CreateOperation(out DateTime deadline);
+        operation.ObserveWorldDataQueued(
+            operation.Snapshot.GenerationDirectory);
+        operation.ObserveWorldLoaded();
+
+        Equal(true, operation.FailAw3Restore("archive: corrupt"),
+            "strict restore failure accepted");
+        long revision = operation.Snapshot.Revision;
+        Equal(false, operation.CompleteRestore(),
+            "failed restore cannot complete");
+        Equal(false, operation.TryTimeout(deadline.AddHours(1)),
+            "failed restore ignores later timeout");
+        Equal(AW3MultiplayerWorldLoadError.Aw3RestoreFailed,
+            operation.Snapshot.Error, "restore error is stable");
+        Equal("archive: corrupt", operation.Snapshot.Detail,
+            "restore detail is stable");
+        Equal(revision, operation.Snapshot.Revision,
+            "late terminal callbacks do not advance revision");
+    }
+
+    private static void CoordinatorLoadsTheOperationCanonicalPath()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core",
+            "multiplayer", "AW3WorldLoadCoordinator.cs"));
+        Equal(true, source.Contains(
+                "canonicalDirectory = operation.Snapshot." +
+                "GenerationDirectory;"),
+            "coordinator dispatches the operation's canonical path");
+        Equal(true, source.Contains(
+                "loadWorld(canonicalDirectory, false)"),
+            "canonical path reaches the real WorldBox load call");
+    }
+
+    private static AW3MultiplayerWorldLoadOperation CreateOperation(
+        out DateTime deadline)
+    {
+        deadline = new DateTime(2030, 1, 1, 0, 2, 0,
+            DateTimeKind.Utc);
+        return new AW3MultiplayerWorldLoadOperation(Guid.NewGuid(),
+            Path.GetFullPath(@"C:\snapshots\verified"), deadline);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void Throws<TException>(Action action, string name)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(name + ": expected " +
+                typeof(TException).Name + ", got " + error.GetType().Name);
+        }
+        throw new InvalidOperationException(name + ": expected " +
+                                            typeof(TException).Name);
+    }
+}

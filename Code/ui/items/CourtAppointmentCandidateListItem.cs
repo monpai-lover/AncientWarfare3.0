@@ -19,6 +19,7 @@ namespace AncientWarfare3.ui.items
         public CourtAppointmentCandidateView candidate;
         public string role_text = "";
         public string school_text = "";
+        public string grade_text = "";
         public bool is_message;
         public bool is_header;
         public bool is_error;
@@ -162,7 +163,10 @@ namespace AncientWarfare3.ui.items
             _name.color = live ? ActorColor(actor) : new Color(0.62f, 0.62f, 0.62f, 1f);
             _role.text = pRow.role_text ?? "";
             _school.text = AW_L10n.Text("aw_court_school", "School") + ": " +
-                           (pRow.school_text ?? "");
+                           (pRow.school_text ?? "") +
+                           (string.IsNullOrEmpty(pRow.grade_text)
+                               ? ""
+                               : " · " + pRow.grade_text);
             _stats.text = string.Format(AW_L10n.Text("aw_court_candidate_stats_compact",
                     "Gov {0:0}  Dip {1:0}  War {2:0}  Int {3:0}"),
                 candidate?.stewardship ?? 0f,
@@ -182,6 +186,9 @@ namespace AncientWarfare3.ui.items
             string tooltip = (pRow.role_text ?? "") + "\n" +
                              AW_L10n.Text("aw_court_school", "School") + ": " +
                              (pRow.school_text ?? "") + "\n" + _stats.text + "\n" +
+                             (string.IsNullOrEmpty(pRow.grade_text)
+                                 ? ""
+                                 : pRow.grade_text + "\n") +
                              AW_L10n.Text("aw_court_candidate_score", "Appointment score") +
                              ": " + (candidate?.score ?? 0f).ToString("0.0");
             SetTip(_tip, gameObject, candidate?.actor_name ?? "", tooltip);

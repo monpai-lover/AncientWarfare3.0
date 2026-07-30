@@ -52,6 +52,7 @@ namespace AncientWarfare3.core.schools
     {
         public const int MaxCapacity = 512;
         public const int DefaultBatchSize = 32;
+        public const int MaxUnknownAttempts = 4;
 
         private sealed class Entry
         {
@@ -66,6 +67,7 @@ namespace AncientWarfare3.core.schools
         private readonly int _maxCapacity;
         private readonly int _maxBatchSize;
         private long _lastProcessFrame = long.MinValue;
+        private bool _isolateHead;
 
         public HistoricalSchoolWriteBuffer(int pMaxCapacity = MaxCapacity,
             int pMaxBatchSize = DefaultBatchSize)
@@ -107,16 +109,16 @@ namespace AncientWarfare3.core.schools
         public bool FlushForSave(IHistoricalSchoolWriteBatchExecutor pExecutor)
         {
             if (pExecutor == null) return false;
-            while (_queue.Count > 0)
+            int workBudget = MaxCapacity * (MaxUnknownAttempts + 2);
+            while (_queue.Count > 0 && workBudget-- > 0)
             {
-                int before = _queue.Count;
                 long frame = _lastProcessFrame == long.MaxValue
                     ? long.MaxValue
                     : Math.Max(0L, _lastProcessFrame + 1L);
-                if (!ProcessOneBatch(frame, pExecutor, pIgnoreBackoff: true) ||
-                    _queue.Count >= before) return false;
+                if (!ProcessOneBatch(frame, pExecutor, pIgnoreBackoff: true))
+                    return false;
             }
-            return true;
+            return _queue.Count == 0;
         }
 
         public void Clear()
@@ -124,6 +126,7 @@ namespace AncientWarfare3.core.schools
             _queue.Clear();
             _operationKeys.Clear();
             _lastProcessFrame = long.MinValue;
+            _isolateHead = false;
         }
 
         private bool ProcessOneBatch(long pFrame,
@@ -131,10 +134,11 @@ namespace AncientWarfare3.core.schools
         {
             if (_queue.Count == 0 ||
                 (!pIgnoreBackoff && _queue.Peek().ReadyFrame > pFrame)) return false;
-            var entries = new List<Entry>(Math.Min(_maxBatchSize, _queue.Count));
+            int batchSize = _isolateHead ? 1 : _maxBatchSize;
+            var entries = new List<Entry>(Math.Min(batchSize, _queue.Count));
             foreach (Entry entry in _queue)
             {
-                if (entries.Count >= _maxBatchSize) break;
+                if (entries.Count >= batchSize) break;
                 entries.Add(entry);
             }
             var operations = new List<IHistoricalSchoolWriteOperation>(entries.Count);
@@ -152,8 +156,8 @@ namespace AncientWarfare3.core.schools
             if (result == null || !result.IsCommitted ||
                 result.Outcomes.Count != entries.Count)
             {
-                ScheduleUnknown(entries, pFrame);
-                return false;
+                HandleUnknown(entries, pFrame);
+                return true;
             }
 
             for (int index = 0; index < entries.Count; index++)
@@ -162,8 +166,8 @@ namespace AncientWarfare3.core.schools
                     result.Outcomes[index];
                 if (outcome == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
                 {
-                    ScheduleUnknown(entries, pFrame);
-                    return false;
+                    HandleUnknown(entries, pFrame);
+                    return true;
                 }
                 Entry current = _queue.Peek();
                 if (!ReferenceEquals(current, entries[index]))
@@ -178,36 +182,66 @@ namespace AncientWarfare3.core.schools
                 }
                 catch
                 {
-                    ScheduleUnknown(current, pFrame);
-                    return false;
+                    _isolateHead = true;
+                    ScheduleOrRetire(current, pFrame);
+                    return true;
                 }
                 _queue.Dequeue();
                 _operationKeys.Remove(current.Operation.OperationKey);
             }
+            _isolateHead = false;
             return true;
         }
 
-        private static void ScheduleUnknown(IEnumerable<Entry> pEntries, long pFrame)
+        private void HandleUnknown(IReadOnlyList<Entry> pEntries, long pFrame)
         {
-            if (pEntries == null) return;
-            foreach (Entry entry in pEntries) ScheduleUnknown(entry, pFrame);
+            if (pEntries == null || pEntries.Count == 0) return;
+            _isolateHead = true;
+            ScheduleOrRetire(pEntries[0], pFrame);
         }
 
-        private static void ScheduleUnknown(Entry pEntry, long pFrame)
+        private void ScheduleOrRetire(Entry pEntry, long pFrame)
         {
             if (pEntry == null) return;
-            pEntry.Attempts = Math.Min(31, pEntry.Attempts + 1);
+            pEntry.Attempts = Math.Min(MaxUnknownAttempts,
+                pEntry.Attempts + 1);
+            if (pEntry.Attempts >= MaxUnknownAttempts)
+            {
+                RetirePoisonedHead(pEntry);
+                return;
+            }
             int shift = Math.Min(8, Math.Max(0, pEntry.Attempts - 1));
             long delay = 1L << shift;
             pEntry.ReadyFrame = pFrame > long.MaxValue - delay
                 ? long.MaxValue
                 : pFrame + delay;
         }
+
+        private void RetirePoisonedHead(Entry pEntry)
+        {
+            if (_queue.Count == 0 ||
+                !ReferenceEquals(_queue.Peek(), pEntry)) return;
+            string operationKey = pEntry.Operation?.OperationKey ?? "";
+            try { pEntry.Operation?.OnCleanFailure(); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "Historical school poisoned write cleanup failed: key=" +
+                    operationKey + " error=" + error.Message);
+            }
+            _queue.Dequeue();
+            _operationKeys.Remove(operationKey);
+            _isolateHead = false;
+            ModClass.LogWarning(
+                "Historical school poisoned write retired after " +
+                MaxUnknownAttempts + " attempts: key=" + operationKey);
+        }
     }
 
     internal sealed class HistoricalSchoolSqlWriteBatchExecutor :
         IHistoricalSchoolWriteBatchExecutor
     {
+        private static string _lastFailureSignature = string.Empty;
         private readonly SQLiteConnection _db;
 
         public HistoricalSchoolSqlWriteBatchExecutor(SQLiteConnection pDb)
@@ -219,7 +253,12 @@ namespace AncientWarfare3.core.schools
             IReadOnlyList<IHistoricalSchoolWriteOperation> pOperations)
         {
             if (_db == null || pOperations == null || pOperations.Count == 0)
+            {
+                if (_db == null)
+                    ReportBatchFailure(pOperations, null,
+                        "lineage archive connection is unavailable");
                 return HistoricalSchoolWriteBatchResult.Unknown;
+            }
             long started = Stopwatch.GetTimestamp();
             bool retry = true;
             SQLiteTransaction transaction = null;
@@ -235,6 +274,8 @@ namespace AncientWarfare3.core.schools
                         HistoricalSchoolTeachingPersistenceOutcome.Unknown)
                     {
                         transaction.Rollback();
+                        ReportBatchFailure(pOperations, null,
+                            "operation returned Unknown at index " + index);
                         return HistoricalSchoolWriteBatchResult.Unknown;
                     }
                 }
@@ -242,9 +283,10 @@ namespace AncientWarfare3.core.schools
                 retry = false;
                 return HistoricalSchoolWriteBatchResult.Committed(outcomes);
             }
-            catch
+            catch (Exception error)
             {
                 try { transaction?.Rollback(); } catch { }
+                ReportBatchFailure(pOperations, error);
                 return HistoricalSchoolWriteBatchResult.Unknown;
             }
             finally
@@ -253,6 +295,32 @@ namespace AncientWarfare3.core.schools
                 HistoricalSchoolDiagnostics.RecordSqlBatch(pOperations.Count,
                     Stopwatch.GetTimestamp() - started, retry);
             }
+        }
+
+        private static void ReportBatchFailure(
+            IReadOnlyList<IHistoricalSchoolWriteOperation> pOperations,
+            Exception pError, string pDetail = null)
+        {
+            IHistoricalSchoolWriteOperation first =
+                pOperations != null && pOperations.Count > 0
+                    ? pOperations[0]
+                    : null;
+            string operationType = first?.GetType().Name ?? "none";
+            string operationKey = first?.OperationKey ?? "none";
+            string errorType = pError?.GetType().Name ?? "UnknownOutcome";
+            string detail = string.IsNullOrWhiteSpace(pDetail)
+                ? pError?.Message ?? "no detail"
+                : pDetail;
+            string signature = operationType + "|" + errorType + "|" + detail;
+            if (string.Equals(_lastFailureSignature, signature,
+                    StringComparison.Ordinal)) return;
+            _lastFailureSignature = signature;
+            ModClass.LogWarning("Historical school write batch blocked: " +
+                                "operation=" + operationType +
+                                " key=" + operationKey +
+                                " error=" + errorType + ": " + detail);
+            if (pError?.StackTrace != null)
+                ModClass.LogWarning(pError.StackTrace);
         }
     }
 

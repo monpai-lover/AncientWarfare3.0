@@ -39,6 +39,19 @@ namespace AncientWarfare3.core.lineage
                 EraChangeReason.Accession, sourceEventId);
         }
 
+        public static EraChangeResult TryStartImperialProclamationEra(
+            Kingdom pKingdom, Actor pEmperor)
+        {
+            long reignId = ReignRecordWriter.FindOpenReignId(
+                pKingdom?.id ?? -1L);
+            string sourceEventId = reignId < 0
+                ? ""
+                : "imperial_proclamation:" + reignId;
+            return TryChangeEra(pKingdom, pEmperor, "",
+                EraChangeKind.ImperialProclamation,
+                EraChangeReason.ImperialProclamation, sourceEventId);
+        }
+
         public static EraChangeResult TryStartRestoredMonarchyEra(
             Kingdom pKingdom, Actor pEmperor)
         {
@@ -224,7 +237,7 @@ namespace AncientWarfare3.core.lineage
             if (block != EraChangeBlockReason.None) return Blocked(block);
 
             long reservationId = -1;
-            bool requiresPoints = pKind != EraChangeKind.Accession;
+            bool requiresPoints = EraNameRules.RequiresPoliticalPoints(pKind);
             if (requiresPoints && !PoliticalPointReservationService.TryReserve(
                     pKingdom.id, VoluntaryChangeCost, out reservationId))
                 return Blocked(EraChangeBlockReason.InsufficientPoliticalPoints);
@@ -278,7 +291,8 @@ namespace AncientWarfare3.core.lineage
                                    sourceEventId, out _, out _, out double recordedStart)
                 ? recordedStart
                 : now;
-            ProjectCommittedEra(pKingdom, committed.EraName, startTime);
+            if (!ProjectCommittedEra(pKingdom, committed.EraName, startTime))
+                RetryCommittedProjection(pKingdom);
             return new EraChangeResult(true, committed.EraId,
                 committed.EraName, EraChangeBlockReason.None);
         }
@@ -289,12 +303,17 @@ namespace AncientWarfare3.core.lineage
                 return new EffectiveChronology(-1, "", "", false);
             bool empireRank = KingdomTitleService.GetTitle(pKingdom) >=
                               KingdomTitle.Emperor;
-            Kingdom root = empireRank ? pKingdom : VassalService.GetRootSuzerain(pKingdom);
+            bool ceremonialEmperor =
+                RulerAppellationRules.ShouldUseLivingEmperor(empireRank,
+                    MandateService.IsMandateKingdom(pKingdom));
+            Kingdom root = ceremonialEmperor
+                ? pKingdom
+                : VassalService.GetRootSuzerain(pKingdom);
             EffectiveChronology rootChronology = root?.data != null && root != pKingdom
                 ? ReadCachedChronology(root, true)
                 : new EffectiveChronology(-1, "", "", false);
             ChronologySourceChoice source = EraNameRules.ResolveChronologySource(
-                pKingdom.id, empireRank, root?.id ?? -1L,
+                pKingdom.id, ceremonialEmperor, root?.id ?? -1L,
                 !string.IsNullOrEmpty(rootChronology.EraName));
             if (source.UsesSuzerain)
             {
@@ -311,14 +330,55 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.KINGDOM_YEAR_START, -1f);
             EraChangeTriggerService.Clear(pKingdom);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.Era);
         }
 
         public static string GetYearName(Kingdom pKingdom)
         {
             EffectiveChronology chronology = GetEffectiveChronology(pKingdom);
-            return string.IsNullOrEmpty(chronology.EraName)
+            string formalEra = string.IsNullOrEmpty(chronology.EraName)
                 ? ""
                 : chronology.EraName + chronology.YearText;
+            return RegnalChronologyRules.SelectDisplay(formalEra,
+                BuildLocalRegnalChronology(pKingdom));
+        }
+
+        private static string BuildLocalRegnalChronology(Kingdom pKingdom)
+        {
+            Actor ruler = pKingdom?.king;
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                ruler?.data == null || ruler.isRekt()) return "";
+
+            bool republic = RepublicGovernmentService.IsRepublic(pKingdom) ||
+                            RepublicGovernmentService.IsRepublicLeader(ruler);
+            bool hereditary = !republic;
+            pKingdom.data.get(LineageKeys.KINGDOM_REIGN_START,
+                out float reignStart, -1f);
+            pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID,
+                out long recordedRulerId, -1L);
+            if (ReignHeaderChronologyRules.ShouldRecoverProjection(
+                    pHasRuler: true, republic, ruler.data.id,
+                    recordedRulerId, reignStart) &&
+                ReignRecordWriter.TryRecoverCurrentProjection(
+                    pKingdom, ruler))
+            {
+                pKingdom.data.get(LineageKeys.KINGDOM_REIGN_START,
+                    out reignStart, -1f);
+                pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID,
+                    out recordedRulerId, -1L);
+            }
+            if (reignStart < 0f || recordedRulerId != ruler.data.id) return "";
+
+            ruler.data.get(LineageKeys.GIVEN_NAME, out string givenName, "");
+            if (string.IsNullOrWhiteSpace(givenName))
+                givenName = ruler.getName();
+            int reignYear = Math.Max(1, Date.getYearsSince(reignStart) + 1);
+            return RegnalChronologyRules.Format(
+                pKingdom.name,
+                KingdomTitleService.GetTitleChar(
+                    KingdomTitleService.GetTitle(pKingdom)),
+                givenName, reignYear, hereditary, republic);
         }
 
         public static bool RetryCommittedProjection(Kingdom pKingdom)
@@ -327,6 +387,82 @@ namespace AncientWarfare3.core.lineage
                 !EraRecordWriter.TryReadCurrent(pKingdom.id, out _,
                     out string eraName, out double startTime)) return false;
             return ProjectCommittedEra(pKingdom, eraName, startTime);
+        }
+
+        public static void RebuildCommittedProjections()
+        {
+            if (World.world?.kingdoms == null) return;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt() ||
+                    kingdom.isNeutral() || !kingdom.isCiv()) continue;
+                if (!RetryCommittedProjection(kingdom))
+                    TryRecoverLegacyCurrentProjection(kingdom);
+            }
+        }
+
+        private static bool TryRecoverLegacyCurrentProjection(
+            Kingdom pKingdom)
+        {
+            Actor emperor = pKingdom?.king;
+            if (!Ready || !IsSupportedHereditaryEmperor(pKingdom, emperor))
+                return false;
+
+            ReignRecordWriter.ReignInfo reign =
+                ReignRecordWriter.ReadOpenReignInfo(pKingdom.id);
+            if (!reign.IsValid || reign.KingActorId != emperor.data.id)
+                return false;
+
+            emperor.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+            if (shiId < 0L || reign.ShiId != shiId) return false;
+
+            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_NAME,
+                out string eraName, "");
+            if (!EraNameRules.IsValidCustom(eraName))
+            {
+                HashSet<string> usedNames;
+                try
+                {
+                    usedNames = DynastyTitleRegistryService.ReadUsed(
+                        shiId, "era", 0);
+                }
+                catch
+                {
+                    usedNames = new HashSet<string>(StringComparer.Ordinal);
+                }
+                eraName = EraNameRules.SelectAutomatic(shiId,
+                    emperor.data.id, Math.Max(1, reign.ReignIndex),
+                    usedNames);
+            }
+            if (!EraNameRules.IsValidCustom(eraName)) return false;
+
+            double now = LineageService.CurTime();
+            pKingdom.data.get(LineageKeys.KINGDOM_YEAR_START,
+                out float projectedStart, -1f);
+            double startTime = projectedStart >= reign.StartTime &&
+                               projectedStart <= now
+                ? projectedStart
+                : reign.StartTime;
+            if (startTime < 0d) return false;
+
+            var request = new EraAtomicCommitRequest
+            {
+                KingdomId = pKingdom.id,
+                KingdomColor = HistoryColors.FromKingdom(pKingdom),
+                ShiId = shiId,
+                ActorId = emperor.data.id,
+                ReignId = reign.ReignId,
+                EraName = eraName,
+                ChangeKind = "legacy_recovery",
+                ChangeReason = "legacy_load_recovery",
+                SourceEventId = "legacy_recovery:" + reign.ReignId,
+                DecidedTime = startTime,
+                StartYear = Date.getYear(startTime)
+            };
+            EraAtomicCommitResult result =
+                EraRecordWriter.TryRecoverLegacyCurrent(request);
+            if (!result.Success) return false;
+            return RetryCommittedProjection(pKingdom);
         }
 
         private static EffectiveChronology ReadCachedChronology(Kingdom pKingdom,
@@ -360,6 +496,8 @@ namespace AncientWarfare3.core.lineage
                 pKingdom.data.set(LineageKeys.KINGDOM_YEAR_NAME, pEraName);
                 pKingdom.data.set(LineageKeys.KINGDOM_YEAR_START, (float)pStartTime);
                 RulerAppellationService.RefreshLivingProjection(pKingdom);
+                FamilyTreeProjectionRevision.Advance(
+                    FamilyTreeProjectionChange.Era);
                 return true;
             }
             catch (Exception error)
@@ -377,6 +515,8 @@ namespace AncientWarfare3.core.lineage
             return pKind switch
             {
                 EraChangeKind.Accession => "accession:" + pReignId,
+                EraChangeKind.ImperialProclamation =>
+                    "imperial_proclamation:" + pReignId,
                 EraChangeKind.Voluntary => "player:" + pReignId + ":" + pYear +
                                            ":" + (pCandidate ?? ""),
                 _ => ReasonId(pReason) + ":" + pReignId + ":" + pYear
@@ -389,6 +529,22 @@ namespace AncientWarfare3.core.lineage
         {
             string imperialState = ImperialStateName(pStateName);
             string color = HistoryColors.FromActor(pEmperor);
+            if (pKind == EraChangeKind.ImperialProclamation)
+            {
+                string title = RulerAppellationRules.LivingEmperor(
+                    pStateName, pNewEra);
+                HistoryText actor = HistoryText.Actor(pEmperor);
+                HistoryText era = HistoryText.Colored(pNewEra, color);
+                HistoryText appellation = HistoryText.Colored(title, color);
+                string template = T(
+                    "aw_hist_edict_imperial_proclamation");
+                return new HistoryText(
+                    string.Format(template, pEmperor?.getName() ?? "",
+                        pNewEra, title),
+                    string.Format(template, actor.Rich, era.Rich,
+                        appellation.Rich),
+                    actor.TargetType, actor.TargetId);
+            }
             if (pKind == EraChangeKind.Accession)
             {
                 string title = RulerAppellationRules.LivingEmperor(
@@ -396,7 +552,7 @@ namespace AncientWarfare3.core.lineage
                 HistoryText actor = HistoryText.Actor(pEmperor);
                 HistoryText era = HistoryText.Colored(pNewEra, color);
                 HistoryText appellation = HistoryText.Colored(title, color);
-                string template = T("aw_hist_title_accession_era");
+                string template = T("aw_hist_edict_accession_era");
                 return new HistoryText(
                     string.Format(template, pEmperor?.getName() ?? "", pNewEra, title),
                     string.Format(template, actor.Rich, era.Rich, appellation.Rich),
@@ -404,7 +560,7 @@ namespace AncientWarfare3.core.lineage
             }
             string oldTitle = imperialState + (pOldEra ?? "") + "皇帝";
             string reason = ReasonLabel(pReason);
-            string voluntaryTemplate = T("aw_hist_title_voluntary_era");
+            string voluntaryTemplate = T("aw_hist_edict_voluntary_era");
             return new HistoryText(
                 string.Format(voluntaryTemplate, oldTitle, reason, pNewEra),
                 string.Format(voluntaryTemplate,
@@ -429,6 +585,8 @@ namespace AncientWarfare3.core.lineage
             return pReason switch
             {
                 EraChangeReason.Accession => "accession",
+                EraChangeReason.ImperialProclamation =>
+                    "imperial_proclamation",
                 EraChangeReason.RestoredMandate => "restored_mandate",
                 EraChangeReason.AutonomousRestoration => "autonomous_restoration",
                 EraChangeReason.MajorVictory => "major_victory",
@@ -448,7 +606,9 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pEmperor?.data == null ||
                 pKingdom.king != pEmperor || pKingdom.isRekt() ||
-                !KingdomTitleService.IsEmperor(pKingdom) ||
+                !RulerAppellationRules.ShouldUseLivingEmperor(
+                    KingdomTitleService.IsEmperor(pKingdom),
+                    MandateService.IsMandateKingdom(pKingdom)) ||
                 RepublicGovernmentService.IsRepublic(pKingdom) ||
                 RepublicGovernmentService.IsRepublicLeader(pEmperor) ||
                 !RepublicGovernmentService.HasEstablishedMonarchy(pKingdom)) return false;

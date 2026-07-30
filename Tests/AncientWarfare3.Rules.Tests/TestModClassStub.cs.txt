@@ -1,0 +1,9 @@
+namespace AncientWarfare3
+{
+    internal static class ModClass
+    {
+        internal static void LogWarning(string message)
+        {
+        }
+    }
+}

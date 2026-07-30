@@ -1,0 +1,77 @@
+using AncientWarfare3.core.lineage;
+
+internal static class SeparatePeaceRuntimeFactsRulesTests
+{
+    public static void Run()
+    {
+        FrozenHomeKingdomKeepsTransferredCitiesInOccupationRatio();
+        ParticipantMobilizationLossDifferentiatesExhaustion();
+        ExitGroupPowerIncludesObligationBoundVassals();
+    }
+
+    private static void
+        FrozenHomeKingdomKeepsTransferredCitiesInOccupationRatio()
+    {
+        var frozen = new[]
+        {
+            new SeparatePeaceFrozenCityFacts(101, 10,
+                controllerOpposesExitRoot: true),
+            new SeparatePeaceFrozenCityFacts(102, 10,
+                controllerOpposesExitRoot: false),
+            new SeparatePeaceFrozenCityFacts(201, 20,
+                controllerOpposesExitRoot: true)
+        };
+
+        Equal(.5f, SeparatePeaceRuntimeFactsRules.OccupiedCityRatio(
+                exitRootKingdomId: 10,
+                liveHomeCityIds: new long[] { 102 }, frozen),
+            "frozen home ids retain transferred cities in the exit root ratio");
+    }
+
+    private static void
+        ParticipantMobilizationLossDifferentiatesExhaustion()
+    {
+        int stable = SeparatePeaceRuntimeFactsRules.ParticipantExhaustion(
+            sideExhaustion: 35, mobilizationBaseline: 100,
+            currentMilitaryPotential: 90);
+        int depleted = SeparatePeaceRuntimeFactsRules.ParticipantExhaustion(
+            sideExhaustion: 35, mobilizationBaseline: 100,
+            currentMilitaryPotential: 20);
+
+        True(depleted > stable,
+            "one depleted ally is more exhausted than a stable ally on the same side");
+        Equal(80, depleted,
+            "participant depletion can outweigh the shared side exhaustion floor");
+    }
+
+    private static void ExitGroupPowerIncludesObligationBoundVassals()
+    {
+        var participants = new[]
+        {
+            new SeparatePeaceParticipantPowerFacts(10, sameSide: true,
+                includedInExitGroup: true, power: 20),
+            new SeparatePeaceParticipantPowerFacts(11, sameSide: true,
+                includedInExitGroup: true, power: 30),
+            new SeparatePeaceParticipantPowerFacts(12, sameSide: true,
+                includedInExitGroup: false, power: 50),
+            new SeparatePeaceParticipantPowerFacts(21, sameSide: false,
+                includedInExitGroup: false, power: 100)
+        };
+
+        Equal(.5f, SeparatePeaceRuntimeFactsRules.ExitGroupPowerShare(
+                participants),
+            "exit root and its obligation-bound vassal count as one departing force group");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

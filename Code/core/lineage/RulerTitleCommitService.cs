@@ -96,14 +96,17 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static RulerTitleDecision ForRetrospective(RulerTitleFacts pFacts,
-            string pTempleName, int pTempleCycleNo, string pRelation)
+            string pTempleName, string pInheritedPosthumousName,
+            int pTempleCycleNo, string pRelation)
         {
             string temple = (pTempleName ?? "").Trim();
             return new RulerTitleDecision
             {
                 Facts = pFacts,
+                PosthumousName = (pInheritedPosthumousName ?? "").Trim(),
                 TempleName = temple,
-                DisplayTitle = temple,
+                DisplayTitle = RetrospectiveTitleRules.BuildImperialAppellation(
+                    temple, pInheritedPosthumousName),
                 TempleQualificationKey = "retrospective_" + (pRelation ?? ""),
                 TempleCycleNo = Math.Max(0, pTempleCycleNo),
                 TitleKind = "retrospective",
@@ -115,6 +118,28 @@ namespace AncientWarfare3.core.lineage
                 BiographyRole = "imperial_ancestor",
                 AgeAtEvent = pFacts?.Age ?? -1
             };
+        }
+
+        public static RulerTitleDecision ForConferred(
+            RulerTitleFacts pFacts, PosthumousTitleDecision pPosthumous,
+            string pDisplayTitle, string pHistoryPlain, string pHistoryRich,
+            string pYearPrefix, string pYearPrefixRich,
+            string pBiographyRole, string pBiographyRoleLabel)
+        {
+            RulerTitleDecision decision = ForPosthumous(
+                pFacts, pPosthumous, "conferred");
+            decision.TitleKind = "conferred";
+            decision.DisplayTitle = (pDisplayTitle ?? "").Trim();
+            decision.TitleSuffix = "";
+            decision.IsRetrospective = false;
+            decision.HistoryPlain = pHistoryPlain ?? "";
+            decision.HistoryRich = pHistoryRich ?? "";
+            decision.YearPrefix = pYearPrefix ?? "";
+            decision.YearPrefixRich = pYearPrefixRich ?? "";
+            decision.BiographyCategory = ChronicleCategory.HONOR;
+            decision.BiographyRole = pBiographyRole ?? "";
+            decision.BiographyRoleLabel = pBiographyRoleLabel ?? "";
+            return decision;
         }
     }
 
@@ -148,50 +173,95 @@ namespace AncientWarfare3.core.lineage
         public static RulerTitleCommitResult Commit(RulerTitleDecision pDecision)
         {
             RulerTitleFacts facts = pDecision?.Facts;
+            string titleKind = pDecision?.TitleKind ?? "";
             bool retrospective = pDecision?.IsRetrospective == true &&
-                                 !string.IsNullOrWhiteSpace(pDecision.TempleName) &&
-                                 string.IsNullOrWhiteSpace(pDecision.PosthumousName);
-            if (!Ready || facts == null || facts.ActorId < 0 || facts.ShiId < 0 ||
+                                 !string.IsNullOrWhiteSpace(pDecision.TempleName);
+            if (!Ready || facts == null ||
+                !ConferredPosthumousTitleRules.CanCommitIdentity(titleKind,
+                    facts.ActorId, facts.KingdomId, facts.ShiId, facts.ReignId) ||
                 (!retrospective && string.IsNullOrWhiteSpace(pDecision.PosthumousName)) ||
                 string.IsNullOrWhiteSpace(pDecision.DisplayTitle))
                 return RulerTitleCommitResult.Failed;
 
             if (facts.ReignId >= 0 && TryReadExisting(facts.ReignId, out RulerTitleCommitResult existing))
                 return existing;
+            bool conferred = ConferredPosthumousTitleRules.IsConferredKind(
+                titleKind);
+            if (conferred && TryReadExistingConferred(facts.KingdomId,
+                    facts.ActorId, out existing))
+                return existing;
+            if (conferred && TryReadExistingFormalActorTitle(
+                    facts.ActorId, out existing))
+                return existing;
 
-            try
-            {
-                using SQLiteTransaction transaction = DB.BeginTransaction();
-                double time = LineageService.CurTime();
-                if (!string.IsNullOrWhiteSpace(pDecision.PosthumousName) &&
-                    !DynastyTitleRegistryService.TryReserve(DB, transaction, facts.ShiId,
-                        "posthumous", pDecision.PosthumousName,
-                        pDecision.PosthumousCycleNo, facts.ActorId, facts.ReignId, time))
-                    return RulerTitleCommitResult.Failed;
-                if (!string.IsNullOrWhiteSpace(pDecision.TempleName) &&
-                    !DynastyTitleRegistryService.TryReserve(DB, transaction, facts.ShiId,
-                        "temple", pDecision.TempleName, pDecision.TempleCycleNo,
-                        facts.ActorId, facts.ReignId, time))
-                    return RulerTitleCommitResult.Failed;
+            string[] historyTables = string.IsNullOrEmpty(
+                pDecision.HistoryPlain)
+                ? Array.Empty<string>()
+                : new[]
+                {
+                    KingdomHistoryTableItem.GetTableName(),
+                    PersonBiographyTableItem.GetTableName()
+                };
+            if (HistoricalSynchronousWriteCoordinator.TryExecute(
+                    TimeSpan.FromSeconds(5), historyTables,
+                    HistoricalWriteService.FlushForSynchronousFallback,
+                    HistoricalWriteService.TryReserveEventId,
+                    eventIds => CommitReserved(pDecision, conferred,
+                        retrospective,
+                        eventIds.Count > 0 ? eventIds[0] : 0L,
+                        eventIds.Count > 1 ? eventIds[1] : 0L),
+                    out RulerTitleCommitResult result, out string error))
+                return result;
+            ModClass.LogWarning("Ruler title transaction failed: " + error);
+            return RulerTitleCommitResult.Failed;
+        }
 
-                long recordId = NextId(transaction,
-                    PosthumousTitleTableItem.GetTableName(), "RECORD_ID");
-                InsertTitle(transaction, recordId, pDecision, time);
-                if (facts.ReignId >= 0)
-                    UpdateReignHighestTitle(transaction, facts.ReignId,
-                        facts.HighestTitle);
-                if (!string.IsNullOrEmpty(pDecision.HistoryPlain))
-                    InsertHistory(transaction, pDecision, time);
-                transaction.Commit();
-                return new RulerTitleCommitResult(true, recordId,
-                    pDecision.PosthumousName, pDecision.TempleName,
-                    pDecision.DisplayTitle);
-            }
-            catch (Exception error)
-            {
-                ModClass.LogWarning("Ruler title transaction failed: " + error.Message);
+        private static RulerTitleCommitResult CommitReserved(
+            RulerTitleDecision pDecision, bool pConferred,
+            bool pRetrospective, long pKingdomEventId,
+            long pPersonEventId)
+        {
+            RulerTitleFacts facts = pDecision.Facts;
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            if (pConferred && TryReadExistingConferred(facts.KingdomId,
+                    facts.ActorId, out RulerTitleCommitResult existing,
+                    transaction))
+                return existing;
+            if (pConferred && TryReadExistingFormalActorTitle(
+                    facts.ActorId, out existing, transaction))
+                return existing;
+            double time = LineageService.CurTime();
+            bool reserveShi = !pRetrospective &&
+                ConferredPosthumousTitleRules.ShouldReserveShiTitle(
+                    pDecision.TitleKind, facts.ShiId);
+            if (!string.IsNullOrWhiteSpace(pDecision.PosthumousName) &&
+                reserveShi &&
+                !DynastyTitleRegistryService.TryReserve(DB, transaction,
+                    facts.ShiId, "posthumous", pDecision.PosthumousName,
+                    pDecision.PosthumousCycleNo, facts.ActorId,
+                    facts.ReignId, time))
                 return RulerTitleCommitResult.Failed;
-            }
+            if (!string.IsNullOrWhiteSpace(pDecision.TempleName) &&
+                !DynastyTitleRegistryService.TryReserve(DB, transaction,
+                    facts.ShiId, "temple", pDecision.TempleName,
+                    pDecision.TempleCycleNo, facts.ActorId, facts.ReignId,
+                    time))
+                return RulerTitleCommitResult.Failed;
+
+            long recordId = NextId(transaction,
+                PosthumousTitleTableItem.GetTableName(), "RECORD_ID");
+            InsertTitle(transaction, recordId, pDecision, time);
+            if (facts.ReignId >= 0)
+                UpdateReignHighestTitle(transaction, facts.ReignId,
+                    facts.HighestTitle);
+            if (!string.IsNullOrEmpty(pDecision.HistoryPlain))
+                InsertHistory(transaction, pKingdomEventId, pPersonEventId,
+                    pDecision, time);
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                transaction.Commit);
+            return new RulerTitleCommitResult(true, recordId,
+                pDecision.PosthumousName, pDecision.TempleName,
+                pDecision.DisplayTitle);
         }
 
         private static void InsertTitle(SQLiteTransaction pTransaction, long pRecordId,
@@ -262,11 +332,10 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static void InsertHistory(SQLiteTransaction pTransaction,
+            long pKingdomEventId, long pPersonEventId,
             RulerTitleDecision pDecision, double pTime)
         {
             RulerTitleFacts facts = pDecision.Facts;
-            long kingdomEventId = NextId(pTransaction,
-                KingdomHistoryTableItem.GetTableName(), "EVENT_ID");
             using (var kingdom = new SQLiteCommand(DB) { Transaction = pTransaction })
             {
                 kingdom.CommandText = "INSERT INTO " + KingdomHistoryTableItem.GetTableName() +
@@ -275,12 +344,11 @@ namespace AncientWarfare3.core.lineage
                     "CONTEXT_KINGDOM_ID,CONTEXT_KINGDOM_NAME,CONTEXT_KINGDOM_COLOR," +
                     "TARGET_TYPE,TARGET_ID) VALUES (@id,@kingdom,@time,@year,@yearRich," +
                     "@subject,@color,@content,@rich,@type,@kingdom,@subject,@color,'actor',@actor)";
-                AddHistoryParameters(kingdom, kingdomEventId, pDecision, pTime);
+                AddHistoryParameters(kingdom, pKingdomEventId, pDecision,
+                    pTime);
                 kingdom.ExecuteNonQuery();
             }
 
-            long personEventId = NextId(pTransaction,
-                PersonBiographyTableItem.GetTableName(), "EVENT_ID");
             using var person = new SQLiteCommand(DB) { Transaction = pTransaction };
             person.CommandText = "INSERT INTO " + PersonBiographyTableItem.GetTableName() +
                 " (EVENT_ID,ACTOR_ID,WORLD_TIME,YEAR_PREFIX,YEAR_PREFIX_RICH,SUBJECT_NAME," +
@@ -290,7 +358,7 @@ namespace AncientWarfare3.core.lineage
                 " VALUES (@id,@actor,@time,@year,@yearRich,@actorName,@color,@content," +
                 "@rich,@type,@category,@age,0,@role,@roleLabel,@kingdom,@subject,@color," +
                 "'kingdom',@kingdom)";
-            person.Parameters.AddWithValue("@id", personEventId);
+            person.Parameters.AddWithValue("@id", pPersonEventId);
             person.Parameters.AddWithValue("@actorName", facts.ActorName ?? "");
             person.Parameters.AddWithValue("@category", pDecision.BiographyCategory ?? "");
             person.Parameters.AddWithValue("@age", pDecision.AgeAtEvent);
@@ -322,7 +390,9 @@ namespace AncientWarfare3.core.lineage
             pCommand.Parameters.AddWithValue("@rich", string.IsNullOrEmpty(pDecision.HistoryRich)
                 ? pDecision.HistoryPlain ?? ""
                 : pDecision.HistoryRich);
-            pCommand.Parameters.AddWithValue("@type", KingdomEvent.POSTHUMOUS);
+            pCommand.Parameters.AddWithValue("@type",
+                ConferredPosthumousTitleRules.HistoryEventType(
+                    pDecision.TitleKind));
         }
 
         private static long NextId(SQLiteTransaction pTransaction, string pTable, string pColumn)
@@ -343,6 +413,54 @@ namespace AncientWarfare3.core.lineage
                                       "FROM " + PosthumousTitleTableItem.GetTableName() +
                                       " WHERE REIGN_ID=@reign LIMIT 1";
                 command.Parameters.AddWithValue("@reign", pReignId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return false;
+                pResult = new RulerTitleCommitResult(true,
+                    reader.GetInt64(0), ValueString(reader, 1),
+                    ValueString(reader, 2), ValueString(reader, 3));
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static bool TryReadExistingConferred(long pKingdomId,
+            long pActorId, out RulerTitleCommitResult pResult,
+            SQLiteTransaction pTransaction = null)
+        {
+            return TryReadExistingByActor(pActorId, pKingdomId,
+                " AND KINGDOM_ID=@kingdom AND TITLE_KIND='conferred'",
+                out pResult, pTransaction);
+        }
+
+        private static bool TryReadExistingFormalActorTitle(long pActorId,
+            out RulerTitleCommitResult pResult,
+            SQLiteTransaction pTransaction = null)
+        {
+            return TryReadExistingByActor(pActorId, -1L,
+                " AND IS_RETROSPECTIVE=0", out pResult, pTransaction);
+        }
+
+        private static bool TryReadExistingByActor(long pActorId,
+            long pKingdomId, string pWhere,
+            out RulerTitleCommitResult pResult,
+            SQLiteTransaction pTransaction)
+        {
+            pResult = RulerTitleCommitResult.Failed;
+            if (pActorId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB)
+                {
+                    Transaction = pTransaction
+                };
+                command.CommandText =
+                    "SELECT RECORD_ID,POSTHUMOUS_NAME,TEMPLE_NAME,FULL_TITLE " +
+                    "FROM " + PosthumousTitleTableItem.GetTableName() +
+                    " WHERE ACTOR_ID=@actor" + pWhere +
+                    " ORDER BY DECIDED_TIME DESC,RECORD_ID DESC LIMIT 1";
+                command.Parameters.AddWithValue("@actor", pActorId);
+                if (pKingdomId >= 0)
+                    command.Parameters.AddWithValue("@kingdom", pKingdomId);
                 using SQLiteDataReader reader = command.ExecuteReader();
                 if (!reader.Read()) return false;
                 pResult = new RulerTitleCommitResult(true,

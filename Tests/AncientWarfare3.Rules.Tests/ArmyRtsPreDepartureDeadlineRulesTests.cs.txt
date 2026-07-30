@@ -1,0 +1,205 @@
+using System.Reflection;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsPreDepartureDeadlineRulesTests
+{
+    public static void Run()
+    {
+        ReplenishmentBypassNeverMakesAnUnderstrengthArmyReady();
+        MissionStrengthSurvivesMissingAnchorsAndCasualties();
+        ReplenishmentBypassCannotLeaveTheReplenishmentState();
+        UnderstrengthArmiesRetryTheirReplenishmentRequest();
+        ForceDepartureRequiresEscortQuorum();
+        ForceDeploymentRequiresEscortQuorum();
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: true, captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 219.9d),
+            "rally must retain its readiness checks before two years");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: true, captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "the legacy overload must not bypass escort quorum");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Replenish,
+                minimumForceReady: true, captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "the legacy overload must not bypass escort quorum in replenishment");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: false, captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "an understrength army must not be forced into combat");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.March,
+                minimumForceReady: true, captainPresent: true,
+                issuedWorldTime: 100d, currentWorldTime: 220d),
+            "a marching army must not use the pre-departure timeout");
+        Assert(!ArmyRtsRules.ShouldForcePreDeparture(
+                authoritative: true, state: ArmyRtsState.Rally,
+                minimumForceReady: true, captainPresent: true,
+                issuedWorldTime: double.NaN, currentWorldTime: 220d),
+            "invalid mission time must not force departure");
+        Assert(!ArmyRtsRules.ShouldForceDeployment(
+                authoritative: true, state: ArmyRtsState.Deploy,
+                minimumForceReady: true, captainPresent: true,
+                routeArrived: true, deploymentStartedWorldTime: 100d,
+                currentWorldTime: 219.9d),
+            "deployment must retain its escort quorum before the bounded wait expires");
+        Assert(!ArmyRtsRules.ShouldForceDeployment(
+                authoritative: true, state: ArmyRtsState.Deploy,
+                minimumForceReady: true, captainPresent: true,
+                routeArrived: true, deploymentStartedWorldTime: 100d,
+                currentWorldTime: 220d),
+            "the legacy deployment overload must not send a captain alone into assault");
+        Assert(!ArmyRtsRules.ShouldForceDeployment(
+                authoritative: true, state: ArmyRtsState.Deploy,
+                minimumForceReady: true, captainPresent: true,
+                routeArrived: false, deploymentStartedWorldTime: 100d,
+                currentWorldTime: 220d),
+            "a force without a completed route must not bypass the march state");
+        Assert(!ArmyRtsRules.ShouldForceDeployment(
+                authoritative: true, state: ArmyRtsState.Deploy,
+                minimumForceReady: false, captainPresent: true,
+                routeArrived: true, deploymentStartedWorldTime: 100d,
+                currentWorldTime: 220d),
+            "an understrength force must not be pushed into an assault by deployment timeout");
+    }
+
+    private static void ReplenishmentBypassNeverMakesAnUnderstrengthArmyReady()
+    {
+        Assert(!ArmyRtsRules.HasDepartureStrength(
+                living: 9, targetStrength: 37,
+                minimumForceReady: true,
+                replenishmentBypassActive: true),
+            "a stalled replenishment bypass must not send a 24-percent army into combat");
+        Assert(ArmyRtsRules.HasDepartureStrength(
+                living: 30, targetStrength: 37,
+                minimumForceReady: true,
+                replenishmentBypassActive: false),
+            "an army at the 80-percent deployment quorum remains eligible to depart");
+    }
+
+    private static void MissionStrengthSurvivesMissingAnchorsAndCasualties()
+    {
+        Equal(48, ResolveMissionTargetStrength(
+                persistedTargetStrength: 0, anchorTargetStrength: 2,
+                rosterLiving: 48),
+            "a detached army must retain its actual initial strength when its anchor has no warrior slots");
+        Equal(48, ResolveMissionTargetStrength(
+                persistedTargetStrength: 48, anchorTargetStrength: 2,
+                rosterLiving: 9),
+            "casualties must not lower a mission's recruitment target");
+        Equal(60, ResolveMissionTargetStrength(
+                persistedTargetStrength: 48, anchorTargetStrength: 60,
+                rosterLiving: 9),
+            "a larger anchor establishment may raise the retained mission target");
+    }
+
+    private static void ReplenishmentBypassCannotLeaveTheReplenishmentState()
+    {
+        MethodInfo method = typeof(ArmyRtsRules).GetMethod(
+            "ShouldRemainInReplenishment",
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "RTS must retain an understrength army in replenishment regardless of route-recovery bypasses");
+        Assert((bool)method.Invoke(null, new object[]
+            { true, false }),
+            "an understrength army must remain in Replenish until it reaches the deployment quorum");
+    }
+
+    private static void UnderstrengthArmiesRetryTheirReplenishmentRequest()
+    {
+        MethodInfo method = typeof(ArmyRtsRules).GetMethod(
+            "ShouldRetryStalledReplenishment",
+            new[] { typeof(bool), typeof(bool), typeof(bool),
+                    typeof(bool), typeof(bool) });
+        if (method == null)
+            throw new InvalidOperationException(
+                "replenishment retry must distinguish an operational remnant from deployment readiness");
+        Assert((bool)method.Invoke(null, new object[]
+            { true, true, false, true, true }),
+            "a 9-of-37 operational remnant must retry a stalled recruitment request");
+        Assert(!(bool)method.Invoke(null, new object[]
+            { true, true, true, true, true }),
+            "an army already at the deployment quorum must not repeatedly enqueue replacement work");
+    }
+
+    private static void ForceDepartureRequiresEscortQuorum()
+    {
+        MethodInfo method = typeof(ArmyRtsRules).GetMethod(
+            "ShouldForcePreDeparture", new[]
+            {
+                typeof(bool), typeof(ArmyRtsState), typeof(bool),
+                typeof(bool), typeof(bool), typeof(double), typeof(double)
+            });
+        if (method == null)
+            throw new InvalidOperationException(
+                "RTS pre-departure timeout must require an escort quorum");
+
+        object[] common =
+        {
+            true, ArmyRtsState.Rally, true, true, false, 100d, 220d
+        };
+        Assert(!(bool)method.Invoke(null, common),
+            "two years must not send a captain alone while followers are late");
+        common[4] = true;
+        Assert((bool)method.Invoke(null, common),
+            "two years may release a fully rallied army from bounded staging");
+    }
+
+    private static void ForceDeploymentRequiresEscortQuorum()
+    {
+        MethodInfo method = typeof(ArmyRtsRules).GetMethod(
+            "ShouldForceDeployment", new[]
+            {
+                typeof(bool), typeof(ArmyRtsState), typeof(bool),
+                typeof(bool), typeof(bool), typeof(bool),
+                typeof(double), typeof(double)
+            });
+        if (method == null)
+            throw new InvalidOperationException(
+                "RTS deployment timeout must require an escort quorum");
+
+        object[] common =
+        {
+            true, ArmyRtsState.Deploy, true, true, false, true, 100d,
+            220d
+        };
+        Assert(!(bool)method.Invoke(null, common),
+            "a captain at the objective must wait when his followers are late");
+        common[4] = true;
+        Assert((bool)method.Invoke(null, common),
+            "a fully deployed army may leave bounded staging after two years");
+    }
+
+    private static int ResolveMissionTargetStrength(
+        int persistedTargetStrength, int anchorTargetStrength,
+        int rosterLiving)
+    {
+        MethodInfo method = typeof(ArmyRtsRules).GetMethod(
+            "ResolveMissionTargetStrength",
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "RTS mission strength must survive detached-army anchor loss");
+        return (int)method.Invoke(null, new object[]
+        {
+            persistedTargetStrength, anchorTargetStrength, rosterLiving
+        });
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(message + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

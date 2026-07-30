@@ -1,0 +1,75 @@
+using AncientWarfare3.core.lineage;
+using System.Reflection;
+
+internal static class DeferredRuntimeWorkRulesTests
+{
+    private static void Contains(string expected, string actual, string name)
+    {
+        if (actual == null || !actual.Contains(expected,
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{name}: expected to contain '{expected}', got '{actual}'");
+    }
+
+    public static void Run()
+    {
+        var error = new InvalidOperationException("projection failed");
+        string diagnostic = DeferredRuntimeWorkRules.FormatFailure(
+            "lineage-projection:42", error);
+
+        Contains("key=lineage-projection:42", diagnostic,
+            "deferred diagnostics identify the failed work item");
+        Contains("type=System.InvalidOperationException", diagnostic,
+            "deferred diagnostics identify the exception type");
+        Contains("message=projection failed", diagnostic,
+            "deferred diagnostics retain the exception message");
+        Contains(error.ToString(), diagnostic,
+            "deferred diagnostics retain the stack-bearing exception text");
+
+        string ordered = DeferredRuntimeWorkRules.FormatFailure(null, error);
+        Contains("key=<ordered>", ordered,
+            "ordered work without a coalescing key remains identifiable");
+
+        MethodInfo runtimePriority = typeof(DeferredRuntimeWorkRules)
+            .GetMethod("ShouldPrioritizeRuntimeWork",
+                BindingFlags.Public | BindingFlags.Static);
+        if (runtimePriority == null)
+            throw new InvalidOperationException(
+                "wartime runtime work needs a bounded queue-priority policy");
+
+        Assert((bool)runtimePriority.Invoke(null,
+                new object[] { true, true, 0 }),
+            "a pending RTS runtime task runs ahead of persistent history work");
+        Assert(!(bool)runtimePriority.Invoke(null,
+                new object[] { true, true, 3 }),
+            "a bounded runtime burst yields one turn to persistent work");
+        Assert((bool)runtimePriority.Invoke(null,
+                new object[] { true, false, 3 }),
+            "runtime work continues when no persistent work is waiting");
+        Assert(!(bool)runtimePriority.Invoke(null,
+                new object[] { false, true, 0 }),
+            "persistent work remains selectable when no runtime task is queued");
+
+        MethodInfo criticalRuntimePriority = typeof(DeferredRuntimeWorkRules)
+            .GetMethod("ShouldPrioritizeCriticalRuntimeWork",
+                BindingFlags.Public | BindingFlags.Static);
+        if (criticalRuntimePriority == null)
+            throw new InvalidOperationException(
+                "wartime levy work needs a critical queue-priority policy");
+
+        Assert((bool)criticalRuntimePriority.Invoke(null,
+                new object[] { true, true, true, 0 }),
+            "wartime levy work preempts ordinary runtime work");
+        Assert(!(bool)criticalRuntimePriority.Invoke(null,
+                new object[] { true, true, true, 3 }),
+            "critical wartime work yields after the bounded burst");
+        Assert((bool)criticalRuntimePriority.Invoke(null,
+                new object[] { true, false, false, 3 }),
+            "critical work remains selectable when it is the only queued work");
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition) throw new InvalidOperationException(name);
+    }
+}

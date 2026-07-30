@@ -21,12 +21,13 @@ namespace AncientWarfare3.core.lineage
             bool joiningExistingWar, bool pairAlreadyAtWar)
         {
             if (!deliberateDecision || joiningExistingWar || pairAlreadyAtWar) return false;
-            if (!attackerIsXia && xiaizationLevel < AdoptedRitesLevel) return false;
             if (string.Equals(goalType, "independence", StringComparison.Ordinal)) return false;
 
             string type = warType ?? "";
             if (type == "independence_war" || type == "general_rebellion_war" ||
-                type == "fief_independence_war" || type.IndexOf("rebellion", StringComparison.Ordinal) >= 0)
+                type == "fief_independence_war" ||
+                type == CoupRestorationRules.WarTypeId ||
+                type.IndexOf("rebellion", StringComparison.Ordinal) >= 0)
                 return false;
             return true;
         }
@@ -48,6 +49,16 @@ namespace AncientWarfare3.core.lineage
             if (pCurrentYear < pEarliestWarYear) return WarNoticeGate.Wait;
             if (deploymentsReady) return WarNoticeGate.Ready;
             return pCurrentYear >= pForcedWarYear ? WarNoticeGate.Forced : WarNoticeGate.Wait;
+        }
+
+        public static WarNoticeGate EvaluateDiplomaticGate(int pCurrentYear,
+            int pEarliestWarYear, int pForcedWarYear, bool deploymentsReady)
+        {
+            if (pCurrentYear < pEarliestWarYear) return WarNoticeGate.Wait;
+            if (deploymentsReady) return WarNoticeGate.Ready;
+            return pCurrentYear >= pForcedWarYear
+                ? WarNoticeGate.Forced
+                : WarNoticeGate.Wait;
         }
 
         public static string BuildSignature(long pAttackerId, long pDefenderId, string pGoalType,

@@ -46,6 +46,7 @@ aw_hist_war_notice_received_mid,收到战书，来自, received a declaration of
 aw_hist_temporary_levy_enlisted,奉召临时入伍, was temporarily levied,奉召臨時入伍
 aw_hist_temporary_levy_demobilized,战后解除征召, was released from wartime levy,戰後解除徵召
 aw_hist_temporary_slave_vanguard_demobilized,解散了临时奴隶先锋军, disbanded its temporary slave vanguard,解散了臨時奴隸先鋒軍
+task_unit_aw_wartime_garrison,卫戍本城,Defending the city,衛戍本城
 aw_war_preparation,战备,War preparation,戰備
 aw_war_notice_target,战书目标,Notice target,戰書目標
 aw_war_notice_year,下书年份,Notice year,下書年份
@@ -63,3 +64,19 @@ aw_restoration_error_phase_order,天下尚未进入乱世，自主复国只能�
 aw_restoration_error_no_core,没有可用于起兵的旧国核心,No eligible old core can support an uprising,沒有可用於起兵的舊國核心
 aw_restoration_error_claimant,宣称人已不再符合复国条件,The claimant is no longer eligible,宣稱人已不再符合復國條件
 aw_restoration_error_generic,当前无法举兵复国,Restoration cannot begin now,目前無法舉兵復國
+aw_war_declaration_reason,宣战理由：,War reason: ,宣戰理由：
+aw_war_target_realm,目标国：,Target realm: ,目標國：
+aw_war_target_goal,战争目标：,War target: ,戰爭目標：
+aw_war_stat_core,核,Core ,核
+aw_war_stat_strong,强,Strong ,強
+aw_war_stat_weak,弱,Weak ,弱
+aw_war_stat_pending,造,Pending ,造
+aw_war_fabrication_reason_same_kingdom_or_invalid,不是可用的他国目标,Not an eligible foreign target,不是可用的他國目標
+aw_war_fabrication_reason_target_city_invalid,没有可用的目标城市,No eligible target city,沒有可用的目標城市
+aw_war_fabrication_reason_vassal_annex_by_decision,附庸只能通过附庸决议吞并,Vassals can be annexed only through a vassal decision,附庸只能通過附庸決議吞併
+aw_war_fabrication_reason_not_neighbor,只能在接壤的他国城市制造,Can be fabricated only in a bordering foreign city,只能在接壤的他國城市製造
+aw_war_fabrication_reason_source_invalid,本国不可用,The source realm is unavailable,本國不可用
+aw_war_fabrication_reason_not_own_city,只能在本国控制的城市制造核心,Cores can be fabricated only in a controlled city,只能在本國控制的城市製造核心
+aw_war_fabrication_reason_already_core,该城市已是核心,This city is already a core,該城市已是核心
+aw_war_fabrication_reason_project_exists,已有同类决策或项目在进行,A similar decision or project is already active,已有同類決策或項目在進行
+aw_war_fabrication_reason_available,已可制造,Fabrication available,已可製造

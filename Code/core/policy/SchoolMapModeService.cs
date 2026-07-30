@@ -147,12 +147,18 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 AWMapModeMetaLibrary.ClearDynamicMetaCache();
                 World.world?.zone_calculator?.dirtyAndClear();
             }
             catch { }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void DirtyMapIfActive()
@@ -162,6 +168,16 @@ namespace AncientWarfare3.core.policy
                     DirtyMinInterval)) return;
             _lastDirtyTime = now;
             DirtyMap();
+        }
+
+        internal static void ResetRuntime()
+        {
+            Colors.Clear();
+            _lastDirtyTime = -1d;
+            _windowDepth = 0;
+            _wasEnabledBeforeWindow = false;
+            _focusBeforeWindow = CourtSchoolId.None;
+            FocusSchoolId = CourtSchoolId.None;
         }
 
         internal static string GetSchoolDisplayName(string pSchoolId)

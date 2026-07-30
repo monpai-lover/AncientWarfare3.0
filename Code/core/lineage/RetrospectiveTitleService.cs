@@ -48,10 +48,11 @@ namespace AncientWarfare3.core.lineage
         private static void TryAward(Kingdom pKingdom, Actor pEmperor,
             long pShiId, long pDynastyId, long pActorId, string pRelation)
         {
-            if (HasFormalReignTitle(pActorId) || HasRetrospectiveTitle(pShiId, pActorId)) return;
+            if (HasRetrospectiveTitle(pShiId, pActorId)) return;
             if (!TryReadAncestor(pActorId, out AncestorArchive ancestor)) return;
             if (!RulerTitleFactService.TryReadPersonalSnapshot(
                     pActorId, out RulerPersonalFacts personal)) return;
+            string inheritedPosthumous = ReadFormalPosthumousName(pActorId);
 
             int civil = personal.Diplomacy + personal.Stewardship + personal.Intelligence;
             int martial = personal.Warfare * 2 + personal.Combat;
@@ -94,7 +95,7 @@ namespace AncientWarfare3.core.lineage
                 Traits = personal.Traits
             };
             RulerTitleDecision decision = RulerTitleDecision.ForRetrospective(
-                facts, temple, cycleNo, pRelation);
+                facts, temple, inheritedPosthumous, cycleNo, pRelation);
             string template = HistoryLocalizationRules.Text(
                 "aw_hist_title_retrospective");
             HistoryText emperorText = HistoryText.Actor(pEmperor);
@@ -189,17 +190,23 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        private static bool HasFormalReignTitle(long pActorId)
+        private static string ReadFormalPosthumousName(long pActorId)
         {
             try
             {
                 using var command = new SQLiteCommand(DB);
-                command.CommandText = "SELECT 1 FROM " + PosthumousTitleTableItem.GetTableName() +
-                                      " WHERE ACTOR_ID=@actor AND IS_RETROSPECTIVE=0 LIMIT 1";
+                command.CommandText = "SELECT IFNULL(POSTHUMOUS_NAME,'') FROM " +
+                                      PosthumousTitleTableItem.GetTableName() +
+                                      " WHERE ACTOR_ID=@actor AND IS_RETROSPECTIVE=0 " +
+                                      "AND REIGN_ID>=0 " +
+                                      "ORDER BY DECIDED_TIME DESC,RECORD_ID DESC LIMIT 1";
                 command.Parameters.AddWithValue("@actor", pActorId);
-                return command.ExecuteScalar() != null;
+                object value = command.ExecuteScalar();
+                return value == null || value == DBNull.Value
+                    ? ""
+                    : Convert.ToString(value) ?? "";
             }
-            catch { return true; }
+            catch { return ""; }
         }
 
         private static bool HasRetrospectiveTitle(long pShiId, long pActorId)

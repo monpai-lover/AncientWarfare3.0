@@ -6,6 +6,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pWarType == "aw_normal_war" && pPath == "ui/wars/war_conquest") return "wars/war_conquest";
             if (pWarType == "general_rebellion_war" && pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
+            if (pWarType == FeudatoryJingnanRules.WarTypeId &&
+                pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
+            if (pWarType == SuccessionDisputeRules.WarTypeId &&
+                pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
+            if (pWarType == CoupRestorationRules.WarTypeId &&
+                pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
             return pPath ?? "";
         }
 
@@ -18,6 +24,8 @@ namespace AncientWarfare3.core.lineage
                 case "take_core_city": return "ui/plots/plot_reclaim";
                 case "press_claim_city": return "ui/plots/plot_reclaim";
                 case "restore_kingdom": return "ui/plots/plot_usurpation";
+                case "reunify_succession":
+                    return "ui/plots/plot_usurpation";
                 case "force_vassal": return "ui/plots/plot_vassal_war";
                 case "independence": return "ui/plots/plot_Independence_War";
                 case "no_cb_punitive": return "ui/wars/war_reclaim";

@@ -1,0 +1,25 @@
+using AncientWarfare3.core.policy;
+
+internal static class ActorDeathInvocationRulesTests
+{
+    public static void Run()
+    {
+        Assert(ActorDeathInvocationRules.ShouldProcess(
+                pWasAliveAtEntry: true, pIsAliveAfterCall: false),
+            "the first transition from alive to dead is processed");
+        Assert(!ActorDeathInvocationRules.ShouldProcess(
+                pWasAliveAtEntry: false, pIsAliveAfterCall: false),
+            "the later corpse-destroy call is not processed twice");
+        Assert(!ActorDeathInvocationRules.ShouldProcess(
+                pWasAliveAtEntry: true, pIsAliveAfterCall: true),
+            "a call that did not kill the actor is ignored");
+        Assert(!ActorDeathInvocationRules.ShouldProcess(
+                pWasAliveAtEntry: false, pIsAliveAfterCall: true),
+            "an invalid revived-state transition is ignored");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

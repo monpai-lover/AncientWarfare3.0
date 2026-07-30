@@ -2,13 +2,39 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.ui;
 using AncientWarfare3.utils;
 using UnityEngine;
 
 namespace AncientWarfare3.core.lineage
 {
+    internal readonly struct ActiveVassalRelationIdentity
+    {
+        public ActiveVassalRelationIdentity(long pRelationId,
+            long pVassalId, long pSuzerainId, int pContractTier,
+            string pRelationType, bool pAmbiguous)
+        {
+            RelationId = pRelationId;
+            VassalId = pVassalId;
+            SuzerainId = pSuzerainId;
+            ContractTier = pContractTier;
+            RelationType = pRelationType ?? "";
+            Ambiguous = pAmbiguous;
+        }
+
+        public long RelationId { get; }
+        public long VassalId { get; }
+        public long SuzerainId { get; }
+        public int ContractTier { get; }
+        public string RelationType { get; }
+        public bool Ambiguous { get; }
+        public bool IsTributary =>
+            VassalContractTierRules.IsLooseTributary(ContractTier);
+    }
+
     internal static class VassalService
     {
         private const float VASSAL_POWER_WEIGHT = 0.6f;
@@ -17,6 +43,7 @@ namespace AncientWarfare3.core.lineage
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
         private static string T(string pKey) => HistoryLocalizationRules.Text(pKey);
+        private static string L(string pKey, string pFallback) => AW_L10n.Text(pKey, pFallback);
 
         internal sealed class KingdomDestroyWarCleanupState
         {
@@ -87,12 +114,13 @@ namespace AncientWarfare3.core.lineage
             bool vassal = IsVassalKingdom(pKingdom);
             bool tributary = IsTributaryKingdom(pKingdom);
             bool suzerain = IsSuzerain(pKingdom);
-            if (vassal && suzerain) return "\u81E3+";
-            if (vassal) return "\u81E3";
-            if (tributary) return "\u8D21";
-            if (suzerain) return "\u4E3B";
-            if (IsTributarySuzerain(pKingdom)) return "\u8D21+";
-            return "\u72EC";
+            if (vassal && suzerain) return L("aw_vassal_short_nested", "V+");
+            if (vassal) return L("aw_vassal_short_vassal", "V");
+            if (tributary) return L("aw_vassal_short_tributary", "T");
+            if (suzerain) return L("aw_vassal_short_suzerain", "S");
+            if (IsTributarySuzerain(pKingdom))
+                return L("aw_vassal_short_tributary_suzerain", "T+");
+            return L("aw_vassal_short_independent", "I");
         }
 
         public static string GetStatusTooltip(Kingdom pKingdom)
@@ -101,18 +129,24 @@ namespace AncientWarfare3.core.lineage
             var lines = new List<string>();
             lines.Add(BuildStatusTitle(pKingdom));
             Kingdom suzerain = GetSuzerain(pKingdom);
-            if (suzerain?.data != null) lines.Add("\u5B97\u4E3B: " + suzerain.name);
+            if (suzerain?.data != null) lines.Add(L("aw_vassal_label_suzerain", "Suzerain: ") +
+                RulerAppellationService.GetProjectedStateName(suzerain));
             Kingdom tributarySuzerain = GetTributarySuzerain(pKingdom);
             if (tributarySuzerain?.data != null)
-                lines.Add("\u671D\u8D21\u5B97\u4E3B: " + tributarySuzerain.name);
+                lines.Add(L("aw_vassal_label_tributary_suzerain", "Tributary suzerain: ") +
+                    RulerAppellationService.GetProjectedStateName(
+                        tributarySuzerain));
             List<Kingdom> direct = GetVassals(pKingdom);
             List<Kingdom> total = GetVassals(pKingdom, pRecursive: true);
-            if (direct.Count > 0) lines.Add("\u76F4\u5C5E\u9644\u5EB8: " + direct.Count);
+            if (direct.Count > 0)
+                lines.Add(L("aw_vassal_label_direct", "Direct vassals: ") + direct.Count);
             int directTributaries = GetDirectTributaryCount(pKingdom);
-            if (directTributaries > 0) lines.Add("\u76F4\u5C5E\u671D\u8D21\u56FD: " + directTributaries);
-            if (total.Count > direct.Count) lines.Add("\u9644\u5EB8\u4F53\u7CFB: " + total.Count);
+            if (directTributaries > 0)
+                lines.Add(L("aw_vassal_label_direct_tributary", "Direct tributaries: ") + directTributaries);
+            if (total.Count > direct.Count)
+                lines.Add(L("aw_vassal_label_network", "Vassal network: ") + total.Count);
             int years = GetYearsSinceRelationStarted(pKingdom);
-            if (years >= 0) lines.Add("\u81E3\u5C5E\u5E74\u6570: " + years);
+            if (years >= 0) lines.Add(L("aw_vassal_label_years", "Years as subject: ") + years);
             return string.Join("\n", lines.ToArray());
         }
 
@@ -126,7 +160,8 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom tributarySuzerain = GetTributarySuzerain(pContext);
             if (tributarySuzerain?.data != null && !tributarySuzerain.isRekt())
-                result.Add(BuildRelationRow(tributarySuzerain, "\u671D\u8D21\u5B97\u4E3B", 1,
+                result.Add(BuildRelationRow(tributarySuzerain,
+                    L("aw_vassal_role_tributary_suzerain", "Tributary suzerain"), 1,
                     isContext: false, isChain: true, relationSubject: pContext));
 
             Kingdom current = pContext;
@@ -136,7 +171,9 @@ namespace AncientWarfare3.core.lineage
             {
                 Kingdom suzerain = GetSuzerain(current);
                 if (suzerain?.data == null || suzerain.isRekt() || !visited.Add(suzerain.id)) break;
-                string role = chainDepth == 1 ? "\u76F4\u63A5\u5B97\u4E3B" : "\u4E0A\u7EA7\u5B97\u4E3B";
+                string role = chainDepth == 1
+                    ? L("aw_vassal_role_direct_suzerain", "Direct suzerain")
+                    : L("aw_vassal_role_upper_suzerain", "Upper suzerain");
                 result.Add(BuildRelationRow(suzerain, role, chainDepth, isContext: false,
                     isChain: true, relationSubject: current));
                 current = suzerain;
@@ -235,6 +272,62 @@ namespace AncientWarfare3.core.lineage
             return FindKingdom(GetTributarySuzerainId(pKingdom));
         }
 
+        public static Kingdom GetDiplomaticSuzerain(Kingdom pKingdom)
+        {
+            return GetSuzerain(pKingdom) ?? GetTributarySuzerain(pKingdom);
+        }
+
+        internal static bool TryReadActiveRelationIdentity(long pVassalId,
+            out ActiveVassalRelationIdentity pIdentity,
+            out bool pExists)
+        {
+            pIdentity = default(ActiveVassalRelationIdentity);
+            pExists = false;
+            if (!Ready || pVassalId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT RELATION_ID,VASSAL_ID," +
+                    "SUZERAIN_ID,CONTRACT_TIER,RELATION_TYPE FROM " +
+                    VassalRelationTableItem.GetTableName() +
+                    " WHERE VASSAL_ID=@vassal AND ACTIVE=1 AND " +
+                    "END_TIME<0 ORDER BY START_TIME DESC,RELATION_ID DESC " +
+                    "LIMIT 2";
+                command.Parameters.AddWithValue("@vassal", pVassalId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return true;
+                long relationId = reader.IsDBNull(0)
+                    ? -1L
+                    : reader.GetInt64(0);
+                long vassalId = reader.IsDBNull(1)
+                    ? pVassalId
+                    : reader.GetInt64(1);
+                long suzerainId = reader.IsDBNull(2)
+                    ? -1L
+                    : reader.GetInt64(2);
+                int contractTier = reader.IsDBNull(3)
+                    ? VassalContractTierRules.Outer
+                    : VassalContractTierRules.NormalizeTier(
+                        (int)reader.GetInt64(3));
+                string relationType = reader.IsDBNull(4)
+                    ? ""
+                    : reader.GetString(4);
+                bool ambiguous = reader.Read();
+                pExists = true;
+                pIdentity = new ActiveVassalRelationIdentity(relationId,
+                    vassalId, suzerainId, contractTier, relationType,
+                    ambiguous);
+                return true;
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "VassalService.TryReadActiveRelationIdentity: " +
+                    error.Message);
+                return false;
+            }
+        }
+
         public static Kingdom GetRootSuzerain(Kingdom pKingdom)
         {
             Kingdom current = pKingdom;
@@ -278,8 +371,13 @@ namespace AncientWarfare3.core.lineage
                                 GetSuzerainId(pVassal) == pSuzerain?.id;
             bool suzerainAtWar = HasActiveWars(pSuzerain);
             bool vassalAtWar = HasActiveWars(pVassal);
+            bool activeSpyNetwork = directVassal &&
+                                    DiplomaticOperationService.
+                                        HasActiveSpyNetwork(
+                                            pSuzerain, pVassal,
+                                            out _, out _);
             bool baseAllowed = VassalAnnexDecisionRules.CanStart(suzerainValid, directVassal,
-                suzerainAtWar, vassalAtWar, out pReason);
+                suzerainAtWar, vassalAtWar, activeSpyNetwork, out pReason);
             if (!baseAllowed) return false;
 
             return VassalRelationRules.CanAbsorbVassal(true,
@@ -302,10 +400,58 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
+        public static bool CanCompleteAbsorbVassalByDecision(
+            Kingdom pSuzerain, Kingdom pVassal, out string pReason)
+        {
+            bool suzerainValid = pSuzerain?.data != null &&
+                                 !pSuzerain.isRekt() &&
+                                 pSuzerain.getCities().Any(c =>
+                                     c?.data != null && !c.isRekt());
+            bool directVassal = pVassal?.data != null &&
+                                !pVassal.isRekt() &&
+                                GetSuzerainId(pVassal) == pSuzerain?.id;
+            if (!VassalAnnexDecisionRules.CanComplete(suzerainValid,
+                    directVassal, out pReason)) return false;
+            return VassalRelationRules.CanAbsorbVassal(true,
+                MandateRebelService.IsRebelKingdom(pSuzerain),
+                MandateRebelService.IsRebelKingdom(pVassal), out pReason);
+        }
+
+        public static VassalAnnexProgressState GetAnnexDecisionProgressState(
+            Kingdom pSuzerain, Kingdom pVassal, float pProgress, float pCost)
+        {
+            bool suzerainValid = pSuzerain?.data != null &&
+                                 !pSuzerain.isRekt() &&
+                                 pSuzerain.getCities().Any(c =>
+                                     c?.data != null && !c.isRekt());
+            bool targetValid = pVassal?.data != null &&
+                               !pVassal.isRekt() &&
+                               pVassal.getCities().Any(c =>
+                                   c?.data != null && !c.isRekt());
+            bool directVassal = targetValid &&
+                                GetSuzerainId(pVassal) == pSuzerain?.id;
+            bool independenceSuspended = targetValid && suzerainValid &&
+                                         HasActiveIndependenceSuspension(
+                                             pVassal, pSuzerain);
+            return VassalAnnexDecisionRules.ResolveProgressState(
+                suzerainValid, targetValid, directVassal,
+                independenceSuspended, pProgress, pCost);
+        }
+
         public static bool CanSetVassal(Kingdom pVassal, Kingdom pSuzerain)
         {
+            return CanSetVassal(pVassal, pSuzerain, out _);
+        }
+
+        public static bool CanSetVassal(Kingdom pVassal, Kingdom pSuzerain,
+            out string pReason)
+        {
             bool basicValid = HasValidVassalParticipants(pVassal, pSuzerain);
-            if (!basicValid) return false;
+            if (!basicValid)
+            {
+                pReason = "invalid";
+                return false;
+            }
 
             bool titleAbove = KingdomTitleService.GetTitle(pSuzerain) > KingdomTitleService.GetTitle(pVassal);
             bool cycleDetected = WouldCreateCycle(pVassal, pSuzerain);
@@ -317,10 +463,40 @@ namespace AncientWarfare3.core.lineage
                 titleAbove,
                 cycleDetected,
                 directlyAdjacent,
-                out _);
+                out pReason);
         }
 
-        private static bool CanEnforceVassalWarVictory(Kingdom pVassal, Kingdom pSuzerain)
+        public static bool CanSetTributary(Kingdom pTributary,
+            Kingdom pSuzerain)
+        {
+            return CanSetTributary(pTributary, pSuzerain, out _);
+        }
+
+        public static bool CanSetTributary(Kingdom pTributary,
+            Kingdom pSuzerain, out string pReason)
+        {
+            bool basicValid = HasValidVassalParticipants(pTributary,
+                pSuzerain);
+            bool suzerainIndependent = basicValid &&
+                                       GetSuzerainId(pSuzerain) < 0 &&
+                                       GetTributarySuzerainId(pSuzerain) < 0;
+            bool targetIndependent = basicValid &&
+                                     GetSuzerainId(pTributary) < 0 &&
+                                     GetTributarySuzerainId(pTributary) < 0;
+            bool cycleDetected = basicValid && WouldCreateCycle(pTributary,
+                pSuzerain);
+            bool directlyAdjacent = basicValid &&
+                                    KingdomAdjacency.AreDirectNeighbors(
+                                        pTributary, pSuzerain);
+            return VassalRelationRules.CanSetTributary(basicValid,
+                basicValid && MandateRebelService.IsRebelKingdom(pTributary),
+                basicValid && MandateRebelService.IsRebelKingdom(pSuzerain),
+                suzerainIndependent, targetIndependent, cycleDetected,
+                directlyAdjacent, out pReason);
+        }
+
+        internal static bool CanEnforceVassalWarVictory(Kingdom pVassal,
+            Kingdom pSuzerain)
         {
             bool basicValid = HasValidVassalParticipants(pVassal, pSuzerain);
             if (!basicValid) return false;
@@ -330,6 +506,12 @@ namespace AncientWarfare3.core.lineage
                 MandateRebelService.IsRebelKingdom(pVassal),
                 MandateRebelService.IsRebelKingdom(pSuzerain),
                 cycleDetected);
+        }
+
+        internal static bool WouldCreateVassalCycle(Kingdom pVassal,
+            Kingdom pSuzerain)
+        {
+            return WouldCreateCycle(pVassal, pSuzerain);
         }
 
         private static bool HasValidVassalParticipants(Kingdom pVassal, Kingdom pSuzerain)
@@ -367,7 +549,9 @@ namespace AncientWarfare3.core.lineage
             int contractTier = VassalContractTierRules.NormalizeTier(pContractTier);
             bool allowed = pEnforceWarVictory
                 ? CanEnforceVassalWarVictory(pVassal, pSuzerain)
-                : CanSetVassal(pVassal, pSuzerain);
+                : VassalContractTierRules.IsLooseTributary(contractTier)
+                    ? CanSetTributary(pVassal, pSuzerain)
+                    : CanSetVassal(pVassal, pSuzerain);
             if (!allowed) return false;
             if (!Ready) return false;
 
@@ -423,12 +607,32 @@ namespace AncientWarfare3.core.lineage
                 AdjustDirectTributaryCount(pSuzerain, 1);
             }
             RecordVassalSet(pVassal, pSuzerain, pReason);
+            DiplomacyConversationService.RecordVassalSet(pVassal, pSuzerain,
+                VassalContractTierRules.IsLooseTributary(contractTier));
+            LeaveAllianceAfterSubmission(pVassal);
             if (VassalContractTierRules.CountsAsVassal(contractTier))
             {
                 DirtyVassalMap();
                 PullVassalIntoSuzerainWars(pVassal, pSuzerain);
             }
+            KingdomStrategyRevisionService.MarkChanged(pVassal.id,
+                pSuzerain.id);
             return true;
+        }
+
+        private static void LeaveAllianceAfterSubmission(Kingdom pVassal)
+        {
+            try
+            {
+                Alliance alliance = pVassal?.getAlliance();
+                if (alliance?.data != null && alliance.hasKingdom(pVassal))
+                    alliance.leave(pVassal);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Vassal alliance cleanup failed: " +
+                                    error.Message);
+            }
         }
 
         public static bool SetTributary(Kingdom pTributary, Kingdom pSuzerain,
@@ -451,7 +655,11 @@ namespace AncientWarfare3.core.lineage
             if (!CloseRelation(relationId, pReason ?? "ended", absorbed: false)) return false;
             ClearRelationProjection(pVassal);
             RecordVassalEnd(pVassal, suzerain, pReason);
+            DiplomacyConversationService.RecordVassalEnded(pVassal,
+                suzerain);
             DirtyVassalMap();
+            KingdomStrategyRevisionService.MarkChanged(pVassal.id,
+                suzerainId);
             return true;
         }
 
@@ -463,26 +671,38 @@ namespace AncientWarfare3.core.lineage
         public static bool TryAbsorbVassal(Kingdom pSuzerain, Kingdom pVassal, string pReason = "absorbed")
         {
             if (pSuzerain?.data == null || pVassal?.data == null || !Ready) return false;
-            if (!VassalRelationRules.CanAbsorbVassal(true,
-                    MandateRebelService.IsRebelKingdom(pSuzerain),
-                    MandateRebelService.IsRebelKingdom(pVassal),
-                    out _))
-                return false;
+            if (!CanCompleteAbsorbVassalByDecision(pSuzerain, pVassal,
+                    out _)) return false;
             if (GetSuzerainId(pVassal) != pSuzerain.id) return false;
 
             long relationId = GetRelationId(pVassal);
             if (relationId < 0) relationId = ReadActiveRelationId(pVassal.id);
             if (relationId < 0) return false;
 
-            foreach (Kingdom child in GetVassals(pVassal).ToList())
-                SetVassal(child, pSuzerain, "absorbed_reparent");
-
             List<City> cities = pVassal.getCities().Where(c => c?.data != null && !c.isRekt()).ToList();
+            if (cities.Count == 0) return false;
             foreach (City city in cities)
                 city.joinAnotherKingdom(pSuzerain);
 
-            CloseRelation(relationId, pReason ?? "absorbed", absorbed: true);
+            if (!HasCommittedCityTransfer(pSuzerain, pVassal, cities))
+            {
+                RollBackCityTransfer(pVassal, pSuzerain, cities);
+                return false;
+            }
+
+            if (!CloseRelation(relationId, pReason ?? "absorbed",
+                    absorbed: true))
+            {
+                RollBackCityTransfer(pVassal, pSuzerain, cities);
+                return false;
+            }
+
+            foreach (Kingdom child in GetVassals(pVassal).ToList())
+                SetVassal(child, pSuzerain, "absorbed_reparent");
+
             ClearRelationProjection(pVassal);
+            DiplomaticOperationService.ConsumeActiveSpyNetwork(
+                pSuzerain.id, pVassal.id);
 
             HistoryWriter.RecordKingdom(pSuzerain, "vassal_absorb",
                 KingdomLabel(pSuzerain) + H("aw_hist_vassal_absorb_mid") + KingdomLabel(pVassal),
@@ -493,6 +713,31 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pSuzerain));
             DirtyVassalMap();
             return true;
+        }
+
+        private static bool HasCommittedCityTransfer(Kingdom pSuzerain,
+            Kingdom pVassal, IReadOnlyList<City> pExpectedCities)
+        {
+            if (pSuzerain?.data == null || pVassal?.data == null ||
+                pExpectedCities == null || pExpectedCities.Count == 0)
+                return false;
+            foreach (City city in pExpectedCities)
+                if (city?.data == null || city.isRekt() ||
+                    city.kingdom != pSuzerain)
+                    return false;
+            return !pVassal.getCities().Any(c =>
+                c?.data != null && !c.isRekt());
+        }
+
+        private static void RollBackCityTransfer(Kingdom pVassal,
+            Kingdom pSuzerain, IReadOnlyList<City> pCities)
+        {
+            if (pVassal?.data == null || pSuzerain?.data == null ||
+                pCities == null) return;
+            foreach (City city in pCities)
+                if (city?.data != null && !city.isRekt() &&
+                    city.kingdom == pSuzerain)
+                    city.joinAnotherKingdom(pVassal);
         }
 
         internal static void EnforceNoVassalRelationsForRebel(Kingdom pKingdom, string pReason = "rebel_government")
@@ -547,11 +792,13 @@ namespace AncientWarfare3.core.lineage
             string type = GetWarType(pWar);
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
+            bool hasExplicitGoal = WarTerritoryService.HasWarGoal(pWar.data.id);
 
             if (type == "independence_war")
                 EndIndependenceSuspension(pWar, attacker);
 
-            if (type == "vassal_war" && pWinner == WarWinner.Attackers)
+            if (!hasExplicitGoal && type == "vassal_war" &&
+                pWinner == WarWinner.Attackers)
             {
                 SetVassal(defender, attacker, "vassal_war", pWar.data.id,
                     pEnforceWarVictory: true,
@@ -559,7 +806,8 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            if (type == WarDecisionService.WAR_TRIBUTARY && pWinner == WarWinner.Attackers)
+            if (!hasExplicitGoal && type == WarDecisionService.WAR_TRIBUTARY &&
+                pWinner == WarWinner.Attackers)
             {
                 SetTributary(defender, attacker, "tributary_war", pWar.data.id,
                     pEnforceWarVictory: true);
@@ -607,6 +855,8 @@ namespace AncientWarfare3.core.lineage
             List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain);
             if (relations.Count == 0) return;
             CentralizationEffects effects = CentralizationService.ReadSnapshot(pSuzerain).effects;
+            CourtInstitutionEffects institution =
+                CourtInstitutionEffectService.Read(pSuzerain);
             float politicalTransferred = 0f;
             int goldTransferred = 0;
 
@@ -614,7 +864,8 @@ namespace AncientWarfare3.core.lineage
             {
                 Kingdom vassal = relation.vassal;
                 if (vassal?.data == null || vassal.isRekt()) continue;
-                VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                VassalEffectiveTerms terms = GetEffectiveRelationTerms(
+                    relation, effects, institution);
                 CityEconomyService.TryGetLatestCachedTaxContribution(vassal, out float annualTax);
                 float requestedPolitical = VassalFiscalRules.PoliticalTribute(annualTax,
                     terms.TributeRate, KingdomPolicyService.GetPoliticalPoints(vassal),
@@ -642,7 +893,8 @@ namespace AncientWarfare3.core.lineage
             CentralizationEffects effects = CentralizationService.ReadSnapshot(suzerain).effects;
             return relation == null
                 ? VassalFiscalRules.EffectiveTerms(100, 0, 0, effects)
-                : GetEffectiveRelationTerms(relation, effects);
+                : GetEffectiveRelationTerms(relation, effects,
+                    CourtInstitutionEffectService.Read(suzerain));
         }
 
         public static CentralPowerVassalSummary ReadCentralPowerSummary(Kingdom pSuzerain)
@@ -651,6 +903,8 @@ namespace AncientWarfare3.core.lineage
             if (pSuzerain?.data == null || pSuzerain.isRekt() || !Ready) return summary;
             List<ActiveRelationDetails> relations = ReadDirectRelations(pSuzerain);
             CentralizationEffects effects = CentralizationService.ReadSnapshot(pSuzerain).effects;
+            CourtInstitutionEffects institution =
+                CourtInstitutionEffectService.Read(pSuzerain);
             float projectedSuzerainPoints = KingdomPolicyService.GetPoliticalPoints(pSuzerain);
             float autonomyTotal = 0f;
             float obligationTotal = 0f;
@@ -659,11 +913,14 @@ namespace AncientWarfare3.core.lineage
             {
                 Kingdom vassal = relation.vassal;
                 if (vassal?.data == null || vassal.isRekt()) continue;
-                VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                VassalEffectiveTerms terms = GetEffectiveRelationTerms(
+                    relation, effects, institution);
                 CityEconomyService.TryGetLatestCachedTaxContribution(vassal, out float annualTax);
-                float political = VassalFiscalRules.PoliticalTribute(annualTax,
-                    terms.TributeRate, KingdomPolicyService.GetPoliticalPoints(vassal),
-                    projectedSuzerainPoints, VassalFiscalRules.MaximumPoliticalBalance);
+                float political = VassalFiscalRules.PoliticalTribute(
+                    annualTax, terms.TributeRate,
+                    KingdomPolicyService.GetPoliticalPoints(vassal),
+                    projectedSuzerainPoints,
+                    VassalFiscalRules.MaximumPoliticalBalance);
                 int gold = VassalFiscalRules.GoldTribute(
                     annualTax, terms.TributeRate, GetCapitalGold(vassal));
                 projectedSuzerainPoints += political;
@@ -784,6 +1041,23 @@ namespace AncientWarfare3.core.lineage
             return score;
         }
 
+        public static float GetWarPowerScore(Kingdom pKingdom,
+            bool pIncludeVassals)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return 0f;
+            float score = WartimeMilitaryPotentialService.
+                              CountPotentialWarriors(pKingdom) * 2f +
+                          CountCities(pKingdom) * 5f +
+                          pKingdom.countZones() * 0.02f;
+            if (!pIncludeVassals) return score;
+
+            foreach (Kingdom vassal in GetVassals(pKingdom,
+                         pRecursive: true))
+                score += GetWarPowerScore(vassal,
+                    pIncludeVassals: false) * VASSAL_POWER_WEIGHT;
+            return score;
+        }
+
         public static int GetNetworkArmy(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0;
@@ -824,31 +1098,40 @@ namespace AncientWarfare3.core.lineage
 
             if (suzerain?.data != null)
             {
-                lines.Add("\u9644\u5EB8\u56FD");
-                lines.Add("\u5B97\u4E3B: " + suzerain.name);
-                if (root?.data != null && root != suzerain) lines.Add("\u6839\u5B97\u4E3B: " + root.name);
+                lines.Add(L("aw_vassal_status_vassal", "Vassal realm"));
+                lines.Add(L("aw_vassal_label_suzerain", "Suzerain: ") +
+                    RulerAppellationService.GetProjectedStateName(suzerain));
+                if (root?.data != null && root != suzerain)
+                    lines.Add(L("aw_vassal_label_root_suzerain", "Root suzerain: ") +
+                        RulerAppellationService.GetProjectedStateName(root));
                 int years = GetYearsSinceRelationStarted(pKingdom);
-                if (years >= 0) lines.Add("\u81E3\u5C5E\u5E74\u6570: " + years);
+                if (years >= 0) lines.Add(L("aw_vassal_label_years", "Years as subject: ") + years);
             }
             else if (GetTributarySuzerain(pKingdom) is Kingdom tributarySuzerain &&
                      tributarySuzerain.data != null)
             {
-                lines.Add("\u671D\u8D21\u56FD");
-                lines.Add("\u671D\u8D21\u5B97\u4E3B: " + tributarySuzerain.name);
+                lines.Add(L("aw_vassal_status_tributary", "Tributary realm"));
+                lines.Add(L("aw_vassal_label_tributary_suzerain", "Tributary suzerain: ") +
+                    RulerAppellationService.GetProjectedStateName(
+                        tributarySuzerain));
                 int years = GetYearsSinceRelationStarted(pKingdom);
-                if (years >= 0) lines.Add("\u671D\u8D21\u5E74\u6570: " + years);
+                if (years >= 0)
+                    lines.Add(L("aw_vassal_label_tributary_years", "Years as tributary: ") + years);
             }
             else
             {
-                lines.Add("\u72EC\u7ACB\u56FD\u5BB6");
-                if (root?.data != null && root != pKingdom) lines.Add("\u6839\u5B97\u4E3B: " + root.name);
+                lines.Add(L("aw_vassal_status_independent", "Independent realm"));
+                if (root?.data != null && root != pKingdom)
+                    lines.Add(L("aw_vassal_label_root_suzerain", "Root suzerain: ") +
+                        RulerAppellationService.GetProjectedStateName(root));
             }
 
             if (direct.Count > 0)
-                lines.Add("\u76F4\u5C5E\u9644\u5EB8: " + direct.Count);
+                lines.Add(L("aw_vassal_label_direct", "Direct vassals: ") + direct.Count);
             if (total.Count > direct.Count)
-                lines.Add("\u9644\u5EB8\u4F53\u7CFB\u603B\u6570: " + total.Count);
-            lines.Add("\u4F53\u7CFB\u519B\u529B: " + GetNetworkArmy(root ?? pKingdom));
+                lines.Add(L("aw_vassal_label_network_total", "Total vassal network: ") + total.Count);
+            lines.Add(L("aw_vassal_label_network_army", "Network military strength: ") +
+                      GetNetworkArmy(root ?? pKingdom));
             return string.Join("\n", lines.ToArray());
         }
 
@@ -872,7 +1155,9 @@ namespace AncientWarfare3.core.lineage
                 if (child?.data == null || child.isRekt()) continue;
                 if (!pVisited.Add(child.id)) continue;
 
-                string role = pDepth == 1 ? "\u76F4\u5C5E\u9644\u5EB8" : "\u9644\u5EB8";
+                string role = pDepth == 1
+                    ? L("aw_vassal_role_direct_vassal", "Direct vassal")
+                    : L("aw_vassal_role_vassal", "Vassal");
                 pRows.Add(BuildRelationRow(child, role, pDepth, isContext: false,
                     isChain: false, relationSubject: child));
                 AddVassalRows(child, pRows, pDepth + 1, pVisited);
@@ -888,7 +1173,8 @@ namespace AncientWarfare3.core.lineage
             {
                 Kingdom tributary = relation.vassal;
                 if (tributary?.data == null || tributary.isRekt()) continue;
-                pRows.Add(BuildRelationRow(tributary, "\u671D\u8D21\u56FD", 1,
+                pRows.Add(BuildRelationRow(tributary,
+                    L("aw_vassal_status_tributary", "Tributary realm"), 1,
                     isContext: false, isChain: false, relationSubject: tributary));
             }
         }
@@ -912,7 +1198,9 @@ namespace AncientWarfare3.core.lineage
             var row = new VassalRelationInfo
             {
                 kingdom_id = pKingdom?.id ?? -1,
-                kingdom_name = pKingdom?.name ?? "",
+                kingdom_name = pKingdom?.data == null
+                    ? ""
+                    : RulerAppellationService.GetProjectedStateName(pKingdom),
                 color_text = HistoryColors.FromKingdom(pKingdom),
                 color_id = pKingdom?.data?.color_id ?? -1,
                 banner_icon_id = pKingdom?.data?.banner_icon_id ?? 0,
@@ -934,11 +1222,16 @@ namespace AncientWarfare3.core.lineage
             ActiveRelationDetails relation = ReadActiveRelationDetails(relationKingdom?.id ?? -1);
             if (relation != null)
             {
-                CentralizationEffects effects = CentralizationService.ReadSnapshot(
-                    FindKingdom(relation.suzerain_id)).effects;
-                VassalEffectiveTerms effective = GetEffectiveRelationTerms(relation, effects);
+                Kingdom suzerain = FindKingdom(relation.suzerain_id);
+                CentralizationEffects effects =
+                    CentralizationService.ReadSnapshot(suzerain).effects;
+                VassalEffectiveTerms effective = GetEffectiveRelationTerms(
+                    relation, effects,
+                    CourtInstitutionEffectService.Read(suzerain));
                 row.suzerain_id = relation.suzerain_id;
-                row.suzerain_name = relation.suzerain_name;
+                row.suzerain_name = suzerain?.data == null
+                    ? relation.suzerain_name
+                    : RulerAppellationService.GetProjectedStateName(suzerain);
                 row.suzerain_color = relation.suzerain_color;
                 row.relation_type = relation.relation_type;
                 row.contract_tier = relation.contract_tier;
@@ -961,14 +1254,18 @@ namespace AncientWarfare3.core.lineage
             bool tributary = IsTributaryKingdom(pKingdom);
             bool suzerain = IsSuzerain(pKingdom);
             bool tributarySuzerain = IsTributarySuzerain(pKingdom);
-            if (vassal && suzerain) return "\u672C\u56FD\u00B7\u9644\u5EB8\u5B97\u4E3B";
-            if (vassal) return "\u672C\u56FD\u00B7\u9644\u5EB8";
-            if (tributary && suzerain) return "\u672C\u56FD\u00B7\u671D\u8D21\u56FD\u00B7\u5B97\u4E3B";
-            if (tributary) return "\u672C\u56FD\u00B7\u671D\u8D21\u56FD";
-            if (suzerain && tributarySuzerain) return "\u672C\u56FD\u00B7\u5B97\u4E3B\u00B7\u671D\u8D21\u5B97\u4E3B";
-            if (suzerain) return "\u672C\u56FD\u00B7\u5B97\u4E3B";
-            if (tributarySuzerain) return "\u672C\u56FD\u00B7\u671D\u8D21\u5B97\u4E3B";
-            return "\u672C\u56FD\u00B7\u72EC\u7ACB";
+            if (vassal && suzerain)
+                return L("aw_vassal_context_vassal_suzerain", "This realm · Vassal suzerain");
+            if (vassal) return L("aw_vassal_context_vassal", "This realm · Vassal");
+            if (tributary && suzerain)
+                return L("aw_vassal_context_tributary_suzerain", "This realm · Tributary · Suzerain");
+            if (tributary) return L("aw_vassal_context_tributary", "This realm · Tributary");
+            if (suzerain && tributarySuzerain)
+                return L("aw_vassal_context_dual_suzerain", "This realm · Suzerain · Tributary suzerain");
+            if (suzerain) return L("aw_vassal_context_suzerain", "This realm · Suzerain");
+            if (tributarySuzerain)
+                return L("aw_vassal_context_tributary_overlord", "This realm · Tributary suzerain");
+            return L("aw_vassal_context_independent", "This realm · Independent");
         }
 
         private static string BuildStatusTitle(Kingdom pKingdom)
@@ -977,13 +1274,16 @@ namespace AncientWarfare3.core.lineage
             bool tributary = IsTributaryKingdom(pKingdom);
             bool suzerain = IsSuzerain(pKingdom);
             bool tributarySuzerain = IsTributarySuzerain(pKingdom);
-            if (vassal && suzerain) return "\u9644\u5EB8\u56FD\uFF0C\u5E76\u62E5\u6709\u4E0B\u7EA7\u9644\u5EB8";
-            if (vassal) return "\u9644\u5EB8\u56FD";
-            if (tributary) return "\u671D\u8D21\u56FD";
-            if (suzerain && tributarySuzerain) return "\u5B97\u4E3B\u56FD\uFF0C\u5E76\u63A5\u53D7\u671D\u8D21";
-            if (suzerain) return "\u5B97\u4E3B\u56FD";
-            if (tributarySuzerain) return "\u671D\u8D21\u5B97\u4E3B\u56FD";
-            return "\u72EC\u7ACB\u56FD\u5BB6";
+            if (vassal && suzerain)
+                return L("aw_vassal_status_nested", "Vassal realm with subordinate vassals");
+            if (vassal) return L("aw_vassal_status_vassal", "Vassal realm");
+            if (tributary) return L("aw_vassal_status_tributary", "Tributary realm");
+            if (suzerain && tributarySuzerain)
+                return L("aw_vassal_status_dual_suzerain", "Suzerain realm receiving tribute");
+            if (suzerain) return L("aw_vassal_status_suzerain", "Suzerain realm");
+            if (tributarySuzerain)
+                return L("aw_vassal_status_tributary_suzerain", "Tributary suzerain realm");
+            return L("aw_vassal_status_independent", "Independent realm");
         }
 
         private static List<ActiveRelationDetails> ReadDirectRelations(Kingdom pSuzerain)
@@ -1093,15 +1393,21 @@ namespace AncientWarfare3.core.lineage
         }
 
         private static VassalEffectiveTerms GetEffectiveRelationTerms(
-            ActiveRelationDetails pRelation, CentralizationEffects pEffects)
+            ActiveRelationDetails pRelation, CentralizationEffects pEffects,
+            CourtInstitutionEffects pInstitution)
         {
             if (pRelation == null)
                 return VassalFiscalRules.EffectiveTerms(100, 0, 0, pEffects);
             if (VassalContractTierRules.IsLooseTributary(pRelation.contract_tier))
-                return new VassalEffectiveTerms(pRelation.autonomy, pRelation.tribute_rate,
-                    pRelation.military_obligation);
+                return VassalFiscalRules.EffectiveTerms(pRelation.autonomy,
+                    pRelation.tribute_rate, pRelation.military_obligation,
+                    pEffects, pInstitution.DirectVassalAutonomyCapReduction,
+                    pInstitution.DirectVassalTributeRateBonus,
+                    applyRealmModifiers: false);
             return VassalFiscalRules.EffectiveTerms(pRelation.autonomy, pRelation.tribute_rate,
-                pRelation.military_obligation, pEffects);
+                pRelation.military_obligation, pEffects,
+                pInstitution.DirectVassalAutonomyCapReduction,
+                pInstitution.DirectVassalTributeRateBonus);
         }
 
         private static CentralPowerVassalInfo BuildCentralPowerVassalInfo(
@@ -1180,12 +1486,16 @@ namespace AncientWarfare3.core.lineage
             bool pAllowNewDecisions)
         {
             if (pWar?.data == null || pWar.hasEnded() || pRoot?.data == null || pRelations == null) return;
-            if (pRoot != pMain && pRoot != pEnemy) JoinSide(pWar, pRoot, attackers);
+            if (pRoot != pMain && pRoot != pEnemy)
+                JoinSide(pWar, pRoot, attackers,
+                    WarParticipantEntrySourceKind.ScriptedJoin, pMain);
 
             pWar.data.get(LineageKeys.VASSAL_OBLIGATION_DECISIONS,
                 out string decisions, "");
             string initialDecisions = decisions;
             var effectsBySuzerain = new Dictionary<long, CentralizationEffects>();
+            var institutionsBySuzerain =
+                new Dictionary<long, CourtInstitutionEffects>();
             var queue = new Queue<Kingdom>();
             var visited = new HashSet<long>();
             if (IsOnWarSide(pWar, pRoot, attackers)) queue.Enqueue(pRoot);
@@ -1204,6 +1514,12 @@ namespace AncientWarfare3.core.lineage
                 {
                     effects = CentralizationService.ReadSnapshot(suzerain).effects;
                     effectsBySuzerain[suzerain.id] = effects;
+                }
+                if (!institutionsBySuzerain.TryGetValue(suzerain.id,
+                        out CourtInstitutionEffects institution))
+                {
+                    institution = CourtInstitutionEffectService.Read(suzerain);
+                    institutionsBySuzerain[suzerain.id] = institution;
                 }
 
                 foreach (ActiveRelationDetails relation in children)
@@ -1227,7 +1543,8 @@ namespace AncientWarfare3.core.lineage
                     bool accepted;
                     if (pAllowNewDecisions)
                     {
-                        VassalEffectiveTerms terms = GetEffectiveRelationTerms(relation, effects);
+                        VassalEffectiveTerms terms = GetEffectiveRelationTerms(
+                            relation, effects, institution);
                         VassalObligationDecisionCodec.Resolve(decisions, pWar.data.id,
                             suzerain.id, vassal.id, terms.MilitaryObligation,
                             out accepted, out decisions);
@@ -1246,7 +1563,9 @@ namespace AncientWarfare3.core.lineage
                             independenceSuspended: false,
                             pObligationAccepted: accepted))
                         continue;
-                    JoinSide(pWar, vassal, attackers);
+                    JoinSide(pWar, vassal, attackers,
+                        WarParticipantEntrySourceKind.FormalVassalObligation,
+                        suzerain);
                     if (IsOnWarSide(pWar, vassal, attackers)) queue.Enqueue(vassal);
                 }
             }
@@ -1300,14 +1619,20 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private static void JoinSide(War pWar, Kingdom pKingdom, bool attackers)
+        private static void JoinSide(War pWar, Kingdom pKingdom,
+            bool attackers, WarParticipantEntrySourceKind pSourceKind,
+            Kingdom pSourceKingdom)
         {
             if (pWar == null || pKingdom?.data == null || pKingdom.isRekt()) return;
             try { if (pWar.hasKingdom(pKingdom)) return; } catch { }
             try
             {
-                if (attackers) pWar.joinAttackers(pKingdom);
-                else pWar.joinDefenders(pKingdom);
+                using (WarParticipantEntrySourceScope.Open(pWar, pKingdom,
+                           pSourceKind, pSourceKingdom))
+                {
+                    if (attackers) pWar.joinAttackers(pKingdom);
+                    else pWar.joinDefenders(pKingdom);
+                }
             }
             catch { }
         }

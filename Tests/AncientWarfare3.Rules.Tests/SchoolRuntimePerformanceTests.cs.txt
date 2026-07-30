@@ -1,0 +1,938 @@
+using AncientWarfare3.core.schools;
+using AncientWarfare3.core.court;
+
+internal static class SchoolRuntimePerformanceTests
+{
+    public static void Run()
+    {
+        HistoricalSchoolDiagnostics.ClearRuntime();
+        HistoricalSchoolDiagnostics.RecordYearEnqueue(7);
+        HistoricalSchoolDiagnostics.RecordSchedulerFrame(11, 13, true);
+        HistoricalSchoolDiagnostics.RecordSqlBatch(2, 17, true);
+        HistoricalSchoolDiagnosticSnapshot populated =
+            HistoricalSchoolDiagnostics.Snapshot();
+        True(populated.YearTokens > 0 && populated.SqlBatches > 0,
+            "school diagnostics record current-world work");
+        HistoricalSchoolDiagnostics.ClearRuntime();
+        HistoricalSchoolDiagnosticSnapshot cleared =
+            HistoricalSchoolDiagnostics.Snapshot();
+        Equal(0L, cleared.YearTokens,
+            "world switches clear school yearly diagnostics");
+        Equal(0L, cleared.SchedulerFrames,
+            "world switches clear school scheduler diagnostics");
+        Equal(0L, cleared.SqlBatches,
+            "world switches clear school SQL diagnostics");
+        Equal(0L, cleared.IdleAllocatedBytes,
+            "world switches clear school allocation diagnostics");
+
+        True(HistoricalSchoolRecoveryRules.NeedsRecruitment(
+                pLivingMembers: 1, pQualifiedTeachers: 1,
+                pPendingRecruitment: false),
+            "a school reduced to its master enters bounded recovery");
+        Equal(false, HistoricalSchoolRecoveryRules.NeedsRecruitment(
+                pLivingMembers: HistoricalSchoolRecoveryRules.MinimumLivingMembers,
+                pQualifiedTeachers: 1, pPendingRecruitment: false),
+            "a sustainable school does not consume recovery work");
+        Equal(false, HistoricalSchoolRecoveryRules.NeedsRecruitment(
+                pLivingMembers: 1, pQualifiedTeachers: 1,
+                pPendingRecruitment: true),
+            "a pending disciple write is not duplicated by recovery");
+        Equal(HistoricalSchoolRecoveryRules.MaxSchoolsPerYear,
+            HistoricalSchoolRecoveryRules.SchoolWorkBudget(99),
+            "school recovery has a strict annual school budget");
+        Equal(2, HistoricalSchoolRecoveryRules.SchoolWorkBudget(2),
+            "small recovery snapshots process each deficient school once");
+        Equal(HistoricalSchoolRecoveryRules.MaxCandidatesPerSchoolAttempt,
+            HistoricalSchoolRecoveryRules.CandidateWorkBudget(99),
+            "one school recovery attempt has a strict real-candidate budget");
+        Equal(false, HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
+                pLivingMembers: 2, pQualifiedTeachers: 1,
+                HistoricalSchoolStanding.Member, pPresent: true,
+                pMembershipYears: 20, pReputation: 80f),
+            "continuity promotion never creates a redundant teacher");
+        True(HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
+                pLivingMembers: 1, pQualifiedTeachers: 0,
+                HistoricalSchoolStanding.Member, pPresent: true,
+                pMembershipYears: 3, pReputation: 20f),
+            "a mature preserved-work member can restart a broken teaching chain");
+        Equal(false, HistoricalSchoolRecoveryRules.ShouldPromoteContinuityTeacher(
+                pLivingMembers: 1, pQualifiedTeachers: 0,
+                HistoricalSchoolStanding.Member, pPresent: false,
+                pMembershipYears: 30, pReputation: 100f),
+            "an absent member cannot be promoted to repair the local chain");
+        int firstRecoveryCandidateStart =
+            HistoricalSchoolRecoveryRules.CandidateStart(
+                pYear: 120, pSchoolIndex: 3, pCandidateCount: 48);
+        int nextRecoveryCandidateStart =
+            HistoricalSchoolRecoveryRules.CandidateStart(
+                pYear: 121, pSchoolIndex: 3, pCandidateCount: 48);
+        Equal(false, firstRecoveryCandidateStart == nextRecoveryCandidateStart,
+            "successive years rotate a school's bounded recovery candidates");
+        Equal(0, HistoricalSchoolRecoveryRules.CandidateIndex(
+                pStart: 47, pOffset: 1, pCandidateCount: 48),
+            "the bounded recovery candidate cursor wraps without rescanning");
+        string schoolSchedulerSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolScheduler.cs"));
+        True(schoolSchedulerSource.Contains(
+                "HistoricalSchoolPopulationRecoveryService.ProcessYearFrame"),
+            "the annual school scheduler runs bounded population recovery");
+
+        var years = new HistoricalSchoolSchedulerState();
+        True(years.EnqueueYear(73), "first year token is accepted");
+        True(years.EnqueueYear(75), "newer year coalesces pending work");
+        Equal(75, years.PendingYear, "latest pending year wins");
+        Equal(75, years.TakePendingYear(), "pending year is consumed once");
+        Equal(-1, years.TakePendingYear(), "empty scheduler stays empty");
+        Equal(false, years.EnqueueYear(75),
+            "consumed year cannot be requeued by another kingdom");
+
+        var annualCities = new HistoricalSchoolBoundedWorkCursor(
+            pStart: 3, pCount: 4, pSourceCount: 5);
+        True(annualCities.TryTake(out int annualCity0) && annualCity0 == 3,
+            "bounded annual work starts at its fair cursor");
+        True(annualCities.TryTake(out int annualCity1) && annualCity1 == 4,
+            "bounded annual work advances one item per call");
+        True(annualCities.TryTake(out int annualCity2) && annualCity2 == 0,
+            "bounded annual work wraps inside the source snapshot");
+        True(annualCities.TryTake(out int annualCity3) && annualCity3 == 1,
+            "bounded annual work preserves exact requested count");
+        Equal(false, annualCities.TryTake(out _),
+            "bounded annual work stops after its fixed snapshot count");
+        Equal(4, annualCities.Processed,
+            "bounded annual cursor reports completed work without rescanning");
+
+        var descentBudgetMethod = typeof(HistoricalSchoolSchedulerRules)
+            .GetMethod("DescentAttemptBudget");
+        True(descentBudgetMethod != null,
+            "historical master descent exposes a per-frame attempt budget");
+        if (descentBudgetMethod != null)
+        {
+            Equal(1, (int)descentBudgetMethod.Invoke(null,
+                    new object[] { false, 2 }),
+                "only one historical master may descend in a frame");
+            Equal(0, (int)descentBudgetMethod.Invoke(null,
+                    new object[] { true, 2 }),
+                "pending descent persistence blocks another spawn attempt");
+            Equal(0, (int)descentBudgetMethod.Invoke(null,
+                    new object[] { false, 0 }),
+                "an exhausted descent plan performs no frame work");
+        }
+
+        for (int i = 0; i < 10_000; i++) years.HasPendingWork();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++) years.HasPendingWork();
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - before,
+            "idle scheduler query allocates zero bytes");
+
+        Equal(HistoricalSchoolRevisionMask.None,
+            HistoricalSchoolRevisionRules.ClassifyAffiliation(4, 4, true, true, -1, -1),
+            "identical affiliation does not invalidate");
+        Equal(HistoricalSchoolRevisionMask.Residence,
+            HistoricalSchoolRevisionRules.ClassifyAffiliation(4, 9, true, true, -1, -1),
+            "actual residence move invalidates residence only");
+        Equal(HistoricalSchoolRevisionMask.Presence,
+            HistoricalSchoolRevisionRules.ClassifyAffiliation(4, 4, true, false, -1, -1),
+            "travel departure invalidates presence");
+        Equal(HistoricalSchoolRevisionMask.Service,
+            HistoricalSchoolRevisionRules.ClassifyAffiliation(4, 4, true, true, -1, 8),
+            "appointment invalidates service only");
+
+        Equal(HistoricalSchoolStanding.Teacher,
+            HistoricalSchoolStandingRules.ResolvePromotion(
+                HistoricalSchoolStanding.Disciple, 3, 10f),
+            "three-year reputation-ten disciple becomes teacher");
+        Equal(HistoricalSchoolStanding.Teacher,
+            HistoricalSchoolStandingRules.ResolvePromotion(
+                HistoricalSchoolStanding.Disciple, 3, 0f),
+            "three years of study qualify a disciple for basic teaching even without fame");
+        Equal(13, HistoricalSchoolStandingRules.PromotionDueYear(
+                HistoricalSchoolStanding.Disciple, pMembershipStartYear: 10),
+            "a zero-reputation disciple still enters the three-year promotion index");
+        Equal(HistoricalSchoolStanding.Disciple,
+            HistoricalSchoolStandingRules.ResolvePromotion(
+                HistoricalSchoolStanding.Disciple, 2, 30f),
+            "membership age cannot be skipped");
+        True(HistoricalSchoolStandingRules.CanConvert(30, 18, 5, 0.45f, false),
+            "conversion is available after loyalty and teacher absence");
+        Equal(false,
+            HistoricalSchoolStandingRules.CanConvert(29, 18, 5, 0.45f, false),
+            "twelve-year loyalty is strict");
+        Equal(false,
+            HistoricalSchoolStandingRules.CanConvert(40, 18, 5, 0.45f, true),
+            "busy member cannot convert");
+
+        var leaderCandidates = new[]
+        {
+            new HistoricalSchoolLeaderCandidate(
+                11, 8, HistoricalSchoolStanding.Teacher, true),
+            new HistoricalSchoolLeaderCandidate(
+                9, 8, HistoricalSchoolStanding.Teacher, true),
+            new HistoricalSchoolLeaderCandidate(
+                5, 3, HistoricalSchoolStanding.Disciple, true),
+            new HistoricalSchoolLeaderCandidate(
+                2, 1, HistoricalSchoolStanding.Teacher, false)
+        };
+        Equal(9L,
+            HistoricalSchoolStandingRules.SelectLeaderActorId(leaderCandidates),
+            "senior available teacher wins with actor id tie-break");
+
+        int fairCursor = -1;
+        var visitedSchools = new HashSet<int>();
+        for (int slot = 0; slot < 14; slot++)
+        {
+            fairCursor = HistoricalSchoolStandingRules.NextFairIndex(fairCursor, 14);
+            True(visitedSchools.Add(fairCursor),
+                "fair school cursor does not repeat before full coverage");
+        }
+        Equal(14, visitedSchools.Count,
+            "two eight-slot years can cover all fourteen schools");
+        Equal(0, HistoricalSchoolStandingRules.NextFairIndex(fairCursor, 14),
+            "fair school cursor repeats only after full coverage");
+
+        True(HistoricalSchoolLectureRules.HasDiscipleCapacity(7, 8),
+            "a teacher below the direct-disciple cap can replenish the school");
+        Equal(false, HistoricalSchoolLectureRules.HasDiscipleCapacity(8, 8),
+            "a saturated teacher cannot consume a replenishment slot");
+        True(HistoricalSchoolLectureRules.TeacherPrecedesForLecture(
+                pHasDiscipleCapacity: true, pStartYear: 20, pActorId: 20,
+                pOtherHasDiscipleCapacity: false, pOtherStartYear: 1,
+                pOtherActorId: 1),
+            "a newer teacher with capacity precedes a saturated senior teacher");
+        True(HistoricalSchoolLectureRules.TeacherPrecedesForLecture(
+                pHasDiscipleCapacity: true, pStartYear: 8, pActorId: 9,
+                pOtherHasDiscipleCapacity: true, pOtherStartYear: 8,
+                pOtherActorId: 11),
+            "equally capable teachers retain seniority and stable actor-id ordering");
+
+        True(SchoolMembershipPersistenceRules.CanPersistPendingActor(
+                pHasData: true, pAlive: true, pRekt: false,
+                pExpectedActorId: 17, pRuntimeActorId: 17),
+            "a live matching actor can commit a pending membership write");
+        Equal(false, SchoolMembershipPersistenceRules.CanPersistPendingActor(
+                pHasData: false, pAlive: false, pRekt: true,
+                pExpectedActorId: 17, pRuntimeActorId: -1),
+            "a destroyed actor is rejected before a membership transaction commits");
+        Equal(false, SchoolMembershipPersistenceRules.CanPersistPendingActor(
+                pHasData: true, pAlive: true, pRekt: false,
+                pExpectedActorId: 17, pRuntimeActorId: 18),
+            "a reused actor reference cannot commit another actor's membership");
+
+        True(FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 11),
+            "exact committed transfer is allowed");
+        Equal(false,
+            FormalAffiliationTransferRules.Allows(42, 7, 11, 43, 7, 11),
+            "another actor cannot borrow a permit");
+        Equal(false,
+            FormalAffiliationTransferRules.Allows(42, 7, 11, 42, 7, 12),
+            "another city cannot borrow a permit");
+        True(FormalAffiliationTransferRules.AllowsKingdom(42, 7, 42, 7),
+            "nested kingdom transfer can use the exact city permit");
+        Equal(false,
+            FormalAffiliationTransferRules.AllowsKingdom(42, 7, 43, 7),
+            "nested kingdom transfer rejects another actor");
+        Equal(false,
+            FormalAffiliationTransferRules.AllowsKingdom(42, 7, 42, 8),
+            "nested kingdom transfer rejects another kingdom");
+
+        var index = new HistoricalSchoolRuntimeIndex();
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            42,
+            "ru",
+            7,
+            HistoricalSchoolStanding.Disciple,
+            true,
+            false,
+            -1));
+        Equal(1, index.MemberCount("ru"), "school member is indexed once");
+        Equal(1, index.ResidentCount(7, "ru"),
+            "present resident is indexed by city");
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            42,
+            "ru",
+            9,
+            HistoricalSchoolStanding.Teacher,
+            true,
+            true,
+            -1));
+        Equal(0, index.ResidentCount(7, "ru"),
+            "old residence bucket is removed");
+        Equal(1, index.TeacherCount("ru"),
+            "promotion updates teacher bucket");
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            43,
+            "mo",
+            9,
+            HistoricalSchoolStanding.Teacher,
+            true,
+            false,
+            -1,
+            pTravelBucket: 2,
+            pTravelEligible: true));
+        Equal(1, index.TravelEligibleCount(2),
+            "resident teacher enters the eligible travel bucket before departure");
+        Equal(43L, index.TravelEligibleIds(2)[0],
+            "eligible travel bucket returns the resident teacher");
+        index.Remove(42);
+        Equal(0, index.MemberCount("ru"),
+            "death/close removes all buckets");
+        index.Remove(43);
+        Equal(0, index.TravelEligibleCount(2),
+            "membership close removes the eligible travel bucket entry");
+
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            50, "mo", 9, HistoricalSchoolStanding.Teacher,
+            true, false, -1));
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            51, "mo", 9, HistoricalSchoolStanding.Disciple,
+            true, false, -1,
+            pTeacherActorId: 50, pDirectDiscipleship: true));
+        index.Upsert(new HistoricalSchoolIndexEntry(
+            52, "fa", 10, HistoricalSchoolStanding.Teacher,
+            false, false, 7));
+        Equal(1, index.DirectDiscipleCount(50),
+            "direct disciple count is maintained by membership projection");
+        Equal(50L, index.ResidentTeacherIds(9, "mo")[0],
+            "present city-school teacher bucket returns the teacher");
+        Equal(1, index.ResidentTeacherCount(9, "mo"),
+            "present teacher count is maintained without intersecting two buckets");
+        Equal(0, index.ResidentTeacherCount(9, "fa"),
+            "non-present teachers do not enter another city's teacher bucket");
+        Equal(2, index.ResidentIds(9).Length,
+            "city residence bucket joins schools without a world scan");
+        Equal(9L, index.PresentCityIds()[0],
+            "present city ids are available without rebuilding an annual map");
+        Equal(52L, index.ServingActorIds()[0],
+            "serving actor ids are available without affiliation snapshots");
+        index.Remove(51);
+        Equal(0, index.DirectDiscipleCount(50),
+            "closing a disciple removes the teacher's direct count");
+        index.Remove(50);
+        index.Remove(52);
+
+        index.SetLivingXiaCity(100, true);
+        Equal(1, index.LivingXiaCityCount,
+            "living Xia city enters the descent index");
+        index.SetLivingXiaCity(100, false);
+        Equal(0, index.LivingXiaCityCount,
+            "destroyed or transferred Xia city leaves the descent index");
+
+        var leases = new HistoricalSchoolTaskLeaseBook();
+        var firstLease = new HistoricalSchoolTaskLease(
+            42, "lecture:1", "aw_school_lecture", "ru", 7, "venue:1", 10, 20);
+        True(leases.TryAcquire(firstLease), "task lease can be acquired");
+        Equal(false, leases.TryAcquire(firstLease),
+            "duplicate actor task lease is rejected");
+        Equal(false, leases.TryRelease(42, "stale", out _),
+            "stale completion cannot release current lease");
+        True(leases.TryRelease(42, "lecture:1", out HistoricalSchoolTaskLease released),
+            "exact completion releases current lease");
+        Equal("venue:1", released.VenueKey, "released lease preserves venue owner");
+
+        var expiringLease = new HistoricalSchoolTaskLease(
+            43, "debate:1", "aw_school_debate", "mo", 8, "venue:2", 11, 15);
+        True(leases.TryAcquire(expiringLease), "expiring lease can be acquired");
+        Equal(false, leases.TryExpireOne(14, out _),
+            "lease does not expire before its deadline");
+        True(leases.TryExpireOne(15, out HistoricalSchoolTaskLease expired),
+            "lease expires at its deadline");
+        Equal(43L, expired.ActorId, "expiry returns the exact actor lease");
+
+        True(leases.TryAcquire(new HistoricalSchoolTaskLease(
+            44, "debate:2", "aw_school_debate", "fa", 9, "venue:3", 16, 30)),
+            "death-release lease can be acquired");
+        True(leases.TryReleaseActor(44, out _), "death releases actor lease");
+        leases.TryAcquire(new HistoricalSchoolTaskLease(
+            45, "lecture:2", "aw_school_lecture", "dao", 10, "venue:4", 20, 40));
+        leases.Clear();
+        Equal(0, leases.Count, "clear removes every task lease");
+
+        leases.TryExpireOne(100, out _);
+        long leaseAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++) leases.TryExpireOne(100, out _);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - leaseAllocatedBefore,
+            "empty activity scheduler allocates zero bytes");
+        True(HistoricalSchoolActivityQueueRules.CanEnqueueTotal(15, 16),
+            "lecture backlog accepts work below its two-year capacity");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueueTotal(16, 16),
+            "lecture backlog rejects work at its exact global capacity");
+        True(HistoricalSchoolActivityQueueRules.CanActivate(7, 8),
+            "lecture activation remains available below the concurrent limit");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanActivate(8, 8),
+            "lecture activation waits at the exact concurrent limit");
+        True(HistoricalSchoolActivityQueueRules.CanEnqueueTotal(95, 96),
+            "debate backlog accepts work below its two-year capacity");
+        Equal(false, HistoricalSchoolActivityQueueRules.CanEnqueueTotal(96, 96),
+            "debate backlog rejects work at its exact global capacity");
+
+        var boundedYearKeys = new HistoricalSchoolBoundedYearKeys();
+        for (int key = 0; key < 10; key++)
+        {
+            True(boundedYearKeys.Add(20, "old-" + key),
+                "old operation key enters the retained two-year window");
+            True(boundedYearKeys.Add(21, "previous-" + key),
+                "previous-year operation key enters the retained window");
+        }
+        Equal(20, boundedYearKeys.Count,
+            "operation keys retain exactly two populated years");
+        for (int key = 0; key < 10; key++)
+            True(boundedYearKeys.Add(22, "current-" + key),
+                "current-year operation key advances the retained window");
+        Equal(20, boundedYearKeys.Count,
+            "advancing a year prunes every key older than the previous year");
+        Equal(false, boundedYearKeys.Contains(20, "old-0"),
+            "operation keys discard the year outside the retained window");
+        True(boundedYearKeys.Contains(21, "previous-0"),
+            "operation keys retain the previous simulation year");
+        True(boundedYearKeys.Contains(22, "current-0"),
+            "operation keys retain the current simulation year");
+        Equal(false, boundedYearKeys.Add(20, "late-old"),
+            "late stale work cannot re-enter a pruned year");
+        boundedYearKeys.Clear();
+        Equal(0, boundedYearKeys.Count, "year-key clear removes every retained key");
+
+        var cityCache = new HistoricalSchoolFixedLru<long, int>(128);
+        for (int city = 0; city < 256; city++) cityCache.Set(city, city);
+        Equal(128, cityCache.Count,
+            "city LRU remains exactly at capacity after excess insertions");
+        cityCache.Clear();
+        for (int city = 0; city < 128; city++) cityCache.Set(city, city);
+        True(cityCache.TryGet(0, out _), "LRU access refreshes oldest city");
+        cityCache.Set(128, 128);
+        Equal(false, cityCache.ContainsKey(1), "LRU evicts the least recent city");
+        True(cityCache.ContainsKey(0), "recently accessed city remains cached");
+        True(cityCache.Remove(0), "city destruction removes its cache entry");
+        Equal(127, cityCache.Count, "city destruction removes only its cache entry");
+        cityCache.Clear();
+        Equal(0, cityCache.Count, "fresh-world clear removes every cached city");
+
+        var yearlyLedgerCache = new HistoricalSchoolYearCityCache<string>(128);
+        yearlyLedgerCache.Set(4, 73, "city-4-year-73");
+        var ledgerHits = new Dictionary<long, string>();
+        long[] ledgerMisses = yearlyLedgerCache.CollectMisses(
+            new long[] { 4, 5, 5, -1 }, 73, ledgerHits);
+        Equal(1, ledgerHits.Count,
+            "ledger cache returns an existing city-year snapshot without SQL");
+        Equal("city-4-year-73", ledgerHits[4],
+            "ledger cache preserves the exact immutable snapshot value");
+        Equal(1, ledgerMisses.Length,
+            "ledger cache deduplicates uncached city ids before the SQL batch");
+        Equal(5L, ledgerMisses[0],
+            "ledger cache preserves stable request order for SQL misses");
+        ledgerHits.Clear();
+        ledgerMisses = yearlyLedgerCache.CollectMisses(
+            new long[] { 4 }, 74, ledgerHits);
+        Equal(0, ledgerHits.Count,
+            "a new year never reuses a pre-decay ledger snapshot");
+        Equal(1, ledgerMisses.Length,
+            "a new year requires one fresh ledger read");
+        True(yearlyLedgerCache.Remove(4, 73),
+            "a ledger write invalidates its exact current-year cache entry");
+        Equal(false, yearlyLedgerCache.TryGet(4, 73, out _),
+            "invalidated ledger data cannot be observed by a later debate");
+        yearlyLedgerCache.Set(4, 74, "city-4-year-74");
+        yearlyLedgerCache.Clear();
+        Equal(0, yearlyLedgerCache.Count,
+            "world switches clear every cached city-year ledger snapshot");
+
+        var venueClaims = new HistoricalSchoolActiveReservationBook<string, int>(12);
+        for (int claim = 0; claim < 12; claim++)
+            True(venueClaims.TryAdd("venue-" + claim, claim),
+                "active venue claim enters through the exact capacity");
+        Equal(false, venueClaims.TryAdd("venue-overflow", 12),
+            "active venue claims reject entries above lecture/debate capacity");
+        Equal(12, venueClaims.Count,
+            "active venue claims remain exactly bounded at twelve");
+        True(venueClaims.TryRemove("venue-0", out int releasedVenue) &&
+             releasedVenue == 0, "terminal activity releases its exact venue claim");
+        Equal(11, venueClaims.Count,
+            "released venue claims leave only active operations");
+        venueClaims.Clear();
+        Equal(0, venueClaims.Count, "fresh-world clear releases every venue claim");
+
+        var travelReservations = new HistoricalSchoolTravelReservationBook(6);
+        for (long actorId = 0; actorId < 6; actorId++)
+            True(travelReservations.TryReserve("ru", actorId),
+                "travel reservation enters through the per-school capacity");
+        Equal(false, travelReservations.TryReserve("ru", 6),
+            "travel reservations reject a seventh itinerant for one school");
+        Equal(6, travelReservations.CountForSchool("ru"),
+            "travel reservations remain exactly bounded at six per school");
+        Equal(false, travelReservations.TryReserve("mo", 0),
+            "one actor cannot reserve travel for two schools");
+        True(travelReservations.Release(0),
+            "travel completion releases the actor reservation");
+        Equal(5, travelReservations.Count,
+            "only active travel reservations remain after completion");
+        travelReservations.Clear();
+        Equal(0, travelReservations.Count,
+            "fresh-world clear removes every travel reservation");
+        True(HistoricalSchoolTravelReservationRestoreRules.
+                ShouldUseExamTravelerReservation(
+                    activeTravel: true, qualifiedTeacher: false),
+            "a travelling non-teacher restores through the exam reservation path");
+        Equal(false, HistoricalSchoolTravelReservationRestoreRules.
+                ShouldUseExamTravelerReservation(
+                    activeTravel: true, qualifiedTeacher: true),
+            "a travelling teacher keeps the ordinary itinerant restore path");
+        Equal(false, HistoricalSchoolTravelReservationRestoreRules.
+                ShouldUseExamTravelerReservation(
+                    activeTravel: false, qualifiedTeacher: false),
+            "an inactive scholar does not reserve an exam travel slot");
+
+        var processingDeaths = new HistoricalSchoolTransientIdGate();
+        True(processingDeaths.TryBegin(42),
+            "teacher death enters the transient processing gate");
+        Equal(false, processingDeaths.TryBegin(42),
+            "duplicate teacher death cannot run concurrently");
+        Equal(1, processingDeaths.Count,
+            "teacher death gate contains only the operation being handled");
+        True(processingDeaths.Complete(42),
+            "durable death/successor completion releases handled state");
+        Equal(0, processingDeaths.Count,
+            "handled teacher death state is never retained after completion");
+        processingDeaths.TryBegin(43);
+        processingDeaths.TryBegin(44);
+        processingDeaths.Clear();
+        Equal(0, processingDeaths.Count,
+            "fresh-world clear removes every in-flight death gate");
+
+        var cityStamp = new HistoricalSchoolCityCacheStamp(
+            pIdentityToken: 17, pKingdomId: 4, pZoneCount: 12,
+            pCenterX: 80, pCenterY: 40);
+        True(cityStamp.Matches(17, 4, 12, 80, 40),
+            "unchanged city identity and geometry keep a cache entry valid");
+        Equal(false, cityStamp.Matches(17, 5, 12, 80, 40),
+            "city transfer invalidates its cache entry");
+        Equal(false, cityStamp.Matches(17, 4, 13, 80, 40),
+            "city zone growth invalidates its cache entry");
+        Equal(false, cityStamp.Matches(18, 4, 12, 80, 40),
+            "reused city id cannot reuse another city object's cache entry");
+
+        Equal(HistoricalSchoolVenueSourceKind.Academy,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: true, pPublicAvailable: true, pLocalAvailable: true),
+            "academy venue has first priority");
+        Equal(HistoricalSchoolVenueSourceKind.PublicCity,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: false, pPublicAvailable: true, pLocalAvailable: true),
+            "public city venue is the first fallback");
+        Equal(HistoricalSchoolVenueSourceKind.Local,
+            HistoricalSchoolVenueRules.SelectSource(
+                pAcademyAvailable: false, pPublicAvailable: false, pLocalAvailable: true),
+            "bounded local venue is the final fallback");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsPublicCandidate(
+                pInsideCity: true, pWalkable: true, pCityCenter: true),
+            "city center is never a universal public venue");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 35),
+            "idle roam never chooses a tile nearer than six tiles");
+        True(HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 36),
+            "idle roam accepts the six-tile boundary");
+        True(HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 324),
+            "idle roam accepts the eighteen-tile boundary");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: false, pDistanceSquared: 325),
+            "idle roam remains within eighteen tiles");
+        Equal(false,
+            HistoricalSchoolVenueRules.IsIdleRoamCandidate(
+                pInsideResidenceCity: true, pWalkable: true,
+                pCityCenter: false, pBorderZone: true, pDistanceSquared: 100),
+            "idle roam never chooses a residence border zone");
+        Equal(64, HistoricalSchoolVenueRules.IdleRoamProbeCount(37 * 37),
+            "idle roam caps local tile probes at a fixed budget");
+        Equal(31, HistoricalSchoolVenueRules.IdleRoamProbeCount(31),
+            "small local searches retain every candidate");
+        var idleProbeIndices = new HashSet<int>();
+        int idleProbeCount = HistoricalSchoolVenueRules.IdleRoamProbeCount(37 * 37);
+        for (int probe = 0; probe < idleProbeCount; probe++)
+        {
+            int probeIndex = HistoricalSchoolVenueRules.IdleRoamProbeIndex(
+                pStableKey: 481L, pProbe: probe, pCandidateCount: 37 * 37);
+            True(probeIndex >= 0 && probeIndex < 37 * 37,
+                "idle roam probe remains inside the local search square");
+            True(idleProbeIndices.Add(probeIndex),
+                "idle roam probe budget never repeats a tile");
+        }
+
+        var rosterRevisions = new TestSchoolRevisionSource();
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 5, pActivity: 7);
+        rosterRevisions.SetSchool("bing", pStructure: 11, pScore: 13, pActivity: 17);
+        rosterRevisions.SetCity(41, 19);
+        rosterRevisions.SetCity(43, 23);
+        rosterRevisions.SetCity(47, 29);
+        HistoricalSchoolRosterRevisionStamp rosterStamp =
+            HistoricalSchoolRosterRevisionStamp.Capture("ru",
+                new long[] { 43, 41, 43 }, rosterRevisions);
+        Equal(2, rosterStamp.CityCount,
+            "roster revision stamp deduplicates represented cities");
+        True(rosterStamp.IsCurrent("ru", rosterRevisions),
+            "unchanged selected school roster stays current");
+        rosterRevisions.SetSchool("bing", pStructure: 31, pScore: 37, pActivity: 41);
+        rosterRevisions.SetCity(47, 43);
+        True(rosterStamp.IsCurrent("ru", rosterRevisions),
+            "another school and unrelated city do not invalidate the roster");
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 6, pActivity: 7);
+        Equal(false, rosterStamp.IsCurrent("ru", rosterRevisions),
+            "selected-school score change invalidates the roster");
+        rosterRevisions.SetSchool("ru", pStructure: 3, pScore: 5, pActivity: 7);
+        rosterRevisions.SetCity(43, 24);
+        Equal(false, rosterStamp.IsCurrent("ru", rosterRevisions),
+            "represented-city residence change invalidates the roster");
+        rosterRevisions.SetCity(43, 23);
+        Equal(false, rosterStamp.IsCurrent("bing", rosterRevisions),
+            "switching the selected school invalidates the roster");
+        rosterStamp.IsCurrent("ru", rosterRevisions);
+        long rosterAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int rosterIndex = 0; rosterIndex < 10_000; rosterIndex++)
+            rosterStamp.IsCurrent("ru", rosterRevisions);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - rosterAllocatedBefore,
+            "unchanged roster revision checks allocate zero bytes");
+
+        var dirtyCities = new CitySchoolDirtyQueue();
+        True(dirtyCities.Mark(1), "first dirty city enters the queue");
+        Equal(false, dirtyCities.Mark(1), "duplicate dirty city is coalesced");
+        dirtyCities.Mark(2);
+        dirtyCities.Mark(3);
+        Equal(2, dirtyCities.RequeueFront(new long[] { 3, 2, 3 }),
+            "front requeue deduplicates the requested cities");
+        True(dirtyCities.TryDequeue(out long firstDirty),
+            "dirty queue dequeues its first city");
+        Equal(3L, firstDirty, "front requeue preserves requested order");
+        True(dirtyCities.Remove(1), "dirty city can be removed before processing");
+        True(dirtyCities.TryDequeue(out long secondDirty),
+            "dirty queue dequeues the remaining city");
+        Equal(2L, secondDirty, "dirty queue remains FIFO after removal");
+        Equal(false, dirtyCities.TryDequeue(out long emptyDirty),
+            "empty dirty queue reports no work");
+        Equal(-1L, emptyDirty, "empty dirty queue returns the sentinel id");
+        dirtyCities.TryDequeue(out _);
+        long dirtyAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int dirtyIndex = 0; dirtyIndex < 10_000; dirtyIndex++)
+            dirtyCities.TryDequeue(out _);
+        Equal(0L, GC.GetAllocatedBytesForCurrentThread() - dirtyAllocatedBefore,
+            "empty dirty queue allocates zero bytes");
+
+        var writeLog = new List<string>();
+        var writeExecutor = new TestSchoolWriteBatchExecutor(writeLog);
+        var writes = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3, pMaxBatchSize: 2);
+        var firstWrite = new TestSchoolWriteOperation("first", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        var replayedWrite = new TestSchoolWriteOperation("replayed", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Replayed);
+        var cleanWrite = new TestSchoolWriteOperation("clean", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.CleanFailure);
+        True(writes.TryEnqueue(firstWrite, pDurableReady: true),
+            "durable-ready school write enters the buffer");
+        Equal(false, writes.TryEnqueue(firstWrite, pDurableReady: true),
+            "duplicate school operation key is rejected");
+        True(writes.TryEnqueue(replayedWrite, pDurableReady: true),
+            "second school write enters FIFO order");
+        True(writes.TryEnqueue(cleanWrite, pDurableReady: true),
+            "third school write fills the configured capacity");
+        Equal(false, writes.TryEnqueue(
+                new TestSchoolWriteOperation("overflow", writeLog,
+                    HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                pDurableReady: true),
+            "school write buffer rejects entries above capacity");
+        True(writes.ProcessFrame(100, writeExecutor),
+            "first persistence frame executes one bounded batch");
+        Equal("execute:first|execute:replayed|commit|project:first:Committed|" +
+              "project:replayed:Replayed", string.Join("|", writeLog),
+            "write batch commits before ordered runtime projections");
+        Equal(1, writes.Count, "one bounded batch leaves later FIFO work queued");
+        Equal(false, writes.ProcessFrame(100, writeExecutor),
+            "the same frame cannot execute a second database batch");
+        True(writes.ProcessFrame(101, writeExecutor),
+            "the next frame executes the next FIFO batch");
+        Equal("clean:clean", writeLog[writeLog.Count - 1],
+            "clean persistence failure releases its operation");
+        Equal(0, writes.Count, "resolved and clean operations leave the buffer");
+
+        writeLog.Clear();
+        var retryWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3,
+            pMaxBatchSize: 2);
+        var retryWrite = new TestSchoolWriteOperation("retry", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        retryWrites.TryEnqueue(retryWrite, pDurableReady: true);
+        True(retryWrites.ProcessFrame(200, writeExecutor),
+            "unknown persistence outcome consumes one attempt");
+        Equal(1, retryWrites.Count,
+            "unknown persistence outcome retains the exact operation");
+        Equal(false, retryWrites.ProcessFrame(200, writeExecutor),
+            "unknown operation observes same-frame batch gating");
+        True(retryWrites.ProcessFrame(201, writeExecutor),
+            "unknown operation retries after exponential backoff");
+        Equal(0, retryWrites.Count, "successful retry releases the operation");
+        True(ReferenceEquals(retryWrite, writeExecutor.LastOperation),
+            "unknown retry preserves the original operation instance");
+
+        writeLog.Clear();
+        var exponentialRetryWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3,
+            pMaxBatchSize: 2);
+        var twiceUnknownWrite = new TestSchoolWriteOperation("retry-twice", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        exponentialRetryWrites.TryEnqueue(twiceUnknownWrite, pDurableReady: true);
+        True(exponentialRetryWrites.ProcessFrame(300, writeExecutor),
+            "first unknown write attempt is executed immediately");
+        True(exponentialRetryWrites.ProcessFrame(301, writeExecutor),
+            "first unknown retry waits one frame");
+        Equal(false, exponentialRetryWrites.ProcessFrame(302, writeExecutor),
+            "second unknown retry waits two frames");
+        True(exponentialRetryWrites.ProcessFrame(303, writeExecutor),
+            "second unknown retry executes after exponential backoff");
+        Equal(0, exponentialRetryWrites.Count,
+            "successful second retry releases the operation");
+
+        writeLog.Clear();
+        var poisonedWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 3,
+            pMaxBatchSize: 2);
+        var poisonedHead = new TestSchoolWriteOperation("poisoned", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTeachingPersistenceOutcome.Unknown);
+        var healthyTail = new TestSchoolWriteOperation("healthy-tail", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        True(poisonedWrites.TryEnqueue(poisonedHead, pDurableReady: true),
+            "permanently unknown head enters the write buffer");
+        True(poisonedWrites.TryEnqueue(healthyTail, pDurableReady: true),
+            "healthy write queues behind the unknown head");
+        for (long frame = 400; frame < 440 && poisonedWrites.Count > 0; frame++)
+            poisonedWrites.ProcessFrame(frame, writeExecutor);
+        Equal(HistoricalSchoolWriteBuffer.MaxUnknownAttempts,
+            poisonedHead.ExecuteCount,
+            "a poisoned single operation has a finite retry budget");
+        True(writeLog.Contains("clean:poisoned"),
+            "terminal poisoned write runs its clean-failure projection");
+        True(writeLog.Contains("project:healthy-tail:Committed"),
+            "a healthy write behind a poisoned head eventually commits");
+        Equal(0, poisonedWrites.Count,
+            "poison isolation cannot leave later durable work blocked");
+
+        writeLog.Clear();
+        var saveWrites = new HistoricalSchoolWriteBuffer(pMaxCapacity: 8,
+            pMaxBatchSize: 2);
+        var unfinishedMovement = new TestSchoolWriteOperation("moving", writeLog,
+            HistoricalSchoolTeachingPersistenceOutcome.Committed);
+        Equal(false, saveWrites.TryEnqueue(unfinishedMovement, pDurableReady: false),
+            "unfinished movement never enters the durable write buffer");
+        for (int writeIndex = 0; writeIndex < 5; writeIndex++)
+            True(saveWrites.TryEnqueue(new TestSchoolWriteOperation("save-" + writeIndex,
+                    writeLog, HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                    pDurableReady: true),
+                "save-ready operation enters the durable buffer");
+        int batchesBeforeSave = writeExecutor.BatchCount;
+        True(saveWrites.FlushForSave(writeExecutor),
+            "save flush drains every durable-ready batch");
+        Equal(3, writeExecutor.BatchCount - batchesBeforeSave,
+            "save flush retains the configured transaction batch bound");
+        Equal(0, unfinishedMovement.ExecuteCount,
+            "save flush does not settle unfinished actor movement");
+        Equal(0, saveWrites.Count, "save flush drains committed operations");
+
+        var boundedWrites = new HistoricalSchoolWriteBuffer();
+        for (int writeIndex = 0; writeIndex < HistoricalSchoolWriteBuffer.MaxCapacity;
+             writeIndex++)
+            True(boundedWrites.TryEnqueue(new TestSchoolWriteOperation(
+                    "bounded-" + writeIndex, writeLog,
+                    HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                    pDurableReady: true),
+                "default write buffer accepts entries through its fixed capacity");
+        Equal(false, boundedWrites.TryEnqueue(new TestSchoolWriteOperation(
+                "bounded-overflow", writeLog,
+                HistoricalSchoolTeachingPersistenceOutcome.Committed),
+                pDurableReady: true),
+            "default school write buffer is bounded at 512 operations");
+
+        Equal("journey_arrival:42:7:108",
+            HistoricalSchoolTravelPersistenceRules.OperationKey(
+                pActorId: 42, pDestinationCityId: 7, pYear: 108),
+            "journey arrival writes use a stable idempotency key");
+        Equal(HistoricalSchoolTeachingPersistenceOutcome.Committed,
+            HistoricalSchoolTravelPersistenceRules.Combine(
+                HistoricalSchoolTeachingPersistenceOutcome.Committed,
+                HistoricalSchoolTeachingPersistenceOutcome.Committed),
+            "new affiliation and journey rows commit atomically");
+        Equal(HistoricalSchoolTeachingPersistenceOutcome.Replayed,
+            HistoricalSchoolTravelPersistenceRules.Combine(
+                HistoricalSchoolTeachingPersistenceOutcome.Committed,
+                HistoricalSchoolTeachingPersistenceOutcome.Replayed),
+            "a replayed journey row resolves the whole atomic retry");
+        Equal(HistoricalSchoolTeachingPersistenceOutcome.Unknown,
+            HistoricalSchoolTravelPersistenceRules.Combine(
+                HistoricalSchoolTeachingPersistenceOutcome.Committed,
+                HistoricalSchoolTeachingPersistenceOutcome.Unknown),
+            "unknown journey writes stay queued for retry");
+        Equal(HistoricalSchoolTeachingPersistenceOutcome.CleanFailure,
+            HistoricalSchoolTravelPersistenceRules.Combine(
+                HistoricalSchoolTeachingPersistenceOutcome.CleanFailure,
+                HistoricalSchoolTeachingPersistenceOutcome.Committed),
+            "invalid affiliation transitions are terminal clean failures");
+
+        HistoricalSchoolEffectiveLedger lazyLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 1d, pMembership: 0.6d, pInstitutions: 4d,
+                pActivePresence: 1d, pMomentum: 0.8d,
+                pLastActiveYear: 10, pLastDecayYear: 10, pCurrentYear: 13);
+        Near(0.995d, lazyLedger.Tradition, 0.000000001d,
+            "tradition begins decaying after its three-year grace period");
+        Near(Math.Pow(0.97d, 3d), lazyLedger.ActivePresence, 0.000000001d,
+            "lazy presence decay applies every skipped year arithmetically");
+        Near(0.8d * Math.Pow(0.85d, 3d), lazyLedger.Momentum, 0.000000001d,
+            "lazy momentum decay applies every skipped year arithmetically");
+        Near(0.6d, lazyLedger.Membership, 0.000000001d,
+            "membership influence is not part of annual decay");
+        Near(4d, lazyLedger.Institutions, 0.000000001d,
+            "institution influence is not part of annual decay");
+        Equal(13, lazyLedger.LastDecayYear,
+            "effective ledger advances its decay watermark to the read year");
+        HistoricalSchoolEffectiveLedger graceLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 0.7d, pMembership: 0d, pInstitutions: 0d,
+                pActivePresence: 0d, pMomentum: 0d,
+                pLastActiveYear: 10, pLastDecayYear: 10, pCurrentYear: 12);
+        Near(0.7d, graceLedger.Tradition, 0.000000001d,
+            "tradition remains unchanged inside the grace period");
+        HistoricalSchoolEffectiveLedger futureLedger =
+            HistoricalSchoolLedgerDecayRules.Effective(
+                pTradition: 0.4d, pMembership: 0.3d, pInstitutions: 2d,
+                pActivePresence: 0.2d, pMomentum: 0.1d,
+                pLastActiveYear: 20, pLastDecayYear: 20, pCurrentYear: 19);
+        Equal(20, futureLedger.LastDecayYear,
+            "reading an earlier year never reverses the decay watermark");
+        Near(0.4d, futureLedger.Tradition, 0.000000001d,
+            "reading an earlier year never applies reverse decay");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException($"{name}: expected true");
+    }
+
+    private static void Near(double expected, double actual, double epsilon, string name)
+    {
+        if (double.IsNaN(actual) || Math.Abs(expected - actual) > epsilon)
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private sealed class TestSchoolRevisionSource : IHistoricalSchoolRevisionSource
+    {
+        private readonly Dictionary<string, long[]> _schools =
+            new Dictionary<string, long[]>(StringComparer.Ordinal);
+        private readonly Dictionary<long, long> _cities = new Dictionary<long, long>();
+
+        public void SetSchool(string pSchoolId, long pStructure, long pScore, long pActivity)
+        {
+            _schools[pSchoolId] = new long[] { pStructure, pScore, pActivity };
+        }
+
+        public void SetCity(long pCityId, long pRevision)
+        {
+            _cities[pCityId] = pRevision;
+        }
+
+        public long StructureRevision(string pSchoolId) => School(pSchoolId, 0);
+        public long ScoreRevision(string pSchoolId) => School(pSchoolId, 1);
+        public long ActivityRevision(string pSchoolId) => School(pSchoolId, 2);
+
+        public long ResidenceRevisionForCity(long pCityId)
+        {
+            return _cities.TryGetValue(pCityId, out long revision) ? revision : 0L;
+        }
+
+        private long School(string pSchoolId, int pIndex)
+        {
+            return pSchoolId != null && _schools.TryGetValue(pSchoolId, out long[] values)
+                ? values[pIndex]
+                : 0L;
+        }
+    }
+
+    private sealed class TestSchoolWriteOperation : IHistoricalSchoolWriteOperation
+    {
+        private readonly List<string> _log;
+        private readonly Queue<HistoricalSchoolTeachingPersistenceOutcome> _outcomes;
+
+        public TestSchoolWriteOperation(string pOperationKey, List<string> pLog,
+            params HistoricalSchoolTeachingPersistenceOutcome[] pOutcomes)
+        {
+            OperationKey = pOperationKey;
+            _log = pLog;
+            _outcomes = new Queue<HistoricalSchoolTeachingPersistenceOutcome>(pOutcomes);
+        }
+
+        public string OperationKey { get; }
+        public int ExecuteCount { get; private set; }
+
+        public HistoricalSchoolTeachingPersistenceOutcome Execute(
+            System.Data.SQLite.SQLiteConnection pDb,
+            System.Data.SQLite.SQLiteTransaction pTransaction)
+        {
+            ExecuteCount++;
+            _log.Add("execute:" + OperationKey);
+            return _outcomes.Count > 0
+                ? _outcomes.Dequeue()
+                : HistoricalSchoolTeachingPersistenceOutcome.Committed;
+        }
+
+        public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
+        {
+            _log.Add("project:" + OperationKey + ":" + pOutcome);
+        }
+
+        public void OnCleanFailure()
+        {
+            _log.Add("clean:" + OperationKey);
+        }
+    }
+
+    private sealed class TestSchoolWriteBatchExecutor : IHistoricalSchoolWriteBatchExecutor
+    {
+        private readonly List<string> _log;
+
+        public TestSchoolWriteBatchExecutor(List<string> pLog)
+        {
+            _log = pLog;
+        }
+
+        public int BatchCount { get; private set; }
+        public IHistoricalSchoolWriteOperation LastOperation { get; private set; }
+
+        public HistoricalSchoolWriteBatchResult Execute(
+            IReadOnlyList<IHistoricalSchoolWriteOperation> pOperations)
+        {
+            BatchCount++;
+            var outcomes = new HistoricalSchoolTeachingPersistenceOutcome[pOperations.Count];
+            for (int index = 0; index < pOperations.Count; index++)
+            {
+                LastOperation = pOperations[index];
+                outcomes[index] = pOperations[index].Execute(null, null);
+                if (outcomes[index] == HistoricalSchoolTeachingPersistenceOutcome.Unknown)
+                    return HistoricalSchoolWriteBatchResult.Unknown;
+            }
+            _log.Add("commit");
+            return HistoricalSchoolWriteBatchResult.Committed(outcomes);
+        }
+    }
+}

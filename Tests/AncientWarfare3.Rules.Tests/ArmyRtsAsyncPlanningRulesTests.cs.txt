@@ -1,0 +1,31 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsAsyncPlanningRulesTests
+{
+    public static void Run()
+    {
+        var stamp = new ArmyRtsAsyncPlanStamp(4L, 10L, 7, 21L, 3L);
+        Assert(ArmyRtsAsyncPlanningRules.Accept(stamp, 4L, 10L, 7,
+                21L, 3L),
+            "a matching async front plan may be consumed");
+        Assert(!ArmyRtsAsyncPlanningRules.Accept(stamp, 4L, 10L, 8,
+                21L, 3L),
+            "a changed director generation rejects a stale plan");
+
+        IReadOnlyList<ArmyRtsAsyncFrontCandidate> ranked =
+            ArmyRtsAsyncPlanningRules.Rank(new[]
+            {
+                new ArmyRtsAsyncFrontCandidate(3L, 20),
+                new ArmyRtsAsyncFrontCandidate(2L, 20),
+                new ArmyRtsAsyncFrontCandidate(1L, 25)
+            });
+        Assert(ranked.Count == 3 && ranked[0].CityId == 1L &&
+               ranked[1].CityId == 2L && ranked[2].CityId == 3L,
+            "async front ranking is score-descending with city-ID tie breaking");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}

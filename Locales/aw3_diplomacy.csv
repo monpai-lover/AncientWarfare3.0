@@ -1,0 +1,279 @@
+key,cz,en,ch
+aw_diplomacy_action_household_offering_desc,从本国贵族宗族的18至33岁女子中选择一人，提供给对方君主为正妻或妾室,Offer an 18-33 year old woman of a domestic noble clan to the other ruler as principal wife or consort,從本國貴族宗族的18至33歲女子中選擇一人，提供給對方君主為正妻或妾室
+aw_diplomatic_marriage Title,宗室婚盟,Royal Marriage,宗室婚盟
+aw_diplomatic_marriage,宗室婚盟,Royal Marriage,宗室婚盟
+aw_diplomatic_marriage_title,宗室婚盟,Royal Marriage,宗室婚盟
+aw_diplomatic_marriage_our_house,本国宗室,Our royal house,本國宗室
+aw_diplomatic_marriage_other_house,对方宗室,Other royal house,對方宗室
+aw_diplomatic_marriage_confirm,发送婚盟请求,Send marriage proposal,發送婚盟請求
+aw_diplomatic_marriage_cancel,取消,Cancel,取消
+aw_diplomatic_marriage_back,返回外交,Back to diplomacy,返回外交
+aw_diplomatic_marriage_pair_valid,当前宗室婚配有效,Valid royal marriage pair,當前宗室婚配有效
+aw_diplomatic_marriage_previous,上一位宗室候选,Previous candidate,上一位宗室候選
+aw_diplomatic_marriage_next,下一位宗室候选,Next candidate,下一位宗室候選
+aw_diplomatic_marriage_no_candidate,无候选,No candidate,無候選
+aw_diplomatic_marriage_royal_house,所属宗室,Royal house,所屬宗室
+aw_diplomatic_marriage_male,男,Male,男
+aw_diplomatic_marriage_female,女,Female,女
+aw_diplomatic_marriage_male_short,男,M,男
+aw_diplomatic_marriage_female_short,女,F,女
+aw_diplomatic_marriage_age,年龄,Age,年齡
+aw_diplomatic_marriage_direction_our_male,本国男 + 对方女,Our male + their female,本國男 + 對方女
+aw_diplomatic_marriage_direction_our_female,本国女 + 对方男,Our female + their male,本國女 + 對方男
+aw_diplomatic_marriage_direction_unavailable,当前方向没有可用的宗室婚配组合,No eligible royal pair in this direction,目前方向沒有可用的宗室婚配組合
+aw_diplomatic_marriage_realms_unavailable,一方国家已不存在或当前不可用,One of the realms is no longer available,一方國家已不存在或目前不可用
+aw_diplomatic_marriage_ruler,君主本人,Reigning ruler,君主本人
+aw_diplomatic_marriage_direct_child,君主直系子女,Ruler's direct child,君主直系子女
+aw_diplomatic_marriage_collateral_kin,旁系宗室,Collateral royal kin,旁系宗室
+aw_diplomacy_failure_no_requester_royal_candidate,本国没有符合婚配硬条件的宗室成员,Our realm has no eligible royal candidate,本國沒有符合婚配硬條件的宗室成員
+aw_diplomacy_failure_no_responder_royal_candidate,对方没有符合婚配硬条件的宗室成员,The other realm has no eligible royal candidate,對方沒有符合婚配硬條件的宗室成員
+aw_diplomacy_failure_no_compatible_royal_pair,双方现有宗室候选无法组成有效异性婚姻,The available royal candidates cannot form a valid marriage,雙方現有宗室候選無法組成有效異性婚姻
+aw_diplomacy_selector_coalition_prompt,选择合纵目标,Select coalition target,選擇合縱目標
+aw_diplomacy_selector_marriage_prompt,选择宗室婚盟,Select royal marriage,選擇宗室婚盟
+aw_diplomacy_selector_forgery_prompt,选择伪造目标,Select forgery target,選擇偽造目標
+aw_diplomacy_selector_spy_prompt,选择间作目标,Select spy target,選擇間作目標
+aw_diplomacy_conversations Title,外交,Diplomacy,外交
+aw_diplomacy_window_title,外交,Diplomacy,外交
+aw_diplomacy_window_desc,查看与各国的关系及外交事件对话记录,Review relations and diplomatic event conversations,查看與各國的關係及外交事件對話記錄
+aw_diplomacy_no_countries,暂无其他国家,No other kingdoms,暫無其他國家
+aw_diplomacy_no_events,暂无外交事件记录,No recorded diplomatic events,暫無外交事件記錄
+aw_diplomacy_opinion,好感,Opinion,好感
+aw_diplomacy_distance,距离 {0},Distance {0},距離 {0}
+aw_diplomacy_distance_unknown,距离未知,Distance unknown,距離未知
+aw_diplomacy_system,外交纪要,System,外交紀要
+aw_diplomacy_relation_war,交战,War,交戰
+aw_diplomacy_relation_alliance,盟国,Alliance,盟國
+aw_diplomacy_relation_our_suzerain,宗主国,Our suzerain,宗主國
+aw_diplomacy_relation_our_vassal,附庸国,Our vassal,附庸國
+aw_diplomacy_relation_our_tributary_suzerain,朝贡宗主,Tributary suzerain,朝貢宗主
+aw_diplomacy_relation_our_tributary,朝贡国,Our tributary,朝貢國
+aw_diplomacy_relation_normal,邦交,Normal,邦交
+aw_diplomacy_relation_non_aggression,互不侵犯：剩余{0}年（至第{1}年）,Non-aggression pact: {0} years remaining (until year {1}),互不侵犯：剩餘{0}年（至第{1}年）
+aw_diplomacy_relation_non_aggression_expiring,互不侵犯：本年到期（第{0}年）,Non-aggression pact expires this year ({0}),互不侵犯：本年到期（第{0}年）
+aw_diplomacy_war_declared_mid,向, declared war on ,向
+aw_diplomacy_war_declared_suffix,宣战,,宣戰
+aw_diplomacy_war_notice_mid,向其递交宣战书：, delivered a declaration of war to ,向其遞交宣戰書：
+aw_diplomacy_war_notice_years_mid,；预计开战年份：,; hostilities will begin between years ,；預計開戰年份：
+aw_diplomacy_war_ended,战争结束,War ended,戰爭結束
+aw_diplomacy_white_peace_suffix,：议和收兵,: white peace,：議和收兵
+aw_diplomacy_winner_mid,：胜者为,: victor ,：勝者為
+aw_diplomacy_vassal_set_mid,臣服于, became a vassal of ,臣服於
+aw_diplomacy_tributary_set_mid,向其朝贡于, became a tributary of ,向其朝貢於
+aw_diplomacy_vassal_ended_suffix,解除宗藩关系, ended their vassal relationship,解除宗藩關係
+aw_diplomacy_alliance_formed_mid,与之结盟：, formed an alliance with ,與之結盟：
+aw_diplomacy_alliance_joined_mid,加入其盟约：, joined the alliance of ,加入其盟約：
+aw_diplomacy_alliance_left_mid,退出与其共有的盟约：, left the alliance shared with ,退出與其共有的盟約：
+aw_diplomacy_group_friendly,友好,Friendly,友好
+aw_diplomacy_group_war,战争,War,戰爭
+aw_diplomacy_group_vassal,宗藩,Vassalage,宗藩
+aw_diplomacy_group_treaty,盟约,Treaties,盟約
+aw_diplomacy_actions_expand,外交选项,Actions,外交選項
+aw_diplomacy_actions_collapse,收起选项,Close,收起選項
+aw_diplomacy_send,发送,Send,發送
+aw_diplomacy_chat_placeholder,输入消息,Message,輸入訊息
+aw_diplomacy_chat_send_failed,消息发送失败,Message could not be sent,訊息發送失敗
+aw_diplomacy_execute,执行,Execute,執行
+aw_diplomacy_no_action_selected,未选择外交要求,No action selected,未選擇外交要求
+aw_diplomacy_action_available,可以发送,Available,可以發送
+aw_diplomacy_action_alliance,提议结盟,Form alliance,提議結盟
+aw_diplomacy_action_peace,无条件和平,White peace,無條件和平
+aw_diplomacy_action_peace_desc,双方无胜负结束战争 均不强制执行战争目标并进入停战期,End the war without a victor; neither side enforces its demands and a truce begins.,雙方無勝負結束戰爭 均不強制執行戰爭目標並進入停戰期
+aw_diplomacy_action_surrender,投降,Surrender,投降
+aw_diplomacy_action_surrender_desc,本国承认战败 对方作为胜者执行战争结果并进入停战期,Admit defeat; the other realm wins and enforces the war result before a truce begins.,本國承認戰敗 對方作為勝者執行戰爭結果並進入停戰期
+aw_diplomacy_action_enforce_demands,强制执行,Enforce demands,強制執行
+aw_diplomacy_action_war_negotiation,战争谈判,War negotiation,戰爭談判
+aw_diplomacy_action_war_negotiation_desc,根据当前战局提出我方要求或让步，并与对方议定停战条件,Review demands and concessions based on the current war situation,根據當前戰局提出我方要求或讓步，並與對方議定停戰條件
+aw_diplomacy_war_score,战争分数,War score,戰爭分數
+aw_diplomacy_action_enforce_demands_desc,要求对方承认战败 本国作为胜者执行战争结果并进入停战期,Demand the other realm concede; our realm wins and enforces the war result before a truce begins.,要求對方承認戰敗 本國作為勝者執行戰爭結果並進入停戰期
+aw_diplomacy_action_non_aggression,缔结互不侵犯,Non-aggression pact,締結互不侵犯
+aw_diplomacy_action_break_non_aggression,撕毁互不侵犯,Break non-aggression pact,撕毀互不侵犯
+aw_diplomacy_action_break_non_aggression_desc,单方面撕毁当前协议并进入五年停战期；停战期内仍不能发动普通战争。,Unilaterally end the pact and enter a five-year truce; ordinary wars remain blocked during the truce.,單方面撕毀當前協議並進入五年停戰期；停戰期內仍不能發動普通戰爭。
+aw_diplomacy_action_join_war,请求参战,Request war support,請求參戰
+aw_diplomacy_action_vassalize,要求称臣,Demand vassalage,要求稱臣
+aw_diplomacy_action_tributary,要求纳贡,Demand tribute,要求納貢
+aw_diplomacy_action_end_alliance,解除盟约,End alliance,解除盟約
+aw_diplomacy_action_end_vassal,解除宗藩,End vassalage,解除宗藩
+aw_diplomacy_action_declare_war,宣战,Declare war,宣戰
+aw_diplomacy_action_truce,停战协议,Truce,停戰協議
+aw_diplomacy_action_unknown,外交要求,Diplomatic request,外交要求
+aw_diplomacy_proposal_sent_mid,提出：, proposed ,提出：
+aw_diplomacy_status_pending,等待回应,Awaiting response,等待回應
+aw_diplomacy_status_processing,正在落实外交答复,Processing response,正在落實外交答覆
+aw_diplomacy_status_accepted,已经接受,Accepted,已經接受
+aw_diplomacy_status_rejected,已经拒绝,Rejected,已經拒絕
+aw_diplomacy_status_expired,已经失效,Expired,已經失效
+aw_diplomacy_status_cancelled,已经取消,Cancelled,已經取消
+aw_diplomacy_accept,接受,Accept,接受
+aw_diplomacy_reject,拒绝,Reject,拒絕
+aw_diplomacy_failure_pending,已有一项外交要求正在等待回应,A request is already awaiting a response,已有一項外交要求正在等待回應
+aw_diplomacy_failure_expired,该外交要求已经失效,The request expired,該外交要求已經失效
+aw_diplomacy_failure_write,外交事务写入失败,The request could not be recorded,外交事務寫入失敗
+aw_diplomacy_failure_execution,协议内容无法执行,The agreed action could not be completed,協議內容無法執行
+aw_diplomacy_failure_not_found,该外交要求已不存在,The request no longer exists,該外交要求已不存在
+aw_diplomacy_failure_unavailable,当前无法执行此外交操作,This action is currently unavailable,當前無法執行此外交操作
+aw_diplomacy_failure_at_war,双方正在交战,The realms are at war,雙方正在交戰
+aw_diplomacy_failure_not_at_war,双方当前并未交战,The realms are not at war,雙方當前並未交戰
+aw_diplomacy_failure_not_war_leader,只有交战双方的主战国可以议和,Only the principal belligerents may negotiate peace,只有交戰雙方的主戰國可以議和
+aw_diplomacy_failure_war_no_longer_active,战争已经结束,The war has already ended,戰爭已經結束
+aw_diplomacy_failure_war_score_unavailable,暂时无法读取当前战争分数,The current war score could not be read,暫時無法讀取當前戰爭分數
+aw_diplomacy_failure_invalid_peace_draft,和谈条款已与当前战局不符,The peace terms no longer match this war,和談條款已與當前戰局不符
+aw_diplomacy_failure_rebellion_direct_transfer,叛乱战争直接按实际占领转移城池 无需普通和谈,Rebellion territory transfers by direct capture and cannot use ordinary peace talks,叛亂戰爭直接按實際佔領轉移城池 無需普通和談
+aw_diplomacy_failure_replica_read_only,联机中只能由主机提交和谈,Only the multiplayer host may submit peace terms,聯機中只能由主機提交和談
+aw_diplomacy_failure_peace_submit_exception,和谈提交发生内部错误 详情已写入日志,The peace request encountered an internal error; details were written to the log,和談提交發生內部錯誤 詳情已寫入日誌
+aw_diplomacy_failure_invalid_settlement_participants,议和双方已不再符合当前战争,The negotiating realms no longer match this war,議和雙方已不再符合當前戰爭
+aw_diplomacy_failure_invalid_term_count,请选择有效数量的和谈条款,Select a valid number of peace terms,請選擇有效數量的和談條款
+aw_diplomacy_failure_invalid_term_participants,有和谈条款涉及本次议和范围之外的国家,One peace term names a realm outside this negotiation,有和談條款涉及本次議和範圍之外的國家
+aw_diplomacy_failure_no_territorial_basis,所选城市已不再被占领或拥有宣称依据,The selected city is no longer occupied or claimed,所選城市已不再被佔領或擁有宣稱依據
+aw_diplomacy_failure_not_losing_war,本国当前并非败势 不能承认战败,Our realm is not currently losing and cannot surrender,本國當前並非敗勢 不能承認戰敗
+aw_diplomacy_failure_not_winning_war,本国当前并非胜势 不能强制对方执行战争结果,Our realm is not currently winning and cannot enforce demands,本國當前並非勝勢 不能強制對方執行戰爭結果
+aw_diplomacy_failure_already_allied,双方已经处于同一盟约,The realms are already allied,雙方已經處於同一盟約
+aw_diplomacy_failure_not_allied,双方并非盟国,The realms are not allies,雙方並非盟國
+aw_diplomacy_failure_requester_subject,附庸国无权独立进行此外交操作,A subject cannot conduct this diplomacy,附庸國無權獨立進行此外交操作
+aw_diplomacy_failure_responder_subject,目标已经臣属于其他国家,The target is already subject to another realm,目標已經臣屬於其他國家
+aw_diplomacy_failure_no_joinable_war,当前没有可邀请盟国参加的战争,There is no war this ally can join,當前沒有可邀請盟國參加的戰爭
+aw_diplomacy_failure_requires_mandate,只有天命国可以要求他国纳贡,Only the Mandate realm may demand tribute,只有天命國可以要求他國納貢
+aw_diplomacy_failure_active_non_aggression,双方已经缔结互不侵犯协议,A non-aggression pact is already active,雙方已經締結互不侵犯協議
+aw_diplomacy_failure_subject_non_aggression,直接宗藩关系已经自动保证互不侵犯 无需另行缔约,A direct subject relationship already guarantees non-aggression,直接宗藩關係已經自動保證互不侵犯 無需另行締約
+aw_diplomacy_failure_no_active_non_aggression,双方当前没有可撕毁的互不侵犯协议,There is no active non-aggression pact to break,雙方當前沒有可撕毀的互不侵犯協議
+aw_diplomacy_failure_war_preparation,双方已进入宣战布告或备战 无法缔结合作协议,A war declaration or military preparation is active between these realms,雙方已進入宣戰布告或備戰 無法締結合作協議
+aw_diplomacy_non_aggression_broken_text,{0}告知{1}：即日起撕毁互不侵犯协议；双方停战至第{2}年。,{0} notified {1}: the non-aggression pact is terminated; a truce remains until year {2}.,{0}告知{1}：即日起撕毀互不侵犯協議；雙方停戰至第{2}年。
+aw_diplomacy_relation_truce,停战：剩余{0}年（至第{1}年）,Truce: {0} years remaining (until year {1}),停戰：剩餘{0}年（至第{1}年）
+aw_diplomacy_relation_truce_expiring,停战：本年到期（第{0}年）,Truce expires this year ({0}),停戰：本年到期（第{0}年）
+aw_diplomacy_failure_no_vassal_relation,双方没有可以解除的直接宗藩关系,There is no direct subject relationship to end,雙方沒有可以解除的直接宗藩關係
+aw_diplomacy_failure_already_responded,该外交要求已经得到回应,The request has already been answered,該外交要求已經得到回應
+aw_diplomacy_failure_no_longer_available,局势已经变化 当前无法履行该协议,Changed circumstances prevent this agreement,局勢已經變化 當前無法履行該協議
+aw_diplomacy_failure_title_too_low,宗主爵位必须高于受封国,The suzerain must hold a higher rank than the target,宗主爵位必須高於受封國
+aw_diplomacy_failure_not_adjacent,建立宗藩关系要求双方领土接壤,A subject request requires a shared border,建立宗藩關係要求雙方領土接壤
+aw_diplomacy_failure_vassal_cycle,该协议会形成循环宗藩关系,This agreement would create a circular subject relationship,該協議會形成循環宗藩關係
+aw_diplomacy_failure_rebel_vassal,起义政权不能通过外交成为附庸,A rebel realm cannot become a subject through diplomacy,起義政權不能通過外交成為附庸
+aw_diplomacy_failure_rebel_suzerain,起义政权不能通过外交接纳附庸,A rebel realm cannot receive diplomatic subjects,起義政權不能通過外交接納附庸
+aw_diplomacy_failure_alliance_conflict,双方已经分属不同盟约,Both realms already belong to different alliances,雙方已經分屬不同盟約
+aw_diplomacy_failure_alliance_members_refuse,现有盟约的成员拒绝该国加入,The existing alliance will not admit this realm,現有盟約的成員拒絕該國加入
+aw_diplomacy_failure_alliance_unavailable,当前无法建立或加入该盟约,The alliance cannot currently be formed,當前無法建立或加入該盟約
+aw_diplomacy_failure_join_war_execution,该国未能加入指定战争,The realm could not be added to the requested war,該國未能加入指定戰爭
+aw_diplomacy_failure_subject_write,宗藩协议未能写入档案,The subject agreement could not be recorded,宗藩協議未能寫入檔案
+aw_diplomacy_expected_accept,预计会接受,Expected to accept,預計會接受
+aw_diplomacy_expected_reject,预计会拒绝,Expected to reject,預計會拒絕
+aw_diplomacy_acceptance_score,接受意愿,Acceptance score,接受意願
+aw_diplomacy_score_base,基础意愿,Base willingness,基礎意願
+aw_diplomacy_score_opinion,双方好感,Opinion,雙方好感
+aw_diplomacy_score_shared_enemy,共同敌人,Shared enemy,共同敵人
+aw_diplomacy_score_mandate,天命威望,Mandate prestige,天命威望
+aw_diplomacy_score_diplomacy,统治者外交能力,Ruler diplomacy,統治者外交能力
+aw_diplomacy_score_war_situation,当前战局,War situation,當前戰局
+aw_diplomacy_score_power,相对军力,Relative military power,相對軍力
+aw_diplomacy_score_alliance,盟约义务,Alliance obligation,盟約義務
+aw_diplomacy_score_court,朝堂倾向,Court preference,朝堂傾向
+aw_diplomacy_ruler,统治者,Ruler,統治者
+aw_diplomacy_capital,国都,Capital,國都
+aw_diplomacy_power,军事实力,Military power,軍事實力
+aw_diplomacy_unknown_ruler,暂无统治者,No ruler,暫無統治者
+aw_diplomacy_unknown_capital,暂无国都,No capital,暫無國都
+aw_diplomatic_war_declaration Title,宣战,Declare War,宣戰
+aw_diplomatic_war_title,宣战,Declare War,宣戰
+aw_diplomatic_war_potential_allies,潜在参战盟友,Potential allies,潛在參戰盟友
+aw_diplomatic_war_no_reasons,当前没有可用的战争理由,No valid war reasons,當前沒有可用的戰爭理由
+aw_diplomatic_war_send,递交宣战书,Deliver declaration,遞交宣戰書
+aw_diplomatic_war_unavailable,目前无法宣战,Declaration unavailable,目前無法宣戰
+aw_diplomatic_war_power_overwhelming,我方拥有压倒性优势,Overwhelming advantage,我方擁有壓倒性優勢
+aw_diplomatic_war_power_advantage,我方军力占优,Favorable balance,我方軍力佔優
+aw_diplomatic_war_power_even,双方势均力敌,Evenly matched,雙方勢均力敵
+aw_diplomatic_war_power_disadvantage,我方军力处于劣势,Unfavorable balance,我方軍力處於劣勢
+aw_diplomatic_war_power_desperate,敌方拥有压倒性优势,Severe disadvantage,敵方擁有壓倒性優勢
+aw_diplomacy_event_time,第{0}年,Year {0},第{0}年
+aw_diplomacy_request_time,国书送达,Request sent,國書送達
+aw_diplomacy_response_time,复书送达,Reply received,覆書送達
+aw_diplomacy_unknown_realm,彼国,the other realm,彼國
+aw_diplomacy_letter_peer_open,敬启{0}国君：,To the esteemed ruler of {0}:,敬啟{0}國君：
+aw_diplomacy_letter_imperial_open,皇帝敬问{0}君：,The Emperor sends greetings to the ruler of {0}:,皇帝敬問{0}君：
+aw_diplomacy_letter_suzerain_open,谕{0}臣邦：,To our subject realm of {0}:,諭{0}臣邦：
+aw_diplomacy_letter_subject_open,臣国谨启{0}上国：,With respect to the honored realm of {0}:,臣國謹啟{0}上國：
+aw_diplomacy_letter_peer_body,我国欲与贵国议定「{0}」 愿两邦审处,Our realm proposes that our two states conclude: {0}.,我國欲與貴國議定「{0}」 願兩邦審處
+aw_diplomacy_letter_imperial_body,兹以天下之义 告谕贵国议定「{0}」 其审慎奉答,By imperial instruction we call upon your realm to consider: {0}.,茲以天下之義 告諭貴國議定「{0}」 其審慎奉答
+aw_diplomacy_letter_suzerain_body,本国谕令臣邦审议「{0}」 依约具复,As your suzerain we instruct your court to consider: {0}.,本國諭令臣邦審議「{0}」 依約具覆
+aw_diplomacy_letter_subject_body,敝国谨请与上国议定「{0}」 伏候裁示,Our realm respectfully petitions to conclude: {0}.,敝國謹請與上國議定「{0}」 伏候裁示
+aw_diplomacy_letter_await_reply,谨候佳音,We await your considered reply.,謹候佳音
+aw_diplomacy_reply_accept,{0}复书：谨允所请,{0} replies: We accept your proposal.,{0}覆書：謹允所請
+aw_diplomacy_reply_reject,{0}复书：所议未便 恕难从命,{0} replies: We must decline your proposal.,{0}覆書：所議未便 恕難從命
+aw_diplomacy_reply_imperial_accept,{0}奉诏：谨遵所谕,{0} replies: We receive the imperial instruction and shall comply.,{0}奉詔：謹遵所諭
+aw_diplomacy_reply_imperial_reject,{0}复奏：国情未便 不敢奉诏,{0} replies: We cannot obey this instruction.,{0}覆奏：國情未便 不敢奉詔
+aw_diplomacy_reply_from_imperial_accept,{0}诏曰：所请允行,{0} decrees: The proposal is accepted.,{0}詔曰：所請允行
+aw_diplomacy_reply_from_imperial_reject,{0}诏曰：所请不允,{0} decrees: The proposal is rejected.,{0}詔曰：所請不允
+aw_diplomacy_reply_suzerain_accept,{0}复谕：准其所请,{0} replies: We grant this request.,{0}覆諭：准其所請
+aw_diplomacy_reply_suzerain_reject,{0}复谕：所请不准,{0} replies: This request is denied.,{0}覆諭：所請不准
+aw_diplomacy_reply_subject_accept,{0}谨复：臣邦遵行,{0} replies with respect: We shall comply.,{0}謹覆：臣邦遵行
+aw_diplomacy_reply_subject_reject,{0}谨复：臣邦实难从命,{0} replies with respect: We are unable to comply.,{0}謹覆：臣邦實難從命
+aw_diplomacy_reply_status,{0}：{1},{0}: {1},{0}：{1}
+aw_diplomacy_reply_tone_cordial,愿两国由此益敦和好,May amity between our realms endure.,願兩國由此益敦和好
+aw_diplomacy_reply_tone_neutral,此为本国廷议之答,This is our court's considered answer.,此為本國廷議之答
+aw_diplomacy_reply_tone_cold,此答既定 无须再议,Let this answer settle the matter.,此答既定 無須再議
+aw_diplomacy_reply_tone_hostile,毋再以此事相逼,Do not press this matter further.,毋再以此事相逼
+aw_diplomacy_truce_settlement_summary,{0}与{1}战事既止 双方缔结停战协议 约期{2}年 至第{3}年止,{0} and {1} ended the war and concluded a {2}-year truce through year {3},{0}與{1}戰事既止 雙方締結停戰協議 約期{2}年 至第{3}年止
+aw_diplomacy_truce_settlement_terms,战争结算条款：,Executed settlement terms:,戰爭結算條款：
+aw_diplomacy_truce_settlement_no_extra_terms,本次结算无额外割地或物资条款,No additional territorial or material terms were included in this settlement.,本次結算無額外割地或物資條款
+aw_diplomacy_sender_title,发信君主,Sender,發信君主
+aw_diplomacy_letter_tone_cordial,愿两国长保信义 永敦睦谊,May trust and friendship between our realms endure.,願兩國長保信義 永敦睦誼
+aw_diplomacy_letter_tone_neutral,请贵国廷议审处,We ask your court to consider this proposal.,請貴國廷議審處
+aw_diplomacy_letter_tone_cold,此议关乎两国利害 望勿轻忽,This matter concerns both realms; weigh it carefully.,此議關乎兩國利害 望勿輕忽
+aw_diplomacy_letter_tone_hostile,此为最后通告 勿谓言之不预,This is our final notice; do not disregard it.,此為最後通告 勿謂言之不預
+aw_window_resize,调整窗口大小,Resize window,調整視窗大小
+aw_window_resize_desc,拖动右下角斜向箭头可调整窗口大小,Drag the diagonal arrow in the lower-right corner to resize the window.,拖動右下角斜向箭頭可調整視窗大小
+aw_diplomacy_action_royal_marriage,宗室婚盟,Royal marriage,宗室婚盟
+aw_diplomacy_royal_marriage_pair,{0}：{1}与{2},{0}: {1} and {2},{0}：{1}與{2}
+aw_diplomacy_marriage_unknown_candidate,宗室成员,royal member,宗室成員
+aw_hist_royal_marriage_mid,与, married ,與
+aw_diplomacy_action_coalition,合纵抗强,Coalition against a threat,合縱抗強
+aw_diplomacy_coalition_target,{0}：共同防备{1},{0}: jointly contain {1},{0}：共同防備{1}
+aw_diplomacy_action_spy_network,布置间作,Establish spy network,布置間作
+aw_diplomacy_action_plan_annexation,谋划吞并,Plan annexation,謀劃吞併
+aw_diplomacy_action_plan_annexation_desc,将该直属附庸设为吞并决议目标 决议完成后并入宗主国,Set this direct vassal as the target of an annexation decision; it will join the suzerain when completed.,將該直屬附庸設為吞併決議目標 決議完成後併入宗主國
+aw_diplomacy_selector_annexation_prompt,选择吞并目标,Select annexation target,選擇吞併目標
+aw_diplomacy_action_forge_documents,购买战争宣称,Purchase war claim,購買戰爭宣稱
+aw_diplomacy_covert_result_text,{0}：{1},{0}: {1},{0}：{1}
+aw_diplomacy_covert_discovered_text,间作败露：{0}（{1}）,Espionage discovered: {0} ({1}),間作敗露：{0}（{1}）
+aw_diplomacy_covert_result_network_active,间作网络建立成功,spy network established,間作網絡建立成功
+aw_diplomacy_covert_result_spy_network_failed,布置间作失败,spy network failed,布置間作失敗
+aw_diplomacy_covert_result_fabrication_started,伪造事务已转入国策,forgery entered the policy queue,偽造事務已轉入國策
+aw_diplomacy_covert_result_fabrication_start_failed,伪造成功但国策无法承接,forgery succeeded but policy execution failed,偽造成功但國策無法承接
+aw_diplomacy_covert_result_forgery_failed,伪造失败,forgery failed,偽造失敗
+aw_diplomacy_covert_result_invalid,行动条件已经失效,the operation conditions are no longer valid,行動條件已經失效
+aw_diplomacy_covert_result_at_war,两国交战使行动中止,the outbreak of war cancelled the operation,兩國交戰使行動中止
+aw_diplomacy_covert_result_cannot_spy_on_suzerain,臣属关系使行动中止,the subject relationship cancelled the operation,臣屬關係使行動中止
+aw_diplomacy_covert_result_covert_operation_pending,另一项秘密行动使本次行动中止,another covert operation displaced this operation,另一項秘密行動使本次行動中止
+aw_diplomacy_covert_result_spy_network_required,间作网络已经失效,the spy network expired before completion,間作網絡已經失效
+aw_diplomacy_covert_result_target_city_changed,目标城市易主，伪造中止,the target city changed hands and the forgery was cancelled,目標城市易主，偽造中止
+aw_diplomacy_covert_result_fabrication_unavailable,目标已无法制造宣称,the target can no longer receive a fabricated claim,目標已無法製造宣稱
+aw_diplomacy_covert_result_network_too_weak,间作网络已不足以支撑强宣称,the spy network is now too weak for a strong claim,間作網絡已不足以支撐強宣稱
+aw_diplomacy_group_coalition_marriage,合纵与婚盟,Coalitions and marriage,合縱與婚盟
+aw_diplomacy_group_strategy,谋略,Strategy,謀略
+aw_diplomacy_covert_preview,用时{0}年｜成功{1}%｜败露{2}%,Duration {0} years | Success {1}% | Discovery {2}%,用時{0}年｜成功{1}%｜敗露{2}%
+aw_diplomacy_discovery_chance,败露风险,Discovery risk,敗露風險
+aw_diplomacy_forgery_weak,弱宣称,Weak claim,弱宣稱
+aw_diplomacy_forgery_strong,强宣称,Strong claim,強宣稱
+aw_diplomacy_failure_coalition_target,请选择有效的共同威胁,Select a valid common threat,請選擇有效的共同威脅
+aw_diplomacy_failure_coalition_limit,一方已有两项生效中的合纵,One member already has two active coalitions,一方已有兩項生效中的合縱
+aw_diplomacy_failure_active_coalition,针对该国的合纵已经生效,This coalition is already active,針對該國的合縱已經生效
+aw_diplomacy_failure_missing_royal_house,双方都必须有在位君主与宗室,Both realms need a ruler and royal house,雙方都必須有在位君主與宗室
+aw_diplomacy_failure_active_royal_marriage,两国宗室已有生效中的婚盟,The royal houses already have an active marriage,兩國宗室已有生效中的婚盟
+aw_diplomacy_failure_no_royal_candidate,没有仍然合格的固定宗室婚配对象,No eligible fixed royal pair remains,沒有仍然合格的固定宗室婚配對象
+aw_diplomacy_failure_spy_suzerain,臣属不能对宗主布置间作,A subject cannot spy on its suzerain,臣屬不能對宗主布置間作
+aw_diplomacy_failure_covert_pending,两国之间已有秘密行动正在进行,Another covert operation is underway,兩國之間已有秘密行動正在進行
+aw_diplomacy_failure_network_active,对该国的间作网络仍在生效,A spy network is already active,對該國的間作網絡仍在生效
+aw_diplomacy_failure_network_required,必须先建立有效的间作网络,An active spy network is required,必須先建立有效的間作網絡
+aw_diplomacy_failure_target_city_changed,目标城市已经易主,The target city changed hands,目標城市已經易主
+aw_diplomacy_failure_fabrication_unavailable,当前无法为该城市伪造宣称,No claim can be fabricated for this city,當前無法為該城市偽造宣稱
+aw_diplomacy_failure_network_too_weak,间作网络不足以支撑强宣称,The spy network is too weak for a strong claim,間作網絡不足以支撐強宣稱
+aw_diplomacy_no_coalition_target,没有可选的共同威胁,No valid common threat,沒有可選的共同威脅
+aw_diplomacy_no_marriage_pair,没有合格的宗室婚配对象,No eligible royal pair,沒有合格的宗室婚配對象
+aw_diplomacy_marriage_direct,双方均为君主本人或直系子女,Both are rulers or direct royal children,雙方均為君主本人或直系子女
+aw_diplomacy_marriage_collateral,由宗室旁支缔结婚盟,Marriage through collateral royal kin,由宗室旁支締結婚盟
+aw_diplomacy_no_forgery_city,没有可选的目标城市,No target city,沒有可選的目標城市
+aw_diplomacy_select_action_detail,选择动作后查看详情,Select the action to inspect details,選擇動作後查看詳情
+aw_diplomacy_score_direct_royal_marriage,君主或直系婚配,Rulers or direct royal children,君主或直系婚配
+aw_diplomacy_network_status,间作强度{0}｜剩余{1}年,Network strength {0} | {1} years remaining,間作強度{0}｜剩餘{1}年
+aw_diplomacy_spy_points_status,间谍点数 {0}/{1}｜每年 +{2},Spy points {0}/{1} | +{2}/year,間諜點數 {0}/{1}｜每年 +{2}
+aw_diplomacy_spy_claim_costs,弱宣称 {0}｜强宣称 {1},Weak claim {0} | Strong claim {1},弱宣稱 {0}｜強宣稱 {1}
+aw_diplomacy_spy_selected_cost,当前花费：{0},Selected cost: {0},當前花費：{0}
+aw_diplomacy_failure_insufficient_spy_points,间谍点数不足,The spy network has insufficient points,間諜點數不足
+aw_diplomacy_failure_claim_already_purchased,该城市的对应宣称已经购买,This claim has already been purchased for the city,該城市的對應宣稱已經購買
+aw_diplomacy_failure_claim_creation_failed,宣称写入失败，未扣除间谍点数,The claim could not be recorded; no points were spent,宣稱寫入失敗，未扣除間諜點數

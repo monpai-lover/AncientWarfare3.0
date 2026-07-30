@@ -78,6 +78,10 @@ Additional rules are:
 - A principal-wife offering grants a moderate relation improvement; a consort offering grants a smaller improvement.
 - AI may offer a household partner only when a valid vacancy exists, the candidate remains eligible, the expected acceptance passes, and no equivalent pending proposal exists.
 
+When an AI ruler has an open consort slot, the vacancy realm may instead send a formal request for a consort to a friendly independent realm. This is a normal diplomacy proposal rather than an immediate household mutation. The requester must have a living eligible ruler, free consort capacity, no equivalent pending request to that realm, no active rejection cooldown, and a sufficiently positive relationship with the invited realm. At most one request may be generated for a ruler in one diplomacy planning cycle, and the planner prefers the nearest friendly realm that can plausibly supply an eligible woman.
+
+The invited realm owns candidate selection. On AI acceptance it chooses one eligible woman from its noble or royal clans, aged 18 through 33, preferring the ruling lineage and then closer kin before other noble clans. When the invited realm is player-controlled, acceptance opens the dedicated household-candidate window and no relationship is committed until the player selects and confirms a valid candidate. If no candidate remains eligible, the response fails with a localized reason and neither actor nor realm is mutated. Rejection and expiry use the ordinary diplomacy cooldown and proposal lifecycle. Accepted requests reuse the same authority-side `PrepareOffer` and `TryCommit` path as a direct consort offering, with the invited realm as the woman's origin realm and the vacancy realm as recipient.
+
 All player and AI commits pass through the AW3 command and authority path so a multiplayer client cannot mutate a household locally.
 
 ## Pregnancy And Children
@@ -111,6 +115,8 @@ Pure rule tests cover:
 - principal-wife and consort candidate eligibility;
 - spouse vacancy and consort capacity gates;
 - principal-wife versus consort diplomatic effects;
+- friendly-realm vacancy requests, target selection, pending/rejection suppression, and one-request-per-cycle limits;
+- AI recipient candidate ranking and player recipient deferred candidate selection;
 - legitimate children ranking before concubine-born children while both remain eligible;
 - lifecycle closure and cache-repair decisions;
 - bounded pregnancy scheduling.

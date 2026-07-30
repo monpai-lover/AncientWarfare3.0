@@ -1,0 +1,29 @@
+using AncientWarfare3.core.policy;
+
+internal static class ArmyRtsControllerPerformanceRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(ArmyRtsControllerPerformanceStage.Formation,
+            ArmyRtsControllerPerformanceRules.StageForId("formation"),
+            "formation has a stable controller diagnostic stage");
+        Equal(ArmyRtsControllerPerformanceStage.TargetFacts,
+            ArmyRtsControllerPerformanceRules.StageForId("target_facts"),
+            "target facts have a stable controller diagnostic stage");
+        Equal(ArmyRtsControllerPerformanceStage.Unknown,
+            ArmyRtsControllerPerformanceRules.StageForId("missing"),
+            "unknown controller diagnostic stages cannot index a fixed table");
+        Equal("route", ArmyRtsControllerPerformanceRules.Id(
+                ArmyRtsControllerPerformanceStage.Route),
+            "route diagnostics expose a compact stable id");
+        Equal(5, ArmyRtsControllerPerformanceRules.StageCount,
+            "controller diagnostic table has one slot per measured stage");
+    }
+}

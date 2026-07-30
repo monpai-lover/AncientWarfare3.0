@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content;
-using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -42,7 +41,6 @@ namespace AncientWarfare3.core.lineage
 
     internal static class WarNoticeService
     {
-        private const string DeclareWarDecisionId = "aw_decision_declare_war";
         private static readonly Dictionary<string, WarNoticeState> Notices =
             new Dictionary<string, WarNoticeState>(StringComparer.Ordinal);
         private static readonly Dictionary<long, string> SummaryNoticeByKingdom =
@@ -58,15 +56,21 @@ namespace AncientWarfare3.core.lineage
         public static void EnsureCurrentNotice(Kingdom pAttacker)
         {
             if (pAttacker?.data == null || pAttacker.isRekt()) return;
-            pAttacker.data.get(LineageKeys.DECISION_CURRENT, out string current, "");
-            if (current != DeclareWarDecisionId) return;
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_PENDING,
+                out bool pending, false);
+            if (!pending) return;
 
-            Kingdom defender = DecisionTarget(pAttacker);
+            Kingdom defender = DiplomaticWarDeclarationService.TargetKingdom(
+                pAttacker);
             if (defender?.data == null || defender.isRekt()) return;
-            pAttacker.data.get(LineageKeys.DECISION_WAR_GOAL_TYPE, out string goalType, "");
-            pAttacker.data.get(LineageKeys.DECISION_WAR_TYPE, out string warType, "");
-            pAttacker.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID, out long targetCityId, -1L);
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out string signature, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
+                out string goalType, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TYPE,
+                out string warType, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
+                out long targetCityId, -1L);
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                out string signature, "");
 
             if (string.IsNullOrEmpty(signature))
             {
@@ -84,13 +88,18 @@ namespace AncientWarfare3.core.lineage
                 int year = Date.getCurrentYear();
                 signature = WarNoticeRules.BuildSignature(pAttacker.id, defender.id, goalType,
                     targetCityId, year);
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_SIGNATURE, signature);
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_YEAR, year);
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR,
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE, signature);
+                pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_YEAR,
+                    year);
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_NOTICE_EARLIEST_YEAR,
                     WarNoticeRules.EarliestWarYear(year));
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_FORCED_YEAR,
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_NOTICE_FORCED_YEAR,
                     WarNoticeRules.ForcedWarYear(year));
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_RECORDED, false);
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_NOTICE_RECORDED, false);
             }
 
             WarNoticeState state = ReadCurrentState(pAttacker, defender);
@@ -101,30 +110,37 @@ namespace AncientWarfare3.core.lineage
                 TemporaryLevyService.OnEmergencyChanged(defender);
                 TemporarySlaveVanguardService.OnEmergencyChanged(pAttacker);
                 TemporarySlaveVanguardService.OnEmergencyChanged(defender);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(pAttacker);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(defender);
             }
             ArmyDeploymentService.ActivateNotice(state);
 
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_RECORDED, out bool recorded, false);
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_RECORDED,
+                out bool recorded, false);
             if (!recorded)
             {
                 RecordNotice(pAttacker, defender, state);
-                pAttacker.data.set(LineageKeys.DECISION_NOTICE_RECORDED, true);
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_NOTICE_RECORDED, true);
             }
         }
 
-        public static bool CanCompleteCurrentDeclaration(Kingdom pAttacker, float pProgress, float pCost)
+        public static bool CanCompleteDiplomaticDeclaration(Kingdom pAttacker)
         {
             if (pAttacker?.data == null) return true;
-            EnsureCurrentNotice(pAttacker);
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out string signature, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                out string signature, "");
             if (string.IsNullOrEmpty(signature)) return true;
             if (!Notices.TryGetValue(signature, out WarNoticeState state)) return true;
 
             Kingdom defender = ResolveKingdom(state.DefenderId);
             bool ready = defender?.data == null || defender.isRekt() ||
                          ArmyDeploymentService.AreAllRequiredArmiesReady(state);
-            WarNoticeGate gate = WarNoticeRules.EvaluateGate(pProgress, pCost, Date.getCurrentYear(),
-                state.EarliestWarYear, state.ForcedWarYear, ready);
+            WarNoticeGate gate = WarNoticeRules.EvaluateDiplomaticGate(
+                Date.getCurrentYear(), state.EarliestWarYear,
+                state.ForcedWarYear, ready);
             return gate == WarNoticeGate.Ready || gate == WarNoticeGate.Forced;
         }
 
@@ -132,6 +148,15 @@ namespace AncientWarfare3.core.lineage
         {
             return pKingdom?.data != null && NoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> set) &&
                    set.Count > 0;
+        }
+
+        public static bool HasActiveNoticeBetween(Kingdom pFirst,
+            Kingdom pSecond)
+        {
+            if (pFirst?.data == null || pSecond?.data == null ||
+                pFirst == pSecond) return false;
+            return FindPair(pFirst.id, pSecond.id) != null ||
+                   FindPair(pSecond.id, pFirst.id) != null;
         }
 
         public static int ActiveNoticeCount(Kingdom pKingdom)
@@ -183,7 +208,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnArmyChanged(Kingdom pKingdom, Army pArmy, bool pRosterExpanded = true)
         {
             if (pKingdom?.data == null || pArmy?.data == null ||
-                !IncomingNoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> signatures) ||
+                !NoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> signatures) ||
                 signatures.Count == 0) return;
             ArmyDeploymentService.OnArmyChanged(pKingdom, pArmy, pRosterExpanded);
         }
@@ -192,7 +217,7 @@ namespace AncientWarfare3.core.lineage
             bool pRosterExpanded = false)
         {
             if (pKingdom?.data == null || pArmy?.data == null ||
-                !IncomingNoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> notices) ||
+                !NoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> notices) ||
                 notices.Count == 0) return;
             long kingdomId = pKingdom.id;
             long armyId = pArmy.id;
@@ -205,7 +230,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnArmyInvalidated(Kingdom pKingdom, long pArmyId)
         {
             if (pKingdom?.data == null || pArmyId < 0 ||
-                !IncomingNoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> signatures) ||
+                !NoticesByKingdom.TryGetValue(pKingdom.id, out HashSet<string> signatures) ||
                 signatures.Count == 0) return;
             ArmyDeploymentService.OnArmyInvalidated(pKingdom, pArmyId);
         }
@@ -238,11 +263,36 @@ namespace AncientWarfare3.core.lineage
             EnsureCurrentNotice(pKingdom);
         }
 
-        public static void OnDecisionClearing(Kingdom pKingdom)
+        public static void OnKingdomDestroying(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
-            pKingdom.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out string signature, "");
-            if (string.IsNullOrEmpty(signature) || IsQueued(pKingdom, signature)) return;
+            if (NoticesByKingdom.TryGetValue(pKingdom.id,
+                    out HashSet<string> indexed))
+            {
+                var signatures = new List<string>(indexed);
+                for (int i = 0; i < signatures.Count; i++)
+                {
+                    string signature = signatures[i];
+                    if (!Notices.TryGetValue(signature,
+                            out WarNoticeState state)) continue;
+                    Kingdom attacker = ResolveKingdom(state.AttackerId);
+                    if (attacker?.data != null &&
+                        DiplomaticWarDeclarationService.HasPending(attacker))
+                        DiplomaticWarDeclarationService.Clear(attacker);
+                    else
+                        Close(signature);
+                }
+            }
+            if (DiplomaticWarDeclarationService.HasPending(pKingdom))
+                DiplomaticWarDeclarationService.Clear(pKingdom);
+        }
+
+        public static void OnDiplomaticDeclarationClearing(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                out string signature, "");
+            if (string.IsNullOrEmpty(signature)) return;
             Close(signature);
         }
 
@@ -252,9 +302,13 @@ namespace AncientWarfare3.core.lineage
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
             WarNoticeState state = FindPair(attacker?.id ?? -1L, defender?.id ?? -1L);
-            if (state == null) return;
-            ArmyDeploymentService.CancelNotice(state.Signature, restoreJobs: true);
-            RemoveIndex(state);
+            if (state != null)
+            {
+                ArmyDeploymentService.CancelNotice(state.Signature,
+                    restoreJobs: true);
+                RemoveIndex(state);
+            }
+            DiplomaticWarDeclarationService.OnWarStarted(pWar);
         }
 
         public static void RebuildRuntime()
@@ -265,14 +319,6 @@ namespace AncientWarfare3.core.lineage
             {
                 if (kingdom?.data == null || kingdom.isRekt()) continue;
                 RebuildCurrent(kingdom);
-                kingdom.data.get(LineageKeys.DECISION_QUEUE, out string raw, "");
-                foreach (KingdomDecisionQueueItem item in KingdomDecisionQueueCodec.Decode(raw))
-                {
-                    WarNoticeState queued = FromQueueItem(kingdom.id, item);
-                    if (queued == null) continue;
-                    Index(queued);
-                    ArmyDeploymentService.ActivateNotice(queued);
-                }
             }
         }
 
@@ -289,13 +335,15 @@ namespace AncientWarfare3.core.lineage
 
         private static void RebuildCurrent(Kingdom pKingdom)
         {
-            pKingdom.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out string signature, "");
+            pKingdom.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                out string signature, "");
             if (string.IsNullOrEmpty(signature))
             {
                 EnsureCurrentNotice(pKingdom);
                 return;
             }
-            Kingdom defender = DecisionTarget(pKingdom);
+            Kingdom defender = DiplomaticWarDeclarationService.TargetKingdom(
+                pKingdom);
             WarNoticeState state = ReadCurrentState(pKingdom, defender);
             if (state == null) return;
             Index(state);
@@ -305,13 +353,22 @@ namespace AncientWarfare3.core.lineage
         private static WarNoticeState ReadCurrentState(Kingdom pAttacker, Kingdom pDefender)
         {
             if (pAttacker?.data == null || pDefender?.data == null) return null;
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_SIGNATURE, out string signature, "");
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_YEAR, out int noticeYear, -1);
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_EARLIEST_YEAR, out int earliest, -1);
-            pAttacker.data.get(LineageKeys.DECISION_NOTICE_FORCED_YEAR, out int forced, -1);
-            pAttacker.data.get(LineageKeys.DECISION_WAR_GOAL_TYPE, out string goal, "");
-            pAttacker.data.get(LineageKeys.DECISION_WAR_TYPE, out string warType, "");
-            pAttacker.data.get(LineageKeys.DECISION_WAR_TARGET_CITY_ID, out long cityId, -1L);
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                out string signature, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_NOTICE_YEAR,
+                out int noticeYear, -1);
+            pAttacker.data.get(
+                LineageKeys.DIPLOMATIC_WAR_NOTICE_EARLIEST_YEAR,
+                out int earliest, -1);
+            pAttacker.data.get(
+                LineageKeys.DIPLOMATIC_WAR_NOTICE_FORCED_YEAR,
+                out int forced, -1);
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
+                out string goal, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TYPE,
+                out string warType, "");
+            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
+                out long cityId, -1L);
             if (string.IsNullOrEmpty(signature) || noticeYear < 0 || earliest < 0 || forced < 0) return null;
             return new WarNoticeState
             {
@@ -324,24 +381,6 @@ namespace AncientWarfare3.core.lineage
                 NoticeYear = noticeYear,
                 EarliestWarYear = earliest,
                 ForcedWarYear = forced
-            };
-        }
-
-        private static WarNoticeState FromQueueItem(long pAttackerId, KingdomDecisionQueueItem pItem)
-        {
-            if (pItem == null || string.IsNullOrEmpty(pItem.notice_signature) || pItem.notice_year < 0 ||
-                pItem.target_kingdom_id < 0) return null;
-            return new WarNoticeState
-            {
-                Signature = pItem.notice_signature,
-                AttackerId = pAttackerId,
-                DefenderId = pItem.target_kingdom_id,
-                GoalType = pItem.war_goal_type ?? "",
-                WarType = pItem.war_type ?? "",
-                TargetCityId = pItem.war_target_city_id,
-                NoticeYear = pItem.notice_year,
-                EarliestWarYear = pItem.earliest_war_year,
-                ForcedWarYear = pItem.forced_war_year
             };
         }
 
@@ -401,8 +440,14 @@ namespace AncientWarfare3.core.lineage
             ArmyDeploymentService.CancelNotice(pSignature, restoreJobs: true);
             TemporaryLevyService.OnNoticeClosed(state.AttackerId);
             TemporaryLevyService.OnNoticeClosed(state.DefenderId);
-            TemporarySlaveVanguardService.OnEmergencyChanged(ResolveKingdom(state.AttackerId));
-            TemporarySlaveVanguardService.OnEmergencyChanged(ResolveKingdom(state.DefenderId));
+            Kingdom attacker = ResolveKingdom(state.AttackerId);
+            Kingdom defender = ResolveKingdom(state.DefenderId);
+            WartimeGarrisonService.OnKingdomWarStateChanged(attacker);
+            WartimeGarrisonService.OnKingdomWarStateChanged(defender);
+            TemporarySlaveVanguardService.OnEmergencyChanged(attacker);
+            TemporarySlaveVanguardService.OnEmergencyChanged(defender);
+            StandingArmyPeacetimeService.OnMilitaryEmergencyChanged(attacker);
+            StandingArmyPeacetimeService.OnMilitaryEmergencyChanged(defender);
         }
 
         private static void RemoveIndex(WarNoticeState pState)
@@ -483,21 +528,6 @@ namespace AncientWarfare3.core.lineage
             return pAttackerId + ":" + pDefenderId;
         }
 
-        private static bool IsQueued(Kingdom pKingdom, string pSignature)
-        {
-            pKingdom.data.get(LineageKeys.DECISION_QUEUE, out string raw, "");
-            foreach (KingdomDecisionQueueItem item in KingdomDecisionQueueCodec.Decode(raw))
-                if (item.notice_signature == pSignature) return true;
-            return false;
-        }
-
-        private static Kingdom DecisionTarget(Kingdom pAttacker)
-        {
-            if (pAttacker?.data == null) return null;
-            pAttacker.data.get(LineageKeys.DECISION_TARGET_KINGDOM_ID, out long targetId, -1L);
-            return ResolveKingdom(targetId);
-        }
-
         private static Kingdom ResolveKingdom(long pId)
         {
             if (pId < 0) return null;
@@ -521,6 +551,8 @@ namespace AncientWarfare3.core.lineage
         private static void RecordNotice(Kingdom pAttacker, Kingdom pDefender, WarNoticeState pState)
         {
             WarMobilizationContent.AnnounceNotice(pAttacker, pDefender);
+            DiplomacyConversationService.RecordWarNotice(pAttacker,
+                pDefender, pState.EarliestWarYear, pState.ForcedWarYear);
             HistoryWriter.RecordKingdom(pAttacker, "war_notice_issued",
                 HistoryText.Kingdom(pAttacker) + HistoryLocalizationRules.H("aw_hist_war_notice_issued_mid") +
                 HistoryText.Kingdom(pDefender), HistoryTarget.Kingdom(pDefender));

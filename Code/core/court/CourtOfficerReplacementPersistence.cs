@@ -32,7 +32,8 @@ namespace AncientWarfare3.core.court
         internal static CourtOfficerReplacementResult Replace(
             SQLiteConnection pDb, OfficialCareerAppointment pAppointment,
             OfficialCareerCloseRequest pLocalClose,
-            GuestOfficeEndRequest pGuestEnd)
+            GuestOfficeEndRequest pGuestEnd,
+            Action<SQLiteConnection, SQLiteTransaction> pStageAdditional = null)
         {
             if (pDb == null || pAppointment == null ||
                 (pLocalClose == null) == (pGuestEnd == null))
@@ -65,6 +66,7 @@ namespace AncientWarfare3.core.court
                 appointmentToken = OfficialCareerPersistence.Capture(
                     pDb, transaction, pAppointment);
                 OfficialCareerPersistence.Stage(pDb, transaction, appointmentToken);
+                pStageAdditional?.Invoke(pDb, transaction);
                 transaction.Commit();
                 return Build(CourtReplacementPersistenceOutcome.Committed,
                     closeToken, appointmentToken, guestResult);

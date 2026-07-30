@@ -1,4 +1,5 @@
 using AncientWarfare3.core.court;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using HarmonyLib;
 
@@ -21,6 +22,7 @@ namespace AncientWarfare3.patch
         public static bool SetLeader_HeirGuard_Prefix(City __instance, Actor pActor, bool pNew, out bool __state)
         {
             __state = false;
+            if (AW3MultiplayerReplicaScope.IsApplying) return true;
             if (pActor == null ||
                 (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(__instance?.kingdom) &&
                  !XiaizationService.IsForeignPseudoDynasty(pActor.kingdom)))
@@ -46,6 +48,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.setLeader))]
         public static void SetLeader_Postfix(Actor pActor, bool pNew, bool __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state) return;
             if (pActor == null ||
                 (!LineageService.IsXia(pActor) && !LineageService.IsXiaKingdom(pActor.kingdom) &&
@@ -61,6 +65,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!SetKingPostfixRules.ShouldRun(pFromLoad, pActor != null && __instance?.king == pActor)) return;
             RoyalMedicalCareService.ReconcileTargets(__instance);
             if (pActor == null ||
@@ -71,9 +76,11 @@ namespace AncientWarfare3.patch
         }
 
         [HarmonyPrefix]
+        [HarmonyPriority(Priority.High)]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static bool SetKing_MaleOnly_Prefix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return true;
             if (pActor == null) return true;
             if (RoyalAsylumService.IsActive(pActor) &&
                 !RoyalAsylumService.RecallForSuccession(pActor, __instance)) return false;
@@ -90,24 +97,27 @@ namespace AncientWarfare3.patch
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(City), nameof(City.setLeader))]
-        public static void SetLeader_Prefix(City __instance, out Actor __state)
+        public static void SetLeader_Prefix(City __instance, Actor pActor,
+            out Actor __state)
         {
             __state = __instance?.leader;
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (GovernorRotationRuntimeScope.IsActive) return;
+            if (pActor?.data != null &&
+                CourtService.HasOfficialCourt(__instance?.kingdom))
+                OfficialCareerStateService.FreezeNativeCityFast(pActor);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(City), nameof(City.setLeader))]
         public static void SetLeader_Postfix(City __instance, Actor pActor, bool pNew, Actor __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null && __state != __instance?.leader)
                 EndLeaderCareer(__state, "replaced");
-            if (!pNew || pActor?.data == null || __instance?.leader != pActor || pActor.kingdom?.data == null)
-                return;
-
-            string school = CourtService.EnsurePersonalSchool(pActor);
-            OfficialCareerService.Appoint(pActor, pActor.kingdom, CourtOfficeLayer.City,
-                CourtOfficeId.Governor, school, __instance);
-            CitySchoolSnapshotService.MarkDirty(__instance);
+            CityGovernorProjectionRepairService.OnLeaderAssigned(
+                __instance, pActor, pNew);
         }
 
         [HarmonyPrefix]
@@ -121,16 +131,14 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.removeLeader))]
         public static void RemoveLeader_Postfix(Actor __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (GovernorRotationRuntimeScope.IsActive) return;
             if (__state?.data != null) EndLeaderCareer(__state, "removed");
         }
 
         private static void EndLeaderCareer(Actor pActor, string pReason)
         {
-            Kingdom kingdom = pActor?.kingdom;
-            if (!OfficialCareerService.End(pActor, CourtOfficeLayer.City,
-                    CourtOfficeId.Governor, pReason) || kingdom?.data == null) return;
-            ChronicleEvents.OnCourtOfficerDismissed(pActor, kingdom, CourtOfficeId.Governor, pReason);
-            CitySchoolSnapshotService.MarkActorDirty(pActor);
+            CourtService.ClearCityGovernor(pActor, pReason);
         }
     }
 }

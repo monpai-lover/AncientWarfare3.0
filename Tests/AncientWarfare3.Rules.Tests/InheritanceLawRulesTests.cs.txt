@@ -1,0 +1,545 @@
+using AncientWarfare3.core.lineage;
+
+internal static class InheritanceLawRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(560, InheritanceLawRules.DefaultWindowWidth,
+            "the inheritance window matches the court default width");
+        Equal(360, InheritanceLawRules.DefaultWindowHeight,
+            "the inheritance window matches the court default height");
+        Equal(true, InheritanceLawRules.RequiresVerticalScroll(
+                viewportHeight: 182f),
+            "compact inheritance content scrolls instead of overflowing");
+        Equal(true, InheritanceLawRules.RequiresVerticalScroll(
+                viewportHeight: 220f),
+            "the three faction candidate rows remain scrollable in a compact window");
+        Equal(false, InheritanceLawRules.RequiresVerticalScroll(
+                viewportHeight: 300f),
+            "a tall inheritance viewport does not scroll unnecessarily");
+
+        Equal(InheritanceLaw.Primogeniture,
+            InheritanceLawRules.Normalize(-10),
+            "unknown inheritance laws normalize to primogeniture");
+        Equal(InheritanceLaw.CivilAcclaim,
+            InheritanceLawRules.Normalize((int)InheritanceLaw.CivilAcclaim),
+            "known inheritance laws remain stable");
+
+        Equal(false, InheritanceLawRules.CanUseMilitary(
+                adultRoyalCount: 1, activeGeneralCount: 0,
+                activeArmyCount: 1),
+            "military acclaim needs an active general body");
+        Equal(false, InheritanceLawRules.CanUseMilitary(
+                adultRoyalCount: 1, activeGeneralCount: 1,
+                activeArmyCount: 0),
+            "military acclaim needs an active army body");
+        Equal(true, InheritanceLawRules.CanUseMilitary(
+                adultRoyalCount: 1, activeGeneralCount: 1,
+                activeArmyCount: 1),
+            "military acclaim unlocks with an adult royal and armed support");
+
+        Equal(false, InheritanceLawRules.CanUseCivil(
+                adultRoyalCount: 1, officialCourtCompleted: true,
+                threeDepartmentsCompleted: true, finiteTermLaw: true,
+                activeOfficerCount: 2),
+            "civil acclaim needs three active officials");
+        Equal(false, InheritanceLawRules.CanUseCivil(
+                adultRoyalCount: 1, officialCourtCompleted: true,
+                threeDepartmentsCompleted: false, finiteTermLaw: true,
+                activeOfficerCount: 6),
+            "civil acclaim needs the complete institution chain");
+        Equal(true, InheritanceLawRules.CanUseCivil(
+                adultRoyalCount: 1, officialCourtCompleted: true,
+                threeDepartmentsCompleted: true, finiteTermLaw: true,
+                activeOfficerCount: 3),
+            "civil acclaim unlocks with institutions and officials");
+
+        Equal(InheritanceLaw.Primogeniture,
+            InheritanceLawRules.ResolveEffective(
+                InheritanceLaw.MilitaryAcclaim,
+                militaryUnlocked: false, civilUnlocked: true),
+            "an unavailable military lock temporarily falls back");
+        Equal(InheritanceLaw.CivilAcclaim,
+            InheritanceLawRules.ResolveEffective(
+                InheritanceLaw.CivilAcclaim,
+                militaryUnlocked: false, civilUnlocked: true),
+            "an available civil lock remains effective");
+
+        var golden = new InheritanceLawSnapshot(
+            MandatePhase.Golden, hasLivingDirectSon: true,
+            stableDynasty: true, atWar: false, activeArmyCount: 1,
+            activeGeneralCount: 1, activeOfficerCount: 8,
+            institutionMaturity: 4, militaryDirection: 0,
+            civilDirection: 10);
+        Equal(85, InheritanceLawRules.Score(
+                InheritanceLaw.Primogeniture, golden),
+            "golden stable direct succession receives every legitimacy bonus");
+
+        System.Reflection.ConstructorInfo influenceSnapshotConstructor =
+            typeof(InheritanceLawSnapshot).GetConstructor(new[]
+            {
+                typeof(MandatePhase), typeof(bool), typeof(bool),
+                typeof(bool), typeof(int), typeof(int), typeof(int),
+                typeof(int), typeof(int), typeof(int), typeof(int)
+            });
+        Equal(true, influenceSnapshotConstructor != null,
+            "inheritance snapshots carry ruler court influence");
+        if (influenceSnapshotConstructor != null)
+        {
+            var weakRulerSnapshot = (InheritanceLawSnapshot)
+                influenceSnapshotConstructor.Invoke(new object[]
+                {
+                    MandatePhase.Decline, false, false, false,
+                    0, 0, 0, 0, 0, 0, -60
+                });
+            Equal(-10, InheritanceLawRules.Score(
+                    InheritanceLaw.Primogeniture, weakRulerSnapshot),
+                "negative ruler influence can make orthodox support negative");
+        }
+
+        var chaos = new InheritanceLawSnapshot(
+            MandatePhase.Chaos, hasLivingDirectSon: false,
+            stableDynasty: false, atWar: true, activeArmyCount: 3,
+            activeGeneralCount: 5, activeOfficerCount: 2,
+            institutionMaturity: 0, militaryDirection: 20,
+            civilDirection: 0);
+        Equal(110, InheritanceLawRules.Score(
+                InheritanceLaw.MilitaryAcclaim, chaos),
+            "chaos military scoring applies bounded army and court support");
+
+        Equal(true, InheritanceLawRules.ShouldEvaluate(
+                currentYear: 48, lastEvaluationYear: -1,
+                kingdomId: 12),
+            "initial automatic evaluation follows the kingdom six-year slot");
+        Equal(false, InheritanceLawRules.ShouldEvaluate(
+                currentYear: 49, lastEvaluationYear: -1,
+                kingdomId: 12),
+            "other kingdoms do no work outside their staggered slot");
+        Equal(false, InheritanceLawRules.ShouldEvaluate(
+                currentYear: 52, lastEvaluationYear: 48,
+                kingdomId: 12),
+            "automatic evaluation cannot repeat before six years");
+        Equal(true, InheritanceLawRules.ShouldEvaluate(
+                currentYear: 54, lastEvaluationYear: 48,
+                kingdomId: 12),
+            "automatic evaluation repeats after six years in its slot");
+
+        Equal(InheritanceLaw.Primogeniture,
+            InheritanceLawRules.SelectAutomatic(
+                InheritanceLaw.Primogeniture,
+                primogenitureScore: 60, militaryScore: 74,
+                civilScore: 30, militaryUnlocked: true,
+                civilUnlocked: true),
+            "a fourteen-point lead cannot change inheritance law");
+        Equal(InheritanceLaw.MilitaryAcclaim,
+            InheritanceLawRules.SelectAutomatic(
+                InheritanceLaw.Primogeniture,
+                primogenitureScore: 60, militaryScore: 75,
+                civilScore: 30, militaryUnlocked: true,
+                civilUnlocked: true),
+            "a fifteen-point lead changes inheritance law");
+        Equal(InheritanceLaw.Primogeniture,
+            InheritanceLawRules.SelectAutomatic(
+                InheritanceLaw.Primogeniture,
+                primogenitureScore: 60, militaryScore: 90,
+                civilScore: 80, militaryUnlocked: false,
+                civilUnlocked: false),
+            "automatic evaluation ignores locked systems without candidates");
+
+        Equal(InheritanceLawChangeResult.Cooldown,
+            InheritanceLawRules.ValidateChange(
+                currentYear: 18, lastChangeYear: 10,
+                politicalPoints: 100, currentLock: null,
+                requestedLock: InheritanceLaw.MilitaryAcclaim,
+                militaryUnlocked: true, civilUnlocked: true),
+            "law changes have a ten-year cooldown");
+        Equal(InheritanceLawChangeResult.InsufficientPoliticalPoints,
+            InheritanceLawRules.ValidateChange(
+                currentYear: 20, lastChangeYear: 10,
+                politicalPoints: 29, currentLock: null,
+                requestedLock: InheritanceLaw.MilitaryAcclaim,
+                militaryUnlocked: true, civilUnlocked: true),
+            "locking a law costs thirty political points");
+        Equal(InheritanceLawChangeResult.Unavailable,
+            InheritanceLawRules.ValidateChange(
+                currentYear: 20, lastChangeYear: 10,
+                politicalPoints: 30, currentLock: null,
+                requestedLock: InheritanceLaw.CivilAcclaim,
+                militaryUnlocked: true, civilUnlocked: false),
+            "players cannot newly lock an unavailable law");
+        Equal(InheritanceLawChangeResult.Success,
+            InheritanceLawRules.ValidateChange(
+                currentYear: 20, lastChangeYear: 10,
+                politicalPoints: 0,
+                currentLock: InheritanceLaw.MilitaryAcclaim,
+                requestedLock: null, militaryUnlocked: true,
+                civilUnlocked: true),
+            "returning to automatic is free after the active cooldown");
+        Equal(0, InheritanceLawRules.ChangeCost(null),
+            "automatic control has no political-point cost");
+        Equal(30, InheritanceLawRules.ChangeCost(
+                InheritanceLaw.CivilAcclaim),
+            "locking any law costs thirty political points");
+
+        var minorRoyal = new InheritanceCandidateFacts(
+            actorId: 10, alive: true, male: true, adult: false,
+            royal: true, king: false, enslaved: false, mad: false,
+            domestic: true, agnaticDistance: 1,
+            existingSuccessionLegitimacy: 20, warfare: 12,
+            combat: 10, courage: 8, generalExperience: 1,
+            stewardship: 12, intelligence: 12, diplomacy: 12,
+            officialRank: 8, officialMerit: 10,
+            evaluationGrade: 5, groupSupport: 10);
+        Equal(true, InheritanceCandidateRules.IsEligible(
+                minorRoyal, InheritanceLaw.Primogeniture),
+            "primogeniture may retain an underage dynast");
+        Equal(false, InheritanceCandidateRules.IsEligible(
+                minorRoyal, InheritanceLaw.MilitaryAcclaim),
+            "military acclaim never selects a minor");
+        Equal(false, InheritanceCandidateRules.IsEligible(
+                minorRoyal, InheritanceLaw.CivilAcclaim),
+            "civil acclaim never selects a minor");
+
+        var ordinaryGeneral = new InheritanceCandidateFacts(
+            actorId: 11, alive: true, male: true, adult: true,
+            royal: false, king: false, enslaved: false, mad: false,
+            domestic: true, agnaticDistance: 1,
+            existingSuccessionLegitimacy: 0, warfare: 20,
+            combat: 20, courage: 20, generalExperience: 1,
+            stewardship: 5, intelligence: 5, diplomacy: 5,
+            officialRank: 1, officialMerit: 0,
+            evaluationGrade: 1, groupSupport: 100);
+        Equal(false, InheritanceCandidateRules.IsEligible(
+                ordinaryGeneral, InheritanceLaw.MilitaryAcclaim),
+            "ordinary generals cannot inherit through military acclaim");
+
+        Equal(true, InheritanceLawRules.ShouldRestorePrimogeniture(
+                InheritanceLaw.MilitaryAcclaim,
+                hasLivingLegitimateDirectSon: true),
+            "a legitimate son immediately restores primogeniture from military acclaim");
+        Equal(true, InheritanceLawRules.ShouldRestorePrimogeniture(
+                InheritanceLaw.CivilAcclaim,
+                hasLivingLegitimateDirectSon: true),
+            "a legitimate son immediately restores primogeniture from civil acclaim");
+        Equal(false, InheritanceLawRules.ShouldRestorePrimogeniture(
+                InheritanceLaw.CivilAcclaim,
+                hasLivingLegitimateDirectSon: false),
+            "an heirless court may still use another unlocked faction");
+        Equal(true, InheritanceLawRules.EstablishesHereditaryBranch(
+                "military_acclaim"),
+            "a military-backed accession establishes the winner's whole branch");
+        Equal(true, InheritanceLawRules.EstablishesHereditaryBranch(
+                "civil_acclaim"),
+            "a civil-backed accession establishes the winner's whole branch");
+        Equal(false, InheritanceLawRules.EstablishesHereditaryBranch(
+                "direct"),
+            "ordinary direct succession keeps the existing legitimate branch");
+        Equal(true, InheritanceLawRules.HasDecisiveCandidateLead(83, 45),
+            "a thirty-eight point lead is decisive even when the leader is the designated heir");
+        Equal(false, InheritanceLawRules.HasDecisiveCandidateLead(64, 45),
+            "a nineteen point lead is not decisive");
+        Equal(false, InheritanceLawRules.ShouldStartSuccessionDispute(
+                pLeaderActorId: 10, pDesignatedHeirId: 10,
+                pLeaderSupport: 83, pRunnerUpSupport: 45,
+                pHasSupportCity: true, pHasActiveDispute: false),
+            "a decisively leading designated heir keeps succession stable");
+        Equal("\u6587\u5b98\u62e5\u7acb",
+            HistoryLocalizationRules.Text("aw_inheritance_law_civil", "cz"),
+            "civil acclaim is displayed as civil-official acclamation");
+        Equal(InheritanceLaw.MilitaryAcclaim,
+            InheritanceLawRules.ResolveAvailableLaw(
+                InheritanceLaw.CivilAcclaim,
+                primogenitureAvailable: false, primogenitureScore: 90,
+                militaryAvailable: true, militaryScore: 70,
+                civilAvailable: false, civilScore: 100),
+            "an empty civil faction falls back to the strongest valid faction");
+        Equal(InheritanceLaw.Primogeniture,
+            InheritanceLawRules.ResolveAvailableLaw(
+                InheritanceLaw.MilitaryAcclaim,
+                primogenitureAvailable: true, primogenitureScore: 80,
+                militaryAvailable: false, militaryScore: 100,
+                civilAvailable: true, civilScore: 70),
+            "a stronger valid hereditary candidate wins fallback selection");
+
+        var supportedRoyal = new InheritanceCandidateFacts(
+            actorId: 12, alive: true, male: true, adult: true,
+            royal: true, king: false, enslaved: false, mad: false,
+            domestic: true, agnaticDistance: 2,
+            existingSuccessionLegitimacy: 10, warfare: 14,
+            combat: 12, courage: 10, generalExperience: 1,
+            stewardship: 15, intelligence: 14, diplomacy: 13,
+            officialRank: 10, officialMerit: 20,
+            evaluationGrade: 7, groupSupport: 30);
+        Equal(true, InheritanceCandidateRules.Score(
+                supportedRoyal, InheritanceLaw.MilitaryAcclaim) >
+            InheritanceCandidateRules.Score(
+                minorRoyal, InheritanceLaw.MilitaryAcclaim),
+            "adult royal military experience and group support improve acclaim");
+
+        System.Reflection.MethodInfo rulerInfluence =
+            typeof(InheritanceLawRules).GetMethod(
+                "ResolveRulerCourtInfluence");
+        Equal(true, rulerInfluence != null,
+            "inheritance exposes ruler influence among court and aristocrats");
+        if (rulerInfluence != null)
+        {
+            Equal(25, (int)rulerInfluence.Invoke(null,
+                    new object[] { 15, 0, 50, true }),
+                "an able guarded ruler receives positive court influence");
+            Equal(-60, (int)rulerInfluence.Invoke(null,
+                    new object[] { 0, 100, 200, false }),
+                "a puppet under a powerbroker and strong rival houses may have negative influence");
+            Equal(40, (int)rulerInfluence.Invoke(null,
+                    new object[] { 40, 0, 0, true }),
+                "ruler court influence has a stable positive cap");
+        }
+
+        System.Reflection.MethodInfo aggregateSupport =
+            typeof(InheritanceLawRules).GetMethod(
+                "AggregateCandidateSupport");
+        Equal(true, aggregateSupport != null,
+            "inheritance aggregates faction support by candidate");
+        if (aggregateSupport != null)
+        {
+            Equal(80, (int)aggregateSupport.Invoke(null, new object[]
+                {
+                    10L, 10L, 10L, 60, 20L, 40, 30L, 30
+                }), "the designated heir receives a twenty-point institutional baseline");
+            Equal(75, (int)aggregateSupport.Invoke(null, new object[]
+                {
+                    20L, 10L, 10L, 60, 20L, 40, 20L, 35
+                }), "multiple factions add their influence to the same candidate");
+            Equal(-10, (int)aggregateSupport.Invoke(null, new object[]
+                {
+                    10L, 10L, 10L, -30, -1L, 0, -1L, 0
+                }), "negative imperial influence remains negative after aggregation");
+        }
+
+        System.Reflection.MethodInfo startsDispute =
+            typeof(InheritanceLawRules).GetMethod(
+                "ShouldStartSuccessionDispute");
+        Equal(true, startsDispute != null,
+            "inheritance exposes the decisive alternative threshold");
+        if (startsDispute != null)
+        {
+            Equal(false, (bool)startsDispute.Invoke(null, new object[]
+                {
+                    20L, 10L, 79, 60, true, false
+                }), "a nineteen-point lead does not challenge the installed heir");
+            Equal(true, (bool)startsDispute.Invoke(null, new object[]
+                {
+                    20L, 10L, 80, 60, true, false
+                }), "a twenty-point lead challenges the installed heir");
+            Equal(false, (bool)startsDispute.Invoke(null, new object[]
+                {
+                    10L, 10L, 100, 40, true, false
+                }), "the installed heir never rebels against himself");
+            Equal(false, (bool)startsDispute.Invoke(null, new object[]
+                {
+                    20L, 10L, 100, 40, false, false
+                }), "a succession rival still requires a viable support city");
+        }
+
+        long[] boundedArchive = InheritanceCandidateRules.BoundArchiveIds(
+            Enumerable.Range(1, 40).Select(value => (long)value)
+                .Concat(new long[] { 2, 3 }).ToArray());
+        Equal(InheritanceCandidateRules.MaximumArchiveIds,
+            boundedArchive.Length,
+            "royal archive reads are capped at thirty-two IDs");
+        Equal(32L, boundedArchive[^1],
+            "bounded archive IDs preserve stable discovery order");
+
+        var candidatePool = Enumerable.Range(1, 12)
+            .Select(value => new InheritanceCandidateFacts(
+                actorId: value, alive: true, male: true, adult: true,
+                royal: true, king: false, enslaved: false, mad: false,
+                domestic: true, agnaticDistance: 2,
+                existingSuccessionLegitimacy: value,
+                warfare: value, combat: value, courage: value,
+                generalExperience: 0, stewardship: value,
+                intelligence: value, diplomacy: value,
+                officialRank: value, officialMerit: value,
+                evaluationGrade: value, groupSupport: value))
+            .ToArray();
+        InheritanceCandidateFacts[] finalists =
+            InheritanceCandidateRules.SelectFinalists(candidatePool,
+                InheritanceLaw.CivilAcclaim);
+        Equal(InheritanceCandidateRules.MaximumFinalists,
+            finalists.Length,
+            "only eight candidates proceed to support scoring");
+        Equal(12L, finalists[0].ActorId,
+            "the strongest candidate leads the bounded finalists");
+
+        var tieHighId = new InheritanceCandidateFacts(
+            actorId: 20, alive: true, male: true, adult: true,
+            royal: true, king: false, enslaved: false, mad: false,
+            domestic: true, agnaticDistance: 1,
+            existingSuccessionLegitimacy: 10, warfare: 10,
+            combat: 10, courage: 10, generalExperience: 0,
+            stewardship: 10, intelligence: 10, diplomacy: 10,
+            officialRank: 5, officialMerit: 5,
+            evaluationGrade: 5, groupSupport: 5);
+        var tieLowId = tieHighId.WithActorId(19);
+        Equal(19L, InheritanceCandidateRules.SelectBest(
+                new[] { tieHighId, tieLowId },
+                InheritanceLaw.CivilAcclaim).ActorId,
+            "Actor ID resolves exact candidate-score ties deterministically");
+        Equal(96, InheritanceCandidateRules.MaximumOfficerSupporters,
+            "civil support never consumes more than ninety-six officials");
+
+        string candidateServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "InheritanceCandidateService.cs"));
+        Equal(false, candidateServiceSource.Contains("getUnits()"),
+            "inheritance candidate discovery never scans kingdom population");
+        Equal(true, candidateServiceSource.Contains(
+                "LineageQuery.GetLivingLineageMemberIds"),
+            "collateral discovery uses the bounded lineage archive index");
+        Equal(true, candidateServiceSource.Contains(
+                "InheritanceCandidateRules.MaximumArchiveIds"),
+            "runtime discovery consumes the same hard archive cap as pure rules");
+        Equal(true, candidateServiceSource.Contains(
+                "PreviewPrimogenitureCandidate"),
+            "the imperial faction previews the actual primogeniture candidate");
+        string heirServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirService.cs"));
+        Equal(true, heirServiceSource.Contains(
+                "InheritanceCandidateService.CollectRoyalCandidates"),
+            "primogeniture collateral search shares the bounded royal pool");
+        string lineageKeysSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageKeys.cs"));
+        foreach (string key in new[]
+                 {
+                     "INHERITANCE_LAW_EFFECTIVE",
+                     "INHERITANCE_LAW_LOCKED",
+                     "INHERITANCE_LAW_LAST_EVALUATION_YEAR",
+                     "INHERITANCE_LAW_LAST_CHANGE_YEAR",
+                     "INHERITANCE_CANDIDATE_ID",
+                     "INHERITANCE_CANDIDATE_MODE",
+                     "INHERITANCE_CANDIDATE_REFERENCE_KING_ID",
+                     "INHERITANCE_RULER_COURT_INFLUENCE",
+                     "ACTIVE_SUCCESSION_DISPUTE_ID"
+                 })
+            Equal(true, lineageKeysSource.Contains(key),
+                "inheritance hot state defines " + key);
+        Equal(true, heirServiceSource.Contains("SelectByEffectiveLaw"),
+            "heir refresh dispatches through the effective inheritance law");
+        Equal(true, heirServiceSource.Contains(
+                "RestorePrimogenitureForDirectSon"),
+            "a legitimate direct son immediately restores hereditary succession");
+        Equal(true, heirServiceSource.Contains("SelectAlternativeFaction"),
+            "an empty current faction falls back to another valid faction");
+        Equal(true, heirServiceSource.Contains(
+                "IsRegisteredCandidateEligible(formerHeir, pKingdom)"),
+            "the registered heir remains the installed successor at the king's death");
+        string candidateServiceIntegration = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "InheritanceCandidateService.cs"));
+        Equal(true, candidateServiceIntegration.Contains(
+                "AggregateCandidateSupport("),
+            "candidate service aggregates all faction influence by actor");
+        string disputeServiceIntegration = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "SuccessionDisputeService.cs"));
+        Equal(true, disputeServiceIntegration.Contains(
+                "ResolveFactionSupport("),
+            "succession disputes use the globally aggregated faction leader");
+        Equal(true, disputeServiceIntegration.Contains(
+                "TryGetMaterializedByKingdom"),
+            "succession display state rejects prepared and zero-city fake splits");
+        Equal(true, disputeServiceIntegration.Contains(
+                "pSnapshot.Materialized"),
+            "hot dispute display reads use an O(1) published materialization flag");
+        Equal(true, disputeServiceIntegration.Contains(
+                "PrepareClaimantAccessionMode"),
+            "a victorious claimant carries the recorded faction mode into accession");
+        Equal(true, disputeServiceIntegration.Contains(
+                "HeirService.ClearHeir(pKingdom);"),
+            "a victorious claimant clears the displaced court's stale heir flag first");
+        Equal(true, disputeServiceIntegration.Contains(
+                "original.king != successor") &&
+                    disputeServiceIntegration.Contains(
+                        "if (pClaimantWins)") &&
+                    disputeServiceIntegration.Contains(
+                        "original.setKing(claimant)"),
+            "the heir accedes before rebellion and the claimant takes the original throne only after victory");
+        string inheritanceLawServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "InheritanceLawService.cs"));
+        Equal(true, inheritanceLawServiceSource.Contains(
+                "ResolveRulerCourtInfluence("),
+            "inheritance evaluation consumes ruler court influence");
+        Equal(true, inheritanceLawServiceSource.Contains(
+                "EstablishHereditaryBranchAfterAccession"),
+            "military and civil accessions establish a new hereditary branch");
+        Equal(true, inheritanceLawServiceSource.Contains(
+                "CourtAristocraticGroupService.GetCachedGroups"),
+            "inheritance reads the bounded aristocratic group cache");
+        string heirPatchSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_HeirPatch.cs"));
+        Equal(true, heirPatchSource.Contains("SuccessionMode"),
+            "setKing context captures the selected succession source");
+        Equal(true, heirPatchSource.Contains(
+                "EstablishHereditaryBranchAfterAccession"),
+            "setKing commits the acclaimed branch before selecting its heir");
+        string republicServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "RepublicGovernmentService.cs"));
+        Equal(true, republicServiceSource.Contains(
+                "HeirService.ReconcileHeir(pKingdom, pForce: false)"),
+            "a royal vacancy preserves the prepared eligible heir instead of recomputing without a living king context");
+        Equal(false, republicServiceSource.Contains(
+                "HeirService.ReconcileHeir(pKingdom, pForce: true)"),
+            "vacancy resolution never replaces the prepared faction branch by force");
+        string lineageServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "LineageService.cs"));
+        Equal(true, lineageServiceSource.Contains("pSuccessionMode"),
+            "lineage accession receives an explicit succession source");
+        string heirTitleSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "HeirTitleRules.cs"));
+        Equal(true, heirTitleSource.Contains("LiuhouKey"),
+            "military-backed royal heirs display as Liuhou");
+        Equal(true, heirTitleSource.Contains("SijunKey"),
+            "civil-backed royal heirs display as Sijun");
+        string inheritanceWindowSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "InheritanceLawWindow.cs"));
+        Equal(true, inheritanceWindowSource.Contains(
+                "InheritanceCandidateService.ResolveFactionSupport"),
+            "the inheritance window uses the same aggregated support snapshot as succession");
+        Equal(true, inheritanceWindowSource.Contains(
+                "TryGetMaterializedByKingdom"),
+            "the inheritance window never labels a prepared row as a real split");
+        Equal(true, inheritanceWindowSource.Contains("LeaderSupport"),
+            "the inheritance window displays the leading candidate support");
+        Equal(true, inheritanceWindowSource.Contains("RunnerUpSupport"),
+            "the inheritance window displays the runner-up support");
+        Equal(true, inheritanceWindowSource.Contains(
+                "DesignatedHeirSupport"),
+            "the inheritance window displays the designated heir baseline and faction support");
+        Equal(true, inheritanceWindowSource.Contains("SupporterCount"),
+            "the inheritance window exposes military and civil supporter counts");
+        Equal(true, inheritanceWindowSource.Contains("row.Portrait.show(actor)"),
+            "each faction candidate uses a live actor portrait");
+        string diplomacyWindowSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "DiplomacyConversationWindow.cs"));
+        Equal(true, diplomacyWindowSource.Contains(
+                "CompareCapitalDistance("),
+            "the diplomacy country list sorts by capital distance");
+        Equal(true, diplomacyWindowSource.Contains(
+                "aw_diplomacy_distance"),
+            "the diplomacy country list renders the capital distance");
+    }
+}

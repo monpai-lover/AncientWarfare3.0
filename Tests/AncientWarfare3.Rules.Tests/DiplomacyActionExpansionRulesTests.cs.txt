@@ -1,0 +1,441 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyActionExpansionRulesTests
+{
+    public static void Run()
+    {
+        Equal(24, DiplomacyActionExpansionRules.MaximumRoyalCandidatesPerRealm,
+            "royal candidate reads are bounded per realm");
+        Equal(64, DiplomacyActionExpansionRules.MaximumCoalitionTargets,
+            "coalition target previews are bounded");
+        Equal(2, DiplomacyActionExpansionRules.MaximumActiveCoalitionsPerRealm,
+            "a realm cannot accumulate an unbounded coalition web");
+        Equal(12, DiplomacyActionExpansionRules.CoalitionYears,
+            "coalitions expire after twelve years");
+        Equal(8, DiplomacyActionExpansionRules.SpyNetworkYears,
+            "successful spy networks remain useful for eight years");
+        Equal(1, DiplomacyActionExpansionRules.MaximumDueOperationsPerFrame,
+            "only one covert operation may resolve per frame");
+        Equal(8,
+            DiplomacyActionExpansionRules.MaximumMarriageMaintenanceRows,
+            "royal marriage maintenance remains bounded per realm-year");
+        Equal(-1L,
+            DiplomacyActionExpansionRules.NextMarriageMaintenanceCursor(
+                Array.Empty<long>()),
+            "an exhausted marriage maintenance page resets its cursor");
+        Equal(18L,
+            DiplomacyActionExpansionRules.NextMarriageMaintenanceCursor(
+                new long[] { 10, 14, 18 }),
+            "marriage maintenance advances to the last inspected row");
+        Equal(4, DiplomacyActionExpansionRules.MaximumAiForgeryCitiesScanned,
+            "covert AI inspects at most four target cities per yearly turn");
+
+        Equal(DiplomacyProposalType.Coalition,
+            (DiplomacyProposalType)11,
+            "coalition keeps an append-only proposal id");
+        Equal(DiplomacyProposalType.RoyalMarriage,
+            (DiplomacyProposalType)12,
+            "royal marriage keeps an append-only proposal id");
+
+        var target = new CoalitionTargetFacts(
+            distinctRealms: true, targetAlive: true, targetCivilized: true,
+            subjectConflict: false, servingTargetInWar: false,
+            targetHasMandate: false, targetPower: 126f,
+            strongerMemberPower: 100f);
+        True(DiplomacyActionExpansionRules.IsEligibleCoalitionTarget(target),
+            "a third realm at 125 percent power qualifies as a common threat");
+        Equal(false, DiplomacyActionExpansionRules.IsEligibleCoalitionTarget(
+                new CoalitionTargetFacts(true, true, true, false, false,
+                    false, 124f, 100f)),
+            "a weaker ordinary third realm is not a coalition target");
+        True(DiplomacyActionExpansionRules.IsEligibleCoalitionTarget(
+                new CoalitionTargetFacts(true, true, true, false, false,
+                    true, 80f, 100f)),
+            "an active Mandate realm is always a valid coalition threat");
+        Equal(false, DiplomacyActionExpansionRules.IsEligibleCoalitionTarget(
+                new CoalitionTargetFacts(true, true, true, true, false,
+                    true, 200f, 100f)),
+            "a subject relation cannot be targeted by a coalition");
+        Equal(CoalitionWarJoinSide.Attackers,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 20, endYear: 24,
+                targetIsAttacker: false, targetIsDefender: true,
+                memberIsAttacker: true, memberIsDefender: false,
+                partnerAlreadyInWar: false, subjectConflict: false),
+            "a coalition partner joins its member against a defending target");
+        Equal(CoalitionWarJoinSide.Defenders,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 20, endYear: 24,
+                targetIsAttacker: true, targetIsDefender: false,
+                memberIsAttacker: false, memberIsDefender: true,
+                partnerAlreadyInWar: false, subjectConflict: false),
+            "a coalition partner defends its member against an attacking target");
+        Equal(CoalitionWarJoinSide.None,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 20, endYear: 24,
+                targetIsAttacker: false, targetIsDefender: false,
+                memberIsAttacker: true, memberIsDefender: false,
+                partnerAlreadyInWar: false, subjectConflict: false),
+            "a war not involving the recorded target cannot trigger a coalition");
+        Equal(CoalitionWarJoinSide.None,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 25, endYear: 24,
+                targetIsAttacker: false, targetIsDefender: true,
+                memberIsAttacker: true, memberIsDefender: false,
+                partnerAlreadyInWar: false, subjectConflict: false),
+            "an expired coalition cannot join a war");
+        Equal(CoalitionWarJoinSide.None,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 20, endYear: 24,
+                targetIsAttacker: false, targetIsDefender: true,
+                memberIsAttacker: true, memberIsDefender: false,
+                partnerAlreadyInWar: true, subjectConflict: false),
+            "an existing war participant is never joined twice");
+        Equal(CoalitionWarJoinSide.None,
+            DiplomacyActionExpansionRules.ResolveCoalitionWarJoin(
+                active: true, currentYear: 20, endYear: 24,
+                targetIsAttacker: false, targetIsDefender: true,
+                memberIsAttacker: true, memberIsDefender: false,
+                partnerAlreadyInWar: false, subjectConflict: true),
+            "a later subject relationship closes coalition war support");
+        Equal("at_war",
+            DiplomacyActionExpansionRules.CoalitionUnavailableReason(
+                membersAtWar: true, requesterSubject: false,
+                responderSubject: false, requesterActiveCount: 0,
+                responderActiveCount: 0, duplicateTarget: false,
+                validTarget: true),
+            "realms at war cannot negotiate a coalition");
+        Equal("requester_subject",
+            DiplomacyActionExpansionRules.CoalitionUnavailableReason(
+                membersAtWar: false, requesterSubject: true,
+                responderSubject: false, requesterActiveCount: 0,
+                responderActiveCount: 0, duplicateTarget: false,
+                validTarget: true),
+            "a subject cannot independently establish a coalition");
+        Equal("coalition_limit",
+            DiplomacyActionExpansionRules.CoalitionUnavailableReason(
+                membersAtWar: false, requesterSubject: false,
+                responderSubject: false, requesterActiveCount: 2,
+                responderActiveCount: 0, duplicateTarget: false,
+                validTarget: true),
+            "the two-coalition cap blocks further agreements");
+        Equal("active_coalition",
+            DiplomacyActionExpansionRules.CoalitionUnavailableReason(
+                membersAtWar: false, requesterSubject: false,
+                responderSubject: false, requesterActiveCount: 0,
+                responderActiveCount: 0, duplicateTarget: true,
+                validTarget: true),
+            "the same pair and target cannot be negotiated twice");
+        Equal("invalid_coalition_target",
+            DiplomacyActionExpansionRules.CoalitionUnavailableReason(
+                membersAtWar: false, requesterSubject: false,
+                responderSubject: false, requesterActiveCount: 0,
+                responderActiveCount: 0, duplicateTarget: false,
+                validTarget: false),
+            "a weak or related third realm cannot be targeted");
+
+        var eligibleBride = new RoyalMarriageCandidateFacts(
+            actorId: 20, alive: true, adult: true, breedingAge: true,
+            unmarried: true, royalLineage: true, male: false);
+        var eligibleGroom = new RoyalMarriageCandidateFacts(
+            actorId: 10, alive: true, adult: true, breedingAge: true,
+            unmarried: true, royalLineage: true, male: true);
+        True(DiplomacyActionExpansionRules.IsEligibleMarriageCandidate(
+                eligibleBride), "an adult unmarried royal woman is eligible");
+        Equal(false,
+            DiplomacyActionExpansionRules.IsEligibleMarriageCandidate(
+                new RoyalMarriageCandidateFacts(
+                    actorId: 21, alive: true, adult: true,
+                    breedingAge: true, unmarried: true,
+                    royalLineage: true, male: false,
+                    reigningRuler: true)),
+            "a reigning ruler is excluded from royal marriage");
+        True(DiplomacyActionExpansionRules.CanPairMarriage(
+                eligibleBride, eligibleGroom, related: false),
+            "unrelated opposite-sex royal candidates can marry");
+        True(DiplomacyActionExpansionRules
+                .IsAvailableForDynasticMarriage(
+                    hasNaturalPartner: true,
+                    hasActiveDynasticMarriage: false),
+            "an ordinary natural partner does not consume the diplomatic marriage slot");
+        Equal(false, DiplomacyActionExpansionRules
+                .IsAvailableForDynasticMarriage(
+                    hasNaturalPartner: false,
+                    hasActiveDynasticMarriage: true),
+            "an active diplomatic marriage consumes the dynastic marriage slot");
+        Equal(false, DiplomacyActionExpansionRules.CanPairMarriage(
+                eligibleBride, eligibleGroom, related: true),
+            "related royal candidates cannot be paired");
+        Equal(false, DiplomacyActionExpansionRules.CanPairMarriage(
+                eligibleBride,
+                new RoyalMarriageCandidateFacts(30, true, true, true, true,
+                    true, false), related: false),
+            "same-sex candidates are not paired by this historical marriage rule");
+
+        Equal(RoyalMarriageKinship.Ruler,
+            DiplomacyActionExpansionRules.ClassifyMarriageKinship(
+                actorId: 10, rulerId: 10,
+                firstParentId: -1, secondParentId: -1),
+            "the reigning ruler is classified explicitly instead of as collateral kin");
+        Equal(RoyalMarriageKinship.DirectChild,
+            DiplomacyActionExpansionRules.ClassifyMarriageKinship(
+                actorId: 11, rulerId: 10,
+                firstParentId: 10, secondParentId: -1),
+            "a ruler's child remains direct royal kin");
+        Equal(RoyalMarriageKinship.Collateral,
+            DiplomacyActionExpansionRules.ClassifyMarriageKinship(
+                actorId: 12, rulerId: 10,
+                firstParentId: 3, secondParentId: 4),
+            "other members of the royal lineage remain collateral kin");
+        True(DiplomacyActionExpansionRules.IsDirectMarriageKinship(
+                RoyalMarriageKinship.Ruler),
+            "the ruler participates in direct-royal marriage priority");
+        True(DiplomacyActionExpansionRules.IsDirectMarriageKinship(
+                RoyalMarriageKinship.DirectChild),
+            "the ruler's child participates in direct-royal marriage priority");
+        Equal(0, DiplomacyActionExpansionRules.MarriageGenerationDistance(
+                RoyalMarriageKinship.Ruler),
+            "the ruler has the nearest royal generation distance");
+        Equal(1, DiplomacyActionExpansionRules.MarriageGenerationDistance(
+                RoyalMarriageKinship.DirectChild),
+            "a direct child follows the ruler in royal generation distance");
+
+        True(DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterMaleResponderFemale,
+                requesterSide: true, male: true),
+            "male-requester direction keeps men on the requester side");
+        True(DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterMaleResponderFemale,
+                requesterSide: false, male: false),
+            "male-requester direction keeps women on the responder side");
+        Equal(false, DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterMaleResponderFemale,
+                requesterSide: true, male: false),
+            "male-requester direction rejects stale requester-side women");
+        True(DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterFemaleResponderMale,
+                requesterSide: true, male: false),
+            "female-requester direction keeps women on the requester side");
+        True(DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterFemaleResponderMale,
+                requesterSide: false, male: true),
+            "female-requester direction keeps men on the responder side");
+        Equal(false, DiplomacyActionExpansionRules.MatchesMarriageDirection(
+                RoyalMarriageDirection.RequesterFemaleResponderMale,
+                requesterSide: false, male: false),
+            "female-requester direction rejects stale responder-side women");
+        True(DiplomacyActionExpansionRules.CanPairMarriageInDirection(
+                eligibleGroom, eligibleBride, related: false,
+                RoyalMarriageDirection.RequesterMaleResponderFemale),
+            "the selected groom and bride remain valid in their direction");
+        Equal(false,
+            DiplomacyActionExpansionRules.CanPairMarriageInDirection(
+                eligibleGroom, eligibleBride, related: false,
+                RoyalMarriageDirection.RequesterFemaleResponderMale),
+            "switching direction invalidates actor ids selected under the old direction");
+        True(DiplomacyActionExpansionRules.CanPairMarriageInDirection(
+                eligibleBride, eligibleGroom, related: false,
+                RoyalMarriageDirection.RequesterFemaleResponderMale),
+            "the reverse direction accepts a requester-side woman and responder-side man");
+
+        var collateralRequesterPool = new[]
+        {
+            new RoyalMarriageCandidateFacts(41, true, true, true, true,
+                royalLineage: true, male: true)
+        };
+        var collateralResponderPool = new[]
+        {
+            new RoyalMarriageCandidateFacts(52, true, true, true, true,
+                royalLineage: true, male: false)
+        };
+        True(TryFindMarriagePair(collateralRequesterPool,
+                collateralResponderPool, out long collateralRequester,
+                out long collateralResponder),
+            "collateral royal adults remain marriage candidates when neither ruler has a direct child");
+        Equal(41L, collateralRequester,
+            "the collateral requester is retained as the selected actor");
+        Equal(52L, collateralResponder,
+            "the collateral responder is retained as the selected actor");
+
+        var femaleRequesterPool = new[]
+        {
+            new RoyalMarriageCandidateFacts(61, true, true, true, true,
+                royalLineage: true, male: false)
+        };
+        var maleResponderPool = new[]
+        {
+            new RoyalMarriageCandidateFacts(72, true, true, true, true,
+                royalLineage: true, male: true)
+        };
+        True(TryFindMarriagePair(femaleRequesterPool, maleResponderPool,
+                out long femaleRequester, out long maleResponder),
+            "marriage matching swaps the gender direction when the requester supplies the woman");
+        Equal(61L, femaleRequester,
+            "gender-direction matching keeps the requester-side woman");
+        Equal(72L, maleResponder,
+            "gender-direction matching keeps the responder-side man");
+
+        var directPair = new RoyalMarriagePairScore(
+            firstActorId: 20, secondActorId: 10,
+            directRoyalChildren: 2, generationDistance: 1,
+            ageDifference: 6, combinedMerit: 30);
+        var collateralPair = new RoyalMarriagePairScore(
+            firstActorId: 5, secondActorId: 4,
+            directRoyalChildren: 0, generationDistance: 1,
+            ageDifference: 0, combinedMerit: 100);
+        True(DiplomacyActionExpansionRules.CompareMarriagePair(
+                directPair, collateralPair) < 0,
+            "direct royal children outrank more talented collateral kin");
+        Equal(10L, DiplomacyActionExpansionRules.StableActorTie(10, 20),
+            "marriage ranking uses stable actor ids as its final tie break");
+
+        Equal(1, DiplomacyActionExpansionRules.OperationDurationYears(
+                capitalDistanceTiles: 0f, diplomacy: 30, intelligence: 30,
+                strongForgery: false),
+            "nearby capable courts finish a basic covert action in one year");
+        Equal(4, DiplomacyActionExpansionRules.OperationDurationYears(
+                capitalDistanceTiles: 500f, diplomacy: 0, intelligence: 0,
+                strongForgery: true),
+            "distant strong forgery is capped at four years");
+        int stableRollA = DiplomacyActionExpansionRules.StablePercentRoll(
+            91, 4, 8, 120, 7);
+        int stableRollB = DiplomacyActionExpansionRules.StablePercentRoll(
+            91, 4, 8, 120, 7);
+        Equal(stableRollA, stableRollB,
+            "covert rolls remain identical after save and reload");
+        True(stableRollA >= 0 && stableRollA < 100,
+            "stable covert rolls remain a percentage");
+        DiplomaticOperationChances capableSpy =
+            DiplomacyActionExpansionRules.OperationChances(
+                sourceDiplomacy: 30, sourceIntelligence: 30,
+                targetDiplomacy: 10, targetIntelligence: 10,
+                forgery: false, strongForgery: false);
+        True(capableSpy.SuccessChance > capableSpy.DiscoveryChance,
+            "a capable court is more likely to establish a hidden network than be exposed");
+        DiplomaticOperationChances strongForgery =
+            DiplomacyActionExpansionRules.OperationChances(
+                sourceDiplomacy: 30, sourceIntelligence: 30,
+                targetDiplomacy: 10, targetIntelligence: 10,
+                forgery: true, strongForgery: true);
+        True(strongForgery.SuccessChance < capableSpy.SuccessChance,
+            "strong document forgery is harder than placing spies");
+        True(strongForgery.DiscoveryChance > capableSpy.DiscoveryChance,
+            "strong document forgery is easier to discover");
+        DiplomaticOperationOutcome operationSuccess =
+            DiplomacyActionExpansionRules.ResolveOperationOutcome(
+                successRoll: 59, discoveryRoll: 29,
+                successChance: 60, discoveryChance: 30);
+        True(operationSuccess.Succeeded && operationSuccess.Discovered,
+            "rolls strictly below their thresholds resolve both outcomes");
+        DiplomaticOperationOutcome operationBoundary =
+            DiplomacyActionExpansionRules.ResolveOperationOutcome(
+                successRoll: 60, discoveryRoll: 30,
+                successChance: 60, discoveryChance: 30);
+        Equal(false, operationBoundary.Succeeded,
+            "a success roll equal to the threshold fails");
+        Equal(false, operationBoundary.Discovered,
+            "a discovery roll equal to the threshold stays hidden");
+        True(DiplomacyActionExpansionRules.NetworkStrengthForSuccess(
+                capableSpy.SuccessChance) >= 40,
+            "a successful spy operation creates a useful network");
+        Equal(28,
+            DiplomacyActionExpansionRules.NetworkExpiryYear(
+                completionYear: 20),
+            "a successful network lasts exactly eight years");
+
+        Equal("spy_network_required",
+            DiplomacyActionExpansionRules.ForgeUnavailableReason(
+                activeSpyNetwork: false, targetCityOwned: true,
+                canFabricate: true, strongForgery: false,
+                networkStrength: 100),
+            "forgery requires an active spy network");
+        Equal("network_too_weak",
+            DiplomacyActionExpansionRules.ForgeUnavailableReason(
+                activeSpyNetwork: true, targetCityOwned: true,
+                canFabricate: true, strongForgery: true,
+                networkStrength: 59),
+            "strong forgery requires sixty network strength");
+        Equal("",
+            DiplomacyActionExpansionRules.ForgeUnavailableReason(
+                activeSpyNetwork: true, targetCityOwned: true,
+                canFabricate: true, strongForgery: true,
+                networkStrength: 60),
+            "a valid network and city enable strong forgery");
+        True(DiplomacyActionExpansionRules.IsModifierActive(
+                currentYear: 20, untilYear: 20),
+            "a relation modifier remains active through its final year");
+        Equal(false, DiplomacyActionExpansionRules.IsModifierActive(
+                currentYear: 21, untilYear: 20),
+            "an expired relation modifier no longer affects opinion");
+
+        Equal("at_war",
+            DiplomacyActionExpansionRules.MarriageUnavailableReason(
+                atWar: true, bothHaveKings: true, activeMarriage: false,
+                hasCandidatePair: true),
+            "realms at war cannot arrange a royal marriage");
+        Equal("no_royal_candidate",
+            DiplomacyActionExpansionRules.MarriageUnavailableReason(
+                atWar: false, bothHaveKings: true, activeMarriage: false,
+                hasCandidatePair: false),
+            "a missing fixed actor pair blocks the proposal");
+        Equal("active_royal_marriage",
+            DiplomacyActionExpansionRules.MarriageUnavailableReason(
+                atWar: false, bothHaveKings: true, activeMarriage: true,
+                hasCandidatePair: true),
+            "an active marriage blocks a duplicate realm marriage");
+        Equal("",
+            DiplomacyActionExpansionRules.MarriageUnavailableReason(
+                atWar: false, bothHaveKings: true, activeMarriage: false,
+                hasCandidatePair: true),
+            "a valid fixed royal pair can be proposed");
+
+        var marriageAssessment = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.RoyalMarriage,
+            new DiplomacyProposalScoreFacts(opinion: 70,
+                requesterPower: 100, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 20, responderDiplomacy: 10,
+                proposedMarriageDirectRoyal: true));
+        True(marriageAssessment.ExpectedAccepted,
+            "friendly courts accept a marriage between direct royal children");
+        True(marriageAssessment.Parts.Any(p =>
+                p.Key == "direct_royal_marriage" && p.Value > 0),
+            "marriage acceptance explains the direct-royal bonus");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(
+            $"{name}: expected true");
+    }
+
+    private static bool TryFindMarriagePair(
+        IReadOnlyList<RoyalMarriageCandidateFacts> requester,
+        IReadOnlyList<RoyalMarriageCandidateFacts> responder,
+        out long requesterActorId, out long responderActorId)
+    {
+        requesterActorId = -1L;
+        responderActorId = -1L;
+        var method = typeof(DiplomacyActionExpansionRules).GetMethod(
+            "TryFindMarriagePair");
+        if (method == null) return false;
+        object[] arguments =
+        {
+            requester, responder,
+            new Func<long, long, bool>((_, _) => false),
+            requesterActorId, responderActorId
+        };
+        bool found = (bool)method.Invoke(null, arguments);
+        requesterActorId = (long)arguments[3];
+        responderActorId = (long)arguments[4];
+        return found;
+    }
+}

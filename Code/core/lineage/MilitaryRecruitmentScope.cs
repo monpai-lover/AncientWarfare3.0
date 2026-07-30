@@ -7,8 +7,10 @@ namespace AncientWarfare3.core.lineage
         None,
         StandingArmy,
         TemporaryLevy,
+        WartimeGarrison,
         RestorationUprising,
         SlaveVanguard,
+        FeudatoryGarrison,
         ExistingSpecialArmy
     }
 
@@ -22,8 +24,15 @@ namespace AncientWarfare3.core.lineage
         public static bool BypassesWarriorCapacity => _current != MilitaryRecruitmentKind.None;
         public static bool SuppressesPermanentEnlistmentHistory =>
             _current == MilitaryRecruitmentKind.TemporaryLevy ||
+            _current == MilitaryRecruitmentKind.WartimeGarrison ||
             _current == MilitaryRecruitmentKind.RestorationUprising ||
             _current == MilitaryRecruitmentKind.SlaveVanguard;
+
+        public static bool ShouldTrackPermanentEnlistmentHistory(
+            bool pNobleActor)
+        {
+            return !SuppressesPermanentEnlistmentHistory || pNobleActor;
+        }
 
         public static IDisposable Open(MilitaryRecruitmentKind pKind)
         {

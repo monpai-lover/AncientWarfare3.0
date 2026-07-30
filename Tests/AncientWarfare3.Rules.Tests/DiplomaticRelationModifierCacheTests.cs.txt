@@ -1,0 +1,44 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomaticRelationModifierCacheTests
+{
+    public static void Run()
+    {
+        var cache = new DiplomaticRelationModifierCache();
+        int loads = 0;
+        DiplomaticRelationModifierLoad Loader(
+            DiplomacyKingdomPair pair, int year)
+        {
+            loads++;
+            return new DiplomaticRelationModifierLoad(35, 20);
+        }
+
+        Equal(35, cache.Read(2, 1, 10, Loader),
+            "the first pair read uses the loader");
+        Equal(35, cache.Read(1, 2, 15, Loader),
+            "the normalized reverse pair reuses the cache");
+        Equal(1, loads,
+            "repeated reads before expiry execute no additional loader");
+        Equal(35, cache.Read(1, 2, 21, Loader),
+            "the first year after expiry reloads active modifiers");
+        Equal(2, loads, "expiry causes exactly one reload");
+
+        cache.Read(3, 4, 10, Loader);
+        Equal(3, loads, "a second pair owns an independent cache entry");
+        cache.Invalidate(2, 1);
+        cache.Read(1, 2, 10, Loader);
+        Equal(4, loads, "a write invalidates only its normalized pair");
+        cache.Read(4, 3, 10, Loader);
+        Equal(4, loads, "another pair remains cached after targeted invalidation");
+        cache.Clear();
+        cache.Read(3, 4, 10, Loader);
+        Equal(5, loads, "world reset clears every cached pair");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

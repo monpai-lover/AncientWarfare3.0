@@ -81,6 +81,52 @@ aw_school_role_scholar,游学先师/传承教师,Resident Scholar,遊學先師/�
 aw_school_event_lecture,讲学,Lecture,講學
 aw_school_event_persuasion,游说,Persuasion,遊說
 aw_school_event_disciple_joined,收徒,Disciple joined,收徒
+aw_hist_event_school_disciple,拜师受业,Became a Disciple,拜師受業
+aw_hist_school_studied_under,师从, studied under ,師從
+aw_hist_event_school_work_authored,著述传世,Work Authored,著述傳世
+aw_hist_event_school_conversion,转投学派,School Conversion,轉投學派
+aw_hist_event_school_rediscovery,学统复兴,School Revival,學統復興
+aw_hist_event_school_debate,百家论辩,School Debate,百家論辯
+aw_hist_event_school_master_death,先师辞世,Master Died,先師辭世
+aw_hist_event_school_master_descent,先师降临,Master Appeared,先師降臨
+aw_hist_event_school_master_travel,先师游学,Master Travelled,先師遊學
+aw_hist_event_school_master_arrival,游学抵达,Master Arrived,遊學抵達
+aw_hist_event_school_guest_service,客卿任官,Guest Court Service,客卿任官
+aw_hist_school_authored,著成, authored ,著成
+aw_hist_school_preserved,传于此城, and preserved it in this city,傳於此城
+aw_hist_school_converted_from,由, converted from ,由
+aw_hist_school_converted_to,转入, to ,轉入
+aw_hist_school_rediscovered,重得, rediscovered ,重得
+aw_hist_school_revived,复兴, and revived ,復興
+aw_hist_school_debated_with,与, debated with ,與
+aw_hist_school_debated_topic,论辩, on ,論辯
+aw_hist_school_outcome_open,（, (,（
+aw_hist_school_outcome_close,）,),）
+aw_hist_school_master_died,逝世, died,逝世
+aw_hist_school_descended_at,降临于, appeared in ,降臨於
+aw_hist_school_descended_here,降临此城, appeared in this city,降臨此城
+aw_hist_school_travelled_to,游学至, travelled to study in ,遊學至
+aw_hist_school_arrived_to_study,来此游学, arrived here to study,來此遊學
+aw_hist_school_served_as,出任, served as ,出任
+aw_hist_school_served_court,入朝为客卿, entered court as a guest scholar,入朝為客卿
+aw_hist_school_topic_livelihood,民生,livelihood,民生
+aw_hist_school_topic_famine,饥荒,famine,飢荒
+aw_hist_school_topic_war,战争,war,戰爭
+aw_hist_school_topic_defense,守御,defense,守禦
+aw_hist_school_topic_aggression,征伐,aggression,征伐
+aw_hist_school_topic_peace,议和,peace,議和
+aw_hist_school_topic_diplomacy,外交,diplomacy,外交
+aw_hist_school_topic_order,治序,order,治序
+aw_hist_school_topic_commerce,商贸,commerce,商貿
+aw_hist_school_topic_technology,技艺,technology,技藝
+aw_hist_school_topic_institutions,制度,institutions,制度
+aw_hist_school_topic_medicine,医道,medicine,醫道
+aw_hist_school_topic_epidemic,疫病,epidemic,疫病
+aw_hist_school_outcome_draw,未分胜负,no clear victor,未分勝負
+aw_hist_school_outcome_narrow_first,前者小胜,the former narrowly prevailed,前者小勝
+aw_hist_school_outcome_decisive_first,前者大胜,the former won decisively,前者大勝
+aw_hist_school_outcome_narrow_second,后者小胜,the latter narrowly prevailed,後者小勝
+aw_hist_school_outcome_decisive_second,后者大胜,the latter won decisively,後者大勝
 aw_school_event_school_conversion,转入学派,School conversion,轉入學派
 aw_school_event_school_rediscovery,学派复兴,School rediscovered,學派復興
 aw_school_event_journey_arrival,游学抵达,Journey arrival,遊學抵達

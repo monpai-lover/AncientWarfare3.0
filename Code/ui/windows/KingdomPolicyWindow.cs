@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.policies;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -55,6 +56,8 @@ namespace AncientWarfare3.ui.windows
         private Transform _canvas;
         private RectTransform _canvasRect;
         private GameObject _dragSurface;
+        private bool _commandPending;
+        private bool _commandRefreshRequested;
 
         public static void Open(long pKingdomId)
         {
@@ -90,11 +93,40 @@ namespace AncientWarfare3.ui.windows
         protected override void Init()
         {
             ConfigureWindow();
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
+        }
+
+        private void OnDestroy()
+        {
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
         }
 
         public override void OnNormalEnable()
         {
             Refresh();
+        }
+
+        private void Update()
+        {
+            if (!_commandRefreshRequested) return;
+            _commandRefreshRequested = false;
+            _commandPending = false;
+            if (isActiveAndEnabled) Refresh();
+        }
+
+        private void OnCommandStateChanged()
+        {
+            _commandRefreshRequested = true;
+        }
+
+        private AW3CommandResult DispatchCommand(AW3CommandRequest pRequest)
+        {
+            if (_commandPending)
+                return AW3CommandResult.Pending("aw3_command_pending");
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(pRequest);
+            _commandPending = result.Status == AW3CommandStatus.Pending;
+            return result;
         }
 
         private void ConfigureWindow()
@@ -360,8 +392,9 @@ namespace AncientWarfare3.ui.windows
             var manual = CreateButtonBox("EnablePolicyManual", AW_L10n.Text("aw_policy_enable_manual", "\u542F\u7528\u56FD\u7B56"),
                 TopLeft(x, buttonY), new Vector2(buttonW, SUMMARY_H), Color.white, () =>
                 {
-                    KingdomPolicyService.SetPolicyEnabled(pKingdom, true);
-                    KingdomPolicyService.SetPolicyAIEnabled(pKingdom, false);
+                    DispatchCommand(
+                        AW3CommandRequest.ConfigurePolicy(
+                            pKingdom.id, true, false));
                     Refresh();
                 });
             SetTip(manual, AW_L10n.Text("aw_policy_enable_manual", "\u542F\u7528\u56FD\u7B56"),
@@ -371,8 +404,9 @@ namespace AncientWarfare3.ui.windows
                 TopLeft(x + buttonW + gap, buttonY), new Vector2(buttonW, SUMMARY_H),
                 new Color(0.78f, 1f, 0.72f, 1f), () =>
                 {
-                    KingdomPolicyService.SetPolicyEnabled(pKingdom, true);
-                    KingdomPolicyService.SetPolicyAIEnabled(pKingdom, true);
+                    DispatchCommand(
+                        AW3CommandRequest.ConfigurePolicy(
+                            pKingdom.id, true, true));
                     Refresh();
                 });
             SetTip(auto, AW_L10n.Text("aw_policy_enable_ai", "\u542F\u7528\u81EA\u52A8"),
@@ -394,8 +428,10 @@ namespace AncientWarfare3.ui.windows
             float gap = 8f;
             float classW = 112f;
             float decisionW = 96f;
+            float lawsW = 72f;
             float aiW = 64f;
-            float currentW = Mathf.Max(150f, width - classW - decisionW - aiW - gap * 3f);
+            float currentW = Mathf.Max(105f,
+                width - classW - decisionW - lawsW - aiW - gap * 4f);
             float x = CONTENT_PAD_X;
 
             var classBox = CreateButtonBox("ClassState", classText, TopLeft(x, pY), new Vector2(classW, SUMMARY_H),
@@ -429,6 +465,18 @@ namespace AncientWarfare3.ui.windows
             SetTip(decisionBox, AW_L10n.Text("aw_policy_decisions", "\u5E38\u6001\u51B3\u7B56"),
                 decision + "\n" + points);
             x += decisionW + gap;
+            var lawsBox = CreateButtonBox("AuxiliaryLaws",
+                AW_L10n.Text("aw_court_auxiliary_laws_entry", "\u8F85\u52A9\u6CD5"),
+                TopLeft(x, pY), new Vector2(lawsW, SUMMARY_H),
+                new Color(0.84f, 0.74f, 0.46f, 1f), () =>
+                {
+                    CourtAuxiliaryLawWindow.Open(pKingdom.id);
+                });
+            SetTip(lawsBox,
+                AW_L10n.Text("aw_court_auxiliary_laws_entry", "\u8F85\u52A9\u6CD5"),
+                AW_L10n.Text("aw_court_auxiliary_laws_entry_desc",
+                    "\u8C03\u6574\u4EFB\u671F\u6CD5 \u8FB9\u9632\u4E4B\u5236\u4E0E\u7528\u5B98\u6587\u5316"));
+            x += lawsW + gap;
             bool aiEnabled = KingdomPolicyService.IsPolicyAIEnabled(pKingdom);
             string aiText = aiEnabled
                 ? AW_L10n.Text("aw_policy_ai_on", "AI\u5F00")
@@ -436,7 +484,10 @@ namespace AncientWarfare3.ui.windows
             var aiBox = CreateButtonBox("PolicyAI", aiText, TopLeft(x, pY), new Vector2(aiW, SUMMARY_H),
                 aiEnabled ? new Color(0.78f, 1f, 0.72f, 1f) : Color.white, () =>
                 {
-                    KingdomPolicyService.SetPolicyAIEnabled(pKingdom, !KingdomPolicyService.IsPolicyAIEnabled(pKingdom));
+                    DispatchCommand(
+                        AW3CommandRequest.ConfigurePolicy(pKingdom.id,
+                            true, !KingdomPolicyService.IsPolicyAIEnabled(
+                                pKingdom)));
                     Refresh();
                 });
             SetTip(aiBox, AW_L10n.Text("aw_policy_ai_toggle", "\u81EA\u52A8\u7814\u53D1"),
@@ -831,7 +882,9 @@ namespace AncientWarfare3.ui.windows
                     active ? pKingdom.getColor().getColorText() : Color.white,
                     () =>
                     {
-                        KingdomPolicyService.ForceSetClassState(pKingdom, classId);
+                        DispatchCommand(
+                            AW3CommandRequest.SetPolicyClass(
+                                pKingdom.id, classId));
                         Refresh();
                     });
 
@@ -891,15 +944,18 @@ namespace AncientWarfare3.ui.windows
                         return;
                     City city = WarTerritoryService.FindFirstCoreProjectTargetCity(pKingdom);
                     if (city?.data != null)
-                        KingdomPolicyService.StartFabricationDecision(pKingdom, pKingdom, city,
-                            WarTerritoryService.PROJECT_CORE);
+                        DispatchCommand(
+                            AW3CommandRequest.StartCoreFabrication(
+                                pKingdom.id, city.data.id,
+                                WarTerritoryService.PROJECT_CORE));
                     Refresh();
                 });
             Image img = box.GetComponent<Image>();
             if (img != null && locked) img.color = NodeLockedBackground();
             else if (img != null && count > 0) img.color = new Color(0.58f, 0.47f, 0.22f, 0.96f);
             var button = box.GetComponent<Button>();
-            if (button != null) button.interactable = !locked;
+            if (button != null)
+                button.interactable = !locked && !_commandPending;
             SetTip(box, AW_L10n.Text("aw_core_fabrication_queue", "\u6838\u5FC3\u961F\u5217"),
                 BuildCoreFabricationSidebarTooltip(pKingdom));
         }
@@ -1182,18 +1238,20 @@ namespace AncientWarfare3.ui.windows
                         NameDecisionWindow.Open(pKingdom.id);
                         return;
                     }
-                    bool changed = forceMode
-                        ? KingdomPolicyService.ForceStartResearch(pKingdom, pDef.Id)
-                        : KingdomPolicyService.StartResearch(pKingdom, pDef.Id);
-                    if (changed)
+                    AW3CommandResult result =
+                        DispatchCommand(
+                            AW3CommandRequest.StartPolicyNode(
+                                pKingdom.id, pDef.Id, forceMode));
+                    if (result.Status != AW3CommandStatus.Rejected)
                         Refresh();
                 }, pParent);
 
             var button = box.GetComponent<Button>();
             if (button != null)
-                button.interactable = !playerLocked && (forceMode
-                    ? status != PolicyNodeStatus.Completed
-                    : status == PolicyNodeStatus.Available);
+                button.interactable = !_commandPending && !playerLocked &&
+                                      (forceMode
+                                          ? status != PolicyNodeStatus.Completed
+                                          : status == PolicyNodeStatus.Available);
 
             Image img = box.GetComponent<Image>();
             if (img != null) img.color = playerLocked ? NodeLockedBackground() : NodeBackground(status);
@@ -1219,7 +1277,12 @@ namespace AncientWarfare3.ui.windows
 
             AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.95f);
             var btn = obj.GetComponent<Button>();
-            btn.onClick.AddListener(() => pClick?.Invoke());
+            btn.interactable = !_commandPending;
+            btn.onClick.AddListener(() =>
+            {
+                if (_commandPending) return;
+                pClick?.Invoke();
+            });
 
             var text = CreateTextObject("Text", obj.transform, pText, new Vector2(4, 0), new Vector2(-4, 0),
                 TextAnchor.MiddleCenter, 9, pTextColor);
@@ -1349,9 +1412,14 @@ namespace AncientWarfare3.ui.windows
                     new Vector2(1f, 0f), new Vector2(-1f, 0f), TextAnchor.MiddleCenter, 8, Color.white);
 
             var button = obj.GetComponent<Button>();
+            button.interactable = !_commandPending;
             button.onClick.AddListener(() =>
             {
-                if (KingdomPolicyService.ToggleNodeLocked(pKingdom, pDef.Id))
+                AW3CommandResult result =
+                    DispatchCommand(
+                        AW3CommandRequest.TogglePolicyNodeLock(
+                            pKingdom.id, pDef.Id));
+                if (result.Status != AW3CommandStatus.Rejected)
                     Refresh();
             });
 

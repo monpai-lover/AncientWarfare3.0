@@ -51,18 +51,57 @@ namespace AncientWarfare3.core.lineage
                     return -1L;
             }
 
+            return SelectBestCity(zoneX, zoneY, neighbours);
+        }
+
+        public static long SelectComponentTargetCity(bool touchesWorldEdge,
+            bool exceededZoneBudget, int componentCenterX,
+            int componentCenterY,
+            IReadOnlyList<EnclosedZoneNeighbourFacts> ownedBoundary)
+        {
+            if (touchesWorldEdge || exceededZoneBudget ||
+                ownedBoundary == null || ownedBoundary.Count == 0)
+                return -1L;
+
+            long enclosingKingdomId = -1L;
+            for (int i = 0; i < ownedBoundary.Count; i++)
+            {
+                EnclosedZoneNeighbourFacts neighbour = ownedBoundary[i];
+                if (!neighbour.IsOwned || !neighbour.IsLive ||
+                    neighbour.CityId < 0L || neighbour.KingdomId < 0L)
+                    return -1L;
+
+                if (enclosingKingdomId < 0L)
+                    enclosingKingdomId = neighbour.KingdomId;
+                else if (neighbour.KingdomId != enclosingKingdomId)
+                    return -1L;
+            }
+
+            return SelectBestCity(componentCenterX, componentCenterY,
+                ownedBoundary);
+        }
+
+        public static bool CanStartComponentScan(
+            int pOwnedCardinalNeighbourCount)
+        {
+            return pOwnedCardinalNeighbourCount >= 2;
+        }
+
+        private static long SelectBestCity(int pCenterX, int pCenterY,
+            IReadOnlyList<EnclosedZoneNeighbourFacts> pCandidates)
+        {
             long bestCityId = -1L;
             int bestSharedSides = -1;
             long bestDistanceSquared = long.MaxValue;
-            for (int i = 0; i < neighbours.Count; i++)
+            for (int i = 0; i < pCandidates.Count; i++)
             {
-                EnclosedZoneNeighbourFacts candidate = neighbours[i];
-                if (AppearedEarlier(neighbours, i, candidate.CityId))
+                EnclosedZoneNeighbourFacts candidate = pCandidates[i];
+                if (AppearedEarlier(pCandidates, i, candidate.CityId))
                     continue;
 
-                int sharedSides = CountSharedSides(neighbours,
+                int sharedSides = CountSharedSides(pCandidates,
                     candidate.CityId);
-                long distanceSquared = DistanceSquared(zoneX, zoneY,
+                long distanceSquared = DistanceSquared(pCenterX, pCenterY,
                     candidate.CityCenterX, candidate.CityCenterY);
                 bool better = sharedSides > bestSharedSides ||
                               sharedSides == bestSharedSides &&

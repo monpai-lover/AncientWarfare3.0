@@ -18,12 +18,12 @@ namespace AncientWarfare3.core.court
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_LAST_YEAR, out int lastYear, -1);
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_DIRTY, out bool dirty, true);
-            if (!dirty && lastYear == year) return Read(pKingdom);
+            if (!dirty && lastYear == year) return ReadCached(pKingdom);
 
             CourtDirectionSnapshot target = CourtDirectionRules.Aggregate(BuildContributions(pKingdom));
             CourtDirectionSnapshot snapshot = lastYear < 0
                 ? target
-                : CourtDirectionRules.Smooth(Read(pKingdom), target, alpha: 0.25f, deadband: 0.03f);
+                : CourtDirectionRules.Smooth(ReadCached(pKingdom), target, alpha: 0.25f, deadband: 0.03f);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_LIVELIHOOD, snapshot.Livelihood);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_WAR, snapshot.War);
             pKingdom.data.set(LineageKeys.COURT_DIRECTION_AGGRESSION, snapshot.Aggression);
@@ -36,7 +36,7 @@ namespace AncientWarfare3.core.court
             return snapshot;
         }
 
-        private static CourtDirectionSnapshot Read(Kingdom pKingdom)
+        internal static CourtDirectionSnapshot ReadCached(Kingdom pKingdom)
         {
             var result = new CourtDirectionSnapshot();
             pKingdom.data.get(LineageKeys.COURT_DIRECTION_LIVELIHOOD, out result.Livelihood, 0.5f);

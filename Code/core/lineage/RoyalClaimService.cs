@@ -8,6 +8,13 @@ namespace AncientWarfare3.core.lineage
 {
     internal static class RoyalClaimService
     {
+        internal enum WarGoalRestorationApplicationState
+        {
+            NotApplied,
+            Applied,
+            Ambiguous
+        }
+
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
         private static readonly HashSet<long> ActiveClaimantIds = new HashSet<long>();
@@ -37,11 +44,84 @@ namespace AncientWarfare3.core.lineage
             public long anchorActorId;
             public long parentClaimId;
             public int generation;
+            public string extinctionCause;
+            public int earliestAutonomousYear;
             public long originalCapitalCityId;
             public long originalMandatePeriodId;
             public int strength;
             public string restoreMode;
             public string restorationState;
+        }
+
+        internal readonly struct TreatyAnnexationMarker
+        {
+            public TreatyAnnexationMarker(Kingdom pKingdom,
+                string pPreviousCause, int pPreviousEarliestYear,
+                int pPreparedYear)
+            {
+                Kingdom = pKingdom;
+                PreviousCause = pPreviousCause ?? "kingdom_fall";
+                PreviousEarliestYear = pPreviousEarliestYear;
+                PreparedYear = pPreparedYear;
+            }
+
+            public Kingdom Kingdom { get; }
+            public string PreviousCause { get; }
+            public int PreviousEarliestYear { get; }
+            public int PreparedYear { get; }
+            public bool Prepared => Kingdom?.data != null;
+        }
+
+        internal static TreatyAnnexationMarker PrepareTreatyAnnexation(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return default;
+            int year = Date.getCurrentYear();
+            pKingdom.data.get(LineageKeys.KINGDOM_EXTINCTION_CAUSE,
+                out string previousCause, "kingdom_fall");
+            pKingdom.data.get(LineageKeys.KINGDOM_EARLIEST_AUTONOMOUS_YEAR,
+                out int previousEarliestYear, year);
+            pKingdom.data.set(LineageKeys.KINGDOM_EXTINCTION_CAUSE,
+                "treaty_annexation");
+            pKingdom.data.set(LineageKeys.KINGDOM_EARLIEST_AUTONOMOUS_YEAR,
+                RoyalRestorationRules.EarliestAutonomousYear(
+                    year, "treaty_annexation"));
+            return new TreatyAnnexationMarker(pKingdom, previousCause,
+                previousEarliestYear, year);
+        }
+
+        internal static void RollbackTreatyAnnexation(
+            TreatyAnnexationMarker pMarker)
+        {
+            if (!pMarker.Prepared) return;
+            pMarker.Kingdom.data.set(LineageKeys.KINGDOM_EXTINCTION_CAUSE,
+                pMarker.PreviousCause);
+            pMarker.Kingdom.data.set(
+                LineageKeys.KINGDOM_EARLIEST_AUTONOMOUS_YEAR,
+                pMarker.PreviousEarliestYear);
+            if (!Ready) return;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = $"UPDATE {RoyalClaimTableItem.GetTableName()} SET " +
+                                      "EXTINCTION_CAUSE=@cause, EARLIEST_AUTONOMOUS_YEAR=@earliest " +
+                                      "WHERE ORIGINAL_KINGDOM_ID=@kingdom AND ACTIVE=1 " +
+                                      "AND EXTINCTION_CAUSE='treaty_annexation' " +
+                                      "AND EARLIEST_AUTONOMOUS_YEAR=@prepared";
+                command.Parameters.AddWithValue("@cause", pMarker.PreviousCause);
+                command.Parameters.AddWithValue("@earliest",
+                    pMarker.PreviousEarliestYear);
+                command.Parameters.AddWithValue("@kingdom", pMarker.Kingdom.id);
+                command.Parameters.AddWithValue("@prepared",
+                    RoyalRestorationRules.EarliestAutonomousYear(
+                        pMarker.PreparedYear, "treaty_annexation"));
+                command.ExecuteNonQuery();
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Treaty annexation marker rollback failed: " +
+                                    e.Message);
+            }
         }
 
         public static void CreateClaimsFromFallenKingdom(Kingdom pKingdom)
@@ -53,6 +133,16 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.get(LineageKeys.KINGDOM_HEIR_ID, out long heirId, -1L);
             long capitalId = ResolveOriginalCapitalId(pKingdom);
             long mandatePeriodId = ResolveOriginalMandatePeriodId(pKingdom);
+            int extinctionYear = Date.getCurrentYear();
+            pKingdom.data.get(LineageKeys.KINGDOM_EXTINCTION_CAUSE,
+                out string extinctionCause, "kingdom_fall");
+            if (string.IsNullOrEmpty(extinctionCause))
+                extinctionCause = "kingdom_fall";
+            pKingdom.data.get(LineageKeys.KINGDOM_EARLIEST_AUTONOMOUS_YEAR,
+                out int storedEarliestYear, extinctionYear);
+            int earliestAutonomousYear = Math.Max(storedEarliestYear,
+                RoyalRestorationRules.EarliestAutonomousYear(
+                    extinctionYear, extinctionCause));
             var frontier = new List<long> { anchorId };
             var visited = new HashSet<long> { anchorId };
             int inspected = 0;
@@ -74,7 +164,9 @@ namespace AncientWarfare3.core.lineage
                                 ? 85
                                 : RoyalRestorationRules.InheritedClaimStrength(85, generation);
                         CreateClaim(actor, pKingdom, anchorId, -1L, generation,
-                            "kingdom_fall", capitalId, mandatePeriodId, strength);
+                            "kingdom_fall", extinctionCause,
+                            earliestAutonomousYear, capitalId,
+                            mandatePeriodId, strength);
                     }
 
                     if (generation >= RoyalRestorationRules.MaxClaimGeneration) continue;
@@ -208,6 +300,95 @@ namespace AncientWarfare3.core.lineage
                 pTargetCity);
         }
 
+        internal static bool TryApplyWarGoalRestoration(Kingdom pHost,
+            Kingdom pDefender, long pWarId, long pClaimId,
+            City pTargetCity, out string pReason)
+        {
+            WarGoalRestorationApplicationState state =
+                InspectWarGoalRestoration(pHost, pDefender, pClaimId,
+                    pTargetCity, out pReason);
+            if (state == WarGoalRestorationApplicationState.Applied)
+                return true;
+            if (state != WarGoalRestorationApplicationState.NotApplied)
+                return false;
+
+            try
+            {
+                OnRestorationWarWon(pHost, pDefender, pWarId, pClaimId,
+                    pTargetCity);
+            }
+            catch (Exception exception)
+            {
+                pReason = "restoration_exception:" +
+                          exception.GetType().Name;
+                return false;
+            }
+
+            state = InspectWarGoalRestoration(pHost, pDefender, pClaimId,
+                pTargetCity, out pReason);
+            if (state == WarGoalRestorationApplicationState.Applied)
+                return true;
+            if (string.IsNullOrEmpty(pReason))
+                pReason = "restoration_not_applied";
+            return false;
+        }
+
+        internal static WarGoalRestorationApplicationState
+            InspectWarGoalRestoration(Kingdom pHost, Kingdom pDefender,
+                long pClaimId, City pTargetCity, out string pReason)
+        {
+            pReason = "";
+            if (!Ready || pHost?.data == null || pDefender?.data == null ||
+                pClaimId < 0 || pTargetCity?.data == null)
+            {
+                pReason = "restoration_state_unavailable";
+                return WarGoalRestorationApplicationState.Ambiguous;
+            }
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "SELECT ORIGINAL_KINGDOM_ID,ACTIVE," +
+                                      "RESTORATION_STATE,RESOLVED_REASON FROM " +
+                                      RoyalClaimTableItem.GetTableName() +
+                                      " WHERE CLAIM_ID=@claim LIMIT 1";
+                command.Parameters.AddWithValue("@claim", pClaimId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read())
+                {
+                    pReason = "restoration_claim_missing";
+                    return WarGoalRestorationApplicationState.Ambiguous;
+                }
+                long originalKingdomId = reader.IsDBNull(0) ? -1L :
+                    reader.GetInt64(0);
+                bool active = !reader.IsDBNull(1) &&
+                              reader.GetInt32(1) != 0;
+                string restorationState = reader.IsDBNull(2) ? "" :
+                    reader.GetString(2);
+                string resolvedReason = reader.IsDBNull(3) ? "" :
+                    reader.GetString(3);
+                if (!active && restorationState == "resolved" &&
+                    resolvedReason == "restoration_won")
+                    return WarGoalRestorationApplicationState.Applied;
+
+                Kingdom owner = pTargetCity.kingdom;
+                if (owner?.data != null && owner.id == originalKingdomId &&
+                    VassalService.GetSuzerain(owner) == pHost)
+                    return WarGoalRestorationApplicationState.Applied;
+                if (active && restorationState == "dormant" &&
+                    owner == pDefender)
+                    return WarGoalRestorationApplicationState.NotApplied;
+
+                pReason = "restoration_state_ambiguous";
+                return WarGoalRestorationApplicationState.Ambiguous;
+            }
+            catch (Exception exception)
+            {
+                pReason = "restoration_state_exception:" +
+                          exception.GetType().Name;
+                return WarGoalRestorationApplicationState.Ambiguous;
+            }
+        }
+
         private static void RecordRestoreSuccess(Kingdom pHost, Kingdom pDefender, string pEventType,
             string pResolveReason, long pWarId = -1L, long pClaimId = -1L, City pTargetCity = null)
         {
@@ -226,18 +407,24 @@ namespace AncientWarfare3.core.lineage
 
             Kingdom restored = TryRestoreKingdomForClaim(pHost, claimant, claim, pTargetCity, pWarId);
             if (restored?.data == null) return;
-            HistoryText text = HistoryText.Kingdom(pHost) + " \u4ee5" +
+            HistoryText text = HistoryText.Kingdom(pHost) +
+                               HistoryLocalizationRules.H("aw_hist_royal_claim_host_mid") +
                                HistoryText.Actor(claimant, claim.claimantName) +
-                               " \u7684\u65e7\u56fd\u8840\u7edf\u53d1\u8d77\u590d\u56fd\u6218\u4e89\uff0c\u5ba3\u79f0\u6062\u590d " +
-                               HistoryText.Colored(claim.originalKingdomName, "") + " \u65e7\u7edf";
+                               HistoryLocalizationRules.H("aw_hist_royal_claim_host_suffix") +
+                               HistoryText.Colored(claim.originalKingdomName, "") +
+                               HistoryLocalizationRules.H("aw_hist_royal_claim_old_order_suffix");
             HistoryWriter.RecordKingdom(pHost, pEventType, text, HistoryTarget.Actor(claim.claimantId));
             if (claimant?.data != null)
                 HistoryWriter.RecordPerson(claimant.data.id, pHost, claimant.getName(), "reclaim_claim",
                     text, ChronicleCategory.HONOR, HistoryTarget.Kingdom(pHost));
             if (restored?.data != null)
                 HistoryWriter.RecordKingdom(restored, "restoration_kingdom_restored",
-                    HistoryText.Actor(claimant, claim.claimantName) + " \u590d\u5efa" +
-                    HistoryText.Kingdom(restored) + "\uff0c\u5949" + HistoryText.Kingdom(pHost) + " \u4e3a\u5b97\u4e3b",
+                    HistoryText.Actor(claimant, claim.claimantName) +
+                    HistoryLocalizationRules.H("aw_hist_royal_claim_restored_mid") +
+                    HistoryText.Kingdom(restored) +
+                    HistoryLocalizationRules.H("aw_hist_royal_claim_suzerain_mid") +
+                    HistoryText.Kingdom(pHost) +
+                    HistoryLocalizationRules.H("aw_hist_royal_claim_suzerain_suffix"),
                     HistoryTarget.Kingdom(pHost));
 
             ResolveAllClaimsForKingdom(claim.originalKingdomId, pResolveReason);
@@ -279,7 +466,9 @@ namespace AncientWarfare3.core.lineage
 
         private static long CreateClaim(Actor pClaimant, Kingdom pOriginalKingdom,
             long pAnchorActorId, long pParentClaimId, int pGeneration, string pOrigin,
-            long pOriginalCapitalCityId, long pOriginalMandatePeriodId, int pStrength)
+            string pExtinctionCause, int pEarliestAutonomousYear,
+            long pOriginalCapitalCityId, long pOriginalMandatePeriodId,
+            int pStrength)
         {
             if (pClaimant?.data == null || pOriginalKingdom?.data == null) return -1L;
             bool duplicate = HasActiveClaim(pClaimant.data.id, pOriginalKingdom.id);
@@ -308,6 +497,10 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("PARENT_CLAIM_ID", pParentClaimId),
                 ColumnVal.Create("CLAIM_GENERATION", pGeneration),
                 ColumnVal.Create("CLAIM_ORIGIN", pOrigin ?? ""),
+                ColumnVal.Create("EXTINCTION_CAUSE",
+                    pExtinctionCause ?? "kingdom_fall"),
+                ColumnVal.Create("EARLIEST_AUTONOMOUS_YEAR",
+                    pEarliestAutonomousYear),
                 ColumnVal.Create("ORIGINAL_CAPITAL_CITY_ID", pOriginalCapitalCityId),
                 ColumnVal.Create("ORIGINAL_MANDATE_PERIOD_ID", pOriginalMandatePeriodId),
                 ColumnVal.Create("CLAIM_STRENGTH", pStrength),
@@ -323,8 +516,10 @@ namespace AncientWarfare3.core.lineage
 
             ActiveClaimantIds.Add(pClaimant.data.id);
             HistoryWriter.RecordPerson(pClaimant.data.id, pClaimant.kingdom, pClaimant.getName(), "royal_claim",
-                HistoryText.Actor(pClaimant) + " \u83b7\u5f97 " + HistoryText.Kingdom(pOriginalKingdom) +
-                " \u590d\u56fd\u5ba3\u79f0",
+                HistoryText.Actor(pClaimant) +
+                HistoryLocalizationRules.H("aw_hist_royal_claim_gained_mid") +
+                HistoryText.Kingdom(pOriginalKingdom) +
+                HistoryLocalizationRules.H("aw_hist_royal_claim_gained_suffix"),
                 ChronicleCategory.HONOR, HistoryTarget.Kingdom(pOriginalKingdom));
             return claimId;
         }
@@ -359,6 +554,12 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("PARENT_CLAIM_ID", pParentClaim.claimId),
                 ColumnVal.Create("CLAIM_GENERATION", pGeneration),
                 ColumnVal.Create("CLAIM_ORIGIN", "birth_inheritance"),
+                ColumnVal.Create("EXTINCTION_CAUSE",
+                    pParentClaim.extinctionCause ?? "kingdom_fall"),
+                ColumnVal.Create("EARLIEST_AUTONOMOUS_YEAR",
+                    RoyalRestorationRules.InheritedEarliestAutonomousYear(
+                        pParentClaim.earliestAutonomousYear,
+                        pParentClaim.earliestAutonomousYear)),
                 ColumnVal.Create("ORIGINAL_CAPITAL_CITY_ID", pParentClaim.originalCapitalCityId),
                 ColumnVal.Create("ORIGINAL_MANDATE_PERIOD_ID", pParentClaim.originalMandatePeriodId),
                 ColumnVal.Create("CLAIM_STRENGTH", strength),
@@ -373,9 +574,11 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("RESOLVED_REASON", ""));
 
             ActiveClaimantIds.Add(pBaby.data.id);
-            HistoryText text = HistoryText.Actor(pBaby) + " \u627f\u7eed " +
+            HistoryText text = HistoryText.Actor(pBaby) +
+                               HistoryLocalizationRules.H("aw_hist_royal_claim_inherited_mid") +
                                HistoryText.Colored(pParentClaim.originalKingdomName,
-                                   pParentClaim.originalKingdomColor) + " \u590d\u56fd\u5ba3\u79f0";
+                                   pParentClaim.originalKingdomColor) +
+                               HistoryLocalizationRules.H("aw_hist_royal_claim_gained_suffix");
             HistoryWriter.RecordPerson(pBaby.data.id, pBaby.kingdom, pBaby.getName(), "royal_claim_inherited",
                 text, ChronicleCategory.HONOR,
                 HistoryTarget.From("kingdom", pParentClaim.originalKingdomId));
@@ -391,7 +594,8 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText =
                     $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
                     $"ORIGINAL_KINGDOM_NAME, ORIGINAL_KINGDOM_COLOR, LINEAGE_ID, SHI_ID, CLAN_NAME, " +
-                    $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, ORIGINAL_CAPITAL_CITY_ID, " +
+                    $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, EXTINCTION_CAUSE, " +
+                    $"EARLIEST_AUTONOMOUS_YEAR, ORIGINAL_CAPITAL_CITY_ID, " +
                     $"ORIGINAL_MANDATE_PERIOD_ID, CLAIM_STRENGTH, RESTORE_MODE, RESTORATION_STATE " +
                     $"FROM {RoyalClaimTableItem.GetTableName()} " +
                     "WHERE CLAIMANT_ACTOR_ID=@a AND ACTIVE=1 AND CLAIM_GENERATION<@max " +
@@ -419,10 +623,12 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText = FullClaimSelect() +
                                   " WHERE ACTIVE=1 AND RESTORATION_STATE='dormant' " +
                                   "AND IFNULL(RESTORE_MODE,'')='' AND CLAIM_STRENGTH>=@strength " +
+                                  "AND EARLIEST_AUTONOMOUS_YEAR<=@year " +
                                   "AND (LAST_ATTEMPT_YEAR<0 OR LAST_ATTEMPT_YEAR<=@retry) " +
                                   "ORDER BY CLAIM_STRENGTH DESC, CLAIM_GENERATION ASC, CREATED_TIME ASC, CLAIM_ID ASC " +
                                   "LIMIT @lim";
                 cmd.Parameters.AddWithValue("@strength", RoyalRestorationRules.AiMinimumClaimStrength);
+                cmd.Parameters.AddWithValue("@year", pYear);
                 cmd.Parameters.AddWithValue("@retry", pYear - RestorationCampaignRules.AiRetryCooldownYears);
                 cmd.Parameters.AddWithValue("@lim", pLimit);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
@@ -449,6 +655,32 @@ namespace AncientWarfare3.core.lineage
                 return reader.Read() ? ReadFullClaimRow(reader) : result;
             }
             catch { return result; }
+        }
+
+        internal static List<ClaimRow> GetDormantClaimsForActor(
+            long pActorId, int pLimit)
+        {
+            var result = new List<ClaimRow>();
+            if (!Ready || pActorId < 0 || pLimit <= 0) return result;
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = FullClaimSelect() +
+                                  " WHERE CLAIMANT_ACTOR_ID=@a AND ACTIVE=1 " +
+                                  "AND RESTORATION_STATE='dormant' " +
+                                  "AND IFNULL(RESTORE_MODE,'')='' " +
+                                  "ORDER BY CLAIM_STRENGTH DESC, CLAIM_ID ASC LIMIT @lim";
+                cmd.Parameters.AddWithValue("@a", pActorId);
+                cmd.Parameters.AddWithValue("@lim", pLimit);
+                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                while (reader.Read()) result.Add(ReadFullClaimRow(reader));
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Restoration rebellion claim read failed: " + e.Message);
+            }
+            return result;
         }
 
         internal static long FindBestDormantClaimIdForActor(long pActorId)
@@ -484,12 +716,29 @@ namespace AncientWarfare3.core.lineage
         internal static long BeginSelfCampaign(ClaimRow pClaim, Actor pClaimant, City pSeed,
             string pCoreIds, int pControlled, int pTotal, int pYear)
         {
-            if (!Ready || pClaim.claimId < 0 || pClaimant?.data == null || pSeed?.data == null) return -1L;
-            long campaignId = TableIdAllocator.Next(DB,
-                RestorationCampaignTableItem.GetTableName(), "CAMPAIGN_ID");
+            if (!Ready || pClaim.claimId < 0 || pClaimant?.data == null ||
+                pSeed?.data == null ||
+                !RoyalRestorationRules.IsAutonomousYearEligible(
+                    pYear, pClaim.earliestAutonomousYear)) return -1L;
             using var transaction = DB.BeginTransaction();
             try
             {
+                using (var yearly = new SQLiteCommand(DB))
+                {
+                    yearly.Transaction = transaction;
+                    yearly.CommandText = $"SELECT COUNT(*) FROM {RestorationCampaignTableItem.GetTableName()} " +
+                                         "WHERE STARTED_YEAR=@year";
+                    yearly.Parameters.AddWithValue("@year", pYear);
+                    if (Convert.ToInt32(yearly.ExecuteScalar()) >=
+                        RoyalRestorationRules.MaxAnnualStarts)
+                    {
+                        transaction.Rollback();
+                        return -1L;
+                    }
+                }
+                long campaignId = TableIdAllocator.Next(DB,
+                    RestorationCampaignTableItem.GetTableName(),
+                    "CAMPAIGN_ID");
                 using (var suspend = new SQLiteCommand(DB))
                 {
                     suspend.Transaction = transaction;
@@ -561,6 +810,49 @@ namespace AncientWarfare3.core.lineage
             cmd.ExecuteNonQuery();
         }
 
+        internal static bool MarkSelfCampaignRollbackPending(
+            long pCampaignId, long pOriginalKingdomId,
+            long pSeedOwnerId, long pPreviousClaimantKingdomId,
+            long pPreviousClaimantCityId, int pYear, int pAttempts)
+        {
+            if (!Ready || pCampaignId < 0 || pOriginalKingdomId < 0)
+                return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText =
+                    $"UPDATE {RestorationCampaignTableItem.GetTableName()} SET " +
+                    "STATE='rollback_pending', RESULT='initial_cohort_failed', " +
+                    "ROLLBACK_SEED_OWNER_ID=@owner, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_KINGDOM_ID=@host, " +
+                    "ROLLBACK_PREVIOUS_CLAIMANT_CITY_ID=@city, " +
+                    "ROLLBACK_ATTEMPTS=ROLLBACK_ATTEMPTS+@attempts, " +
+                    "LAST_ATTEMPT_YEAR=@year, ACTIVE_WAR_ID=-1, " +
+                    "TARGET_CITY_ID=-1, TARGET_KINGDOM_ID=-1 " +
+                    "WHERE CAMPAIGN_ID=@id AND ORIGINAL_KINGDOM_ID=@kingdom " +
+                    "AND STATE IN ('uprising','rollback_pending')";
+                command.Parameters.AddWithValue("@owner", pSeedOwnerId);
+                command.Parameters.AddWithValue("@host",
+                    pPreviousClaimantKingdomId);
+                command.Parameters.AddWithValue("@city",
+                    pPreviousClaimantCityId);
+                command.Parameters.AddWithValue("@attempts",
+                    Math.Max(0, pAttempts));
+                command.Parameters.AddWithValue("@year", pYear);
+                command.Parameters.AddWithValue("@id", pCampaignId);
+                command.Parameters.AddWithValue("@kingdom",
+                    pOriginalKingdomId);
+                return command.ExecuteNonQuery() == 1;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(
+                    "Self restoration rollback persistence failed: " +
+                    e.Message);
+                return false;
+            }
+        }
+
         internal static bool CompleteSelfCampaign(long pCampaignId,
             long pOriginalKingdomId, string pReason)
         {
@@ -621,7 +913,7 @@ namespace AncientWarfare3.core.lineage
                                            "STATE='failed', COMPLETED_TIME=@time, RESULT=@reason, " +
                                            "ACTIVE_WAR_ID=-1, TARGET_CITY_ID=-1, TARGET_KINGDOM_ID=-1 " +
                                            "WHERE CAMPAIGN_ID=@id AND ORIGINAL_KINGDOM_ID=@k " +
-                                           "AND STATE='uprising'";
+                                           "AND STATE IN ('uprising','rollback_pending')";
                     campaign.Parameters.AddWithValue("@time", LineageService.CurTime());
                     campaign.Parameters.AddWithValue("@reason", pReason ?? "restoration_regime_fell");
                     campaign.Parameters.AddWithValue("@id", pCampaignId);
@@ -713,11 +1005,15 @@ namespace AncientWarfare3.core.lineage
                 anchorActorId = pReader.IsDBNull(9) ? -1L : pReader.GetInt64(9),
                 parentClaimId = pReader.IsDBNull(10) ? -1L : pReader.GetInt64(10),
                 generation = pReader.IsDBNull(11) ? 0 : pReader.GetInt32(11),
-                originalCapitalCityId = pReader.IsDBNull(12) ? -1L : pReader.GetInt64(12),
-                originalMandatePeriodId = pReader.IsDBNull(13) ? -1L : pReader.GetInt64(13),
-                strength = pReader.IsDBNull(14) ? 0 : pReader.GetInt32(14),
-                restoreMode = pReader.IsDBNull(15) ? "" : pReader.GetString(15),
-                restorationState = pReader.IsDBNull(16) ? "dormant" : pReader.GetString(16)
+                extinctionCause = pReader.IsDBNull(12)
+                    ? "kingdom_fall" : pReader.GetString(12),
+                earliestAutonomousYear = pReader.IsDBNull(13)
+                    ? 0 : pReader.GetInt32(13),
+                originalCapitalCityId = pReader.IsDBNull(14) ? -1L : pReader.GetInt64(14),
+                originalMandatePeriodId = pReader.IsDBNull(15) ? -1L : pReader.GetInt64(15),
+                strength = pReader.IsDBNull(16) ? 0 : pReader.GetInt32(16),
+                restoreMode = pReader.IsDBNull(17) ? "" : pReader.GetString(17),
+                restorationState = pReader.IsDBNull(18) ? "dormant" : pReader.GetString(18)
             };
         }
 
@@ -801,7 +1097,8 @@ namespace AncientWarfare3.core.lineage
         {
             return $"SELECT CLAIM_ID, CLAIMANT_ACTOR_ID, CLAIMANT_NAME, ORIGINAL_KINGDOM_ID, " +
                    $"ORIGINAL_KINGDOM_NAME, ORIGINAL_KINGDOM_COLOR, LINEAGE_ID, SHI_ID, CLAN_NAME, " +
-                   $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, ORIGINAL_CAPITAL_CITY_ID, " +
+                   $"ANCHOR_ACTOR_ID, PARENT_CLAIM_ID, CLAIM_GENERATION, EXTINCTION_CAUSE, " +
+                   $"EARLIEST_AUTONOMOUS_YEAR, ORIGINAL_CAPITAL_CITY_ID, " +
                    $"ORIGINAL_MANDATE_PERIOD_ID, CLAIM_STRENGTH, RESTORE_MODE, RESTORATION_STATE " +
                    $"FROM {RoyalClaimTableItem.GetTableName()}";
         }

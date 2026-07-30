@@ -804,8 +804,11 @@ namespace AncientWarfare3.core.lineage
                             !pChild.hasTrait("madness") &&
                             !SlaveService.IsSlave(pChild);
             pActors[pChild.data.id] = pChild;
+            pChild.data.get(LineageKeys.BIRTH_LEGITIMACY,
+                out bool legitimateBirth, true);
             pCandidates.Add(new HeirDirectSonCandidate(pChild.data.id,
-                eligible, SafeCreatedTime(pChild), SafeIsAdult(pChild)));
+                eligible, SafeCreatedTime(pChild), SafeIsAdult(pChild),
+                legitimateBirth));
         }
 
         private static bool IsHeirBaseEligible(Actor pActor, Kingdom pKingdom, Actor pKing)

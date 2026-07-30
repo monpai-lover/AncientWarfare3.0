@@ -30,6 +30,8 @@ namespace AncientWarfare3.core.schools
                     out HistoricalSchoolAffiliationSnapshot nextState);
                 HistoricalSchoolRevisionService.ApplyAffiliationChange(
                     oldState, nextState);
+                HistoricalSchoolJourneyArrivalRevision.MarkActorChanged(
+                    actorId);
                 SchoolMembershipService.RefreshRuntimeIndex(actorId);
             }
         }
@@ -38,6 +40,7 @@ namespace AncientWarfare3.core.schools
         {
             long[] actorIds = ByActor.Keys.ToArray();
             ByActor.Clear();
+            HistoricalSchoolJourneyArrivalRevision.Clear();
             HistoricalSchoolRevisionService.Clear();
             foreach (long actorId in actorIds)
                 SchoolMembershipService.RefreshRuntimeIndex(actorId);
@@ -197,6 +200,33 @@ namespace AncientWarfare3.core.schools
             return !ReferenceEquals(next, current) && Save(next);
         }
 
+        internal static bool TryPrepareArrival(Actor pActor, long pCityId,
+            int pYear, out HistoricalSchoolAffiliationSnapshot pPrevious,
+            out HistoricalSchoolAffiliationSnapshot pDesired)
+        {
+            pPrevious = Get(pActor?.data?.id ?? -1L);
+            pDesired = pPrevious;
+            if (!IsUsable(pActor, pPrevious)) return false;
+            HistoricalSchoolAffiliationSnapshot next =
+                pPrevious.Arrive(pCityId, pYear);
+            if (ReferenceEquals(next, pPrevious)) return false;
+            pDesired = next;
+            return true;
+        }
+
+        internal static bool ApplyPersistedTransition(
+            HistoricalSchoolAffiliationSnapshot pPrevious,
+            HistoricalSchoolAffiliationSnapshot pDesired)
+        {
+            if (pPrevious == null || pDesired == null ||
+                pPrevious.ActorId != pDesired.ActorId) return false;
+            HistoricalSchoolAffiliationSnapshot current = Get(pPrevious.ActorId);
+            if (SnapshotExact(current, pDesired)) return true;
+            if (!SnapshotExact(current, pPrevious)) return false;
+            ApplyCommittedState(current, pDesired);
+            return true;
+        }
+
         internal static bool RollbackArrival(Actor pActor,
             HistoricalSchoolAffiliationSnapshot pPrevious)
         {
@@ -241,17 +271,6 @@ namespace AncientWarfare3.core.schools
             if (!IsUsable(pActor, current) || current.ServiceKingdomId >= 0) return false;
             HistoricalSchoolAffiliationSnapshot next = current.BeginVoyage(pStartYear,
                 pArrivalYear);
-            return !ReferenceEquals(next, current) && Save(next);
-        }
-
-        public static bool TryBeginService(Actor pActor, Kingdom pKingdom, int pStartYear,
-            int pEndYear)
-        {
-            HistoricalSchoolAffiliationSnapshot current = Get(pActor?.data?.id ?? -1L);
-            if (!IsUsable(pActor, current) || pKingdom?.data == null || pKingdom.isRekt())
-                return false;
-            HistoricalSchoolAffiliationSnapshot next = current.BeginService(pKingdom.id,
-                pStartYear, pEndYear);
             return !ReferenceEquals(next, current) && Save(next);
         }
 
@@ -354,6 +373,13 @@ namespace AncientWarfare3.core.schools
             HistoricalSchoolAffiliationSnapshot state = Get(actorId);
             if (state == null || pTarget == null || pTarget == pActor.kingdom) return true;
 
+            City currentCity = pActor.city;
+            if (SchoolAffiliationTransferRules.AllowsCitySovereigntyTransfer(
+                    actorHasLiveCity: currentCity?.data != null &&
+                                      !currentCity.isRekt(),
+                    targetMatchesActorCityKingdom:
+                        currentCity?.kingdom == pTarget)) return true;
+
             Kingdom source = pActor.kingdom;
             KingdomManager manager = World.world?.kingdoms;
             bool sourceIsLiveCivilization =
@@ -408,6 +434,7 @@ namespace AncientWarfare3.core.schools
             if (actorId < 0) return;
             if (pNextState == null) ByActor.Remove(actorId);
             else ByActor[actorId] = pNextState;
+            HistoricalSchoolJourneyArrivalRevision.MarkActorChanged(actorId);
             HistoricalSchoolRevisionService.ApplyAffiliationChange(
                 pOldState, pNextState);
             SchoolMembershipService.RefreshRuntimeIndex(actorId);

@@ -1,0 +1,395 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class ConferredPosthumousTitleSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+        Seed(db);
+
+        var query = new ConferredPosthumousTitleQuery(db);
+        List<ConferredPosthumousCandidateRecord> candidates =
+            query.ReadCandidates(7, 500, 500);
+
+        Equal(4, candidates.Count,
+            "only four dead historical figures qualify");
+        Equal(11L, candidates[0].ActorId, "former ruler sorts first");
+        Equal(ConferredPosthumousRole.FormerRuler |
+              ConferredPosthumousRole.Royal |
+              ConferredPosthumousRole.Official,
+            candidates[0].Roles,
+            "multiple records merge into one role mask");
+        HasActor(candidates, 12, ConferredPosthumousRole.Royal);
+        HasActor(candidates, 13, ConferredPosthumousRole.Official);
+        HasActor(candidates, 14, ConferredPosthumousRole.General);
+        MissingActor(candidates, 15, "living official is excluded");
+        MissingActor(candidates, 16, "unrelated civilian is excluded");
+        MissingActor(candidates, 17, "already titled official is excluded");
+        True(candidates.Count <= ConferredPosthumousTitleRules.MaximumCandidates,
+            "requested limits are clamped to 96");
+        ConferredPosthumousCandidateRecord official = candidates.First(
+            pCandidate => pCandidate.ActorId == 13);
+        Equal(7, official.NobleRank,
+            "lightweight candidate keeps highest noble rank");
+        Equal(16, official.HighestOfficeRank,
+            "lightweight candidate keeps highest official rank");
+        Equal(8, official.TenureYears,
+            "lightweight candidate keeps persisted tenure");
+        Equal(260, official.CivilMerit,
+            "lightweight candidate keeps normalized civil merit");
+        ConferredPosthumousCandidateRecord general = candidates.First(
+            pCandidate => pCandidate.ActorId == 14);
+        Equal(300, general.GeneralMerit,
+            "lightweight candidate keeps general merit");
+
+        True(query.TryReadTarget(7, 500, 11,
+                out ConferredPosthumousTargetRecord former),
+            "single-actor target lookup finds a former ruler");
+        False(former.IsAlive, "single-actor target preserves death state");
+        Equal(ConferredPosthumousRole.FormerRuler |
+              ConferredPosthumousRole.Royal |
+              ConferredPosthumousRole.Official,
+            former.Roles, "single-actor target merges all roles");
+        True(query.TryReadTarget(7, 500, 15,
+                out ConferredPosthumousTargetRecord living),
+            "single-actor target lookup finds a living official");
+        True(living.IsAlive, "living state remains explicit");
+        True(query.TryReadTarget(7, 500, 16,
+                out ConferredPosthumousTargetRecord unrelated),
+            "single-actor target lookup finds an unrelated archive row");
+        Equal(ConferredPosthumousRole.None, unrelated.Roles,
+            "unrelated archive row gains no historical role");
+
+        Equal(100d, query.ReadLastConferredTime(7),
+            "latest committed title owns cooldown");
+        Equal(-1d, query.ReadLastConferredTime(8),
+            "realm without conferment has no cooldown");
+        IReadOnlyDictionary<long, double> cooldowns =
+            query.ReadLastConferredTimes();
+        Equal(100d, cooldowns[7],
+            "cooldown batch keeps the latest time for each realm");
+        False(cooldowns.ContainsKey(8),
+            "cooldown batch omits realms without conferment");
+        True(query.HasFormalTitle(17), "formal title is detected");
+        False(query.HasFormalTitle(16), "untitled person remains eligible");
+        True(query.TryReadFormalTitle(17,
+                out ConferredPosthumousExistingTitle existingTitle),
+            "formal title details are readable");
+        Equal(90L, existingTitle.RecordId,
+            "formal title details retain the record id");
+        Equal("周文侯", existingTitle.DisplayTitle,
+            "formal title details retain the display title");
+        Equal("posthumous", existingTitle.TitleKind,
+            "formal title details retain the title kind");
+        ConferredPosthumousCooldownRecord cooldown =
+            query.ReadLastConferred(7);
+        Equal(92L, cooldown.RecordId,
+            "cooldown token uses the authoritative title row");
+        Equal(100d, cooldown.DecidedTime,
+            "cooldown token uses the authoritative title time");
+
+        bool duplicateRejected = false;
+        try
+        {
+            using var duplicate = new SQLiteCommand(
+                "INSERT INTO PosthumousTitle VALUES" +
+                "(93,99,7,0,'conferred','文贞',110);", db);
+            duplicate.ExecuteNonQuery();
+        }
+        catch (SQLiteException)
+        {
+            duplicateRejected = true;
+        }
+        True(duplicateRejected,
+            "one actor-realm can own only one conferred title");
+
+        QueryPlanUsesBoundedSources(db, query);
+        ArchivedFactAdapterReadsBoundedRecords();
+    }
+
+    private static void ArchivedFactAdapterReadsBoundedRecords()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE ActorArchive(" +
+            "id INTEGER PRIMARY KEY,display_name TEXT,shi_id INTEGER," +
+            "lineage_id INTEGER,birth_time REAL,death_time REAL," +
+            "death_cause TEXT,parent_id_1 INTEGER,is_alive INTEGER);" +
+            "CREATE TABLE KingdomReign(" +
+            "reign_id INTEGER PRIMARY KEY,kingdom_id INTEGER,king_actor_id INTEGER," +
+            "shi_id INTEGER,dynasty_id INTEGER,mandate_period_id INTEGER," +
+            "highest_title INTEGER,state_name_snapshot TEXT,kingdom_color TEXT," +
+            "start_time REAL,end_time REAL,end_reason TEXT,start_population INTEGER," +
+            "end_population INTEGER,start_city_count INTEGER,end_city_count INTEGER," +
+            "reign_index INTEGER,is_founder INTEGER,war_wins INTEGER," +
+            "war_losses INTEGER,lost_capital INTEGER,death_cause TEXT);" +
+            "CREATE TABLE CourtOfficer(" +
+            "officer_id INTEGER PRIMARY KEY,kingdom_id INTEGER,actor_id INTEGER," +
+            "office_id TEXT,rank_at_appointment INTEGER,appointed_year INTEGER," +
+            "ended_year INTEGER,appointed_time REAL,active INTEGER);" +
+            "CREATE TABLE OfficialCareerState(" +
+            "actor_id INTEGER PRIMARY KEY,kingdom_id INTEGER,rank INTEGER," +
+            "office_id TEXT,merit REAL,seniority INTEGER);" +
+            "CREATE TABLE GeneralState(" +
+            "actor_id INTEGER PRIMARY KEY,kingdom_id INTEGER,merit_score INTEGER," +
+            "troop_power_snapshot INTEGER,appointed_time REAL,active INTEGER," +
+            "end_reason TEXT);" +
+            "CREATE TABLE Enfeoffment(" +
+            "grant_id INTEGER PRIMARY KEY,kingdom_id INTEGER,actor_id INTEGER," +
+            "noble_rank INTEGER,title_style TEXT,title_name TEXT,start_time REAL);" +
+            "CREATE TABLE ActorTitleFactSnapshot(" +
+            "actor_id INTEGER PRIMARY KEY,diplomacy INTEGER,warfare INTEGER," +
+            "stewardship INTEGER,intelligence INTEGER,health INTEGER," +
+            "combat INTEGER,trait_flags INTEGER,decided_time REAL);", db))
+            schema.ExecuteNonQuery();
+        using (var seed = new SQLiteCommand(
+            "INSERT INTO ActorArchive VALUES" +
+            "(21,'official',81,801,10,50,'old_age',1,0)," +
+            "(22,'general',82,802,12,52,'battle',2,0)," +
+            "(23,'ruler',83,803,8,48,'old_age',3,0);" +
+            "INSERT INTO CourtOfficer VALUES" +
+            "(1,7,21,'aw_office_prime_minister',16,30,45,30,0);" +
+            "INSERT INTO OfficialCareerState VALUES" +
+            "(21,7,16,'aw_office_prime_minister',2.6,15);" +
+            "INSERT INTO GeneralState VALUES" +
+            "(22,7,340,180,30,0,'died');" +
+            "INSERT INTO Enfeoffment VALUES" +
+            "(1,7,21,7,'male','郑',32);" +
+            "INSERT INTO ActorTitleFactSnapshot VALUES" +
+            "(21,12,2,13,14,10,3,201326592,49)," +
+            "(22,4,15,3,6,12,16,266240,51);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(9,7,23,83,3,-1,3,'周','#abcdef',20,48,'died'," +
+            "100,140,3,6,2,1,4,1,0,'old_age');", db))
+            seed.ExecuteNonQuery();
+
+        var service = new ConferredPosthumousTitleFactService(
+            db, pTime => (int)Math.Floor(pTime));
+
+        True(service.TryBuild(7, "周", "#abcdef",
+                new ConferredPosthumousCandidateRecord
+                {
+                    ActorId = 21,
+                    ActorName = "official",
+                    ShiId = 81,
+                    Roles = ConferredPosthumousRole.Official
+                }, out RulerTitleFacts official,
+                out ConferredPosthumousFactContext officialContext),
+            "official facts are readable");
+        Equal(-1L, official.ReignId,
+            "official never receives a synthetic reign");
+        Equal(16, official.ReignYears,
+            "official tenure comes from persisted career years");
+        Equal(16, officialContext.HighestOfficeRank,
+            "highest official rank is preserved");
+        Equal("aw_office_prime_minister", officialContext.HighestOfficeId,
+            "highest office id is preserved");
+        Equal(7, officialContext.NobleRank,
+            "persisted noble rank is preserved");
+        Equal("郑", officialContext.NobleTitleName,
+            "persisted noble title name is preserved");
+        True(official.MajorReforms >= 2,
+            "official merit reaches the title fact mapper");
+
+        True(service.TryBuild(7, "周", "#abcdef",
+                new ConferredPosthumousCandidateRecord
+                {
+                    ActorId = 22,
+                    ActorName = "general",
+                    ShiId = 82,
+                    Roles = ConferredPosthumousRole.General
+                }, out RulerTitleFacts general,
+                out ConferredPosthumousFactContext generalContext),
+            "general facts are readable");
+        True(general.WarWins >= 3,
+            "general merit reaches the title fact mapper");
+        Equal(340, generalContext.GeneralMerit,
+            "general merit is preserved for preview");
+
+        True(service.TryBuild(7, "周", "#abcdef",
+                new ConferredPosthumousCandidateRecord
+                {
+                    ActorId = 23,
+                    ActorName = "ruler",
+                    ShiId = 83,
+                    Roles = ConferredPosthumousRole.FormerRuler
+                }, out RulerTitleFacts ruler,
+                out _),
+            "former-ruler facts are readable");
+        Equal(9L, ruler.ReignId, "real reign id is retained");
+        Equal(4, ruler.WarWins, "real reign wins are retained");
+        Equal(3, ruler.CityDelta, "real reign city delta is retained");
+
+        False(service.TryBuild(7, "周", "#abcdef",
+                new ConferredPosthumousCandidateRecord
+                {
+                    ActorId = 999,
+                    Roles = ConferredPosthumousRole.Official
+                }, out _, out _),
+            "missing archive row fails without throwing");
+    }
+
+    private static void CreateSchema(SQLiteConnection pDb)
+    {
+        using var command = new SQLiteCommand(
+            "CREATE TABLE ActorArchive(" +
+            "id INTEGER PRIMARY KEY,display_name TEXT,lineage_id INTEGER," +
+            "shi_id INTEGER,is_alive INTEGER,birth_time REAL);" +
+            "CREATE TABLE KingdomReign(" +
+            "reign_id INTEGER PRIMARY KEY,kingdom_id INTEGER," +
+            "king_actor_id INTEGER,start_time REAL);" +
+            "CREATE TABLE CourtOfficer(" +
+            "officer_id INTEGER PRIMARY KEY,kingdom_id INTEGER," +
+            "actor_id INTEGER,active INTEGER,rank_at_appointment INTEGER," +
+            "appointed_year INTEGER,ended_year INTEGER," +
+            "appointed_time REAL,ended_time REAL);" +
+            "CREATE TABLE GeneralState(" +
+            "actor_id INTEGER PRIMARY KEY,kingdom_id INTEGER,active INTEGER," +
+            "merit_score INTEGER,appointed_time REAL);" +
+            "CREATE TABLE OfficialCareerState(" +
+            "actor_id INTEGER PRIMARY KEY,kingdom_id INTEGER,rank INTEGER," +
+            "merit REAL,seniority INTEGER);" +
+            "CREATE TABLE Enfeoffment(" +
+            "grant_id INTEGER PRIMARY KEY,kingdom_id INTEGER,actor_id INTEGER," +
+            "noble_rank INTEGER,start_time REAL);" +
+            "CREATE TABLE PosthumousTitle(" +
+            "record_id INTEGER PRIMARY KEY,actor_id INTEGER,kingdom_id INTEGER," +
+            "is_retrospective INTEGER,title_kind TEXT,full_title TEXT," +
+            "decided_time REAL);" +
+            "CREATE INDEX idx_archive_lineage_alive ON ActorArchive" +
+            "(lineage_id,is_alive,birth_time,id);" +
+            "CREATE INDEX idx_reign_kingdom_actor ON KingdomReign" +
+            "(kingdom_id,king_actor_id,start_time);" +
+            "CREATE INDEX idx_officer_kingdom_actor ON CourtOfficer" +
+            "(kingdom_id,actor_id);" +
+            "CREATE INDEX idx_general_kingdom_actor ON GeneralState" +
+            "(kingdom_id,actor_id);" +
+            "CREATE INDEX idx_career_kingdom_actor ON OfficialCareerState" +
+            "(kingdom_id,actor_id);" +
+            "CREATE INDEX idx_enfeoffment_kingdom_actor ON Enfeoffment" +
+            "(kingdom_id,actor_id,noble_rank);" +
+            "CREATE INDEX idx_title_actor ON PosthumousTitle" +
+            "(actor_id,is_retrospective);" +
+            "CREATE INDEX idx_title_kingdom_kind_time ON PosthumousTitle" +
+            "(kingdom_id,title_kind,decided_time,record_id);" +
+            "CREATE UNIQUE INDEX uq_title_conferred_actor_kingdom ON " +
+            "PosthumousTitle(kingdom_id,actor_id) " +
+            "WHERE title_kind='conferred';", pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Seed(SQLiteConnection pDb)
+    {
+        using var command = new SQLiteCommand(
+            "INSERT INTO ActorArchive VALUES" +
+            "(11,'former',500,501,0,1)," +
+            "(12,'royal',500,502,0,2)," +
+            "(13,'official',700,503,0,3)," +
+            "(14,'general',701,504,0,4)," +
+            "(15,'living',702,505,1,5)," +
+            "(16,'civilian',703,506,0,6)," +
+            "(17,'titled',704,507,0,7);" +
+            "INSERT INTO KingdomReign VALUES(1,7,11,1);" +
+            "INSERT INTO CourtOfficer VALUES" +
+            "(1,7,11,0,8,1,8,1,8)," +
+            "(2,7,13,0,7,2,9,2,9)," +
+            "(3,7,15,1,4,5,-1,5,-1)," +
+            "(4,7,17,0,6,1,7,1,7);" +
+            "INSERT INTO GeneralState VALUES(14,7,0,300,3);" +
+            "INSERT INTO OfficialCareerState VALUES(13,7,16,2.6,8);" +
+            "INSERT INTO Enfeoffment VALUES(1,7,13,7,4);" +
+            "INSERT INTO PosthumousTitle VALUES" +
+            "(90,17,7,0,'posthumous','周文侯',90)," +
+            "(91,14,7,1,'retrospective','宣祖',80)," +
+            "(92,99,7,0,'conferred','文贞',100);", pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void QueryPlanUsesBoundedSources(SQLiteConnection pDb,
+        ConferredPosthumousTitleQuery pQuery)
+    {
+        string plan = pQuery.ExplainCandidatePlan(7, 500, 96);
+        False(plan.Contains("SCAN archive", StringComparison.OrdinalIgnoreCase),
+            "the query cannot start with a full dead-actor scan");
+        True(plan.Contains("idx_archive_lineage_alive",
+                StringComparison.OrdinalIgnoreCase),
+            "royal candidates use the lineage-alive index");
+        True(plan.Contains("idx_officer_kingdom_actor",
+                StringComparison.OrdinalIgnoreCase),
+            "official candidates use the kingdom-actor index");
+        True(plan.Contains("idx_general_kingdom_actor",
+                StringComparison.OrdinalIgnoreCase),
+            "general candidates use the kingdom-actor index");
+    }
+
+    private static void HasActor(
+        IEnumerable<ConferredPosthumousCandidateRecord> pCandidates,
+        long pActorId, ConferredPosthumousRole pRole)
+    {
+        ConferredPosthumousCandidateRecord found = pCandidates.FirstOrDefault(
+            pCandidate => pCandidate.ActorId == pActorId);
+        True(found != null, "candidate " + pActorId + " is present");
+        True((found.Roles & pRole) != 0,
+            "candidate " + pActorId + " has role " + pRole);
+    }
+
+    private static void MissingActor(
+        IEnumerable<ConferredPosthumousCandidateRecord> pCandidates,
+        long pActorId, string pName)
+    {
+        False(pCandidates.Any(pCandidate => pCandidate.ActorId == pActorId),
+            pName);
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue) throw new InvalidOperationException(pName);
+    }
+
+    private static void Equal(int pExpected, int pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(double pExpected, double pActual, string pName)
+    {
+        if (Math.Abs(pExpected - pActual) > 0.0001d)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(string pExpected, string pActual, string pName)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(ConferredPosthumousRole pExpected,
+        ConferredPosthumousRole pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+}

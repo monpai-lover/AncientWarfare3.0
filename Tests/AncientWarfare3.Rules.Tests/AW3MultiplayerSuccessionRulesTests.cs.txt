@@ -1,0 +1,354 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using AncientWarfare3.api.multiplayer;
+
+internal static class AW3MultiplayerSuccessionRulesTests
+{
+    public static void Run()
+    {
+        ProviderOwnershipAndHoldsAreReferenceBased();
+        CompletionAndReleaseCallbacksAreIsolated();
+        UnregisterReleasesEveryOwnedHold();
+        PublicModelsAreImmutableBoundedAndTransportFree();
+        Aw3SuccessionPipelineOwnsCanonicalInstallation();
+    }
+
+    private static void ProviderOwnershipAndHoldsAreReferenceBased()
+    {
+        var first = new FakeProvider();
+        var second = new FakeProvider();
+        AW3SuccessionOffer offer = Offer(11, 21, 31, 32);
+
+        Equal(true, AW3MultiplayerSuccessionFacade.Register(first),
+            "the first provider owns succession");
+        Equal(true, AW3MultiplayerSuccessionFacade.Register(first),
+            "same-reference registration is idempotent");
+        Same(first, AW3MultiplayerSuccessionFacade.Current,
+            "the owned provider is observable");
+        Equal(false, AW3MultiplayerSuccessionFacade.Register(second),
+            "a different provider cannot replace the owner");
+
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(offer),
+            "an accepted offer is held by AW3");
+        Equal(1, first.Begun.Count,
+            "the provider receives one immutable offer");
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(offer),
+            "the identical dead-ruler hold is idempotent");
+        Equal(1, first.Begun.Count,
+            "an idempotent hold does not call the provider twice");
+        Equal(false, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(11, 22, 41, 42)),
+            "one country cannot hold two dead rulers");
+
+        Equal(true, AW3MultiplayerSuccessionFacade.NotifyInstalled(
+                11, 21, 32),
+            "an external AW3 installation completes the matching hold");
+        Equal(1, first.Installed.Count,
+            "the provider receives the installed ruler identity");
+        Equal(false, AW3MultiplayerSuccessionFacade.NotifyInstalled(
+                11, 21, 32),
+            "a completed hold cannot notify twice");
+        Equal(true, AW3MultiplayerSuccessionFacade.Unregister(first),
+            "the owner unregisters");
+        Same(null, AW3MultiplayerSuccessionFacade.Current,
+            "unregister clears ownership");
+    }
+
+    private static void CompletionAndReleaseCallbacksAreIsolated()
+    {
+        var provider = new FakeProvider
+        {
+            ThrowOnBegin = true
+        };
+        Equal(true, AW3MultiplayerSuccessionFacade.Register(provider),
+            "provider registration succeeds");
+        Equal(false, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(12, 22, 33, 34)),
+            "a failing begin callback does not create a hold");
+
+        provider.ThrowOnBegin = false;
+        provider.ThrowOnInstalled = true;
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(12, 22, 33, 34)),
+            "the recovered provider can accept a later offer");
+        Equal(true, AW3MultiplayerSuccessionFacade.NotifyInstalled(
+                12, 22, 34),
+            "a failing installed callback cannot retain the hold");
+
+        provider.ThrowOnReleased = true;
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(13, 23, 35, 36)),
+            "a second hold is accepted");
+        Equal(true, AW3MultiplayerSuccessionFacade.Release(13, 23),
+            "a failing released callback cannot retain the hold");
+        Equal(true, AW3MultiplayerSuccessionFacade.Unregister(provider),
+            "callback failures cannot retain provider ownership");
+    }
+
+    private static void UnregisterReleasesEveryOwnedHold()
+    {
+        var provider = new FakeProvider
+        {
+            ThrowReleasedCountryId = 21
+        };
+        Equal(true, AW3MultiplayerSuccessionFacade.Register(provider),
+            "provider registration succeeds");
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(22, 32, 42, 43)),
+            "later hold is accepted");
+        Equal(true, AW3MultiplayerSuccessionFacade.TryBegin(
+                Offer(21, 31, 41, 44)),
+            "earlier hold is accepted");
+
+        Equal(true, AW3MultiplayerSuccessionFacade.Unregister(provider),
+            "unregister releases all accepted offers");
+        SequenceEqual(new long[] { 21, 22 }, provider.Released,
+            "hold cleanup is deterministic and isolates one callback");
+
+        var next = new FakeProvider();
+        Equal(true, AW3MultiplayerSuccessionFacade.Register(next),
+            "a new provider can register after complete cleanup");
+        Equal(true, AW3MultiplayerSuccessionFacade.Unregister(next),
+            "the replacement owner unregisters cleanly");
+    }
+
+    private static void PublicModelsAreImmutableBoundedAndTransportFree()
+    {
+        var mutable = new List<AW3SuccessionCandidate>
+        {
+            new AW3SuccessionCandidate(32, "Prince B", "collateral",
+                "collateral_restore", false),
+            new AW3SuccessionCandidate(31, "Prince A", "direct_son",
+                "direct", true)
+        };
+        var offer = new AW3SuccessionOffer(11, 21, 31, mutable);
+        mutable.Clear();
+        Equal(2, offer.Candidates.Count,
+            "offer candidates are copied");
+        Equal(31L, offer.Candidates[0].ActorId,
+            "offer candidates have deterministic actor ordering");
+        Equal(true, offer.Candidates[0].IsDefault,
+            "the AW3 default marker is retained");
+
+        Throws<ArgumentException>(() => new AW3SuccessionOffer(11, 21, 31,
+                Enumerable.Range(1, 33).Select(index =>
+                    new AW3SuccessionCandidate(index,
+                        "Candidate " + index, "royal", "direct",
+                        index == 31)).ToArray()),
+            "offers are capped at 32 candidates");
+        Throws<ArgumentException>(() => new AW3SuccessionOffer(11, 21, 31,
+                new[]
+                {
+                    new AW3SuccessionCandidate(32, "Wrong", "royal",
+                        "direct", true)
+                }),
+            "the default actor must be marked in selectable candidates");
+
+        AW3SuccessionInstallResult installed =
+            AW3SuccessionInstallResult.Installed(31);
+        Equal(AW3SuccessionInstallStatus.Installed, installed.Status,
+            "install status is retained");
+        Equal(31L, installed.InstalledRulerActorId,
+            "installed ruler identity is retained");
+
+        Type[] publicTypes = typeof(IAW3MultiplayerSuccessionProvider)
+            .Assembly.GetExportedTypes()
+            .Where(type => type.Namespace ==
+                    "AncientWarfare3.api.multiplayer" &&
+                (type.Name.StartsWith("AW3Succession",
+                     StringComparison.Ordinal) ||
+                 type == typeof(IAW3MultiplayerSuccessionProvider) ||
+                 type == typeof(AW3MultiplayerSuccessionFacade)))
+            .ToArray();
+        foreach (Type type in publicTypes)
+        {
+            foreach (PropertyInfo property in type.GetProperties())
+                Equal(null, property.SetMethod,
+                    type.Name + "." + property.Name + " is immutable");
+            foreach (MethodInfo method in type.GetMethods())
+            {
+                AssertTransportFree(method.ReturnType,
+                    type.Name + "." + method.Name + " return type");
+                foreach (ParameterInfo parameter in method.GetParameters())
+                    AssertTransportFree(parameter.ParameterType,
+                        type.Name + "." + method.Name + " parameter");
+            }
+        }
+    }
+
+    private static void Aw3SuccessionPipelineOwnsCanonicalInstallation()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string facade = Read(root, "Code", "api", "multiplayer",
+            "AW3MultiplayerSuccessionFacade.cs");
+        string candidates = Read(root, "Code", "core", "lineage",
+            "InheritanceCandidateService.cs");
+        string heir = Read(root, "Code", "core", "lineage",
+            "HeirService.cs");
+        string mandate = Read(root, "Code", "patch",
+            "AW_MandateSuccessionPatch.cs");
+        string accession = Read(root, "Code", "patch", "AW_HeirPatch.cs");
+
+        int prepare = mandate.IndexOf(
+            "HeirService.PrepareSuccessionBeforeKingDeath(pKingdom, king);",
+            StringComparison.Ordinal);
+        int defer = mandate.IndexOf(
+            "AW3MultiplayerSuccessionFacade.TryDefer(pKingdom, king)",
+            StringComparison.Ordinal);
+        True(prepare >= 0 && defer > prepare,
+            "AW3 prepares its canonical succession before offering a hold");
+        Contains(mandate, "ref BehResult __result",
+            "the mandate prefix can return Continue while a player decides");
+        Contains(mandate, "__result = BehResult.Continue;",
+            "an accepted hold keeps the kingdom behavior pending");
+        Contains(mandate, "return false;",
+            "only an accepted hold skips vanilla installation");
+
+        int commit = accession.IndexOf(
+            "AccessionIdentityService.Commit(__instance, king)",
+            StringComparison.Ordinal);
+        int notify = accession.IndexOf(
+            "AW3MultiplayerSuccessionFacade.NotifyKingInstalled(__instance, king);",
+            StringComparison.Ordinal);
+        True(commit >= 0 && notify > commit,
+            "the provider is notified only after canonical AW3 accession");
+
+        Contains(candidates, "CollectFinalists(",
+            "AW3 exposes effective-law finalists without duplicating rules");
+        Contains(heir, "ResolveSuccessionModeForCandidate(",
+            "AW3 derives the stored succession mode for each candidate");
+        Contains(facade, "InheritanceLawService.GetEffectiveLaw(",
+            "the facade reads AW3's effective inheritance law");
+        Contains(facade, "InheritanceCandidateService.CollectFinalists(",
+            "the facade offers AW3-selected finalists");
+        Contains(facade, "HeirService.StoreSelectedHeir(",
+            "the selected AW3 mode is stored before accession");
+        Contains(facade, ".setKing(successor)",
+            "the host installs through canonical Kingdom.setKing");
+        Contains(facade, "hold.Installing",
+            "an initiated install suppresses duplicate external notification");
+        Contains(facade, "BuildOffer(",
+            "default installation recomputes live AW3 eligibility");
+
+        string production = facade + candidates + heir + mandate + accession;
+        Equal(false, production.Contains("System.Reflection",
+                StringComparison.Ordinal),
+            "the succession integration does not use reflection");
+        Equal(false, production.Contains("GetMethod(",
+                StringComparison.Ordinal),
+            "the succession integration uses typed APIs only");
+    }
+
+    private static AW3SuccessionOffer Offer(long countryId,
+        long formerRulerId, long defaultActorId, long alternativeActorId)
+    {
+        return new AW3SuccessionOffer(countryId, formerRulerId,
+            defaultActorId, new[]
+            {
+                new AW3SuccessionCandidate(defaultActorId,
+                    "Default " + defaultActorId, "direct_son", "direct",
+                    true),
+                new AW3SuccessionCandidate(alternativeActorId,
+                    "Alternative " + alternativeActorId, "collateral",
+                    "collateral_restore", false)
+            });
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        string path = Path.Combine(new[] { root }.Concat(parts).ToArray());
+        if (!File.Exists(path))
+            throw new InvalidOperationException(
+                "required production source exists: " + path);
+        return File.ReadAllText(path);
+    }
+
+    private static void AssertTransportFree(Type type, string message)
+    {
+        string surface = type.FullName ?? type.Name;
+        string[] forbidden =
+        {
+            "Network", "Connection", "Socket", "Transport", "Tcp", "Lan"
+        };
+        foreach (string token in forbidden)
+            Equal(false, surface.Contains(token,
+                    StringComparison.OrdinalIgnoreCase),
+                message + " contains " + token);
+    }
+
+    private sealed class FakeProvider : IAW3MultiplayerSuccessionProvider
+    {
+        public readonly List<AW3SuccessionOffer> Begun = new();
+        public readonly List<long> Installed = new();
+        public readonly List<long> Released = new();
+        public bool ThrowOnBegin;
+        public bool ThrowOnInstalled;
+        public bool ThrowOnReleased;
+        public long ThrowReleasedCountryId = -1;
+
+        public bool TryBegin(AW3SuccessionOffer offer)
+        {
+            if (ThrowOnBegin) throw new InvalidOperationException("begin");
+            Begun.Add(offer);
+            return true;
+        }
+
+        public void OnInstalled(long countryId, long formerRulerActorId,
+            long installedRulerActorId)
+        {
+            Installed.Add(installedRulerActorId);
+            if (ThrowOnInstalled)
+                throw new InvalidOperationException("installed");
+        }
+
+        public void OnReleased(long countryId, long formerRulerActorId)
+        {
+            Released.Add(countryId);
+            if (ThrowOnReleased || countryId == ThrowReleasedCountryId)
+                throw new InvalidOperationException("released");
+        }
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Same(object expected, object actual, string message)
+    {
+        if (!ReferenceEquals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected={expected}, actual={actual}");
+    }
+
+    private static void SequenceEqual<T>(IEnumerable<T> expected,
+        IEnumerable<T> actual, string message)
+    {
+        if (!expected.SequenceEqual(actual))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Throws<TException>(Action action, string message)
+        where TException : Exception
+    {
+        try { action(); }
+        catch (TException) { return; }
+        throw new InvalidOperationException(message);
+    }
+}

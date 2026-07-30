@@ -28,7 +28,7 @@ vassal Description,依次选择附庸与宗主国以建立关系,Select a vassal
 vassal_remove,解除附庸关系,Remove a vassal
 vassal_remove Description,选择要解除附庸关系的附庸国,Select a vassal to remove its vassalage
 spawn_xia,夏人,Xia
-spawn_xia Description, ,From East
+spawn_xia Description,生成夏人,Spawn Xia people
 TianMing_board,天命面板,Mandate of Heaven Board
 TianMing_board Description,查看世界中拥有天命的单位,View The Significant Units Within Your World
 Kingdom_History,国家历史,Kingdoms History

@@ -14,6 +14,26 @@ namespace AncientWarfare3.core.lineage
             bool pHasRestorationTarget,
             out string pReason)
         {
+            return CanQueueGoal(pGoalType, pBasicAllowed, pHasNormalCb,
+                pCanForceNoCb, pHasCoreTarget, pHasClaimTarget,
+                pCanForceVassal, pCanForceTributary,
+                pIsIndependenceTarget, pHasRestorationTarget,
+                pCanReunifySuccession: false, out pReason);
+        }
+
+        public static bool CanQueueGoal(string pGoalType,
+            bool pBasicAllowed,
+            bool pHasNormalCb,
+            bool pCanForceNoCb,
+            bool pHasCoreTarget,
+            bool pHasClaimTarget,
+            bool pCanForceVassal,
+            bool pCanForceTributary,
+            bool pIsIndependenceTarget,
+            bool pHasRestorationTarget,
+            bool pCanReunifySuccession,
+            out string pReason)
+        {
             if (!pBasicAllowed)
             {
                 pReason = "basic_blocked";
@@ -38,6 +58,9 @@ namespace AncientWarfare3.core.lineage
                     return Check(pIsIndependenceTarget, "not_suzerain", out pReason);
                 case "restore_kingdom":
                     return Check(pHasRestorationTarget, "missing_restoration_target", out pReason);
+                case "reunify_succession":
+                    return Check(pCanReunifySuccession,
+                        "missing_reunification_claim", out pReason);
                 case "no_cb":
                 case "no_cb_punitive":
                     return Check(pCanForceNoCb, "cannot_force_no_cb", out pReason);

@@ -8,14 +8,25 @@ namespace AncientWarfare3.core.lineage
     {
         private const int ArrivalRadius = 3;
         private const int ActorMutationBatchSize = 16;
-        private static readonly int[] TargetOffsetX = { 2, -2, 0, 0, 2, -2, 2, -2 };
-        private static readonly int[] TargetOffsetY = { 0, 0, 2, -2, 2, 2, -2, -2 };
+
+        private sealed class FrontierTarget
+        {
+            public long CityId;
+            public int TileId;
+        }
 
         private sealed class NoticeAssignments
         {
             public WarNoticeState State;
+            public string AssignmentKey = "";
+            public long OwnerKingdomId = -1L;
+            public long OpponentKingdomId = -1L;
+            public bool IsDefenderSide;
             public readonly Dictionary<long, long> TargetCityByArmy = new Dictionary<long, long>();
+            public readonly Dictionary<long, int> TargetTileByArmy = new Dictionary<long, int>();
             public readonly HashSet<long> ActorIds = new HashSet<long>();
+            public readonly List<FrontierTarget> FrontierTargets = new List<FrontierTarget>();
+            public readonly HashSet<int> FrontierTileSet = new HashSet<int>();
             public readonly List<long> TargetCityIds = new List<long>();
             public readonly HashSet<long> TargetCitySet = new HashSet<long>();
             public readonly List<long> RequiredArmyIds = new List<long>();
@@ -23,12 +34,18 @@ namespace AncientWarfare3.core.lineage
             public readonly HashSet<long> BlockingArmyIds = new HashSet<long>();
             public readonly Dictionary<long, int> ArmyOrderById = new Dictionary<long, int>();
             public readonly Dictionary<long, int> NextActorIndexByArmy = new Dictionary<long, int>();
-            public readonly Dictionary<long, long> AssignedTargetCityByArmy = new Dictionary<long, long>();
+            public readonly Dictionary<long, int> AssignedTargetTileByArmy = new Dictionary<long, int>();
             public readonly HashSet<long> ArrivedArmyIds = new HashSet<long>();
             public readonly long[] CleanupBuffer = new long[ActorMutationBatchSize];
             public int CityDiscoveryCursor;
             public int ArmyReviewCursor;
             public long FallbackCityId = -1L;
+            public int FallbackCoastTileId = -1;
+            public long FallbackCoastCityId = -1L;
+            public long FallbackCoastDistance = long.MaxValue;
+            public int FallbackApproachTileId = -1;
+            public long FallbackApproachCityId = -1L;
+            public long FallbackApproachDistance = long.MaxValue;
             public bool DiscoveryComplete;
             public bool Closing;
             public bool RestoreJobs;
@@ -56,27 +73,38 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        private sealed class DefenderNoticeGroup
+        private sealed class SideNotice
         {
-            public readonly long DefenderId;
-            public readonly Dictionary<string, WarNoticeState> Notices =
-                new Dictionary<string, WarNoticeState>(StringComparer.Ordinal);
+            public WarNoticeState State;
+            public string AssignmentKey = "";
+            public long OwnerKingdomId = -1L;
+            public long OpponentKingdomId = -1L;
+            public bool IsDefenderSide;
+        }
+
+        private sealed class KingdomNoticeGroup
+        {
+            public readonly long KingdomId;
+            public readonly Dictionary<string, SideNotice> Notices =
+                new Dictionary<string, SideNotice>(StringComparer.Ordinal);
             public readonly SortedSet<NoticePriority> Priorities =
                 new SortedSet<NoticePriority>();
             public string PrimarySignature = "";
 
-            public DefenderNoticeGroup(long pDefenderId)
+            public KingdomNoticeGroup(long pKingdomId)
             {
-                DefenderId = pDefenderId;
+                KingdomId = pKingdomId;
             }
         }
 
         private static readonly Dictionary<string, NoticeAssignments> Assignments =
             new Dictionary<string, NoticeAssignments>(StringComparer.Ordinal);
-        private static readonly Dictionary<long, DefenderNoticeGroup> DefenderNoticeGroups =
-            new Dictionary<long, DefenderNoticeGroup>();
-        private static readonly Dictionary<string, long> DefenderIdByNoticeSignature =
+        private static readonly Dictionary<long, KingdomNoticeGroup> KingdomNoticeGroups =
+            new Dictionary<long, KingdomNoticeGroup>();
+        private static readonly Dictionary<string, long> KingdomIdByAssignmentKey =
             new Dictionary<string, long>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, HashSet<string>> AssignmentKeysByNotice =
+            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
         public static void ActivateNotice(WarNoticeState pState)
         {
@@ -88,37 +116,102 @@ namespace AncientWarfare3.core.lineage
         {
             if (pState == null || string.IsNullOrEmpty(pState.Signature)) return;
             RegisterNotice(pState);
-            NoticeAssignments assignments = ResolvePrimaryAssignments(pState);
-            if (assignments == null) return;
-            if (assignments.Closing) return;
+            RefreshSide(pState, pState.AttackerId);
+            RefreshSide(pState, pState.DefenderId);
+        }
+
+        private static void RefreshSide(WarNoticeState pState,
+            long pOwnerKingdomId)
+        {
+            NoticeAssignments assignments = ResolvePrimaryAssignments(
+                pState, pOwnerKingdomId);
+            if (assignments == null || assignments.Closing) return;
             if (!assignments.DiscoveryComplete)
-                ScheduleDiscovery(assignments.State.Signature);
+                ScheduleDiscovery(assignments.AssignmentKey);
             else
-                ScheduleArmyReview(assignments.State.Signature, pRestart: true);
+                ScheduleArmyReview(assignments.AssignmentKey,
+                    pRestart: true);
         }
 
         public static bool AreAllRequiredArmiesReady(WarNoticeState pState)
         {
             if (pState == null) return true;
             ActivateNotice(pState);
-            Kingdom defender = ResolveKingdom(pState.DefenderId);
-            if (defender?.data == null || defender.isRekt()) return true;
-            bool defenderAlreadyAtWar = MilitaryEmergencyService.TryGetActiveWarId(defender, out _);
-            if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(defenderAlreadyAtWar)) return true;
-            NoticeAssignments assignments = ResolvePrimaryAssignments(pState);
-            if (assignments == null) return false;
-            return assignments.DiscoveryComplete && assignments.BlockingArmyIds.Count == 0;
+            bool attackerReady = EvaluateSideReadiness(pState,
+                pState.AttackerId, out bool attackerBypassed);
+            bool defenderReady = EvaluateSideReadiness(pState,
+                pState.DefenderId, out bool defenderBypassed);
+            return ArmyDeploymentRules.AreBothSidesReady(
+                attackerBypassed, attackerReady,
+                defenderBypassed, defenderReady);
         }
 
         public static bool TryGetCachedReadiness(WarNoticeState pState, out bool pReady)
         {
             pReady = false;
             if (pState == null ||
-                !DefenderNoticeGroups.TryGetValue(pState.DefenderId, out DefenderNoticeGroup group) ||
-                string.IsNullOrEmpty(group.PrimarySignature) ||
-                !Assignments.TryGetValue(group.PrimarySignature, out NoticeAssignments assignments) ||
-                assignments.Closing) return false;
-            pReady = assignments.DiscoveryComplete && assignments.BlockingArmyIds.Count == 0;
+                !TryGetCachedSideReadiness(pState, pState.AttackerId,
+                    out bool attackerBypassed,
+                    out bool attackerReady) ||
+                !TryGetCachedSideReadiness(pState, pState.DefenderId,
+                    out bool defenderBypassed,
+                    out bool defenderReady)) return false;
+            pReady = ArmyDeploymentRules.AreBothSidesReady(
+                attackerBypassed, attackerReady,
+                defenderBypassed, defenderReady);
+            return true;
+        }
+
+        private static bool EvaluateSideReadiness(WarNoticeState pState,
+            long pOwnerKingdomId, out bool pBypassed)
+        {
+            pBypassed = false;
+            Kingdom owner = ResolveKingdom(pOwnerKingdomId);
+            if (owner?.data == null || owner.isRekt())
+            {
+                pBypassed = true;
+                return false;
+            }
+            bool alreadyAtWar = MilitaryEmergencyService.
+                TryGetActiveWarId(owner, out _);
+            if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(
+                    alreadyAtWar))
+            {
+                pBypassed = true;
+                return false;
+            }
+            NoticeAssignments assignments = ResolveDeclarationAssignments(
+                pState, pOwnerKingdomId);
+            return assignments != null &&
+                   assignments.DiscoveryComplete &&
+                   assignments.BlockingArmyIds.Count == 0;
+        }
+
+        private static bool TryGetCachedSideReadiness(
+            WarNoticeState pState, long pOwnerKingdomId,
+            out bool pBypassed, out bool pReady)
+        {
+            pBypassed = false;
+            pReady = false;
+            Kingdom owner = ResolveKingdom(pOwnerKingdomId);
+            if (owner?.data == null || owner.isRekt())
+            {
+                pBypassed = true;
+                return true;
+            }
+            bool alreadyAtWar = MilitaryEmergencyService.
+                TryGetActiveWarId(owner, out _);
+            if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(
+                    alreadyAtWar))
+            {
+                pBypassed = true;
+                return true;
+            }
+            NoticeAssignments assignments = ResolveDeclarationAssignments(
+                pState, pOwnerKingdomId);
+            if (assignments == null) return false;
+            pReady = assignments.DiscoveryComplete &&
+                     assignments.BlockingArmyIds.Count == 0;
             return true;
         }
 
@@ -127,9 +220,10 @@ namespace AncientWarfare3.core.lineage
         {
             pCity = null;
             if (pDefender?.data == null || pOrdinal < 0 ||
-                !DefenderNoticeGroups.TryGetValue(pDefender.id, out DefenderNoticeGroup group) ||
+                !KingdomNoticeGroups.TryGetValue(pDefender.id, out KingdomNoticeGroup group) ||
                 string.IsNullOrEmpty(group.PrimarySignature) ||
-                !Assignments.TryGetValue(group.PrimarySignature, out NoticeAssignments assignments) ||
+                !Assignments.TryGetValue(BuildAssignmentKey(
+                    group.PrimarySignature, group.KingdomId), out NoticeAssignments assignments) ||
                 assignments.Closing || pOrdinal >= assignments.TargetCityIds.Count) return false;
             City city = ResolveCity(assignments.TargetCityIds[pOrdinal]);
             if (city?.data == null || city.isRekt() || city.kingdom != pDefender) return false;
@@ -137,35 +231,58 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        public static void OnArmyChanged(Kingdom pDefender, Army pArmy, bool pRosterExpanded)
+        public static bool TryGetPreferredLevyCityCount(Kingdom pKingdom,
+            out int pCount)
         {
-            if (pDefender?.data == null || pArmy?.data == null ||
-                !DefenderNoticeGroups.TryGetValue(pDefender.id, out DefenderNoticeGroup group)) return;
+            pCount = 0;
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                !KingdomNoticeGroups.TryGetValue(pKingdom.id,
+                    out KingdomNoticeGroup group) ||
+                string.IsNullOrEmpty(group.PrimarySignature) ||
+                !Assignments.TryGetValue(BuildAssignmentKey(
+                    group.PrimarySignature, group.KingdomId),
+                    out NoticeAssignments assignments) ||
+                assignments.Closing || !assignments.DiscoveryComplete)
+                return false;
+            pCount = assignments.TargetCityIds.Count;
+            return true;
+        }
+
+        public static void OnArmyChanged(Kingdom pKingdom, Army pArmy, bool pRosterExpanded)
+        {
+            if (pArmy?.data == null) return;
+            AWArmyMarchService.ReleaseCompletedDeploymentTrailIfUnused(pArmy);
+            if (pKingdom?.data == null ||
+                !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group)) return;
             NoticeAssignments assignments = ResolvePrimaryAssignments(group);
             if (assignments == null || assignments.Closing) return;
             if (pRosterExpanded) assignments.ArrivedArmyIds.Remove(pArmy.id);
             RegisterOrRefreshArmy(assignments, pArmy);
         }
 
-        public static void OnArmyInvalidated(Kingdom pDefender, long pArmyId)
+        public static void OnArmyInvalidated(Kingdom pKingdom, long pArmyId)
         {
-            if (pDefender?.data == null || pArmyId < 0 ||
-                !DefenderNoticeGroups.TryGetValue(pDefender.id, out DefenderNoticeGroup group)) return;
+            if (pArmyId < 0) return;
+            AWArmyMarchService.ClearArmy(pArmyId);
+            if (pKingdom?.data == null ||
+                !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group)) return;
             NoticeAssignments assignments = ResolvePrimaryAssignments(group);
             if (assignments == null) return;
             assignments.BlockingArmyIds.Remove(pArmyId);
             assignments.ArrivedArmyIds.Remove(pArmyId);
             assignments.TargetCityByArmy.Remove(pArmyId);
-            assignments.AssignedTargetCityByArmy.Remove(pArmyId);
+            assignments.TargetTileByArmy.Remove(pArmyId);
+            assignments.AssignedTargetTileByArmy.Remove(pArmyId);
             assignments.NextActorIndexByArmy.Remove(pArmyId);
         }
 
         public static void OnKingdomEnteredWar(Kingdom pKingdom)
         {
             if (pKingdom?.data == null ||
-                !DefenderNoticeGroups.TryGetValue(pKingdom.id, out DefenderNoticeGroup group) ||
+                !KingdomNoticeGroups.TryGetValue(pKingdom.id, out KingdomNoticeGroup group) ||
                 string.IsNullOrEmpty(group.PrimarySignature)) return;
-            BeginAssignmentCleanup(group.PrimarySignature, restoreJobs: true);
+            BeginAssignmentCleanup(BuildAssignmentKey(
+                group.PrimarySignature, group.KingdomId), restoreJobs: true);
         }
 
         public static bool TryPrepareMove(Actor pActor, out WorldTile pTarget)
@@ -173,17 +290,13 @@ namespace AncientWarfare3.core.lineage
             pTarget = null;
             if (pActor?.data == null || pActor.isRekt()) return false;
             pActor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE, out string signature, "");
-            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_CITY_ID, out long cityId, -1L);
+            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_X, out int x, -1);
+            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_Y, out int y, -1);
             if (string.IsNullOrEmpty(signature) ||
                 !Assignments.TryGetValue(signature, out NoticeAssignments assignments) ||
                 assignments.Closing) return false;
-            City city = ResolveCity(cityId);
-            if (city?.data == null || city.isRekt()) return false;
-            pTarget = StableTargetTile(city, pActor.data.id);
-            if (pTarget == null) return false;
-            pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_X, pTarget.x);
-            pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_Y, pTarget.y);
-            return true;
+            pTarget = ResolveTargetTile(assignments, x, y);
+            return pTarget?.data != null;
         }
 
         public static void MarkArrival(Actor pActor)
@@ -206,6 +319,8 @@ namespace AncientWarfare3.core.lineage
                 Assignments.TryGetValue(signature, out NoticeAssignments assignments) &&
                 !assignments.Closing)
             {
+                WorldTile target = ResolveTargetTile(assignments, x, y);
+                if (target?.data == null) return;
                 if (!assignments.ArrivedArmyIds.Add(pActor.army.id)) return;
                 RegisterOrRefreshArmy(assignments, pActor.army);
             }
@@ -213,11 +328,27 @@ namespace AncientWarfare3.core.lineage
 
         public static bool HasActiveAssignment(Actor pActor)
         {
+            return TryGetActiveAssignmentKey(pActor, out _);
+        }
+
+        public static bool TryGetActiveAssignmentKey(Actor pActor,
+            out string pAssignmentKey)
+        {
+            pAssignmentKey = "";
             if (pActor?.data == null) return false;
-            pActor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE, out string signature, "");
-            return !string.IsNullOrEmpty(signature) &&
-                   Assignments.TryGetValue(signature, out NoticeAssignments assignments) &&
-                   !assignments.Closing;
+            pActor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE,
+                out string signature, "");
+            if (string.IsNullOrEmpty(signature) ||
+                !Assignments.TryGetValue(signature,
+                    out NoticeAssignments assignments) ||
+                assignments.Closing) return false;
+            pAssignmentKey = signature;
+            return true;
+        }
+
+        public static void QueueFormationReview(Actor pActor)
+        {
+            return;
         }
 
         public static void CancelNotice(string pSignature, bool restoreJobs)
@@ -242,28 +373,64 @@ namespace AncientWarfare3.core.lineage
         public static void ClearRuntime()
         {
             Assignments.Clear();
-            DefenderNoticeGroups.Clear();
-            DefenderIdByNoticeSignature.Clear();
+            KingdomNoticeGroups.Clear();
+            KingdomIdByAssignmentKey.Clear();
+            AssignmentKeysByNotice.Clear();
         }
 
         private static void RegisterNotice(WarNoticeState pState)
         {
-            if (pState == null || string.IsNullOrEmpty(pState.Signature) || pState.DefenderId < 0) return;
-            if (DefenderIdByNoticeSignature.TryGetValue(pState.Signature, out long previousDefenderId) &&
-                previousDefenderId != pState.DefenderId)
-                RemoveNoticeFromGroup(pState.Signature, restoreJobs: true);
+            if (pState == null || string.IsNullOrEmpty(pState.Signature) ||
+                pState.AttackerId < 0 || pState.DefenderId < 0 ||
+                pState.AttackerId == pState.DefenderId) return;
+            RegisterNoticeSide(pState, pState.AttackerId,
+                pState.DefenderId, pIsDefenderSide: false);
+            RegisterNoticeSide(pState, pState.DefenderId,
+                pState.AttackerId, pIsDefenderSide: true);
+        }
 
-            if (!DefenderNoticeGroups.TryGetValue(pState.DefenderId, out DefenderNoticeGroup group))
+        private static void RegisterNoticeSide(WarNoticeState pState,
+            long pOwnerKingdomId, long pOpponentKingdomId,
+            bool pIsDefenderSide)
+        {
+            if (pOwnerKingdomId < 0 || pOpponentKingdomId < 0 ||
+                !ArmyDeploymentRules.ShouldCreateSideProjection(
+                    pOwnerKingdomId == pState.AttackerId,
+                    pOwnerKingdomId == pState.DefenderId)) return;
+            string assignmentKey = BuildAssignmentKey(pState.Signature, pOwnerKingdomId);
+            if (KingdomIdByAssignmentKey.TryGetValue(assignmentKey,
+                    out long previousKingdomId) &&
+                previousKingdomId != pOwnerKingdomId)
+                RemoveProjection(pState.Signature, assignmentKey,
+                    restoreJobs: true);
+
+            if (!KingdomNoticeGroups.TryGetValue(pOwnerKingdomId,
+                    out KingdomNoticeGroup group))
             {
-                group = new DefenderNoticeGroup(pState.DefenderId);
-                DefenderNoticeGroups[pState.DefenderId] = group;
+                group = new KingdomNoticeGroup(pOwnerKingdomId);
+                KingdomNoticeGroups[pOwnerKingdomId] = group;
             }
 
-            if (group.Notices.TryGetValue(pState.Signature, out WarNoticeState previousState))
-                group.Priorities.Remove(new NoticePriority(previousState));
-            group.Notices[pState.Signature] = pState;
+            if (group.Notices.TryGetValue(pState.Signature,
+                    out SideNotice previous))
+                group.Priorities.Remove(new NoticePriority(previous.State));
+            group.Notices[pState.Signature] = new SideNotice
+            {
+                State = pState,
+                AssignmentKey = assignmentKey,
+                OwnerKingdomId = pOwnerKingdomId,
+                OpponentKingdomId = pOpponentKingdomId,
+                IsDefenderSide = pIsDefenderSide
+            };
             group.Priorities.Add(new NoticePriority(pState));
-            DefenderIdByNoticeSignature[pState.Signature] = pState.DefenderId;
+            KingdomIdByAssignmentKey[assignmentKey] = pOwnerKingdomId;
+            if (!AssignmentKeysByNotice.TryGetValue(pState.Signature,
+                    out HashSet<string> assignmentKeys))
+            {
+                assignmentKeys = new HashSet<string>(StringComparer.Ordinal);
+                AssignmentKeysByNotice[pState.Signature] = assignmentKeys;
+            }
+            assignmentKeys.Add(assignmentKey);
 
             string nextPrimary = group.Priorities.Count > 0
                 ? group.Priorities.Min.Signature
@@ -273,83 +440,148 @@ namespace AncientWarfare3.core.lineage
                 string previousPrimary = group.PrimarySignature;
                 group.PrimarySignature = nextPrimary;
                 if (!string.IsNullOrEmpty(previousPrimary))
-                    BeginAssignmentCleanup(previousPrimary, restoreJobs: true);
+                    BeginAssignmentCleanup(BuildAssignmentKey(
+                        previousPrimary, group.KingdomId),
+                        restoreJobs: true);
             }
 
             NoticeAssignments assignments = ResolvePrimaryAssignments(group);
             if (assignments != null && group.Notices.TryGetValue(
-                    group.PrimarySignature, out WarNoticeState primaryState))
-                assignments.State = primaryState;
+                    group.PrimarySignature, out SideNotice primary))
+                ApplySide(assignments, primary);
         }
 
-        private static NoticeAssignments ResolvePrimaryAssignments(WarNoticeState pState)
+        private static NoticeAssignments ResolvePrimaryAssignments(
+            WarNoticeState pState, long pOwnerKingdomId)
         {
             if (pState == null ||
-                !DefenderNoticeGroups.TryGetValue(pState.DefenderId, out DefenderNoticeGroup group))
+                !KingdomNoticeGroups.TryGetValue(pOwnerKingdomId,
+                    out KingdomNoticeGroup group))
                 return null;
             return ResolvePrimaryAssignments(group);
         }
 
-        private static NoticeAssignments ResolvePrimaryAssignments(DefenderNoticeGroup pGroup)
+        private static NoticeAssignments ResolveDeclarationAssignments(
+            WarNoticeState pState, long pOwnerKingdomId)
+        {
+            if (pState == null ||
+                !KingdomNoticeGroups.TryGetValue(pOwnerKingdomId,
+                    out KingdomNoticeGroup group)) return null;
+            string assignmentKey = BuildAssignmentKey(pState.Signature, pOwnerKingdomId);
+            bool exists = Assignments.TryGetValue(assignmentKey,
+                out NoticeAssignments assignments);
+            return ArmyDeploymentRules.CanUseDeclarationProjection(
+                    pState.Signature, group.PrimarySignature, exists,
+                    assignments?.Closing == true)
+                ? assignments
+                : null;
+        }
+
+        private static NoticeAssignments ResolvePrimaryAssignments(
+            KingdomNoticeGroup pGroup)
         {
             if (pGroup == null || string.IsNullOrEmpty(pGroup.PrimarySignature) ||
-                !pGroup.Notices.TryGetValue(pGroup.PrimarySignature, out WarNoticeState primaryState))
+                !pGroup.Notices.TryGetValue(pGroup.PrimarySignature,
+                    out SideNotice primary))
                 return null;
 
-            Kingdom defender = ResolveKingdom(pGroup.DefenderId);
-            bool defenderAlreadyAtWar = defender?.data != null &&
-                                        MilitaryEmergencyService.TryGetActiveWarId(defender, out _);
-            if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(defenderAlreadyAtWar))
+            Kingdom owner = ResolveKingdom(pGroup.KingdomId);
+            bool ownerAlreadyAtWar = owner?.data != null &&
+                                     MilitaryEmergencyService.
+                                         TryGetActiveWarId(owner, out _);
+            if (ArmyDeploymentRules.ShouldBypassPrewarDeployment(
+                    ownerAlreadyAtWar))
             {
-                BeginAssignmentCleanup(pGroup.PrimarySignature, restoreJobs: true);
+                BeginAssignmentCleanup(primary.AssignmentKey,
+                    restoreJobs: true);
                 return null;
             }
 
             bool created = !Assignments.TryGetValue(
-                pGroup.PrimarySignature, out NoticeAssignments assignments);
+                primary.AssignmentKey, out NoticeAssignments assignments);
             if (created)
             {
-                assignments = new NoticeAssignments { State = primaryState };
-                Assignments[pGroup.PrimarySignature] = assignments;
+                assignments = new NoticeAssignments();
+                ApplySide(assignments, primary);
+                Assignments[primary.AssignmentKey] = assignments;
             }
             else
             {
                 if (assignments.Closing) return null;
-                assignments.State = primaryState;
+                ApplySide(assignments, primary);
             }
-            if (created) ScheduleDiscovery(pGroup.PrimarySignature);
+            if (created) ScheduleDiscovery(primary.AssignmentKey);
             return assignments;
         }
 
         private static void RemoveNoticeFromGroup(string pSignature, bool restoreJobs)
         {
-            if (!DefenderIdByNoticeSignature.TryGetValue(pSignature, out long defenderId) ||
-                !DefenderNoticeGroups.TryGetValue(defenderId, out DefenderNoticeGroup group))
+            if (!AssignmentKeysByNotice.TryGetValue(pSignature,
+                    out HashSet<string> assignmentKeys) ||
+                assignmentKeys.Count == 0)
             {
                 BeginAssignmentCleanup(pSignature, restoreJobs);
                 return;
             }
+            string[] keys = new string[assignmentKeys.Count];
+            assignmentKeys.CopyTo(keys);
+            AssignmentKeysByNotice.Remove(pSignature);
+            for (int i = 0; i < keys.Length; i++)
+                RemoveProjection(pSignature, keys[i], restoreJobs);
+        }
 
-            if (group.Notices.TryGetValue(pSignature, out WarNoticeState state))
+        private static void RemoveProjection(string pSignature,
+            string pAssignmentKey, bool restoreJobs)
+        {
+            if (!KingdomIdByAssignmentKey.TryGetValue(pAssignmentKey,
+                    out long kingdomId) ||
+                !KingdomNoticeGroups.TryGetValue(kingdomId,
+                    out KingdomNoticeGroup group))
             {
-                group.Priorities.Remove(new NoticePriority(state));
+                BeginAssignmentCleanup(pAssignmentKey, restoreJobs);
+                return;
+            }
+
+            if (group.Notices.TryGetValue(pSignature,
+                    out SideNotice side))
+            {
+                group.Priorities.Remove(new NoticePriority(side.State));
                 group.Notices.Remove(pSignature);
             }
-            DefenderIdByNoticeSignature.Remove(pSignature);
+            KingdomIdByAssignmentKey.Remove(pAssignmentKey);
 
             bool wasPrimary = string.Equals(
                 group.PrimarySignature, pSignature, StringComparison.Ordinal);
-            if (wasPrimary) BeginAssignmentCleanup(pSignature, restoreJobs);
+            if (wasPrimary)
+                BeginAssignmentCleanup(pAssignmentKey, restoreJobs);
 
             if (group.Notices.Count == 0 || group.Priorities.Count == 0)
             {
-                DefenderNoticeGroups.Remove(defenderId);
+                KingdomNoticeGroups.Remove(kingdomId);
                 return;
             }
 
             if (!wasPrimary) return;
             group.PrimarySignature = group.Priorities.Min.Signature;
             ResolvePrimaryAssignments(group);
+        }
+
+        private static void ApplySide(NoticeAssignments pAssignments,
+            SideNotice pSide)
+        {
+            if (pAssignments == null || pSide == null) return;
+            pAssignments.State = pSide.State;
+            pAssignments.AssignmentKey = pSide.AssignmentKey;
+            pAssignments.OwnerKingdomId = pSide.OwnerKingdomId;
+            pAssignments.OpponentKingdomId = pSide.OpponentKingdomId;
+            pAssignments.IsDefenderSide = pSide.IsDefenderSide;
+        }
+
+        private static string BuildAssignmentKey(string pNoticeSignature,
+            long pOwnerKingdomId)
+        {
+            return (pNoticeSignature ?? "") + "|side:" +
+                   pOwnerKingdomId;
         }
 
         private static void BeginAssignmentCleanup(string pSignature, bool restoreJobs)
@@ -382,51 +614,65 @@ namespace AncientWarfare3.core.lineage
                 try
                 {
                     City city = pArmy.hasCity() ? pArmy.getCity() : null;
-                    if (city?.data != null && city.getArmy() == pArmy) return city.isOkToSendArmy();
+                    if (city?.data != null && city.getArmy() == pArmy)
+                        return city.isOkToSendArmy();
                 }
                 catch { }
             }
             Actor captain = null;
             try { captain = pArmy.getCaptain(); } catch { }
-            return captain?.data != null && !captain.isRekt() && captain.isAlive();
+            return captain?.data != null &&
+                   !captain.isRekt() && captain.isAlive();
         }
 
         private static bool IsArmyArrived(NoticeAssignments pAssignments, Army pArmy)
         {
-            return pArmy?.data != null && pAssignments.TargetCityByArmy.ContainsKey(pArmy.id) &&
-                   pAssignments.ArrivedArmyIds.Contains(pArmy.id);
+            if (pArmy?.data == null ||
+                !pAssignments.TargetCityByArmy.ContainsKey(pArmy.id) ||
+                !pAssignments.TargetTileByArmy.ContainsKey(pArmy.id))
+                return false;
+            return pAssignments.ArrivedArmyIds.Contains(pArmy.id);
         }
 
-        private static City ResolveAssignedCity(NoticeAssignments pAssignments, Army pArmy)
+        private static FrontierTarget ResolveAssignedTarget(
+            NoticeAssignments pAssignments, Army pArmy)
         {
-            if (pAssignments.TargetCityByArmy.TryGetValue(pArmy.id, out long cityId))
+            if (pAssignments.TargetCityByArmy.TryGetValue(pArmy.id,
+                    out long cityId) &&
+                pAssignments.TargetTileByArmy.TryGetValue(pArmy.id,
+                    out int tileId))
             {
-                City existing = ResolveCity(cityId);
-                if (existing?.data != null && !existing.isRekt() && existing.kingdom?.id == pStateDefender(pAssignments))
+                var existing = new FrontierTarget
+                {
+                    CityId = cityId,
+                    TileId = tileId
+                };
+                if (ResolveFrontierTarget(pAssignments, existing) != null)
                     return existing;
             }
-            if (pAssignments.TargetCityIds.Count == 0 ||
-                !pAssignments.ArmyOrderById.TryGetValue(pArmy.id, out int order)) return null;
-            long targetId = pAssignments.TargetCityIds[order % pAssignments.TargetCityIds.Count];
-            City target = ResolveCity(targetId);
-            if (target?.data == null || target.isRekt() || target.kingdom?.id != pStateDefender(pAssignments))
+            int index = ArmyDeploymentRules.StableFrontierIndex(
+                pArmy.id, pAssignments.FrontierTargets.Count);
+            if (index < 0) return null;
+            FrontierTarget target = pAssignments.FrontierTargets[index];
+            if (ResolveFrontierTarget(pAssignments, target) == null)
                 return null;
-            pAssignments.TargetCityByArmy[pArmy.id] = target.id;
+            pAssignments.TargetCityByArmy[pArmy.id] = target.CityId;
+            pAssignments.TargetTileByArmy[pArmy.id] = target.TileId;
             return target;
         }
 
-        private static long pStateDefender(NoticeAssignments pAssignments)
+        private static void AssignArmy(NoticeAssignments pAssignments,
+            Army pArmy, FrontierTarget pTarget)
         {
-            return pAssignments?.State?.DefenderId ?? -1L;
-        }
-
-        private static void AssignArmy(NoticeAssignments pAssignments, Army pArmy, City pTarget)
-        {
-            if (pAssignments?.State == null || pArmy?.data == null || pTarget?.data == null) return;
-            bool targetChanged = !pAssignments.AssignedTargetCityByArmy.TryGetValue(
-                                     pArmy.id, out long assignedTargetId) ||
-                                 assignedTargetId != pTarget.id;
-            pAssignments.AssignedTargetCityByArmy[pArmy.id] = pTarget.id;
+            if (pAssignments?.State == null || pArmy?.data == null ||
+                pTarget == null || ResolveFrontierTarget(pAssignments,
+                    pTarget) == null) return;
+            bool targetChanged = !pAssignments.AssignedTargetTileByArmy.
+                                     TryGetValue(pArmy.id,
+                                         out int assignedTargetId) ||
+                                 assignedTargetId != pTarget.TileId;
+            pAssignments.AssignedTargetTileByArmy[pArmy.id] =
+                pTarget.TileId;
             if (targetChanged)
             {
                 pAssignments.NextActorIndexByArmy[pArmy.id] = 0;
@@ -436,51 +682,125 @@ namespace AncientWarfare3.core.lineage
             {
                 pAssignments.NextActorIndexByArmy[pArmy.id] = 0;
             }
-            ScheduleArmyAssignment(pAssignments.State.Signature, pArmy.id, pTarget.id);
+            ScheduleArmyAssignment(pAssignments.AssignmentKey, pArmy.id,
+                pTarget.CityId, pTarget.TileId);
         }
 
-        private static void ScheduleArmyAssignment(string pSignature, long pArmyId, long pTargetCityId)
+        private static void ScheduleArmyAssignment(string pSignature,
+            long pArmyId, long pTargetCityId, int pTargetTileId)
         {
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 DeferredRuntimeWorkRules.CoalescingKey("deployment_assign:" + (pSignature ?? ""), pArmyId),
                 DeferredWorkClass.Runtime,
-                () => AssignArmyBatch(pSignature, pArmyId, pTargetCityId));
+                () => AssignArmyBatch(pSignature, pArmyId, pTargetCityId,
+                    pTargetTileId));
         }
 
-        private static void AssignArmyBatch(string pSignature, long pArmyId, long pTargetCityId)
+        private static void AssignArmyBatch(string pSignature, long pArmyId,
+            long pTargetCityId, int pTargetTileId)
         {
             if (string.IsNullOrEmpty(pSignature) ||
                 !Assignments.TryGetValue(pSignature, out NoticeAssignments assignments) ||
                 assignments.Closing) return;
             Army army = ResolveArmy(pArmyId);
             City target = ResolveCity(pTargetCityId);
-            if (army?.data == null || target?.data == null || target.isRekt()) return;
-            assignments.NextActorIndexByArmy.TryGetValue(pArmyId, out int cursor);
-            if (cursor < 0 || cursor > army.units.Count) cursor = 0;
-            int end = Math.Min(army.units.Count, cursor + ActorMutationBatchSize);
+            WorldTile targetTile = FindTile(pTargetTileId);
+            if (army?.data == null || target?.data == null ||
+                target.isRekt() || targetTile?.data == null ||
+                target.kingdom?.id != assignments.OwnerKingdomId ||
+                targetTile.zone?.city != target) return;
+            Actor captain = null;
+            try { captain = army.getCaptain(); } catch { }
+            ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
+            bool useFormationMovement =
+                ArmyDeploymentRules.ShouldUseFormationQuorum(
+                    mode);
+            int count;
+            try { count = army.units.Count; }
+            catch { count = 0; }
+            if (!useFormationMovement)
+            {
+                if (ArmyDeploymentRules.ShouldAssignDeploymentActor(
+                        mode, actorIsCaptain: true))
+                    AssignDeploymentActor(assignments, captain, pSignature,
+                        pTargetCityId, targetTile,
+                        WarMobilizationContent.DeploymentJobId);
+                assignments.NextActorIndexByArmy[pArmyId] = count;
+                return;
+            }
+
+            WorldTile deploymentAnchor = ResolveDeploymentAnchor(army,
+                targetTile, out bool deploymentEligible);
+            ArmyFormationService.SetAnchor(army, deploymentAnchor,
+                pDeploymentEligible: deploymentEligible);
+            assignments.NextActorIndexByArmy.TryGetValue(pArmyId,
+                out int cursor);
+            if (cursor < 0 || cursor > count) cursor = 0;
+            int end = Math.Min(count, cursor + ActorMutationBatchSize);
             for (int i = cursor; i < end; i++)
             {
-                Actor actor = army.units[i];
-                if (actor?.data == null || actor.isRekt() || !actor.isAlive() || !actor.isWarrior()) continue;
-                if (RoyalGuardService.IsRoyalGuard(actor)) continue;
-                actor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE, out string currentSignature, "");
-                actor.data.get(LineageKeys.DEPLOYMENT_TARGET_CITY_ID, out long currentCityId, -1L);
-                bool reset = ArmyDeploymentRules.ShouldResetAssignment(currentSignature,
-                    pSignature, currentCityId, pTargetCityId);
-                actor.data.set(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE, pSignature);
-                actor.data.set(LineageKeys.DEPLOYMENT_TARGET_CITY_ID, pTargetCityId);
-                if (reset) actor.data.set(LineageKeys.DEPLOYMENT_ARRIVED, false);
-                assignments.ActorIds.Add(actor.data.id);
-                try
-                {
-                    if (actor.ai?.job?.id != WarMobilizationContent.DeploymentJobId)
-                        actor.ai?.setJob(WarMobilizationContent.DeploymentJobId);
-                }
+                Actor actor = null;
+                try { actor = army.units[i]; }
                 catch { }
+                if (actor?.data == null || actor.isRekt() ||
+                    !actor.isAlive() || !actor.isWarrior() ||
+                    RoyalGuardService.IsRoyalGuard(actor)) continue;
+                bool actorIsCaptain = actor == captain;
+                if (!ArmyDeploymentRules.ShouldAssignDeploymentActor(
+                        mode, actorIsCaptain)) continue;
+                string jobId = ArmyDeploymentRules.
+                    ShouldUseFormationFollowerJob(
+                        mode, actorIsCaptain)
+                    ? ArmyRtsContent.FollowerJobId
+                    : WarMobilizationContent.DeploymentJobId;
+                AssignDeploymentActor(assignments, actor, pSignature,
+                    pTargetCityId, targetTile, jobId);
             }
             assignments.NextActorIndexByArmy[pArmyId] = end;
-            if (end < army.units.Count)
-                ScheduleArmyAssignment(pSignature, pArmyId, pTargetCityId);
+            if (end < count)
+                ScheduleArmyAssignment(pSignature, pArmyId,
+                    pTargetCityId, pTargetTileId);
+        }
+
+        private static void AssignDeploymentActor(
+            NoticeAssignments pAssignments, Actor pActor,
+            string pSignature, long pTargetCityId, WorldTile pTargetTile,
+            string pJobId)
+        {
+            if (pAssignments == null || pActor?.data == null ||
+                pTargetTile?.data == null ||
+                pActor.isRekt() || !pActor.isAlive() ||
+                !pActor.isWarrior() ||
+                RoyalGuardService.IsRoyalGuard(pActor)) return;
+            pActor.data.get(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE,
+                out string currentSignature, "");
+            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_CITY_ID,
+                out long currentCityId, -1L);
+            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_X,
+                out int currentX, -1);
+            pActor.data.get(LineageKeys.DEPLOYMENT_TARGET_Y,
+                out int currentY, -1);
+            bool reset = ArmyDeploymentRules.ShouldResetAssignment(
+                currentSignature, pSignature, currentCityId,
+                pTargetCityId) || currentX != pTargetTile.x ||
+                                 currentY != pTargetTile.y;
+            pActor.data.set(LineageKeys.DEPLOYMENT_NOTICE_SIGNATURE,
+                pSignature);
+            pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_CITY_ID,
+                pTargetCityId);
+            pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_X,
+                pTargetTile.x);
+            pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_Y,
+                pTargetTile.y);
+            if (reset)
+                pActor.data.set(LineageKeys.DEPLOYMENT_ARRIVED, false);
+            pAssignments.ActorIds.Add(pActor.data.id);
+            try
+            {
+                if (pActor.ai?.job?.id != pJobId)
+                    pActor.ai?.setJob(pJobId);
+            }
+            catch { }
         }
 
         private static void ScheduleCleanup(string pSignature)
@@ -512,7 +832,11 @@ namespace AncientWarfare3.core.lineage
                         out string currentSignature, "");
                     if (ArmyDeploymentRules.ShouldClearForClosingNotice(
                             currentSignature, pSignature))
+                    {
+                        AWArmyMarchService.ClearRetainedDeploymentTrail(
+                            actor.army, pSignature);
                         ClearActorAssignment(actor, assignments.RestoreJobs);
+                    }
                 }
             }
             if (assignments.ActorIds.Count > 0)
@@ -536,22 +860,26 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(pSignature) ||
                 !Assignments.TryGetValue(pSignature, out NoticeAssignments assignments) ||
                 assignments.Closing || assignments.DiscoveryComplete) return;
-            Kingdom defender = ResolveKingdom(assignments.State?.DefenderId ?? -1L);
-            Kingdom attacker = ResolveKingdom(assignments.State?.AttackerId ?? -1L);
-            if (defender?.data == null || defender.isRekt()) return;
+            Kingdom owner = ResolveKingdom(assignments.OwnerKingdomId);
+            Kingdom opponent = ResolveKingdom(assignments.OpponentKingdomId);
+            if (owner?.data == null || owner.isRekt() ||
+                opponent?.data == null || opponent.isRekt()) return;
+            City focus = ResolveOpponentFocus(assignments, opponent);
 
-            int cityCount = defender.cities.Count;
+            int cityCount = owner.cities.Count;
             if (assignments.CityDiscoveryCursor < 0 || assignments.CityDiscoveryCursor > cityCount)
                 assignments.CityDiscoveryCursor = 0;
             int end = Math.Min(cityCount, assignments.CityDiscoveryCursor +
                                           ArmyDeploymentRules.MaxCitiesDiscoveredPerWorkItem);
             for (int i = assignments.CityDiscoveryCursor; i < end; i++)
             {
-                City city = defender.cities[i];
-                if (city?.data == null || city.isRekt() || city.kingdom != defender) continue;
-                if (assignments.FallbackCityId < 0 || city == defender.capital)
+                City city = owner.cities[i];
+                if (city?.data == null || city.isRekt() ||
+                    city.kingdom != owner) continue;
+                if (assignments.FallbackCityId < 0 || city == owner.capital)
                     assignments.FallbackCityId = city.id;
-                if (BordersKingdom(city, attacker)) AddTargetCity(assignments, city);
+                DiscoverFrontierTargets(assignments, city, opponent,
+                    focus);
                 if (city.hasArmy()) RegisterOrRefreshArmy(assignments, city.getArmy());
             }
             assignments.CityDiscoveryCursor = end;
@@ -561,15 +889,21 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
 
-            AddIndexedRoleArmies(assignments, defender, AWArmyRole.BorderArmy);
-            AddIndexedRoleArmies(assignments, defender, AWArmyRole.SlaveArmy);
-            if (assignments.TargetCityIds.Count == 0)
+            AddIndexedRoleArmies(assignments, owner, AWArmyRole.BorderArmy);
+            AddIndexedRoleArmies(assignments, owner, AWArmyRole.SlaveArmy);
+            if (assignments.FrontierTargets.Count == 0)
             {
-                City fallback = defender.capital?.data != null && !defender.capital.isRekt()
-                    ? defender.capital
-                    : ResolveCity(assignments.FallbackCityId);
-                AddTargetCity(assignments, fallback);
+                int fallbackTileId = assignments.FallbackCoastTileId >= 0
+                    ? assignments.FallbackCoastTileId
+                    : assignments.FallbackApproachTileId;
+                long fallbackCityId = assignments.FallbackCoastTileId >= 0
+                    ? assignments.FallbackCoastCityId
+                    : assignments.FallbackApproachCityId;
+                AddFrontierTarget(assignments, fallbackCityId,
+                    fallbackTileId);
             }
+            assignments.FrontierTargets.Sort((left, right) =>
+                left.TileId.CompareTo(right.TileId));
             assignments.DiscoveryComplete = true;
             ScheduleArmyReview(pSignature, pRestart: true);
         }
@@ -581,6 +915,132 @@ namespace AncientWarfare3.core.lineage
             pAssignments.TargetCityIds.Add(pCity.id);
         }
 
+        private static void DiscoverFrontierTargets(
+            NoticeAssignments pAssignments, City pCity,
+            Kingdom pOpponent, City pFocus)
+        {
+            if (pAssignments == null || pCity?.data == null ||
+                pOpponent?.data == null) return;
+            try { pCity.recalculateNeighbourZones(); }
+            catch { }
+            try
+            {
+                foreach (TileZone zone in pCity.border_zones)
+                {
+                    if (zone?.tiles == null || zone.city != pCity) continue;
+                    foreach (WorldTile tile in zone.tiles)
+                    {
+                        if (tile?.data == null || tile.Type == null) continue;
+                        bool ownedBySide = tile.zone?.city == pCity &&
+                                           pCity.kingdom?.id ==
+                                           pAssignments.OwnerKingdomId;
+                        bool touchesOpponent = TouchesOpponentLand(tile,
+                            pOpponent);
+                        if (ArmyDeploymentRules.IsFacingFrontierTile(
+                                ownedBySide, tile.Type.ground,
+                                tile.Type.liquid || tile.Type.ocean,
+                                tile.Type.lava, tile.Type.block,
+                                touchesOpponent))
+                            TryAddFacingBorderTarget(pAssignments, pCity,
+                                tile);
+                        ObserveFallbackTarget(pAssignments, pCity, tile,
+                            pFocus);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void TryAddFacingBorderTarget(
+            NoticeAssignments pAssignments, City pCity,
+            WorldTile pTile)
+        {
+            AddFrontierTarget(pAssignments, pCity?.id ?? -1L,
+                pTile?.data?.tile_id ?? -1);
+        }
+
+        private static void AddFrontierTarget(
+            NoticeAssignments pAssignments, long pCityId, int pTileId)
+        {
+            if (pAssignments == null || pCityId < 0 || pTileId < 0 ||
+                !pAssignments.FrontierTileSet.Add(pTileId)) return;
+            City city = ResolveCity(pCityId);
+            WorldTile tile = FindTile(pTileId);
+            if (city?.data == null || city.isRekt() ||
+                city.kingdom?.id != pAssignments.OwnerKingdomId ||
+                tile?.data == null || tile.zone?.city != city)
+            {
+                pAssignments.FrontierTileSet.Remove(pTileId);
+                return;
+            }
+            pAssignments.FrontierTargets.Add(new FrontierTarget
+            {
+                CityId = pCityId,
+                TileId = pTileId
+            });
+            AddTargetCity(pAssignments, city);
+        }
+
+        private static void ObserveFallbackTarget(
+            NoticeAssignments pAssignments, City pCity,
+            WorldTile pTile, City pFocus)
+        {
+            if (pAssignments == null || pCity?.data == null ||
+                pTile?.data == null || pTile.Type == null ||
+                pTile.zone?.city != pCity || !pTile.Type.ground ||
+                pTile.Type.liquid || pTile.Type.ocean || pTile.Type.lava ||
+                pTile.Type.block) return;
+            long distance = TileDistanceSquared(pTile, pFocus?.getTile());
+            int tileId = pTile.data.tile_id;
+            if (distance < pAssignments.FallbackApproachDistance ||
+                distance == pAssignments.FallbackApproachDistance &&
+                tileId < pAssignments.FallbackApproachTileId)
+            {
+                pAssignments.FallbackApproachDistance = distance;
+                pAssignments.FallbackApproachTileId = tileId;
+                pAssignments.FallbackApproachCityId = pCity.id;
+            }
+            if (!TouchesLiquid(pTile)) return;
+            if (distance < pAssignments.FallbackCoastDistance ||
+                distance == pAssignments.FallbackCoastDistance &&
+                tileId < pAssignments.FallbackCoastTileId)
+            {
+                pAssignments.FallbackCoastDistance = distance;
+                pAssignments.FallbackCoastTileId = tileId;
+                pAssignments.FallbackCoastCityId = pCity.id;
+            }
+        }
+
+        private static bool TouchesOpponentLand(WorldTile pTile,
+            Kingdom pOpponent)
+        {
+            if (pTile?.neighboursAll == null || pOpponent?.data == null)
+                return false;
+            foreach (WorldTile neighbour in pTile.neighboursAll)
+            {
+                if (neighbour?.Type == null || !neighbour.Type.ground ||
+                    neighbour.Type.liquid || neighbour.Type.ocean ||
+                    neighbour.Type.lava || neighbour.Type.block) continue;
+                try
+                {
+                    if (neighbour.zone?.city?.kingdom == pOpponent)
+                        return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private static bool TouchesLiquid(WorldTile pTile)
+        {
+            if (pTile?.neighboursAll == null) return false;
+            foreach (WorldTile neighbour in pTile.neighboursAll)
+                if (neighbour?.Type != null &&
+                    (neighbour.Type.liquid || neighbour.Type.ocean))
+                    return true;
+            return false;
+        }
+
         private static void ScheduleArmyReview(string pSignature, bool pRestart)
         {
             if (string.IsNullOrEmpty(pSignature) ||
@@ -590,6 +1050,28 @@ namespace AncientWarfare3.core.lineage
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 "deployment_review:" + (pSignature ?? ""), DeferredWorkClass.Runtime,
                 () => ReviewArmyBatch(pSignature));
+        }
+
+        private static void ScheduleFormationReview(string pSignature,
+            long pArmyId)
+        {
+            if (string.IsNullOrEmpty(pSignature) || pArmyId < 0L)
+                return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "deployment_formation:" + (pSignature ?? ""),
+                    pArmyId), DeferredWorkClass.Runtime,
+                () => ReviewFormationArmy(pSignature, pArmyId));
+        }
+
+        private static void ReviewFormationArmy(string pSignature,
+            long pArmyId)
+        {
+            if (string.IsNullOrEmpty(pSignature) ||
+                !Assignments.TryGetValue(pSignature,
+                    out NoticeAssignments assignments) ||
+                assignments.Closing) return;
+            RegisterOrRefreshArmy(assignments, ResolveArmy(pArmyId));
         }
 
         private static void ReviewArmyBatch(string pSignature)
@@ -604,7 +1086,8 @@ namespace AncientWarfare3.core.lineage
             }
 
             int count = assignments.RequiredArmyIds.Count;
-            if (assignments.ArmyReviewCursor < 0 || assignments.ArmyReviewCursor > count)
+            if (assignments.ArmyReviewCursor < 0 ||
+                assignments.ArmyReviewCursor >= count)
                 assignments.ArmyReviewCursor = 0;
             int end = Math.Min(count, assignments.ArmyReviewCursor +
                                       ArmyDeploymentRules.MaxArmiesReviewedPerWorkItem);
@@ -618,8 +1101,9 @@ namespace AncientWarfare3.core.lineage
         private static void RegisterOrRefreshArmy(NoticeAssignments pAssignments, Army pArmy)
         {
             if (pAssignments?.State == null) return;
-            Kingdom defender = ResolveKingdom(pAssignments.State.DefenderId);
-            if (!IsRequiredArmy(pArmy, defender, out int living))
+            Kingdom owner = ResolveKingdom(pAssignments.OwnerKingdomId);
+            ObserveFormation(pAssignments, pArmy);
+            if (!IsRequiredArmy(pArmy, owner, out int living))
             {
                 if (pArmy?.data != null) pAssignments.BlockingArmyIds.Remove(pArmy.id);
                 return;
@@ -632,17 +1116,60 @@ namespace AncientWarfare3.core.lineage
             }
 
             bool ready = IsReady(pArmy, living);
-            if (ready && pAssignments.DiscoveryComplete)
+            if (ArmyDeploymentRules.CanBeginDeployment(ready,
+                    pAssignments.DiscoveryComplete))
             {
-                City target = ResolveAssignedCity(pAssignments, pArmy);
-                if (target?.data != null) AssignArmy(pAssignments, pArmy, target);
+                FrontierTarget target = ResolveAssignedTarget(pAssignments,
+                    pArmy);
+                if (target != null) AssignArmy(pAssignments, pArmy, target);
             }
             bool arrived = ready && IsArmyArrived(pAssignments, pArmy);
-            if (ArmyDeploymentRules.BlocksDeclarationGate(
-                    living > 0, IsRoyalGuardArmy(pArmy), ready, arrived))
+            if (ArmyDeploymentRules.BlocksDeclarationGateForSide(
+                    pAssignments.IsDefenderSide, living > 0,
+                    IsRoyalGuardArmy(pArmy), ready, arrived))
                 pAssignments.BlockingArmyIds.Add(pArmy.id);
             else
                 pAssignments.BlockingArmyIds.Remove(pArmy.id);
+        }
+
+        private static void ObserveFormation(NoticeAssignments pAssignments,
+            Army pArmy)
+        {
+            if (pAssignments == null || pArmy?.data == null) return;
+            WorldTile target = null;
+            if (pAssignments.AssignedTargetTileByArmy.TryGetValue(pArmy.id,
+                    out int targetTileId))
+                target = FindTile(targetTileId);
+            WorldTile anchor = ResolveDeploymentAnchor(pArmy, target,
+                out bool deploymentEligible);
+            ArmyFormationService.SetAnchor(pArmy, anchor,
+                pDeploymentEligible: deploymentEligible);
+        }
+
+        private static WorldTile ResolveDeploymentAnchor(Army pArmy,
+            WorldTile pFrontierTarget, out bool pDeploymentEligible)
+        {
+            pDeploymentEligible = false;
+            Actor captain = null;
+            try { captain = pArmy?.getCaptain(); }
+            catch { }
+            WorldTile captainTile = captain?.current_tile;
+            bool captainAtTarget = captainTile?.data != null &&
+                                   pFrontierTarget?.data != null &&
+                                   Math.Abs(captainTile.x -
+                                            pFrontierTarget.x) <=
+                                   ArrivalRadius &&
+                                   Math.Abs(captainTile.y -
+                                            pFrontierTarget.y) <=
+                                   ArrivalRadius;
+            if (ArmyDeploymentRules.ShouldUseFrontierAnchor(
+                    captainAtTarget,
+                    pFrontierTarget?.data != null))
+            {
+                pDeploymentEligible = true;
+                return pFrontierTarget;
+            }
+            return captainTile ?? pFrontierTarget;
         }
 
         private static void AddIndexedRoleArmies(NoticeAssignments pAssignments,
@@ -652,24 +1179,87 @@ namespace AncientWarfare3.core.lineage
                 RegisterOrRefreshArmy(pAssignments, army);
         }
 
-        private static bool BordersKingdom(City pCity, Kingdom pAttacker)
+        private static City ResolveOpponentFocus(
+            NoticeAssignments pAssignments, Kingdom pOpponent)
         {
-            if (pCity?.data == null || pAttacker?.data == null) return false;
-            try { return pCity.neighbours_kingdoms.Contains(pAttacker); }
-            catch { return false; }
+            City target = ResolveCity(pAssignments?.State?.TargetCityId ??
+                                      -1L);
+            if (target?.data != null && !target.isRekt() &&
+                target.kingdom == pOpponent) return target;
+            if (pOpponent?.capital?.data != null &&
+                !pOpponent.capital.isRekt()) return pOpponent.capital;
+            try
+            {
+                for (int i = 0; i < pOpponent.cities.Count; i++)
+                {
+                    City city = pOpponent.cities[i];
+                    if (city?.data != null && !city.isRekt() &&
+                        city.kingdom == pOpponent) return city;
+                }
+            }
+            catch { }
+            return null;
         }
 
-        private static WorldTile StableTargetTile(City pCity, long pActorId)
+        private static WorldTile ResolveFrontierTarget(
+            NoticeAssignments pAssignments, FrontierTarget pTarget)
         {
-            WorldTile center = pCity?.getTile();
-            if (center == null) return null;
-            int phase = (int)(Math.Abs(pActorId) % 8L);
-            WorldTile candidate = World.world?.GetTile(
-                center.x + TargetOffsetX[phase], center.y + TargetOffsetY[phase]);
-            if (candidate != null && candidate.Type != null && candidate.Type.ground &&
-                !candidate.Type.liquid && !candidate.Type.lava && !candidate.Type.block &&
-                candidate.isSameIsland(center)) return candidate;
-            return center.getNeighbourTileSameIsland() ?? center;
+            if (pAssignments == null || pTarget == null) return null;
+            City city = ResolveCity(pTarget.CityId);
+            WorldTile tile = FindTile(pTarget.TileId);
+            return IsFriendlyWalkableTarget(pAssignments, city, tile)
+                ? tile
+                : null;
+        }
+
+        private static WorldTile ResolveTargetTile(
+            NoticeAssignments pAssignments, int pX, int pY)
+        {
+            if (pAssignments == null || pX < 0 || pY < 0) return null;
+            WorldTile tile;
+            try { tile = World.world?.GetTile(pX, pY); }
+            catch { return null; }
+            City city = tile?.zone?.city;
+            return IsFriendlyWalkableTarget(pAssignments, city, tile)
+                ? tile
+                : null;
+        }
+
+        private static bool IsFriendlyWalkableTarget(
+            NoticeAssignments pAssignments, City pCity, WorldTile pTile)
+        {
+            return pAssignments != null && pCity?.data != null &&
+                   !pCity.isRekt() &&
+                   pCity.kingdom?.id == pAssignments.OwnerKingdomId &&
+                   pTile?.data != null && pTile.zone?.city == pCity &&
+                   pTile.Type != null && pTile.Type.ground &&
+                   !pTile.Type.liquid && !pTile.Type.ocean &&
+                   !pTile.Type.lava && !pTile.Type.block;
+        }
+
+        private static WorldTile FindTile(int pTileId)
+        {
+            try
+            {
+                WorldTile[] tiles = World.world?.tiles_list;
+                return tiles != null && pTileId >= 0 &&
+                       pTileId < tiles.Length
+                    ? tiles[pTileId]
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        private static long TileDistanceSquared(WorldTile pFirst,
+            WorldTile pSecond)
+        {
+            if (pFirst == null || pSecond == null) return long.MaxValue;
+            long x = pFirst.x - pSecond.x;
+            long y = pFirst.y - pSecond.y;
+            if (Math.Abs(x) > 3_000_000_000L ||
+                Math.Abs(y) > 3_000_000_000L) return long.MaxValue;
+            long distance = x * x + y * y;
+            return distance < 0 ? long.MaxValue : distance;
         }
 
         private static bool IsRoyalGuardArmy(Army pArmy)
@@ -685,7 +1275,10 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_X, -1);
             pActor.data.set(LineageKeys.DEPLOYMENT_TARGET_Y, -1);
             pActor.data.set(LineageKeys.DEPLOYMENT_ARRIVED, false);
-            if (!pRestoreJob || pActor.isRekt() || pActor.ai == null) return;
+            bool restoreJob = ArmyDeploymentRules.ShouldRestoreLegacyJob(
+                pRestoreJob,
+                ArmyRtsControllerService.OwnsLiveActor(pActor));
+            if (!restoreJob || pActor.isRekt() || pActor.ai == null) return;
             try { pActor.ai.setJob(pActor.getNextJob()); } catch { }
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
 using AncientWarfare3.ui.items;
@@ -32,6 +33,19 @@ namespace AncientWarfare3.ui.windows
         private Text _cityHeader;
         private FeudatoryPortraitPanel _portrait;
         private WideWindowChrome _chrome;
+        private RectTransform _actionBar;
+        private Button _relocateButton;
+        private Button _reclaimButton;
+        private Button _abolishButton;
+        private Text _relocateText;
+        private Text _reclaimText;
+        private Text _abolishText;
+        private TipButton _relocateTip;
+        private TipButton _reclaimTip;
+        private TipButton _abolishTip;
+        private bool _abolishArmed;
+        private bool _commandPending;
+        private bool _commandRefreshRequested;
 
         public static void Open(long pKingdomId)
         {
@@ -52,11 +66,31 @@ namespace AncientWarfare3.ui.windows
                 () => _windowSize,
                 size => { _windowSize = size; ApplyLayout(); },
                 DefaultSize, MinimumSize, MaximumSize);
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
+        }
+
+        private void OnDestroy()
+        {
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
         }
 
         public override void OnNormalEnable()
         {
             Refresh();
+        }
+
+        private void Update()
+        {
+            if (!_commandRefreshRequested) return;
+            _commandRefreshRequested = false;
+            _commandPending = false;
+            _abolishArmed = false;
+            if (isActiveAndEnabled) Refresh();
+        }
+
+        private void OnCommandStateChanged()
+        {
+            if (_commandPending) _commandRefreshRequested = true;
         }
 
         public void Refresh()
@@ -98,6 +132,7 @@ namespace AncientWarfare3.ui.windows
                 _detailBody.text = "";
                 _cityHeader.text = "";
                 HideCityButtons();
+                if (_actionBar != null) _actionBar.gameObject.SetActive(false);
                 return;
             }
             RenderDetail(selected);
@@ -105,13 +140,17 @@ namespace AncientWarfare3.ui.windows
 
         private void RenderDetail(FeudatorySnapshot pSnapshot)
         {
+            string princeTitle =
+                DynasticTitleService.ResolveLivingTitle(
+                    pSnapshot.PrinceActorId);
             _portrait.Bind(pSnapshot.PrinceActorId, pSnapshot.PrinceName,
-                pSnapshot.PrinceShiLabel);
+                princeTitle, pSnapshot.PrinceShiLabel);
             _detailTitle.text = string.IsNullOrEmpty(pSnapshot.FeudatoryName)
                 ? pSnapshot.SeatName
                 : pSnapshot.FeudatoryName;
             string successor = string.IsNullOrEmpty(pSnapshot.SuccessorName)
-                ? AW_L10n.Text("aw_feudatory_successor_none", "No successor")
+                ? AW_L10n.Text("aw_feudatory_successor_none",
+                    "No heir apparent")
                 : pSnapshot.SuccessorName;
             _detailBody.text =
                 AW_L10n.Text("aw_feudatory_mapmode_autonomy", "Autonomy") +
@@ -120,8 +159,15 @@ namespace AncientWarfare3.ui.windows
                 ": " + pSnapshot.Loyalty +
                 "\n" + AW_L10n.Text("aw_feudatory_garrison", "Garrison") +
                 ": " + pSnapshot.GarrisonSize +
-                "    " + AW_L10n.Text("aw_feudatory_successor", "Successor") +
-                ": " + successor + BuildSelectedCityLine(pSnapshot);
+                "    " + AW_L10n.Text("aw_feudatory_successor",
+                    "Heir Apparent") +
+                ": " + successor +
+                "\n" + AW_L10n.Text("aw_feudatory_remittance",
+                    "Central remittance") + ": " +
+                Mathf.RoundToInt(
+                    FeudatoryAutonomyRules.CentralRemittanceMultiplier(
+                        pSnapshot.Autonomy) * 100f) + "%" +
+                BuildSelectedCityLine(pSnapshot);
             _cityHeader.text = AW_L10n.Text("aw_feudatory_cities", "Cities") +
                                "  " + pSnapshot.CityRows.Count + "/" +
                                FeudatoryRules.MaximumCities;
@@ -133,6 +179,8 @@ namespace AncientWarfare3.ui.windows
             }
             for (int i = pSnapshot.CityRows.Count; i < _cityButtonPool.Count; i++)
                 _cityButtonPool[i].gameObject.SetActive(false);
+            _actionBar.gameObject.SetActive(true);
+            RefreshActionButtons();
         }
 
         private string BuildSelectedCityLine(FeudatorySnapshot pSnapshot)
@@ -157,7 +205,10 @@ namespace AncientWarfare3.ui.windows
         private void SelectFeudatory(long pFeudatoryId)
         {
             if (_selectedFeudatoryId != pFeudatoryId)
+            {
                 _selectedCityId = -1L;
+                _abolishArmed = false;
+            }
             _selectedFeudatoryId = pFeudatoryId;
             Refresh();
         }
@@ -168,6 +219,70 @@ namespace AncientWarfare3.ui.windows
             if (city?.data == null || city.isRekt()) return;
             SelectedMetas.selected_city = city;
             _selectedCityId = pCityId;
+            Refresh();
+        }
+
+        private void RelocateSelectedFeudatory()
+        {
+            if (_commandPending) return;
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.RelocateFeudatory(_kingdomId,
+                        _selectedFeudatoryId));
+            _commandPending = result.Status == AW3CommandStatus.Pending;
+            if (_commandPending)
+            {
+                Refresh();
+                return;
+            }
+            if (!result.Accepted) return;
+            _selectedCityId = -1L;
+            _abolishArmed = false;
+            Refresh();
+        }
+
+        private void ReclaimSelectedCity()
+        {
+            if (_commandPending || _selectedCityId < 0) return;
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.ReclaimFeudatoryCity(_kingdomId,
+                        _selectedFeudatoryId, _selectedCityId));
+            _commandPending = result.Status == AW3CommandStatus.Pending;
+            if (_commandPending)
+            {
+                Refresh();
+                return;
+            }
+            if (!result.Accepted) return;
+            _selectedCityId = -1L;
+            _abolishArmed = false;
+            Refresh();
+        }
+
+        private void AbolishSelectedFeudatory()
+        {
+            if (_commandPending) return;
+            if (!_abolishArmed)
+            {
+                _abolishArmed = true;
+                RefreshActionButtons();
+                return;
+            }
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.AbolishFeudatory(_kingdomId,
+                        _selectedFeudatoryId));
+            _commandPending = result.Status == AW3CommandStatus.Pending;
+            if (_commandPending)
+            {
+                Refresh();
+                return;
+            }
+            if (!result.Accepted) return;
+            _selectedFeudatoryId = -1L;
+            _selectedCityId = -1L;
+            _abolishArmed = false;
             Refresh();
         }
 
@@ -207,6 +322,17 @@ namespace AncientWarfare3.ui.windows
                 TextAnchor.UpperLeft);
             _cityHeader = CreateText(_rightContent, "CityHeader", 10,
                 TextAnchor.UpperLeft);
+            _actionBar = new GameObject("GovernanceActions",
+                typeof(RectTransform)).GetComponent<RectTransform>();
+            _actionBar.SetParent(_rightContent, false);
+            _relocateButton = CreateActionButton(_actionBar, "Relocate",
+                RelocateSelectedFeudatory, out _relocateText,
+                out _relocateTip);
+            _reclaimButton = CreateActionButton(_actionBar, "Reclaim",
+                ReclaimSelectedCity, out _reclaimText, out _reclaimTip);
+            _abolishButton = CreateActionButton(_actionBar, "Abolish",
+                AbolishSelectedFeudatory, out _abolishText,
+                out _abolishTip);
             SetWindowTitle();
         }
 
@@ -282,18 +408,105 @@ namespace AncientWarfare3.ui.windows
                 _root.sizeDelta.y);
             _leftContent.sizeDelta = new Vector2(leftWidth - 10f,
                 _leftContent.sizeDelta.y);
-            float detailHeight = Mathf.Max(_root.sizeDelta.y, 350f);
+            float detailHeight = Mathf.Max(_root.sizeDelta.y, 390f);
             _rightContent.sizeDelta = new Vector2(rightWidth - 10f,
                 detailHeight);
             Layout(_portrait.GetComponent<RectTransform>(), 0f, 0f,
                 rightWidth - 12f, 76f);
             Layout(_detailTitle.rectTransform, 0f, 82f, rightWidth - 12f, 24f);
-            Layout(_detailBody.rectTransform, 0f, 110f, rightWidth - 12f, 68f);
-            Layout(_cityHeader.rectTransform, 0f, 184f, rightWidth - 12f, 20f);
+            Layout(_detailBody.rectTransform, 0f, 110f, rightWidth - 12f, 88f);
+            Layout(_cityHeader.rectTransform, 0f, 204f, rightWidth - 12f, 20f);
             for (int i = 0; i < _cityButtonPool.Count; i++)
                 Layout(_cityButtonPool[i].GetComponent<RectTransform>(), 0f,
-                    208f + i * 26f, rightWidth - 12f, 23f);
+                    228f + i * 26f, rightWidth - 12f, 23f);
+            float actionY = 228f + FeudatoryRules.MaximumCities * 26f + 7f;
+            float actionWidth = rightWidth - 12f;
+            Layout(_actionBar, 0f, actionY, actionWidth, 25f);
+            float buttonWidth = Mathf.Max(54f, (actionWidth - 8f) / 3f);
+            Layout(_relocateButton?.GetComponent<RectTransform>(), 0f, 0f,
+                buttonWidth, 24f);
+            Layout(_reclaimButton?.GetComponent<RectTransform>(),
+                buttonWidth + 4f, 0f, buttonWidth, 24f);
+            Layout(_abolishButton?.GetComponent<RectTransform>(),
+                (buttonWidth + 4f) * 2f, 0f, buttonWidth, 24f);
             _chrome?.RepositionResizeHandle();
+        }
+
+        private void RefreshActionButtons()
+        {
+            Kingdom kingdom = FindKingdom(_kingdomId);
+            bool relocate = kingdom?.data != null &&
+                            FeudatoryService.CanRelocateFeudatory(kingdom,
+                                _selectedFeudatoryId) && !_commandPending;
+            bool reclaim = kingdom?.data != null && _selectedCityId >= 0 &&
+                           FeudatoryService.CanReclaimFeudatoryCity(kingdom,
+                               _selectedFeudatoryId, _selectedCityId) &&
+                           !_commandPending;
+            bool abolish = kingdom?.data != null &&
+                           FeudatoryService.CanAbolishFeudatory(kingdom,
+                               _selectedFeudatoryId) && !_commandPending;
+            SetActionButton(_relocateButton, _relocateText, _relocateTip,
+                relocate, "aw_feudatory_action_relocate", "Relocate",
+                "aw_feudatory_action_relocate_desc",
+                "Relocate to a smaller inner contiguous territory");
+            SetActionButton(_reclaimButton, _reclaimText, _reclaimTip,
+                reclaim, "aw_feudatory_action_reclaim", "Reclaim",
+                "aw_feudatory_action_reclaim_desc",
+                "Return the selected city to direct rule");
+            SetActionButton(_abolishButton, _abolishText, _abolishTip,
+                abolish,
+                _abolishArmed
+                    ? "aw_feudatory_action_confirm_abolish"
+                    : "aw_feudatory_action_abolish",
+                _abolishArmed ? "Confirm" : "Abolish",
+                "aw_feudatory_action_abolish_desc",
+                "Return all cities to direct rule");
+        }
+
+        private static Button CreateActionButton(Transform pParent,
+            string pName, UnityEngine.Events.UnityAction pAction,
+            out Text pText, out TipButton pTip)
+        {
+            var obj = new GameObject(pName, typeof(RectTransform),
+                typeof(Image), typeof(Button), typeof(TipButton));
+            obj.transform.SetParent(pParent, false);
+            Button button = obj.GetComponent<Button>();
+            button.onClick.AddListener(pAction);
+            pText = CreateText(obj.transform, "Text", 9,
+                TextAnchor.MiddleCenter);
+            pText.rectTransform.anchorMin = Vector2.zero;
+            pText.rectTransform.anchorMax = Vector2.one;
+            pText.rectTransform.offsetMin = new Vector2(3f, 1f);
+            pText.rectTransform.offsetMax = new Vector2(-3f, -1f);
+            pTip = obj.GetComponent<TipButton>();
+            pTip.type = AW_RawTooltip.TYPE;
+            return button;
+        }
+
+        private static void SetActionButton(Button pButton, Text pText,
+            TipButton pTip, bool pEnabled, string pTitleKey,
+            string pTitleFallback, string pDescriptionKey,
+            string pDescriptionFallback)
+        {
+            if (pButton == null || pText == null) return;
+            string title = AW_L10n.Text(pTitleKey, pTitleFallback);
+            string description = AW_L10n.Text(pDescriptionKey,
+                pDescriptionFallback);
+            pButton.interactable = pEnabled;
+            pText.text = title;
+            AW_UIStyle.ApplyButton(pButton.GetComponent<Image>(),
+                pEnabled ? .96f : .48f);
+            if (pTip == null) return;
+            pTip.enabled = true;
+            pTip.hoverAction = () => Tooltip.show(pTip.gameObject,
+                AW_RawTooltip.TYPE, new TooltipData
+                {
+                    tip_name = title,
+                    tip_description = pEnabled
+                        ? description
+                        : description + "\n" + AW_L10n.Text(
+                            "aw_feudatory_action_unavailable", "Unavailable")
+                });
         }
 
         private static void CreateScrollArea(Transform pParent, string pName,
@@ -377,7 +590,7 @@ namespace AncientWarfare3.ui.windows
                 : new Color(.16f, .145f, .11f, .94f);
             pButton.gameObject.SetActive(true);
             Layout(pButton.GetComponent<RectTransform>(), 0f,
-                208f + pIndex * 26f, _rightContent.sizeDelta.x, 23f);
+                228f + pIndex * 26f, _rightContent.sizeDelta.x, 23f);
         }
 
         private void HideCityButtons()
@@ -432,6 +645,13 @@ namespace AncientWarfare3.ui.windows
                 CityManager cities = World.world?.cities;
                 return cities?.get(pCityId);
             }
+            catch { return null; }
+        }
+
+        private static Kingdom FindKingdom(long pKingdomId)
+        {
+            if (pKingdomId < 0) return null;
+            try { return World.world?.kingdoms?.get(pKingdomId); }
             catch { return null; }
         }
     }

@@ -6,7 +6,7 @@ using UnityEngine;
 namespace AncientWarfare3.content.figures
 {
     /// <summary>
-    ///     历史人物降临(姬发/嬴政/刘邦/曹丕/司马炎)—— AW2 SpecialFigure 的新版重做。
+    ///     历代开国君主降临—— AW2 SpecialFigure 的新版重做。
     ///
     ///     相比 AW2 的改进:
     ///     - **随存档持久化**(FigureStateStore/SQLite),根治重进档重复生成。
@@ -135,6 +135,11 @@ namespace AncientWarfare3.content.figures
             //   → 历史人物**永远不生成**(根因)。改用种族文明标志 asset.civ(对齐 AW2 的 race.civilization,不依赖 kingdom)。
             if (pActor.asset == null || !pActor.asset.civ) { Diag(pSource, "asset 非 civ:" + (pActor.asset?.id ?? "null")); return; }
             if (pActor.hasTrait(TRAIT_FIGURE) || pActor.hasTrait(TRAIT_FIRST)) { Diag(pSource, "已是 figure"); return; }
+            if (!HistoricalFigureSpawnRules.CanEvaluate(FigureStateStore.IsReady))
+            {
+                Diag(pSource, "lineage archive unavailable");
+                return;
+            }
 
             // —— 存活互斥 + 天命国 ——
             if (FigureStateStore.AnyAliveFigure()) { Diag(pSource, "已有 figure 存活(互斥)"); return; }
@@ -146,8 +151,18 @@ namespace AncientWarfare3.content.figures
             var def = HistoricalFigureDef.Get(idx);
             if (def == null) return;
 
+            if (!HistoricalFigureSpawnRules.IsDefinitionSpawnable(def.Id,
+                    def.RegistryIndex, def.SpawnOrder, def.Chance))
+            {
+                Diag(pSource, def.Key + " 定义不可生成");
+                return;
+            }
+
             // —— 合流门:刘邦起需降临目标所在国完成姓氏合流 ——
-            if (def.RequiresIntegration && !IsSpawnKingdomIntegrated(pActor))
+            bool integrationReady = !def.RequiresIntegration ||
+                                    IsSpawnKingdomIntegrated(pActor);
+            if (!HistoricalFigureSpawnRules.CanAttemptDefinition(
+                    def.RequiresIntegration, integrationReady, def.Chance))
             {
                 Diag(pSource, def.Key + " 需所在国姓氏合流未满足");
                 return;
@@ -157,7 +172,7 @@ namespace AncientWarfare3.content.figures
             if (Rng.NextDouble() >= def.Chance) { Diag(pSource, def.Key + " 掷骰未中(chance=" + def.Chance + ")"); return; }
 
             ModClass.LogInfo($"历史人物命中:source={pSource} idx={idx} key={def.Key}");
-            ApplyFigure(pActor, def, idx);
+            ApplyFigure(pActor, def, idx, integrationReady);
         }
 
         private static void Diag(string pSource, string pReason)
@@ -183,51 +198,297 @@ namespace AncientWarfare3.content.figures
         }
 
         /// <summary>降临:设属性 + 注入预设姓氏 + 标记持久化 + 发世界日志。</summary>
-        private static void ApplyFigure(Actor pActor, HistoricalFigureDef pDef, int pIndex)
+        private static void ApplyFigure(Actor pActor, HistoricalFigureDef pDef,
+            int pIndex, bool pIntegrationReady)
         {
-            // 1) 基础属性:满血 1500、收藏、figure+first 特质。
-            pActor.addTrait(TRAIT_FIGURE);
-            pActor.addTrait(TRAIT_FIRST);
-            pActor.setHealth(FIGURE_HEALTH);
-            pActor.data.favorite = true;
+            var snapshot = new ActorFigureSnapshot(pActor);
+            bool reservationCommitted = FigureStateStore.TryReserveSpawn(
+                pIndex, pDef.Id, pActor.data.id, LineageService.CurTime());
+            if (!HistoricalFigureSpawnRules.CanMutate(reservationCommitted))
+            {
+                Diag("reservation", pDef.Key + " persistence deferred");
+                return;
+            }
 
-            // 历史人物(姬发/嬴政/刘邦/曹丕/司马炎)均为男性,性别固定为男
-            // (须在 OnActorPromoted→ApplyDisplayName 之前,后者按性别拼名:男=氏+名,女=名+姓)。
-            pActor.data.sex = ActorSex.Male;
+            long lineageId = -1;
+            long shiId = -1;
+            try
+            {
+                // 1) 基础属性:满血 1500、收藏、figure+first 特质。
+                pActor.addTrait(TRAIT_FIGURE);
+                pActor.addTrait(TRAIT_FIRST);
+                pActor.setHealth(FIGURE_HEALTH);
+                pActor.data.favorite = true;
 
-            // 2) 注入预设姓氏(不走随机):先手建姓族+氏支拿 id,再 set 字段,再晋升。
-            //    必须先 set LINEAGE_ID,EnsureLineageForNoble 见已有谱系即跳过随机生成(LineageService.cs:199)。
-            long lineageId = LineageIdAllocator.NextLineageId();
-            long shiId = LineageIdAllocator.NextShiId();
-            LineageService.InsertLineageGroup(lineageId, pDef.FamilyName, pActor);
-            LineageService.InsertShiBranch(shiId, lineageId, pDef.ClanName, pActor, ShiSourceType.SPECIAL_FIGURE);
+                // 须在 OnActorPromoted→ApplyDisplayName 之前设置，后者会按性别拼名。
+                pActor.data.sex = HistoricalFigureSpawnRules.IsFemale(pDef.Sex)
+                    ? ActorSex.Female
+                    : ActorSex.Male;
 
-            pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
-            pActor.data.set(LineageKeys.SHI_ID, shiId);
-            pActor.data.set(LineageKeys.FAMILY_NAME, pDef.FamilyName);
-            pActor.data.set(LineageKeys.CLAN_NAME, pDef.ClanName);
-            pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME, pDef.FamilyName);
-            pActor.data.set(LineageKeys.GIVEN_NAME, pDef.GivenName); // 名:发/政/邦/丕/炎
-            pActor.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
+                // 2) 注入预设姓氏(不走随机):先手建姓族+氏支拿 id,再 set 字段,再晋升。
+                //    必须先 set LINEAGE_ID,EnsureLineageForNoble 见已有谱系即跳过随机生成(LineageService.cs:199)。
+                lineageId = LineageIdAllocator.NextLineageId();
+                shiId = LineageIdAllocator.NextShiId();
+                if (!FigureStateStore.TryBindPendingLineage(pIndex,
+                        pActor.data.id, lineageId, shiId))
+                    throw new InvalidOperationException(
+                        "historical figure pending lineage bind failed");
+                LineageService.InsertLineageGroup(lineageId, pDef.FamilyName,
+                    pActor);
+                LineageService.InsertShiBranch(shiId, lineageId, pDef.ClanName,
+                    pActor, ShiSourceType.SPECIAL_FIGURE);
 
-            // 3) 晋升为贵族(距离归零、guizu、状态 noble、ApplyDisplayName 拼回全名"姬发"、归档)。
-            LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);
+                pActor.data.set(LineageKeys.LINEAGE_ID, lineageId);
+                pActor.data.set(LineageKeys.SHI_ID, shiId);
+                pActor.data.set(LineageKeys.FAMILY_NAME, pDef.FamilyName);
+                pActor.data.set(LineageKeys.CLAN_NAME, pDef.ClanName);
+                pActor.data.set(LineageKeys.CHINESE_FAMILY_NAME,
+                    pDef.FamilyName);
+                pActor.data.set(LineageKeys.GIVEN_NAME, pDef.GivenName);
+                pActor.data.set(LineageKeys.NAME_INTEGRATED,
+                    HistoricalFigureSpawnRules.ShouldUseIntegratedName(
+                        pDef.RequiresIntegration, pIntegrationReady));
+                pActor.data.set(LineageKeys.FOUNDED_BRANCH_SHI_ID, -1L);
 
-            // 4) 持久化生成状态(随存档,根治重复生成)。
-            FigureStateStore.MarkSpawned(pIndex, pDef.Key, pActor.data.id, LineageService.CurTime());
+                if (!FigureStateStore.TryCommitSpawn(pIndex, pActor.data.id))
+                    throw new InvalidOperationException(
+                        "historical figure reservation commit failed");
+            }
+            catch (Exception error)
+            {
+                try { snapshot.Restore(pActor); }
+                catch (Exception restoreError)
+                {
+                    ModClass.LogWarning("Historical figure actor rollback failed: " +
+                        restoreError.Message);
+                }
+                bool aborted = FigureStateStore.TryAbortSpawn(
+                    pIndex, pActor.data.id);
+                ModClass.LogWarning("Historical figure initialization failed: " +
+                    error.Message + (aborted ? "" : "; reservation abort deferred"));
+                return;
+            }
 
-            // 5) 世界日志公告:特殊人物$ren$降临这个世界($ren$=带国色的人名)。
-            AnnounceFigure(pActor);
+            try
+            {
+                LineageService.OnActorPromoted(pActor, NobleTrigger.Figure);
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical figure promotion failed: " +
+                    error.Message);
+                QueueFigurePromotionRepair(pActor.data.id);
+            }
+
+            // 4) 世界日志公告:特殊人物$ren$降临这个世界($ren$=带国色的人名)。
+            AnnounceFigure(pActor, pDef);
 
             // 编年史:历史人物降临 = 一次"出生"事件(预设姓名已就绪)。
-            core.lineage.HistoryWriter.RecordPerson(
-                pActor.data.id, pActor.kingdom, pActor.getName(), "birth",
-                core.lineage.HistoryText.Actor(pActor) + " 降临世间");
+            try
+            {
+                core.lineage.HistoryWriter.RecordPerson(
+                    pActor.data.id, pActor.kingdom, pActor.getName(), "birth",
+                    core.lineage.HistoryText.Actor(pActor) +
+                    core.lineage.HistoryLocalizationRules.H("aw_hist_figure_arrived"));
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical figure history write failed: " +
+                    error.Message);
+            }
 
             ModClass.LogInfo($"历史人物降临:{pDef.Key}(序号 {pIndex},国名预留 {pDef.KingdomName})");
         }
 
-        private static void AnnounceFigure(Actor pActor)
+        private static void QueueFigurePromotionRepair(long pActorId)
+        {
+            if (pActorId < 0) return;
+            DeferredRuntimeWorkService.EnqueueCoalesced(
+                DeferredRuntimeWorkRules.CoalescingKey(
+                    "historical_figure_promotion", pActorId),
+                DeferredWorkClass.Runtime,
+                () =>
+                {
+                    Actor actor = World.world?.units?.get(pActorId);
+                    if (actor?.data == null || actor.isRekt()) return;
+                    LineageService.OnActorPromoted(actor, NobleTrigger.Figure);
+                });
+        }
+
+        private sealed class ActorFigureSnapshot
+        {
+            private readonly int _health;
+            private readonly bool _favorite;
+            private readonly ActorSex _sex;
+            private readonly string _name;
+            private readonly bool _customName;
+            private readonly bool _hadFigure;
+            private readonly bool _hadFirst;
+            private readonly bool _hadGuizu;
+            private readonly LongDataSnapshot _lineageId;
+            private readonly LongDataSnapshot _shiId;
+            private readonly LongDataSnapshot _foundedBranchShiId;
+            private readonly IntDataSnapshot _nobleDistance;
+            private readonly StringDataSnapshot _familyName;
+            private readonly StringDataSnapshot _clanName;
+            private readonly StringDataSnapshot _chineseFamilyName;
+            private readonly StringDataSnapshot _givenName;
+            private readonly StringDataSnapshot _lineageStatus;
+            private readonly StringDataSnapshot _displayName;
+            private readonly BoolDataSnapshot _nameIntegrated;
+
+            public ActorFigureSnapshot(Actor pActor)
+            {
+                _health = pActor.getHealth();
+                _favorite = pActor.data.favorite;
+                _sex = pActor.data.sex;
+                _name = pActor.data.name;
+                _customName = pActor.data.custom_name;
+                _hadFigure = pActor.hasTrait(TRAIT_FIGURE);
+                _hadFirst = pActor.hasTrait(TRAIT_FIRST);
+                _hadGuizu = pActor.hasTrait(LineageKeys.TRAIT_GUIZU);
+                _lineageId = new LongDataSnapshot(pActor, LineageKeys.LINEAGE_ID);
+                _shiId = new LongDataSnapshot(pActor, LineageKeys.SHI_ID);
+                _foundedBranchShiId = new LongDataSnapshot(pActor,
+                    LineageKeys.FOUNDED_BRANCH_SHI_ID);
+                _nobleDistance = new IntDataSnapshot(pActor,
+                    LineageKeys.NOBLE_DISTANCE);
+                _familyName = new StringDataSnapshot(pActor,
+                    LineageKeys.FAMILY_NAME);
+                _clanName = new StringDataSnapshot(pActor, LineageKeys.CLAN_NAME);
+                _chineseFamilyName = new StringDataSnapshot(pActor,
+                    LineageKeys.CHINESE_FAMILY_NAME);
+                _givenName = new StringDataSnapshot(pActor, LineageKeys.GIVEN_NAME);
+                _lineageStatus = new StringDataSnapshot(pActor,
+                    LineageKeys.LINEAGE_STATUS);
+                _displayName = new StringDataSnapshot(pActor, "display_name");
+                _nameIntegrated = new BoolDataSnapshot(pActor,
+                    LineageKeys.NAME_INTEGRATED);
+            }
+
+            public void Restore(Actor pActor)
+            {
+                pActor.setHealth(_health, pClamp: false);
+                pActor.data.favorite = _favorite;
+                pActor.data.sex = _sex;
+                _lineageId.Restore(pActor);
+                _shiId.Restore(pActor);
+                _foundedBranchShiId.Restore(pActor);
+                _nobleDistance.Restore(pActor);
+                _familyName.Restore(pActor);
+                _clanName.Restore(pActor);
+                _chineseFamilyName.Restore(pActor);
+                _givenName.Restore(pActor);
+                _lineageStatus.Restore(pActor);
+                _displayName.Restore(pActor);
+                _nameIntegrated.Restore(pActor);
+                RestoreTrait(pActor, TRAIT_FIGURE, _hadFigure);
+                RestoreTrait(pActor, TRAIT_FIRST, _hadFirst);
+                RestoreTrait(pActor, LineageKeys.TRAIT_GUIZU, _hadGuizu);
+                try { pActor.setName(_name); }
+                catch { pActor.data.name = _name; }
+                pActor.data.custom_name = _customName;
+            }
+
+            private static void RestoreTrait(Actor pActor, string pTrait,
+                bool pWasPresent)
+            {
+                bool present = pActor.hasTrait(pTrait);
+                if (pWasPresent && !present) pActor.addTrait(pTrait);
+                else if (!pWasPresent && present) pActor.removeTrait(pTrait);
+            }
+        }
+
+        private readonly struct LongDataSnapshot
+        {
+            private readonly string _key;
+            private readonly long _value;
+            private readonly bool _exists;
+
+            public LongDataSnapshot(Actor pActor, string pKey)
+            {
+                _key = pKey;
+                long value = default;
+                _exists = pActor.data.custom_data_long != null &&
+                    pActor.data.custom_data_long.TryGetValue(pKey, out value);
+                _value = value;
+            }
+
+            public void Restore(Actor pActor)
+            {
+                if (_exists) pActor.data.set(_key, _value);
+                else pActor.data.removeLong(_key);
+            }
+        }
+
+        private readonly struct IntDataSnapshot
+        {
+            private readonly string _key;
+            private readonly int _value;
+            private readonly bool _exists;
+
+            public IntDataSnapshot(Actor pActor, string pKey)
+            {
+                _key = pKey;
+                int value = default;
+                _exists = pActor.data.custom_data_int != null &&
+                    pActor.data.custom_data_int.TryGetValue(pKey, out value);
+                _value = value;
+            }
+
+            public void Restore(Actor pActor)
+            {
+                if (_exists) pActor.data.set(_key, _value);
+                else pActor.data.removeInt(_key);
+            }
+        }
+
+        private readonly struct StringDataSnapshot
+        {
+            private readonly string _key;
+            private readonly string _value;
+            private readonly bool _exists;
+
+            public StringDataSnapshot(Actor pActor, string pKey)
+            {
+                _key = pKey;
+                string value = default;
+                _exists = pActor.data.custom_data_string != null &&
+                    pActor.data.custom_data_string.TryGetValue(pKey, out value);
+                _value = value;
+            }
+
+            public void Restore(Actor pActor)
+            {
+                if (_exists) pActor.data.set(_key, _value);
+                else pActor.data.removeString(_key);
+            }
+        }
+
+        private readonly struct BoolDataSnapshot
+        {
+            private readonly string _key;
+            private readonly bool _value;
+            private readonly bool _exists;
+
+            public BoolDataSnapshot(Actor pActor, string pKey)
+            {
+                _key = pKey;
+                bool value = default;
+                _exists = pActor.data.custom_data_bool != null &&
+                    pActor.data.custom_data_bool.TryGetValue(pKey, out value);
+                _value = value;
+            }
+
+            public void Restore(Actor pActor)
+            {
+                if (_exists) pActor.data.set(_key, _value);
+                else pActor.data.removeBool(_key);
+            }
+        }
+
+        private static void AnnounceFigure(Actor pActor,
+            HistoricalFigureDef pDef)
         {
             try
             {
@@ -237,7 +498,15 @@ namespace AncientWarfare3.content.figures
                 // 国色 hex:用 ColorAsset.color_text(string 字段),与 AW3 现有 LineageArchiveWriter 一致。
                 string colorHex = k?.getColor()?.color_text;
                 if (string.IsNullOrEmpty(colorHex)) colorHex = "#FFFFFF";
-                string coloredName = Toolbox.coloredString(pActor.getName(), colorHex);
+                string localizedName = AncientWarfare3.ui.AW_L10n.Text(
+                    pDef.NameLocaleKey, pDef.Key);
+                string localizedDynasty = AncientWarfare3.ui.AW_L10n.Text(
+                    pDef.DynastyLocaleKey, pDef.DynastyName);
+                string localizedLabel =
+                    HistoricalFigureSpawnRules.FormatLocalizedLabel(
+                        localizedName, localizedDynasty);
+                string coloredName = Toolbox.coloredString(
+                    localizedLabel, colorHex);
                 var msg = new WorldLogMessage(asset, coloredName) { unit = pActor };
                 if (k != null) msg.kingdom = k;
                 if (pActor.current_tile != null) msg.location = pActor.current_tile.pos;
@@ -264,25 +533,25 @@ namespace AncientWarfare3.content.figures
             var def = HistoricalFigureDef.Get(idx);
             if (def == null) return;
 
-            string oldName = pKingdom.name;
-            if (oldName == def.KingdomName) return;     // 已是目标国名,免重复
-
-            RecordKingdomRename(pKingdom, oldName, def.KingdomName, pKing);
-            KingdomRenameSyncService.Suppress(() => pKingdom.setName(def.KingdomName));
+            if (!string.Equals(pKingdom.name, def.KingdomName,
+                    StringComparison.Ordinal)) return;
             FigureStateStore.MarkKingdomApplied(idx, pKingdom.id, def.KingdomName);
 
-            ModClass.LogInfo($"历史人物 {def.Key} 成为国王 → 国家 '{oldName}' 改名为 '{def.KingdomName}'");
+            ModClass.LogInfo($"历史人物 {def.Key} 成为国王 → 国号 '{def.KingdomName}' 已提交");
+        }
+
+        public static string GetPreferredKingdomName(Actor pActor)
+        {
+            if (pActor?.data == null) return "";
+            int index = FigureStateStore.IndexOfActor(pActor.data.id);
+            HistoricalFigureDef definition = HistoricalFigureDef.Get(index);
+            return definition?.KingdomName ?? "";
         }
 
         /// <summary>
         ///     历史人物改国名不再单独写一条专门历史记录。
         ///     建国、统治期和王朝记录仍由通用历史系统处理。
         /// </summary>
-        private static void RecordKingdomRename(Kingdom pKingdom, string pOldName, string pNewName, Actor pKing)
-        {
-            // Intentionally no-op per current design.
-        }
-
         // ───────────────────────── 死亡:解锁下一个 ─────────────────────────
 
         /// <summary>历史人物死亡 → 标记 dead,解锁严格顺序的下一个。由 AW_ActorDeathPatch 调用。</summary>

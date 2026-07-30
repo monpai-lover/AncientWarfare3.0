@@ -1,0 +1,412 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.multiplayer;
+
+internal static class AW3MultiplayerStrategicStateRulesTests
+{
+    public static void Run()
+    {
+        SnapshotSortsAndCopiesRecords();
+        ModelsRejectInvalidIdentityAndTick();
+        CaptureRequiresMainThread();
+        ApplyPreflightsEveryIdentity();
+        ApplyUsesStableFailuresAndRebuildsAfterWrites();
+        ApplyPreservesExplicitRtsRoleWithAutomaticPosture();
+        ApplyReplacesTheReplicaArmyProjectionSet();
+        FacadeIsTypedAndContainsNoReflectionOrDatabaseAccess();
+    }
+
+    private static void SnapshotSortsAndCopiesRecords()
+    {
+        var armies = new[]
+        {
+            Army(9, "border_army"),
+            Army(4, "royal_guard")
+        };
+        var actors = new[]
+        {
+            Actor(31, true, 20),
+            Actor(11, false, 0)
+        };
+        var snapshot = new AW3MultiplayerStrategicSnapshot(77,
+            armies, actors);
+
+        armies[0] = Army(99, "changed");
+        actors[0] = Actor(99, false, 0);
+
+        Equal(77L, snapshot.AuthoritativeTick, "tick retained");
+        Equal(4L, snapshot.Armies[0].ArmyId, "armies sorted by ID");
+        Equal(9L, snapshot.Armies[1].ArmyId, "second army retained");
+        Equal(11L, snapshot.Actors[0].ActorId,
+            "actors sorted by ID");
+        Equal("border_army", snapshot.Armies[1].RoleId,
+            "input army array copied");
+        Equal("march", snapshot.Armies[1].OperationalStateId,
+            "operational state retained");
+        Equal("attack", snapshot.Armies[1].PostureId,
+            "posture retained");
+        Equal(21L, snapshot.Armies[1].WarId,
+            "war identity retained");
+        Equal(22L, snapshot.Armies[1].FrontId,
+            "front identity retained");
+        Equal(64, snapshot.Armies[1].Supply,
+            "supply retained");
+        Equal(71, snapshot.Armies[1].Organization,
+            "organization retained");
+        Equal(true, snapshot.Armies[1].PlayerOrder,
+            "player-order ownership retained");
+        Equal(31L, snapshot.Actors[1].ActorId,
+            "input actor array copied");
+    }
+
+    private static void ModelsRejectInvalidIdentityAndTick()
+    {
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerStrategicSnapshot(-1,
+                    Array.Empty<AW3MultiplayerArmyProjection>(),
+                    Array.Empty<AW3MultiplayerActorProjection>()),
+            "negative tick rejected");
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerStrategicSnapshot(1,
+                    new[] { Army(2, "a"), Army(2, "b") },
+                    Array.Empty<AW3MultiplayerActorProjection>()),
+            "duplicate army rejected");
+        Throws<ArgumentException>(() =>
+                new AW3MultiplayerStrategicSnapshot(1,
+                    Array.Empty<AW3MultiplayerArmyProjection>(),
+                    new[] { Actor(2, false, 0), Actor(2, true, 1) }),
+            "duplicate actor rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerArmyProjection(-1, "role", -1,
+                    "order", AW3MultiplayerStrategicTargetKind.None,
+                    -1, -1, -1),
+            "negative army ID rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerActorProjection(1, true, -1),
+            "negative general merit rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerArmyProjection(1, "role", -1,
+                    "order", AW3MultiplayerStrategicTargetKind.None,
+                    -1, -1, -1, supply: 101),
+            "supply above one hundred rejected");
+    }
+
+    private static void CaptureRequiresMainThread()
+    {
+        var wrongThread = new FakeStore { IsMainThread = false };
+        AW3MultiplayerStrategicCaptureException error =
+            ThrowsAndReturn<AW3MultiplayerStrategicCaptureException>(() =>
+                AW3MultiplayerStrategicStateCoordinator.Capture(1,
+                    wrongThread), "capture wrong thread");
+        Equal(AW3MultiplayerStrategicError.WrongThread, error.Error,
+            "capture exposes stable wrong-thread code");
+
+        var store = new FakeStore();
+        store.CapturedArmies.Add(Army(8, "royal_guard"));
+        store.CapturedActors.Add(Actor(9, true, 50));
+        AW3MultiplayerStrategicSnapshot snapshot =
+            AW3MultiplayerStrategicStateCoordinator.Capture(12, store);
+        Equal(12L, snapshot.AuthoritativeTick, "capture tick");
+        Equal(8L, snapshot.Armies[0].ArmyId, "typed army captured");
+        Equal(9L, snapshot.Actors[0].ActorId, "typed actor captured");
+    }
+
+    private static void ApplyPreflightsEveryIdentity()
+    {
+        var store = new FakeStore();
+        store.ExistingArmies.Add(4);
+        store.ExistingActors.Add(11);
+        var snapshot = new AW3MultiplayerStrategicSnapshot(1,
+            new[] { Army(4, "royal_guard"), Army(9, "border_army") },
+            new[] { Actor(11, true, 5) });
+
+        AW3MultiplayerStrategicApplyResult result =
+            AW3MultiplayerStrategicStateCoordinator.Apply(snapshot, store);
+
+        Equal(false, result.IsSuccess, "missing identity rejects apply");
+        Equal(AW3MultiplayerStrategicError.MissingArmy, result.Error,
+            "missing army has stable code");
+        Equal(9L, result.FailedIdentityId,
+            "failure identifies missing army");
+        Equal(0, store.Calls.Count,
+            "preflight prevents every partial write");
+    }
+
+    private static void ApplyUsesStableFailuresAndRebuildsAfterWrites()
+    {
+        var wrongThread = new FakeStore { IsMainThread = false };
+        AW3MultiplayerStrategicApplyResult wrongThreadResult =
+            AW3MultiplayerStrategicStateCoordinator.Apply(
+                new AW3MultiplayerStrategicSnapshot(1,
+                    Array.Empty<AW3MultiplayerArmyProjection>(),
+                    Array.Empty<AW3MultiplayerActorProjection>()),
+                wrongThread);
+        Equal(AW3MultiplayerStrategicError.WrongThread,
+            wrongThreadResult.Error, "apply wrong-thread code");
+
+        var store = new FakeStore();
+        store.ExistingArmies.Add(4);
+        store.ExistingActors.Add(11);
+        var snapshot = new AW3MultiplayerStrategicSnapshot(2,
+            new[] { Army(4, "royal_guard") },
+            new[] { Actor(11, true, 42) });
+
+        AW3MultiplayerStrategicApplyResult result =
+            AW3MultiplayerStrategicStateCoordinator.Apply(snapshot, store);
+
+        Equal(true, result.IsSuccess, "valid projection applies");
+        Equal(AW3MultiplayerStrategicError.None, result.Error,
+            "successful apply has no error");
+        Equal(1, result.AppliedArmyCount, "army apply count");
+        Equal(1, result.AppliedActorCount, "actor apply count");
+        SequenceEqual(new[]
+            { "army:4", "actor:11", "complete-armies:4", "rebuild" },
+            store.Calls, "cache rebuild occurs after typed writes");
+
+        var failingStore = new FakeStore { ThrowOnApply = true };
+        failingStore.ExistingArmies.Add(4);
+        AW3MultiplayerStrategicApplyResult failed =
+            AW3MultiplayerStrategicStateCoordinator.Apply(
+                new AW3MultiplayerStrategicSnapshot(2,
+                    new[] { Army(4, "royal_guard") },
+                    Array.Empty<AW3MultiplayerActorProjection>()),
+                failingStore);
+        Equal(AW3MultiplayerStrategicError.ApplyFailed, failed.Error,
+            "runtime failure has stable code");
+    }
+
+    private static void ApplyReplacesTheReplicaArmyProjectionSet()
+    {
+        var store = new FakeStore();
+        AW3MultiplayerStrategicApplyResult result =
+            AW3MultiplayerStrategicStateCoordinator.Apply(
+                new AW3MultiplayerStrategicSnapshot(3,
+                    Array.Empty<AW3MultiplayerArmyProjection>(),
+                    Array.Empty<AW3MultiplayerActorProjection>()),
+                store);
+
+        Equal(true, result.IsSuccess,
+            "empty authoritative Army set applies");
+        SequenceEqual(new[] { "complete-armies:", "rebuild" },
+            store.Calls,
+            "snapshot completion clears omitted replica projections");
+    }
+
+    private static void ApplyPreservesExplicitRtsRoleWithAutomaticPosture()
+    {
+        var store = new FakeStore();
+        store.ExistingArmies.Add(41);
+        store.ExistingArmies.Add(42);
+        var snapshot = new AW3MultiplayerStrategicSnapshot(3,
+            new[]
+            {
+                Army(41, "field_army", rtsRole: "assault",
+                    posture: "automatic"),
+                Army(42, "border_army", rtsRole: "defense",
+                    posture: "automatic")
+            },
+            Array.Empty<AW3MultiplayerActorProjection>());
+
+        AW3MultiplayerStrategicApplyResult result =
+            AW3MultiplayerStrategicStateCoordinator.Apply(snapshot, store);
+
+        Equal(true, result.IsSuccess,
+            "explicit RTS roles apply with automatic posture");
+        Equal("assault", store.AppliedArmies[0].RtsRoleId,
+            "assault role survives host-to-replica projection");
+        Equal("automatic", store.AppliedArmies[0].PostureId,
+            "assault automatic posture remains independent");
+        Equal("defense", store.AppliedArmies[1].RtsRoleId,
+            "defense role survives host-to-replica projection");
+        Equal("automatic", store.AppliedArmies[1].PostureId,
+            "defense automatic posture remains independent");
+    }
+
+    private static void FacadeIsTypedAndContainsNoReflectionOrDatabaseAccess()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string models = Read(root, "Code", "api", "multiplayer",
+            "AW3MultiplayerStrategicStateModels.cs");
+        string facade = Read(root, "Code", "api", "multiplayer",
+            "AW3MultiplayerStrategicStateFacade.cs");
+        string coordinator = Read(root, "Code", "core", "multiplayer",
+            "AW3MultiplayerStrategicStateCoordinator.cs");
+        string controller = Read(root, "Code", "core", "lineage",
+            "ArmyRtsControllerService.cs");
+        string normalizedController = controller.Replace("\r\n", "\n");
+        string combined = models + facade + coordinator + controller;
+
+        Contains(facade,
+            "public static AW3MultiplayerStrategicSnapshot Capture(long tick)",
+            "typed capture facade exists");
+        Contains(facade,
+            "public static AW3MultiplayerStrategicApplyResult Apply(",
+            "typed apply facade exists");
+        Contains(facade, "ThreadHelper.isMainThread()",
+            "facade checks WorldBox main thread");
+        Contains(coordinator, "World.world.armies.get(",
+            "apply resolves existing army identities");
+        Contains(coordinator, "World.world.units.get(",
+            "apply resolves existing actor identities");
+        Contains(coordinator, "AWArmyService.GetRole(",
+            "capture uses AW3-owned army service");
+        Contains(coordinator, "ArmyRtsControllerService.TryGetProjection(",
+            "capture reads the Army-owned RTS projection");
+        Contains(coordinator, "rtsRole = projection.Role;",
+            "capture preserves the explicit RTS mission role");
+        Contains(coordinator, "pArmy.RtsRoleId",
+            "apply forwards the explicit RTS mission role");
+        Contains(coordinator, "InstallReplicaProjection(",
+            "apply installs the typed replica projection");
+        Contains(coordinator, "CompleteArmySnapshot(pSnapshot.Armies)",
+            "apply replaces the complete replica Army projection set");
+        Contains(normalizedController,
+            "if (AW3MultiplayerReplicaScope.IsReplicaSession)\n" +
+            "            {\n" +
+            "                return ReplicaProjectionByArmy.TryGetValue(",
+            "replica reads never fall back to authoritative controller state");
+        Contains(controller,
+            "TryParseDefined(pRtsRoleId, out ArmyRtsRole role)",
+            "replica validates the explicit RTS mission role");
+        Equal(false, controller.Contains("ReplicaRole("),
+            "replica never guesses RTS role from posture");
+        Equal(false, combined.Contains("System.Reflection"),
+            "strategic API does not use reflection");
+        Equal(false, combined.Contains("SQLite"),
+            "strategic API does not expose database access");
+    }
+
+    private static AW3MultiplayerArmyProjection Army(long id, string role,
+        string rtsRole = "assault", string posture = "attack")
+    {
+        return new AW3MultiplayerArmyProjection(id, role,
+            anchorCityId: 3, currentOrderId: "defend",
+            targetKind: AW3MultiplayerStrategicTargetKind.City,
+            targetId: 7, targetTileX: -1, targetTileY: -1,
+            operationalStateId: "march", postureId: posture,
+            warId: 21, frontId: 22, supply: 64, organization: 71,
+            playerOrder: true, rtsRoleId: rtsRole);
+    }
+
+    private static AW3MultiplayerActorProjection Actor(long id,
+        bool general, int merit)
+    {
+        return new AW3MultiplayerActorProjection(id, general, merit);
+    }
+
+    private static string Read(string root, params string[] parts)
+    {
+        var all = new string[parts.Length + 1];
+        all[0] = root;
+        Array.Copy(parts, 0, all, 1, parts.Length);
+        return File.ReadAllText(Path.Combine(all));
+    }
+
+    private static void Contains(string value, string token, string name)
+    {
+        Equal(true, value.Contains(token), name);
+    }
+
+    private static void SequenceEqual(IReadOnlyList<string> expected,
+        IReadOnlyList<string> actual, string name)
+    {
+        Equal(expected.Count, actual.Count, name + " count");
+        for (var index = 0; index < expected.Count; index++)
+            Equal(expected[index], actual[index], name + " at " + index);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                                                expected + ", got " + actual);
+    }
+
+    private static void Throws<TException>(Action action, string name)
+        where TException : Exception
+    {
+        ThrowsAndReturn<TException>(action, name);
+    }
+
+    private static TException ThrowsAndReturn<TException>(Action action,
+        string name) where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException error)
+        {
+            return error;
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException(name + ": expected " +
+                typeof(TException).Name + ", got " + error.GetType().Name);
+        }
+        throw new InvalidOperationException(name + ": expected " +
+                                            typeof(TException).Name);
+    }
+
+    private sealed class FakeStore : IAW3MultiplayerStrategicStateStore
+    {
+        public bool IsMainThread { get; set; } = true;
+        public bool ThrowOnApply { get; set; }
+        public List<AW3MultiplayerArmyProjection> CapturedArmies { get; } =
+            new List<AW3MultiplayerArmyProjection>();
+        public List<AW3MultiplayerActorProjection> CapturedActors { get; } =
+            new List<AW3MultiplayerActorProjection>();
+        public HashSet<long> ExistingArmies { get; } = new HashSet<long>();
+        public HashSet<long> ExistingActors { get; } = new HashSet<long>();
+        public List<string> Calls { get; } = new List<string>();
+        public List<AW3MultiplayerArmyProjection> AppliedArmies { get; } =
+            new List<AW3MultiplayerArmyProjection>();
+
+        public IReadOnlyList<AW3MultiplayerArmyProjection> CaptureArmies()
+        {
+            return CapturedArmies;
+        }
+
+        public IReadOnlyList<AW3MultiplayerActorProjection> CaptureActors()
+        {
+            return CapturedActors;
+        }
+
+        public bool HasArmy(long armyId)
+        {
+            return ExistingArmies.Contains(armyId);
+        }
+
+        public bool HasActor(long actorId)
+        {
+            return ExistingActors.Contains(actorId);
+        }
+
+        public void ApplyArmy(AW3MultiplayerArmyProjection army)
+        {
+            if (ThrowOnApply) throw new InvalidOperationException("apply");
+            AppliedArmies.Add(army);
+            Calls.Add("army:" + army.ArmyId);
+        }
+
+        public void ApplyActor(AW3MultiplayerActorProjection actor)
+        {
+            if (ThrowOnApply) throw new InvalidOperationException("apply");
+            Calls.Add("actor:" + actor.ActorId);
+        }
+
+        public void CompleteArmySnapshot(
+            IReadOnlyList<AW3MultiplayerArmyProjection> armies)
+        {
+            Calls.Add("complete-armies:" + string.Join(",",
+                armies.Select(army => army.ArmyId)));
+        }
+
+        public void RebuildMilitaryReadModels()
+        {
+            Calls.Add("rebuild");
+        }
+    }
+}

@@ -1,4 +1,6 @@
 using AncientWarfare3.content.schools;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using HarmonyLib;
 
@@ -31,6 +33,10 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "setProfession")]
         private static bool SetProfession_Prefix(Actor __instance, UnitProfession pType)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return true;
+            if (ActorProfessionLoadSafetyRules.
+                ShouldBypassTransitionRestrictions(
+                    __instance?.profession_asset != null)) return true;
             return pType != UnitProfession.Warrior ||
                    HistoricalMasterVocationService.CanEnter(__instance,
                        HistoricalMasterMilitaryContext.OrdinaryWarrior);
@@ -41,6 +47,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.setArmy))]
         private static bool SetArmy_Prefix(Actor __instance, Army pObject)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return true;
             return pObject == null || HistoricalMasterVocationService.CanJoinArmy(
                 __instance, pObject);
         }

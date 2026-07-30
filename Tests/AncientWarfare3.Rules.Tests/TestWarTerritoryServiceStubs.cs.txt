@@ -1,0 +1,16 @@
+namespace AncientWarfare3.core.lineage
+{
+    internal static class WarTerritoryService
+    {
+        public const string GOAL_TAKE_MANDATE = "take_mandate";
+        public const string GOAL_MANDATE_CONQUEST = "mandate_conquest";
+        public const string GOAL_TAKE_CORE_CITY = "take_core_city";
+        public const string GOAL_PRESS_CLAIM_CITY = "press_claim_city";
+        public const string GOAL_FORCE_VASSAL = "force_vassal";
+        public const string GOAL_FORCE_TRIBUTARY = "force_tributary";
+        public const string GOAL_INDEPENDENCE = "independence";
+        public const string GOAL_RESTORE_KINGDOM = "restore_kingdom";
+        public const string GOAL_REUNIFY_SUCCESSION = "reunify_succession";
+        public const string GOAL_NO_CB = "no_cb";
+    }
+}

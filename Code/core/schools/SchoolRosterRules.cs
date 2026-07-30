@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace AncientWarfare3.core.schools
 {
@@ -362,6 +363,35 @@ namespace AncientWarfare3.core.schools
             pVisiting.Remove(pNode.ActorId);
             pDepthByActor[pNode.ActorId] = depth;
             return depth;
+        }
+    }
+
+    internal sealed class SchoolRosterLayoutExecution
+    {
+        private readonly string _schoolId;
+        private readonly SchoolRosterCandidate[] _candidates;
+        private readonly float _horizontalSpacing;
+        private readonly float _verticalSpacing;
+        private readonly int _columnsPerRow;
+
+        public SchoolRosterLayoutExecution(string pSchoolId,
+            IEnumerable<SchoolRosterCandidate> pCandidates,
+            float pHorizontalSpacing, float pVerticalSpacing,
+            int pColumnsPerRow)
+        {
+            _schoolId = pSchoolId ?? string.Empty;
+            _candidates = (pCandidates ??
+                Array.Empty<SchoolRosterCandidate>()).ToArray();
+            _horizontalSpacing = pHorizontalSpacing;
+            _verticalSpacing = pVerticalSpacing;
+            _columnsPerRow = pColumnsPerRow;
+        }
+
+        public object Execute(CancellationToken pToken)
+        {
+            pToken.ThrowIfCancellationRequested();
+            return SchoolRosterRules.Build(_schoolId, _candidates,
+                _horizontalSpacing, _verticalSpacing, _columnsPerRow);
         }
     }
 }

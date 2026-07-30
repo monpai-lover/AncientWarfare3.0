@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using UnityEngine;
 
@@ -21,6 +22,9 @@ namespace AncientWarfare3.patch
         public static void DrawKings_Heir_Postfix(QuantumSpriteAsset pAsset)
         {
             if (pAsset?.group_system == null) return;
+            long benchmark = RecentFeatureBenchmark.Begin();
+            try
+            {
             bool markersEnabled = PlayerConfig.optionBoolEnabled("map_kings_leaders");
             if (!markersEnabled) return;
 
@@ -85,6 +89,13 @@ namespace AncientWarfare3.patch
                 qs.set(ref pos, scale);
                 Sprite colored = DynamicSprites.getIcon(baseIcon, visualKingdom.getColor());
                 qs.setSprite(colored);
+            }
+            }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MinimapMarkersIndex,
+                    benchmark);
             }
         }
     }

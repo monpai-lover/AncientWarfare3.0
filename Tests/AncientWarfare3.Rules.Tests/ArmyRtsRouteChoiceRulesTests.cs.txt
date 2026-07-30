@@ -1,0 +1,134 @@
+using System.Reflection;
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyRtsRouteChoiceRulesTests
+{
+    public static void Run()
+    {
+        Assert(ArmyRtsRouteChoiceRules.Resolve(
+                landCost: 120f, transportAvailable: true,
+                pickupCost: 4f, queueCost: 8f, seaCost: 42f,
+                landingCost: 0f) == ArmyRtsTravelChoice.Transport,
+            "a substantially shorter sea route must beat a long land route");
+        Assert(ArmyRtsRouteChoiceRules.Resolve(
+                landCost: 58f, transportAvailable: true,
+                pickupCost: 4f, queueCost: 8f, seaCost: 42f,
+                landingCost: 0f) == ArmyRtsTravelChoice.Land,
+            "transport hysteresis must retain land when sea travel has no clear gain");
+        Assert(!ArmyRtsTransportRules.ShouldUseTransportBeforeLandRoute(
+                authoritative: true, strategicMovementReady: true,
+                actorTileValid: true, targetTileValid: true,
+                sameIsland: false, transportRouteConfirmed: false),
+            "an unconfirmed island boundary must allow the bounded swim or land-route attempt first");
+        Assert(ArmyRtsTransportRules.ShouldInitiateTransportImmediately(
+                routeRequiresTransport: true, voyageAlreadyActive: false,
+                captainCanBeginTransport: true),
+            "a selected cross-island route must open transport immediately instead of waiting for a later behaviour tick");
+        Assert(!ArmyRtsTransportRules.ShouldInitiateTransportImmediately(
+                routeRequiresTransport: true, voyageAlreadyActive: true,
+                captainCanBeginTransport: true),
+            "an active voyage must not receive a duplicate immediate transport request");
+        Assert(!ArmyRtsTransportRules.ShouldInitiateTransportImmediately(
+                routeRequiresTransport: true, voyageAlreadyActive: false,
+                captainCanBeginTransport: false),
+            "an invalid captain cannot manufacture a transport request");
+        Assert(!ArmyRtsTransportRules.ShouldReplaceActiveVoyageTarget(
+                activeTargetMatches: false, callerMayBegin: true,
+                callerIsCaptain: false, forceTransport: false,
+                hasEmbarkedMembers: false),
+            "a non-captain return transport must not replace an active army voyage target");
+        Assert(ArmyRtsTransportRules.ShouldReplaceActiveVoyageTarget(
+                activeTargetMatches: false, callerMayBegin: true,
+                callerIsCaptain: true, forceTransport: true,
+                hasEmbarkedMembers: false),
+            "the RTS captain may replace an unembarked voyage for a newly forced route");
+        Assert(!ArmyRtsTransportRules.ShouldReplaceActiveVoyageTarget(
+                activeTargetMatches: false, callerMayBegin: true,
+                callerIsCaptain: true, forceTransport: true,
+                hasEmbarkedMembers: true),
+            "an embarked army voyage must retain its destination");
+        Assert(ArmyRtsTransportRules.ShouldEscalateCrossIslandRouteFailure(
+                routeFailed: true, sameIsland: false,
+                transportAlreadyActive: false),
+            "a rejected cross-island route must immediately fall back to transport instead of changing its war target");
+        Assert(!ArmyRtsTransportRules.ShouldEscalateCrossIslandRouteFailure(
+                routeFailed: true, sameIsland: true,
+                transportAlreadyActive: false),
+            "a land-route failure on the same island must retain normal route recovery");
+        Assert(!ArmyRtsTransportRules.ShouldEscalateCrossIslandRouteFailure(
+                routeFailed: true, sameIsland: false,
+                transportAlreadyActive: true),
+            "an already active voyage must not be restarted by a route failure");
+        Assert(ArmyRtsRules.ShouldRetryMissingStrategicRoute(
+                currentState: ArmyRtsState.March,
+                nextState: ArmyRtsState.March,
+                routeSubmitted: false, routeArrived: false,
+                transportActive: false),
+            "a March route cleared by recovery must be submitted again");
+        Assert(ArmyRtsRules.ResolveStableStrategicEndpoint(
+                lockedTileId: 41, lockedEndpointLive: true,
+                candidateTileId: 77) == 41,
+            "a mission must retain its selected endpoint when a closer zone tile appears");
+        Assert(ArmyRtsRules.ResolveStableStrategicEndpoint(
+                lockedTileId: 41, lockedEndpointLive: false,
+                candidateTileId: 77) == 77,
+            "an invalidated endpoint must fall back to the current city candidate");
+        RetainForwardFrontHoldAfterAllAttackObjectivesClose();
+        Assert(!ArmyFormationRules.ShouldRestartObservationForAnchorUpdate(
+                allowObservationRestart: true,
+                deploymentEligibilityChanged: false,
+                deploymentEligible: true,
+                formationGeometryChanged: true),
+            "a moving deployment anchor must not starve an in-progress member observation");
+        Assert(ArmyFormationRules.ShouldRestartObservationForAnchorUpdate(
+                allowObservationRestart: true,
+                deploymentEligibilityChanged: true,
+                deploymentEligible: true,
+                formationGeometryChanged: false),
+            "entering deployment must still refresh member readiness");
+        ArmyFormationObservationProgress progress =
+            ArmyFormationRules.DescribeObservationProgress(
+                memberCount: 37, cursor: 16, observationComplete: false,
+                restartCount: 2);
+        Assert(progress.MemberCount == 37 && progress.Cursor == 16 &&
+               !progress.Complete && progress.RestartCount == 2,
+            "formation diagnostics must preserve the incomplete scan cursor and reset count");
+        Assert(ArmyRtsTaskOwnershipRules.ResolveWatchdogTaskId(
+                ArmyWatchdogPositionSource.Captain,
+                ArmyRtsState.Retreat, ArmyRtsProposalKind.Retreat,
+                ArmyRtsTransportPhase.None) ==
+               "aw_army_rts_retreat",
+            "a retreating captain must be checked against the retreat task instead of the generic mission task");
+        Assert(ArmyRtsTaskOwnershipRules.ResolveWatchdogTaskId(
+                ArmyWatchdogPositionSource.FormationMember,
+                ArmyRtsState.Deploy, ArmyRtsProposalKind.Attack,
+                ArmyRtsTransportPhase.None) ==
+               "aw_army_rts_formation",
+            "a sampled formation member must be checked against the formation task");
+    }
+
+    private static void RetainForwardFrontHoldAfterAllAttackObjectivesClose()
+    {
+        MethodInfo method = typeof(ArmyRtsObjectiveRules).GetMethod(
+            "ShouldRetainForwardFrontHoldTarget",
+            new[] { typeof(bool), typeof(bool), typeof(bool) });
+        if (method == null)
+            throw new InvalidOperationException(
+                "RTS must retain a completed forward objective instead of recalling a marching army to its anchor city");
+
+        Assert((bool)method.Invoke(null, new object[]
+            { true, true, true }),
+            "when no attack objective remains, a live city secured by this war remains the front-hold target");
+        Assert(!(bool)method.Invoke(null, new object[]
+            { false, true, true }),
+            "an open attack objective must continue through ordinary attack allocation");
+        Assert(!(bool)method.Invoke(null, new object[]
+            { true, true, false }),
+            "a city not secured by this war cannot become a forward front-hold target");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

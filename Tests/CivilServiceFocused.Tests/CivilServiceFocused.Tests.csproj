@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);AW3_RULES_TESTS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceExamRulesTests.cs.txt" Link="CivilServiceExamRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceCandidatePoolSqlTests.cs.txt" Link="CivilServiceCandidatePoolSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceCenturySimulationSqlTests.cs.txt" Link="CivilServiceCenturySimulationSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceForeignResidentSqlTests.cs.txt" Link="CivilServiceForeignResidentSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceFormalCandidateSqlTests.cs.txt" Link="CivilServiceFormalCandidateSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\CivilServiceWaitingPoolSqlTests.cs.txt" Link="CivilServiceWaitingPoolSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalSchoolEliteEnrollmentRulesTests.cs.txt" Link="HistoricalSchoolEliteEnrollmentRulesTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\HistoricalSchoolEducationCandidateSqlTests.cs.txt" Link="HistoricalSchoolEducationCandidateSqlTests.cs" />
+    <Compile Include="..\AncientWarfare3.Rules.Tests\TestLocalizationStubs.cs.txt" Link="TestLocalizationStubs.cs" />
+
+    <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceExamCandidatePoolQuery.cs" Link="Production\CivilServiceExamCandidatePoolQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceWaitingPoolQuery.cs" Link="Production\CivilServiceWaitingPoolQuery.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerRankRules.cs" Link="Production\OfficialCareerRankRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerBiographyRules.cs" Link="Production\OfficialCareerBiographyRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
+    <Compile Include="..\..\Code\core\court\OfficialCareerAppointmentResult.cs" Link="Production\OfficialCareerAppointmentResult.cs" />
+    <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
+    <Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolEliteEnrollmentRules.cs" Link="Production\HistoricalSchoolEliteEnrollmentRules.cs" />
+    <Compile Include="..\..\Code\core\schools\HistoricalSchoolEducationCandidateQuery.cs" Link="Production\HistoricalSchoolEducationCandidateQuery.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs" Link="Production\HistoryLocalizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\LineageKeys.cs" Link="Production\LineageKeys.cs" />
+
+    <Reference Include="System.Data.SQLite">
+      <HintPath>..\..\Assemblies\System.Data.SQLite.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

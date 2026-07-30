@@ -1,0 +1,110 @@
+using AncientWarfare3.core.schools;
+
+internal static class SchoolGuestOfficeRulesTests
+{
+    public static void Run()
+    {
+        EducatedResidentCanEnterGuestServiceRegardlessOfHomeRealm();
+        GuestServiceStillRequiresAdultResident();
+        AppointmentBudgetIsScopedToOneHost();
+        FormalAppointmentsOutrankActingFallbacks();
+        ActingFallbackWinsWhenNoFormalCandidateExists();
+        QueuedAppointmentsReserveTheirOfficeImmediately();
+    }
+
+    private static void EducatedResidentCanEnterGuestServiceRegardlessOfHomeRealm()
+    {
+        True(SchoolGuestOfficeRules.CanInvite(realScholar: true, alive: true,
+                adult: true, residenceInHost: true, available: true,
+                serviceFree: true, forbidden: false, centralOfficeMale: true,
+                reputationFit: true, officeFit: true),
+            "an office-free educated resident can serve without a foreign-home gate");
+    }
+
+    private static void GuestServiceStillRequiresAdultResident()
+    {
+        False(SchoolGuestOfficeRules.CanInvite(realScholar: true, alive: true,
+                adult: false, residenceInHost: true, available: true,
+                serviceFree: true, forbidden: false, centralOfficeMale: true,
+                reputationFit: true, officeFit: true),
+            "a minor cannot enter guest service");
+        False(SchoolGuestOfficeRules.CanInvite(realScholar: true, alive: true,
+                adult: true, residenceInHost: false, available: true,
+                serviceFree: true, forbidden: false, centralOfficeMale: true,
+                reputationFit: true, officeFit: true),
+            "a scholar outside the host cannot enter guest service");
+    }
+
+    private static void AppointmentBudgetIsScopedToOneHost()
+    {
+        Equal(4, SchoolGuestOfficeRules.AppointmentBudgetForHost(
+                pVacancyCount: 9, pMaxPerHost: 4),
+            "one host receives its bounded annual allowance");
+        Equal(2, SchoolGuestOfficeRules.AppointmentBudgetForHost(
+                pVacancyCount: 2, pMaxPerHost: 4),
+            "a host cannot spend more appointments than it has vacancies");
+        Equal(0, SchoolGuestOfficeRules.AppointmentBudgetForHost(
+                pVacancyCount: -1, pMaxPerHost: 4),
+            "invalid vacancy counts do not create appointment work");
+    }
+
+    private static void FormalAppointmentsOutrankActingFallbacks()
+    {
+        SchoolGuestOfficeRankCandidate? selected =
+            SchoolGuestOfficeRules.SelectBestCandidate(new[]
+            {
+                new SchoolGuestOfficeRankCandidate(20L, 100f, pActing: true),
+                new SchoolGuestOfficeRankCandidate(10L, 40f, pActing: false)
+            });
+
+        Equal(10L, selected?.ActorId ?? -1L,
+            "a formally qualified guest fills the vacancy before an acting guest");
+        False(selected?.IsActing ?? true,
+            "the preferred formally qualified guest is not marked acting");
+    }
+
+    private static void ActingFallbackWinsWhenNoFormalCandidateExists()
+    {
+        SchoolGuestOfficeRankCandidate? selected =
+            SchoolGuestOfficeRules.SelectBestCandidate(new[]
+            {
+                new SchoolGuestOfficeRankCandidate(30L, 55f, pActing: true),
+                new SchoolGuestOfficeRankCandidate(40L, 70f, pActing: true)
+            });
+
+        Equal(40L, selected?.ActorId ?? -1L,
+            "the strongest acting guest fills a vacancy when formal service is unavailable");
+        True(selected?.IsActing ?? false,
+            "the fallback appointment remains marked acting");
+    }
+
+    private static void QueuedAppointmentsReserveTheirOfficeImmediately()
+    {
+        True(SchoolGuestOfficeRules.ReservesOffice(
+                GuestOfficeSubmissionOutcome.Queued),
+            "an asynchronously queued appointment reserves its office");
+        True(SchoolGuestOfficeRules.ReservesOffice(
+                GuestOfficeSubmissionOutcome.Completed),
+            "a completed appointment reserves its office");
+        False(SchoolGuestOfficeRules.ReservesOffice(
+                GuestOfficeSubmissionOutcome.Rejected),
+            "a rejected appointment leaves the office open");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name + ": expected true");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name + ": expected false");
+    }
+}

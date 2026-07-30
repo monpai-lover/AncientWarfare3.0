@@ -126,6 +126,21 @@ namespace AncientWarfare3.core.schools
             if (Plan.IncludePersuasion) Persuasion.EventId = pPersuasionEventId;
         }
 
+        public HistoricalSchoolTeachingDbRequest CloneForBackground()
+        {
+            var clone = new HistoricalSchoolTeachingDbRequest(Plan, ActorName,
+                TargetActorId, TargetActorName, WorldTime)
+            {
+                OriginalLedger = OriginalLedger?.Copy(),
+                DesiredLedger = DesiredLedger?.Copy(),
+                OriginalLedgerCaptured = OriginalLedgerCaptured
+            };
+            if (IdsFrozen)
+                clone.FreezeIds(Lecture.EventId,
+                    Plan.IncludePersuasion ? Persuasion.EventId : -1L);
+            return clone;
+        }
+
         private HistoricalSchoolTeachingEventRow Event(string pType, string pKey,
             long pTargetActorId, string pPayload)
         {

@@ -1,5 +1,7 @@
+using System;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.content.figures;
 using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
@@ -18,13 +20,33 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null || pNewKing?.data == null) return;
             if (!KingdomArchiveWriter.IsArchivable(pKingdom)) return;
-            if (!BindStateNameForRuler(pKingdom, pNewKing)) return;
+            if (!EnsureInitialStateNameForRuler(pKingdom, pNewKing))
+                WarnStateNameProjection(pKingdom, pNewKing);
 
             // 防重复:记录上次为该国登记的王 id,相同则跳过。
             pKingdom.data.get(LineageKeys.CHRONICLE_LAST_KING_ID, out long lastKingId, -1L);
-            if (lastKingId == pNewKing.data.id) return;
+            if (lastKingId == pNewKing.data.id)
+            {
+                ReignRecordWriter.TryRecoverCurrentProjection(
+                    pKingdom, pNewKing);
+                return;
+            }
             RecordPreviousKingLostThrone(pKingdom, lastKingId, pNewKing.data.id);
             pKingdom.data.set(LineageKeys.CHRONICLE_LAST_KING_ID, pNewKing.data.id);
+
+            long previousDynastyShiId =
+                DynastyRecordWriter.GetCurrentDynastyShiId(pKingdom.id);
+            pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
+            bool changedRulingShi = previousDynastyShiId >= 0 &&
+                                    previousDynastyShiId != newShiId;
+            ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
+            ReignRecordWriter.ProjectCurrentReignStart(pKingdom,
+                pNewKing, World.world.getCurWorldTime());
+            bool newDynastyCreated =
+                DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
+            if (!ProjectDynasticStateNameForRuler(pKingdom, pNewKing,
+                    newShiId, changedRulingShi, newDynastyCreated))
+                WarnStateNameProjection(pKingdom, pNewKing);
 
             string kingName = pNewKing.getName();
 
@@ -40,14 +62,35 @@ namespace AncientWarfare3.core.lineage
                     HistoryText.Kingdom(pKingdom) + H("aw_hist_person_ascended_suffix"),
                     ChronicleCategory.HONOR);
 
-            // 结构表：君主世系 + 朝代（先关旧 reign，再开新 reign）
-            ReignRecordWriter.CloseOpenReign(pKingdom, "replaced");
-            DynastyRecordWriter.OnKingChanged(pKingdom, pNewKing);
+            // 结构表：新朝和国号先提交，再打开新君主世系。
             ReignRecordWriter.OpenReign(pKingdom, pNewKing);
-            if (KingdomTitleService.IsEmperor(pKingdom) &&
+            if (HeirTitleRules.IsImperialOrMandate(pKingdom) &&
                 !RepublicGovernmentService.IsRepublic(pKingdom))
                 YearNameService.TryStartAccessionEra(pKingdom, pNewKing);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            RecordAccessionBook(pKingdom, pNewKing);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RulerAccession);
+        }
+
+        private static void RecordAccessionBook(Kingdom pKingdom,
+            Actor pNewKing)
+        {
+            bool republic = RepublicGovernmentService.IsRepublic(pKingdom);
+            if (!CeremonialHistoryRules.ShouldWriteAccessionBook(republic,
+                    pNewKing.isAlive())) return;
+
+            HistoryText text = H("aw_hist_accession_book_prefix") +
+                               HistoryText.Actor(pNewKing) +
+                               H("aw_hist_accession_book_mid") +
+                               HistoryText.Kingdom(pKingdom) +
+                               H("aw_hist_accession_book_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.ACCESSION_BOOK, text,
+                HistoryTarget.Actor(pNewKing));
+            HistoryWriter.RecordPerson(pNewKing.data.id, pKingdom,
+                pNewKing.getName(), PersonEvent.ACCESSION_BOOK, text,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
         }
 
         public static void OnFeudatoryEstablished(Kingdom pKingdom,
@@ -81,18 +124,422 @@ namespace AncientWarfare3.core.lineage
                 "feudatory_established", city, HistoryTarget.Actor(pPrince));
         }
 
-        private static bool BindStateNameForRuler(Kingdom pKingdom, Actor pRuler)
+        public static void OnFeudatoryInherited(Kingdom pKingdom,
+            Actor pOldPrince, Actor pNewPrince, City pSeat, string pReason)
+        {
+            if (pKingdom?.data == null || pNewPrince?.data == null ||
+                pSeat?.data == null) return;
+            HistoryText person = HistoryText.Actor(pNewPrince) +
+                                 H("aw_hist_feudatory_inherited_person") +
+                                 HistoryText.City(pSeat, pKingdom) +
+                                 H("aw_hist_feudatory_inherited_suffix");
+            HistoryWriter.RecordPerson(pNewPrince.data.id, pKingdom,
+                pNewPrince.getName(), PersonEvent.FEUDATORY_INHERITED, person,
+                ChronicleCategory.HONOR, HistoryTarget.City(pSeat));
+
+            HistoryText kingdom = HistoryText.City(pSeat, pKingdom) +
+                                  H("aw_hist_feudatory_line_passed");
+            if (pOldPrince?.data != null)
+                kingdom += HistoryText.Actor(pOldPrince) +
+                           H("aw_hist_feudatory_line_to");
+            kingdom += HistoryText.Actor(pNewPrince) +
+                       H("aw_hist_feudatory_inherited_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.FEUDATORY_INHERITED, kingdom,
+                HistoryTarget.Actor(pNewPrince));
+        }
+
+        public static void OnFeudatoryAbolished(Kingdom pKingdom,
+            Actor pLastPrince, City pSeat, string pReason)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryText kingdom = HistoryText.Kingdom(pKingdom) +
+                                  H(pReason == "revocation_abolish"
+                                      ? "aw_hist_feudatory_revoked_prefix"
+                                      : "aw_hist_feudatory_abolished_prefix");
+            if (pSeat?.data != null)
+                kingdom += HistoryText.City(pSeat, pKingdom);
+            kingdom += H(pReason == "revocation_abolish"
+                ? "aw_hist_feudatory_revoked_suffix"
+                : "aw_hist_feudatory_abolished_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.FEUDATORY_ABOLISHED, kingdom,
+                pLastPrince?.data != null
+                    ? HistoryTarget.Actor(pLastPrince)
+                    : HistoryTarget.Kingdom(pKingdom));
+            if (pLastPrince?.data != null &&
+                pReason == "revocation_abolish")
+                HistoryWriter.RecordPerson(pLastPrince.data.id, pKingdom,
+                    pLastPrince.getName(), "feudatory_revoked",
+                    HistoryText.Actor(pLastPrince) +
+                    H("aw_hist_feudatory_prince_revoked"),
+                    ChronicleCategory.HONOR,
+                    pSeat?.data != null
+                        ? HistoryTarget.City(pSeat)
+                        : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnFeudatoryRelocated(Kingdom pKingdom,
+            Actor pPrince, City pOldSeat, City pNewSeat, int pCityCount,
+            int pIntensity)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null ||
+                pNewSeat?.data == null)
+                return;
+            HistoryText content = HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_feudatory_relocated_prefix") +
+                                  HistoryText.Actor(pPrince);
+            if (pOldSeat?.data != null)
+                content += H("aw_hist_feudatory_relocated_from") +
+                           HistoryText.City(pOldSeat, pKingdom);
+            content += H("aw_hist_feudatory_relocated_to") +
+                       HistoryText.City(pNewSeat, pKingdom) +
+                       H("aw_hist_feudatory_city_count") +
+                       HistoryText.PlainText(pCityCount.ToString()) +
+                       H("aw_hist_feudatory_revocation_intensity") +
+                       HistoryText.PlainText(pIntensity.ToString());
+            HistoryWriter.RecordKingdom(pKingdom, "feudatory_relocated",
+                content, HistoryTarget.Actor(pPrince));
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), "feudatory_relocated",
+                HistoryText.Actor(pPrince) +
+                H("aw_hist_feudatory_prince_relocated") +
+                HistoryText.City(pNewSeat, pKingdom),
+                ChronicleCategory.HONOR, HistoryTarget.City(pNewSeat));
+        }
+
+        public static void OnFeudatoryCityReclaimed(Kingdom pKingdom,
+            Actor pPrince, City pCity, int pIntensity)
+        {
+            if (pKingdom?.data == null || pCity?.data == null) return;
+            HistoryText content = HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_feudatory_reclaimed_prefix") +
+                                  HistoryText.City(pCity, pKingdom) +
+                                  H("aw_hist_feudatory_reclaimed_suffix") +
+                                  H("aw_hist_feudatory_revocation_intensity") +
+                                  HistoryText.PlainText(pIntensity.ToString());
+            HistoryWriter.RecordKingdom(pKingdom,
+                "feudatory_city_reclaimed", content,
+                pPrince?.data != null
+                    ? HistoryTarget.Actor(pPrince)
+                    : HistoryTarget.City(pCity));
+            if (pPrince?.data != null)
+                HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                    pPrince.getName(), "feudatory_city_reclaimed",
+                    HistoryText.Actor(pPrince) +
+                    H("aw_hist_feudatory_prince_lost_city") +
+                    HistoryText.City(pCity, pKingdom),
+                    ChronicleCategory.HONOR, HistoryTarget.City(pCity));
+        }
+
+        public static void OnFeudatoryJingnanStarted(Kingdom pKingdom,
+            Actor pPrince, City pSeat, int pRisk)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null) return;
+            HistoryText content = HistoryText.Actor(pPrince) +
+                                  H("aw_hist_jingnan_started_mid");
+            if (pSeat?.data != null)
+                content += HistoryText.City(pSeat, pKingdom);
+            content += H("aw_hist_jingnan_risk") +
+                       HistoryText.PlainText(pRisk.ToString());
+            HistoryWriter.RecordKingdom(pKingdom, "jingnan_started",
+                content, HistoryTarget.Actor(pPrince));
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), "jingnan_started", content,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnFeudatoryJingnanSuppressed(Kingdom pKingdom,
+            Actor pPrince, City pSeat)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null) return;
+            HistoryText content = HistoryText.Actor(pPrince) +
+                                  H("aw_hist_jingnan_suppressed_mid");
+            if (pSeat?.data != null)
+                content += HistoryText.City(pSeat, pKingdom);
+            HistoryWriter.RecordKingdom(pKingdom, "jingnan_suppressed",
+                content, HistoryTarget.Actor(pPrince));
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), "jingnan_suppressed", content,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnFeudatoryJingnanVictory(Kingdom pKingdom,
+            Actor pPrince)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null) return;
+            HistoryText content = HistoryText.Actor(pPrince) +
+                                  H("aw_hist_jingnan_victory_mid") +
+                                  HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_jingnan_victory_suffix");
+            HistoryWriter.RecordKingdom(pKingdom, "jingnan_victory",
+                content, HistoryTarget.Actor(pPrince));
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), "jingnan_victory", content,
+                ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnFeudatoryJingnanStalemate(Kingdom pKingdom,
+            Kingdom pClaimant, Actor pPrince)
+        {
+            if (pKingdom?.data == null || pClaimant?.data == null) return;
+            HistoryText content = (pPrince?.data != null
+                                      ? HistoryText.Actor(pPrince)
+                                      : HistoryText.Kingdom(pClaimant)) +
+                                  H("aw_hist_jingnan_stalemate_mid") +
+                                  HistoryText.Kingdom(pClaimant) +
+                                  H("aw_hist_jingnan_stalemate_suffix");
+            HistoryWriter.RecordKingdom(pKingdom, "jingnan_stalemate",
+                content, HistoryTarget.Kingdom(pClaimant));
+            HistoryWriter.RecordKingdom(pClaimant, "jingnan_stalemate",
+                content, HistoryTarget.Kingdom(pKingdom));
+            if (pPrince?.data != null)
+                HistoryWriter.RecordPerson(pPrince.data.id, pClaimant,
+                    pPrince.getName(), "jingnan_stalemate", content,
+                    ChronicleCategory.WAR, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnFavorOrderSuccession(Kingdom pKingdom,
+            Actor pPrince, City pAffectedCity, FeudatoryFavorAction pAction,
+            int pAutonomy)
+        {
+            if (pKingdom?.data == null || pPrince?.data == null) return;
+            HistoryText content = HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_favor_order_applied");
+            if (pAction == FeudatoryFavorAction.ReclaimCity &&
+                pAffectedCity?.data != null)
+                content += H("aw_hist_favor_order_reclaimed") +
+                           HistoryText.City(pAffectedCity, pKingdom) +
+                           H("aw_hist_favor_order_reclaimed_suffix");
+            else
+                content += H("aw_hist_favor_order_autonomy") +
+                           HistoryText.PlainText(pAutonomy.ToString());
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.FEUDATORY_FAVOR, content,
+                HistoryTarget.Actor(pPrince));
+            HistoryWriter.RecordPerson(pPrince.data.id, pKingdom,
+                pPrince.getName(), PersonEvent.FEUDATORY_FAVOR,
+                HistoryText.Actor(pPrince) +
+                H("aw_hist_favor_order_prince_record"),
+                ChronicleCategory.HONOR,
+                pAffectedCity?.data != null
+                    ? HistoryTarget.City(pAffectedCity)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnNobleRankGranted(Kingdom pKingdom,
+            Actor pGrantor, Actor pRecipient, string pTitle)
+        {
+            if (pRecipient?.data == null || string.IsNullOrEmpty(pTitle))
+                return;
+            HistoryText content = H("aw_hist_edict_noble_grant_prefix") +
+                                  HistoryText.Actor(pRecipient) +
+                                  H("aw_hist_edict_noble_grant_as") +
+                                  HistoryText.PlainText(pTitle);
+            if (pGrantor?.data != null)
+                content += H("aw_hist_edict_noble_grant_by") +
+                           HistoryText.Actor(pGrantor);
+            content += H("aw_hist_edict_noble_grant_suffix");
+            HistoryWriter.RecordPerson(pRecipient.data.id, pKingdom,
+                pRecipient.getName(), PersonEvent.NOBLE_RANK_GRANTED, content,
+                ChronicleCategory.HONOR,
+                pGrantor?.data != null
+                    ? HistoryTarget.Actor(pGrantor)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtSurnameGranted(Kingdom pKingdom,
+            Actor pRuler, Actor pRecipient, long pOldShiId, long pRoyalShiId,
+            string pOldShiName, string pRoyalShiName)
+        {
+            if (pKingdom?.data == null || pRuler?.data == null ||
+                pRecipient?.data == null || pRoyalShiId < 0) return;
+            HistoryText content = H("aw_hist_court_surname_edict") +
+                                  HistoryText.Actor(pRecipient) +
+                                  H("aw_hist_court_surname_from") +
+                                  ShiLabel(pOldShiName) +
+                                  H("aw_hist_court_surname_to") +
+                                  ShiLabel(pRoyalShiName) +
+                                  H("aw_hist_court_surname_by") +
+                                  HistoryText.Actor(pRuler) +
+                                  H("aw_hist_court_surname_suffix");
+            HistoryTarget target = HistoryTarget.From("shi", pRoyalShiId);
+            HistoryWriter.RecordPerson(pRecipient.data.id, pKingdom,
+                pRecipient.getName(), "court_surname_granted", content,
+                ChronicleCategory.HONOR, target);
+            HistoryWriter.RecordKingdom(pKingdom,
+                "court_surname_granted", content, target);
+        }
+
+        public static void OnCourtLineageExpelled(Kingdom pKingdom,
+            Actor pRuler, Actor pRecipient, long pOldShiId, long pNewShiId,
+            string pOldShiName, string pNewShiName)
+        {
+            if (pKingdom?.data == null || pRuler?.data == null ||
+                pRecipient?.data == null || pNewShiId < 0) return;
+            HistoryText content = H("aw_hist_court_expulsion_edict") +
+                                  HistoryText.Actor(pRecipient) +
+                                  H("aw_hist_court_expulsion_from") +
+                                  ShiLabel(pOldShiName) +
+                                  H("aw_hist_court_expulsion_to") +
+                                  ShiLabel(pNewShiName) +
+                                  H("aw_hist_court_expulsion_by") +
+                                  HistoryText.Actor(pRuler) +
+                                  H("aw_hist_court_expulsion_suffix");
+            HistoryTarget target = HistoryTarget.From("shi", pNewShiId);
+            HistoryWriter.RecordPerson(pRecipient.data.id, pKingdom,
+                pRecipient.getName(), "court_lineage_expelled", content,
+                ChronicleCategory.HONOR, target);
+            HistoryWriter.RecordKingdom(pKingdom,
+                "court_lineage_expelled", content, target);
+        }
+
+        private static HistoryText ShiLabel(string pName)
+        {
+            return HistoryText.PlainText(
+                string.IsNullOrWhiteSpace(pName)
+                    ? T("aw_hist_unknown_shi")
+                    : pName + T("aw_hist_shi_suffix"));
+        }
+
+        public static void OnNobleRankInherited(Kingdom pKingdom,
+            Actor pPreviousHolder, Actor pSuccessor, string pTitle)
+        {
+            if (pSuccessor?.data == null || string.IsNullOrEmpty(pTitle))
+                return;
+            HistoryText content = HistoryText.Actor(pSuccessor) +
+                                  H("aw_hist_noble_rank_inherited_title") +
+                                  HistoryText.PlainText(pTitle);
+            if (pPreviousHolder?.data != null)
+                content += H("aw_hist_noble_rank_inherited_from") +
+                           HistoryText.Actor(pPreviousHolder);
+            HistoryWriter.RecordPerson(pSuccessor.data.id, pKingdom,
+                pSuccessor.getName(), PersonEvent.NOBLE_RANK_INHERITED,
+                content, ChronicleCategory.HONOR,
+                pPreviousHolder?.data != null
+                    ? HistoryTarget.Actor(pPreviousHolder)
+                    : HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.NOBLE_RANK_INHERITED, content,
+                HistoryTarget.Actor(pSuccessor));
+        }
+
+        public static void OnNobleRankExtinct(Kingdom pKingdom,
+            Actor pLastHolder, string pTitle)
+        {
+            if (pLastHolder?.data == null || string.IsNullOrEmpty(pTitle))
+                return;
+            HistoryText content = HistoryText.Actor(pLastHolder) +
+                                  H("aw_hist_noble_rank_extinct_prefix") +
+                                  HistoryText.PlainText(pTitle) +
+                                  H("aw_hist_noble_rank_extinct_suffix");
+            HistoryWriter.RecordPerson(pLastHolder.data.id, pKingdom,
+                pLastHolder.getName(), PersonEvent.NOBLE_RANK_EXTINCT,
+                content, ChronicleCategory.HONOR,
+                HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.NOBLE_RANK_EXTINCT, content,
+                HistoryTarget.Actor(pLastHolder));
+        }
+
+        public static void OnGreatRoyalGrant(Kingdom pKingdom,
+            Actor pEmperor, int pGrantedCount)
+        {
+            if (pKingdom?.data == null || pGrantedCount <= 0) return;
+            HistoryText content = HistoryText.Kingdom(pKingdom) +
+                                  H("aw_hist_edict_great_royal_grant_prefix") +
+                                  HistoryText.PlainText(
+                                      pGrantedCount.ToString()) +
+                                  H("aw_hist_edict_great_royal_grant_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.GREAT_ROYAL_GRANT, content,
+                pEmperor?.data != null
+                    ? HistoryTarget.Actor(pEmperor)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnNobleRemarried(Kingdom pKingdom,
+            Actor pNoble, Actor pSpouse)
+        {
+            if (pKingdom?.data == null || pNoble?.data == null ||
+                pSpouse?.data == null) return;
+            HistoryText content = HistoryText.Actor(pNoble) +
+                                  H("aw_hist_noble_remarried") +
+                                  HistoryText.Actor(pSpouse);
+            HistoryWriter.RecordPerson(pNoble.data.id, pKingdom,
+                pNoble.getName(), PersonEvent.NOBLE_REMARRIAGE, content,
+                ChronicleCategory.BOND,
+                HistoryTarget.Actor(pSpouse));
+            HistoryWriter.RecordPerson(pSpouse.data.id, pKingdom,
+                pSpouse.getName(), PersonEvent.NOBLE_REMARRIAGE, content,
+                ChronicleCategory.BOND,
+                HistoryTarget.Actor(pNoble));
+        }
+
+        private static bool EnsureInitialStateNameForRuler(Kingdom pKingdom,
+            Actor pRuler)
         {
             if (!LineageService.IsXiaKingdom(pKingdom) &&
                 !XiaizationService.UsesXiaizedInstitutionSystem(pKingdom)) return true;
             pRuler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
             if (shiId < 0) return true;
             ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
-            StateNameCommitResult committed = StateNameService.EnsureBoundStateName(
-                pKingdom, pRuler, shiId, -1L,
-                branch?.origin_kingdom_id ?? pKingdom.id);
-            return committed.Success &&
-                   StateNameService.ProjectCommittedStateName(pKingdom, committed);
+            long currentShiId =
+                DynastyRecordWriter.GetCurrentDynastyShiId(pKingdom.id);
+            string preferredStateName =
+                HistoricalFigureService.GetPreferredKingdomName(pRuler);
+            bool hasHistoricalPreferredName =
+                StateNameRules.IsValid(preferredStateName);
+            if (StateNameRules.ShouldSkipInitialStateBinding(
+                    currentShiId >= 0, hasHistoricalPreferredName) ||
+                !StateNameRules.IsValid(pKingdom.name)) return true;
+            StateNameCommitResult initial =
+                StateNameService.EnsureBoundStateName(
+                    pKingdom, pRuler, shiId, -1L,
+                    branch?.origin_kingdom_id ?? pKingdom.id,
+                    preferredStateName);
+            if (initial.Success && hasHistoricalPreferredName)
+            {
+                bool projected = StateNameService.ProjectCommittedStateName(pKingdom, initial);
+                if (projected)
+                    HistoricalFigureService.OnFigureKingBecame(
+                        pKingdom, pRuler);
+                return projected;
+            }
+            // Initial accession only gives the Shi a durable state-name binding.
+            // Projecting it here bypasses the empire/new-dynasty gate below and
+            // can rename an unrelated lower-rank realm to the branch's old state.
+            return initial.Success;
+        }
+
+        private static bool ProjectDynasticStateNameForRuler(
+            Kingdom pKingdom, Actor pRuler, long pShiId,
+            bool pChangedRulingShi, bool pNewDynastyCreated)
+        {
+            if (pShiId < 0) return true;
+            string boundStateName =
+                StateNameService.GetBoundStateName(pShiId);
+            if (!StateNameRules.ShouldProjectDynasticStateName(
+                    pNewDynastyCreated,
+                    KingdomTitleService.IsEmperor(pKingdom),
+                    pChangedRulingShi,
+                    StateNameRules.IsValid(boundStateName))) return true;
+            bool projected = StateNameService.ProjectExistingStateName(
+                pKingdom, pShiId, boundStateName);
+            if (!projected) return false;
+            bool dynastySynced = DynastyRecordWriter.UpdateCurrentStateName(
+                pKingdom.id, boundStateName);
+            HistoricalFigureService.OnFigureKingBecame(pKingdom, pRuler);
+            return dynastySynced;
+        }
+
+        private static void WarnStateNameProjection(Kingdom pKingdom,
+            Actor pRuler)
+        {
+            ModClass.LogWarning(
+                "State-name projection did not complete for kingdom " +
+                pKingdom.id + "; continuing ruler chronicle for actor " +
+                pRuler.data.id);
         }
 
         private static void RecordPreviousKingLostThrone(Kingdom pKingdom, long pPreviousKingId, long pNewKingId)
@@ -178,9 +625,302 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdom?.data == null) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_TIER_UPGRADED,
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_tier_mid") +
-                HistoryText.PlainText(CourtTierName(pTier)),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_court_tier_mid") +
+                HistoryText.PlainText(CourtTierName(pTier)) +
+                H("aw_hist_edict_court_tier_suffix"),
                 HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtInstitutionReformed(Kingdom pKingdom,
+            string pPrevious, string pNext)
+        {
+            if (pKingdom?.data == null ||
+                !CourtInstitutionRules.IsUpgrade(pPrevious, pNext)) return;
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.COURT_INSTITUTION_REFORMED,
+                HistoryText.Kingdom(pKingdom) +
+                H("aw_hist_edict_court_institution_mid") +
+                HistoryText.PlainText(
+                    CourtInstitutionService.InstitutionName(pNext)) +
+                H("aw_hist_edict_court_institution_suffix"),
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCourtAuxiliaryLawChanged(Kingdom pKingdom,
+            Actor pRuler, CourtAuxiliaryLawKind pKind, int pPrevious,
+            int pNext)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pKingdom) +
+                               H("aw_hist_court_auxiliary_law_changed_mid") +
+                               HistoryText.PlainText(
+                                   AuxiliaryLawKindName(pKind)) +
+                               H("aw_hist_court_auxiliary_law_from") +
+                               HistoryText.PlainText(
+                                   AuxiliaryLawValueName(pKind, pPrevious)) +
+                               H("aw_hist_court_auxiliary_law_to") +
+                               HistoryText.PlainText(
+                                   AuxiliaryLawValueName(pKind, pNext));
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.COURT_AUXILIARY_LAW_CHANGED, text,
+                pRuler?.data != null
+                    ? HistoryTarget.Actor(pRuler)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnInheritanceLawChanged(Kingdom pKingdom,
+            Actor pRuler, InheritanceLaw? pPrevious,
+            InheritanceLaw? pNext)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pKingdom) +
+                               H("aw_hist_inheritance_law_changed_mid") +
+                               HistoryText.PlainText(
+                                   InheritanceLawControlName(pPrevious)) +
+                               H("aw_hist_inheritance_law_changed_to") +
+                               HistoryText.PlainText(
+                                   InheritanceLawControlName(pNext));
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.INHERITANCE_LAW_CHANGED, text,
+                pRuler?.data != null
+                    ? HistoryTarget.Actor(pRuler)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnSuccessionDisputeStarted(Kingdom pOriginal,
+            Kingdom pRival, Actor pSuccessor, Actor pClaimant,
+            string pOriginalDisplay, string pRivalDisplay)
+        {
+            if (pOriginal?.data == null || pRival?.data == null ||
+                pClaimant?.data == null) return;
+            HistoryText originalName = FrozenKingdomName(pOriginal,
+                pOriginalDisplay);
+            HistoryText rivalName = FrozenKingdomName(pRival,
+                pRivalDisplay);
+            HistoryText text = HistoryText.Actor(pClaimant) +
+                               H("aw_hist_succession_dispute_claimed_mid") +
+                               originalName +
+                               H("aw_hist_succession_dispute_founded_mid") +
+                               rivalName;
+            HistoryWriter.RecordKingdom(pOriginal,
+                KingdomEvent.SUCCESSION_DISPUTE_STARTED, text,
+                HistoryTarget.Actor(pClaimant));
+            HistoryWriter.RecordKingdom(pRival,
+                KingdomEvent.SUCCESSION_DISPUTE_STARTED, text,
+                HistoryTarget.Kingdom(pOriginal));
+            HistoryWriter.RecordPerson(pClaimant.data.id, pRival,
+                pClaimant.getName(), PersonEvent.SUCCESSION_DISPUTE_STARTED,
+                text, ChronicleCategory.WAR,
+                HistoryTarget.Kingdom(pOriginal));
+            if (pSuccessor?.data != null)
+                HistoryWriter.RecordPerson(pSuccessor.data.id, pOriginal,
+                    pSuccessor.getName(),
+                    PersonEvent.SUCCESSION_DISPUTE_STARTED, text,
+                    ChronicleCategory.WAR,
+                    HistoryTarget.Actor(pClaimant));
+        }
+
+        public static void OnHeirDesignated(Kingdom pKingdom, Actor pRuler,
+            Actor pHeir, string pMode)
+        {
+            if (pKingdom?.data == null || pHeir?.data == null) return;
+            string title = T(HeirTitleRules.TitleKey(
+                HeirTitleRules.IsImperialOrMandate(pKingdom), pMode));
+            HistoryText ruler = pRuler?.data != null
+                ? HistoryText.Actor(pRuler)
+                : HistoryText.Kingdom(pKingdom);
+            HistoryText text = ruler + H("aw_hist_heir_designated_mid") +
+                               HistoryText.Actor(pHeir) +
+                               H("aw_hist_heir_designated_as") +
+                               HistoryText.PlainText(title);
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.HEIR_DESIGNATED, text,
+                HistoryTarget.Actor(pHeir));
+            HistoryWriter.RecordPerson(pHeir.data.id, pKingdom,
+                pHeir.getName(), PersonEvent.HEIR_DESIGNATED, text,
+                ChronicleCategory.HONOR,
+                pRuler?.data != null
+                    ? HistoryTarget.Actor(pRuler)
+                    : HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnSuccessionDisputeResolved(Kingdom pOriginal,
+            Actor pSuccessor, Actor pClaimant, bool pClaimantWon,
+            string pOriginalDisplay, string pRivalDisplay)
+        {
+            if (pOriginal?.data == null) return;
+            Actor winner = pClaimantWon ? pClaimant : pSuccessor;
+            HistoryText text = FrozenKingdomName(pOriginal,
+                                   pOriginalDisplay) +
+                               H("aw_hist_succession_dispute_defeated_mid") +
+                               FrozenPlainName(pRivalDisplay) +
+                               H(pClaimantWon
+                                   ? "aw_hist_succession_claimant_won_suffix"
+                                   : "aw_hist_succession_successor_won_suffix");
+            HistoryWriter.RecordKingdom(pOriginal,
+                KingdomEvent.SUCCESSION_DISPUTE_RESOLVED, text,
+                winner?.data != null
+                    ? HistoryTarget.Actor(winner)
+                    : HistoryTarget.Kingdom(pOriginal));
+            if (winner?.data != null)
+                HistoryWriter.RecordPerson(winner.data.id, pOriginal,
+                    winner.getName(),
+                    PersonEvent.SUCCESSION_DISPUTE_RESOLVED, text,
+                    ChronicleCategory.WAR,
+                    HistoryTarget.Kingdom(pOriginal));
+        }
+
+        public static void OnSuccessionPermanentSplit(Kingdom pOriginal,
+            Kingdom pRival, Actor pSuccessor, Actor pClaimant,
+            string pOriginalDisplay, string pRivalDisplay)
+        {
+            if (pOriginal?.data == null || pRival?.data == null) return;
+            HistoryText text = FrozenKingdomName(pOriginal,
+                                   pOriginalDisplay) +
+                               H("aw_hist_succession_split_with_mid") +
+                               FrozenKingdomName(pRival, pRivalDisplay) +
+                               H("aw_hist_succession_split_suffix");
+            HistoryWriter.RecordKingdom(pOriginal,
+                KingdomEvent.SUCCESSION_PERMANENT_SPLIT, text,
+                HistoryTarget.Kingdom(pRival));
+            HistoryWriter.RecordKingdom(pRival,
+                KingdomEvent.SUCCESSION_PERMANENT_SPLIT, text,
+                HistoryTarget.Kingdom(pOriginal));
+            foreach (Actor actor in new[] { pSuccessor, pClaimant })
+                if (actor?.data != null)
+                    HistoryWriter.RecordPerson(actor.data.id,
+                        actor.kingdom, actor.getName(),
+                        PersonEvent.SUCCESSION_PERMANENT_SPLIT, text,
+                        ChronicleCategory.WAR,
+                        HistoryTarget.Kingdom(pOriginal));
+        }
+
+        public static void OnSuccessionReunified(Kingdom pOriginal,
+            Actor pWinner, string pOriginalDisplay, string pRivalDisplay)
+        {
+            if (pOriginal?.data == null) return;
+            HistoryText text = (pWinner?.data != null
+                                   ? HistoryText.Actor(pWinner)
+                                   : FrozenKingdomName(pOriginal,
+                                       pOriginalDisplay)) +
+                               H("aw_hist_succession_reunified_mid") +
+                               FrozenPlainName(pOriginalDisplay) +
+                               H("aw_hist_succession_reunified_and_mid") +
+                               FrozenPlainName(pRivalDisplay) +
+                               H("aw_hist_succession_reunified_suffix");
+            HistoryWriter.RecordKingdom(pOriginal,
+                KingdomEvent.SUCCESSION_REUNIFIED, text,
+                pWinner?.data != null
+                    ? HistoryTarget.Actor(pWinner)
+                    : HistoryTarget.Kingdom(pOriginal));
+            if (pWinner?.data != null)
+                HistoryWriter.RecordPerson(pWinner.data.id, pOriginal,
+                    pWinner.getName(), PersonEvent.SUCCESSION_REUNIFIED,
+                    text, ChronicleCategory.WAR,
+                    HistoryTarget.Kingdom(pOriginal));
+        }
+
+        private static HistoryText FrozenKingdomName(Kingdom pKingdom,
+            string pDisplayName)
+        {
+            return HistoryText.Colored(
+                string.IsNullOrEmpty(pDisplayName)
+                    ? pKingdom?.name ?? T("aw_unknown_kingdom")
+                    : pDisplayName,
+                pKingdom?.data == null
+                    ? ""
+                    : HistoryColors.FromKingdom(pKingdom));
+        }
+
+        private static HistoryText FrozenPlainName(string pDisplayName)
+        {
+            return HistoryText.PlainText(string.IsNullOrEmpty(pDisplayName)
+                ? T("aw_unknown_kingdom")
+                : pDisplayName);
+        }
+
+        public static void OnBorderPetitionApproved(Kingdom pSuzerain,
+            Kingdom pRequesterKingdom, Actor pRequester, Kingdom pTarget,
+            string pReasonLabel)
+        {
+            if (pSuzerain?.data == null || pTarget?.data == null) return;
+            HistoryText requester = pRequester?.data != null
+                ? HistoryText.Actor(pRequester)
+                : pRequesterKingdom?.data != null
+                    ? HistoryText.Kingdom(pRequesterKingdom)
+                    : HistoryText.Kingdom(pSuzerain);
+            HistoryText text = HistoryText.Kingdom(pSuzerain) +
+                               H("aw_hist_border_petition_source_mid") +
+                               requester +
+                               H("aw_hist_border_petition_target_mid") +
+                               HistoryText.Kingdom(pTarget) +
+                               H("aw_hist_border_petition_reason_mid") +
+                               HistoryText.PlainText(pReasonLabel ?? "") +
+                               H("aw_hist_border_petition_suffix");
+            HistoryWriter.RecordKingdom(pSuzerain,
+                KingdomEvent.BORDER_PETITION_APPROVED, text,
+                HistoryTarget.Kingdom(pTarget));
+        }
+
+        private static string AuxiliaryLawKindName(
+            CourtAuxiliaryLawKind pKind)
+        {
+            return T(pKind switch
+            {
+                CourtAuxiliaryLawKind.Term => "aw_court_aux_law_term",
+                CourtAuxiliaryLawKind.BorderCommand =>
+                    "aw_court_aux_law_border",
+                _ => "aw_court_aux_law_appointment"
+            });
+        }
+
+        private static string InheritanceLawControlName(
+            InheritanceLaw? pLaw)
+        {
+            if (!pLaw.HasValue)
+                return T("aw_inheritance_control_automatic");
+            return T(pLaw.Value switch
+            {
+                InheritanceLaw.MilitaryAcclaim =>
+                    "aw_inheritance_law_military",
+                InheritanceLaw.CivilAcclaim =>
+                    "aw_inheritance_law_civil",
+                _ => "aw_inheritance_law_primogeniture"
+            });
+        }
+
+        private static string AuxiliaryLawValueName(
+            CourtAuxiliaryLawKind pKind, int pValue)
+        {
+            string key = pKind switch
+            {
+                CourtAuxiliaryLawKind.Term => pValue switch
+                {
+                    (int)CourtTermLaw.Lifetime => "aw_court_term_lifetime",
+                    (int)CourtTermLaw.FixedThreeYears =>
+                        "aw_court_term_three",
+                    (int)CourtTermLaw.FixedNineYears =>
+                        "aw_court_term_nine",
+                    _ => "aw_court_term_dynamic"
+                },
+                CourtAuxiliaryLawKind.BorderCommand => pValue switch
+                {
+                    (int)CourtBorderCommandLaw.Discretionary =>
+                        "aw_court_border_discretionary",
+                    (int)CourtBorderCommandLaw.Centralized =>
+                        "aw_court_border_centralized",
+                    _ => "aw_court_border_petition"
+                },
+                _ => pValue switch
+                {
+                    (int)CourtAppointmentCultureLaw.MeritOnly =>
+                        "aw_court_appointment_merit",
+                    (int)CourtAppointmentCultureLaw.XiaCentered =>
+                        "aw_court_appointment_centered",
+                    _ => "aw_court_appointment_preference"
+                }
+            };
+            return T(key);
         }
 
         private static string CourtTierName(string pTier)
@@ -191,8 +931,10 @@ namespace AncientWarfare3.core.lineage
                     return AW_L10n.Text("aw_court_tier_sanshengliubu", "Three Departments and Six Ministries");
                 case CourtTier.SanGongJiuQing:
                     return AW_L10n.Text("aw_court_tier_sangongjiuqing", "Three Excellencies and Nine Ministers");
+                case CourtTier.EasternZhou:
+                    return AW_L10n.Text("aw_court_tier_easternzhou", "Eastern Zhou Six Ministers");
                 default:
-                    return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
+                    return AW_L10n.Text("aw_court_button_locked", "Court Locked");
             }
         }
 
@@ -200,19 +942,209 @@ namespace AncientWarfare3.core.lineage
         {
             if (pActor?.data == null || pKingdom?.data == null) return;
             string name = pActor.getName();
+            int rank = OfficialCareerStateService.ReadRankFast(pActor);
+            string rankKey = OfficialCareerRankRules.RankNameKey(rank);
+            string rankFallback =
+                OfficialCareerRankRules.RankFallbackEnglish(rank);
             HistoryText text = HistoryText.Actor(pActor, name) +
                                H("aw_hist_court_entered_as") +
-                               HistoryText.PlainText(CourtOfficeName(pOfficeId)) +
+                               HistoryText.PlainText(CourtOfficeName(
+                                   pKingdom, pOfficeId)) +
                                H("aw_hist_court_school_mid") +
                                HistoryText.PlainText(CourtSchoolName(pSchoolId));
+            if (CourtService.HasNineRankSystem(pKingdom))
+                text += HistoryText.PlainText(AW_L10n.Text(
+                            "aw_hist_court_rank_mid", ", at official rank ")) +
+                        HistoryText.PlainText(AW_L10n.Text(rankKey,
+                            rankFallback));
 
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
-                PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.HONOR,
+                PersonEvent.COURT_OFFICER_APPOINTED, text, ChronicleCategory.CAREER,
                 HistoryTarget.Kingdom(pKingdom));
 
             if (ChronicleGate.IsImportant(pActor))
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_OFFICER_APPOINTED, text,
                     HistoryTarget.Actor(pActor));
+        }
+
+        public static void OnCivilServiceExamOpened(Kingdom pKingdom,
+            int pCycleYear, string pMode, int pCandidateCount)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pKingdom) +
+                               H("aw_hist_civil_service_exam_opened_mid") +
+                               HistoryText.PlainText(CivilServiceModeName(pMode)) +
+                               H("aw_hist_civil_service_exam_opened_year_mid") +
+                               HistoryText.PlainText(pCycleYear.ToString()) +
+                               H("aw_hist_civil_service_exam_opened_candidates_mid") +
+                               HistoryText.PlainText(Math.Max(0,
+                                   pCandidateCount).ToString()) +
+                               H("aw_hist_civil_service_exam_opened_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.CIVIL_SERVICE_EXAM_OPENED, text,
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCivilServiceQualification(Kingdom pKingdom,
+            long pActorId, string pActorName, string pQualification,
+            int pCycleYear)
+        {
+            if (pKingdom?.data == null || pActorId < 0L ||
+                string.IsNullOrEmpty(pActorName) ||
+                string.IsNullOrEmpty(pQualification) ||
+                pQualification == "none") return;
+            HistoryText actor = SnapshotActor(pActorId, pActorName, pKingdom);
+            HistoryText text = actor +
+                               H("aw_hist_civil_service_qualified_mid") +
+                               HistoryText.PlainText(
+                                   CivilServiceQualificationName(
+                                       pQualification)) +
+                               H("aw_hist_civil_service_qualified_year_mid") +
+                               HistoryText.PlainText(pCycleYear.ToString()) +
+                               H("aw_hist_civil_service_qualified_suffix");
+            HistoryWriter.RecordPerson(pActorId, pKingdom, pActorName,
+                PersonEvent.CIVIL_SERVICE_QUALIFIED, text,
+                ChronicleCategory.CAREER, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCivilServiceTopRanked(Kingdom pKingdom,
+            long pActorId, string pActorName, int pRank, string pRankTitle,
+            int pCycleYear)
+        {
+            if (pKingdom?.data == null || pActorId < 0L ||
+                string.IsNullOrEmpty(pActorName) || pRank < 1 || pRank > 3)
+                return;
+            HistoryText actor = SnapshotActor(pActorId, pActorName, pKingdom);
+            HistoryText text = actor +
+                               H("aw_hist_civil_service_top_ranked_mid") +
+                               HistoryText.PlainText(CivilServiceRankName(
+                                   pRankTitle, pRank)) +
+                               H("aw_hist_civil_service_top_ranked_year_mid") +
+                               HistoryText.PlainText(pCycleYear.ToString()) +
+                               H("aw_hist_civil_service_top_ranked_suffix");
+            HistoryWriter.RecordPerson(pActorId, pKingdom, pActorName,
+                PersonEvent.CIVIL_SERVICE_TOP_RANKED, text,
+                ChronicleCategory.CAREER, HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCivilServiceExamCompleted(Kingdom pKingdom,
+            int pCycleYear, string pMode)
+        {
+            if (pKingdom?.data == null) return;
+            HistoryText text = HistoryText.Kingdom(pKingdom) +
+                               H("aw_hist_civil_service_exam_completed_mid") +
+                               HistoryText.PlainText(CivilServiceModeName(pMode)) +
+                               H("aw_hist_civil_service_exam_completed_year_mid") +
+                               HistoryText.PlainText(pCycleYear.ToString()) +
+                               H("aw_hist_civil_service_exam_completed_suffix");
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.CIVIL_SERVICE_EXAM_COMPLETED, text,
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnCivilServiceFirstAppointment(Actor pActor,
+            Kingdom pKingdom, string pOfficeId, string pQualification)
+        {
+            if (pActor?.data == null || pKingdom?.data == null) return;
+            HistoryText text = HistoryText.Actor(pActor) +
+                               H("aw_hist_civil_service_first_appointment_mid") +
+                               HistoryText.PlainText(
+                                   CivilServiceQualificationName(
+                                       pQualification)) +
+                               H("aw_hist_civil_service_first_appointment_office_mid") +
+                               HistoryText.PlainText(CourtOfficeName(
+                                   pKingdom, pOfficeId)) +
+                               H("aw_hist_civil_service_first_appointment_suffix");
+            HistoryWriter.RecordPerson(pActor.data.id, pKingdom,
+                pActor.getName(), PersonEvent.CIVIL_SERVICE_FIRST_APPOINTMENT,
+                text, ChronicleCategory.CAREER,
+                HistoryTarget.Kingdom(pKingdom));
+        }
+
+        private static HistoryText SnapshotActor(long pActorId,
+            string pActorName, Kingdom pKingdom)
+        {
+            return HistoryText.Reference(pActorName,
+                HistoryColors.FromKingdom(pKingdom), "actor", pActorId);
+        }
+
+        private static string CivilServiceModeName(string pMode)
+        {
+            return string.Equals(pMode, "imperial_exam",
+                    StringComparison.Ordinal)
+                ? AW_L10n.Text("aw_civil_service_mode_imperial",
+                    "Imperial Examination")
+                : AW_L10n.Text("aw_civil_service_mode_tribute",
+                    "Tribute Examination");
+        }
+
+        private static string CivilServiceQualificationName(string pValue)
+        {
+            return pValue switch
+            {
+                "juren" => AW_L10n.Text(
+                    "aw_civil_service_qualification_juren", "Juren"),
+                "gongshi" => AW_L10n.Text(
+                    "aw_civil_service_qualification_gongshi", "Gongshi"),
+                "jinshi" => AW_L10n.Text(
+                    "aw_civil_service_qualification_jinshi", "Jinshi"),
+                _ => AW_L10n.Text(
+                    "aw_civil_service_qualification_none", "Unqualified")
+            };
+        }
+
+        private static string CivilServiceRankName(string pTitle, int pRank)
+        {
+            string key = pTitle switch
+            {
+                "zhuangyuan" => "aw_civil_service_rank_zhuangyuan",
+                "bangyan" => "aw_civil_service_rank_bangyan",
+                "tanhua" => "aw_civil_service_rank_tanhua",
+                _ => pRank == 1 ? "aw_civil_service_rank_zhuangyuan" :
+                    pRank == 2 ? "aw_civil_service_rank_bangyan" :
+                    "aw_civil_service_rank_tanhua"
+            };
+            string fallback = pRank == 1 ? "Principal Graduate" :
+                pRank == 2 ? "Second Graduate" : "Third Graduate";
+            return AW_L10n.Text(key, fallback);
+        }
+
+        public static void OnOfficialRankPromoted(Actor pActor,
+            Kingdom pKingdom, int pTrack, int pPreviousRank, int pNextRank,
+            string pOfficeId)
+        {
+            if (pActor?.data == null || pKingdom?.data == null ||
+                !OfficialCareerBiographyRules.ShouldRecordRankAdvance(
+                    CourtService.HasNineRankSystem(pKingdom),
+                    persistenceCommitted: true, pPreviousRank, pNextRank)) return;
+
+            string trackTitle = AW_L10n.Text(
+                OfficialCareerRankRules.TrackTitleKey(pTrack),
+                OfficialCareerRankRules.TrackTitleFallbackEnglish(pTrack));
+            string rankTitle = AW_L10n.Text(
+                OfficialCareerRankRules.RankNameKey(pNextRank),
+                OfficialCareerRankRules.RankFallbackEnglish(pNextRank));
+            string formalRank = string.Format(AW_L10n.Text(
+                    "aw_court_joint_rank_format", "{0} · {1}"),
+                trackTitle, rankTitle);
+            string office = CourtOfficeName(pKingdom, pOfficeId);
+
+            HistoryText text = H("aw_hist_official_edict_prefix") +
+                               HistoryText.Actor(pActor) +
+                               H(pPreviousRank <= OfficialCareerRankRules.Unranked
+                                   ? "aw_hist_official_rank_grant_mid"
+                                   : "aw_hist_official_edict_mid") +
+                               HistoryText.PlainText(formalRank);
+            if (!string.IsNullOrEmpty(office))
+                text += H("aw_hist_official_edict_office_mid") +
+                        HistoryText.PlainText(office);
+            text += H(pPreviousRank <= OfficialCareerRankRules.Unranked
+                ? "aw_hist_official_rank_grant_suffix"
+                : "aw_hist_official_edict_suffix");
+            HistoryWriter.RecordPerson(pActor.data.id, pKingdom,
+                pActor.getName(), PersonEvent.OFFICIAL_APPOINTMENT_EDICT,
+                text, ChronicleCategory.CAREER,
+                HistoryTarget.Kingdom(pKingdom));
         }
 
         public static void OnCourtFactionDominant(Kingdom pKingdom, string pSchoolId)
@@ -230,18 +1162,36 @@ namespace AncientWarfare3.core.lineage
             string name = pActor.getName();
             HistoryText text = HistoryText.Actor(pActor, name) +
                                H("aw_hist_court_dismissed_mid") +
-                               HistoryText.PlainText(CourtOfficeName(pOfficeId));
+                               HistoryText.PlainText(CourtOfficeName(
+                                   pKingdom, pOfficeId));
             HistoryWriter.RecordPerson(pActor.data.id, pKingdom, name,
-                PersonEvent.COURT_OFFICER_DISMISSED, text, ChronicleCategory.SOCIAL,
+                PersonEvent.COURT_OFFICER_DISMISSED, text, ChronicleCategory.CAREER,
                 HistoryTarget.Kingdom(pKingdom));
+        }
+
+        public static void OnOfficialPetition(Kingdom pKingdom, Actor pActor,
+            int pMoneyCost, float pFavor)
+        {
+            if (pKingdom?.data == null || pActor?.data == null) return;
+            HistoryText text = HistoryText.Actor(pActor) +
+                               H("aw_hist_court_petition_mid") +
+                               HistoryText.PlainText(pMoneyCost.ToString()) +
+                               H("aw_hist_court_petition_favor_mid") +
+                               HistoryText.PlainText(pFavor.ToString("0.#"));
+            HistoryWriter.RecordPerson(pActor.data.id, pKingdom,
+                pActor.getName(), "court_petition", text,
+                ChronicleCategory.SOCIAL, HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordKingdom(pKingdom, "court_petition", text,
+                HistoryTarget.Actor(pActor));
         }
 
         public static void OnCourtReformEvent(Kingdom pKingdom, string pDominantSchool)
         {
             if (pKingdom?.data == null) return;
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.COURT_REFORM_EVENT,
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_court_reform_mid") +
-                HistoryText.PlainText(CourtSchoolName(pDominantSchool)) + H("aw_hist_court_reform_suffix"),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_court_reform_mid") +
+                HistoryText.PlainText(CourtSchoolName(pDominantSchool)) +
+                H("aw_hist_edict_court_reform_suffix"),
                 HistoryTarget.Kingdom(pKingdom));
         }
 
@@ -255,10 +1205,10 @@ namespace AncientWarfare3.core.lineage
                 HistoryTarget.Kingdom(pKingdom));
         }
 
-        private static string CourtOfficeName(string pOfficeId)
+        private static string CourtOfficeName(Kingdom pKingdom,
+            string pOfficeId)
         {
-            string key = "aw_court_office_" + (pOfficeId ?? "");
-            return AW_L10n.Text(key, pOfficeId ?? "");
+            return CourtInstitutionService.OfficeName(pKingdom, pOfficeId);
         }
 
         private static string CourtSchoolName(string pSchoolId)
@@ -279,8 +1229,11 @@ namespace AncientWarfare3.core.lineage
                 case CourtSchoolId.Merchant: return AW_L10n.Text("aw_court_school_merchant", "Merchant");
                 case CourtSchoolId.Craftsman: return AW_L10n.Text("aw_court_school_craftsman", "Craftsman");
                 case CourtSchoolId.Historian: return AW_L10n.Text("aw_court_school_historian", "Historian");
-                case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_primitive_title", "Primitive Council");
-                default: return string.IsNullOrEmpty(pSchoolId) ? T("aw_hist_none") : pSchoolId;
+                case CourtSchoolId.PrimitiveMinister: return AW_L10n.Text("aw_court_school_primitive", "Eastern Zhou Courtier");
+                default:
+                    return string.IsNullOrEmpty(pSchoolId)
+                        ? AW_L10n.Text("aw_court_school_none", "No school")
+                        : pSchoolId;
             }
         }
 
@@ -306,7 +1259,6 @@ namespace AncientWarfare3.core.lineage
             KingdomArchiveWriter.EnsureRow(pKingdom);
             KingdomArchiveWriter.MarkDestroyed(pKingdom);
             RulerAppellationService.RemoveKingdom(pKingdom.id);
-            VassalService.OnKingdomDestroyed(pKingdom);
             MandateService.OnKingdomDestroyed(pKingdom);
             // 结构表：关闭该国所有开着的 reign / dynasty / era（kingdom_fell）
             ReignRecordWriter.ReignInfo reign = ReignRecordWriter.CloseOpenReign(pKingdom, "kingdom_fell", king);

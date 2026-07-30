@@ -1,4 +1,5 @@
 key,cz,en,ch
+aw_feudatories Title,藩国总览,Feudatories,藩國總覽
 aw_mandate_dynasty_title,天命王朝,Mandate Dynasty,天命王朝
 aw_mandate_dynasty Title,天命王朝,Mandate Dynasty,天命王朝
 aw_mandate_dynasty_btn,天命榜,Mandate,天命榜
@@ -29,12 +30,28 @@ aw_mandate_crisis_lost,失德,Discredited,失德
 aw_mandate_crisis_collapse,崩解,Collapse,崩解
 aw_mandate_crisis_unknown,未知,Unknown,未知
 aw_mandate_phase,治乱阶段,Dynastic Cycle,治亂階段
-aw_mandate_phase_golden,治世,Golden Age,治世
-aw_mandate_phase_decline,衰世,Decline,衰世
-aw_mandate_phase_chaos,乱世,Chaos,亂世
-aw_mandate_phase_renewal,新朝,Renewal,新朝
+aw_mandate_phase_golden,政治清明,Political Clarity,政治清明
+aw_mandate_phase_decline,局势紧张,Political Tension,局勢緊張
+aw_mandate_phase_chaos,群雄割据,Warring Contenders,群雄割據
+aw_mandate_phase_renewal,开疆拓土,Territorial Expansion,開疆拓土
 aw_mandate_phase_since,阶段起始,Phase Since,階段起始
 aw_mandate_catalyst,乱世催化,Chaos Catalyst,亂世催化
+aw_mandate_cycle Title,天下治乱,Dynastic Cycle,天下治亂
+aw_mandate_cycle_title,天下治乱,Dynastic Cycle,天下治亂
+aw_mandate_cycle_entry,天下治乱,Dynastic Cycle,天下治亂
+aw_mandate_cycle_entry_desc,查看当前治乱阶段、持续时间、天下压力和实际阶段效果,Inspect the current phase duration realm pressure and actual phase effects,查看當前治亂階段、持續時間、天下壓力和實際階段效果
+aw_mandate_cycle_years,年, years,年
+aw_mandate_cycle_current,当前阶段,Current Phase,當前階段
+aw_mandate_cycle_duration,持续时间,Duration,持續時間
+aw_mandate_cycle_metrics,天下形势,Realm Conditions,天下形勢
+aw_mandate_cycle_claimants,逐鹿者,Contenders,逐鹿者
+aw_mandate_cycle_unstable_feudatories,不稳藩国,Unstable Feudatories,不穩藩國
+aw_mandate_cycle_phase_order,阶段循环,Phase Cycle,階段循環
+aw_mandate_cycle_current_marker,当前,Current,當前
+aw_mandate_cycle_effect_golden,政令清明与稳定期；军队数量提高15%，军队质量提高，占领进度减缓25%，集权上限为3。,Stable administration; army quantity +15% and quality improves capture progress -25% centralization cap 3.,政令清明與穩定期；軍隊數量提高15%，軍隊質量提高，佔領進度減緩25%，集權上限為3。
+aw_mandate_cycle_effect_renewal,受命初创与中兴扩张期；军队数量提高25%，军队质量显著提高，占领进度减缓35%，集权上限为1。,Founding and restoration expansion; army quantity +25% and quality greatly improves capture progress -35% centralization cap 1.,受命初創與中興擴張期；軍隊數量提高25%，軍隊質量顯著提高，佔領進度減緩35%，集權上限為1。
+aw_mandate_cycle_effect_decline,局势紧张期；军队数量降低10%，军队质量下降，占领进度正常，集权上限为2，小规模叛乱风险逐步上升。,Political tension; army quantity -10% and quality declines normal capture progress centralization cap 2 and local revolt pressure rises.,局勢緊張期；軍隊數量降低10%，軍隊質量下降，佔領進度正常，集權上限為2，小規模叛亂風險逐步上升。
+aw_mandate_cycle_effect_chaos,群雄割据期；开放逐鹿与自主复国，旧朝军队数量降低25%且质量衰退，占领进度提高50%，集权强制为0。,Warring contenders; Mandate contests and autonomous restoration unlock old-realm army quantity -25% with lower quality capture progress +50% and centralization forced to 0.,群雄割據期；開放逐鹿與自主復國，舊朝軍隊數量降低25%且質量衰退，佔領進度提高50%，集權強制為0。
 aw_policy_mandate_rites,天命礼制,Mandate Rites,天命礼制
 aw_policy_mandate_rites_desc,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。,Formalize Mandate rites sacrifices and era changes as a legitimacy framework,把受命、祭天和改元纳入国家礼制，为天命王朝提供合法性框架。
 aw_policy_imperial_court,王朝朝廷,Imperial Court,王朝朝廷
@@ -126,9 +143,89 @@ aw_feudatory_entry_desc,查看藩王 藩都 辖城 自治 忠诚与镇军,Inspec
 aw_feudatory_empty,当前没有活动藩国,No active feudatories,當前沒有活動藩國
 aw_feudatory_shi_unknown,氏族未详,Shi unknown,氏族未詳
 aw_feudatory_garrison,镇军,Garrison,鎮軍
-aw_feudatory_successor,继承人,Successor,繼承人
-aw_feudatory_successor_none,暂无合格继承人,No qualified successor,暫無合格繼承人
+aw_feudatory_remittance,中央上缴,Central Remittance,中央上繳
+aw_feudatory_successor,世子,Heir Apparent,世子
+aw_feudatory_successor_none,暂无世子,No heir apparent,暫無世子
 aw_feudatory_cities,辖城,Cities,轄城
 aw_feudatory_governor,流官,Governor,流官
 aw_feudatory_governor_vacant,空缺,Vacant,空缺
 aw_feudatory_selected_city,当前查看,Selected city,當前查看
+aw_hist_event_feudatory_inherited,藩国承袭,Feudatory Inherited,藩國承襲
+aw_hist_event_feudatory_abolished,绝嗣除国,Feudatory Abolished,絕嗣除國
+aw_hist_feudatory_inherited_person, 承袭, inherited the feudatory seated at , 承襲
+aw_hist_feudatory_inherited_suffix,藩，继任藩王, and succeeded as feudatory prince,藩，繼任藩王
+aw_hist_feudatory_line_passed,藩承袭：, feudatory succession: ,藩承襲：
+aw_hist_feudatory_line_to,传于, was succeeded by ,傳於
+aw_hist_feudatory_abolished_prefix, 因宗支绝嗣，除, abolished the heirless feudatory of , 因宗支絕嗣，除
+aw_hist_feudatory_abolished_suffix,藩，辖地复归中央,; its lands returned to direct rule,藩，轄地復歸中央
+aw_mandate_decision_favor_order,颁行推恩令,Proclaim the Favor Order,頒行推恩令
+aw_mandate_decision_favor_order_desc,集权提升一级并永久启用推恩；此后每次袭藩收回一座非藩都城市，单城藩则自治降低15,Raise centralization by one level and permanently apply favor order at each succession,集權提升一級並永久啟用推恩；此後每次襲藩收回一座非藩都城市，單城藩則自治降低15
+aw_hist_event_feudatory_favor,推恩削藩,Favor Order Applied,推恩削藩
+aw_hist_favor_order_proclaimed,颁推恩令，集权进一阶；此后藩国承袭，中央逐代收城,Proclaimed the Favor Order and raised centralization; future successions return land to direct rule,頒推恩令，集權進一階；此後藩國承襲，中央逐代收城
+aw_hist_favor_order_applied, 依推恩令, applied the Favor Order, 依推恩令
+aw_hist_favor_order_reclaimed,收回, and reclaimed ,收回
+aw_hist_favor_order_reclaimed_suffix,，复置流官直辖, under direct appointed administration,，復置流官直轄
+aw_hist_favor_order_autonomy,削单城藩自治至, and reduced single-seat autonomy to ,削單城藩自治至
+aw_hist_favor_order_prince_record, 承袭时奉推恩令，藩权受削, inherited under the Favor Order and lost feudatory authority, 承襲時奉推恩令，藩權受削
+aw_feudatory_action_relocate,移封,Relocate,移封
+aw_feudatory_action_relocate_desc,自动迁往更靠近京畿的连续一至三城；烈度20,Relocate automatically to one to three contiguous cities closer to the capital; intensity 20,自動遷往更靠近京畿的連續一至三城；烈度20
+aw_feudatory_action_reclaim,夺城,Reclaim City,奪城
+aw_feudatory_action_reclaim_desc,收回当前选中的藩国城市；最后一城必须使用废藩；烈度35,Reclaim the selected feudatory city; the final city requires abolition; intensity 35,收回當前選中的藩國城市；最後一城必須使用廢藩；烈度35
+aw_feudatory_action_abolish,废藩,Abolish,廢藩
+aw_feudatory_action_confirm_abolish,确认废藩,Confirm Abolition,確認廢藩
+aw_feudatory_action_abolish_desc,收回全部辖地并将藩王废为庶人；烈度60,Return all cities to direct rule and reduce the prince to common status; intensity 60,收回全部轄地並將藩王廢為庶人；烈度60
+aw_feudatory_action_unavailable,当前条件不足,Unavailable under current conditions,當前條件不足
+aw_hist_event_feudatory_relocated,藩王移封,Feudatory Relocated,藩王移封
+aw_hist_event_feudatory_city_reclaimed,削藩夺城,Feudatory City Reclaimed,削藩奪城
+aw_hist_event_feudatory_revoked,废藩为庶,Feudatory Abolished,廢藩為庶
+aw_hist_event_jingnan_started,藩王靖难,Feudatory Jingnan,藩王靖難
+aw_hist_event_jingnan_suppressed,靖难平定,Jingnan Suppressed,靖難平定
+aw_hist_event_jingnan_victory,靖难入主,Jingnan Accession,靖難入主
+aw_hist_event_jingnan_stalemate,靖难未决,Jingnan Stalemate,靖難未決
+aw_mandate_decision_grant_royal_titles,大封宗室,Great Grant of Royal Titles,大封宗室
+aw_mandate_decision_grant_royal_titles_desc,按五服亲疏向宗室授予可由嫡长子承袭的虚爵 不转移土地军队或外交权,Grant hereditary titular ranks to the royal clan within five degrees without transferring land armies or diplomatic authority,按五服親疏向宗室授予可由嫡長子承襲的虛爵 不轉移土地軍隊或外交權
+aw_noble_rank_county_male,县男,County Baron,縣男
+aw_noble_rank_county_viscount,县子,County Viscount,縣子
+aw_noble_rank_county_count,县伯,County Count,縣伯
+aw_noble_rank_county_marquis,县侯,County Marquis,縣侯
+aw_noble_rank_county_duke,县公,County Duke,縣公
+aw_noble_rank_commandery_duke,郡公,Commandery Duke,郡公
+aw_noble_rank_state_duke,国公,Duke of State,國公
+aw_noble_rank_prince,王,Prince,王
+aw_noble_style_princess,公主,Princess,公主
+aw_noble_style_senior_princess,长公主,Senior Princess,長公主
+aw_noble_style_grand_princess,大长公主,Grand Princess,大長公主
+aw_hist_event_noble_rank_granted,册授爵位,Noble Rank Granted,冊授爵位
+aw_hist_event_noble_rank_inherited,承袭爵位,Noble Rank Inherited,承襲爵位
+aw_hist_event_noble_rank_extinct,爵位绝嗣,Noble Rank Extinct,爵位絕嗣
+aw_hist_event_great_royal_grant,大封宗室,Great Royal Grant,大封宗室
+aw_hist_noble_rank_granted_as,受册为, was invested as ,受冊為
+aw_hist_noble_rank_granted_by,，册授者, by ,，冊授者
+aw_hist_noble_rank_inherited_title,承袭, inherited the title ,承襲
+aw_hist_noble_rank_inherited_from,，前爵主为, from ,，前爵主為
+aw_hist_noble_rank_extinct_prefix,所袭, held the hereditary title ,所襲
+aw_hist_noble_rank_extinct_suffix,，因无合格子嗣而除, which became extinct for lack of an eligible son,，因無合格子嗣而除
+aw_hist_great_royal_grant_prefix,大封宗室，册授, invested ,大封宗室，冊授
+aw_hist_great_royal_grant_suffix,人虚爵, members of the royal clan with titular ranks,人虛爵
+aw_hist_edict_noble_grant_prefix,制曰：,Edict: ,制曰：
+aw_hist_edict_noble_grant_as,宗支敦睦，勋德有闻，宜册为, has served the royal lineage with distinction and shall be invested as ,宗支敦睦，勳德有聞，宜冊為
+aw_hist_edict_noble_grant_by,；其命出于, by command of ,；其命出於
+aw_hist_edict_noble_grant_suffix,，锡号传家，以昭亲亲之义。,; the honor shall descend in the line.,，錫號傳家，以昭親親之義。
+aw_hist_edict_great_royal_grant_prefix,承天建极，敦叙宗盟；今大封宗室，册授, upheld the Mandate and ordered the royal lineage; the court invested ,承天建極，敦敘宗盟；今大封宗室，冊授
+aw_hist_edict_great_royal_grant_suffix,人虚爵，使列班序，屏翰王室，以固邦家。, members of the royal clan with titular ranks to uphold the royal house.,人虛爵，使列班序，屏翰王室，以固邦家。
+aw_hist_edict_fief_grant_prefix,制曰：,Edict: ,制曰：
+aw_hist_edict_fief_grant_mid,勤劳王事，勋著戎行；今封于, has rendered distinguished service in arms and is hereby enfeoffed at ,勤勞王事，勳著戎行；今封於
+aw_hist_edict_fief_grant_suffix,，俾开府治军，镇抚封疆，以屏邦家。,; there to establish a military household and guard the frontier.,，俾開府治軍，鎮撫封疆，以屏邦家。
+aw_hist_edict_mandate_claimed_mid,受命于天，膺图御宇；肇建, received the Mandate of Heaven and founded ,受命於天，膺圖御宇；肇建
+aw_hist_edict_mandate_claimed_suffix,，即皇帝位，布告天下。,; its ruler ascended the imperial throne and proclaimed the settlement to all under Heaven.,，即皇帝位，布告天下。
+aw_hist_edict_actor_claimed_mandate,膺受天命，即皇帝位，君临天下。, received Heaven's Mandate and ascended the imperial throne.,膺受天命，即皇帝位，君臨天下。
+aw_hist_edict_mandate_lost_prefix,德命既衰，天命去之；因, lost Heaven's favor on account of ,德命既衰，天命去之；因
+aw_hist_edict_mandate_lost_suffix,，正统告终，奉天之号自此而罢。,; its orthodox Mandate ended and the imperial claim was relinquished.,，正統告終，奉天之號自此而罷。
+aw_hist_edict_mandate_collapse,德失于天，纲纪遂紊；天命崩解，四方离叛，天下由是大乱。, lost Heaven's favor and the order of the realm broke down; the Mandate collapsed and all under Heaven fell into disorder.,德失於天，綱紀遂紊；天命崩解，四方離叛，天下由是大亂。
+aw_hist_jingnan_started_mid,以清君侧为名据藩起兵于, raised the banner of court purification at ,以清君側為名據藩起兵於
+aw_hist_jingnan_risk,；靖难风险：,; Jingnan risk: ,；靖難風險：
+aw_hist_jingnan_suppressed_mid,靖难兵败，旧藩除国于, was defeated; the former feudatory was abolished at ,靖難兵敗，舊藩除國於
+aw_hist_jingnan_victory_mid,靖难得胜，入主, won the Jingnan campaign and took the throne of ,靖難得勝，入主
+aw_hist_jingnan_victory_suffix,，本朝易主而国统不绝,; the dynasty changed ruler without breaking state continuity,，本朝易主而國統不絕
+aw_hist_jingnan_stalemate_mid,靖难未决，仍据地自立为, ended the Jingnan without decision and retained the claimant realm of ,靖難未決，仍據地自立為
+aw_hist_jingnan_stalemate_suffix,，天下遂入乱世,; the realm entered an age of disorder,，天下遂入亂世

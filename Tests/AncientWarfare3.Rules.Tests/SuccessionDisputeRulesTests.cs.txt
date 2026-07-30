@@ -1,0 +1,336 @@
+using AncientWarfare3.core.lineage;
+
+internal static class SuccessionDisputeRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        var valid = new SuccessionClaimantFacts(
+            claimantActorId: 20,
+            kind: SuccessionClaimantKind.FormerHeir,
+            claimantSupport: 80, successorSupport: 60,
+            hasSupportCity: true, hasActiveDispute: false,
+            hasLivingDirectPaternalAncestor: true);
+        Equal(true, SuccessionDisputeRules.CanPrepare(valid),
+            "the leading candidate contests after a twenty-point lead");
+        Equal(false, SuccessionDisputeRules.CanPrepare(
+                valid.WithSupport(79, 60)),
+            "a nineteen-point lead cannot split a realm");
+        Equal(false, SuccessionDisputeRules.CanPrepare(
+                valid.WithActiveDispute(true)),
+            "one original kingdom can have only one active dispute");
+        Equal(false, SuccessionDisputeRules.CanPrepare(
+                valid.WithKind(SuccessionClaimantKind.None)),
+            "ordinary courtiers are not legal succession claimants");
+
+        Equal(1, SuccessionDisputeRules.CityLimit(2),
+            "a small realm can still split one support city");
+        Equal(7, SuccessionDisputeRules.CityLimit(8),
+            "every non-capital support city may join a medium split");
+        Equal(29, SuccessionDisputeRules.CityLimit(30),
+            "a large dispute is no longer cut to three arbitrary cities");
+        Equal(0, SuccessionDisputeRules.CityLimit(1),
+            "a one-city realm cannot create a non-capital rival court");
+        Equal(true, SuccessionDisputeRules.ShouldJoinClaimant(
+                claimantSupport: 12, loyalistSupport: 8),
+            "a city with stronger claimant supporters joins the rival court");
+        Equal(false, SuccessionDisputeRules.ShouldJoinClaimant(
+                claimantSupport: 8, loyalistSupport: 8),
+            "a tied city remains with the installed successor");
+        Equal(false, SuccessionDisputeRules.ShouldJoinClaimant(
+                claimantSupport: 7, loyalistSupport: 9),
+            "a loyalist city remains with the installed successor");
+        Equal(false,
+            SuccessionDisputeRules.CanFormBalancedTerritorialSplit(6, 1),
+            "one city cannot manufacture a nominal six-city civil war");
+        Equal(true,
+            SuccessionDisputeRules.CanFormBalancedTerritorialSplit(6, 2),
+            "a two-city bloc reaches the one-third territorial floor");
+        Equal(true,
+            SuccessionDisputeRules.CanFormBalancedTerritorialSplit(3, 1),
+            "one against two is the closest balanced three-city split");
+        Equal(false,
+            SuccessionDisputeRules.CanFormBalancedTerritorialSplit(4, 1),
+            "one against three is too weak to materialize");
+        IReadOnlyList<long> multiCitySplit =
+            SuccessionDisputeRules.SelectBalancedSupportCityIds(
+                new[]
+                {
+                    new SuccessionCitySupportFacts(1, true, 20, 0),
+                    new SuccessionCitySupportFacts(2, false, 8, 0),
+                    new SuccessionCitySupportFacts(3, false, 7, 0),
+                    new SuccessionCitySupportFacts(4, false, 6, 0),
+                    new SuccessionCitySupportFacts(5, false, 5, 0),
+                    new SuccessionCitySupportFacts(6, false, 0, 9)
+                }, 6, 5);
+        Equal(4, multiCitySplit.Count,
+            "all explicit supporter cities move as one balanced bloc");
+        Equal(2L, multiCitySplit[0],
+            "the capital is excluded while its neighboring supporter remains eligible");
+        Equal(0,
+            SuccessionDisputeRules.SelectBalancedSupportCityIds(
+                new[]
+                {
+                    new SuccessionCitySupportFacts(1, true, 0, 0),
+                    new SuccessionCitySupportFacts(2, false, 8, 0),
+                    new SuccessionCitySupportFacts(3, false, 0, 8),
+                    new SuccessionCitySupportFacts(4, false, 0, 8),
+                    new SuccessionCitySupportFacts(5, false, 0, 8),
+                    new SuccessionCitySupportFacts(6, false, 0, 8)
+                }, 6, 5).Count,
+            "one unsupported seed cannot manufacture an unbalanced split");
+        Equal(true, SuccessionDisputeRules.CanCloseCompensation(
+                pOriginalCityCount: 5, pRivalCityCount: 0,
+                pTemporaryWarActive: false),
+            "verified compensation may close the dispute");
+        Equal(false, SuccessionDisputeRules.CanCloseCompensation(
+                pOriginalCityCount: 5, pRivalCityCount: 1,
+                pTemporaryWarActive: false),
+            "a retained rival city keeps compensation open");
+        Equal(false, SuccessionDisputeRules.CanCloseCompensation(
+                pOriginalCityCount: 6, pRivalCityCount: 0,
+                pTemporaryWarActive: true),
+            "a live unbound war keeps compensation open");
+        Equal(20L, SuccessionDisputeRules.SelectExplicitBranchSupportTarget(
+                supporterShiId: 30, claimantShiId: 30,
+                claimantActorId: 20, successorShiId: 40,
+                successorActorId: 10),
+            "an explicit claimant branch member supports the claimant");
+        Equal(-1L, SuccessionDisputeRules.SelectExplicitBranchSupportTarget(
+                supporterShiId: 50, claimantShiId: 30,
+                claimantActorId: 20, successorShiId: 40,
+                successorActorId: 10),
+            "an unrelated local actor remains neutral despite national support");
+        Equal(20L,
+            SuccessionDisputeRules.SelectAuthoritativeSupportTarget(
+                pRecordedTargetActorId: 20, pClaimantActorId: 20,
+                pSuccessorActorId: 10),
+            "a recorded supporter target remains authoritative within one shi");
+        Equal(-1L,
+            SuccessionDisputeRules.SelectAuthoritativeSupportTarget(
+                pRecordedTargetActorId: 30, pClaimantActorId: 20,
+                pSuccessorActorId: 10),
+            "support for a third candidate is neutral in a two-court split");
+        Equal(20L,
+            SuccessionDisputeRules.SelectAgnaticBranchSupportTarget(
+                pClaimantLine: true, pSuccessorLine: false,
+                pClaimantActorId: 20, pSuccessorActorId: 10),
+            "claimant descendants follow the claimant branch");
+        Equal(-1L,
+            SuccessionDisputeRules.SelectAgnaticBranchSupportTarget(
+                pClaimantLine: true, pSuccessorLine: true,
+                pClaimantActorId: 20, pSuccessorActorId: 10),
+            "a shared ancestor cannot be counted for both branches");
+
+        Equal(SuccessionDirection.East,
+            SuccessionDisputeRules.ResolveDirection(10f, 1f,
+                claimantAccededLater: true),
+            "east-west displacement uses the dominant axis");
+        Equal(SuccessionDirection.West,
+            SuccessionDisputeRules.ResolveDirection(-10f, 1f,
+                claimantAccededLater: true),
+            "negative horizontal displacement is west");
+        Equal(SuccessionDirection.North,
+            SuccessionDisputeRules.ResolveDirection(1f, 10f,
+                claimantAccededLater: true),
+            "positive vertical displacement is north");
+        Equal(SuccessionDirection.South,
+            SuccessionDisputeRules.ResolveDirection(1f, -10f,
+                claimantAccededLater: true),
+            "negative vertical displacement is south");
+        Equal(SuccessionDirection.Later,
+            SuccessionDisputeRules.ResolveDirection(0f, 0f,
+                claimantAccededLater: true),
+            "indistinguishable capitals use later as stable fallback");
+        Equal(SuccessionDirection.Former,
+            SuccessionDisputeRules.ResolveDirection(0f, 0f,
+                claimantAccededLater: false),
+            "the earlier court uses former as stable fallback");
+
+        Equal(112, SuccessionDisputeRules.DeadlineYear(100),
+            "succession disputes have a twelve-year deadline");
+        Equal(false, SuccessionDisputeRules.ShouldBecomePermanent(
+                currentYear: 111, deadlineYear: 112,
+                warStillActive: true),
+            "an active dispute remains temporary before twelve years");
+        Equal(true, SuccessionDisputeRules.ShouldBecomePermanent(
+                currentYear: 112, deadlineYear: 112,
+                warStillActive: true),
+            "a twelve-year active dispute becomes a permanent split");
+        Equal(false, SuccessionDisputeRules.ShouldBecomePermanent(
+                currentYear: 120, deadlineYear: 112,
+                warStillActive: false),
+            "an ended war cannot later become a permanent split");
+        Equal(false, SuccessionDisputeRules.IsMaterialized(
+                SuccessionDisputeStatus.Prepared, rivalKingdomId: -1,
+                originalCityCount: 4, rivalCityCount: 0),
+            "a prepared row without a rival kingdom is not a visible split");
+        Equal(false, SuccessionDisputeRules.IsMaterialized(
+                SuccessionDisputeStatus.Active, rivalKingdomId: 19,
+                originalCityCount: 4, rivalCityCount: 0),
+            "an active row with a zero-city rival is repaired instead of displayed");
+        Equal(true, SuccessionDisputeRules.IsMaterialized(
+                SuccessionDisputeStatus.Active, rivalKingdomId: 19,
+                originalCityCount: 4, rivalCityCount: 1),
+            "a split is visible only after both territorial courts exist");
+        Equal(-100, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.Active, pFirstKingdomId: 10,
+                pSecondKingdomId: 20, pOriginalKingdomId: 10,
+                pRivalKingdomId: 20, pOriginalCityCount: 3,
+                pRivalCityCount: 2),
+            "active materialized rival courts receive the dynastic split penalty");
+        Equal(-100, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.PermanentSplit,
+                pFirstKingdomId: 20, pSecondKingdomId: 10,
+                pOriginalKingdomId: 10, pRivalKingdomId: 20,
+                pOriginalCityCount: 3, pRivalCityCount: 2),
+            "the permanent split penalty is symmetric and does not expire");
+        Equal(0, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.Closed, 10, 20, 10, 20, 3, 2),
+            "a closed dispute removes the penalty");
+        Equal(0, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.Active, 10, 20, 10, 20, 3, 0),
+            "a destroyed rival court is not a materialized split");
+        Equal(0, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.Active, 10, 30, 10, 20, 3, 2),
+            "an unrelated kingdom receives no split penalty");
+        Equal(0, SuccessionDisputeRules.OpposedCourtOpinion(
+                SuccessionDisputeStatus.Active, 10, 10, 10, 20, 3, 2),
+            "a kingdom never receives the penalty against itself");
+        Equal(false, SuccessionDisputeRules.ShouldBecomePermanent(
+                currentYear: 112, deadlineYear: 112,
+                warStillActive: true, hasTerritorialRival: false),
+            "a missing rival court can never become a permanent split");
+        Equal(true, SuccessionDisputeRules.ShouldBecomePermanent(
+                currentYear: 112, deadlineYear: 112,
+                warStillActive: true, hasTerritorialRival: true),
+            "a live two-court war may become permanent at its deadline");
+        Equal(3, SuccessionDisputeRules.ReunificationClaimGenerations,
+            "both permanent courts retain three generations of claims");
+        Equal(true, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.PermanentSplit,
+                isOppositeCourt: true, rulerGeneration: 0,
+                generationBoundary: 3, hasActiveWar: false),
+            "a founding ruler keeps the free reunification claim");
+        Equal(true, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.PermanentSplit,
+                isOppositeCourt: true, rulerGeneration: 3,
+                generationBoundary: 3, hasActiveWar: false),
+            "the third agnatic generation keeps the reunification claim");
+        Equal(false, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.PermanentSplit,
+                isOppositeCourt: true, rulerGeneration: 4,
+                generationBoundary: 3, hasActiveWar: false),
+            "the reunification claim expires after three generations");
+        Equal(false, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.Active,
+                isOppositeCourt: true, rulerGeneration: 0,
+                generationBoundary: 3, hasActiveWar: false),
+            "temporary disputes cannot open a second reunification war");
+        Equal(false, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.PermanentSplit,
+                isOppositeCourt: false, rulerGeneration: 0,
+                generationBoundary: 3, hasActiveWar: false),
+            "the claim only applies against the opposite court");
+        Equal(false, SuccessionDisputeRules.CanUseReunificationClaim(
+                SuccessionDisputeStatus.PermanentSplit,
+                isOppositeCourt: true, rulerGeneration: 0,
+                generationBoundary: 3, hasActiveWar: true),
+            "an existing war blocks a duplicate reunification war");
+        Equal(true, SuccessionDisputeRules.ShouldPreserveDisputeIdentity(
+                SuccessionDisputeStatus.PermanentSplit,
+                isDisputeCourt: true),
+            "both permanent courts survive until reunification settlement");
+        Equal(false, SuccessionDisputeRules.ShouldPreserveDisputeIdentity(
+                SuccessionDisputeStatus.Closed,
+                isDisputeCourt: true),
+            "closed disputes no longer preserve an empty kingdom");
+        Equal(SuccessionDisputeStatus.RivalCreated,
+            SuccessionDisputeRules.NextDeferredStage(
+                SuccessionDisputeStatus.Prepared),
+            "prepared work creates only the rival court in one frame");
+        Equal(SuccessionDisputeStatus.CitiesTransferred,
+            SuccessionDisputeRules.NextDeferredStage(
+                SuccessionDisputeStatus.RivalCreated),
+            "the next frame transfers the remaining tracked cities");
+        Equal(SuccessionDisputeStatus.WarStarted,
+            SuccessionDisputeRules.NextDeferredStage(
+                SuccessionDisputeStatus.CitiesTransferred),
+            "the next frame starts the dedicated war");
+        Equal(SuccessionDisputeStatus.Active,
+            SuccessionDisputeRules.NextDeferredStage(
+                SuccessionDisputeStatus.WarStarted),
+            "the next frame publishes active state");
+        Equal(SuccessionDisputeStatus.Active,
+            SuccessionDisputeRules.NextDeferredStage(
+                SuccessionDisputeStatus.Active),
+            "active disputes are event-driven and do not repeat stages");
+        Equal(true, SuccessionDisputeRules.ShouldCompensateBeforeWar(
+                SuccessionDisputeStatus.CitiesTransferred,
+                hasActiveWar: false),
+            "failure after city transfer but before war compensates");
+        Equal(false, SuccessionDisputeRules.ShouldCompensateBeforeWar(
+                SuccessionDisputeStatus.Active, hasActiveWar: true),
+            "an active war is settled through the war outcome path");
+        Equal(false, SuccessionDisputeRules.CanSettleInitialWar(
+                SuccessionDisputeStatus.Prepared, recordedWarId: -1,
+                endedWarId: 31, materialized: false),
+            "an unrelated war cannot close a prepared succession dispute");
+        Equal(false, SuccessionDisputeRules.CanSettleInitialWar(
+                SuccessionDisputeStatus.Active, recordedWarId: 30,
+                endedWarId: 31, materialized: true),
+            "a different succession war cannot settle this dispute");
+        Equal(false, SuccessionDisputeRules.CanSettleInitialWar(
+                SuccessionDisputeStatus.Active, recordedWarId: 31,
+                endedWarId: 31, materialized: false),
+            "a zero-city rival cannot settle as a real split");
+        Equal(true, SuccessionDisputeRules.CanSettleInitialWar(
+                SuccessionDisputeStatus.Active, recordedWarId: 31,
+                endedWarId: 31, materialized: true),
+            "the bound active territorial succession war may settle");
+        Equal(true, SuccessionDisputeRules.CanActivatePreparedForSuccessor(
+                SuccessionDisputeStatus.Prepared,
+                preparedSuccessorId: 2864, installedSuccessorId: 2864),
+            "the prepared heir starts the deferred territorial split");
+        Equal(false, SuccessionDisputeRules.CanActivatePreparedForSuccessor(
+                SuccessionDisputeStatus.Prepared,
+                preparedSuccessorId: 2864, installedSuccessorId: 7551),
+            "a genuinely replaced heir cannot leave a stale prepared dispute");
+        Equal("东周", SuccessionDisputeDisplayRules.BuildQualifiedName(
+                "周", "east", active: true, language: "zh"),
+            "an eastern rival projects a Chinese directional state name");
+        Equal("前周", SuccessionDisputeDisplayRules.BuildQualifiedName(
+                "周", "former", active: true, language: "zh"),
+            "fallback accession order projects former in Chinese");
+        Equal("Eastern Zhou",
+            SuccessionDisputeDisplayRules.BuildQualifiedName(
+                "Zhou", "east", active: true, language: "en"),
+            "English display uses an adjective before the canonical name");
+        Equal("周", SuccessionDisputeDisplayRules.BuildQualifiedName(
+                "周", "east", active: false, language: "zh"),
+            "closing a dispute immediately removes its display qualifier");
+        Equal("东周", SuccessionDisputeDisplayRules.BuildQualifiedName(
+                "东周", "", active: false, language: "zh"),
+            "a canonical historical directional name is never stripped");
+        (string south, string north) =
+            SuccessionDisputeDisplayRules.BuildDistinctPair(
+                "黄", "south", "north", active: true, language: "zh");
+        Equal("南黄", south,
+            "the original court always projects its geographic qualifier");
+        Equal("北黄", north,
+            "the rival court always projects its opposite qualifier");
+        Equal(false, south == north,
+            "a materialized split can never render two identical state labels");
+        Equal(true, SuccessionDisputeDisplayRules.NeedsLiveNameCommit(
+                "赤狄", "北直国"),
+            "a vanilla creation name must be replaced by the projected split name");
+        Equal(false, SuccessionDisputeDisplayRules.NeedsLiveNameCommit(
+                "北直国", "北直国"),
+            "an already committed projected name is not rewritten every refresh");
+    }
+}

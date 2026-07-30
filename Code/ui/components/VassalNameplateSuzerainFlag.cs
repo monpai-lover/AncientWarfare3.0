@@ -1,7 +1,5 @@
 using System.Collections.Generic;
-using System.Reflection;
 using AncientWarfare3.core.lineage;
-using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,9 +7,6 @@ namespace AncientWarfare3.ui.components
 {
     internal sealed class VassalNameplateSuzerainFlag : MonoBehaviour
     {
-        private static readonly FieldInfo NameTextField =
-            AccessTools.Field(typeof(NameplateText), "_text_name");
-
         private static readonly Dictionary<NameplateText, VassalNameplateSuzerainFlag> Instances =
             new Dictionary<NameplateText, VassalNameplateSuzerainFlag>();
 
@@ -76,7 +71,7 @@ namespace AncientWarfare3.ui.components
         private void Initialize(NameplateText pNameplate)
         {
             _nameplate = pNameplate;
-            _nameText = NameTextField?.GetValue(pNameplate) as Text;
+            _nameText = FindNameText(pNameplate);
         }
 
         private void OnDestroy()
@@ -125,7 +120,7 @@ namespace AncientWarfare3.ui.components
 
         private void EnsureCreated()
         {
-            if (_root != null || _nameplate == null || _nameText == null) return;
+            if (_root != null || _nameplate == null) return;
 
             Transform parent = _nameplate.layout_group != null
                 ? _nameplate.layout_group.transform
@@ -170,11 +165,28 @@ namespace AncientWarfare3.ui.components
 
         private void MoveBeforeNameText()
         {
-            if (_root == null || _nameText == null) return;
+            if (_root == null) return;
 
             Transform parent = _root.transform.parent;
-            if (_nameText.transform.parent != parent) return;
-            _root.transform.SetSiblingIndex(Mathf.Max(0, _nameText.transform.GetSiblingIndex()));
+            if (_nameText != null && _nameText.transform.parent == parent)
+            {
+                _root.transform.SetSiblingIndex(Mathf.Max(0,
+                    _nameText.transform.GetSiblingIndex()));
+                return;
+            }
+            _root.transform.SetAsFirstSibling();
+        }
+
+        private static Text FindNameText(NameplateText pNameplate)
+        {
+            Transform layout = pNameplate?.layout_group?.transform;
+            if (layout == null) return null;
+            Text[] texts = layout.GetComponentsInChildren<Text>(true);
+            for (var index = 0; index < texts.Length; index++)
+                if (texts[index] != null &&
+                    texts[index].transform.parent == layout)
+                    return texts[index];
+            return texts.Length > 0 ? texts[0] : null;
         }
 
         private void LoadFlag(Kingdom pSuzerain)

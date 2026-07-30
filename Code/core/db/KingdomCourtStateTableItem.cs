@@ -13,6 +13,7 @@ namespace AncientWarfare3.core.db
         public double court_efficiency;
         public double faction_concentration;
         public string faction_cache;
+        public string aristocratic_group_cache;
         public double direction_livelihood;
         public double direction_war;
         public double direction_aggression;

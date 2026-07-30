@@ -22,6 +22,12 @@ namespace AncientWarfare3.core.lineage
             // Only offices with attested office- or occupation-derived Chinese surnames belong here.
             switch (pOfficeId ?? "")
             {
+                case CourtOfficeId.TaiZai: return "宰";
+                case CourtOfficeId.SiTu: return "司徒";
+                case CourtOfficeId.ZongBo: return "宗伯";
+                case CourtOfficeId.SiMa: return "司马";
+                case CourtOfficeId.SiKou: return "司寇";
+                case CourtOfficeId.SiKong: return "司空";
                 case CourtOfficeId.Censor: return "史";
                 case CourtOfficeId.Marshal: return "司马";
                 case CourtOfficeId.Justice: return "司寇";

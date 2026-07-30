@@ -5,6 +5,7 @@ using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
+using UnityEngine;
 
 namespace AncientWarfare3.content
 {
@@ -19,6 +20,13 @@ namespace AncientWarfare3.content
         private static readonly List<City> SchoolNameplateCandidates = new List<City>();
         private static readonly HashSet<long> SchoolNameplateCandidateIds = new HashSet<long>();
         private static readonly Comparison<City> SchoolNameplateCityOrder = CompareSchoolNameplateCities;
+        private static readonly Dictionary<long, City> FeudatoryNameplateAnchors =
+            new Dictionary<long, City>();
+        private static readonly Dictionary<long, TileZone> FeudatoryNameplateZones =
+            new Dictionary<long, TileZone>();
+        private static readonly Dictionary<long, FeudatorySnapshot> FeudatoryNameplateSnapshots =
+            new Dictionary<long, FeudatorySnapshot>();
+        private static readonly List<long> FeudatoryNameplateIds = new List<long>();
 
         public static void Init()
         {
@@ -34,6 +42,17 @@ namespace AncientWarfare3.content
             RegisterMapModeNameplates();
             RegisterVassalPowers();
             RegisterMandateGrantPower();
+        }
+
+        public static void ClearRuntime()
+        {
+            _pendingVassal = null;
+            SchoolNameplateCandidates.Clear();
+            SchoolNameplateCandidateIds.Clear();
+            FeudatoryNameplateAnchors.Clear();
+            FeudatoryNameplateZones.Clear();
+            FeudatoryNameplateSnapshots.Clear();
+            FeudatoryNameplateIds.Clear();
         }
 
         private static void RegisterSpawnXia()
@@ -384,12 +403,133 @@ namespace AncientWarfare3.content
                 schoolPlate.action_main = DrawSchoolNameplates;
             }
 
+            NameplateAsset feudatoryPlate = library.get(
+                "plate_aw_feudatory");
+            if (feudatoryPlate == null)
+            {
+                library.map_modes_nameplates.Remove(
+                    AWMapModeMetaTypes.Feudatory);
+                feudatoryPlate = library.add(new NameplateAsset
+                {
+                    id = "plate_aw_feudatory",
+                    path_sprite = "ui/nameplates/nameplate_kingdom",
+                    padding_left = 26,
+                    padding_right = 26,
+                    padding_top = -2,
+                    banner_only_mode_scale = 2.5f,
+                    map_mode = AWMapModeMetaTypes.Feudatory,
+                    max_nameplate_count = 100,
+                    action_main = DrawFeudatoryNameplates
+                });
+            }
+            else
+            {
+                feudatoryPlate.map_mode = AWMapModeMetaTypes.Feudatory;
+                feudatoryPlate.action_main = DrawFeudatoryNameplates;
+            }
+
             foreach (MetaType metaType in AWMapModeNameplateRules.GetRequiredNameplateMetaTypes())
             {
-                if (metaType == AWMapModeMetaTypes.School) continue;
+                if (metaType == AWMapModeMetaTypes.School ||
+                    metaType == AWMapModeMetaTypes.Feudatory) continue;
                 library.map_modes_nameplates[metaType] = kingdomPlate;
             }
             library.map_modes_nameplates[AWMapModeMetaTypes.School] = schoolPlate;
+            library.map_modes_nameplates[AWMapModeMetaTypes.Feudatory] =
+                feudatoryPlate;
+        }
+
+        private static void DrawFeudatoryNameplates(NameplateManager pManager,
+            NameplateAsset pAsset)
+        {
+            if (pManager == null || pAsset == null ||
+                World.world?.zone_camera == null) return;
+
+            FeudatoryNameplateAnchors.Clear();
+            FeudatoryNameplateZones.Clear();
+            FeudatoryNameplateSnapshots.Clear();
+            FeudatoryNameplateIds.Clear();
+            List<TileZone> visibleZones =
+                World.world.zone_camera.getVisibleZones();
+            for (int i = 0; i < visibleZones.Count; i++)
+            {
+                TileZone zone = visibleZones[i];
+                City city = zone?.city;
+                if (!FeudatoryMapModeService.TryGetSnapshot(city,
+                        out FeudatorySnapshot snapshot)) continue;
+
+                bool centerVisible = World.world.move_camera != null &&
+                    World.world.move_camera.isWithinCameraViewNotPowerBar(
+                        city.city_center);
+                bool candidateIsSeat = city.id == snapshot.SeatCityId;
+                if (FeudatoryNameplateAnchors.TryGetValue(
+                        snapshot.FeudatoryId, out City current))
+                {
+                    TileZone currentZone =
+                        FeudatoryNameplateZones[snapshot.FeudatoryId];
+                    FeudatorySnapshot currentSnapshot =
+                        FeudatoryNameplateSnapshots[snapshot.FeudatoryId];
+                    bool currentCenterVisible =
+                        World.world.move_camera != null &&
+                        World.world.move_camera.isWithinCameraViewNotPowerBar(
+                            current.city_center);
+                    if (!FeudatoryMapModeRules.ShouldReplaceNameplateAnchor(
+                            current.id,
+                            current.id == currentSnapshot.SeatCityId,
+                            currentCenterVisible,
+                            currentZone?.id ?? int.MaxValue,
+                            city.id, candidateIsSeat, centerVisible,
+                            zone.id)) continue;
+                }
+                else
+                {
+                    FeudatoryNameplateIds.Add(snapshot.FeudatoryId);
+                }
+
+                FeudatoryNameplateAnchors[snapshot.FeudatoryId] = city;
+                FeudatoryNameplateZones[snapshot.FeudatoryId] = zone;
+                FeudatoryNameplateSnapshots[snapshot.FeudatoryId] = snapshot;
+            }
+
+            FeudatoryNameplateIds.Sort();
+            int count = 0;
+            for (int i = 0; i < FeudatoryNameplateIds.Count; i++)
+            {
+                if (count >= pAsset.max_nameplate_count) break;
+                long feudatoryId = FeudatoryNameplateIds[i];
+                City anchor = FeudatoryNameplateAnchors[feudatoryId];
+                TileZone zone = FeudatoryNameplateZones[feudatoryId];
+                FeudatorySnapshot snapshot =
+                    FeudatoryNameplateSnapshots[feudatoryId];
+
+                Actor prince;
+                try
+                {
+                    prince = World.world?.units?.get(
+                        snapshot.PrinceActorId);
+                }
+                catch
+                {
+                    prince = null;
+                }
+                if (prince?.data == null || prince.isRekt() ||
+                    !prince.isAlive()) continue;
+
+                AWMapModeMetaObject meta = AWMapModeMetaLibrary.
+                    GetFeudatoryIdentityMeta(snapshot, anchor.kingdom);
+                if (meta == null) continue;
+                bool centerVisible = World.world.move_camera != null &&
+                    World.world.move_camera.isWithinCameraViewNotPowerBar(
+                        anchor.city_center);
+                Vector2 position = centerVisible || zone?.centerTile == null
+                    ? anchor.city_center
+                    : zone.centerTile.posV3;
+                NameplateText text = pManager.prepareNext(pAsset, prince);
+                text.setupMeta(meta.data, meta.getColor());
+                text.setText(meta.data.name, position);
+                text.setPriority(anchor.getPopulationPeople());
+                count++;
+            }
         }
 
         private static void DrawSchoolNameplates(NameplateManager pManager, NameplateAsset pAsset)

@@ -8,7 +8,8 @@ namespace AncientWarfare3.core.db
     /// <summary>
     ///     历史人物生成状态表(随存档持久化)——根治 AW2 用内存 Dictionary 不存档导致重进档重复生成的 bug。
     ///
-    ///     每个历史人物(按 Order 0..4)一行:是否已生成、对应 actor、是否已死、套用国名的国、生成时间。
+    ///     每个历史人物按稳定 RegistryIndex 一行:是否已生成、对应 actor、是否已死、
+    ///     套用国名的国、生成时间。
     ///     [TableDef] → LineageArchiveManager 反射自动建表 + 随存档复制(无需手写 SQL/迁移)。
     ///
     ///     注:SQLiteHelper 只有 Insert/CheckKeyExist/UpdateValue 三个扩展,无多列 select。
@@ -17,15 +18,17 @@ namespace AncientWarfare3.core.db
     [TableDef("FigureState")]
     public class FigureStateTableItem : AbstractTableItem<FigureStateTableItem>
     {
-        [TableItemDef(pIsPrimary: true)] public long figure_index; // 0..4(=HistoricalFigureDef.Order)
+        [TableItemDef(pIsPrimary: true)] public long figure_index; // HistoricalFigureDef.RegistryIndex
 
-        public string figure_key;            // 全名(姬发),便于人读
-        public int    spawned;               // 0/1 是否已生成过
+        public string figure_key;            // 稳定 figure id；旧档前五项可能仍为姓名
+        public int    spawned;               // 0=available, 2=pending, 1=committed
         public long   actor_id = -1;         // 生成的 actor id
         public int    dead;                  // 0/1 该人是否已死
         public long   kingdom_id = -1;       // 成为 king 时套用国名的那个国
         public string kingdom_name_applied;  // 实际套用的国名(周/秦/…)
         public double spawn_time;
+        [TableItemDef(pDefaultValue: "-1")] public long pending_lineage_id = -1;
+        [TableItemDef(pDefaultValue: "-1")] public long pending_shi_id = -1;
     }
 
     /// <summary>
@@ -34,41 +37,65 @@ namespace AncientWarfare3.core.db
     /// </summary>
     public static class FigureStateStore
     {
-        // 内存缓存:5 行(对应 HistoricalFigureDef.All)。
-        private static readonly bool[] _spawned = new bool[content.figures.HistoricalFigureDef.Count];
+        // 内存缓存按稳定 registry 槽位排列。
+        private static readonly int[] _spawnState = new int[content.figures.HistoricalFigureDef.Count];
         private static readonly bool[] _dead    = new bool[content.figures.HistoricalFigureDef.Count];
         private static readonly long[] _actorId = new long[content.figures.HistoricalFigureDef.Count];
         private static bool _loaded;
+        private static bool _reservationFailureLogged;
 
         private static string Table => FigureStateTableItem.GetTableName();
+        public static bool IsReady
+        {
+            get
+            {
+                LineageArchiveManager manager = LineageArchiveManager.Instance;
+                if (!manager.IsOperational) return false;
+                EnsureLoaded();
+                return _loaded;
+            }
+        }
 
-        /// <summary>从当前 DB 载入 5 行状态进内存(读档/新世界后调用,幂等)。DB 无行视为未生成。</summary>
+        /// <summary>从当前 DB 载入生成状态(读档/新世界后调用,幂等)。DB 无行视为未生成。</summary>
         public static void Load()
         {
-            for (int i = 0; i < _spawned.Length; i++)
+            for (int i = 0; i < _spawnState.Length; i++)
             {
-                _spawned[i] = false;
+                _spawnState[i] = content.figures.HistoricalFigureSpawnRules.Available;
                 _dead[i] = false;
                 _actorId[i] = -1;
             }
-            _loaded = true;
+            _loaded = false;
+            _reservationFailureLogged = false;
 
-            var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null) return;
+            LineageArchiveManager manager = LineageArchiveManager.Instance;
+            if (!manager.IsOperational) return;
+            var db = manager.OperatingDB;
 
             try
             {
+                FigureStatePendingRecovery.Recover(db, Table,
+                    ShiBranchTableItem.GetTableName(),
+                    LineageGroupTableItem.GetTableName(),
+                    lineage.ShiSourceType.SPECIAL_FIGURE);
+
                 using var cmd = new SQLiteCommand(db);
                 cmd.CommandText = "SELECT FIGURE_INDEX, SPAWNED, DEAD, ACTOR_ID FROM " + Table;
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
                     int idx = (int)reader.GetInt64(0);
-                    if (idx < 0 || idx >= _spawned.Length) continue;
-                    _spawned[idx] = reader.GetInt64(1) != 0;
-                    _dead[idx]    = reader.GetInt64(2) != 0;
-                    _actorId[idx] = reader.GetInt64(3);
+                    if (idx < 0 || idx >= _spawnState.Length) continue;
+                    int state = content.figures.HistoricalFigureSpawnRules.
+                        NormalizeLoadedSpawnState((int)reader.GetInt64(1));
+                    _spawnState[idx] = state;
+                    if (state == content.figures.HistoricalFigureSpawnRules.Committed)
+                    {
+                        _dead[idx] = reader.GetInt64(2) != 0;
+                        _actorId[idx] = reader.GetInt64(3);
+                    }
                 }
+                _loaded = true;
             }
             catch
             {
@@ -76,46 +103,51 @@ namespace AncientWarfare3.core.db
             }
         }
 
-        private static void EnsureLoaded()
+        private static bool EnsureLoaded()
         {
             if (!_loaded) Load();
+            return _loaded;
         }
 
         public static bool IsSpawned(int pIndex)
         {
-            EnsureLoaded();
-            return pIndex >= 0 && pIndex < _spawned.Length && _spawned[pIndex];
+            if (!EnsureLoaded()) return false;
+            return pIndex >= 0 && pIndex < _spawnState.Length &&
+                   _spawnState[pIndex] ==
+                   content.figures.HistoricalFigureSpawnRules.Committed;
         }
 
         public static bool IsDead(int pIndex)
         {
-            EnsureLoaded();
-            return pIndex >= 0 && pIndex < _dead.Length && _dead[pIndex];
+            if (!EnsureLoaded()) return false;
+            return pIndex >= 0 && pIndex < _dead.Length &&
+                   _spawnState[pIndex] ==
+                   content.figures.HistoricalFigureSpawnRules.Committed &&
+                   _dead[pIndex];
         }
 
         public static long GetActorId(int pIndex)
         {
-            EnsureLoaded();
-            return pIndex >= 0 && pIndex < _actorId.Length ? _actorId[pIndex] : -1;
+            if (!EnsureLoaded()) return -1;
+            return pIndex >= 0 && pIndex < _actorId.Length &&
+                   _spawnState[pIndex] ==
+                   content.figures.HistoricalFigureSpawnRules.Committed
+                ? _actorId[pIndex]
+                : -1;
         }
 
         /// <summary>
-        ///     下一个可生成的 index:最小的"未生成"且(前一个不存在或已死)的 index。
-        ///     严格顺序:idx0 未生成 → 返回 0;idx0 已生成但未死 → 返回 -1(等它死);
-        ///     idx0 已生成且已死、idx1 未生成 → 返回 1;全部生成完 → -1。
+        ///     按 HistoricalFigureDef.SpawnOrder 找下一位，但返回稳定 registry index。
+        ///     这样新增人物可插入历史顺序，而旧档曹丕=3、司马炎=4 不会被重解释。
         /// </summary>
         public static int NextSpawnableIndex()
         {
-            EnsureLoaded();
+            if (!EnsureLoaded()) return -1;
             ReconcileAliveState();                    // 先校正:已生成但单位实际已死/消失 → 补 dead
-            for (int i = 0; i < _spawned.Length; i++)
-            {
-                if (_spawned[i]) continue;            // 已生成,跳过看下一个
-                if (i == 0) return 0;                 // 第一个未生成 → 可生成
-                if (_dead[i - 1]) return i;           // 前一个已死 → 轮到这个
-                return -1;                            // 前一个还活着 → 暂不可生成
-            }
-            return -1;                                // 全生成完
+            return content.figures.HistoricalFigureSpawnRules.
+                NextSpawnableRegistryIndex(
+                    content.figures.HistoricalFigureDef.SpawnRegistryOrder,
+                    _spawnState, _dead);
         }
 
         /// <summary>
@@ -126,9 +158,10 @@ namespace AncientWarfare3.core.db
         {
             var units = World.world?.units;
             if (units == null) return;
-            for (int i = 0; i < _spawned.Length; i++)
+            for (int i = 0; i < _spawnState.Length; i++)
             {
-                if (!_spawned[i] || _dead[i]) continue;
+                if (!content.figures.HistoricalFigureSpawnRules.
+                        IsCommittedAlive(_spawnState[i], _dead[i])) continue;
                 long aid = _actorId[i];
                 if (aid < 0) continue;
                 var actor = units.get(aid);
@@ -141,57 +174,201 @@ namespace AncientWarfare3.core.db
         /// <summary>是否存在"已生成但未死"的历史人物(存活互斥用,避免遍历全图单位)。</summary>
         public static bool AnyAliveFigure()
         {
-            EnsureLoaded();
+            if (!EnsureLoaded()) return false;
             ReconcileAliveState();   // 校正已死但漏标的,避免误判"还有人活着"卡住后续生成
-            for (int i = 0; i < _spawned.Length; i++)
-                if (_spawned[i] && !_dead[i]) return true;
+            for (int i = 0; i < _spawnState.Length; i++)
+                if (content.figures.HistoricalFigureSpawnRules.
+                    IsCommittedAlive(_spawnState[i], _dead[i])) return true;
             return false;
         }
 
-        public static void MarkSpawned(int pIndex, string pKey, long pActorId, double pTime)
+        public static bool TryReserveSpawn(int pIndex, string pKey,
+            long pActorId, double pTime)
         {
-            EnsureLoaded();
-            if (pIndex < 0 || pIndex >= _spawned.Length) return;
+            if (!IsReady || pIndex < 0 || pIndex >= _spawnState.Length ||
+                pActorId < 0)
+                return false;
 
-            var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null)
+            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
+            try
             {
-                // DB 失效:**不改内存**,避免"内存以为已生成、DB 无记录"重启后状态错乱。
-                ModClass.LogWarning("FigureState.MarkSpawned: DB 不可用,历史人物状态未持久化(" + pKey + ")");
-                return;
+                using SQLiteTransaction transaction = db.BeginTransaction();
+                int affected;
+                using (var update = new SQLiteCommand(db)
+                       { Transaction = transaction })
+                {
+                    update.CommandText = "UPDATE " + Table +
+                        " SET FIGURE_KEY=@key,SPAWNED=2,ACTOR_ID=@actor," +
+                        "DEAD=0,KINGDOM_ID=-1,KINGDOM_NAME_APPLIED=''," +
+                        "SPAWN_TIME=@time,PENDING_LINEAGE_ID=-1," +
+                        "PENDING_SHI_ID=-1 WHERE FIGURE_INDEX=@index " +
+                        "AND SPAWNED=0";
+                    update.Parameters.AddWithValue("@key", pKey ?? "");
+                    update.Parameters.AddWithValue("@actor", pActorId);
+                    update.Parameters.AddWithValue("@time", pTime);
+                    update.Parameters.AddWithValue("@index", (long)pIndex);
+                    affected = update.ExecuteNonQuery();
+                }
+
+                if (affected == 0)
+                {
+                    using var insert = new SQLiteCommand(db)
+                        { Transaction = transaction };
+                    insert.CommandText = "INSERT OR IGNORE INTO " + Table +
+                        " (FIGURE_INDEX,FIGURE_KEY,SPAWNED,ACTOR_ID,DEAD," +
+                        "KINGDOM_ID,KINGDOM_NAME_APPLIED,SPAWN_TIME," +
+                        "PENDING_LINEAGE_ID,PENDING_SHI_ID) VALUES " +
+                        "(@index,@key,2,@actor,0,-1,'',@time,-1,-1)";
+                    insert.Parameters.AddWithValue("@index", (long)pIndex);
+                    insert.Parameters.AddWithValue("@key", pKey ?? "");
+                    insert.Parameters.AddWithValue("@actor", pActorId);
+                    insert.Parameters.AddWithValue("@time", pTime);
+                    affected = insert.ExecuteNonQuery();
+                }
+
+                if (affected != 1)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                transaction.Commit();
+                _spawnState[pIndex] = content.figures.
+                    HistoricalFigureSpawnRules.Pending;
+                _dead[pIndex] = false;
+                _actorId[pIndex] = pActorId;
+                return true;
             }
-
-            // DB 可用 → 先改内存再落盘(两者一致)。
-            _spawned[pIndex] = true;
-            _dead[pIndex] = false;
-            _actorId[pIndex] = pActorId;
-
-            if (db.CheckKeyExist(Table, SimpleColumnConstraint.CreateEq("FIGURE_INDEX", (long)pIndex)))
+            catch (System.Exception error)
             {
-                db.UpdateValue(Table,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("FIGURE_INDEX", (long)pIndex) },
-                    ColumnVal.Create("FIGURE_KEY", pKey),
-                    ColumnVal.Create("SPAWNED", 1),
-                    ColumnVal.Create("ACTOR_ID", pActorId),
-                    ColumnVal.Create("DEAD", 0),
-                    ColumnVal.Create("SPAWN_TIME", pTime));
-                return;
+                if (!_reservationFailureLogged)
+                {
+                    _reservationFailureLogged = true;
+                    ModClass.LogWarning(
+                        "FigureState reservation failed; historical figure deferred: " +
+                        error.Message);
+                }
+                return false;
             }
-            db.Insert(Table,
-                ColumnVal.Create("FIGURE_INDEX", (long)pIndex),
-                ColumnVal.Create("FIGURE_KEY", pKey),
-                ColumnVal.Create("SPAWNED", 1),
-                ColumnVal.Create("ACTOR_ID", pActorId),
-                ColumnVal.Create("DEAD", 0),
-                ColumnVal.Create("KINGDOM_ID", -1L),
-                ColumnVal.Create("KINGDOM_NAME_APPLIED", ""),
-                ColumnVal.Create("SPAWN_TIME", pTime));
+        }
+
+        public static bool TryCommitSpawn(int pIndex, long pActorId)
+        {
+            return TryCommitPending(pIndex, pActorId);
+        }
+
+        public static bool TryBindPendingLineage(int pIndex, long pActorId,
+            long pLineageId, long pShiId)
+        {
+            if (!IsReady || pIndex < 0 || pIndex >= _spawnState.Length ||
+                pActorId < 0 || pLineageId < 0 || pShiId < 0)
+                return false;
+
+            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
+            try
+            {
+                using SQLiteTransaction transaction = db.BeginTransaction();
+                using var update = new SQLiteCommand(db)
+                    { Transaction = transaction };
+                update.CommandText = "UPDATE " + Table +
+                    " SET PENDING_LINEAGE_ID=@lineage,PENDING_SHI_ID=@shi" +
+                    " WHERE FIGURE_INDEX=@index AND SPAWNED=2" +
+                    " AND ACTOR_ID=@actor AND PENDING_LINEAGE_ID=-1" +
+                    " AND PENDING_SHI_ID=-1";
+                update.Parameters.AddWithValue("@lineage", pLineageId);
+                update.Parameters.AddWithValue("@shi", pShiId);
+                update.Parameters.AddWithValue("@index", (long)pIndex);
+                update.Parameters.AddWithValue("@actor", pActorId);
+                if (update.ExecuteNonQuery() != 1)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+                transaction.Commit();
+                return true;
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "FigureState pending lineage bind failed: " + error.Message);
+                return false;
+            }
+        }
+
+        public static bool TryAbortSpawn(int pIndex, long pActorId)
+        {
+            if (!IsReady || pIndex < 0 || pIndex >= _spawnState.Length ||
+                pActorId < 0)
+                return false;
+            try
+            {
+                bool aborted = FigureStatePendingRecovery.TryAbort(
+                    LineageArchiveManager.Instance.OperatingDB, Table,
+                    ShiBranchTableItem.GetTableName(),
+                    LineageGroupTableItem.GetTableName(),
+                    lineage.ShiSourceType.SPECIAL_FIGURE, pIndex, pActorId);
+                if (!aborted) return false;
+                _spawnState[pIndex] = content.figures.
+                    HistoricalFigureSpawnRules.Available;
+                _dead[pIndex] = false;
+                _actorId[pIndex] = -1;
+                return true;
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "FigureState pending abort failed: " + error.Message);
+                return false;
+            }
+        }
+
+        private static bool TryCommitPending(int pIndex, long pActorId)
+        {
+            if (!IsReady || pIndex < 0 || pIndex >= _spawnState.Length ||
+                pActorId < 0)
+                return false;
+
+            SQLiteConnection db = LineageArchiveManager.Instance.OperatingDB;
+            try
+            {
+                using SQLiteTransaction transaction = db.BeginTransaction();
+                using var update = new SQLiteCommand(db)
+                    { Transaction = transaction };
+                update.CommandText = "UPDATE " + Table +
+                    " SET SPAWNED=1,PENDING_LINEAGE_ID=-1," +
+                    "PENDING_SHI_ID=-1" +
+                    " WHERE FIGURE_INDEX=@index AND SPAWNED=2 " +
+                    "AND ACTOR_ID=@actor";
+                update.Parameters.AddWithValue("@index", (long)pIndex);
+                update.Parameters.AddWithValue("@actor", pActorId);
+                int affected = update.ExecuteNonQuery();
+                if (affected != 1)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                transaction.Commit();
+                _spawnState[pIndex] = content.figures.
+                    HistoricalFigureSpawnRules.Committed;
+                _dead[pIndex] = false;
+                _actorId[pIndex] = pActorId;
+                return true;
+            }
+            catch (System.Exception error)
+            {
+                ModClass.LogWarning(
+                    "FigureState pending transition failed: " + error.Message);
+                return false;
+            }
         }
 
         public static void MarkDead(int pIndex)
         {
-            EnsureLoaded();
+            if (!EnsureLoaded()) return;
             if (pIndex < 0 || pIndex >= _dead.Length) return;
+            if (_spawnState[pIndex] !=
+                content.figures.HistoricalFigureSpawnRules.Committed) return;
             _dead[pIndex] = true;
 
             var db = LineageArchiveManager.Instance.OperatingDB;
@@ -204,7 +381,7 @@ namespace AncientWarfare3.core.db
         /// <summary>记录成为 king 时套用的国名/国 id(供日后天命国系统读取)。</summary>
         public static void MarkKingdomApplied(int pIndex, long pKingdomId, string pKingdomName)
         {
-            EnsureLoaded();
+            if (!EnsureLoaded()) return;
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null) return;
             db.UpdateValue(Table,
@@ -216,8 +393,8 @@ namespace AncientWarfare3.core.db
         /// <summary>找某 actor 对应的历史人物 index(成为 king/死亡时反查)。无则 -1。</summary>
         public static bool TryGetAppliedKingdomName(long pKingdomId, out string pKingdomName)
         {
-            EnsureLoaded();
             pKingdomName = "";
+            if (!EnsureLoaded()) return false;
             if (pKingdomId < 0) return false;
 
             var db = LineageArchiveManager.Instance.OperatingDB;
@@ -243,10 +420,12 @@ namespace AncientWarfare3.core.db
 
         public static int IndexOfActor(long pActorId)
         {
-            EnsureLoaded();
+            if (!EnsureLoaded()) return -1;
             if (pActorId < 0) return -1;
             for (int i = 0; i < _actorId.Length; i++)
-                if (_spawned[i] && _actorId[i] == pActorId) return i;
+                if (_spawnState[i] ==
+                        content.figures.HistoricalFigureSpawnRules.Committed &&
+                    _actorId[i] == pActorId) return i;
             return -1;
         }
     }

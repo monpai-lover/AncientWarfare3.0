@@ -2,7 +2,7 @@ using System;
 
 namespace AncientWarfare3.core.court
 {
-    // 官场历史层级(按科技解锁):原始朝会 → 三公九卿 → 三省六部。
+    // 官场历史层级(按科技解锁):东周六卿 → 三公九卿 → 三省六部。
     // 每级有自己的中央官职集合;层级提升是一次朝廷改制事件。
     public static class CourtTierRules
     {
@@ -10,7 +10,7 @@ namespace AncientWarfare3.core.court
         {
             if (hasOfficialCourt && hasThreeDepartments) return CourtTier.SanShengLiuBu;
             if (hasOfficialCourt) return CourtTier.SanGongJiuQing;
-            return CourtTier.Primitive;
+            return CourtTier.EasternZhou;
         }
 
         public static int TierRank(string tier)
@@ -47,6 +47,13 @@ namespace AncientWarfare3.core.court
                         CourtOfficeId.Justice, CourtOfficeId.Steward, CourtOfficeId.Erudite,
                         CourtOfficeId.ImperialPhysician, CourtOfficeId.ImperialAstrologer
                     };
+                case CourtTier.EasternZhou:
+                    return new[]
+                    {
+                        CourtOfficeId.TaiZai, CourtOfficeId.SiTu,
+                        CourtOfficeId.ZongBo, CourtOfficeId.SiMa,
+                        CourtOfficeId.SiKou, CourtOfficeId.SiKong
+                    };
                 default:
                     return Array.Empty<string>();
             }
@@ -56,6 +63,12 @@ namespace AncientWarfare3.core.court
         {
             switch (officeId ?? "")
             {
+                case CourtOfficeId.TaiZai: return CourtSchoolId.Ru;
+                case CourtOfficeId.SiTu: return CourtSchoolId.Agrarian;
+                case CourtOfficeId.ZongBo: return CourtSchoolId.Ru;
+                case CourtOfficeId.SiMa: return CourtSchoolId.Military;
+                case CourtOfficeId.SiKou: return CourtSchoolId.Legalist;
+                case CourtOfficeId.SiKong: return CourtSchoolId.Mohist;
                 case CourtOfficeId.Chancellor: return CourtSchoolId.Ru;
                 case CourtOfficeId.Censor: return CourtSchoolId.Legalist;
                 case CourtOfficeId.Marshal: return CourtSchoolId.Military;

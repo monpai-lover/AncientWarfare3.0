@@ -1,0 +1,93 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ActorKingdomSafetyRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        Equal(false, ActorKingdomSafetyRules.IsCityKingdomRepairable(
+                cityKingdomAssetExists: true,
+                cityKingdomIsRekt: true),
+            "a destroyed city kingdom must not trap a kingdomless actor");
+        Equal(true, ActorKingdomSafetyRules.IsCityKingdomRepairable(
+                cityKingdomAssetExists: true,
+                cityKingdomIsRekt: false),
+            "a living city kingdom remains the authoritative repair source");
+        Equal(true, ActorKingdomSafetyRules.ShouldQueueDeferredRepair(
+                immediateRepairSucceeded: false),
+            "a load-time repair failure must retry after world initialization");
+        Equal(false, ActorKingdomSafetyRules.ShouldQueueDeferredRepair(
+                immediateRepairSucceeded: true),
+            "a repaired actor does not require deferred repair");
+
+        Equal(false, ActorKingdomSafetyRules.CanRunEnemyCheck(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: false),
+            "an actor with a null kingdom cannot enter vanilla enemy checks");
+        Equal(true, ActorKingdomSafetyRules.CanRunEnemyCheck(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: true),
+            "a fully restored actor keeps vanilla enemy checks");
+
+        Equal(true,
+            ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
+                kingdomObjectExists: true,
+                kingdomAssetExists: false),
+            "a stale destroyed kingdom must be detached before vanilla joinKingdom");
+        Equal(false,
+            ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
+                kingdomObjectExists: false,
+                kingdomAssetExists: false),
+            "a genuinely kingdomless actor needs no stale-reference detach");
+        Equal(false,
+            ActorKingdomSafetyRules.ShouldDetachInvalidKingdomBeforeRepair(
+                kingdomObjectExists: true,
+                kingdomAssetExists: true),
+            "a valid kingdom reference must never be detached by repair");
+
+        Equal(ActorKingdomRepairSource.City,
+            ActorKingdomSafetyRules.SelectRepairSource(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: false,
+                cityKingdomAssetExists: true,
+                cityKingdomIsRekt: false,
+                wildKingdomIdExists: true),
+            "the loaded city kingdom is the authoritative repair source");
+        Equal(ActorKingdomRepairSource.Wild,
+            ActorKingdomSafetyRules.SelectRepairSource(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: false,
+                cityKingdomAssetExists: false,
+                cityKingdomIsRekt: false,
+                wildKingdomIdExists: true),
+            "ownerless actors fall back to their species wild kingdom");
+        Equal(ActorKingdomRepairSource.None,
+            ActorKingdomSafetyRules.SelectRepairSource(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: true,
+                cityKingdomAssetExists: true,
+                cityKingdomIsRekt: false,
+                wildKingdomIdExists: true),
+            "valid kingdom references are never overwritten");
+        Equal(ActorKingdomRepairSource.None,
+            ActorKingdomSafetyRules.SelectRepairSource(
+                actorExists: true,
+                actorAssetExists: true,
+                kingdomAssetExists: false,
+                cityKingdomAssetExists: false,
+                cityKingdomIsRekt: false,
+                wildKingdomIdExists: false),
+            "actors without a valid repair source remain quarantined");
+    }
+}

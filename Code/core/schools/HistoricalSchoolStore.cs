@@ -26,6 +26,12 @@ namespace AncientWarfare3.core.schools
         private const double MaxLedgerValue = 1d;
         private const double MaxLedgerInstitutions = 100d;
         private const int LedgerCityQueryChunkSize = 128;
+        private const int LedgerReadCacheCapacity = 128;
+        private static readonly HistoricalSchoolYearCityCache<
+                Dictionary<string, HistoricalSchoolLedgerSnapshot>> LedgerReadCache =
+            new HistoricalSchoolYearCityCache<
+                Dictionary<string, HistoricalSchoolLedgerSnapshot>>(
+                LedgerReadCacheCapacity);
         public static long NextMembershipId()
         {
             return DB == null ? -1L : TableIdAllocator.Next(DB, MembershipTable,
@@ -773,41 +779,48 @@ namespace AncientWarfare3.core.schools
             pResult =
                 new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
             pFailure = "";
+            if (pCityIds == null || pCityIds.Count == 0) return true;
+
+            int ledgerYear = CurrentLedgerYear();
+            long[] missingCityIds = LedgerReadCache.CollectMisses(
+                pCityIds, ledgerYear, pResult);
+            if (missingCityIds.Length == 0) return true;
             if (DB == null)
             {
                 pFailure = "database unavailable";
                 return false;
             }
-            if (pCityIds == null || pCityIds.Count == 0) return true;
-
-            var cityIds = new List<long>(pCityIds.Count);
-            var seen = new HashSet<long>();
-            foreach (long cityId in pCityIds)
-            {
-                if (cityId < 0 || !seen.Add(cityId)) continue;
-                cityIds.Add(cityId);
-            }
-            if (cityIds.Count == 0) return true;
 
             var loaded =
                 new Dictionary<long, Dictionary<string, HistoricalSchoolLedgerSnapshot>>();
-            foreach (long cityId in cityIds)
+            foreach (long cityId in missingCityIds)
                 loaded[cityId] = new Dictionary<string, HistoricalSchoolLedgerSnapshot>(
                     StringComparer.Ordinal);
 
-            for (int offset = 0; offset < cityIds.Count;
+            for (int offset = 0; offset < missingCityIds.Length;
                  offset += LedgerCityQueryChunkSize)
             {
-                int count = Math.Min(LedgerCityQueryChunkSize, cityIds.Count - offset);
-                if (!TryLoadLedgerChunk(cityIds, offset, count, loaded,
+                int count = Math.Min(LedgerCityQueryChunkSize,
+                    missingCityIds.Length - offset);
+                if (!TryLoadLedgerChunk(missingCityIds, offset, count, loaded,
                         out string chunkFailure))
                 {
                     pFailure = chunkFailure;
                     return false;
                 }
             }
-            pResult = loaded;
+            foreach (KeyValuePair<long,
+                         Dictionary<string, HistoricalSchoolLedgerSnapshot>> entry in loaded)
+            {
+                LedgerReadCache.Set(entry.Key, ledgerYear, entry.Value);
+                pResult[entry.Key] = entry.Value;
+            }
             return true;
+        }
+
+        internal static void ClearLedgerReadCache()
+        {
+            LedgerReadCache.Clear();
         }
 
         private static bool TryLoadLedgerChunk(IReadOnlyList<long> pCityIds, int pOffset,
@@ -1663,6 +1676,95 @@ namespace AncientWarfare3.core.schools
             }
         }
 
+        internal static HistoricalSchoolTeachingPersistenceOutcome
+            SaveAffiliationTransitionInTransaction(SQLiteConnection pDb,
+                SQLiteTransaction pTransaction,
+                HistoricalSchoolAffiliationSnapshot pExpected,
+                HistoricalSchoolAffiliationSnapshot pDesired,
+                double pTime)
+        {
+            if (pDb == null || pTransaction == null || pExpected == null ||
+                pDesired == null || pExpected.ActorId < 0 ||
+                pExpected.ActorId != pDesired.ActorId)
+                return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+
+            using (var read = new SQLiteCommand(pDb)
+                   {
+                       Transaction = pTransaction
+                   })
+            {
+                read.CommandText = "SELECT RESIDENCE_CITY_ID," +
+                    "PREVIOUS_RESIDENCE_CITY_ID,DESTINATION_CITY_ID," +
+                    "SERVICE_KINGDOM_ID,LIFECYCLE_STATE,SERVICE_START_YEAR," +
+                    "SERVICE_END_YEAR,LAST_TRAVEL_YEAR,TRAVEL_WAIT_START_YEAR," +
+                    "VOYAGE_START_YEAR,VOYAGE_ARRIVAL_YEAR,TRANSPORT_FAILURES " +
+                    "FROM " + AffiliationTable + " WHERE ACTOR_ID=@actor";
+                read.Parameters.AddWithValue("@actor", pExpected.ActorId);
+                using SQLiteDataReader reader = read.ExecuteReader();
+                if (!reader.Read())
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+                if (AffiliationMutableExact(reader, pDesired))
+                    return HistoricalSchoolTeachingPersistenceOutcome.Replayed;
+                if (!AffiliationMutableExact(reader, pExpected))
+                    return HistoricalSchoolTeachingPersistenceOutcome.CleanFailure;
+            }
+
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction
+            };
+            command.CommandText = "UPDATE " + AffiliationTable +
+                " SET RESIDENCE_CITY_ID=@residence," +
+                "PREVIOUS_RESIDENCE_CITY_ID=@previous," +
+                "DESTINATION_CITY_ID=@destination,SERVICE_KINGDOM_ID=@service," +
+                "LIFECYCLE_STATE=@state,SERVICE_START_YEAR=@serviceStart," +
+                "SERVICE_END_YEAR=@serviceEnd,LAST_TRAVEL_YEAR=@lastTravel," +
+                "TRAVEL_WAIT_START_YEAR=@waitStart,VOYAGE_START_YEAR=@voyageStart," +
+                "VOYAGE_ARRIVAL_YEAR=@voyageArrival," +
+                "TRANSPORT_FAILURES=@failures,UPDATED_TIME=@time " +
+                "WHERE ACTOR_ID=@actor AND LIFECYCLE_STATE=@expectedState " +
+                "AND DESTINATION_CITY_ID=@expectedDestination";
+            command.Parameters.AddWithValue("@residence", pDesired.ResidenceCityId);
+            command.Parameters.AddWithValue("@previous", pDesired.PreviousResidenceCityId);
+            command.Parameters.AddWithValue("@destination", pDesired.DestinationCityId);
+            command.Parameters.AddWithValue("@service", pDesired.ServiceKingdomId);
+            command.Parameters.AddWithValue("@state", pDesired.LifecycleState.ToString());
+            command.Parameters.AddWithValue("@serviceStart", pDesired.ServiceStartYear);
+            command.Parameters.AddWithValue("@serviceEnd", pDesired.ServiceEndYear);
+            command.Parameters.AddWithValue("@lastTravel", pDesired.LastTravelYear);
+            command.Parameters.AddWithValue("@waitStart", pDesired.TravelWaitStartYear);
+            command.Parameters.AddWithValue("@voyageStart", pDesired.VoyageStartYear);
+            command.Parameters.AddWithValue("@voyageArrival", pDesired.VoyageArrivalYear);
+            command.Parameters.AddWithValue("@failures", pDesired.TransportFailures);
+            command.Parameters.AddWithValue("@time", FiniteNonNegative(pTime));
+            command.Parameters.AddWithValue("@actor", pDesired.ActorId);
+            command.Parameters.AddWithValue("@expectedState",
+                pExpected.LifecycleState.ToString());
+            command.Parameters.AddWithValue("@expectedDestination",
+                pExpected.DestinationCityId);
+            return command.ExecuteNonQuery() == 1
+                ? HistoricalSchoolTeachingPersistenceOutcome.Committed
+                : HistoricalSchoolTeachingPersistenceOutcome.Unknown;
+        }
+
+        private static bool AffiliationMutableExact(SQLiteDataReader pReader,
+            HistoricalSchoolAffiliationSnapshot pState)
+        {
+            return pReader != null && pState != null &&
+                   ValueLong(pReader, 0, -1L) == pState.ResidenceCityId &&
+                   ValueLong(pReader, 1, -1L) == pState.PreviousResidenceCityId &&
+                   ValueLong(pReader, 2, -1L) == pState.DestinationCityId &&
+                   ValueLong(pReader, 3, -1L) == pState.ServiceKingdomId &&
+                   ValueString(pReader, 4) == pState.LifecycleState.ToString() &&
+                   ValueInt(pReader, 5, -1) == pState.ServiceStartYear &&
+                   ValueInt(pReader, 6, -1) == pState.ServiceEndYear &&
+                   ValueInt(pReader, 7, -1) == pState.LastTravelYear &&
+                   ValueInt(pReader, 8, -1) == pState.TravelWaitStartYear &&
+                   ValueInt(pReader, 9, -1) == pState.VoyageStartYear &&
+                   ValueInt(pReader, 10, -1) == pState.VoyageArrivalYear &&
+                   ValueInt(pReader, 11, -1) == pState.TransportFailures;
+        }
+
         public static void LoadRuntimeState(out int pEligibleYear, out int pLastWorldYear)
         {
             pEligibleYear = 0;
@@ -1807,7 +1909,9 @@ namespace AncientWarfare3.core.schools
                         throw new InvalidOperationException("master affiliation insert failed");
                 }
                 HistoricalMasterLineagePersistence.Stage(DB, transaction, pIdentity);
-                transaction.Commit();
+                HistoricalContentRevision
+                    .AdvanceAfterSuccessfulSynchronousWrite(
+                        transaction.Commit);
                 return SchoolPersistenceOutcome.Committed;
             }
             catch (Exception error)
@@ -2327,7 +2431,7 @@ namespace AncientWarfare3.core.schools
         private static double LoadMembershipTimeForDeath(SchoolMembershipRecord pMembership,
             SQLiteTransaction pTransaction)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE," +
                 "SOURCE_ID,TEACHER_ACTOR_ID,CITY_ID,GENERATION,REPUTATION,START_YEAR," +
                 "END_YEAR,ACTIVE,END_REASON,UPDATED_TIME,STANDING,LOYALTY_UNTIL_YEAR FROM " + MembershipTable +
@@ -2351,7 +2455,7 @@ namespace AncientWarfare3.core.schools
             out HistoricalSchoolAffiliationDeathRow pLoadedRow)
         {
             pLoadedRow = null;
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT ACTOR_ID,HOME_KINGDOM_ID,HOME_KINGDOM_NAME," +
                 "HOMETOWN_CITY_ID,RESIDENCE_CITY_ID,PREVIOUS_RESIDENCE_CITY_ID," +
                 "DESTINATION_CITY_ID,SERVICE_KINGDOM_ID,LIFECYCLE_STATE," +
@@ -2384,7 +2488,7 @@ namespace AncientWarfare3.core.schools
         private static HistoricalSchoolMasterDeathRow LoadMasterForDeath(
             SchoolMembershipRecord pMembership, SQLiteTransaction pTransaction)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT MASTER_ID,ACTOR_ID,SCHOOL_ID,CANONICAL_NAME,SPAWNED," +
                 "DEAD,HOME_KINGDOM_ID,HOME_KINGDOM_NAME,HOMETOWN_CITY_ID,SPAWN_YEAR," +
                 "DEATH_YEAR,LIFECYCLE_STATE,DEATH_CAUSE,DEATH_CITY_ID,UPDATED_TIME FROM " +
@@ -2561,7 +2665,7 @@ namespace AncientWarfare3.core.schools
             SchoolMembershipRecord pMembership, int pYear, string pReason, double pTime,
             SQLiteTransaction pTransaction)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "UPDATE " + MembershipTable +
                 " SET ACTIVE=0,END_YEAR=@year,END_REASON=@reason,UPDATED_TIME=@time" +
                 " WHERE MEMBERSHIP_ID=@id AND ACTOR_ID=@actor AND SCHOOL_ID=@school" +
@@ -2581,7 +2685,7 @@ namespace AncientWarfare3.core.schools
         private static void InsertMembershipCommand(SchoolMembershipRecord pRecord, double pTime,
             SQLiteTransaction pTransaction)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + MembershipTable +
                 " (MEMBERSHIP_ID,ACTOR_ID,SCHOOL_ID,SOURCE_TYPE,SOURCE_ID,TEACHER_ACTOR_ID," +
                 "CITY_ID,GENERATION,REPUTATION,START_YEAR,END_YEAR,ACTIVE,END_REASON,UPDATED_TIME," +
@@ -2642,7 +2746,7 @@ namespace AncientWarfare3.core.schools
         private static void CloseMembershipCommand(long pMembershipId, int pYear, string pReason,
             double pTime, SQLiteTransaction pTransaction)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "UPDATE " + MembershipTable +
                 " SET ACTIVE=0,END_YEAR=@year,END_REASON=@reason,UPDATED_TIME=@time" +
                 " WHERE MEMBERSHIP_ID=@id AND ACTIVE=1";
@@ -2658,7 +2762,7 @@ namespace AncientWarfare3.core.schools
             SQLiteTransaction pTransaction, HistoricalSchoolDebateRecord pDebate,
             out bool pExists)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT TOPIC_ID,FIRST_ACTOR_ID,FIRST_SCHOOL_ID," +
                                   "SECOND_ACTOR_ID,SECOND_SCHOOL_ID,SEED,FIRST_SCORE," +
                                   "SECOND_SCORE,RESULT,RESOLVED FROM " + DebateTable +
@@ -2695,7 +2799,7 @@ namespace AncientWarfare3.core.schools
         private static bool HasActiveInstitutionCommand(SQLiteTransaction pTransaction,
             HistoricalSchoolMasterDefinition pMaster, long pCityId)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT 1 FROM " + InstitutionTable +
                                   " WHERE CITY_ID=@city AND SCHOOL_ID=@school AND " +
                                   "INSTITUTION_TYPE=@institution AND ACTIVE=1 LIMIT 1";
@@ -2717,7 +2821,7 @@ namespace AncientWarfare3.core.schools
         private static bool HasFounderEvidenceCommand(SQLiteTransaction pTransaction,
             long pFounderActorId, long pCityId, string pSchoolId)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT COUNT(*) FROM " + EventTable +
                                   " WHERE CITY_ID=@city AND SCHOOL_ID=@school AND " +
                                   "EVENT_TYPE IN ('lecture','debate') " +
@@ -2733,7 +2837,7 @@ namespace AncientWarfare3.core.schools
             long pInstitutionId, HistoricalSchoolMasterDefinition pMaster,
             long pFounderActorId, long pCityId, int pYear, double pWorldTime)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + InstitutionTable +
                                   " (INSTITUTION_ID,INSTITUTION_TYPE,SCHOOL_ID,CITY_ID," +
                                   "FOUNDER_ACTOR_ID,FOUNDING_YEAR,LEVEL,CUSTODIAN_ACTOR_ID," +
@@ -2756,7 +2860,7 @@ namespace AncientWarfare3.core.schools
             long pEventId, HistoricalSchoolMasterDefinition pMaster, long pFounderActorId,
             long pCityId, int pYear, long pKingdomId, double pWorldTime)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + EventTable +
                                   " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
                                   "CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME) " +
@@ -2777,7 +2881,7 @@ namespace AncientWarfare3.core.schools
         private static void InsertDebateCommand(SQLiteTransaction pTransaction, long pDebateId,
             HistoricalSchoolDebateRecord pDebate)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + DebateTable +
                                   " (DEBATE_ID,CITY_ID,DEBATE_YEAR,TOPIC_ID,FIRST_ACTOR_ID," +
                                   "FIRST_SCHOOL_ID,SECOND_ACTOR_ID,SECOND_SCHOOL_ID,SEED," +
@@ -2808,7 +2912,7 @@ namespace AncientWarfare3.core.schools
             long pEventId, HistoricalSchoolDebateRecord pDebate, string pSchoolId,
             long pActorId, long pTargetActorId, double pWorldTime)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + EventTable +
                                   " (EVENT_ID,OPERATION_KEY,EVENT_TYPE,ACTOR_ID,TARGET_ACTOR_ID,SCHOOL_ID," +
                                   "CITY_ID,KINGDOM_ID,EVENT_YEAR,PAYLOAD,IMPORTANCE,WORLD_TIME)" +
@@ -2839,7 +2943,7 @@ namespace AncientWarfare3.core.schools
             int lastActiveYear = -1;
             int lastDecayYear = -1;
             bool exists;
-            using (var read = new SQLiteCommand(DB) { Transaction = pTransaction })
+            using (var read = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction })
             {
                 read.CommandText = "SELECT TRADITION,MEMBERSHIP,INSTITUTIONS,ACTIVE_PRESENCE," +
                                    "MOMENTUM,LAST_ACTIVE_YEAR,LAST_DECAY_YEAR FROM " + LedgerTable +
@@ -2884,7 +2988,7 @@ namespace AncientWarfare3.core.schools
             lastDecayYear = Math.Max(lastDecayYear, effectiveYear);
             double updatedTime = FiniteNonNegative(pWorldTime);
 
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             if (exists)
             {
                 command.CommandText = "UPDATE " + LedgerTable +
@@ -2960,7 +3064,7 @@ namespace AncientWarfare3.core.schools
             long pActorId, double pDelta, double pWorldTime)
         {
             if (pActorId < 0 || Math.Abs(pDelta) < 0.0001d) return;
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "UPDATE " + MembershipTable +
                                   " SET REPUTATION=MAX(0,MIN(100,REPUTATION+@delta))," +
                                   "UPDATED_TIME=@time WHERE ACTOR_ID=@actor AND ACTIVE=1";
@@ -2991,7 +3095,7 @@ namespace AncientWarfare3.core.schools
         private static long NextIdInTransaction(SQLiteTransaction pTransaction,
             string pTable, string pColumn)
         {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
+            using var command = new SQLiteCommand(pTransaction.Connection) { Transaction = pTransaction };
             command.CommandText = "SELECT IFNULL(MAX(" + pColumn + "),0)+1 FROM " +
                                   pTable;
             return Convert.ToInt64(command.ExecuteScalar(),
@@ -3001,6 +3105,7 @@ namespace AncientWarfare3.core.schools
         private static void InvalidateLedgerCaches(long pCityId)
         {
             if (pCityId < 0) return;
+            LedgerReadCache.Remove(pCityId, CurrentLedgerYear());
             try
             {
                 CitySchoolSnapshotService.MarkDirtyById(pCityId);

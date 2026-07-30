@@ -55,11 +55,116 @@ namespace AncientWarfare3.core.lineage
             ScheduleRecruitment(state);
         }
 
+        internal static List<long> CollectInitialSupporterIds(City pSeed,
+            int pMaximumInspected, out int pInspected)
+        {
+            pInspected = 0;
+            var result = new List<long>();
+            Kingdom owner = pSeed?.kingdom;
+            if (!IsLiveKingdom(owner) || pSeed?.data == null ||
+                pSeed.isRekt() || pMaximumInspected <= 0) return result;
+            int unitCount = pSeed.units?.Count ?? 0;
+            int inspect = RoyalRestorationRules.SeedResidentsToInspect(
+                pMaximumInspected, unitCount);
+            pInspected = inspect;
+            for (int i = 0; i < inspect; i++)
+            {
+                Actor actor = pSeed.units[i];
+                if (CanPreflightSupporter(owner, pSeed, actor))
+                    result.Add(actor.data.id);
+            }
+            return result;
+        }
+
+        internal static List<long> RevalidateInitialSupporterIds(City pSeed,
+            Kingdom pExpectedOwner, IReadOnlyList<long> pCandidateIds)
+        {
+            var result = new List<long>();
+            if (pSeed?.data == null || pSeed.isRekt() ||
+                pSeed.kingdom != pExpectedOwner || pCandidateIds == null)
+                return result;
+            int limit = Math.Min(pCandidateIds.Count,
+                RoyalRestorationRules.MaxSeedResidentsInspected);
+            for (int i = 0; i < limit; i++)
+            {
+                Actor actor = ResolveActor(pCandidateIds[i]);
+                if (CanPreflightSupporter(pExpectedOwner, pSeed, actor))
+                    result.Add(actor.data.id);
+            }
+            return result;
+        }
+
+        internal static bool TryStartWithInitialCohort(Kingdom pKingdom,
+            City pSeed, long pCampaignId, IReadOnlyList<long> pCandidateIds,
+            int pRequiredSupporters)
+        {
+            if (!IsLiveKingdom(pKingdom) || pSeed?.data == null ||
+                pSeed.isRekt() || pSeed.kingdom != pKingdom ||
+                pCampaignId < 0 || pCandidateIds == null ||
+                pRequiredSupporters <= 0) return false;
+
+            int year = Date.getCurrentYear();
+            var state = new CampaignState
+            {
+                CampaignId = pCampaignId,
+                KingdomId = pKingdom.id,
+                SeedCityId = pSeed.id,
+                Year = year,
+                KingdomRef = pKingdom
+            };
+            try
+            {
+                States[pCampaignId] = state;
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ACTIVE, true);
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_CAMPAIGN_ID,
+                    pCampaignId);
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_KINGDOM_ID,
+                    pKingdom.id);
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_SEED_CITY_ID,
+                    pSeed.id);
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, -1L);
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ROSTER_IDS,
+                    "");
+
+                int inspect = Math.Min(pCandidateIds.Count,
+                    RoyalRestorationRules.MaxSeedResidentsInspected);
+                for (int i = 0; i < inspect &&
+                                state.MemberIds.Count < pRequiredSupporters; i++)
+                {
+                    Actor candidate = ResolveActor(pCandidateIds[i]);
+                    TryEnlistCandidate(state, pKingdom, pSeed, candidate);
+                }
+                state.Scanned = inspect;
+                state.Recruited = state.MemberIds.Count;
+                if (state.MemberIds.Count < pRequiredSupporters)
+                {
+                    RollbackInitialCohort(state, pKingdom);
+                    return false;
+                }
+                PersistState(pKingdom, state);
+                PublishArmyChanged(state, pKingdom);
+                ScheduleRecruitment(state);
+                return true;
+            }
+            catch
+            {
+                RollbackInitialCohort(state, pKingdom);
+                return false;
+            }
+        }
+
         public static void OnCampaignYear(Kingdom pKingdom, long pCampaignId)
         {
             if (!IsLiveKingdom(pKingdom) || pCampaignId < 0) return;
             CampaignState state = GetOrRestoreState(pKingdom, pCampaignId);
-            if (state == null || state.Cleaning || !IsCampaignActive(pKingdom, pCampaignId)) return;
+            if (state == null) return;
+            if (state.Cleaning)
+            {
+                PrepareCleanupYear(state, pKingdom);
+                ScheduleCleanup(state);
+                return;
+            }
+            if (!IsCampaignActive(pKingdom, pCampaignId)) return;
 
             int year = Date.getCurrentYear();
             if (state.Year != year)
@@ -82,6 +187,25 @@ namespace AncientWarfare3.core.lineage
         public static void Fail(Kingdom pKingdom, long pCampaignId)
         {
             BeginCleanup(pKingdom, pCampaignId);
+        }
+
+        internal static bool TryCleanupForRollback(Kingdom pKingdom,
+            long pCampaignId)
+        {
+            if (pCampaignId < 0) return true;
+            CampaignState state = GetOrRestoreState(pKingdom, pCampaignId);
+            if (state == null) return true;
+            if (!state.Cleaning)
+            {
+                state.Cleaning = true;
+                state.WorkItems = 0;
+            }
+            if (pKingdom?.data != null)
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ACTIVE,
+                    false);
+            PrepareCleanupYear(state, pKingdom);
+            ProcessCleanupBatch(pCampaignId);
+            return !States.ContainsKey(pCampaignId);
         }
 
         public static void RebuildRuntime()
@@ -232,6 +356,45 @@ namespace AncientWarfare3.core.lineage
                 male, pActor.isAdult(), pActor.getAge(), pActor.isWarrior());
         }
 
+        private static bool CanPreflightSupporter(Kingdom pOwner, City pCity,
+            Actor pActor)
+        {
+            if (pActor?.data == null || pActor.city != pCity ||
+                pActor.kingdom != pOwner || pActor.isRekt() ||
+                !pActor.isAlive() || pActor.asset?.is_boat == true ||
+                !pActor.isProfession(UnitProfession.Unit)) return false;
+            bool male;
+            try { male = pActor.isSexMale(); }
+            catch { male = false; }
+            bool originalEligible;
+            using (MilitaryRecruitmentScope.Open(
+                       MilitaryRecruitmentKind.RestorationUprising))
+                originalEligible = pCity.checkCanMakeWarrior(pActor);
+            return RestorationUprisingRules.CanEnlist(originalEligible,
+                IsProtectedIdentity(pOwner, pActor), male, pActor.isAdult(),
+                pActor.getAge(), pActor.isWarrior());
+        }
+
+        private static void RollbackInitialCohort(CampaignState pState,
+            Kingdom pKingdom)
+        {
+            if (pState == null) return;
+            pState.Cleaning = true;
+            pState.WorkItems = 0;
+            if (pKingdom?.data != null)
+                pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ACTIVE,
+                    false);
+            ProcessCleanupMembers(pState, pKingdom,
+                RestorationUprisingRules.DemobilizationBatchSize);
+            if (pState.MemberIds.Count == 0)
+            {
+                FinishCleanup(pState, pKingdom);
+                return;
+            }
+            PersistState(pKingdom, pState);
+            ScheduleCleanup(pState);
+        }
+
         private static bool Enlist(CampaignState pState, Kingdom pKingdom,
             City pCity, Actor pActor)
         {
@@ -288,7 +451,12 @@ namespace AncientWarfare3.core.lineage
             }
             if (army?.data == null)
             {
-                try { army = World.world?.armies?.newArmy(pRecruit, pCity); }
+                try
+                {
+                    using (MilitaryRecruitmentScope.Open(
+                               MilitaryRecruitmentKind.RestorationUprising))
+                        army = World.world?.armies?.newArmy(pRecruit, pCity);
+                }
                 catch { army = null; }
             }
             if (army?.data == null || !IsArmyOwnedBy(army, pKingdom)) return null;
@@ -296,6 +464,7 @@ namespace AncientWarfare3.core.lineage
             army.data.set(LineageKeys.RESTORATION_UPRISING_ARMY, true);
             army.data.set(LineageKeys.RESTORATION_UPRISING_CAMPAIGN_ID, pState.CampaignId);
             army.data.set(LineageKeys.RESTORATION_UPRISING_KINGDOM_ID, pKingdom.id);
+            ArmyFieldIndexService.OnArmyChanged(army);
             pState.ArmyId = army.id;
             pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ARMY_ID, army.id);
             if (pRecruit.army != army) AWArmyService.AddToArmy(pRecruit, army);
@@ -339,7 +508,11 @@ namespace AncientWarfare3.core.lineage
             if (pCampaignId < 0) return;
             CampaignState state = GetOrRestoreState(pKingdom, pCampaignId);
             if (state == null) return;
-            state.Cleaning = true;
+            if (!state.Cleaning)
+            {
+                state.Cleaning = true;
+                state.WorkItems = 0;
+            }
             if (pKingdom?.data != null)
                 pKingdom.data.set(LineageKeys.RESTORATION_UPRISING_ACTIVE, false);
             if (state.MemberIds.Count == 0)
@@ -355,6 +528,11 @@ namespace AncientWarfare3.core.lineage
         {
             if (pState == null) return;
             pState.Cleaning = true;
+            Kingdom kingdom = ResolveKingdom(pState) ?? pState.KingdomRef;
+            PrepareCleanupYear(pState, kingdom);
+            if (pState.WorkItems >=
+                RestorationUprisingRules.MaxWorkItemsPerCampaignYear)
+                return;
             DeferredRuntimeWorkService.EnqueueCoalesced(
                 DeferredRuntimeWorkRules.CoalescingKey(
                     "restoration_uprising_cleanup", pState.CampaignId),
@@ -366,37 +544,74 @@ namespace AncientWarfare3.core.lineage
         {
             if (!States.TryGetValue(pCampaignId, out CampaignState state)) return;
             Kingdom kingdom = ResolveKingdom(state) ?? state.KingdomRef;
-            int count = 0;
-            foreach (long actorId in state.MemberIds)
-            {
-                state.MutationBuffer[count++] = actorId;
-                if (count >= RestorationUprisingRules.DemobilizationBatchSize) break;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                long actorId = state.MutationBuffer[i];
-                Actor actor = ResolveActor(actorId);
-                if (actor?.data != null) CleanupMemberSafely(state, kingdom, actor);
-                state.MemberIds.Remove(actorId);
-            }
+            PrepareCleanupYear(state, kingdom);
+            if (state.WorkItems >=
+                RestorationUprisingRules.MaxWorkItemsPerCampaignYear) return;
+            ProcessCleanupMembers(state, kingdom,
+                RestorationUprisingRules.DemobilizationBatchSize);
+            state.WorkItems++;
             if (state.MemberIds.Count == 0)
             {
                 FinishCleanup(state, kingdom);
                 return;
             }
-            PersistRoster(kingdom, state);
+            PersistState(kingdom, state);
             ScheduleCleanup(state);
         }
 
-        private static void CleanupMemberSafely(CampaignState pState,
-            Kingdom pKingdom, Actor pActor)
+        private static void ProcessCleanupMembers(CampaignState pState,
+            Kingdom pKingdom, int pLimit)
         {
-            try { DemobilizeActor(pState, pKingdom, pActor); }
-            catch { ClearActorFieldsForCampaign(pActor, pState.CampaignId); }
+            int count = 0;
+            foreach (long actorId in pState.MemberIds)
+            {
+                pState.MutationBuffer[count++] = actorId;
+                if (count >= Math.Min(pState.MutationBuffer.Length,
+                        Math.Max(0, pLimit))) break;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                long actorId = pState.MutationBuffer[i];
+                Actor actor = ResolveActor(actorId);
+                bool cleaned = actor?.data == null ||
+                               CleanupMemberSafely(pState, pKingdom, actor);
+                if (cleaned) pState.MemberIds.Remove(actorId);
+            }
         }
 
-        private static void DemobilizeActor(CampaignState pState, Kingdom pKingdom,
+        private static bool CleanupMemberSafely(CampaignState pState,
+            Kingdom pKingdom, Actor pActor)
+        {
+            try
+            {
+                if (DemobilizeActor(pState, pKingdom, pActor)) return true;
+            }
+            catch { }
+            return ForceCleanupActor(pActor, pState.CampaignId);
+        }
+
+        private static bool ForceCleanupActor(Actor pActor, long pCampaignId)
+        {
+            if (pActor?.data == null) return true;
+            try
+            {
+                if (pActor.hasArmy()) pActor.removeFromArmy();
+            }
+            catch { }
+            try
+            {
+                if (pActor.isWarrior()) pActor.stopBeingWarrior();
+            }
+            catch { }
+            bool physicalCleanupComplete = IsPhysicalCleanupComplete(pActor);
+            if (RoyalRestorationRules.ShouldRetainUprisingCleanupState(
+                    physicalCleanupComplete)) return false;
+            try { ClearActorFieldsForCampaign(pActor, pCampaignId); }
+            catch { return false; }
+            return true;
+        }
+
+        private static bool DemobilizeActor(CampaignState pState, Kingdom pKingdom,
             Actor pActor)
         {
             pActor.data.get(LineageKeys.RESTORATION_UPRISING_MEMBER,
@@ -420,7 +635,27 @@ namespace AncientWarfare3.core.lineage
                 try { pActor.ai?.setJob(pActor.getNextJob()); }
                 catch { }
             }
+            bool physicalCleanupComplete = IsPhysicalCleanupComplete(pActor);
+            if (RoyalRestorationRules.ShouldRetainUprisingCleanupState(
+                    physicalCleanupComplete)) return false;
             if (campaignId == pState.CampaignId) ClearActorFields(pActor);
+            return true;
+        }
+
+        private static bool IsPhysicalCleanupComplete(Actor pActor)
+        {
+            if (pActor?.data == null) return true;
+            bool alive;
+            bool hasArmy;
+            bool warrior;
+            try { alive = !pActor.isRekt() && pActor.isAlive(); }
+            catch { alive = true; }
+            try { hasArmy = pActor.army != null; }
+            catch { hasArmy = true; }
+            try { warrior = pActor.isWarrior(); }
+            catch { warrior = true; }
+            return RoyalRestorationRules.IsUprisingPhysicalCleanupComplete(
+                alive, hasArmy, warrior);
         }
 
         private static void FinishCleanup(CampaignState pState, Kingdom pKingdom)
@@ -437,13 +672,23 @@ namespace AncientWarfare3.core.lineage
             {
                 Actor actor = ResolveActor(actorId);
                 if (IsCurrentMember(actor, pState)) continue;
-                if (actor?.data != null)
-                    ClearActorFieldsForCampaign(actor, pState.CampaignId);
-                pState.StaleIds.Add(actorId);
+                if (actor?.data == null ||
+                    CleanupMemberSafely(pState, pKingdom, actor))
+                    pState.StaleIds.Add(actorId);
             }
             for (int i = 0; i < pState.StaleIds.Count; i++)
                 pState.MemberIds.Remove(pState.StaleIds[i]);
             if (pState.StaleIds.Count > 0) PersistRoster(pKingdom, pState);
+        }
+
+        private static void PrepareCleanupYear(CampaignState pState,
+            Kingdom pKingdom)
+        {
+            int year = Date.getCurrentYear();
+            if (pState.Year == year) return;
+            pState.Year = year;
+            pState.WorkItems = 0;
+            PersistCounters(pKingdom, pState);
         }
 
         private static bool IsCurrentMember(Actor pActor, CampaignState pState)

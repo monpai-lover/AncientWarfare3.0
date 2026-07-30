@@ -1,0 +1,114 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class OfficialCareerActingAtomicPersistenceSqlTests
+{
+    public static void Run()
+    {
+        StateProjectionFailureRollsBackActingAppointment();
+        ActingAppointmentIsMarkedNonFormal();
+    }
+
+    private static void StateProjectionFailureRollsBackActingAppointment()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence
+            .Appoint(db, Appointment(pActing: true), (connection, transaction) =>
+                throw new InvalidOperationException(
+                    "injected acting-state projection failure"));
+
+        False(result.IsCommitted,
+            "state projection failure cannot commit an acting appointment");
+        Equal(0L, Scalar(db,
+                "SELECT COUNT(*) FROM CourtOfficer WHERE ACTIVE=1"),
+            "state projection failure leaves no active court office");
+    }
+
+    private static void ActingAppointmentIsMarkedNonFormal()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence
+            .Appoint(db, Appointment(pActing: true));
+
+        True(result.IsCommitted,
+            "an acting appointment can persist when state staging succeeds");
+        Equal(1L, Scalar(db,
+                "SELECT IS_ACTING FROM CourtOfficer WHERE ACTIVE=1"),
+            "an acting office is marked outside formal career history");
+    }
+
+    private static void CreateSchema(SQLiteConnection pDb)
+    {
+        Execute(pDb, "CREATE TABLE CourtOfficer (" +
+            "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+            "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
+            "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
+            "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +
+            "END_REASON TEXT,UPDATED_TIME REAL," +
+            "RANK_AT_APPOINTMENT INTEGER," +
+            "LOCAL_GRADE_AT_APPOINTMENT INTEGER," +
+            "INSTITUTION_AT_APPOINTMENT TEXT,IS_ACTING INTEGER)");
+    }
+
+    private static OfficialCareerAppointment Appointment(bool pActing)
+    {
+        return new OfficialCareerAppointment
+        {
+            ActorId = 101,
+            ActorName = "Acting official",
+            KingdomId = 7,
+            CityId = -1,
+            Layer = "central",
+            OfficeId = "chancellor",
+            SchoolId = "ru",
+            InstitutionAtAppointment = "han_court",
+            Influence = 20d,
+            AppointedYear = 120,
+            AppointedTime = 7200d,
+            RankAtAppointment = 8,
+            LocalGradeAtAppointment = 5,
+            IsActing = pActing
+        };
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pName + ": expected false");
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
+    }
+}

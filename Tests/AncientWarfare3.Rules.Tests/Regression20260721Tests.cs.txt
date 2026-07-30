@@ -1,0 +1,845 @@
+using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.schools;
+
+internal static class Regression20260721Tests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static string ResolveAnnexProgressState(bool pSuzerainValid,
+        bool pTargetValid, bool pTargetDirectVassal,
+        bool pIndependenceSuspended, float pProgress, float pCost)
+    {
+        return VassalAnnexDecisionRules.ResolveProgressState(
+            pSuzerainValid, pTargetValid, pTargetDirectVassal,
+            pIndependenceSuspended, pProgress, pCost).ToString();
+    }
+
+    public static void Run()
+    {
+        Equal(true, CityGovernorPlacementRules.ShouldPlace(
+                newAssignment: true, actorValid: true, cityValid: true,
+                isCurrentLeader: true, isInDestinationZone: false),
+            "a newly assigned out-of-zone governor must be placed at the city");
+        Equal(false, CityGovernorPlacementRules.ShouldPlace(
+                newAssignment: false, actorValid: true, cityValid: true,
+                isCurrentLeader: true, isInDestinationZone: false),
+            "normal governor travel must not be repositioned");
+        Equal(false, CityGovernorPlacementRules.ShouldPlace(
+                newAssignment: true, actorValid: true, cityValid: true,
+                isCurrentLeader: false, isInDestinationZone: false),
+            "a former governor cannot be repositioned by a replacement callback");
+        Equal(false, CityGovernorPlacementRules.ShouldPlace(
+                newAssignment: true, actorValid: true, cityValid: true,
+                isCurrentLeader: true, isInDestinationZone: true),
+            "a governor already in the destination city remains in place");
+        Equal("Qi-State #24\n统帅: 田和\n任务: 进攻",
+            ArmyMapInformationRules.ComposeText("Qi-State", 24,
+                "田和", "进攻"),
+            "army map labels retain all fields in a compact three-line format");
+        Equal(15, ArmyMapInformationRules.ResolveReplenishmentShortage(
+                replenishing: true, memberCount: 10, targetStrength: 25),
+            "a replenishing army exposes its live target-strength shortage");
+        Equal(0, ArmyMapInformationRules.ResolveReplenishmentShortage(
+                replenishing: false, memberCount: 10, targetStrength: 25),
+            "an army outside replenishment does not show a stale shortage");
+        Equal("Qi-State #10（待补15）\n统帅: 田和\n任务: 补员",
+            ArmyMapInformationRules.ComposeText("Qi-State", 10,
+                "田和", "补员", replenishmentShortage: 15),
+            "army map labels place the replacement shortage beside the live roster");
+        {
+            string armyMapInformationSource = File.ReadAllText(Path.Combine(
+                Directory.GetCurrentDirectory(), "Code", "core",
+                "presentation", "ArmyMapInformationService.cs"));
+            Equal(true, armyMapInformationSource.Contains(
+                    "private const float NativeFlagCharacterSize = 1f;") &&
+                    armyMapInformationSource.Contains(
+                        "pFlag.text.characterSize = NativeFlagCharacterSize;") &&
+                    armyMapInformationSource.Contains(
+                        "pFlag.text.lineSpacing = 0.7f;"),
+                "native army flags use the compact map-label text scale");
+        }
+        Equal(true, CityOwnershipTransferRules.ShouldDisbandLocalArmy(
+                hasOldOwner: true, ownerChanged: true,
+                captureAlreadyCleaned: false),
+            "administrative city transfers retire the former owner's local army");
+        Equal(false, CityOwnershipTransferRules.ShouldDisbandLocalArmy(
+                hasOldOwner: true, ownerChanged: true,
+                captureAlreadyCleaned: true),
+            "combat capture does not repeat vanilla army cleanup");
+        Equal(false, CityOwnershipTransferRules.ShouldDisbandLocalArmy(
+                hasOldOwner: true, ownerChanged: false,
+                captureAlreadyCleaned: false),
+            "assigning the current owner cannot disband its army");
+        Equal(false, AWPathLifecycleRules.ShouldKeepMovementOwnership(
+                AWPathPollKind.NoRequest, hasRetryContext: true,
+                retryPending: false, hasLiveActorTarget: true),
+            "a stale custom request releases ownership so vanilla AI can re-evaluate movement");
+        Equal(true, AWPathLifecycleRules.ShouldKeepMovementOwnership(
+                AWPathPollKind.NoRequest, hasRetryContext: true,
+                retryPending: true, hasLiveActorTarget: true),
+            "a bounded failure retry retains movement ownership until its due time");
+        Equal(false, AWPathLifecycleRules.ShouldKeepMovementOwnership(
+                AWPathPollKind.NoRequest, hasRetryContext: true,
+                retryPending: true, hasLiveActorTarget: false),
+            "clearing the actor target cancels even a pending retry");
+        var formerRulerDeathGate = typeof(FormerRulerPosthumousRules)
+            .GetMethod("ShouldInspectDeathContext");
+        Equal(true, formerRulerDeathGate != null,
+            "former-ruler death processing exposes an in-memory gate before SQLite");
+        if (formerRulerDeathGate != null)
+        {
+            Equal(false, (bool)formerRulerDeathGate.Invoke(null,
+                    new object[] { false, -1L, -1L }),
+                "ordinary deaths skip the former-ruler reign query");
+            Equal(true, (bool)formerRulerDeathGate.Invoke(null,
+                    new object[] { true, -1L, -1L }),
+                "the former-king trait retains posthumous processing");
+            Equal(true, (bool)formerRulerDeathGate.Invoke(null,
+                    new object[] { false, 4L, -1L }),
+                "a former kingdom snapshot retains posthumous processing");
+            Equal(true, (bool)formerRulerDeathGate.Invoke(null,
+                    new object[] { false, -1L, 7L }),
+                "a captured-ruler snapshot retains posthumous processing");
+        }
+        string globalPathPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_GlobalPathfindingPatch.cs"));
+        Equal(true, globalPathPatch.Contains(
+                "if (!AWPathMovementBridge.HasOwnership(__instance)) return true;"),
+            "an actor without AW3 path state falls back to vanilla path recovery");
+        string runtimeDiagnostic = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "RuntimePerformanceDiagnostic.cs"));
+        Equal(true, runtimeDiagnostic.Contains("gc0_collections="),
+            "runtime samples expose generation-zero collections instead of misattributing GC pauses");
+        Equal(true, runtimeDiagnostic.Contains("managed_heap_delta_kb="),
+            "runtime samples expose managed heap movement for allocation diagnosis");
+        Equal(true, runtimeDiagnostic.Contains("path_smooth_slowest_actor="),
+            "path samples identify the exact actor owning a long smooth-movement call");
+        string schoolActivityQueue = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolActivityQueue.cs"));
+        Equal(false, schoolActivityQueue.Contains("school_activity_debate"),
+            "the broad debate wrapper cannot hide the slow create-stage diagnostic");
+        string schoolDebateActivity = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolDebateActivityService.cs"));
+        Equal(true, schoolDebateActivity.Contains("school_debate_create"),
+            "debate activity reports the exact creation stage that can touch storage");
+
+        Equal(false, VassalMapModeRules.ShouldUseMemberMeta(
+                hasActiveWar: true),
+            "a warring vassal keeps the root suzerain map group");
+        Equal(false, VassalMapModeRules.ShouldUseMemberMeta(
+                hasActiveWar: false),
+            "a peaceful vassal keeps the root suzerain map group");
+
+        string warPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_WarPatch.cs"));
+        Equal(4, warPatch.Split(
+                "VassalMapModeService.DirtyMapIfActive()",
+                StringSplitOptions.None).Length - 1,
+            "vassal map cache is invalidated on war start end join and leave");
+
+        Equal(true, VassalCaptureRules.ShouldRedirectToRootSuzerain(
+                capturerIsVassal: true,
+                formerOwnerIsSuzerain: false,
+                independenceWarAgainstSuzerain: false),
+            "ordinary vassal conquests are granted to the root suzerain");
+        Equal(false, VassalCaptureRules.ShouldRedirectToRootSuzerain(
+                capturerIsVassal: true,
+                formerOwnerIsSuzerain: true,
+                independenceWarAgainstSuzerain: true),
+            "independence-war captures are never redirected to the suzerain");
+        string occupationPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_CityOccupationAccelerationPatch.cs"));
+        Equal(true, occupationPatch.Contains(
+                "nameof(City.joinAnotherKingdom)") &&
+                    occupationPatch.Contains("if (!pCaptured) return;"),
+            "direct captured-city transfers also use the vassal recipient rule");
+
+        Equal(true, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(64f),
+            "a person below sixty-five may perform ordinary military service");
+        Equal(false, SoldierRetirementRules.IsOrdinaryServiceAgeAllowed(65f),
+            "sixty-five is the hard upper limit for ordinary military service");
+        Equal(true, SoldierRetirementRules.HasReachedHardRetirementAge(101f),
+            "centenarian ordinary soldiers must retire regardless of lifespan bonuses");
+        Equal(true, SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
+                temporaryService: true, age: 64f),
+            "temporary soldiers below the hard age remain mobilized until demobilization");
+        Equal(false, SoldierRetirementRules.ShouldDeferTemporaryServiceRetirement(
+                temporaryService: true, age: 65f),
+            "temporary service cannot exempt a soldier from the hard retirement age");
+        Equal(false, SoldierRetirementRules.CanConsiderForRetirement(
+                isSupportedActor: true, isRekt: false, isWarrior: true,
+                alreadyRetired: false, isGeneral: true, isFiefHolder: false,
+                isRoyalGuard: true, hardRetirement: true),
+            "generals and guards retain permanent military careers at any age");
+        Equal(false, SoldierRetirementRules.CanConsiderForRetirement(
+                isSupportedActor: true, isRekt: false, isWarrior: true,
+                alreadyRetired: false, isGeneral: true, isFiefHolder: false,
+                isRoyalGuard: false, hardRetirement: false),
+            "young generals retain their role exemption");
+
+        Equal(14, OfficialCareerRankRules.ApplyOfficeRankFloor(
+                currentRank: 7, officeGrade: 10,
+                hasNineRankSystem: true),
+            "top central office raises an existing low rank to principal third");
+        Equal(7, OfficialCareerRankRules.ApplyOfficeRankFloor(
+                currentRank: 7, officeGrade: 10,
+                hasNineRankSystem: false),
+            "office rank floors remain disabled before the Nine-rank system");
+        string careerService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "court",
+            "OfficialCareerService.cs"));
+        Equal(true, careerService.Contains(
+                "OfficialCareerStateService.ResolveAppointmentRankFast(") &&
+                    !careerService.Contains(
+                        "OfficialCareerRankRules.ApplyOfficeRankFloor("),
+            "appointment history records the earned entry rank instead of auto-promoting for the office");
+
+        string courtSummaryWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "CourtWindow.cs"));
+        Equal(true, courtSummaryWindow.Contains(
+                    "KingdomPolicyService.GetPoliticalPoints(") &&
+                    courtSummaryWindow.Contains("aw_inheritance_political_points"),
+            "the court summary exposes the realm's live political-point balance");
+
+        Equal(true, AWPathLifecycleRules.ShouldExpireAcceptedRequest(
+                startedAt: 10d, now: 40d),
+            "accepted path work with no progress is released after a bounded timeout");
+        string movementBridge = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "pathfinding",
+            "AWPathMovementBridge.cs"));
+        string normalizedMovementBridge = movementBridge.Replace("\r", "");
+        Equal(true, movementBridge.Contains("pActor.cancelAllBeh();"),
+            "terminal path failure restarts the actor AI like the licensed Cultiway implementation");
+        Equal(false, movementBridge.Contains("pActor.ai?.setTaskBehFinished();"),
+            "an unreachable destination is never reported as a completed behavior");
+        int completedPollIndex = normalizedMovementBridge.IndexOf(
+            "case AWPathPollKind.Completed:", StringComparison.Ordinal);
+        int boundedContinuationIndex = normalizedMovementBridge.IndexOf(
+            "if (TryContinueBoundedSegment(pActor)) return true;",
+            completedPollIndex, StringComparison.Ordinal);
+        int completedPathEndIndex = normalizedMovementBridge.IndexOf(
+            "AWArmyMarchService.OnPathEnded(pActor);", boundedContinuationIndex,
+            StringComparison.Ordinal);
+        int completedStopIndex = normalizedMovementBridge.IndexOf(
+            "pActor.setNotMoving();", completedPathEndIndex,
+            StringComparison.Ordinal);
+        Equal(true, completedPollIndex >= 0 &&
+                    boundedContinuationIndex > completedPollIndex &&
+                    completedPathEndIndex > boundedContinuationIndex &&
+                    completedStopIndex > completedPathEndIndex,
+            "a bounded segment continues before final path completion cleanup");
+        Equal(true, movementBridge.Contains(
+                "AWPathWorkClassRules.Classify("),
+            "all active military movement enters the operational path queue");
+
+        string occupationService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "CityOccupationAccelerationService.cs"));
+        Equal(false, occupationService.Contains("DefenderAbsentCycles") ||
+                     occupationService.Contains(
+                         "MinimumConfirmedDefenderAbsentCycles"),
+            "continuous occupation removes defender-free instant completion state");
+        Equal(true, occupationService.Contains(
+                    "WartimeGarrisonService.HasIndexedDefender"),
+            "continuous capture acceleration still stops while indexed defenders remain");
+
+        var neutralSurrender = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.Surrender,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 100, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10));
+        Equal(false, neutralSurrender.ExpectedAccepted,
+            "an undefeated equal kingdom cannot present surrender as guaranteed");
+        Equal(-100, neutralSurrender.Parts.Single(part =>
+                part.Key == "base").Value,
+            "surrender starts from a strict negative base willingness");
+        Equal(false, neutralSurrender.Parts.Any(part =>
+                part.Key == "base" && part.Value == 100),
+            "surrender no longer disguises an unconditional result as base willingness 100");
+        var losingSurrender = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.Surrender,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 50, responderPower: 150,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                requesterLosingWar: true));
+        Equal(true, losingSurrender.ExpectedAccepted,
+            "the winning responder accepts a genuine surrender");
+        var winningEnforcement = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.EnforceDemands,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 150, responderPower: 50,
+                sharedEnemy: false, responderLosingWar: true,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                requesterLosingWar: false));
+        Equal(true, winningEnforcement.ExpectedAccepted,
+            "a clear winner can enforce demands on the losing responder");
+
+        string garrisonService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "WartimeGarrisonService.cs"));
+        string garrisonBehaviour = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ai", "behaviours",
+            "actor", "BehWartimeGarrisonPatrol.cs"));
+        string garrisonContent = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "content",
+            "WartimeGarrisonContent.cs"));
+        Equal(true, garrisonService.Contains("PatrolCursorByActor"),
+            "each indexed garrison rotates through city patrol zones");
+        Equal(true, garrisonService.Contains("FindSafeCityRingTile") &&
+                    garrisonService.Contains(
+                        "if (!ShouldPatrol(pActor)) return null;") &&
+                    !garrisonService.Contains("return city?.getTile();"),
+            "a missing border zone falls back to a safe city ring rather than the city centre");
+        Equal(true, garrisonContent.Contains("EngageTaskId") &&
+                    garrisonContent.Contains("ReinforceTaskId") &&
+                    !garrisonContent.Contains(
+                        "BehCityActorGetRandomDangerZone"),
+            "garrison defence uses threat engagement and distributed reinforcement instead of the generic danger-zone centre task");
+        Equal(false, garrisonBehaviour.Contains("12f, 24f") ||
+                     garrisonContent.Contains("12f, 24f"),
+            "garrison patrol never stands still for twelve to twenty-four seconds");
+        Equal(true, garrisonService.Contains(
+                    "WarScoreService.IsCityFrozenControlledByEnemySide") &&
+                    garrisonService.Contains("FindNearbyThreat") &&
+                    garrisonService.Contains(
+                        "WartimeGarrisonRules.CanInspectThreatCandidate") &&
+                    garrisonService.Contains(
+                        "WartimeGarrisonRules.ShouldRunThreatProbe") &&
+                    garrisonService.Contains(
+                        "BoundaryRefreshNextAllowedByCity") &&
+                    garrisonService.Contains(
+                        "OriginChunkId") &&
+                    garrisonService.Contains("ResetThreatProbeCursor") &&
+                    garrisonService.Contains(
+                        "MapChunk originChunk") &&
+                    garrisonService.Contains("originChunk.neighbours_all") &&
+                    garrisonService.Contains("chunk.objects.units_all") &&
+                    garrisonService.Contains(
+                        "WartimeGarrisonRules.ShouldAdvanceThreatProbeChunk") &&
+                    !garrisonService.Contains("Finder.getUnitsFromChunk") &&
+                    !garrisonService.Contains("sequenceIndex"),
+            "garrison patrol integrates frozen-control defence and bounded nearby-threat probes");
+        Equal(false, garrisonService.Contains("hasNearbyThreat: false);"),
+            "garrison patrol never hard-codes nearby threats as absent");
+
+        string armyMapInformationService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "presentation",
+            "ArmyMapInformationService.cs"));
+        string armyMapInformationPatchPath = Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_ArmyMapInformationMinimapPatch.cs");
+        Equal(true, armyMapInformationService.Contains(
+                    "TryPopulateNativeFlagText") &&
+                    File.Exists(armyMapInformationPatchPath),
+            "army map information exposes the shared formatter for native flags");
+        string armyMapInformationPatch = File.Exists(armyMapInformationPatchPath)
+            ? File.ReadAllText(armyMapInformationPatchPath)
+            : string.Empty;
+        Equal(true, armyMapInformationPatch.Contains(
+                    "drawArmies") &&
+                    armyMapInformationPatch.Contains(
+                        "QuantumSpriteWithText") &&
+                    armyMapInformationPatch.Contains("getAll()") &&
+                    armyMapInformationPatch.Contains(
+                        "TryPopulateNativeFlagText") &&
+                    !armyMapInformationPatch.Contains("drawKings") &&
+                    !armyMapInformationPatch.Contains(".getNext()"),
+            "army information populates the original flag without creating a second marker");
+
+        string royalGuardService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "RoyalGuardService.cs"));
+        Equal(false, royalGuardService.Contains(
+                "LineageService.ArchiveActor(guard, pAlive: true);"),
+            "guard graphics maintenance never archives a living actor synchronously");
+
+        string chroniclePatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_ChroniclePatch.cs"));
+        Equal(true, chroniclePatch.Contains(
+                "WartimeGarrisonService.OnCityOwnerChanged("),
+            "city transfer dispatches bounded cleanup of the former garrison");
+
+        string enlistPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_EnlistPatch.cs"));
+        Equal(true, enlistPatch.Contains(
+                "SetProfession_MilitaryState_Postfix") &&
+                    enlistPatch.Contains("removeFromArmy()"),
+            "direct profession changes atomically remove stale army identity");
+
+        Equal(NobleRankRules.RankCountyViscount,
+            NobleRankRules.MaximumGrantableRank(0),
+            "a baron realm can grant at most county viscount");
+        Equal(NobleRankRules.RankCountyCount,
+            NobleRankRules.MaximumGrantableRank(1),
+            "a marquis realm can grant at most county count");
+        Equal(NobleRankRules.RankCountyMarquis,
+            NobleRankRules.MaximumGrantableRank(2),
+            "a duke realm can grant at most county marquis");
+        Equal(NobleRankRules.RankStateDuke,
+            NobleRankRules.MaximumGrantableRank(3),
+            "a king realm can grant at most duke");
+        Equal(NobleRankRules.RankPrince,
+            NobleRankRules.MaximumGrantableRank(4),
+            "an emperor realm can grant prince");
+        Equal(true, NobleRankRules.ShouldReuseGreatGrantAvailability(
+                currentYear: 52, cachedYear: 52,
+                currentRulerId: 17L, cachedRulerId: 17L),
+            "great royal grant availability is reused for one ruler-year");
+        Equal(false, NobleRankRules.ShouldReuseGreatGrantAvailability(
+                currentYear: 53, cachedYear: 52,
+                currentRulerId: 17L, cachedRulerId: 17L),
+            "great royal grant availability is recalculated in a new year");
+        Equal(false, NobleRankRules.ShouldReuseGreatGrantAvailability(
+                currentYear: 52, cachedYear: 52,
+                currentRulerId: 18L, cachedRulerId: 17L),
+            "great royal grant availability is recalculated for a new ruler");
+
+        Equal(560, InheritanceLawRules.DefaultWindowWidth,
+            "the inheritance window matches the court default width");
+        Equal(360, InheritanceLawRules.DefaultWindowHeight,
+            "the inheritance window matches the court default height");
+        string inheritanceWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "InheritanceLawWindow.cs"));
+        Equal(true, inheritanceWindow.Contains(
+                "new Vector2(420f, 280f)") &&
+                    inheritanceWindow.Contains(
+                        "new Vector2(900f, 650f)"),
+            "the inheritance window uses the shared wide-window size bounds");
+        Equal(true, inheritanceWindow.Contains(
+                "AW_LineageWindowIds.ShowKingdom(_kingdomId)") &&
+                    inheritanceWindow.Contains("aw_back_to_kingdom"),
+            "inheritance returns to the owning kingdom window");
+        Equal(true, inheritanceWindow.Contains(
+                "aw_inheritance_political_points") &&
+                    inheritanceWindow.Contains(
+                        "aw_inheritance_support_ranking") &&
+                    inheritanceWindow.Contains(
+                        "aw_inheritance_dispute_pending"),
+            "inheritance displays political points and decisive faction ranking");
+
+        Equal(true, VassalAIActionRules.ShouldAttemptAbsorption(
+                yearsAsVassal: 20, lordToVassalPowerRatio: 1.5f,
+                autonomy: 50, courtAggression: 0.5f),
+            "a long-serving ordinary weak vassal becomes a deterministic annexation target");
+        Equal(true, VassalAIActionRules.CanEvaluateRealm(
+                pValidCivilizedRealm: true, pHasKing: true, pCityCount: 1),
+            "vassal AI applies to every valid civilized realm, independent of Xia policy access");
+        Equal(false, VassalAIActionRules.CanEvaluateRealm(
+                pValidCivilizedRealm: true, pHasKing: true, pCityCount: 0),
+            "a realm without cities cannot run vassal AI");
+        Equal(false, VassalAnnexDecisionRules.CanStart(
+                pSuzerainValid: true, pTargetDirectVassal: true,
+                pSuzerainAtWar: false, pTargetAtWar: false,
+                pActiveSpyNetwork: false, out string missingNetworkReason),
+            "a direct vassal cannot be annexed without an active spy network");
+        Equal("spy_network_required", missingNetworkReason,
+            "annexation reports the missing network prerequisite");
+        Equal(true, VassalAnnexDecisionRules.CanStart(
+                pSuzerainValid: true, pTargetDirectVassal: true,
+                pSuzerainAtWar: false, pTargetAtWar: false,
+                pActiveSpyNetwork: true, out _),
+            "an active spy network unlocks peaceful vassal annexation");
+        Equal("Pause", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: true,
+                pTargetDirectVassal: true,
+                pIndependenceSuspended: true,
+                pProgress: 112f, pCost: 120f),
+            "an active independence war freezes annexation at 112/120");
+        Equal("Pause", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: true,
+                pTargetDirectVassal: false,
+                pIndependenceSuspended: true,
+                pProgress: 112f, pCost: 120f),
+            "temporary relation visibility cannot cancel a suspended annexation");
+        Equal("Advance", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: true,
+                pTargetDirectVassal: true,
+                pIndependenceSuspended: false,
+                pProgress: 112f, pCost: 120f),
+            "a defeated independence revolt resumes the frozen annexation");
+        Equal("Complete", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: true,
+                pTargetDirectVassal: true,
+                pIndependenceSuspended: false,
+                pProgress: 120f, pCost: 120f),
+            "a resumed annexation completes immediately at its threshold");
+        Equal("Cancel", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: true,
+                pTargetDirectVassal: false,
+                pIndependenceSuspended: false,
+                pProgress: 112f, pCost: 120f),
+            "successful independence permanently cancels annexation");
+        Equal("Cancel", ResolveAnnexProgressState(
+                pSuzerainValid: true, pTargetValid: false,
+                pTargetDirectVassal: false,
+                pIndependenceSuspended: false,
+                pProgress: 112f, pCost: 120f),
+            "a destroyed annexation target cancels the transaction");
+        Equal(true, DecisionQueueRules.IsSameTargetedDecision(
+                "aw_decision_absorb_vassal", 12,
+                "aw_decision_absorb_vassal", 12),
+            "a queued annexation is idempotent for the same vassal");
+
+        string policyService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "KingdomPolicyService.cs"));
+        string policyStateTable = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "KingdomPolicyStateTableItem.cs"));
+        Equal(true, policyStateTable.Contains("decision_target_kingdom_id") &&
+                    policyStateTable.Contains("decision_target_kingdom_name"),
+            "the policy snapshot schema persists the frozen targeted-decision kingdom");
+        Equal(true, policyService.Contains(
+                "ColumnVal.Create(\"DECISION_TARGET_KINGDOM_ID\"") &&
+                    policyService.Contains(
+                        "snapshot.decision_target_kingdom_id"),
+            "policy snapshot reads and writes the frozen targeted-decision kingdom");
+        Equal(false, policyService.Contains(
+                "GetDecisionTargetKingdom(pKingdom) ??"),
+            "a completed annexation never silently switches to another vassal");
+        string annexRules = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalAnnexDecisionRules.cs"));
+        Equal(true, annexRules.Contains("CanComplete"),
+            "annexation completion honors authorization committed when the decision started");
+        string vassalServiceSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        Equal(true, vassalServiceSource.Contains("HasCommittedCityTransfer"),
+            "annexation verifies all target cities transferred before closing the vassal relation");
+        Equal(true, vassalServiceSource.Contains(
+                "GetAnnexDecisionProgressState") &&
+                    vassalServiceSource.Contains(
+                        "HasActiveIndependenceSuspension"),
+            "annexation runtime state is derived from the frozen target's independence marker");
+        Equal(true, vassalServiceSource.Contains("GetProjectedStateName"),
+            "live vassal and suzerain labels use the same state-name projection as the map");
+        string diplomacyWindowSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "DiplomacyConversationWindow.cs"));
+        Equal(true, diplomacyWindowSource.Contains("GetProjectedStateName"),
+            "live diplomacy country labels use the same state-name projection as the map");
+        Equal(false, policyService.Contains(
+                "foreach (Actor unit in pKingdom.getUnits())"),
+            "annual policy point generation never scans the whole population");
+        Equal(true, policyService.Contains("getPopulationTotal()"),
+            "annual policy point generation uses the kingdom population cache");
+        string policyAi = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "KingdomPolicyAI.cs"));
+        Equal(false, policyAi.Contains(
+                "foreach (Actor unit in pKingdom.getUnits())"),
+            "policy AI scoring never rescans the realm population per candidate");
+        Equal(true, policyAi.Contains("getPopulationTotal()"),
+            "policy AI scoring uses the kingdom population cache");
+        int decisionEffectIndex = policyService.IndexOf(
+            "effectApplied = ApplyEffect(pKingdom, pDef);",
+            StringComparison.Ordinal);
+        int completionCommitIndex = policyService.IndexOf(
+            "AddCompleted(pKingdom, pDef.Kind, pDef.Id);",
+            StringComparison.Ordinal);
+        Equal(true, decisionEffectIndex >= 0 &&
+                    completionCommitIndex > decisionEffectIndex,
+            "fallible decision effects execute before completion state is committed");
+        Equal(true, policyService.Contains(
+                "ReleaseFailedDecision(pKingdom);"),
+            "a fully researched decision releases its slot when its live effect can no longer commit");
+        Equal(true, policyService.Contains(
+                "case \"aw_decision_absorb_vassal\":") &&
+                    policyService.Contains(
+                        "CanCompleteAbsorbVassalByDecision("),
+            "vassal annexation commits against its frozen authorized target");
+        Equal(true, policyService.Contains(
+                "GetAnnexDecisionProgressState(") &&
+                    policyService.Contains(
+                        "GetFrozenAnnexDecisionTargetKingdom(pKingdom)") &&
+                    policyService.Contains(
+                        "VassalAnnexProgressState.Pause") &&
+                    policyService.Contains(
+                        "VassalAnnexProgressState.Cancel"),
+            "policy advancement uses the indexed frozen target, pauses temporary independence, and cancels only permanent invalidation");
+        string vassalService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "VassalService.cs"));
+        Equal(true, vassalService.Contains(
+                "if (!CanCompleteAbsorbVassalByDecision(pSuzerain, pVassal,"),
+            "the core annexation method honors authorization committed at decision start");
+        Equal(true, VassalAnnexDecisionRules.CanComplete(
+                pSuzerainValid: true, pTargetDirectVassal: true, out _),
+            "an authorized annexation remains completable after its spy network expires");
+        Equal(false, DecisionQueueRules.IsSameTargetedDecision(
+                "aw_decision_absorb_vassal", 12,
+                "aw_decision_absorb_vassal", 13),
+            "annexation plans for different vassals remain distinct");
+        Equal(false, VassalAIActionRules.ShouldAttemptAbsorption(
+                yearsAsVassal: 8, lordToVassalPowerRatio: 3f,
+                autonomy: 20, courtAggression: 1f),
+            "recently established vassalage cannot be immediately annexed");
+        Equal(false, VassalAIActionRules.ShouldAttemptAbsorption(
+                yearsAsVassal: 40, lordToVassalPowerRatio: 1.1f,
+                autonomy: 20, courtAggression: 1f),
+            "a vassal near military parity resists administrative annexation");
+        Equal(false, KingdomDecisionPriorityRules.ShouldApplyGeneralCooldown(
+                "aw_decision_title_upgrade"),
+            "title promotion is not starved by unrelated recent decisions");
+        Equal(false, KingdomDecisionPriorityRules.ShouldUseGeneralDecisionSlot(
+                "aw_decision_fabricate_core"),
+            "dedicated core fabrication cannot starve the general AI decision slot");
+        Equal(true, KingdomDecisionPriorityRules.ShouldUseGeneralDecisionSlot(
+                "aw_decision_title_upgrade"),
+            "title promotion remains eligible for the general AI decision slot");
+        Equal(true, KingdomDecisionPriorityRules.ShouldApplyGeneralCooldown(
+                "aw_decision_change_capital"),
+            "ordinary decisions retain the shared AI cooldown");
+        Equal(true, KingdomDecisionPriorityRules.ShouldReleaseFailedCompletion(
+                isDecision: true, effectApplied: false),
+            "a failed decision completion releases the single decision slot");
+        Equal(false, KingdomDecisionPriorityRules.ShouldReleaseFailedCompletion(
+                isDecision: false, effectApplied: false),
+            "research nodes do not use the decision failure transition");
+        Equal(2, KingdomTitleProgressionRules.MinimumBaseCityCapacity,
+            "a new Xia realm can reach the first title promotion threshold");
+        Equal(false, KingdomTitleProgressionRules.
+                MeetsTerritoryRequirement(0, 1, 300),
+            "a one-city barony remains below the promotion threshold");
+        Equal(true, KingdomTitleProgressionRules.
+                MeetsTerritoryRequirement(0, 2, 0),
+            "a two-city barony may promote to marquis");
+        Equal(true, CityEconomyUpdateRules.ShouldUseContributionCache(
+                pHasCache: true, pCachedYear: 72, pCurrentYear: 72),
+            "same-world current-year economy contributions may be reused");
+        Equal(false, CityEconomyUpdateRules.ShouldUseContributionCache(
+                pHasCache: true, pCachedYear: 71, pCurrentYear: 72),
+            "stale economy contributions cannot drive AI decisions");
+
+        Equal(49, HistoricalSchoolLectureRules.PopulationPriority(
+                livingMemberCount: 1),
+            "a school reduced to its master receives maximum lecture priority");
+        Equal(0, HistoricalSchoolLectureRules.PopulationPriority(
+                livingMemberCount: 50),
+            "a sustainable school no longer consumes emergency priority");
+        Equal(true, HistoricalSchoolActivityQueueRules.
+                ShouldDiscardReadyPersistence(activityStillValid: false),
+            "a ready lecture that became invalid is closed instead of blocking saves forever");
+        Equal(false, HistoricalSchoolActivityQueueRules.
+                ShouldDiscardReadyPersistence(activityStillValid: true),
+            "a valid ready lecture may retry temporary write-buffer pressure");
+        Equal(true, HistoricalSchoolActivityQueueRules.
+                ShouldRetryExpiredLecture(retryCount: 0,
+                    activityStillValid: true),
+            "one failed lecture journey receives a bounded retry");
+        Equal(false, HistoricalSchoolActivityQueueRules.
+                ShouldRetryExpiredLecture(retryCount: 1,
+                    activityStillValid: true),
+            "lecture journey retries cannot grow without bound");
+        Equal(true, SchoolAcademyConstructionRules.ShouldRequestForLecture(
+                cityValid: true, academyUsable: false,
+                academyBuildingPresent: false),
+            "a teacher in a city without an academy requests construction before lecturing");
+        Equal(false, SchoolAcademyConstructionRules.ShouldRequestForLecture(
+                cityValid: true, academyUsable: false,
+                academyBuildingPresent: true),
+            "an academy already under construction is not requested twice");
+
+        string schoolActions = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolActionService.cs"));
+        Equal(true, schoolActions.Contains(
+                "HistoricalSchoolAcademyConstructionService.TryStart(residence)"),
+            "lecture planning seeds an academy after teachers settle in a new city");
+
+        Equal(DiplomacySelectionIndicator.Neutral,
+            DiplomacyActionExpansionRules.ResolveSelectionIndicator(
+                available: true, selected: false,
+                requiresSecondarySelection: true,
+                expectedAccepted: false),
+            "unselected royal marriage displays a neutral marker instead of a rejection");
+        Equal(DiplomacySelectionIndicator.Accept,
+            DiplomacyActionExpansionRules.ResolveSelectionIndicator(
+                available: true, selected: true,
+                requiresSecondarySelection: true,
+                expectedAccepted: true),
+            "a selected valid marriage displays acceptance");
+        Equal(false, DiplomacyActionExpansionRules.
+                ShouldUseAnnexationOperation(sourceIsDirectSuzerain: true,
+                    hasActiveSpyNetwork: false),
+            "a direct vassal without a network still exposes network building");
+        Equal(true, DiplomacyActionExpansionRules.
+                ShouldUseAnnexationOperation(sourceIsDirectSuzerain: true,
+                    hasActiveSpyNetwork: true),
+            "an active network switches the vassal action to annexation planning");
+
+        string chronicle = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "ChronicleEvents.cs"));
+        Equal(true, chronicle.Contains(
+                "HistoricalFigureService.GetPreferredKingdomName(pRuler)"),
+            "historical reserved state names enter the initial binding call");
+        Equal(true, chronicle.Contains(
+                "StateNameService.ProjectCommittedStateName(pKingdom, initial)"),
+            "historical reserved state names are projected at first accession");
+        Equal(false, StateNameRules.ShouldSkipInitialStateBinding(
+                hasCurrentDynasty: true,
+                hasHistoricalPreferredName: true),
+            "an attested historical ruler may apply the reserved state name over an existing dynasty");
+        Equal(true, StateNameRules.ShouldSkipInitialStateBinding(
+                hasCurrentDynasty: true,
+                hasHistoricalPreferredName: false),
+            "ordinary accessions never bypass the new-dynasty empire gate");
+
+        string rosterNode = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "items",
+            "SchoolRosterNodeView.cs"));
+        Equal(true, rosterNode.Contains(
+                "if (prefab == null)\n            {\n                _portraitAttemptedForBind = false;"),
+            "school portraits retry when the shared live-avatar prefab is not ready");
+        Equal(true, rosterNode.Contains("return EnsurePortrait(actor);"),
+            "the roster refresh notices a failed portrait bind");
+
+        string nameProtect = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_NameProtectPatch.cs"));
+        Equal(true, nameProtect.Contains("TryGetIndexedDefinition(") &&
+                    nameProtect.Contains("out var definition"),
+            "the global Actor.getName hook uses the in-memory master index");
+        Equal(false, nameProtect.Contains(
+                "HistoricalSchoolDescentService.IsCanonicalMaster(pActor)"),
+            "the global Actor.getName hook never reads persistent master data for ordinary actors");
+
+        string dispositionWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "CourtDispositionWindow.cs"));
+        Equal(true, dispositionWindow.Contains("EnsurePortraits();"),
+            "court disposition retries portrait creation during refresh");
+        Equal(true, dispositionWindow.Contains(
+                "if (_rulerPortrait == null)"),
+            "court disposition retries a missing ruler portrait prefab");
+        Equal(true, dispositionWindow.Contains(
+                "if (_targetPortrait == null)"),
+            "court disposition retries a missing target portrait prefab");
+        Equal(true, dispositionWindow.Contains("private void Update()") &&
+                    dispositionWindow.Contains("EnsurePortraits();"),
+            "court disposition keeps retrying lazy live portraits while visible");
+
+        string courtNode = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "items",
+            "CourtActorNodeView.cs"));
+        Equal(true, courtNode.Contains("public bool TryEnsurePortrait()") &&
+                    courtNode.Contains("EnsurePortrait(actor)"),
+            "court cards expose bounded lazy live-portrait retries");
+        string courtWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "CourtWindow.cs"));
+        Equal(true, courtWindow.Contains(
+                "RetryMissingPortraits(PortraitsPerFrame)"),
+            "the active court window retries only a bounded portrait batch");
+
+        Equal(true, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: true, cityIndexStable: true,
+                liveCityCount: 0),
+            "a stable zero-city civilization is removed without waiting for every survivor to die");
+        Equal(false, KingdomExtinctionRules.ShouldForceImmediateRemoval(
+                isCivilization: true, cityIndexStable: false,
+                liveCityCount: 0),
+            "a dirty city index cannot trigger premature realm removal");
+        Equal(true, KingdomExtinctionRules.
+                ShouldDemobilizeFallenRealmWarrior(
+                    recordedForFallenRealm: true,
+                    stillInFallenRealm: false,
+                    currentRealmIsCivilized: false),
+            "a temporary soldier moved to the wild realm after extinction is demobilized");
+        Equal(false, KingdomExtinctionRules.
+                ShouldDemobilizeFallenRealmWarrior(
+                    recordedForFallenRealm: true,
+                    stillInFallenRealm: false,
+                    currentRealmIsCivilized: true),
+            "a former temporary soldier already naturalized by another civilization keeps its new military status");
+
+        string mandateService = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "MandateService.cs"));
+        int mandateResetStart = mandateService.IndexOf(
+            "public static void RebuildRuntimeMarkerProjection()",
+            StringComparison.Ordinal);
+        int mandateResetEnd = mandateService.IndexOf(
+            "public static void RefreshKingdomNameProjection(",
+            mandateResetStart, StringComparison.Ordinal);
+        string mandateReset = mandateResetStart >= 0 &&
+                              mandateResetEnd > mandateResetStart
+            ? mandateService.Substring(mandateResetStart,
+                mandateResetEnd - mandateResetStart)
+            : "";
+        Equal(true, mandateReset.Contains(
+                "_autoCandidateYear = int.MinValue;") &&
+            mandateReset.Contains("_autoCandidateKingdomCount = -1;") &&
+            mandateReset.Contains("_autoCandidateKingdomId = -1L;") &&
+            mandateReset.Contains(
+                "_pendingFallenMandateKingdomId = -1L;") &&
+            mandateReset.Contains(
+                "_pendingMandateConquerorKingdomId = -1L;") &&
+            mandateReset.Contains("MandateRebelService.ClearRuntime();"),
+            "switching worlds clears every mandate candidate and rebel cache");
+
+        string restorationPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_RestorationPatch.cs"));
+        int worldYearHook = restorationPatch.IndexOf(
+            "[HarmonyPatch(typeof(MapBox), \"updateObjectAge\")]",
+            StringComparison.Ordinal);
+        string restorationHookPrefix = worldYearHook > 0
+            ? restorationPatch.Substring(Math.Max(0, worldYearHook - 180),
+                Math.Min(180, worldYearHook))
+            : "";
+        Equal(true, restorationHookPrefix.Contains("[HarmonyPrefix]") &&
+            !restorationHookPrefix.Contains("[HarmonyPostfix]"),
+            "autonomous restoration gets the vacant-year slot before ordinary mandate AI");
+        string schoolRuntime = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "schools",
+            "HistoricalSchoolRuntime.cs"));
+        Equal(true, schoolRuntime.Contains(
+                "HistoricalSchoolDiagnostics.ClearRuntime();"),
+            "school world reset also resets benchmark counters");
+
+        string diplomacyWindow = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "ui", "windows",
+            "DiplomacyConversationWindow.cs"));
+        Equal(true, diplomacyWindow.Contains(
+                "IsAnnexationTarget(requester, responder)"),
+            "the conversation resolves the selected vassal relation before sending espionage");
+        Equal(true, diplomacyWindow.Contains(
+                "AW3CommandRequest.StartTargetedDecision("),
+            "vassal annexation enters the durable targeted decision pipeline");
+        Equal(true, diplomacyWindow.Contains(
+                "DiplomacyActionExpansionRules") &&
+            diplomacyWindow.Contains(".ResolveSelectionIndicator("),
+            "secondary actions use explicit neutral selected and rejected visual states");
+        Equal(false, diplomacyWindow.Contains(
+                "FamilyTreeNodeView.BuildArchivedPortrait(\n                pActorId)"),
+            "live diplomatic marriage candidates do not depend on archive portraits");
+        Equal(true, diplomacyWindow.Contains("UiUnitAvatarElement Avatar") &&
+                    diplomacyWindow.Contains("pSlot.Avatar.show(actor)"),
+            "diplomatic marriage candidates bind their real live portraits");
+    }
+}

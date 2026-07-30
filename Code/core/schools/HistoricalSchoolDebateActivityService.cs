@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -120,9 +121,21 @@ namespace AncientWarfare3.core.schools
                             actor.ActorId.ToString(
                                 System.Globalization.CultureInfo.InvariantCulture)))
                         availableActors.Add(actor);
-                if (!HistoricalSchoolDebateService.TryCreateQueuedDebate(request.CityId,
-                        request.Year, availableActors,
-                        out HistoricalSchoolDebateActivity activity))
+                long createDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                bool created;
+                HistoricalSchoolDebateActivity activity;
+                try
+                {
+                    created = HistoricalSchoolDebateService.TryCreateQueuedDebate(
+                        request.CityId, request.Year, availableActors,
+                        out activity);
+                }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "school_debate_create", createDiagnostic);
+                }
+                if (!created)
                 {
                     DecrementYearCount(request.Year);
                     return true;
@@ -289,6 +302,12 @@ namespace AncientWarfare3.core.schools
         private static bool QueueReadyDebate(HistoricalSchoolDebateActivity pActivity)
         {
             if (pActivity == null || pActivity.PersistenceQueued) return pActivity != null;
+            if (HistoricalSchoolActivityQueueRules.ShouldDiscardReadyPersistence(
+                    HistoricalSchoolDebateService.IsDebateCommitValid(pActivity)))
+            {
+                Finish(pActivity);
+                return true;
+            }
             if (HistoricalSchoolDebateService.TryQueueDebateCommit(pActivity))
             {
                 pActivity.PersistenceQueued = true;

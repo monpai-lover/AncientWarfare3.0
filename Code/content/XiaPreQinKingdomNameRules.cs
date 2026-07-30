@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.content
 {
@@ -24,11 +25,19 @@ namespace AncientWarfare3.content
             "箕", "蓐", "向", "谷", "祝", "聂", "叶"
         };
 
+        private static readonly HashSet<string> KnownNames =
+            new HashSet<string>(Names, StringComparer.Ordinal);
+
         public static string Csv { get; } = string.Join(",", Names);
 
         public static string[] All()
         {
             return (string[])Names.Clone();
+        }
+
+        public static bool IsKnown(string pName)
+        {
+            return !string.IsNullOrEmpty(pName) && KnownNames.Contains(pName);
         }
 
         public static string Pick(long pSeed)

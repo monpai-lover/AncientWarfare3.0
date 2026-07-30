@@ -1,0 +1,140 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceWaitingPoolSqlTests
+{
+    public static void Run()
+    {
+        OnlyLatestAvailableHostQualifiedActorsEnterTheWaitingPool();
+        QueryFailureIsDistinctFromAnEmptyWaitingPool();
+    }
+
+    private static void OnlyLatestAvailableHostQualifiedActorsEnterTheWaitingPool()
+    {
+        using var db = OpenDatabase();
+        Execute(db, "INSERT INTO Session VALUES " +
+            "(1,7,100,'completed'),(2,7,101,'completed')," +
+            "(3,7,102,'running')");
+
+        InsertArchive(db, 1, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 2, alive: 1, sex: 0, "common_lineage", 99);
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(1,1,7,1,'jinshi'),(2,2,7,1,'gongshi')," +
+            "(3,2,7,1,'gongshi')");
+        Execute(db, "INSERT INTO Affiliation VALUES " +
+            "(2,99,70,'Resident',-1)");
+
+        InsertArchive(db, 3, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 4, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 5, alive: 0, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 6, alive: 1, sex: 1, "common_lineage", 7);
+        InsertArchive(db, 7, alive: 1, sex: 0, "slave_lineage", 7);
+        InsertArchive(db, 8, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 9, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 10, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 11, alive: 1, sex: 0, "common_lineage", 99);
+        InsertArchive(db, 12, alive: 1, sex: 0, "common_lineage", 99);
+        InsertArchive(db, 13, alive: 1, sex: 0, "common_lineage", 99);
+        InsertArchive(db, 14, alive: 1, sex: 0, "common_lineage", 7);
+        InsertArchive(db, 15, alive: 1, sex: 0, "common_lineage", 99);
+
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(10,3,7,1,'juren')," +
+            "(11,4,7,1,'jinshi'),(12,4,7,2,'none')," +
+            "(13,5,7,1,'jinshi'),(14,6,7,1,'jinshi')," +
+            "(15,7,7,1,'jinshi'),(16,8,7,1,'jinshi')," +
+            "(17,9,7,1,'jinshi'),(18,10,7,1,'jinshi')," +
+            "(19,11,7,1,'jinshi'),(20,12,7,1,'jinshi')," +
+            "(21,13,7,1,'jinshi'),(22,14,7,3,'jinshi')," +
+            "(23,15,7,1,'jinshi')");
+        Execute(db, "INSERT INTO Officer VALUES " +
+            "(8,'central',1),(9,'city',1),(10,'guest',1)");
+        Execute(db, "INSERT INTO Affiliation VALUES " +
+            "(11,99,999,'Resident',-1)," +
+            "(12,99,70,'Serving',7)," +
+            "(13,99,70,'Resident',7)," +
+            "(15,7,70,'AtHome',-1)");
+
+        True(CivilServiceWaitingPoolQuery.TryLoadActorIds(db,
+                "Candidate", "Session", "Archive", "Officer",
+                "Affiliation", hostKingdomId: 7L,
+                hostCityIds: new long[] { 70L, 71L }, pLimit: 32,
+                out IReadOnlyList<long> waiting),
+            "a valid waiting-pool query succeeds");
+        Equal("1,2,15", string.Join(",", waiting),
+            "only domestic and host-qualified foreign residents remain");
+    }
+
+    private static void QueryFailureIsDistinctFromAnEmptyWaitingPool()
+    {
+        using var db = OpenDatabase();
+        True(CivilServiceWaitingPoolQuery.TryLoadActorIds(db,
+                "Candidate", "Session", "Archive", "Officer",
+                "Affiliation", hostKingdomId: 7L,
+                hostCityIds: Array.Empty<long>(), pLimit: 32,
+                out IReadOnlyList<long> empty),
+            "a valid zero-result query succeeds");
+        Equal(0, empty.Count, "a valid zero-result query returns no actors");
+
+        False(CivilServiceWaitingPoolQuery.TryLoadActorIds(db,
+                "Missing;DROP TABLE Candidate", "Session", "Archive",
+                "Officer", "Affiliation", hostKingdomId: 7L,
+                hostCityIds: Array.Empty<long>(), pLimit: 32,
+                out IReadOnlyList<long> failed),
+            "an invalid table identifier fails without executing SQL");
+        Equal(0, failed.Count, "a failed query exposes no partial result");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Candidate (ID INTEGER,ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,KINGDOM_ID INTEGER," +
+            "CYCLE_YEAR INTEGER,STATUS TEXT)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER," +
+            "SEX INTEGER,STATUS TEXT,KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER,LAYER TEXT," +
+            "ACTIVE INTEGER)");
+        Execute(db, "CREATE TABLE Affiliation (ACTOR_ID INTEGER," +
+            "HOME_KINGDOM_ID INTEGER,RESIDENCE_CITY_ID INTEGER," +
+            "LIFECYCLE_STATE TEXT,SERVICE_KINGDOM_ID INTEGER)");
+        return db;
+    }
+
+    private static void InsertArchive(SQLiteConnection pDb, long pActorId,
+        int alive, int sex, string pStatus, long pKingdomId)
+    {
+        Execute(pDb, "INSERT INTO Archive VALUES (" + pActorId + "," +
+            alive + "," + sex + ",'" + pStatus + "'," + pKingdomId + ")");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pMessage + ": expected true");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pMessage + ": expected false");
+    }
+}

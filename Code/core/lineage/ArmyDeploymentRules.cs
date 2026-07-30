@@ -3,7 +3,7 @@ namespace AncientWarfare3.core.lineage
     public static class ArmyDeploymentRules
     {
         public const float OrdinaryReadyRatio = 0.70f;
-        public const int MaxCitiesDiscoveredPerWorkItem = 8;
+        public const int MaxCitiesDiscoveredPerWorkItem = 1;
         public const int MaxArmiesReviewedPerWorkItem = 8;
 
         public static bool IsOrdinaryArmyReady(int pLivingWarriors, int pWarriorSlots)
@@ -17,6 +17,54 @@ namespace AncientWarfare3.core.lineage
         {
             if (!hasLivingWarriors || isRoyalGuard) return false;
             return !ready || !arrived;
+        }
+
+        public static bool ShouldCreateSideProjection(bool actorIsAttacker,
+            bool actorIsDefender)
+        {
+            return actorIsAttacker != actorIsDefender;
+        }
+
+        public static bool BlocksDeclarationGateForSide(bool isDefenderSide,
+            bool hasLivingWarriors, bool isRoyalGuard, bool ready,
+            bool arrived)
+        {
+            return BlocksDeclarationGate(
+                hasLivingWarriors, isRoyalGuard, ready, arrived);
+        }
+
+        public static bool AreBothSidesReady(bool attackerBypassed,
+            bool attackerReady, bool defenderBypassed,
+            bool defenderReady)
+        {
+            return (attackerBypassed || attackerReady) &&
+                   (defenderBypassed || defenderReady);
+        }
+
+        public static bool CanUseDeclarationProjection(
+            string requestedSignature, string primarySignature,
+            bool projectionExists, bool projectionClosing)
+        {
+            return projectionExists && !projectionClosing &&
+                   !string.IsNullOrEmpty(requestedSignature) &&
+                   string.Equals(requestedSignature, primarySignature,
+                       System.StringComparison.Ordinal);
+        }
+
+        public static bool IsFacingFrontierTile(bool ownedBySide,
+            bool ground, bool liquid, bool lava, bool blocked,
+            bool touchesOpponent)
+        {
+            return ownedBySide && ground && !liquid && !lava && !blocked &&
+                   touchesOpponent;
+        }
+
+        public static int StableFrontierIndex(long armyId,
+            int frontierCount)
+        {
+            if (frontierCount <= 0) return -1;
+            return (int)(unchecked((ulong)armyId) %
+                         (ulong)frontierCount);
         }
 
         public static bool ShouldResetAssignment(string currentSignature, string nextSignature,
@@ -33,6 +81,41 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldMarkArmyArrived(bool actorArrived, bool actorIsCaptain)
         {
             return actorArrived && actorIsCaptain;
+        }
+
+        public static bool ShouldUseFrontierAnchor(bool captainAtTarget,
+            bool targetValid)
+        {
+            return captainAtTarget && targetValid;
+        }
+
+        public static bool ShouldUseFormationQuorum(ArmyRtsMode pMode)
+        {
+            return pMode == ArmyRtsMode.On;
+        }
+
+        public static bool ShouldUseFormationFollowerJob(
+            ArmyRtsMode pMode, bool actorIsCaptain)
+        {
+            return !actorIsCaptain && ShouldUseFormationQuorum(pMode);
+        }
+
+        public static bool ShouldAssignDeploymentActor(ArmyRtsMode pMode,
+            bool actorIsCaptain)
+        {
+            return actorIsCaptain || ShouldUseFormationQuorum(pMode);
+        }
+
+        public static bool CanBeginDeployment(bool canSendArmy,
+            bool discoveryComplete)
+        {
+            return canSendArmy && discoveryComplete;
+        }
+
+        public static bool ShouldRestoreLegacyJob(bool restoreRequested,
+            bool ownedByLiveRts)
+        {
+            return restoreRequested && !ownedByLiveRts;
         }
 
         public static int CompareNoticePriority(

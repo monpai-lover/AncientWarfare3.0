@@ -174,11 +174,25 @@ namespace AncientWarfare3.core.lineage
         public double start_time;
         public double end_time = -1;
         public string year_prefix_snapshot;
+        public string state_name_snapshot = "";
+        public int title_rank = -1;
+        public string given_name = "";
+        public string formal_era_stem = "";
+        public System.Collections.Generic.List<EraChronologyPeriod>
+            era_periods = new System.Collections.Generic.List<EraChronologyPeriod>();
         public bool   is_city_period;
         public string owner_name = "";      // 城市史:该时期城市所属国名
         public string owner_color = "";
         public string period_color = "";
         public System.Collections.Generic.List<HistoryEntry> events = new System.Collections.Generic.List<HistoryEntry>();
+    }
+
+    internal sealed class EraChronologyPeriod
+    {
+        public string era_stem = "";
+        public string era_color = "";
+        public double start_time;
+        public double end_time = -1d;
     }
 
     /// <summary>编年史列表统一行:或是朝代段头(可折叠),或是一条事件。国家史用段头分组;人物/城市史只用事件行。</summary>
@@ -193,6 +207,8 @@ namespace AncientWarfare3.core.lineage
         public int    reign_index = -1;
         public int    dynasty_index = -1;
         public long   action_actor_id = -1;
+        public long   action_kingdom_id = -1;
+        public bool   action_enabled = true;
         public string action_kind = "";
         public string filter_key = "";
         public string target_type = "";
@@ -236,6 +252,7 @@ namespace AncientWarfare3.core.lineage
     {
         public long id;
         public string display_name;
+        public string asset_id = "";
         public int sex;
         public bool is_alive;
         public string status;
@@ -263,6 +280,7 @@ namespace AncientWarfare3.core.lineage
         public int    head;          // 头像数据(可选,用于自绘头像)
         public int    skin;
         public int    skin_set;
+        public long   subspecies_id = -1;
         public int    age_overgrowth = 1;
         public int    phenotype_index;   // 死者画像重建用真实肤色(活人从 actor 实时取)
         public int    phenotype_shade;
@@ -368,6 +386,7 @@ namespace AncientWarfare3.core.lineage
 
     internal sealed class MandateReignView
     {
+        public long reign_id = -1;
         public bool has_king;
         public long king_actor_id = -1;
         public string king_name = "";
@@ -377,6 +396,8 @@ namespace AncientWarfare3.core.lineage
         public string year_prefix_snapshot = "";
         public double start_time = -1;
         public double end_time = -1;
+        public readonly List<MandateEraHistoryRecord> eras =
+            new List<MandateEraHistoryRecord>();
         public readonly List<MandateHistoryEvent> events = new List<MandateHistoryEvent>();
     }
 

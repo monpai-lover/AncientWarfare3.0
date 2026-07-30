@@ -16,14 +16,19 @@ namespace AncientWarfare3.core.lineage
     {
         public Actor Actor;
         public int Merit;
+        public int Loyalty = 50;
         public int AppointmentYear = -1;
     }
 
     internal static class GeneralService
     {
         private const int REFRESH_INTERVAL_YEARS = 3;
-        private const int FIEF_INTERVAL_YEARS = 8;
         private const int RISK_INTERVAL_YEARS = 5;
+
+        private static readonly CourtRepairCursorStore<int>
+            DetachedProjectionRepairCursorByKingdom = new();
+        private static long _detachedProjectionRepairDatabaseEpoch = -1L;
+        private static object _detachedProjectionRepairWorld;
 
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
@@ -47,16 +52,32 @@ namespace AncientWarfare3.core.lineage
                 RefreshGenerals(pKingdom);
             }
 
-            if (YearsSince(pKingdom, LineageKeys.GENERAL_LAST_FIEF_YEAR, -99999) >= FIEF_INTERVAL_YEARS)
-            {
-                pKingdom.data.set(LineageKeys.GENERAL_LAST_FIEF_YEAR, year);
-                TryGrantFiefs(pKingdom);
-            }
-
             if (YearsSince(pKingdom, LineageKeys.GENERAL_LAST_RISK_YEAR, -99999) >= RISK_INTERVAL_YEARS)
             {
                 pKingdom.data.set(LineageKeys.GENERAL_LAST_RISK_YEAR, year);
                 GeneralRebellionService.OnKingdomRiskCheck(pKingdom);
+            }
+        }
+
+        public static void OnKingdomDestroying(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            CourtRepairOrchestration.ClearKingdomCursors(pKingdom.id,
+                DetachedProjectionRepairCursorByKingdom.Remove,
+                CourtMeritRewardService.RemoveRepairCursor,
+                (stage, error) => ModClass.LogWarning(
+                    "Court repair cursor cleanup failed kingdom=" +
+                    pKingdom.id + " stage=" + stage + ": " +
+                    error.Message));
+            List<GeneralReadModelEntry> active =
+                GetActiveGeneralsForReadModel(pKingdom,
+                    pAllowUnitFallback: true);
+            for (int i = 0; i < active.Count; i++)
+            {
+                Actor actor = active[i]?.Actor;
+                if (actor?.data == null) continue;
+                FiefService.RevokeActorFief(actor, "kingdom_fell");
+                EndGeneral(actor, "kingdom_fell");
             }
         }
 
@@ -111,6 +132,83 @@ namespace AncientWarfare3.core.lineage
             if (pActor?.data == null) return false;
             pActor.data.get(LineageKeys.GENERAL_ACTIVE, out bool active, false);
             return active;
+        }
+
+        internal static void RepairDetachedProjection(Actor pActor)
+        {
+            if (!Ready || pActor?.data == null ||
+                pActor.kingdom?.data == null)
+                return;
+            pActor.data.get(LineageKeys.GENERAL_ACTIVE,
+                out bool liveActive, false);
+            UpsertGeneral(pActor, pActor.kingdom, liveActive);
+        }
+
+        internal static int RepairDetachedProjections(Kingdom pKingdom,
+            int pMaximumInspections, int pMaximumRepairs)
+        {
+            if (!Ready || pKingdom?.data == null ||
+                pMaximumInspections <= 0 || pMaximumRepairs <= 0)
+                return 0;
+
+            ResetDetachedProjectionRepairCursorsIfNeeded();
+            List<Actor> units = pKingdom.units;
+            int count = units?.Count ?? 0;
+            if (count == 0)
+            {
+                DetachedProjectionRepairCursorByKingdom.Remove(pKingdom.id);
+                return 0;
+            }
+
+            DetachedProjectionRepairCursorByKingdom.TryGet(pKingdom.id,
+                out int rawCursor);
+            CourtRepairScanResult result =
+                CourtRepairOrchestration.ScanBounded(units, rawCursor,
+                    pMaximumInspections, pMaximumRepairs,
+                    actor => NeedsDetachedProjectionRepair(actor, pKingdom),
+                    RepairDetachedProjection,
+                    (actor, stage, error) =>
+                        LogDetachedProjectionRepairFailure(actor, pKingdom,
+                            stage, error),
+                    nextCursor => DetachedProjectionRepairCursorByKingdom.Set(
+                        pKingdom.id, nextCursor));
+            return result.RepairAttempts;
+        }
+
+        private static bool NeedsDetachedProjectionRepair(Actor pActor,
+            Kingdom pKingdom)
+        {
+            if (pActor?.data == null || pActor.isRekt() ||
+                !pActor.isAlive() || pActor.asset?.is_boat == true ||
+                pActor.kingdom != pKingdom)
+                return false;
+            bool liveActive = IsActiveGeneralFast(pActor);
+            return CourtMeritRewardCandidateQuery
+                .NeedsGeneralProjectionRepair(DB,
+                    GeneralStateTableItem.GetTableName(), pActor.data.id,
+                    pKingdom.id, liveActive);
+        }
+
+        private static void LogDetachedProjectionRepairFailure(Actor pActor,
+            Kingdom pKingdom, CourtRepairFailureStage pStage,
+            Exception pError)
+        {
+            ModClass.LogWarning("General projection repair failed actor=" +
+                (pActor?.data?.id ?? -1L) + " kingdom=" +
+                (pKingdom?.id ?? -1L) + " stage=" + pStage + ": " +
+                (pError?.Message ?? "unknown error"));
+        }
+
+        private static void ResetDetachedProjectionRepairCursorsIfNeeded()
+        {
+            long databaseEpoch = LineageArchiveManager.RuntimeDatabaseEpoch;
+            object world = World.world;
+            if (_detachedProjectionRepairDatabaseEpoch == databaseEpoch &&
+                ReferenceEquals(_detachedProjectionRepairWorld, world))
+                return;
+            DetachedProjectionRepairCursorByKingdom.Clear();
+            _detachedProjectionRepairDatabaseEpoch = databaseEpoch;
+            _detachedProjectionRepairWorld = world;
         }
 
         public static bool IsFiefHolder(Actor pActor)
@@ -168,7 +266,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static List<GeneralReadModelEntry> GetActiveGeneralsForReadModel(Kingdom pKingdom,
-            bool pAllowUnitFallback = true)
+            bool pAllowUnitFallback = true, int pLimit = 0)
         {
             var result = new List<GeneralReadModelEntry>();
             if (pKingdom?.data == null) return result;
@@ -181,6 +279,7 @@ namespace AncientWarfare3.core.lineage
                     unit.data.get(LineageKeys.GENERAL_ACTIVE, out bool active, false);
                     unit.data.get(LineageKeys.GENERAL_MERIT, out int merit, 0);
                     if (active) result.Add(new GeneralReadModelEntry { Actor = unit, Merit = merit });
+                    if (pLimit > 0 && result.Count >= pLimit) break;
                 }
                 return result;
             }
@@ -188,10 +287,13 @@ namespace AncientWarfare3.core.lineage
             try
             {
                 using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText = "SELECT ACTOR_ID, MERIT_SCORE, APPOINTED_TIME FROM " +
+                cmd.CommandText = "SELECT ACTOR_ID, MERIT_SCORE, APPOINTED_TIME, LOYALTY_SCORE FROM " +
                                   GeneralStateTableItem.GetTableName() +
-                                  " WHERE KINGDOM_ID=@k AND ACTIVE=1 ORDER BY MERIT_SCORE DESC, ACTOR_ID";
+                                  " WHERE KINGDOM_ID=@k AND ACTIVE=1 ORDER BY MERIT_SCORE DESC, ACTOR_ID" +
+                                  (pLimit > 0 ? " LIMIT @limit" : "");
                 cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                if (pLimit > 0)
+                    cmd.Parameters.AddWithValue("@limit", pLimit);
                 using var reader = (SQLiteDataReader)cmd.ExecuteReader();
                 while (reader.Read())
                 {
@@ -203,6 +305,7 @@ namespace AncientWarfare3.core.lineage
                     {
                         Actor = actor,
                         Merit = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1)),
+                        Loyalty = reader.IsDBNull(3) ? 50 : Convert.ToInt32(reader.GetValue(3)),
                         AppointmentYear = appointedTime > 0d ? Date.getYear(appointedTime) : -1
                     });
                 }
@@ -292,26 +395,18 @@ namespace AncientWarfare3.core.lineage
 
             HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, pActor.getName(),
                 PersonEvent.GENERAL_APPOINTED,
-                HistoryText.Actor(pActor) + " \u4EE5\u519B\u529F\u53D7\u4EFB\u4E3A\u5927\u5C06",
+                HistoryText.Actor(pActor) +
+                HistoryLocalizationRules.H("aw_hist_general_appointed_person"),
                 ChronicleCategory.WAR,
                 HistoryTarget.Actor(pActor));
             HistoryWriter.RecordKingdom(pActor.kingdom, KingdomEvent.GENERAL_APPOINTED,
-                HistoryText.Kingdom(pActor.kingdom) + " \u4EFB" + HistoryText.Actor(pActor) + " \u4E3A\u5927\u5C06",
+                HistoryText.Kingdom(pActor.kingdom) +
+                HistoryLocalizationRules.H("aw_hist_general_appointed_kingdom_mid") +
+                HistoryText.Actor(pActor) +
+                HistoryLocalizationRules.H("aw_hist_general_appointed_kingdom_suffix"),
                 HistoryTarget.Actor(pActor));
             CourtDirectionService.MarkDirty(pActor.kingdom);
             return true;
-        }
-
-        private static void TryGrantFiefs(Kingdom pKingdom)
-        {
-            foreach (Actor general in GetActiveGenerals(pKingdom)
-                         .OrderByDescending(GetMerit)
-                         .ThenByDescending(CandidateScore))
-            {
-                if (GetMerit(general) < FiefGrantRules.MinimumMeritForFief) continue;
-                if (FiefService.GetFiefCityId(general) >= 0) continue;
-                if (FiefService.TryGrantBestFief(pKingdom, general, "military_merit")) break;
-            }
         }
 
         private static List<GeneralCandidate> CollectCandidates(Kingdom pKingdom, List<Actor> pActive)
@@ -356,6 +451,8 @@ namespace AncientWarfare3.core.lineage
             if (SlaveService.IsSlave(pActor) || SlaveService.IsRetiredSoldier(pActor)) return false;
             if (HeirService.IsCurrentHeir(pKingdom, pActor)) return false;
             if (RoyalGuardService.IsRoyalGuard(pActor)) return false;
+            if (DynasticReproductionService
+                .ShouldProtectFromOrdinaryMilitaryService(pActor)) return false;
             if (pActor.hasTrait("madness")) return false;
             return IsArmyCaptain(pActor) || pActor.isCityLeader() || pActor.isWarrior() ||
                    ChronicleGate.IsNobleActor(pActor) || GetMerit(pActor) >= 20 || IsRoyalAdultNonHeir(pActor);
@@ -581,16 +678,18 @@ namespace AncientWarfare3.core.lineage
             foreach (int threshold in new[] { 30, 60, 100 })
             {
                 if (pOld >= threshold || pNext < threshold) continue;
-                string content = "\u4EE5\u519B\u529F\u95FB\u540D\uFF0C\u519B\u529F\u8FBE " + threshold;
                 HistoryWriter.RecordPerson(pActor.data.id, pActor.kingdom, pActor.getName(),
                     PersonEvent.GENERAL_MERIT,
-                    HistoryText.Actor(pActor) + " " + HistoryText.PlainText(content),
+                    HistoryText.Actor(pActor) +
+                    HistoryLocalizationRules.H("aw_hist_general_merit_reached") +
+                    HistoryText.PlainText(threshold.ToString()),
                     ChronicleCategory.WAR,
                     HistoryTarget.Actor(pActor));
 
                 if (threshold >= 60)
                     HistoryWriter.RecordKingdom(pActor.kingdom, KingdomEvent.GENERAL_MERIT,
-                        HistoryText.Actor(pActor) + " \u519B\u529F\u7D2F\u81F3 " +
+                        HistoryText.Actor(pActor) +
+                        HistoryLocalizationRules.H("aw_hist_general_merit_accumulated") +
                         HistoryText.PlainText(threshold.ToString()),
                         HistoryTarget.Actor(pActor));
             }

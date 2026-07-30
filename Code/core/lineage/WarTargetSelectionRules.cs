@@ -40,8 +40,14 @@ namespace AncientWarfare3.core.lineage
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:
                     score += pRestorationStrength + 35;
                     break;
+                case WarTerritoryService.GOAL_REUNIFY_SUCCESSION:
+                    score += 210;
+                    break;
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                     score += 60;
+                    break;
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
+                    score += 55;
                     break;
                 case WarTerritoryService.GOAL_NO_CB:
                     score -= 35;

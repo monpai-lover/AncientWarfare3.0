@@ -1,0 +1,33 @@
+using AncientWarfare3.core.performance;
+using AncientWarfare3.core.pathfinding;
+
+internal static class RuntimePerformanceBudgetRulesTests
+{
+    public static void Run()
+    {
+        Equal(2, RuntimePerformanceBudgetRules.ResolveWatchdogArmiesPerFrame(
+                pendingArmies: 48),
+            "the RTS watchdog spreads large Army samples across frames");
+        Equal(1, RuntimePerformanceBudgetRules.ResolveWatchdogArmiesPerFrame(
+                pendingArmies: 1),
+            "the RTS watchdog does not skip a small pending sample");
+        Equal(0, RuntimePerformanceBudgetRules.ResolveWatchdogArmiesPerFrame(
+                pendingArmies: 0),
+            "the RTS watchdog remains idle without pending armies");
+        Equal(3, RuntimePerformanceBudgetRules.ResolveFollowerChecksPerArmy(
+                requestedChecks: 6),
+            "follower recovery bounds per-Army scanning without disabling it");
+        Equal(24, RuntimePerformanceBudgetRules.ResolveFollowerScanWindow(
+                requestedChecks: 6),
+            "the follower cursor advances over a bounded recovery window");
+        Equal(24, AWPathLifecycleRules.MaximumSmoothPathStepsPerUpdate,
+            "custom path smoothing cannot consume an unbounded frame slice");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

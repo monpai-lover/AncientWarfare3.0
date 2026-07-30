@@ -4,6 +4,8 @@ using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Threading;
 using AncientWarfare3.attributes;
 using AncientWarfare3.utils;
 
@@ -22,12 +24,23 @@ namespace AncientWarfare3.core.db
     /// </summary>
     public class LineageArchiveManager
     {
-        public const string DB_FILE_NAME = "aw3_lineage_archive.db";
+        public const string DB_FILE_NAME = LineageRuntimePathRules.DbFileName;
+        public const string MISSING_ARCHIVE_ERROR = "Lineage archive is missing.";
 
         private static LineageArchiveManager _instance;
+        private static long _runtimeDatabaseEpoch;
         private SQLiteConnection _db;
 
         public bool InitializeSuccessful { get; private set; } = true;
+        public bool IsOperational => InitializeSuccessful && _db != null;
+        public static long RuntimeDatabaseEpoch =>
+            Interlocked.Read(ref _runtimeDatabaseEpoch);
+
+        public static bool IsMissingArchiveError(string pError)
+        {
+            return string.Equals(pError, MISSING_ARCHIVE_ERROR,
+                StringComparison.Ordinal);
+        }
 
         public static LineageArchiveManager Instance
         {
@@ -50,15 +63,17 @@ namespace AncientWarfare3.core.db
             }
         }
 
-        /// <summary>运行时库路径:&lt;modFolder&gt;/.runtime/aw3_lineage_archive.db。</summary>
+        /// <summary>当前进程隔离的族谱运行时库路径。</summary>
         public static string RuntimeDbPath
         {
             get
             {
                 string modFolder = ModClass.Instance.GetDeclaration().FolderPath;
-                string runtimeDir = Path.Combine(modFolder, ".runtime");
+                string path = LineageRuntimePathRules.Resolve(modFolder,
+                    System.Diagnostics.Process.GetCurrentProcess().Id);
+                string runtimeDir = Path.GetDirectoryName(path);
                 if (!Directory.Exists(runtimeDir)) Directory.CreateDirectory(runtimeDir);
-                return Path.Combine(runtimeDir, DB_FILE_NAME);
+                return path;
             }
         }
 
@@ -73,6 +88,7 @@ namespace AncientWarfare3.core.db
                 _db = new SQLiteConnection("data source=" + path);
                 _db.Open();
                 LineageArchivePragmaService.Configure(_db);
+                Interlocked.Increment(ref _runtimeDatabaseEpoch);
                 InitializeTables();
                 InitializeSuccessful = true;
             }
@@ -85,65 +101,379 @@ namespace AncientWarfare3.core.db
             }
         }
 
-        /// <summary>从给定存档目录恢复库:有则复制覆盖运行时库并打开,无则建新空库。</summary>
+        /// <summary>从给定存档目录恢复库。失败时停用运行时档案，绝不以空库代替存档。</summary>
         public void LoadFromSaveDirectory(string pSaveFolder)
         {
+            if (TryLoadFromSaveDirectory(pSaveFolder, out string error)) return;
+
+            DisableRuntimeArchive();
+            ModClass.LogWarning(
+                "LineageArchiveManager: failed to restore archive from save");
+            ModClass.LogWarning(error);
+        }
+
+        /// <summary>
+        ///     隔离无法确认归属的运行时档案。仅显式创建新世界时才允许随后建立空库。
+        /// </summary>
+        public void DisableRuntimeArchive()
+        {
+            try { CloseAndDeleteRuntimeDb(); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning(
+                    "LineageArchiveManager: failed to quarantine runtime archive");
+                ModClass.LogWarning(error.Message);
+            }
+            finally
+            {
+                InitializeSuccessful = false;
+            }
+        }
+
+        public bool TryLoadFromSaveDirectory(string pSaveFolder,
+            out string pError)
+        {
+            pError = string.Empty;
             try
             {
-                string savedDb = Path.Combine(pSaveFolder, DB_FILE_NAME);
+                if (string.IsNullOrWhiteSpace(pSaveFolder))
+                {
+                    pError = "Save directory is required.";
+                    return false;
+                }
+
+                string savedDb = Path.Combine(Path.GetFullPath(pSaveFolder),
+                    DB_FILE_NAME);
                 if (!File.Exists(savedDb))
                 {
-                    CreateDataBase(); // 老存档没有档案库,起一个空的
-                    return;
+                    pError = MISSING_ARCHIVE_ERROR;
+                    return false;
                 }
 
                 CloseAndDeleteRuntimeDb();
                 string runtime = RuntimeDbPath;
                 File.Copy(savedDb, runtime, overwrite: true);
-                _db = new SQLiteConnection("data source=" + runtime);
-                _db.Open();
-                LineageArchivePragmaService.Configure(_db);
+                OpenRuntimeDatabase(runtime);
                 EnsureLoadedSchema(); // 注册表元信息 + 旧档案幂等补列(否则 Insert 抛 KeyNotFound / no such column)
                 InitializeSuccessful = true;
+                return true;
             }
-            catch (Exception e)
+            catch (Exception error)
             {
                 InitializeSuccessful = false;
-                ModClass.LogWarning("LineageArchiveManager: 从存档恢复数据库失败");
-                ModClass.LogWarning(e.Message);
+                pError = string.IsNullOrWhiteSpace(error.Message)
+                    ? "Lineage archive installation failed."
+                    : error.Message;
+                try { CloseAndDeleteRuntimeDb(); }
+                catch { }
+                return false;
             }
         }
 
         /// <summary>把当前运行时库复制进存档目录(随存档持久化)。</summary>
         public void SaveToSaveDirectory(string pSaveFolder)
         {
+            if (!TryExportLineageArchive(pSaveFolder, out string error))
+            {
+                ModClass.LogWarning("LineageArchiveManager: lineage export failed");
+                ModClass.LogWarning(error);
+            }
+        }
+
+        internal bool TryExportLineageArchive(string pSaveFolder,
+            out string pError)
+        {
+            pError = string.Empty;
+            string temporary = null;
+
             try
             {
-                if (_db == null) return;
-                if (!Directory.Exists(pSaveFolder)) Directory.CreateDirectory(pSaveFolder);
-                string dest = Path.Combine(pSaveFolder, DB_FILE_NAME);
-                DeleteDatabaseSidecars(dest);
+                if (_db == null)
+                {
+                    pError = "Live lineage archive is unavailable.";
+                    return false;
+                }
+                if (string.IsNullOrWhiteSpace(pSaveFolder))
+                {
+                    pError = "Save directory is required.";
+                    return false;
+                }
 
-                // SQLite 在连接打开时直接复制文件可能漏掉未刷盘数据,先用 backup API 落盘到目标。
-                using var destConn = new SQLiteConnection("data source=" + dest);
-                destConn.Open();
-                LineageArchivePragmaService.Configure(destConn);
-                _db.BackupDatabase(destConn, "main", "main", -1, null, 0);
-                if (!LineageArchivePragmaService.CheckpointForSave(destConn))
-                    throw new InvalidOperationException(
-                        "Destination lineage archive checkpoint failed");
+                string directory = Path.GetFullPath(pSaveFolder);
+                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+
+                string destination = Path.Combine(directory, DB_FILE_NAME);
+                temporary = destination + ".tmp";
+                DeleteDatabaseFile(temporary);
+
+                using (var destinationConnection = new SQLiteConnection(
+                           LineageArchivePragmaService
+                               .SnapshotTargetConnectionString(temporary)))
+                {
+                    destinationConnection.Open();
+                    LineageArchivePragmaService.ConfigureSnapshotTarget(
+                        destinationConnection);
+                    _db.BackupDatabase(destinationConnection, "main", "main",
+                        -1, null, 0);
+                    LineageArchivePragmaService.ConfigureSnapshotTarget(
+                        destinationConnection);
+                }
+
+                DeleteDatabaseSidecars(temporary);
+                if (!LineageArchivePragmaService.TryValidateSnapshot(temporary,
+                        out bool journalModeInvalid, out string validationError))
+                {
+                    pError = journalModeInvalid
+                        ? "Snapshot lineage archive journal mode is invalid: " +
+                          validationError
+                        : "Snapshot lineage archive quick_check failed: " +
+                          validationError;
+                    return false;
+                }
+                if (HasDatabaseSidecars(temporary))
+                {
+                    pError = "Snapshot lineage archive left WAL or SHM sidecars.";
+                    return false;
+                }
+
+                DeleteDatabaseSidecars(destination);
+                if (File.Exists(destination))
+                    File.Replace(temporary, destination, null);
+                else
+                    File.Move(temporary, destination);
+                temporary = null;
+
+                DeleteDatabaseSidecars(destination);
+                if (HasDatabaseSidecars(destination))
+                {
+                    pError = "Published lineage archive has WAL or SHM sidecars.";
+                    return false;
+                }
+
+                return true;
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                ModClass.LogWarning("LineageArchiveManager: 保存数据库到存档失败");
-                ModClass.LogWarning(e.Message);
+                pError = error.Message;
+                return false;
             }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temporary))
+                    DeleteDatabaseFileBestEffort(temporary);
+            }
+        }
+
+        internal bool TryInstallReplicationArchive(
+            string pVerifiedArchivePath, byte[] expectedSha256,
+            out string pInstalledPath, out string pError)
+        {
+            pInstalledPath = string.Empty;
+            pError = string.Empty;
+            string staging = null;
+            string backup = null;
+            string runtime = null;
+            bool runtimeMoved = false;
+
+            try
+            {
+                if (expectedSha256 == null || expectedSha256.Length != 32)
+                {
+                    pError = "Expected archive SHA-256 must contain 32 bytes.";
+                    return false;
+                }
+                if (string.IsNullOrWhiteSpace(pVerifiedArchivePath) ||
+                    !Path.IsPathRooted(pVerifiedArchivePath))
+                {
+                    pError = "Verified archive path must be absolute.";
+                    return false;
+                }
+
+                string source = Path.GetFullPath(pVerifiedArchivePath);
+                if (!File.Exists(source) ||
+                    (File.GetAttributes(source) &
+                     (FileAttributes.Directory |
+                      FileAttributes.ReparsePoint)) != 0)
+                {
+                    pError = "Verified archive must be a regular file.";
+                    return false;
+                }
+                if (HasDatabaseSidecars(source))
+                {
+                    pError = "Verified archive has WAL or SHM sidecars.";
+                    return false;
+                }
+                if (!LineageArchivePragmaService.TryValidateSnapshot(source,
+                        out bool sourceJournalInvalid,
+                        out string sourceValidationError))
+                {
+                    pError = sourceJournalInvalid
+                        ? "Verified archive journal mode is invalid: " +
+                          sourceValidationError
+                        : "Verified archive quick_check failed: " +
+                          sourceValidationError;
+                    return false;
+                }
+                if (!HashMatches(source, expectedSha256))
+                {
+                    pError = "Verified archive SHA-256 does not match.";
+                    return false;
+                }
+
+                runtime = RuntimeDbPath;
+                if (string.Equals(source, Path.GetFullPath(runtime),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    pError = "Verified archive cannot be the live runtime file.";
+                    return false;
+                }
+                string nonce = Guid.NewGuid().ToString("N");
+                staging = runtime + ".replication-install-" + nonce + ".tmp";
+                backup = runtime + ".replication-backup-" + nonce + ".bak";
+                DeleteDatabaseFile(staging);
+                DeleteDatabaseFile(backup);
+                File.Copy(source, staging, overwrite: false);
+                DeleteDatabaseSidecars(staging);
+
+                if (!LineageArchivePragmaService.TryValidateSnapshot(staging,
+                        out bool stagingJournalInvalid,
+                        out string stagingValidationError))
+                {
+                    pError = stagingJournalInvalid
+                        ? "Staged archive journal mode is invalid: " +
+                          stagingValidationError
+                        : "Staged archive quick_check failed: " +
+                          stagingValidationError;
+                    return false;
+                }
+                if (!HashMatches(staging, expectedSha256))
+                {
+                    pError = "Staged archive SHA-256 does not match.";
+                    return false;
+                }
+                if (HasDatabaseSidecars(staging))
+                {
+                    pError = "Staged archive left WAL or SHM sidecars.";
+                    return false;
+                }
+                if (_db != null &&
+                    !LineageArchivePragmaService.CheckpointForSave(_db))
+                {
+                    pError = "Live archive checkpoint failed before install.";
+                    return false;
+                }
+
+                CloseRuntimeDatabase();
+                DeleteDatabaseSidecars(runtime);
+                if (File.Exists(runtime))
+                {
+                    File.Move(runtime, backup);
+                    runtimeMoved = true;
+                }
+                File.Move(staging, runtime);
+                staging = null;
+
+                try
+                {
+                    OpenRuntimeDatabase(runtime);
+                    EnsureLoadedSchema();
+                    InitializeSuccessful = true;
+                }
+                catch
+                {
+                    CloseRuntimeDatabase();
+                    DeleteDatabaseFileBestEffort(runtime);
+                    if (runtimeMoved && File.Exists(backup))
+                    {
+                        File.Move(backup, runtime);
+                        runtimeMoved = false;
+                        OpenRuntimeDatabase(runtime);
+                        EnsureLoadedSchema();
+                        InitializeSuccessful = true;
+                        backup = null;
+                    }
+                    throw;
+                }
+
+                DeleteDatabaseFileBestEffort(backup);
+                backup = null;
+                pInstalledPath = runtime;
+                return true;
+            }
+            catch (Exception error)
+            {
+                if (_db == null && runtimeMoved &&
+                    !string.IsNullOrEmpty(runtime) &&
+                    !string.IsNullOrEmpty(backup) && File.Exists(backup))
+                {
+                    try
+                    {
+                        DeleteDatabaseFileBestEffort(runtime);
+                        File.Move(backup, runtime);
+                        runtimeMoved = false;
+                        OpenRuntimeDatabase(runtime);
+                        EnsureLoadedSchema();
+                        InitializeSuccessful = true;
+                        backup = null;
+                    }
+                    catch (Exception rollbackError)
+                    {
+                        InitializeSuccessful = false;
+                        pError = "Replication install and rollback failed: " +
+                                 error.Message + "; " + rollbackError.Message;
+                        return false;
+                    }
+                }
+                else if (_db == null)
+                {
+                    InitializeSuccessful = false;
+                }
+
+                pError = string.IsNullOrWhiteSpace(error.Message)
+                    ? "Replication archive installation failed."
+                    : error.Message;
+                return false;
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(staging))
+                    DeleteDatabaseFileBestEffort(staging);
+            }
+        }
+
+        private void OpenRuntimeDatabase(string pPath)
+        {
+            _db = new SQLiteConnection("data source=" + pPath);
+            _db.Open();
+            LineageArchivePragmaService.Configure(_db);
+            Interlocked.Increment(ref _runtimeDatabaseEpoch);
+        }
+
+        private void CloseRuntimeDatabase()
+        {
+            if (_db == null) return;
+            _db.Close();
+            _db.Dispose();
+            _db = null;
+            Interlocked.Increment(ref _runtimeDatabaseEpoch);
+        }
+
+        private static bool HashMatches(string pPath, byte[] pExpected)
+        {
+            using var stream = new FileStream(pPath, FileMode.Open,
+                FileAccess.Read, FileShare.Read);
+            using SHA256 sha256 = SHA256.Create();
+            byte[] actual = sha256.ComputeHash(stream);
+            if (actual.Length != pExpected.Length) return false;
+            var difference = 0;
+            for (var index = 0; index < actual.Length; index++)
+                difference |= actual[index] ^ pExpected[index];
+            return difference == 0;
         }
 
         private void CloseAndDeleteRuntimeDb()
         {
-            _db?.Close();
-            _db = null;
+            CloseRuntimeDatabase();
             string path = RuntimeDbPath;
             if (File.Exists(path)) File.Delete(path);
             DeleteDatabaseSidecars(path);
@@ -155,6 +485,23 @@ namespace AncientWarfare3.core.db
             string sharedMemory = pPath + "-shm";
             if (File.Exists(wal)) File.Delete(wal);
             if (File.Exists(sharedMemory)) File.Delete(sharedMemory);
+        }
+
+        private static bool HasDatabaseSidecars(string pPath)
+        {
+            return File.Exists(pPath + "-wal") || File.Exists(pPath + "-shm");
+        }
+
+        private static void DeleteDatabaseFile(string pPath)
+        {
+            if (File.Exists(pPath)) File.Delete(pPath);
+            DeleteDatabaseSidecars(pPath);
+        }
+
+        private static void DeleteDatabaseFileBestEffort(string pPath)
+        {
+            try { DeleteDatabaseFile(pPath); }
+            catch { }
         }
 
         /// <summary>反射扫描本程序集所有 [TableDef] 类,按字段类型**建表**(新库用)。</summary>

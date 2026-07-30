@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
@@ -21,9 +22,22 @@ namespace AncientWarfare3.core.lineage
             new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
         private static readonly Dictionary<long, string> RoleIndexKeyByArmy =
             new Dictionary<long, string>();
-        private static bool _creatingSpecialArmy;
+        private static readonly HashSet<Army> SpecialArmiesBeingCreated =
+            new HashSet<Army>();
 
-        public static bool IsCreatingSpecialArmy => _creatingSpecialArmy;
+        internal static bool IsSpecialArmyCreationInProgress(Army pArmy)
+        {
+            return pArmy != null && SpecialArmiesBeingCreated.Contains(pArmy);
+        }
+
+        public static void ClearRuntimeCaches()
+        {
+            RoleArmyCache.Clear();
+            LookupCacheKeysByArmy.Clear();
+            RoleArmyIdsByKingdomRole.Clear();
+            RoleIndexKeyByArmy.Clear();
+            SpecialArmiesBeingCreated.Clear();
+        }
 
         public static string GetRole(Army pArmy)
         {
@@ -40,6 +54,22 @@ namespace AncientWarfare3.core.lineage
         public static bool IsSpecialArmy(Army pArmy)
         {
             return AWArmyRoleRules.IsSpecialRole(GetRole(pArmy));
+        }
+
+        public static void EnsureOrdinaryNativeName(Army pArmy,
+            Kingdom pKingdom = null, City pAnchorCity = null)
+        {
+            if (pArmy?.data == null ||
+                !ArmyNativeNameService.IsOrdinaryArmy(pArmy)) return;
+            if (pAnchorCity?.data != null &&
+                GetAnchorCityId(pArmy) < 0L)
+                SetOrdinaryArmyAnchor(pArmy, pAnchorCity);
+            if (!ArmyNativeNameService.TryResolve(pArmy, pKingdom,
+                    pAnchorCity, out string name) ||
+                pArmy.data.name == name) return;
+            pArmy.data.custom_name = true;
+            try { pArmy.setName(name); }
+            catch { }
         }
 
         public static long GetAnchorCityId(Army pArmy)
@@ -82,6 +112,7 @@ namespace AncientWarfare3.core.lineage
                 TryGetRoleArmy(pKingdom, pRole, out army);
             else
                 army = FindArmy(pKingdom, pAnchorCity, pRole);
+            if (!CanUseCaptainForArmy(pCaptain, army)) return null;
             bool created = false;
             if (army == null)
             {
@@ -100,6 +131,36 @@ namespace AncientWarfare3.core.lineage
                     pCreated: created, pReanchored: false, pPostLoadRepair: false))
                 CleanupDuplicateArmies(pKingdom, anchor, pRole, army);
             return army;
+        }
+
+        private static bool CanUseCaptainForArmy(Actor pCaptain,
+            Army pRequestedArmy)
+        {
+            if (pCaptain?.data == null) return false;
+            if (IsCivilAuthority(pCaptain)) return false;
+            Army currentArmy = pCaptain.army;
+            if (currentArmy == null) return true;
+
+            bool currentArmyLive = false;
+            bool actorAlive = false;
+            bool actorIsCurrentCaptain = false;
+            try
+            {
+                currentArmyLive = currentArmy.data != null &&
+                                  currentArmy.isAlive();
+                actorAlive = pCaptain.isAlive() && !pCaptain.isRekt();
+                actorIsCurrentCaptain = ReferenceEquals(
+                    currentArmy.getCaptain(), pCaptain);
+            }
+            catch { }
+
+            return ArmyCaptainContinuityRules.CanTransferCaptainLease(
+                ArmyRtsRuntimeMode.Current,
+                AW3MultiplayerReplicaScope.IsReplicaSession ||
+                AW3MultiplayerReplicaScope.IsApplying ||
+                ArmyCaptainDisposalScope.IsActive(currentArmy),
+                currentArmyLive, actorIsCurrentCaptain, actorAlive,
+                ReferenceEquals(currentArmy, pRequestedArmy));
         }
 
         public static Army FindArmy(Kingdom pKingdom, City pAnchorCity, string pRole)
@@ -167,7 +228,7 @@ namespace AncientWarfare3.core.lineage
                 pArmy.setName(pName);
             TrySetRuntimeKingdom(pArmy, pKingdom);
             if (AWArmyRoleRules.ShouldUseDetachedArmy(pRole) && pArmy.hasCity())
-                pArmy.clearCity();
+                DetachArmyFromCity(pArmy);
             else if (!AWArmyRoleRules.ShouldUseDetachedArmy(pRole))
                 TrySetRuntimeCity(pArmy, pAnchorCity, pKingdom);
             CacheArmy(pArmy, pKingdom, pRole);
@@ -182,12 +243,20 @@ namespace AncientWarfare3.core.lineage
             if (!HistoricalMasterVocationService.CanJoinArmy(pActor, pArmy)) return;
             if (pActor.army == pArmy)
             {
+                bool armyListChanged = false;
                 try
                 {
                     if (!pArmy.units.Contains(pActor))
+                    {
                         pArmy.listUnit(pActor);
+                        armyListChanged = true;
+                    }
                 }
                 catch { }
+                if (TemporaryLevyRules.ShouldNotifyRtsRosterChanged(
+                        actorArmyChanged: false, armyListChanged))
+                    ArmyRtsControllerService.OnArmyRosterChanged(pArmy);
+                EnsureOrdinaryNativeName(pArmy, pActor.kingdom, pActor.city);
                 return;
             }
             Army oldArmy = pActor.army;
@@ -195,46 +264,247 @@ namespace AncientWarfare3.core.lineage
             {
                 try { pActor.removeFromArmy(); }
                 catch { pActor.setArmy(null); }
+                if (ReferenceEquals(pActor.army, oldArmy)) return;
                 try { oldArmy?.units?.Remove(pActor); }
                 catch { }
             }
             pActor.setArmy(pArmy);
             if (pActor.army != pArmy) return;
+            bool currentArmyListChanged = false;
             try
             {
                 if (!pArmy.units.Contains(pActor))
+                {
                     pArmy.listUnit(pActor);
+                    currentArmyListChanged = true;
+                }
             }
             catch { }
+            if (TemporaryLevyRules.ShouldNotifyRtsRosterChanged(
+                    actorArmyChanged: true, currentArmyListChanged))
+                ArmyRtsControllerService.OnArmyRosterChanged(pArmy);
+            EnsureOrdinaryNativeName(pArmy, pActor.kingdom, pActor.city);
         }
 
-        public static void TryRemoveEmptyArmy(Army pArmy)
+        public static bool TryRemoveEmptyArmy(Army pArmy,
+            City pCityHint = null, Kingdom pKingdomHint = null)
         {
-            if (!IsSpecialArmy(pArmy)) return;
-            if (pArmy.countUnits() > 0 || pArmy.hasCaptain()) return;
-            RemoveArmyFromCache(pArmy);
-            try { World.world?.armies?.removeObject(pArmy); }
-            catch { }
+            Bench.bench(CityMaintenanceBenchmarkRules.EmptyArmyDetection,
+                CityMaintenanceBenchmarkRules.Group);
+            bool shouldRemove;
+            try
+            {
+                bool alive = false;
+                int listedUnitCount = 0;
+                bool hasLinkedLiveUnit = false;
+                try { alive = pArmy != null && pArmy.isAlive(); }
+                catch { }
+                try { listedUnitCount = pArmy?.countUnits() ?? 0; }
+                catch { }
+                if (listedUnitCount <= 1)
+                    hasLinkedLiveUnit = HasLinkedLiveUnit(pArmy);
+                shouldRemove = ArmyLifecycleRules.ShouldRemoveEmptyArmy(
+                    pArmy?.data != null, alive, listedUnitCount,
+                    hasLinkedLiveUnit, IsSpecialArmyCreationInProgress(pArmy));
+            }
+            finally
+            {
+                Bench.benchEnd(
+                    CityMaintenanceBenchmarkRules.EmptyArmyDetection,
+                    CityMaintenanceBenchmarkRules.Group);
+            }
+            if (!shouldRemove) return false;
+
+            Bench.bench(CityMaintenanceBenchmarkRules.EmptyArmyRemoval,
+                CityMaintenanceBenchmarkRules.Group);
+            try
+            {
+                bool nonReplacingShell = IsNonReplacingShell(pArmy);
+                return RemoveArmyObject(pArmy, pClearCityReference: true,
+                    pCityHint, pKingdomHint,
+                    pRequestReplacement: !nonReplacingShell);
+            }
+            finally
+            {
+                Bench.benchEnd(CityMaintenanceBenchmarkRules.EmptyArmyRemoval,
+                    CityMaintenanceBenchmarkRules.Group);
+            }
         }
 
         public static void RemoveSpecialArmy(Army pArmy)
         {
             if (!IsSpecialArmy(pArmy)) return;
+            RemoveArmyObject(pArmy, pClearCityReference: true);
+        }
+
+        internal static bool IsNonReplacingShell(Army pArmy)
+        {
+            if (pArmy?.data == null) return false;
+            pArmy.data.get(LineageKeys.AW_ARMY_NON_REPLACING_SHELL,
+                out bool marked, false);
+            return marked;
+        }
+
+        internal static bool RemoveArmyObject(Army pArmy,
+            bool pClearCityReference, City pCityHint = null,
+            Kingdom pKingdomHint = null,
+            bool pRequestReplacement = true)
+        {
+            if (pArmy == null) return false;
+            ArmyManager manager = World.world?.armies;
+            if (manager == null) return false;
+
+            bool alive = false;
+            try { alive = pArmy.isAlive(); }
+            catch { }
+            if (!alive)
+            {
+                try { manager.checkLists(); } catch { }
+                return false;
+            }
+
+            using (ArmyCaptainDisposalScope.Open(pArmy))
+            {
+            City city = SafeGetCity(pArmy) ?? pCityHint;
+            Kingdom kingdom = SafeGetStoredKingdom(pArmy) ??
+                              pKingdomHint ?? SafeGetKingdom(pArmy, city);
+            bool wasSpecialArmy = IsSpecialArmy(pArmy);
+            long armyId = pArmy.data?.id ?? -1L;
+            var units = new List<Actor>();
+            try
+            {
+                foreach (Actor unit in pArmy.getUnits())
+                    if (unit?.data != null)
+                        units.Add(unit);
+            }
+            catch { }
+            Actor captain = null;
+            try { captain = pArmy.getCaptain(); }
+            catch { }
+
+            for (int i = 0; i < units.Count; i++)
+            {
+                Actor unit = units[i];
+                if (unit.army != pArmy) continue;
+                try { unit.removeFromArmy(); }
+                catch
+                {
+                    try { unit.setArmy(null); }
+                    catch { }
+                }
+            }
+            if (captain?.data != null && captain.army == pArmy)
+            {
+                try { captain.removeFromArmy(); }
+                catch
+                {
+                    try { captain.setArmy(null); }
+                    catch { }
+                }
+            }
             try { pArmy.setCaptain(null); } catch { }
             try { pArmy.units.Clear(); } catch { }
+
+            if (pClearCityReference && city?.data != null)
+            {
+                try
+                {
+                    if (city.getArmy() == pArmy) city.setArmy(null);
+                }
+                catch { }
+            }
+            try { pArmy.clearCity(); } catch { }
+
+            AWArmyMarchService.ClearArmy(pArmy);
             RemoveArmyFromCache(pArmy);
-            try { World.world?.armies?.removeObject(pArmy); } catch { }
+            WarNoticeService.OnArmyInvalidated(kingdom, armyId);
+            KingdomMilitaryReadinessService.MarkCityDirty(city);
+            try { manager.removeObject(pArmy); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Army cleanup failed: " + error.Message);
+                return false;
+            }
+
+            bool hasReplacementArmy = false;
+            try
+            {
+                Army replacement = city?.getArmy();
+                hasReplacementArmy = replacement?.data != null &&
+                                      replacement != pArmy &&
+                                      replacement.isAlive() &&
+                                      SafeGetKingdom(replacement, city) ==
+                                      kingdom;
+            }
+            catch { }
+            if (ArmyLifecycleRules.ShouldRequestOffensiveReinforcement(
+                    pRequestReplacement, wasSpecialArmy,
+                    MilitaryEmergencyService.HasAny(kingdom),
+                    hasReplacementArmy))
+                TemporaryLevyService.RequestOffensiveRecovery(kingdom, city);
+            return true;
+            }
+        }
+
+        private static bool HasLinkedLiveUnit(Army pArmy)
+        {
+            if (pArmy == null) return false;
+            try
+            {
+                foreach (Actor unit in pArmy.getUnits())
+                {
+                    if (unit?.data == null || unit.army != pArmy ||
+                        unit.isRekt() || !unit.isAlive()) continue;
+                    return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         public static void SetCaptainIfChanged(Army pArmy, Actor pCaptain)
         {
             if (pArmy?.data == null || pCaptain?.data == null || pCaptain.isRekt()) return;
+            if (!IsCaptainLeaseEligible(pArmy, pCaptain,
+                    requireMembership: false)) return;
             if (!HistoricalMasterVocationService.CanJoinArmy(pCaptain, pArmy) ||
                 !HistoricalMasterVocationService.CanEnter(pCaptain,
                     HistoricalMasterMilitaryContext.ArmyCaptain)) return;
             long currentId = -1L;
-            try { currentId = pArmy.getCaptain()?.data?.id ?? -1L; }
+            Actor current = null;
+            try
+            {
+                current = pArmy.getCaptain();
+                currentId = current?.data?.id ?? -1L;
+            }
             catch { }
+
+            bool liveArmy = false;
+            bool currentExists = current?.data != null;
+            bool currentAlive = false;
+            bool currentIsMember = false;
+            bool currentAuthority = false;
+            try
+            {
+                liveArmy = pArmy.isAlive();
+                currentAlive = currentExists &&
+                               current.isAlive() && !current.isRekt();
+                currentIsMember = currentExists &&
+                                  ReferenceEquals(current.army, pArmy) &&
+                                  pArmy.units.Contains(current);
+                currentAuthority = IsCivilAuthority(current);
+            }
+            catch { }
+            if (ArmyCaptainContinuityRules.ShouldRejectCaptainMutation(
+                    ArmyRtsRuntimeMode.Current,
+                    replicaApplying: false,
+                    liveArmy,
+                    currentExists,
+                    currentAlive,
+                    currentIsMember,
+                    ReferenceEquals(current, pCaptain),
+                    currentCaptainIsCivilAuthority: currentAuthority))
+                return;
 
             if (!AWArmyRoleRules.ShouldSetCaptain(currentId, pCaptain.data.id))
             {
@@ -244,16 +514,98 @@ namespace AncientWarfare3.core.lineage
             }
 
             pArmy.setCaptain(pCaptain);
+            try
+            {
+                if (ReferenceEquals(pArmy.getCaptain(), pCaptain))
+                    LineageService.OnActorPromoted(pCaptain,
+                        NobleTrigger.ArmyCaptain);
+            }
+            catch { }
             DedupePastCaptains(pArmy);
+        }
+
+        internal static bool IsCaptainLeaseEligible(Army pArmy,
+            Actor pActor, bool requireMembership)
+        {
+            try
+            {
+                if (pArmy?.data == null || pActor?.data == null ||
+                    !pActor.isKingdomCiv() || !pActor.isAlive() ||
+                    pActor.isRekt() || !pActor.is_profession_warrior ||
+                    pActor.isKing() || pActor.isCityLeader() ||
+                    !CaptainMatchesArmyKingdom(pArmy, pActor)) return false;
+                if (!ArmyCaptainContinuityRules.
+                        IsCareerStandingCaptainCandidate(
+                            actorAlive: true,
+                            currentProfessionIsWarrior: true,
+                            pActor.hasArmy(),
+                            TemporaryLevyService.IsTemporaryLevy(pActor),
+                            WartimeGarrisonService.IsActive(pActor),
+                            TemporarySlaveVanguardService.IsMember(pActor),
+                            SlaveService.IsSlave(pActor))) return false;
+                if (requireMembership &&
+                    (pActor.army != pArmy || pArmy?.units == null ||
+                     !pArmy.units.Contains(pActor))) return false;
+                if (!IsRoleArmy(pArmy, AWArmyRole.RoyalGuard) &&
+                    RoyalGuardService.IsRoyalGuard(pActor)) return false;
+                return HistoricalMasterVocationService.CanJoinArmy(
+                           pActor, pArmy) &&
+                       HistoricalMasterVocationService.CanEnter(pActor,
+                           HistoricalMasterMilitaryContext.ArmyCaptain);
+            }
+            catch { return false; }
+        }
+
+        internal static Kingdom GetIntendedKingdom(Army pArmy,
+            City pAnchorHint = null)
+        {
+            Kingdom stored = SafeGetStoredKingdom(pArmy);
+            if (stored?.data != null && !stored.isRekt()) return stored;
+            City anchor = pAnchorHint ?? FindAnchorCity(pArmy);
+            if (anchor?.kingdom?.data != null && !anchor.kingdom.isRekt())
+                return anchor.kingdom;
+            try
+            {
+                if (pArmy?.data != null && pArmy.data.id_kingdom >= 0)
+                {
+                    Kingdom saved = World.world?.kingdoms?.get(
+                        pArmy.data.id_kingdom);
+                    if (saved?.data != null && !saved.isRekt()) return saved;
+                }
+            }
+            catch { }
+            try
+            {
+                Kingdom runtime = pArmy?.getKingdom();
+                return runtime?.data != null && !runtime.isRekt()
+                    ? runtime
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        internal static bool CaptainMatchesArmyKingdom(Army pArmy,
+            Actor pCaptain)
+        {
+            Kingdom intended = GetIntendedKingdom(pArmy);
+            return intended?.data != null && pCaptain?.kingdom?.data != null &&
+                   ReferenceEquals(intended, pCaptain.kingdom);
+        }
+
+        private static bool IsCivilAuthority(Actor pActor)
+        {
+            try
+            {
+                return pActor?.data != null &&
+                       (pActor.isKing() || pActor.isCityLeader());
+            }
+            catch { return false; }
         }
 
         public static void RepairSpecialArmiesAfterLoad()
         {
             if (World.world?.armies == null) return;
-            RoleArmyCache.Clear();
-            LookupCacheKeysByArmy.Clear();
-            RoleArmyIdsByKingdomRole.Clear();
-            RoleIndexKeyByArmy.Clear();
+            ClearRuntimeCaches();
             var snapshot = new List<Army>();
             foreach (Army army in World.world.armies)
                 snapshot.Add(army);
@@ -294,6 +646,11 @@ namespace AncientWarfare3.core.lineage
                     CleanupDuplicateArmies(kingdom, anchor, role, army);
                 CacheArmy(army, kingdom, role);
             }
+
+            foreach (Army army in snapshot)
+                EnsureOrdinaryNativeName(army);
+
+            ArmyInvalidCleanupQueue.BeginPostLoadSweep(snapshot);
         }
 
         public static void ReanchorArmy(Army pArmy, Kingdom pKingdom, City pAnchorCity, string pRole, string pName)
@@ -383,29 +740,47 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal static Army CreateDetachedArmy(Kingdom pKingdom,
+            City pAnchorCity, Actor pCaptain)
+        {
+            return CreateArmy(pKingdom, pAnchorCity, pCaptain,
+                pDetached: true);
+        }
+
         private static Army CreateArmy(Kingdom pKingdom, City pCity, Actor pCaptain, bool pDetached)
         {
             if (NewArmyObjectMethod == null || World.world?.armies == null) return null;
             if (pCity?.data == null || pCaptain?.data == null) return null;
 
+            Army army = null;
+            bool initialized = false;
             try
             {
-                var army = NewArmyObjectMethod.Invoke(World.world.armies, null) as Army;
+                army = NewArmyObjectMethod.Invoke(World.world.armies, null) as Army;
                 if (army == null) return null;
 
-                _creatingSpecialArmy = true;
+                SpecialArmiesBeingCreated.Add(army);
                 try { army.createArmy(pCaptain, pCity); }
-                finally { _creatingSpecialArmy = false; }
+                finally { SpecialArmiesBeingCreated.Remove(army); }
+
+                initialized = army.data != null;
+                if (!initialized) return null;
 
                 if (pDetached)
-                    army.clearCity();
+                    DetachArmyFromCity(army, pCity);
                 return army;
             }
             catch (Exception e)
             {
-                _creatingSpecialArmy = false;
                 ModClass.LogWarning("Create AW3 special army failed: " + e.Message);
                 return null;
+            }
+            finally
+            {
+                if (ArmyCreationSafetyRules.ShouldCleanupFailedCreation(
+                        army != null, initialized))
+                    ArmyInvalidCleanupQueue.RemoveFailedCreation(army,
+                        pCaptain, pCity);
             }
         }
 
@@ -422,6 +797,34 @@ namespace AncientWarfare3.core.lineage
                 type = type.BaseType;
             }
             return null;
+        }
+
+        private static void DetachArmyFromCity(Army pArmy,
+            City pCityHint = null)
+        {
+            if (pArmy == null) return;
+            City city = SafeGetCity(pArmy) ?? pCityHint;
+            try
+            {
+                if (city?.getArmy() == pArmy)
+                    city.setArmy(null);
+            }
+            catch { }
+            try
+            {
+                if (pArmy.hasCity()) pArmy.clearCity();
+            }
+            catch { }
+        }
+
+        private static void SetOrdinaryArmyAnchor(Army pArmy,
+            City pAnchorCity)
+        {
+            if (pArmy?.data == null || pAnchorCity?.data == null) return;
+            pArmy.data.set(LineageKeys.AW_ARMY_CITY_ID, pAnchorCity.id);
+            WorldTile tile = pAnchorCity.getTile();
+            pArmy.data.set(LineageKeys.AW_ARMY_ANCHOR_X, tile?.x ?? -1);
+            pArmy.data.set(LineageKeys.AW_ARMY_ANCHOR_Y, tile?.y ?? -1);
         }
 
         private static void CleanupDuplicateArmies(Kingdom pKingdom, City pAnchorCity, string pRole, Army pKeeper)
@@ -457,25 +860,18 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
-            foreach (Actor unit in units)
-                AddToArmy(unit, pKeeper);
-
-            try { pDuplicate.setCaptain(null); }
+            Actor duplicateCaptain = null;
+            try { duplicateCaptain = pDuplicate.getCaptain(); }
             catch { }
-            try
+            using (ArmyCaptainDisposalScope.Open(pDuplicate))
             {
-                pDuplicate.data.removeString(LineageKeys.AW_ARMY_ROLE);
-                pDuplicate.data.removeLong(LineageKeys.AW_ARMY_CITY_ID);
+                foreach (Actor unit in units)
+                    AddToArmy(unit, pKeeper);
             }
-            catch
-            {
-                pDuplicate.data.set(LineageKeys.AW_ARMY_ROLE, "");
-                pDuplicate.data.set(LineageKeys.AW_ARMY_CITY_ID, -1L);
-            }
-
-            RemoveArmyFromCache(pDuplicate);
-            try { World.world?.armies?.removeObject(pDuplicate); }
-            catch { }
+            if (duplicateCaptain?.army == pKeeper)
+                SetCaptainIfChanged(pKeeper, duplicateCaptain);
+            RemoveArmyObject(pDuplicate, pClearCityReference: true,
+                pRequestReplacement: false);
         }
 
         private static Army GetArmyById(long pArmyId)
@@ -577,6 +973,8 @@ namespace AncientWarfare3.core.lineage
 
         private static Kingdom SafeGetKingdom(Army pArmy, City pAnchorCity)
         {
+            Kingdom intended = GetIntendedKingdom(pArmy, pAnchorCity);
+            if (intended?.data != null) return intended;
             try
             {
                 Kingdom kingdom = pArmy?.getKingdom();
@@ -584,6 +982,18 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             return pAnchorCity?.kingdom;
+        }
+
+        private static Kingdom SafeGetStoredKingdom(Army pArmy)
+        {
+            try
+            {
+                Kingdom kingdom = ArmyKingdomField?.GetValue(pArmy) as Kingdom;
+                return kingdom?.data != null && !kingdom.isRekt()
+                    ? kingdom
+                    : null;
+            }
+            catch { return null; }
         }
 
         private static void TrySetRuntimeCity(Army pArmy, City pCity, Kingdom pKingdom)

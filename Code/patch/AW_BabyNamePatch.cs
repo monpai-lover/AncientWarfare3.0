@@ -26,6 +26,7 @@ namespace AncientWarfare3.patch
             LineageService.ApplyDisplayName(__result); // 性别已定 → 重算走正确性别分支
             LineageService.ArchiveActor(__result, pAlive: true);
             HeirService.RefreshForNewRoyalChild(__result, pParent1, pParent2);
+            DynasticTitleService.OnChildBorn(__result, pParent1, pParent2);
         }
     }
 }

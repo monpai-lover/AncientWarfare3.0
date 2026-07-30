@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -7,9 +8,12 @@ namespace AncientWarfare3.core.lineage
         public static string BuildSummary(string pReason, string pTargetKingdom, string pTargetCity)
         {
             var lines = new List<string>();
-            if (!string.IsNullOrEmpty(pReason)) lines.Add("\u5ba3\u6218\u7406\u7531\uff1a" + pReason);
-            if (!string.IsNullOrEmpty(pTargetKingdom)) lines.Add("\u76ee\u6807\u56fd\uff1a" + pTargetKingdom);
-            if (!string.IsNullOrEmpty(pTargetCity)) lines.Add("\u6218\u4e89\u76ee\u6807\uff1a" + pTargetCity);
+            if (!string.IsNullOrEmpty(pReason))
+                lines.Add(AW_L10n.Text("aw_war_declaration_reason", "War reason: ") + pReason);
+            if (!string.IsNullOrEmpty(pTargetKingdom))
+                lines.Add(AW_L10n.Text("aw_war_target_realm", "Target realm: ") + pTargetKingdom);
+            if (!string.IsNullOrEmpty(pTargetCity))
+                lines.Add(AW_L10n.Text("aw_war_target_goal", "War target: ") + pTargetCity);
             return string.Join("\n", lines.ToArray());
         }
 
@@ -23,9 +27,12 @@ namespace AncientWarfare3.core.lineage
         public static string BuildStatsLine(int pCoreCount, int pStrongClaimCount, int pWeakClaimCount,
             int pPendingCount, string pTargetCityRich)
         {
-            string stats = "\u6838" + pCoreCount + " \u5f3a" + pStrongClaimCount +
-                           " \u5f31" + pWeakClaimCount + " \u9020" + pPendingCount;
-            if (!string.IsNullOrEmpty(pTargetCityRich)) stats += " \u76ee\u6807\uff1a" + pTargetCityRich;
+            string stats = AW_L10n.Text("aw_war_stat_core", "Core ") + pCoreCount + " " +
+                           AW_L10n.Text("aw_war_stat_strong", "Strong ") + pStrongClaimCount + " " +
+                           AW_L10n.Text("aw_war_stat_weak", "Weak ") + pWeakClaimCount + " " +
+                           AW_L10n.Text("aw_war_stat_pending", "Pending ") + pPendingCount;
+            if (!string.IsNullOrEmpty(pTargetCityRich))
+                stats += " " + AW_L10n.Text("aw_war_target_goal", "War target: ") + pTargetCityRich;
             return stats;
         }
     }

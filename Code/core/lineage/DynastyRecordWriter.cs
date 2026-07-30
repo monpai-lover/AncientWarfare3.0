@@ -27,27 +27,30 @@ namespace AncientWarfare3.core.lineage
 
         private static readonly System.Random Rng = new System.Random();
 
-        public static void OnKingChanged(Kingdom pKingdom, Actor pNewKing)
+        public static bool OnKingChanged(Kingdom pKingdom, Actor pNewKing)
         {
-            if (!Ready || pKingdom?.data == null || pNewKing?.data == null) return;
-            if (!LineageService.IsXiaKingdom(pKingdom)) return;
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null)
+                return false;
+            if (!LineageService.IsXiaKingdom(pKingdom)) return false;
 
             pNewKing.data.get(LineageKeys.SHI_ID, out long newShiId, -1L);
             string newClanName = ResolveDynastyClanName(pNewKing, newShiId);
             long curShiId = GetCurrentDynastyShiId(pKingdom.id);
 
-            if (StateNameRules.IsSameShiContinuity(curShiId, newShiId)) return;
+            if (IsDynasticContinuity(pKingdom.id, curShiId, newShiId))
+                return false;
 
             // 关旧朝代
             string closeReason = (newShiId < 0 || !LineageService.IsXia(pNewKing))
                 ? END_REASON_UNKNOWN_SUCCESSOR
                 : END_REASON_REPLACED;
             CloseOpenDynasty(pKingdom.id, closeReason);
-            if (newShiId < 0 || !LineageService.IsXia(pNewKing)) return;
+            if (newShiId < 0 || !LineageService.IsXia(pNewKing))
+                return false;
 
             // 开新朝代
             string dynastyName = BuildRulePeriodName(pNewKing, pKingdom, newShiId, newClanName);
-            string stateName = StateNameService.GetBoundOrCurrentName(pKingdom, newShiId);
+            string stateName = pKingdom.name ?? "";
             string kingdomColor = HistoryColors.FromKingdom(pKingdom);
             string dynastyColor = HistoryColors.FromClan(pNewKing.clan, pKingdom);
             if (string.IsNullOrEmpty(dynastyColor)) dynastyColor = kingdomColor;
@@ -73,10 +76,62 @@ namespace AncientWarfare3.core.lineage
                     ColumnVal.Create("START_TIME",              now),
                     ColumnVal.Create("END_TIME",                -1.0),
                     ColumnVal.Create("END_REASON",              ""));
-                HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.DYNASTY_CHANGE,
-                    HistoryText.Colored(dynastyName, dynastyColor) + " \u5F00\u59CB");
             }
-            catch (Exception e) { ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " + e.Message); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("DynastyRecordWriter.OnKingChanged: " +
+                                    e.Message);
+                return false;
+            }
+
+            try
+            {
+                HistoryWriter.RecordKingdom(pKingdom,
+                    KingdomEvent.DYNASTY_CHANGE,
+                    HistoryText.Colored(dynastyName, dynastyColor) +
+                    " \u5F00\u59CB");
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Dynasty history write failed: " +
+                                    e.Message);
+            }
+            return true;
+        }
+
+        internal static bool WouldCreateNewDynasty(Kingdom pKingdom,
+            Actor pNewKing, long pPreBranchShiId)
+        {
+            if (!Ready || pKingdom?.data == null || pNewKing?.data == null ||
+                pPreBranchShiId < 0 ||
+                !LineageService.IsXiaKingdom(pKingdom) ||
+                !LineageService.IsXia(pNewKing)) return false;
+            long currentShiId = GetCurrentDynastyShiId(pKingdom.id);
+            return !IsDynasticContinuity(pKingdom.id, currentShiId,
+                pPreBranchShiId);
+        }
+
+        public static bool UpdateCurrentStateName(long pKingdomId,
+            string pStateName)
+        {
+            if (!Ready || pKingdomId < 0 ||
+                !StateNameRules.IsValid(pStateName)) return false;
+            try
+            {
+                using var command = new SQLiteCommand(DB);
+                command.CommandText = "UPDATE " + TABLE +
+                                      " SET STATE_NAME=@name " +
+                                      "WHERE KINGDOM_ID=@kingdom AND END_TIME=-1";
+                command.Parameters.AddWithValue("@name", pStateName);
+                command.Parameters.AddWithValue("@kingdom", pKingdomId);
+                return command.ExecuteNonQuery() > 0;
+            }
+            catch (Exception e)
+            {
+                ModClass.LogWarning("Dynasty state-name sync failed: " +
+                                    e.Message);
+                return false;
+            }
         }
 
         private static string ResolveDynastyClanName(Actor pKing, long pShiId)
@@ -88,6 +143,26 @@ namespace AncientWarfare3.core.lineage
 
             var shi = LineageQuery.GetShiBranchInfo(pShiId);
             return shi?.clan_name ?? "";
+        }
+
+        private static bool IsDynasticContinuity(long pKingdomId,
+            long pCurrentShiId, long pNewShiId)
+        {
+            if (StateNameRules.IsSameShiContinuity(pCurrentShiId,
+                    pNewShiId)) return true;
+            ShiBranchInfo current = LineageQuery.GetShiBranchInfo(
+                pCurrentShiId);
+            ShiBranchInfo next = LineageQuery.GetShiBranchInfo(pNewShiId);
+            if (current == null || next == null) return false;
+            List<ShiBranchInfo> parents =
+                LineageQuery.GetShiParentChain(pNewShiId);
+            var parentIds = new List<long>(parents.Count);
+            for (int i = 0; i < parents.Count; i++)
+                if (parents[i] != null) parentIds.Add(parents[i].shi_id);
+            return StateNameRules.IsDynasticContinuity(pCurrentShiId,
+                pNewShiId, current.lineage_id, next.lineage_id,
+                next.origin_kingdom_id, pKingdomId, next.source_type,
+                parentIds);
         }
 
         private static string BuildRulePeriodName(Actor pKing, Kingdom pKingdom, long pShiId, string pClanName)
@@ -156,7 +231,7 @@ namespace AncientWarfare3.core.lineage
         }
 
         // 查当前朝代的 shi_id（end=-1 行），-1=无
-        private static long GetCurrentDynastyShiId(long pKingdomId)
+        internal static long GetCurrentDynastyShiId(long pKingdomId)
         {
             if (!Ready) return -1;
             try

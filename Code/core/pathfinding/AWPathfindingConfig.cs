@@ -34,6 +34,25 @@ namespace AncientWarfare3.core.pathfinding
         public float DamageUnitsTicksPerSecond { get; set; } = 3.333f;
         public float ExhaustedSwimSpeedScale { get; set; } = 0.4f;
 
+        public static AWPathfindingConfig CreateArmyRouteConfig(
+            int worldTileCount)
+        {
+            int tiles = Math.Max(1, worldTileCount);
+            return new AWPathfindingConfig
+            {
+                ShortRangeTiles = 24,
+                LongRangeTiles = 96,
+                MaxNodesShort = 6000,
+                MaxNodesLong = 60000,
+                MaxNodesLongFallback = Math.Max(120000,
+                    Math.Min(1000000, tiles + 4096)),
+                FallbackCorridorMinDetour = Math.Max(128,
+                    (int)Math.Ceiling(Math.Sqrt(tiles) * 2d)),
+                FallbackCorridorDetourScale = 1.5f,
+                MaxLabelsPerTile = 1
+            };
+        }
+
         public static int WorkerCount(int pProcessorCount)
         {
             return Math.Max(1, Math.Min(4, pProcessorCount - 1));

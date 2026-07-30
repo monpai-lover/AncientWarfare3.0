@@ -36,9 +36,9 @@ namespace AncientWarfare3.content
                 unlocked_with_achievement = false,
                 group_id = XiaTraitGroups.AW2
             };
+            AssetManager.traits.add(trait);
             trait.base_stats["stewardship"] = 3f;
             trait.base_stats["diplomacy"] = 2f;
-            AssetManager.traits.add(trait);
             trait.unlock();
         }
 

@@ -64,10 +64,10 @@ namespace AncientWarfare3.patch
         private static void MakeBaby_Prefix(Actor pParent1,
             Actor pParent2, ref ActorSex pForcedSexType)
         {
-            if (pForcedSexType != ActorSex.None) return;
-            Actor protectedParent = PreferredParent(pParent1, pParent2);
-            if (protectedParent == null) return;
-            pForcedSexType = DynasticBirthSexRules.RollMakesMale(
+            if (pForcedSexType != ActorSex.None ||
+                !NobleHeirPregnancyService.IsActiveLoverHeirBirth(
+                    pParent1, pParent2)) return;
+            pForcedSexType = DynasticLoverConceptionRules.RollMakesMale(
                 Randy.randomInt(0, 100))
                 ? ActorSex.Male
                 : ActorSex.Female;
@@ -78,23 +78,10 @@ namespace AncientWarfare3.patch
         private static void MakeBaby_Postfix(Actor pParent1,
             Actor pParent2, Actor __result)
         {
+            NobleHeirPregnancyService.OnLoverHeirChildBorn(
+                __result, pParent1, pParent2);
             DynasticLivingSonIndexService.OnChildBorn(
                 __result, pParent1, pParent2);
-        }
-
-        private static Actor PreferredParent(Actor pFirst, Actor pSecond)
-        {
-            return ShouldPreferMale(pFirst)
-                ? pFirst
-                : ShouldPreferMale(pSecond)
-                    ? pSecond
-                    : null;
-        }
-
-        private static bool ShouldPreferMale(Actor pActor)
-        {
-            return DynasticMaleLineContinuityService.NeedsContinuation(
-                pActor);
         }
     }
 }

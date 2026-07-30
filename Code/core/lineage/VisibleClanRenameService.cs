@@ -101,17 +101,26 @@ namespace AncientWarfare3.core.lineage
 
         private static void UpdateBranchName(long pShiId, string pClanName)
         {
-            DB.UpdateValue(ShiBranchTableItem.GetTableName(),
-                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("SHI_ID", pShiId) },
-                ColumnVal.Create("CLAN_NAME", pClanName));
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => DB.UpdateValue(ShiBranchTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("SHI_ID", pShiId)
+                    },
+                    ColumnVal.Create("CLAN_NAME", pClanName)));
         }
 
         private static void UpdateArchivedActor(ActorArchiveTableItem pRow, string pClanName)
         {
-            DB.UpdateValue(ActorArchiveTableItem.GetTableName(),
-                new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", pRow.id) },
-                ColumnVal.Create("CLAN_NAME", pClanName),
-                ColumnVal.Create("DISPLAY_NAME", BuildArchivedDisplayName(pRow, pClanName)));
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => DB.UpdateValue(ActorArchiveTableItem.GetTableName(),
+                    new List<SimpleColumnConstraint>
+                    {
+                        SimpleColumnConstraint.CreateEq("ID", pRow.id)
+                    },
+                    ColumnVal.Create("CLAN_NAME", pClanName),
+                    ColumnVal.Create("DISPLAY_NAME",
+                        BuildArchivedDisplayName(pRow, pClanName))));
         }
 
         private static string BuildArchivedDisplayName(ActorArchiveTableItem pRow, string pClanName)
@@ -120,20 +129,9 @@ namespace AncientWarfare3.core.lineage
             if (string.IsNullOrEmpty(given)) given = pRow.display_name ?? "";
             if (string.IsNullOrEmpty(given)) return "";
 
-            string family = pRow.family_name ?? "";
-            string status = pRow.status ?? LineageStatus.NONE;
-            if (status == LineageStatus.NOBLE)
-            {
-                if (pRow.sex == 0)
-                {
-                    string prefix = !string.IsNullOrEmpty(pClanName) ? pClanName : family;
-                    return !string.IsNullOrEmpty(prefix) ? prefix + given : given;
-                }
-
-                return !string.IsNullOrEmpty(family) ? given + family : given;
-            }
-
-            return !string.IsNullOrEmpty(pClanName) ? pClanName + given : given;
+            return LineageDisplayNameRules.Build(given, pRow.family_name,
+                pClanName, pRow.status == LineageStatus.NOBLE,
+                pRow.sex == 0, pRow.name_integrated != 0);
         }
     }
 }

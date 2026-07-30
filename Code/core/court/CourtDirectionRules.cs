@@ -128,9 +128,8 @@ namespace AncientWarfare3.core.court
         public static float OffensiveWarMultiplier(float aggression, float peace, float livelihood,
             float war, bool protectedWar)
         {
-            if (protectedWar) return 1f;
-            return Clamp(1f + (aggression - 0.5f) * 0.45f - (peace - 0.5f) * 0.35f -
-                         (livelihood - 0.5f) * 0.15f + (war - 0.5f) * 0.25f, 0.5f, 1.5f);
+            return WarCourtMultiplierRules.OffensiveWarMultiplier(
+                aggression, peace, livelihood, war, protectedWar);
         }
 
         public static float VoluntaryDiplomacyMultiplier(float peace)

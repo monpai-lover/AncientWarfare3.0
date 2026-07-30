@@ -71,5 +71,12 @@ namespace AncientWarfare3.patch
                 __instance, __state, pFromLoad);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(City), "turnCityToNeutral")]
+        private static bool TurnCityToNeutral_Prefix(City __instance)
+        {
+            return !EmptyCitySurvivalService.ShouldKeepFormalOwner(__instance);
+        }
+
     }
 }

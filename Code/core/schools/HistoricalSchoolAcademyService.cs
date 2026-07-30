@@ -13,23 +13,73 @@ namespace AncientWarfare3.core.schools
         public static Building FindUsable(City pCity)
         {
             if (pCity?.data == null || pCity.isRekt()) return null;
-            Building academy = pCity.getBuildingOfType(
-                SchoolAcademyBuildingContent.BuildingTypeId,
-                pCountOnlyFinished: true);
-            return IsUsable(academy, pCity) ? academy : null;
+            try
+            {
+                System.Collections.Generic.List<Building> academies =
+                    pCity.getBuildingListOfType(
+                        SchoolAcademyBuildingContent.BuildingTypeId);
+                if (academies == null) return null;
+                for (int i = 0; i < academies.Count; i++)
+                {
+                    Building academy = academies[i];
+                    if (IsUsable(academy, pCity)) return academy;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public static bool HasLiveAcademy(City pCity)
+        {
+            if (pCity?.data == null || pCity.isRekt()) return false;
+            try
+            {
+                System.Collections.Generic.List<Building> academies =
+                    pCity.getBuildingListOfType(
+                        SchoolAcademyBuildingContent.BuildingTypeId);
+                if (academies == null) return false;
+                for (int i = 0; i < academies.Count; i++)
+                    if (IsLiveAcademyForCity(academies[i], pCity)) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool IsLiveAcademyForCity(Building pAcademy, City pCity)
+        {
+            if (pAcademy == null || pCity?.data == null || pCity.isRekt() ||
+                pAcademy.asset == null || !pAcademy.isAlive() ||
+                pAcademy.isRuin() || pAcademy.isAbandoned()) return false;
+            if (pAcademy.asset.id != SchoolAcademyBuildingContent.BuildingId &&
+                pAcademy.asset.type != SchoolAcademyBuildingContent.BuildingTypeId)
+                return false;
+            City attachedCity = null;
+            try { attachedCity = pAcademy.getCity(); }
+            catch { }
+            if (ReferenceEquals(attachedCity, pCity)) return true;
+            return attachedCity == null &&
+                   ReferenceEquals(pAcademy.current_tile?.zone?.city, pCity);
         }
 
         public static bool IsUsable(Building pAcademy, City pCity)
         {
+            if (!IsLiveAcademyForCity(pAcademy, pCity)) return false;
             City attachedCity = null;
             try { attachedCity = pAcademy?.getCity(); }
             catch { }
+            bool attachedToRequestedCity =
+                HistoricalSchoolVenueRules.IsAttachedToRequestedCity(
+                    directAttachment: ReferenceEquals(attachedCity, pCity),
+                    tileAttachment: attachedCity == null &&
+                                    ReferenceEquals(
+                                        pAcademy?.current_tile?.zone?.city,
+                                        pCity));
             return HistoricalSchoolVenueRules.IsAcademyUsable(
                 buildingExists: pAcademy != null,
                 buildingUsable: pAcademy?.isUsable() == true,
                 underConstruction: pAcademy?.isUnderConstruction() == true,
-                attachedToCity: attachedCity?.data != null && !attachedCity.isRekt(),
-                belongsToRequestedCity: ReferenceEquals(attachedCity, pCity));
+                attachedToCity: attachedToRequestedCity,
+                belongsToRequestedCity: attachedToRequestedCity);
         }
 
         public static bool IsInside(Actor pActor, Building pAcademy)

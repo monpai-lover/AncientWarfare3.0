@@ -1,0 +1,127 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class NobleDeathSuccessionRetrySqlTests
+{
+    public static void Run()
+    {
+        FailedTransactionRemainsPendingAndRetriesExactlyOnce();
+        FailedSaveFlushBlocksAndClearDropsPendingState();
+    }
+
+    private static void FailedTransactionRemainsPendingAndRetriesExactlyOnce()
+    {
+        using var db = OpenDatabase();
+        var queue = new NobleDeathSuccessionRetryQueue<string>();
+        Assert(queue.TryUpsert(10L, "holder-10"),
+            "death succession retry can be queued");
+        Assert(queue.TryUpsert(10L, "holder-10-latest") && queue.Count == 1,
+            "duplicate death callbacks coalesce by actor id");
+
+        string processed = "";
+        int attempts = 0;
+        bool first = queue.TryProcessOne(value =>
+        {
+            attempts++;
+            processed = value;
+            return TryApplySuccession(db, failBeforeCommit: true);
+        });
+        Assert(!first && queue.Count == 1,
+            "NobleDeathSuccessionRetrySqlTests.FailedTransactionRemainsPendingAndRetriesExactlyOnce: failed transaction must remain pending");
+        Assert(Scalar(db, "SELECT ACTIVE FROM Grants WHERE GRANT_ID=1") == 1L,
+            "failed death cleanup transaction rolls back the holder close");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM Grants WHERE PREDECESSOR_GRANT_ID=1") == 0L,
+            "failed death cleanup transaction rolls back inheritance");
+        Assert(processed == "holder-10-latest",
+            "coalesced death retry keeps the latest actor state");
+
+        bool second = queue.TryProcessOne(_ =>
+        {
+            attempts++;
+            return TryApplySuccession(db, failBeforeCommit: false);
+        });
+        Assert(second && queue.Count == 0,
+            "successful retry removes pending death cleanup");
+        Assert(attempts == 2,
+            "failed transaction is retried exactly once before completion");
+        Assert(Scalar(db, "SELECT ACTIVE FROM Grants WHERE GRANT_ID=1") == 0L,
+            "successful retry closes the holder grant");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM Grants WHERE PREDECESSOR_GRANT_ID=1") == 1L,
+            "successful retry inserts exactly one inherited grant");
+
+        int calls = 0;
+        Assert(queue.TryProcessOne(_ => { calls++; return true; }) && calls == 0,
+            "empty retry drain is idempotent");
+        Assert(Scalar(db, "SELECT COUNT(*) FROM Grants WHERE PREDECESSOR_GRANT_ID=1") == 1L,
+            "idempotent drain never duplicates an inherited grant");
+    }
+
+    private static void FailedSaveFlushBlocksAndClearDropsPendingState()
+    {
+        var queue = new NobleDeathSuccessionRetryQueue<string>();
+        Assert(queue.TryUpsert(20L, "holder-20"),
+            "save retry can be queued");
+        bool flushed = queue.TryFlushAll(_ => false);
+        Assert(!flushed && queue.Count == 1,
+            "NobleDeathSuccessionRetrySqlTests.FailedSaveFlushBlocksAndClearDropsPendingState: unresolved death cleanup must block save");
+        queue.Clear();
+        Assert(queue.Count == 0,
+            "world clear empties pending noble death cleanup");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Grants (GRANT_ID INTEGER PRIMARY KEY," +
+                    "ACTOR_ID INTEGER NOT NULL,ACTIVE INTEGER NOT NULL," +
+                    "PREDECESSOR_GRANT_ID INTEGER NOT NULL);");
+        Execute(db, "INSERT INTO Grants VALUES(1,10,1,-1);");
+        return db;
+    }
+
+    private static bool TryApplySuccession(SQLiteConnection db,
+        bool failBeforeCommit)
+    {
+        using SQLiteTransaction transaction = db.BeginTransaction();
+        try
+        {
+            using var close = new SQLiteCommand(
+                "UPDATE Grants SET ACTIVE=0 WHERE GRANT_ID=1 AND ACTIVE=1", db,
+                transaction);
+            close.ExecuteNonQuery();
+            using var inherit = new SQLiteCommand(
+                "INSERT INTO Grants(GRANT_ID,ACTOR_ID,ACTIVE,PREDECESSOR_GRANT_ID) " +
+                "SELECT 2,11,1,1 WHERE NOT EXISTS " +
+                "(SELECT 1 FROM Grants WHERE PREDECESSOR_GRANT_ID=1)", db,
+                transaction);
+            inherit.ExecuteNonQuery();
+            if (failBeforeCommit)
+                throw new SQLiteException("injected death cleanup failure");
+            transaction.Commit();
+            return true;
+        }
+        catch
+        {
+            try { transaction.Rollback(); } catch { }
+            return false;
+        }
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

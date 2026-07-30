@@ -1,0 +1,1301 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarAiGoalSelectionRulesTests
+{
+    public static void Run()
+    {
+        NativeXiaIdentitySurvivesMissingRuntimeIds();
+        ShortUninvadedWarStronglyRejectsSurrender();
+        SevereCasualtyExhaustionOpensEarlyPeaceEvaluation();
+        ExtremeEarlySurrenderRequiresWeakPeaceFactionAndRareRoll();
+        HighLegitimacyWarUsesAnUnyieldingThreshold();
+        ReversedAttackerSeeksPeaceBeforeCollapse();
+        MutualAttritionDoesNotMakeBothSidesLosers();
+        SettlementAvailabilityFollowsWarPosition();
+        SettlementAcceptanceUsesDetailedReadiness();
+        LosingPeaceOfferClosesSelectionResponseLoop();
+        CatastrophicSurrenderClosesSelectionResponseLoop();
+        WarSettlementCandidateDefersToPreparedTerms();
+        MultiWarSelectionSkipsTheFirstIneligibleWar();
+        WarSettlementCursorReachesTheFifthWar();
+        SettlementPathsRemainRoleSpecific();
+        SamePeoplePreferTerritorialClaim();
+        SuccessionSplitPrefersReunificationWithoutForcingIt();
+        BoundedTerritorialPreferenceBreaksCloseScores();
+        ForeignPeoplePreferIndirectSubjugation();
+        ProductionTributaryScoreCanCompeteWithVassalage();
+        ForeignLowControlRealmCanPreferTributaryRule();
+        ActualTargetValueDominatesReasonLabel();
+        HighSubjugationNeedCanBeatLowValueClaim();
+        SameCultureCanStillChooseVassalageWhenItHasMoreValue();
+        FabricatableTerritoryCompetesWithImmediateSubjugation();
+        IndependenceRequiresTheActualSuzerainTarget();
+        NoCbIsOnlyALegalFallback();
+        ForcedVassalageRequiresTwoTitleRanks();
+        VassalRelationRetainsItsStrictTitleGate();
+        TributaryWarRequiresRoyalOrImperialAttacker();
+        DedicatedVassalWarRequiresEligibleAdjacentTarget();
+        DedicatedSubjugationDoesNotBypassSamePeopleCompetition();
+        VanillaWarIntentRemainsConnected();
+        SeparatePeacePrefersVulnerableOpposingAllies();
+        SeparatePeaceValuesCoalitionIsolation();
+        SeparatePeaceEligibilityRespectsParticipantStatus();
+        SeparatePeaceLosingParticipantOffersCompensation();
+    }
+
+    private static void NativeXiaIdentitySurvivesMissingRuntimeIds()
+    {
+        Equal(WarAiPeopleRelation.SameSpecies,
+            WarAiGoalSelectionRules.ResolvePeopleRelation(
+                "", "", -1L, -1L,
+                attackerIsNativeXia: true,
+                defenderIsNativeXia: true),
+            "two native Xia realms remain the same people without runtime ids");
+        Equal(WarAiPeopleRelation.Foreign,
+            WarAiGoalSelectionRules.ResolvePeopleRelation(
+                "human", "human", 11L, 12L,
+                attackerIsNativeXia: true,
+                defenderIsNativeXia: false),
+            "native Xia and non-Xia realms do not collapse to one species");
+    }
+
+    private static void SevereCasualtyExhaustionOpensEarlyPeaceEvaluation()
+    {
+        var belowThreshold = new WarSettlementAiFacts(
+            warYears: 1, requesterToOpponentMilitaryRatio: .4f,
+            requesterFieldLossRatio: .5f, opponentFieldLossRatio: .08f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .8f, opponentWarFatigue: .1f,
+            requesterFoodSecurity: .9f, requesterOrder: .9f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: true, warCourtDominant: false,
+            highLegitimacyWar: false,
+            requesterWarExhaustion: 29,
+            opponentWarExhaustion: 5);
+        Equal(WarSettlementAiDecision.None,
+            DiplomacyProposalAiRules.SelectWarSettlement(belowThreshold,
+                WarSettlementPosition.Losing, earlySurrenderRoll: 1f),
+            "a short uninvaded war remains protected below thirty exhaustion");
+
+        var atThreshold = new WarSettlementAiFacts(
+            warYears: 1, requesterToOpponentMilitaryRatio: .4f,
+            requesterFieldLossRatio: .5f, opponentFieldLossRatio: .08f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .8f, opponentWarFatigue: .1f,
+            requesterFoodSecurity: .9f, requesterOrder: .9f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: true, warCourtDominant: false,
+            highLegitimacyWar: false,
+            requesterWarExhaustion: 30,
+            opponentWarExhaustion: 5);
+        Equal(WarSettlementAiDecision.Peace,
+            DiplomacyProposalAiRules.SelectWarSettlement(atThreshold,
+                WarSettlementPosition.Losing, earlySurrenderRoll: 1f),
+            "thirty exhaustion opens ordinary peace evaluation without forcing surrender");
+    }
+
+    private static void ShortUninvadedWarStronglyRejectsSurrender()
+    {
+        var facts = new WarSettlementAiFacts(
+            warYears: 1, requesterToOpponentMilitaryRatio: .28f,
+            requesterFieldLossRatio: .12f, opponentFieldLossRatio: .05f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .08f, opponentWarFatigue: .04f,
+            requesterFoodSecurity: .9f, requesterOrder: .85f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+
+        Equal(-100, DiplomacyProposalAiRules.BaseWillingness(
+                WarSettlementAiDecision.Surrender),
+            "surrender keeps the required fixed negative base");
+        var surrenderCandidate = new DiplomacyProposalAiCandidate(
+            DiplomacyProposalType.Surrender, allowed: true, opinion: 0,
+            requesterPowerRatio: .28f, directRoyalMarriage: false,
+            targetPowerRatio: 0f, targetHasMandate: false);
+        Equal(-100, DiplomacyProposalAiRules.Score(surrenderCandidate),
+            "generic diplomacy selection cannot restore a positive surrender base");
+        Equal(WarSettlementAiDecision.None,
+            DiplomacyProposalAiRules.SelectWarSettlement(facts,
+                earlySurrenderRoll: 0f),
+            "a short war with no occupied city does not surrender on ordinary disparity");
+    }
+
+    private static void ExtremeEarlySurrenderRequiresWeakPeaceFactionAndRareRoll()
+    {
+        var facts = new WarSettlementAiFacts(
+            warYears: 1, requesterToOpponentMilitaryRatio: .12f,
+            requesterFieldLossRatio: .68f, opponentFieldLossRatio: .08f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .55f, opponentWarFatigue: .1f,
+            requesterFoodSecurity: .55f, requesterOrder: .5f,
+            rulerWeak: true, rulerResolute: false,
+            peaceCourtDominant: true, warCourtDominant: false,
+            highLegitimacyWar: false);
+
+        True(DiplomacyProposalAiRules.IsExtremeEarlySurrenderEligible(facts),
+            "actual field-army collapse can open the historical early-surrender exception");
+        Equal(.04f, DiplomacyProposalAiRules.EarlySurrenderProbability(facts),
+            "ordinary extreme early surrender remains a small probability");
+        Equal(WarSettlementAiDecision.Surrender,
+            DiplomacyProposalAiRules.SelectWarSettlement(facts,
+                earlySurrenderRoll: .02f),
+            "a weak ruler under a peace faction may rarely yield before occupation");
+        Equal(WarSettlementAiDecision.None,
+            DiplomacyProposalAiRules.SelectWarSettlement(facts,
+                earlySurrenderRoll: .2f),
+            "the same early collapse usually continues resistance");
+    }
+
+    private static void HighLegitimacyWarUsesAnUnyieldingThreshold()
+    {
+        var resoluteDefense = new WarSettlementAiFacts(
+            warYears: 8, requesterToOpponentMilitaryRatio: .16f,
+            requesterFieldLossRatio: .64f, opponentFieldLossRatio: .22f,
+            requesterCitiesLostRatio: .25f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .58f, opponentWarFatigue: .2f,
+            requesterFoodSecurity: .55f, requesterOrder: .65f,
+            rulerWeak: false, rulerResolute: true,
+            peaceCourtDominant: false, warCourtDominant: true,
+            highLegitimacyWar: true);
+        Equal(WarSettlementAiDecision.None,
+            DiplomacyProposalAiRules.SelectWarSettlement(resoluteDefense,
+                earlySurrenderRoll: 0f),
+            "a resolute ruler and pro-war court reject ordinary collapse in a legitimate war");
+        False(DiplomacyProposalAiRules.IsReadyToConcede(resoluteDefense),
+            "an unyielding legitimate defense is not treated as ready to concede");
+
+        var catastrophicDefense = new WarSettlementAiFacts(
+            warYears: 12, requesterToOpponentMilitaryRatio: .05f,
+            requesterFieldLossRatio: .92f, opponentFieldLossRatio: .12f,
+            requesterCitiesLostRatio: .82f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: true,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .95f, opponentWarFatigue: .25f,
+            requesterFoodSecurity: .08f, requesterOrder: .12f,
+            rulerWeak: false, rulerResolute: true,
+            peaceCourtDominant: false, warCourtDominant: true,
+            highLegitimacyWar: true);
+        Equal(WarSettlementAiDecision.Surrender,
+            DiplomacyProposalAiRules.SelectWarSettlement(catastrophicDefense,
+                earlySurrenderRoll: 0f),
+            "even an unyielding route may fail only after catastrophic occupation and army loss");
+        True(DiplomacyProposalAiRules.IsReadyToConcede(catastrophicDefense),
+            "catastrophic collapse eventually overcomes the unyielding modifiers");
+    }
+
+    private static void MutualAttritionDoesNotMakeBothSidesLosers()
+    {
+        var left = new WarSettlementAiFacts(
+            warYears: 8, requesterToOpponentMilitaryRatio: .7f,
+            requesterFieldLossRatio: .45f, opponentFieldLossRatio: .5f,
+            requesterCitiesLostRatio: .3f, opponentCitiesLostRatio: .3f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .72f, opponentWarFatigue: .76f,
+            requesterFoodSecurity: .65f, requesterOrder: .6f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        var right = new WarSettlementAiFacts(
+            warYears: 8, requesterToOpponentMilitaryRatio: 1f / .7f,
+            requesterFieldLossRatio: .5f, opponentFieldLossRatio: .45f,
+            requesterCitiesLostRatio: .3f, opponentCitiesLostRatio: .3f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .76f, opponentWarFatigue: .72f,
+            requesterFoodSecurity: .65f, requesterOrder: .6f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+
+        False(DiplomacyProposalAiRules.IsMateriallyLosing(left) &&
+              DiplomacyProposalAiRules.IsMateriallyLosing(right),
+            "one war cannot mark both opposing perspectives as the loser");
+
+        var foodStressedLeft = new WarSettlementAiFacts(
+            warYears: 8, requesterToOpponentMilitaryRatio: .8f,
+            requesterFieldLossRatio: .14f, opponentFieldLossRatio: 0f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .8f, opponentWarFatigue: .4f,
+            requesterFoodSecurity: 0f, requesterOrder: .5f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        var foodStressedRight = new WarSettlementAiFacts(
+            warYears: 8, requesterToOpponentMilitaryRatio: 1.25f,
+            requesterFieldLossRatio: 0f, opponentFieldLossRatio: .14f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .8f, opponentWarFatigue: .4f,
+            requesterFoodSecurity: 0f, requesterOrder: .5f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        Equal(WarSettlementPosition.Losing,
+            DiplomacyProposalAiRules.ResolvePosition(foodStressedLeft),
+            "materially weaker forces are objectively losing");
+        Equal(WarSettlementPosition.Winning,
+            DiplomacyProposalAiRules.ResolvePosition(foodStressedRight),
+            "the opposing perspective remains the objective winner despite its own food stress");
+
+        var sixtyPercent = new WarSettlementAiFacts(
+            warYears: 6, requesterToOpponentMilitaryRatio: .6f,
+            requesterFieldLossRatio: 0f, opponentFieldLossRatio: 0f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: false,
+            requesterWarFatigue: 0f, opponentWarFatigue: 0f,
+            requesterFoodSecurity: 1f, requesterOrder: 1f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        var inverseSixtyPercent = new WarSettlementAiFacts(
+            warYears: 6, requesterToOpponentMilitaryRatio: 1f / .6f,
+            requesterFieldLossRatio: 0f, opponentFieldLossRatio: 0f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: false,
+            requesterWarFatigue: 0f, opponentWarFatigue: 0f,
+            requesterFoodSecurity: 1f, requesterOrder: 1f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        WarSettlementPosition sixtyPosition =
+            DiplomacyProposalAiRules.ResolvePosition(sixtyPercent);
+        Equal(WarSettlementPosition.Losing, sixtyPosition,
+            "a sixty-percent force ratio is materially losing");
+        Equal(DiplomacyProposalAiRules.Opposite(sixtyPosition),
+            DiplomacyProposalAiRules.ResolvePosition(inverseSixtyPercent),
+            "reciprocal military ratios project strict opposite positions");
+    }
+
+    private static void ReversedAttackerSeeksPeaceBeforeCollapse()
+    {
+        var reversedAttacker = new WarSettlementAiFacts(
+            warYears: 5, requesterToOpponentMilitaryRatio: .42f,
+            requesterFieldLossRatio: .55f, opponentFieldLossRatio: .12f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .58f, opponentWarFatigue: .18f,
+            requesterFoodSecurity: .65f, requesterOrder: .6f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+
+        Equal(WarSettlementAiDecision.Peace,
+            DiplomacyProposalAiRules.SelectWarSettlement(
+                reversedAttacker, earlySurrenderRoll: 1f),
+            "a repelled attacker seeks unconditional peace before total collapse");
+    }
+
+    private static void SettlementAvailabilityFollowsWarPosition()
+    {
+        DiplomacyAvailabilityFacts Facts(WarSettlementPosition position) =>
+            new DiplomacyAvailabilityFacts(
+                atWar: true, allied: false, requesterIsSubject: false,
+                responderIsSubject: false, directSubjectRelation: false,
+                hasJoinableWar: false, requesterIsMandate: false,
+                activeNonAggression: false, activeTruce: false,
+                subjectFailureReason: "", allianceFailureReason: "",
+                activeWarPreparation: false, peaceNegotiators: true,
+                warPosition: position);
+
+        Equal("", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.Surrender,
+                Facts(WarSettlementPosition.Losing)),
+            "only the losing realm may offer surrender");
+        Equal("not_winning_war", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.EnforceDemands,
+                Facts(WarSettlementPosition.Losing)),
+            "a losing realm cannot enforce demands");
+        Equal("", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.EnforceDemands,
+                Facts(WarSettlementPosition.Winning)),
+            "only the winning realm may enforce demands");
+        Equal("not_losing_war", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.Surrender,
+                Facts(WarSettlementPosition.Winning)),
+            "a winning realm cannot offer surrender");
+        Equal("not_losing_war", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.Surrender,
+                Facts(WarSettlementPosition.Contested)),
+            "a contested realm cannot claim it has already lost");
+        Equal("not_winning_war", DiplomacyProposalRules.UnavailableReason(
+                DiplomacyProposalType.EnforceDemands,
+                Facts(WarSettlementPosition.Contested)),
+            "a contested realm cannot claim victory");
+    }
+
+    private static void SettlementAcceptanceUsesDetailedReadiness()
+    {
+        var exhaustedPeace = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.Peace,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 100, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                responderReadyForPeace: true,
+                responderReadyToConcede: false,
+                hasWarSettlementReadiness: true));
+        True(exhaustedPeace.ExpectedAccepted,
+            "an exhausted responder accepts peace through the same settlement rule");
+        Equal(28, exhaustedPeace.Parts.Single(part =>
+                part.Key == "war_situation").Value,
+            "the peace tooltip reports the detailed settlement readiness");
+
+        var unyieldingEnforcement = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.EnforceDemands,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 300, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: true,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                responderReadyForPeace: false,
+                responderReadyToConcede: false,
+                hasWarSettlementReadiness: true));
+        False(unyieldingEnforcement.ExpectedAccepted,
+            "winning alone does not bypass an unyielding responder");
+        Equal(-30, unyieldingEnforcement.Parts.Single(part =>
+                part.Key == "war_situation").Value,
+            "the enforcement tooltip uses the same refusal state as AI execution");
+
+        var concedingEnforcement = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.EnforceDemands,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 300, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: true,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                responderReadyForPeace: true,
+                responderReadyToConcede: true,
+                hasWarSettlementReadiness: true));
+        True(concedingEnforcement.ExpectedAccepted,
+            "a genuine loser may concede to enforcement");
+    }
+
+    private static void LosingPeaceOfferClosesSelectionResponseLoop()
+    {
+        var reversedAttacker = new WarSettlementAiFacts(
+            warYears: 6, requesterToOpponentMilitaryRatio: .6f,
+            requesterFieldLossRatio: .3f, opponentFieldLossRatio: 0f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .28f, opponentWarFatigue: .14f,
+            requesterFoodSecurity: 1f, requesterOrder: 1f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        Equal(WarSettlementAiDecision.Peace,
+            DiplomacyProposalAiRules.SelectWarSettlement(
+                reversedAttacker, earlySurrenderRoll: 1f),
+            "a six-year repelled attacker selects peace");
+
+        var closedLoop = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.Peace,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 60, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                requesterLosingWar: true,
+                requesterReadyForPeace: true,
+                responderReadyForPeace: false,
+                responderReadyToConcede: false,
+                hasWarSettlementReadiness: true));
+        True(closedLoop.ExpectedAccepted,
+            "a selected losing-side peace offer survives predicted-rejection filtering");
+        Equal(28, closedLoop.Parts.Single(part =>
+                part.Key == "war_situation").Value,
+            "the response score recognizes a credible losing-side peace offer");
+
+        var prematureOffer = DiplomacyProposalRules.Assess(
+            DiplomacyProposalType.Peace,
+            new DiplomacyProposalScoreFacts(opinion: 0,
+                requesterPower: 60, responderPower: 100,
+                sharedEnemy: false, responderLosingWar: false,
+                allied: false, requesterIsMandate: false,
+                requesterDiplomacy: 10, responderDiplomacy: 10,
+                requesterLosingWar: true,
+                requesterReadyForPeace: false,
+                responderReadyForPeace: false,
+                responderReadyToConcede: false,
+                hasWarSettlementReadiness: true));
+        False(prematureOffer.ExpectedAccepted,
+            "being behind does not bypass peace acceptance before settlement readiness");
+    }
+
+    private static void CatastrophicSurrenderClosesSelectionResponseLoop()
+    {
+        var catastrophic = new WarSettlementAiFacts(
+            warYears: 12, requesterToOpponentMilitaryRatio: .05f,
+            requesterFieldLossRatio: .92f, opponentFieldLossRatio: .12f,
+            requesterCitiesLostRatio: .82f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: true,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .95f, opponentWarFatigue: .25f,
+            requesterFoodSecurity: .08f, requesterOrder: .12f,
+            rulerWeak: false, rulerResolute: true,
+            peaceCourtDominant: false, warCourtDominant: true,
+            highLegitimacyWar: true);
+        Equal(WarSettlementAiDecision.Surrender,
+            DiplomacyProposalAiRules.SelectWarSettlement(
+                catastrophic, earlySurrenderRoll: 1f),
+            "catastrophic collapse selects surrender before proposal creation");
+
+        DiplomacyProposalAssessment catastrophicAssessment =
+            DiplomacyProposalRules.Assess(
+                DiplomacyProposalType.Surrender,
+                new DiplomacyProposalScoreFacts(opinion: 0,
+                    requesterPower: 5, responderPower: 100,
+                    sharedEnemy: false, responderLosingWar: false,
+                    allied: false, requesterIsMandate: false,
+                    requesterDiplomacy: 10, responderDiplomacy: 10,
+                    requesterLosingWar: true,
+                    requesterSurrenderWarSituation:
+                        DiplomacyProposalAiRules.SurrenderWarSituationScore(
+                            catastrophic),
+                    requesterSurrenderPower:
+                        DiplomacyProposalAiRules.SurrenderPowerScore(
+                            catastrophic),
+                    requesterSurrenderResolve:
+                        DiplomacyProposalAiRules.SurrenderResolveScore(
+                            catastrophic),
+                    hasDetailedSurrender: true));
+        True(catastrophicAssessment.ExpectedAccepted,
+            "a surrender selected from catastrophic facts survives receiver assessment");
+        Equal(-100, catastrophicAssessment.Parts.Single(part =>
+                part.Key == "base").Value,
+            "the detailed surrender path preserves the strict negative base");
+        True(catastrophicAssessment.Parts.Single(part =>
+                part.Key == "war_situation").Value > 150,
+            "occupation capital threat and fatigue reach the receiver tooltip");
+
+        var ordinaryDefeat = new WarSettlementAiFacts(
+            warYears: 6, requesterToOpponentMilitaryRatio: .6f,
+            requesterFieldLossRatio: .3f, opponentFieldLossRatio: 0f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .28f, opponentWarFatigue: .14f,
+            requesterFoodSecurity: 1f, requesterOrder: 1f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        DiplomacyProposalAssessment ordinaryAssessment =
+            DiplomacyProposalRules.Assess(
+                DiplomacyProposalType.Surrender,
+                new DiplomacyProposalScoreFacts(opinion: 0,
+                    requesterPower: 60, responderPower: 100,
+                    sharedEnemy: false, responderLosingWar: false,
+                    allied: false, requesterIsMandate: false,
+                    requesterDiplomacy: 10, responderDiplomacy: 10,
+                    requesterLosingWar: true,
+                    requesterSurrenderWarSituation:
+                        DiplomacyProposalAiRules.SurrenderWarSituationScore(
+                            ordinaryDefeat),
+                    requesterSurrenderPower:
+                        DiplomacyProposalAiRules.SurrenderPowerScore(
+                            ordinaryDefeat),
+                    requesterSurrenderResolve:
+                        DiplomacyProposalAiRules.SurrenderResolveScore(
+                            ordinaryDefeat),
+                    hasDetailedSurrender: true));
+        False(ordinaryAssessment.ExpectedAccepted,
+            "ordinary defeat remains below the strict surrender threshold");
+    }
+
+    private static void MultiWarSelectionSkipsTheFirstIneligibleWar()
+    {
+        var candidates = new[]
+        {
+            new WarSettlementSelectionCandidate(
+                eligible: false, WarSettlementAiDecision.Surrender,
+                urgency: 1000),
+            new WarSettlementSelectionCandidate(
+                eligible: true, WarSettlementAiDecision.Peace,
+                urgency: 120),
+            new WarSettlementSelectionCandidate(
+                eligible: true, WarSettlementAiDecision.EnforceDemands,
+                urgency: 80)
+        };
+        Equal(1, DiplomacyProposalAiRules.SelectBestWarSettlementIndex(
+                candidates),
+            "multi-war AI can select the eligible second war instead of always using the first");
+        Equal(4, DiplomacyProposalAiRules.MaximumWarSettlementAssessments,
+            "annual multi-war settlement inspection stays strictly bounded");
+        Equal(8, DiplomacyProposalAiRules.MaximumWarSettlementScanBudget,
+            "annual multi-war discovery stays strictly bounded");
+        Equal(16,
+            DiplomacyProposalAiRules.MaximumSeparatePeacePotentialCityScans,
+            "separate-peace military-potential city work stays bounded");
+
+        var beyondBound = new[]
+        {
+            new WarSettlementSelectionCandidate(false,
+                WarSettlementAiDecision.None, 0),
+            new WarSettlementSelectionCandidate(false,
+                WarSettlementAiDecision.None, 0),
+            new WarSettlementSelectionCandidate(false,
+                WarSettlementAiDecision.None, 0),
+            new WarSettlementSelectionCandidate(false,
+                WarSettlementAiDecision.None, 0),
+            new WarSettlementSelectionCandidate(true,
+                WarSettlementAiDecision.Surrender, 1000)
+        };
+        Equal(-1, DiplomacyProposalAiRules.SelectBestWarSettlementIndex(
+                beyondBound),
+            "one annual pass never assesses beyond the fixed war bound");
+    }
+
+    private static void WarSettlementCursorReachesTheFifthWar()
+    {
+        using var cursor = new BoundedRoundRobinCursor<int>(
+            () => new[] { 0, 1, 2, 3, 4 });
+        Equal("0,1,2,3", string.Join(",", cursor.Take(4)),
+            "the first annual pass inspects exactly four wars");
+        Equal("4,0,1,2", string.Join(",", cursor.Take(4)),
+            "the stable next pass starts with the fifth war and then wraps");
+
+        using var singleWarCursor = new BoundedRoundRobinCursor<int>(
+            () => new[] { 7 });
+        Equal("7", string.Join(",", singleWarCursor.Take(4)),
+            "one annual pass never reassesses the same war after wrapping");
+    }
+
+    private static void WarSettlementCandidateDefersToPreparedTerms()
+    {
+        DiplomacyProposalAssessment hostileReceiver =
+            DiplomacyProposalRules.Assess(
+                DiplomacyProposalType.Peace,
+                new DiplomacyProposalScoreFacts(opinion: -50,
+                    requesterPower: 60, responderPower: 100,
+                    sharedEnemy: false, responderLosingWar: false,
+                    allied: false, requesterIsMandate: false,
+                    requesterDiplomacy: 10, responderDiplomacy: 10,
+                    responderPeace: .1f, responderAggression: .9f,
+                    requesterLosingWar: true,
+                    requesterReadyForPeace: true,
+                    responderReadyForPeace: false,
+                    responderReadyToConcede: false,
+                    hasWarSettlementReadiness: true));
+        False(hostileReceiver.ExpectedAccepted,
+            "negative opinion and a war court still predict final rejection");
+        True(DiplomacyProposalAiRules.CanQueueWarSettlementProposal(
+                WarSettlementAiDecision.Peace,
+                requesterReadyForPeace: true,
+                actionAllowed: true,
+                rejectionCooldownActive: false),
+            "a ready peace candidate reaches the prepared-term preflight");
+        False(DiplomacyProposalAiRules.CanQueueWarSettlementProposal(
+                WarSettlementAiDecision.Peace,
+                requesterReadyForPeace: false,
+                actionAllowed: true,
+                rejectionCooldownActive: false),
+            "an unready requester does not prepare a peace treaty");
+        False(DiplomacyProposalAiRules.CanQueueWarSettlementProposal(
+                WarSettlementAiDecision.Peace,
+                requesterReadyForPeace: true,
+                actionAllowed: true,
+                rejectionCooldownActive: true),
+            "prepared-term preflight still respects rejection cooldown");
+    }
+
+    private static void SettlementPathsRemainRoleSpecific()
+    {
+        var stalemate = new WarSettlementAiFacts(
+            warYears: 11, requesterToOpponentMilitaryRatio: 1.05f,
+            requesterFieldLossRatio: .48f, opponentFieldLossRatio: .52f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: 0f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: false,
+            requesterBorderThreatened: true,
+            requesterWarFatigue: .74f, opponentWarFatigue: .76f,
+            requesterFoodSecurity: .6f, requesterOrder: .6f,
+            rulerWeak: false, rulerResolute: false,
+            peaceCourtDominant: false, warCourtDominant: false,
+            highLegitimacyWar: false);
+        Equal(WarSettlementAiDecision.Peace,
+            DiplomacyProposalAiRules.SelectWarSettlement(stalemate, 1f),
+            "mutual long-war exhaustion selects unconditional peace, not surrender");
+        True(DiplomacyProposalAiRules.IsReadyToAcceptPeace(stalemate),
+            "the same exhausted-stalemate rule accepts an incoming peace offer");
+        False(DiplomacyProposalAiRules.IsReadyToConcede(stalemate),
+            "white-peace exhaustion is not mislabeled as surrender");
+
+        var winner = new WarSettlementAiFacts(
+            warYears: 7, requesterToOpponentMilitaryRatio: 3.4f,
+            requesterFieldLossRatio: .15f, opponentFieldLossRatio: .72f,
+            requesterCitiesLostRatio: 0f, opponentCitiesLostRatio: .55f,
+            requesterCapitalThreatened: false,
+            opponentCapitalThreatened: true,
+            requesterBorderThreatened: false,
+            requesterWarFatigue: .25f, opponentWarFatigue: .8f,
+            requesterFoodSecurity: .9f, requesterOrder: .9f,
+            rulerWeak: false, rulerResolute: true,
+            peaceCourtDominant: false, warCourtDominant: true,
+            highLegitimacyWar: false);
+        Equal(WarSettlementAiDecision.EnforceDemands,
+            DiplomacyProposalAiRules.SelectWarSettlement(winner, 1f),
+            "a winner follows the enforcement path rather than borrowing surrender scoring");
+        True(DiplomacyProposalAiRules.BaseWillingness(
+                 WarSettlementAiDecision.EnforceDemands) !=
+             DiplomacyProposalAiRules.BaseWillingness(
+                 WarSettlementAiDecision.Surrender),
+            "winner and loser paths have distinct base willingness");
+    }
+
+    private static void SamePeoplePreferTerritorialClaim()
+    {
+        WarAiPeopleRelation relation = WarAiGoalSelectionRules.ResolvePeopleRelation(
+            "Xia", "Xia", 11, 11);
+        string selected = WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("press_claim_city", 100),
+            new WarAiGoalCandidate("force_vassal", 105)
+        }, relation);
+
+        Equal(WarAiPeopleRelation.SameCulture, relation,
+            "same culture is an integrated people relationship");
+        Equal("press_claim_city", selected,
+            "same-culture weak claims are not monopolized by vassal war");
+
+        relation = WarAiGoalSelectionRules.ResolvePeopleRelation(
+            "human", "human", 11, 22);
+        selected = WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("press_claim_city", 80),
+            new WarAiGoalCandidate("force_vassal", 140)
+        }, relation);
+        Equal(WarAiPeopleRelation.SameSpecies, relation,
+            "same species remains one people when cultures differ");
+        Equal("press_claim_city", selected,
+            "same-species conquest fabricates or presses claims instead of default vassalization");
+    }
+
+    private static void SuccessionSplitPrefersReunificationWithoutForcingIt()
+    {
+        var split = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.5f, targetCityCount: 3,
+            attackerCentralization: 2, attackerExpansionism: .7f,
+            courtWar: .7f, courtPeace: .2f,
+            currentSubjectCount: 1, subjectSoftCap: 6,
+            opposedSuccessionBranches: true);
+        Equal("reunify_succession", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("reunify_succession", 90),
+                new WarAiGoalCandidate("force_vassal", 130)
+            }, WarAiPeopleRelation.SameCulture, split),
+            "opposed courts prefer whole-realm reunification over a nearby indirect rule score");
+        Equal("take_mandate", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("reunify_succession", 90),
+                new WarAiGoalCandidate("take_mandate", 260)
+            }, WarAiPeopleRelation.SameCulture, split),
+            "the succession preference does not override a materially stronger legal objective");
+    }
+
+    private static void BoundedTerritorialPreferenceBreaksCloseScores()
+    {
+        Equal("press_claim_city", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", 105),
+                new WarAiGoalCandidate("press_claim_city", 90)
+            }, WarAiPeopleRelation.Unknown),
+            "a later territorial goal wins an exact final-score tie");
+        Equal("press_claim_city", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", 106),
+                new WarAiGoalCandidate("press_claim_city", 92)
+            }, WarAiPeopleRelation.Unknown),
+            "the bounded territorial preference flips a near tie");
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", 140),
+                new WarAiGoalCandidate("press_claim_city", 90)
+            }, WarAiPeopleRelation.Unknown),
+            "territorial preference cannot erase a materially stronger goal");
+    }
+
+    private static void ForeignPeoplePreferIndirectSubjugation()
+    {
+        WarAiPeopleRelation relation = WarAiGoalSelectionRules.ResolvePeopleRelation(
+            "Xia", "orc", 11, 22);
+        var context = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.7f, targetCityCount: 2,
+            attackerCentralization: 1, attackerExpansionism: .55f,
+            courtWar: .55f, courtPeace: .35f,
+            currentSubjectCount: 1, subjectSoftCap: 6);
+        string selected = WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("press_claim_city", 35),
+            new WarAiGoalCandidate("force_tributary", 90),
+            new WarAiGoalCandidate("force_vassal", 80)
+        }, relation, context);
+
+        Equal(WarAiPeopleRelation.Foreign, relation,
+            "different species and culture are a foreign people");
+        Equal("force_vassal", selected,
+            "foreign realms prefer vassal war for indirect rule before annexation");
+    }
+
+    private static void ForeignLowControlRealmCanPreferTributaryRule()
+    {
+        int vassalScore = WarTargetSelectionRules.ScoreTarget(
+            WarTerritoryService.GOAL_FORCE_VASSAL,
+            pHasCore: false, pHasStrongClaim: false,
+            pHasWeakClaim: false, pRestorationStrength: 0,
+            pPopulation: 100);
+        int tributaryScore = WarTargetSelectionRules.ScoreTarget(
+            WarTerritoryService.GOAL_FORCE_TRIBUTARY,
+            pHasCore: false, pHasStrongClaim: false,
+            pHasWeakClaim: false, pRestorationStrength: 0,
+            pPopulation: 100);
+        var indirectRule = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.8f, targetCityCount: 3,
+            attackerCentralization: 0, attackerExpansionism: .45f,
+            courtWar: .35f, courtPeace: .65f,
+            currentSubjectCount: 2, subjectSoftCap: 7);
+        Equal("force_tributary", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", vassalScore,
+                    WarAiGoalSelectionRules.ObjectiveUrgency(
+                        "force_vassal", vassalScore)),
+                new WarAiGoalCandidate("force_tributary", tributaryScore,
+                    WarAiGoalSelectionRules.ObjectiveUrgency(
+                        "force_tributary", tributaryScore))
+            }, WarAiPeopleRelation.Foreign, indirectRule),
+            "a low-control realm can prefer tributary rule over direct vassal management");
+
+        var expansion = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 2.6f, targetCityCount: 1,
+            attackerCentralization: 3, attackerExpansionism: .9f,
+            courtWar: .8f, courtPeace: .15f,
+            currentSubjectCount: 1, subjectSoftCap: 8);
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", vassalScore,
+                    WarAiGoalSelectionRules.ObjectiveUrgency(
+                        "force_vassal", vassalScore)),
+                new WarAiGoalCandidate("force_tributary", tributaryScore,
+                    WarAiGoalSelectionRules.ObjectiveUrgency(
+                        "force_tributary", tributaryScore))
+            }, WarAiPeopleRelation.Foreign, expansion),
+            "a centralized expansionist can still prefer a weak foreign vassal");
+
+        var fullVassalCapacity = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 2f, targetCityCount: 2,
+            attackerCentralization: 1, attackerExpansionism: .6f,
+            courtWar: .5f, courtPeace: .5f,
+            currentSubjectCount: 5, subjectSoftCap: 5);
+        Equal("force_tributary", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", 500),
+                new WarAiGoalCandidate("force_tributary", tributaryScore)
+            }, WarAiPeopleRelation.Foreign, fullVassalCapacity),
+            "full vassal capacity rejects new vassals without blocking tributary rule");
+    }
+
+    private static void ProductionTributaryScoreCanCompeteWithVassalage()
+    {
+        int vassal = WarTargetSelectionRules.ScoreTarget(
+            WarTerritoryService.GOAL_FORCE_VASSAL,
+            pHasCore: false, pHasStrongClaim: false,
+            pHasWeakClaim: false, pRestorationStrength: 0,
+            pPopulation: 100);
+        int tributary = WarTargetSelectionRules.ScoreTarget(
+            WarTerritoryService.GOAL_FORCE_TRIBUTARY,
+            pHasCore: false, pHasStrongClaim: false,
+            pHasWeakClaim: false, pRestorationStrength: 0,
+            pPopulation: 100);
+        Equal(5, vassal - tributary,
+            "production target scores preserve only a small default preference for vassalage over tributary rule");
+        Equal(25, WarAiGoalSelectionRules.ObjectiveUrgency(
+                WarTerritoryService.GOAL_FORCE_VASSAL, vassal),
+            "normal and dedicated routes share vassal objective urgency");
+        Equal(15, WarAiGoalSelectionRules.ObjectiveUrgency(
+                WarTerritoryService.GOAL_FORCE_TRIBUTARY, tributary),
+            "normal and dedicated routes share tributary objective urgency");
+    }
+
+    private static void ActualTargetValueDominatesReasonLabel()
+    {
+        var context = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.6f, targetCityCount: 3,
+            attackerCentralization: 1, attackerExpansionism: .5f,
+            courtWar: .5f, courtPeace: .4f,
+            currentSubjectCount: 3, subjectSoftCap: 6);
+        Equal("take_core_city", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("restore_kingdom", 10, urgency: 5),
+            new WarAiGoalCandidate("take_core_city", 500, urgency: 35)
+        }, WarAiPeopleRelation.Foreign, context),
+            "a low-value restoration label cannot erase a high-value core target");
+        Equal("press_claim_city", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("restore_kingdom", 25, urgency: 5),
+            new WarAiGoalCandidate("press_claim_city", 260, urgency: 20)
+        }, WarAiPeopleRelation.SameCulture, context),
+            "ordinary claims may beat a low-value restoration when their actual target matters more");
+    }
+
+    private static void HighSubjugationNeedCanBeatLowValueClaim()
+    {
+        var context = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 2.5f, targetCityCount: 1,
+            attackerCentralization: 3, attackerExpansionism: .95f,
+            courtWar: .85f, courtPeace: .1f,
+            currentSubjectCount: 0, subjectSoftCap: 8);
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("press_claim_city", 55, urgency: 5),
+            new WarAiGoalCandidate("force_vassal", 35, urgency: 25)
+        }, WarAiPeopleRelation.Foreign, context),
+            "large spare subject capacity and expansion pressure can outweigh a low-value claim");
+    }
+
+    private static void SameCultureCanStillChooseVassalageWhenItHasMoreValue()
+    {
+        var context = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 3f, targetCityCount: 1,
+            attackerCentralization: 3, attackerExpansionism: 1f,
+            courtWar: 1f, courtPeace: 0f,
+            currentSubjectCount: 0, subjectSoftCap: 10);
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("force_vassal", 35, urgency: 25),
+            new WarAiGoalCandidate("press_claim_city", 15, urgency: 0)
+        }, WarAiPeopleRelation.SameCulture, context),
+            "culture changes strategic weight but cannot make an otherwise legal vassal war ineligible");
+    }
+
+    private static void FabricatableTerritoryCompetesWithImmediateSubjugation()
+    {
+        var routineExpansion = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.6f, targetCityCount: 2,
+            attackerCentralization: 1, attackerExpansionism: .55f,
+            courtWar: .55f, courtPeace: .35f,
+            currentSubjectCount: 1, subjectSoftCap: 6);
+        True(WarAiGoalSelectionRules.ShouldPreferTerritorialPreparation(
+                WarAiPeopleRelation.SameCulture, routineExpansion,
+                prospectiveClaimBaseScore: 65,
+                new WarAiGoalCandidate("force_vassal", 70,
+                    urgency: 25)),
+            "a fabricatable same-culture claim competes before routine immediate vassalage");
+        False(WarAiGoalSelectionRules.ShouldPreferTerritorialPreparation(
+                WarAiPeopleRelation.Foreign, routineExpansion,
+                prospectiveClaimBaseScore: 65,
+                new WarAiGoalCandidate("force_vassal", 70,
+                    urgency: 25)),
+            "a suitable foreign target still prefers immediate indirect rule");
+        True(WarAiGoalSelectionRules.ShouldPreferTerritorialPreparation(
+                WarAiPeopleRelation.Foreign, routineExpansion,
+                prospectiveClaimBaseScore: 180,
+                new WarAiGoalCandidate("force_tributary", 50,
+                    urgency: 15)),
+            "foreign indirect rule is a preference and cannot erase an exceptionally valuable future claim");
+
+        var overwhelmingSubjugation = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 3f, targetCityCount: 1,
+            attackerCentralization: 3, attackerExpansionism: 1f,
+            courtWar: 1f, courtPeace: 0f,
+            currentSubjectCount: 0, subjectSoftCap: 10);
+        False(WarAiGoalSelectionRules.ShouldPreferTerritorialPreparation(
+                WarAiPeopleRelation.SameCulture, overwhelmingSubjugation,
+                prospectiveClaimBaseScore: 10,
+                new WarAiGoalCandidate("force_vassal", 100,
+                    urgency: 25)),
+            "same culture is a strategic weight rather than an absolute annexation lock");
+    }
+
+    private static void IndependenceRequiresTheActualSuzerainTarget()
+    {
+        var wrongTarget = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: true,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: .8f, targetCityCount: 2,
+            attackerCentralization: 0, attackerExpansionism: .5f,
+            courtWar: .6f, courtPeace: .3f,
+            independenceTargetIsSuzerain: false);
+        Equal("", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("independence", 500, urgency: 100)
+        }, WarAiPeopleRelation.Foreign, wrongTarget),
+            "independence is invalid against a realm that is not the attacker's suzerain");
+        var suzerain = new WarAiGoalContext(
+            directlyAdjacent: false, attackerIsSubject: true,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: .8f, targetCityCount: 2,
+            attackerCentralization: 0, attackerExpansionism: .5f,
+            courtWar: .6f, courtPeace: .3f,
+            independenceTargetIsSuzerain: true);
+        Equal("independence", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("force_vassal", 900, urgency: 100),
+            new WarAiGoalCandidate("independence", 40, urgency: 60)
+        }, WarAiPeopleRelation.Foreign, suzerain),
+            "a subject can select independence only against its actual suzerain");
+    }
+
+    private static void NoCbIsOnlyALegalFallback()
+    {
+        var context = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.5f, targetCityCount: 2,
+            attackerCentralization: 1, attackerExpansionism: .8f,
+            courtWar: .75f, courtPeace: .2f);
+        Equal("press_claim_city", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("no_cb_punitive", 500, urgency: 100),
+            new WarAiGoalCandidate("press_claim_city", -40, urgency: 0)
+        }, WarAiPeopleRelation.SameSpecies, context),
+            "no-CB cannot displace an available valid legal reason");
+        Equal("no_cb_punitive", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("no_cb_punitive", -80, urgency: 0)
+        }, WarAiPeopleRelation.SameSpecies, context),
+            "no-CB remains reachable when no legal reason is available");
+    }
+
+    private static void VassalRelationRetainsItsStrictTitleGate()
+    {
+        True(VassalRelationRules.CanSetVassal(
+                pBasicValid: true, pVassalIsRebel: false,
+                pSuzerainIsRebel: false,
+                pSuzerainTitleAboveVassal: true,
+                pCycleDetected: false, pDirectlyAdjacent: true,
+                out _),
+            "a strictly lower title remains eligible for forced vassalage");
+        False(VassalRelationRules.CanSetVassal(
+                pBasicValid: true, pVassalIsRebel: false,
+                pSuzerainIsRebel: false,
+                pSuzerainTitleAboveVassal: false,
+                pCycleDetected: false, pDirectlyAdjacent: true,
+                out _),
+            "an equal title cannot be forced into vassalage");
+    }
+
+    private static void TributaryWarRequiresRoyalOrImperialAttacker()
+    {
+        True(VassalContractTierRules.CanInitiateForcedTributary(
+                attackerTitleRank: 3),
+            "a king may force an eligible independent target into tributary status");
+        True(VassalContractTierRules.CanInitiateForcedTributary(
+                attackerTitleRank: 4),
+            "an emperor may force an eligible independent target into tributary status");
+        False(VassalContractTierRules.CanInitiateForcedTributary(
+                attackerTitleRank: 0),
+            "a baron cannot force tributary status");
+        False(VassalContractTierRules.CanInitiateForcedTributary(
+                attackerTitleRank: 1),
+            "a marquis cannot force tributary status");
+        False(VassalContractTierRules.CanInitiateForcedTributary(
+                attackerTitleRank: 2),
+            "a duke cannot force tributary status");
+        True(VassalRelationRules.CanSetTributary(
+                pBasicValid: true, pTributaryIsRebel: false,
+                pSuzerainIsRebel: false,
+                pSuzerainIndependent: true,
+                pTargetIndependent: true,
+                pCycleDetected: false, pDirectlyAdjacent: true,
+                out _),
+            "tributary preflight has no defender-title gate, so King against King remains eligible");
+    }
+
+    private static void DedicatedVassalWarRequiresEligibleAdjacentTarget()
+    {
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
+                WarAiPeopleRelation.SameCulture,
+                directlyAdjacent: true, attackerIsSubject: false,
+                targetIsIndependent: true, diplomaticBlocked: false,
+                powerRatio: 1.4f),
+            "same-culture targets must use normal goal competition instead of the dedicated indirect-rule route");
+        True(WarAiGoalSelectionRules.ShouldLaunchDedicatedVassalWar(
+                WarAiPeopleRelation.Foreign, directlyAdjacent: true,
+                attackerIsSubject: false, targetIsIndependent: true,
+                diplomaticBlocked: false, powerRatio: 1.4f,
+                currentSubjectCount: 2, subjectSoftCap: 6),
+            "a stronger realm may wage an adjacent foreign vassal war");
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedVassalWar(
+                WarAiPeopleRelation.SameCulture, true, false, true,
+                false, 2f, 0, 6),
+            "same-culture vassalage remains available only through normal goal competition");
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedVassalWar(
+                WarAiPeopleRelation.Foreign, false, false, true,
+                false, 2f, 0, 6),
+            "foreign vassal wars still require a shared border");
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedVassalWar(
+                WarAiPeopleRelation.Foreign, true, false, true,
+                true, 2f, 0, 6),
+            "treaties and alliances still block foreign vassal wars");
+    }
+
+    private static void DedicatedSubjugationDoesNotBypassSamePeopleCompetition()
+    {
+        var strongTerritorialRoute = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 1.8f, targetCityCount: 2,
+            attackerCentralization: 2, attackerExpansionism: .7f,
+            courtWar: .65f, courtPeace: .25f,
+            currentSubjectCount: 1, subjectSoftCap: 6);
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
+                WarAiPeopleRelation.SameCulture,
+                directlyAdjacent: true, attackerIsSubject: false,
+                targetIsIndependent: true, diplomaticBlocked: false,
+                powerRatio: 1.8f),
+            "the dedicated indirect-rule route must return same-culture targets to normal goal competition");
+        Equal("take_core_city", WarAiGoalSelectionRules.SelectBestGoal(
+            new[]
+            {
+                new WarAiGoalCandidate("force_vassal", 100,
+                    urgency: 25),
+                new WarAiGoalCandidate("take_core_city", 180,
+                    urgency: 35)
+            }, WarAiPeopleRelation.SameCulture, strongTerritorialRoute),
+            "a strong same-culture territorial route wins after the dedicated path yields to normal competition");
+        False(WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
+                WarAiPeopleRelation.SameSpecies,
+                directlyAdjacent: true, attackerIsSubject: false,
+                targetIsIndependent: true, diplomaticBlocked: false,
+                powerRatio: 1.8f),
+            "the dedicated indirect-rule route must not bypass same-people territorial preparation");
+        True(WarAiGoalSelectionRules.ShouldLaunchDedicatedSubjugationWar(
+                WarAiPeopleRelation.Foreign,
+                directlyAdjacent: true, attackerIsSubject: false,
+                targetIsIndependent: true, diplomaticBlocked: false,
+                powerRatio: 1.8f),
+            "foreign targets retain the dedicated indirect-rule route");
+    }
+
+    private static void VanillaWarIntentRemainsConnected()
+    {
+        True(WarAiGoalSelectionRules.CanRedirectVanillaWarIntent(
+                validCivilizedRealm: true, hasKing: true, hasEnemies: false,
+                attackerIsSubject: false),
+            "ordinary civilizations keep a route from vanilla war intent into AW3 diplomacy");
+        False(WarAiGoalSelectionRules.CanRedirectVanillaWarIntent(
+                true, true, false, attackerIsSubject: true),
+            "subjects cannot turn vanilla plots into autonomous foreign wars");
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(new[]
+        {
+            new WarAiGoalCandidate("force_vassal", 200),
+            new WarAiGoalCandidate("no_cb", -50)
+        }, WarAiPeopleRelation.SameSpecies),
+            "culture weighting cannot make no-CB displace an available legal vassal reason");
+    }
+
+    private static void SeparatePeacePrefersVulnerableOpposingAllies()
+    {
+        var stable = new SeparatePeaceAiCandidateFacts(
+            authorizedPair: true, totalWar: false, protectedWar: false,
+            pendingProposal: false, recentRejection: false,
+            exitRootRole: WarParticipantRoleKind.Independent,
+            occupiedCityRatio: .05f, exitWarExhaustion: 15,
+            exitToRequesterPowerRatio: 1.1f,
+            exitShareOfCoalitionPower: .12f,
+            requesterIsWarLeader: true, exitRootWantsPeace: false);
+        var vulnerable = new SeparatePeaceAiCandidateFacts(
+            authorizedPair: true, totalWar: false, protectedWar: false,
+            pendingProposal: false, recentRejection: false,
+            exitRootRole: WarParticipantRoleKind.Independent,
+            occupiedCityRatio: .65f, exitWarExhaustion: 75,
+            exitToRequesterPowerRatio: .35f,
+            exitShareOfCoalitionPower: .12f,
+            requesterIsWarLeader: true, exitRootWantsPeace: false);
+
+        True(DiplomacyProposalAiRules.SeparatePeaceTargetScore(vulnerable) >
+             DiplomacyProposalAiRules.SeparatePeaceTargetScore(stable),
+            "occupied, exhausted and militarily weak allies are preferred separate-peace targets");
+        True(DiplomacyProposalAiRules.CanQueueSeparatePeace(vulnerable),
+            "a vulnerable independent ally is a valid leader-initiated separate-peace target");
+    }
+
+    private static void SeparatePeaceValuesCoalitionIsolation()
+    {
+        SeparatePeaceAiCandidateFacts SmallShare(float share) => new(
+            authorizedPair: true, totalWar: false, protectedWar: false,
+            pendingProposal: false, recentRejection: false,
+            exitRootRole: WarParticipantRoleKind.Independent,
+            occupiedCityRatio: .25f, exitWarExhaustion: 40,
+            exitToRequesterPowerRatio: .75f,
+            exitShareOfCoalitionPower: share,
+            requesterIsWarLeader: true, exitRootWantsPeace: false);
+
+        True(DiplomacyProposalAiRules.SeparatePeaceTargetScore(
+                 SmallShare(.45f)) >
+             DiplomacyProposalAiRules.SeparatePeaceTargetScore(
+                 SmallShare(.05f)),
+            "an ally whose departure changes the coalition force ratio is more valuable to isolate");
+    }
+
+    private static void SeparatePeaceEligibilityRespectsParticipantStatus()
+    {
+        SeparatePeaceAiCandidateFacts Facts(WarParticipantRoleKind role,
+            bool pending = false, bool rejected = false) => new(
+            authorizedPair: true, totalWar: false, protectedWar: false,
+            pendingProposal: pending, recentRejection: rejected,
+            exitRootRole: role, occupiedCityRatio: .75f,
+            exitWarExhaustion: 80, exitToRequesterPowerRatio: .3f,
+            exitShareOfCoalitionPower: .35f,
+            requesterIsWarLeader: true, exitRootWantsPeace: false);
+
+        False(DiplomacyProposalAiRules.CanQueueSeparatePeace(
+                Facts(WarParticipantRoleKind.FormalVassal)),
+            "a formal vassal cannot independently negotiate separate peace");
+        True(DiplomacyProposalAiRules.CanQueueSeparatePeace(
+                Facts(WarParticipantRoleKind.Tributary)),
+            "a tributary retains independent separate-peace authority");
+        False(DiplomacyProposalAiRules.CanQueueSeparatePeace(
+                Facts(WarParticipantRoleKind.Independent, pending: true)),
+            "an equivalent pending proposal suppresses duplicate separate peace");
+        False(DiplomacyProposalAiRules.CanQueueSeparatePeace(
+                Facts(WarParticipantRoleKind.Independent, rejected: true)),
+            "a recent rejection suppresses separate-peace proposal spam");
+    }
+
+    private static void SeparatePeaceLosingParticipantOffersCompensation()
+    {
+        Equal(DiplomacyProposalType.Surrender,
+            DiplomacyProposalAiRules.SeparatePeaceProposalType(
+                requesterIsExitRoot: true,
+                WarSettlementPosition.Losing),
+            "a losing independent participant uses surrender terms so its own gold or resources can pay for exit");
+        Equal(DiplomacyProposalType.EnforceDemands,
+            DiplomacyProposalAiRules.SeparatePeaceProposalType(
+                requesterIsExitRoot: false,
+                WarSettlementPosition.Winning),
+            "a winning war leader asks terms from the opposing exit group");
+        Equal(DiplomacyProposalType.Surrender,
+            DiplomacyProposalAiRules.SeparatePeaceProposalType(
+                requesterIsExitRoot: false,
+                WarSettlementPosition.Losing),
+            "a losing war leader offers liquid compensation to induce the opposing ally to exit");
+    }
+
+    private static void ForcedVassalageRequiresTwoTitleRanks()
+    {
+        False(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 1, targetTitleRank: 0),
+            "a marquis cannot force-vassalize a baron through AI");
+        True(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 2, targetTitleRank: 0),
+            "a duke may force-vassalize a baron through AI");
+        False(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 3, targetTitleRank: 2),
+            "a king cannot force-vassalize a duke through AI");
+        True(WarAiGoalSelectionRules.CanAiForceVassal(
+                attackerTitleRank: 4, targetTitleRank: 2),
+            "an emperor may force-vassalize a duke through AI");
+
+        var oneRankGap = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 2f, targetCityCount: 1,
+            attackerCentralization: 2, attackerExpansionism: .8f,
+            courtWar: .8f, courtPeace: .1f,
+            currentSubjectCount: 0, subjectSoftCap: 6,
+            attackerTitleRank: 1, targetTitleRank: 0);
+        Equal("press_claim_city", WarAiGoalSelectionRules.SelectBestGoal(
+                new[]
+                {
+                    new WarAiGoalCandidate("force_vassal", 500),
+                    new WarAiGoalCandidate("press_claim_city", 10)
+                }, WarAiPeopleRelation.Foreign, oneRankGap),
+            "an illegal one-rank vassal goal is filtered before scoring");
+
+        var twoRankGap = new WarAiGoalContext(
+            directlyAdjacent: true, attackerIsSubject: false,
+            targetIsIndependent: true, diplomaticBlocked: false,
+            attackerToTargetPowerRatio: 2f, targetCityCount: 1,
+            attackerCentralization: 2, attackerExpansionism: .8f,
+            courtWar: .8f, courtPeace: .1f,
+            currentSubjectCount: 0, subjectSoftCap: 6,
+            attackerTitleRank: 2, targetTitleRank: 0);
+        Equal("force_vassal", WarAiGoalSelectionRules.SelectBestGoal(
+                new[]
+                {
+                    new WarAiGoalCandidate("force_vassal", 500),
+                    new WarAiGoalCandidate("press_claim_city", 10)
+                }, WarAiPeopleRelation.Foreign, twoRankGap),
+            "a legal two-rank vassal goal continues into normal scoring");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool actual, string name)
+    {
+        if (!actual) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool actual, string name)
+    {
+        if (actual) throw new InvalidOperationException(name);
+    }
+}

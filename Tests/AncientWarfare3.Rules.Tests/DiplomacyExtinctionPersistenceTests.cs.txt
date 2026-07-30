@@ -1,0 +1,181 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyExtinctionPersistenceTests
+{
+    public static void Run()
+    {
+        ClosesEveryLiveDiplomaticStateInOneCommit();
+        RollsBackEveryTableWhenOneClosureFails();
+        ExtinctionAndWorldSwitchEntrypointsAreWired();
+    }
+
+    private static void ClosesEveryLiveDiplomaticStateInOneCommit()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Seed(db);
+
+        Equal(true, DiplomacyExtinctionPersistence.CloseRealm(
+                db, pKingdomId: 7L, pCurrentYear: 50,
+                pEventTime: 123d),
+            "a fallen realm closes its diplomatic state");
+        Equal("cancelled", ScalarText(db,
+                "SELECT STATUS FROM DiplomacyProposal WHERE PROPOSAL_ID=1"),
+            "a pending outgoing letter is cancelled");
+        Equal("cancelled", ScalarText(db,
+                "SELECT STATUS FROM DiplomacyProposal WHERE PROPOSAL_ID=2"),
+            "a processing incoming letter is cancelled");
+        Equal(49L, Scalar(db,
+                "SELECT TREATY_UNTIL_YEAR FROM DiplomacyProposal " +
+                "WHERE PROPOSAL_ID=3"),
+            "an accepted pact expires before the extinction year");
+        Equal("accepted", ScalarText(db,
+                "SELECT STATUS FROM DiplomacyProposal WHERE PROPOSAL_ID=4"),
+            "an unrelated treaty remains active");
+        Equal(4L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticOperation WHERE OPERATION_ID=1"),
+            "a pending operation is cancelled");
+        Equal(4L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticOperation WHERE OPERATION_ID=2"),
+            "an active spy network is cancelled");
+        Equal(2L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticOperation WHERE OPERATION_ID=3"),
+            "an unrelated spy network remains active");
+        Equal(1L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticCoalition WHERE COALITION_ID=1"),
+            "a coalition involving the fallen realm is closed");
+        Equal(0L, Scalar(db,
+                "SELECT ACTIVE FROM DiplomaticRelationModifier " +
+                "WHERE MODIFIER_ID=1"),
+            "opinion modifiers involving the fallen realm are deactivated");
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM DiplomaticRelationModifier " +
+                "WHERE MODIFIER_ID=2"),
+            "unrelated opinion modifiers remain active");
+    }
+
+    private static void RollsBackEveryTableWhenOneClosureFails()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        Seed(db);
+        Execute(db, "CREATE TRIGGER reject_extinction BEFORE UPDATE ON " +
+                    "DiplomaticCoalition WHEN OLD.COALITION_ID=1 BEGIN " +
+                    "SELECT RAISE(ABORT,'injected closure failure'); END;");
+
+        Equal(false, DiplomacyExtinctionPersistence.CloseRealm(
+                db, 7L, 50, 123d),
+            "a failed diplomatic closure reports failure");
+        Equal("pending", ScalarText(db,
+                "SELECT STATUS FROM DiplomacyProposal WHERE PROPOSAL_ID=1"),
+            "proposal cancellation rolls back with the transaction");
+        Equal(0L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticOperation WHERE OPERATION_ID=1"),
+            "operation cancellation rolls back with the transaction");
+        Equal(0L, Scalar(db,
+                "SELECT STATUS FROM DiplomaticCoalition WHERE COALITION_ID=1"),
+            "coalition closure rolls back with the transaction");
+        Equal(1L, Scalar(db,
+                "SELECT ACTIVE FROM DiplomaticRelationModifier " +
+                "WHERE MODIFIER_ID=1"),
+            "modifier deactivation rolls back with the transaction");
+    }
+
+    private static void ExtinctionAndWorldSwitchEntrypointsAreWired()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string chronicle = File.ReadAllText(Path.Combine(root, "Code",
+            "patch", "AW_ChroniclePatch.cs"));
+        int prefixStart = chronicle.IndexOf(
+            "internal static void RemoveKingdom_Prefix(",
+            StringComparison.Ordinal);
+        int postfixStart = chronicle.IndexOf(
+            "internal static void RemoveKingdom_Postfix(",
+            StringComparison.Ordinal);
+        int archiveCall = chronicle.IndexOf(
+            "ChronicleEvents.OnKingdomDestroyed(pKingdom);",
+            StringComparison.Ordinal);
+        Equal(true, prefixStart >= 0 && postfixStart > prefixStart &&
+            archiveCall > prefixStart && archiveCall < postfixStart,
+            "the complete extinction archive commits before vanilla clears the ruler");
+        Equal(true, chronicle.Contains(
+                "VassalService.OnKingdomDestroyed(pKingdom);") &&
+            chronicle.Contains(
+                "DiplomacyExtinctionService.OnKingdomDestroying(pKingdom);"),
+            "the pre-extinction hook closes subject and diplomatic state");
+
+        string godPowers = File.ReadAllText(Path.Combine(root, "Code",
+            "content", "GodPowerLibrary.cs"));
+        string restorePipeline = File.ReadAllText(Path.Combine(root, "Code",
+            "core", "multiplayer", "AW3RuntimeRestorePipeline.cs"));
+        Equal(true, godPowers.Contains("public static void ClearRuntime()") &&
+            godPowers.Contains("_pendingVassal = null;") &&
+            restorePipeline.Contains("GodPowerLibrary.ClearRuntime"),
+            "switching worlds clears the pending manual-vassal selection");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db,
+            "CREATE TABLE DiplomacyProposal(" +
+            "PROPOSAL_ID INTEGER PRIMARY KEY,REQUESTER_KINGDOM_ID INTEGER," +
+            "RESPONDER_KINGDOM_ID INTEGER,TARGET_KINGDOM_ID INTEGER," +
+            "STATUS TEXT,RESPONSE_YEAR INTEGER,RESPONSE_TIME REAL," +
+            "RESPONSE_REASON TEXT,TREATY_UNTIL_YEAR INTEGER);" +
+            "CREATE TABLE DiplomaticOperation(" +
+            "OPERATION_ID INTEGER PRIMARY KEY,SOURCE_KINGDOM_ID INTEGER," +
+            "TARGET_KINGDOM_ID INTEGER,STATUS INTEGER,RESULT TEXT);" +
+            "CREATE TABLE DiplomaticCoalition(" +
+            "COALITION_ID INTEGER PRIMARY KEY,MEMBER_A_ID INTEGER," +
+            "MEMBER_B_ID INTEGER,TARGET_KINGDOM_ID INTEGER," +
+            "STATUS INTEGER,END_TIME REAL);" +
+            "CREATE TABLE DiplomaticRelationModifier(" +
+            "MODIFIER_ID INTEGER PRIMARY KEY,KINGDOM_A_ID INTEGER," +
+            "KINGDOM_B_ID INTEGER,ACTIVE INTEGER);");
+        return db;
+    }
+
+    private static void Seed(SQLiteConnection db)
+    {
+        Execute(db,
+            "INSERT INTO DiplomacyProposal VALUES" +
+            "(1,7,8,-1,'pending',-1,-1,'',-1)," +
+            "(2,8,7,-1,'processing',-1,-1,'',-1)," +
+            "(3,7,8,-1,'accepted',40,40,'accepted',80)," +
+            "(4,8,9,-1,'accepted',40,40,'accepted',80);" +
+            "INSERT INTO DiplomaticOperation VALUES" +
+            "(1,7,8,0,''),(2,8,7,2,'network_active')," +
+            "(3,8,9,2,'network_active');" +
+            "INSERT INTO DiplomaticCoalition VALUES" +
+            "(1,7,8,9,0,-1),(2,8,9,10,0,-1);" +
+            "INSERT INTO DiplomaticRelationModifier VALUES" +
+            "(1,7,8,1),(2,8,9,1);");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar()) ?? "";
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

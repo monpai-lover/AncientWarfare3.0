@@ -205,6 +205,34 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
+                Id = "aw_tech_nine_rank_system",
+                Kind = PolicyNodeKind.Tech,
+                NameKey = "aw_tech_nine_rank_system",
+                DescKey = "aw_tech_nine_rank_system_desc",
+                FallbackName = "\u4E5D\u54C1\u4E2D\u6B63",
+                FallbackDesc = "\u6BCF\u516D\u5E74\u590D\u8BC4\u4E61\u54C1\uFF0C\u95E8\u7B2C\u660E\u663E\u52A0\u5206\uFF0C\u5BD2\u95E8\u4ECD\u53EF\u51ED\u80FD\u529B\u3001\u5B66\u6D3E\u8D44\u5386\u3001\u8003\u8BFE\u548C\u529F\u7EE9\u8FDB\u5165\u4E0A\u54C1\u3002",
+                IconPath = "ui/icons/iconKnowledge",
+                Cost = 80f,
+                RequiredTechs = new[] { "aw_tech_official_court" },
+                Column = 2,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_tech_civil_service_examination",
+                Kind = PolicyNodeKind.Tech,
+                NameKey = "aw_tech_civil_service_examination",
+                DescKey = "aw_tech_civil_service_examination_desc",
+                FallbackName = "\u8D21\u4E3E\u5236\u5EA6",
+                FallbackDesc = "\u4EE5\u8003\u8BD5\u9009\u62D4\u53D7\u6559\u80B2\u7684\u58EB\u4EBA\uFF0C\u4F7F\u8D35\u65CF\u3001\u5BD2\u95E8\u4E0E\u5E73\u6C11\u51ED\u624D\u5B66\u5165\u4ED5\u3002",
+                IconPath = "ui/icons/iconKnowledge",
+                Cost = 90f,
+                RequiredTechs = new[] { "aw_tech_nine_rank_system" },
+                Column = 3,
+                Row = 3
+            },
+            new KingdomPolicyDef
+            {
                 Id = "aw_tech_three_departments",
                 Kind = PolicyNodeKind.Tech,
                 NameKey = "aw_tech_three_departments",
@@ -213,8 +241,22 @@ namespace AncientWarfare3.content.policies
                 FallbackDesc = "将三公九卿升级为三省六部，中枢分职集权，官场更高效。",
                 IconPath = "ui/icons/iconDiplomacy",
                 Cost = 95f,
-                RequiredTechs = new[] { "aw_tech_official_court" },
+                RequiredTechs = new[] { "aw_tech_nine_rank_system" },
                 Column = 2,
+                Row = 2
+            },
+            new KingdomPolicyDef
+            {
+                Id = "aw_tech_song_court",
+                Kind = PolicyNodeKind.Tech,
+                NameKey = "aw_tech_song_court",
+                DescKey = "aw_tech_song_court_desc",
+                FallbackName = "宋制官政",
+                FallbackDesc = "在三省六部基础上以中书门下和枢密财政诸司分掌文武财计。",
+                IconPath = "ui/icons/iconDiplomacy",
+                Cost = 125f,
+                RequiredTechs = new[] { "aw_tech_three_departments" },
+                Column = 3,
                 Row = 2
             },
             new KingdomPolicyDef
@@ -421,23 +463,6 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
-                Id = "aw_policy_favor_order",
-                Kind = PolicyNodeKind.Social,
-                NameKey = "aw_policy_favor_order",
-                DescKey = "aw_policy_favor_order_desc",
-                FallbackName = "\u63A8\u6069\u4EE4",
-                FallbackDesc = "\u5C06\u5206\u5C01\u79E9\u5E8F\u6536\u7D27\u4E3A\u6709\u9650\u5206\u5C01\uFF0C\u4F9B\u540E\u7EED\u5929\u547D\u548C\u9644\u5EB8\u7CFB\u7EDF\u8BFB\u53D6\u3002",
-                IconPath = "ui/icons/iconDiplomacy",
-                Cost = 86f,
-                RequiredPolicies = new[] { "aw_policy_base_enfeoffment" },
-                RequiredTechs = new[] { "aw_tech_granary_accounting" },
-                ClassAfter = ClassAristocrat,
-                EnfeoffmentStateAfter = EnfeoffmentLimit,
-                Column = 5,
-                Row = 2
-            },
-            new KingdomPolicyDef
-            {
                 Id = "aw_policy_continuous_enfeoffment",
                 Kind = PolicyNodeKind.Social,
                 NameKey = "aw_policy_continuous_enfeoffment",
@@ -522,7 +547,7 @@ namespace AncientWarfare3.content.policies
                 FallbackDesc = "\u5EFA\u7ACB\u9762\u5411\u8BF8\u4FAF\u548C\u9644\u5EB8\u7684\u671D\u5EF7\u79E9\u5E8F\uFF0C\u63D0\u9AD8\u5929\u547D\u56FD\u7684\u7687\u6743\u4E0E\u9644\u5EB8\u7BA1\u63A7\u80FD\u529B\u3002",
                 IconPath = "ui/icons/iconDiplomacy",
                 Cost = 125f,
-                RequiredPolicies = new[] { "aw_policy_mandate_rites", "aw_policy_favor_order" },
+                RequiredPolicies = new[] { "aw_policy_mandate_rites" },
                 RequiredTechs = new[] { "aw_tech_rites_music" },
                 ClassAfter = ClassAristocrat,
                 Column = 7,
@@ -662,34 +687,6 @@ namespace AncientWarfare3.content.policies
             },
             new KingdomPolicyDef
             {
-                Id = "aw_decision_fabricate_weak_claim",
-                Kind = PolicyNodeKind.Decision,
-                NameKey = "aw_decision_fabricate_weak_claim",
-                DescKey = "aw_decision_fabricate_weak_claim_desc",
-                FallbackName = "\u5236\u9020\u5f31\u5ba3\u79f0",
-                FallbackDesc = "\u5728\u63a5\u58e4\u7684\u4ed6\u56fd\u57ce\u5e02\u5236\u9020\u8f83\u5feb\u4f46\u4f1a\u8fc7\u671f\u7684\u5f31\u5ba3\u79f0\u3002",
-                IconPath = "ui/wars/war_reclaim",
-                Cost = 65f,
-                Repeatable = true,
-                Column = 7,
-                Row = 0
-            },
-            new KingdomPolicyDef
-            {
-                Id = "aw_decision_fabricate_strong_claim",
-                Kind = PolicyNodeKind.Decision,
-                NameKey = "aw_decision_fabricate_strong_claim",
-                DescKey = "aw_decision_fabricate_strong_claim_desc",
-                FallbackName = "\u5236\u9020\u5f3a\u5ba3\u79f0",
-                FallbackDesc = "\u5728\u63a5\u58e4\u7684\u4ed6\u56fd\u57ce\u5e02\u5236\u9020\u8f83\u7a33\u56fa\u7684\u5f3a\u5ba3\u79f0\u3002",
-                IconPath = "ui/wars/war_reclaim",
-                Cost = 110f,
-                Repeatable = true,
-                Column = 8,
-                Row = 0
-            },
-            new KingdomPolicyDef
-            {
                 Id = "aw_decision_seek_suzerain",
                 Kind = PolicyNodeKind.Decision,
                 NameKey = "aw_decision_seek_suzerain",
@@ -709,25 +706,11 @@ namespace AncientWarfare3.content.policies
                 NameKey = "aw_decision_absorb_vassal",
                 DescKey = "aw_decision_absorb_vassal_desc",
                 FallbackName = "\u541E\u5E76\u9644\u5EB8",
-                FallbackDesc = "\u5C06\u4E00\u4E2A\u76F4\u5C5E\u9644\u5EB8\u5E76\u5165\u672C\u56FD\uFF0C\u9644\u5EB8\u4E0D\u80FD\u6B63\u5728\u4EA4\u6218\u3002",
+                FallbackDesc = "\u5148\u5728\u76F4\u5C5E\u9644\u5EB8\u5185\u6210\u529F\u5EFA\u7ACB\u95F4\u8C0D\u7F51\uFF0C\u518D\u8C0B\u5212\u5C06\u5176\u5E76\u5165\u672C\u56FD\uFF1B\u53CC\u65B9\u4EA4\u6218\u65F6\u4E0D\u53EF\u6267\u884C\u3002",
                 IconPath = "ui/wars/war_vassal",
                 Cost = 120f,
                 Repeatable = true,
                 Column = 10,
-                Row = 0
-            },
-            new KingdomPolicyDef
-            {
-                Id = "aw_decision_declare_war",
-                Kind = PolicyNodeKind.Decision,
-                NameKey = "aw_decision_declare_war",
-                DescKey = "aw_decision_declare_war_desc",
-                FallbackName = "\u5174\u5e08\u5ba3\u6218",
-                FallbackDesc = "\u6309\u5df2\u9009\u5b9a\u7684\u5ba3\u6218\u7406\u7531\u548c\u6218\u4e89\u76ee\u6807\u53d1\u52a8\u6218\u4e89\u3002",
-                IconPath = "ui/wars/war_reclaim",
-                Cost = 45f,
-                Repeatable = true,
-                Column = 11,
                 Row = 0
             }
         };

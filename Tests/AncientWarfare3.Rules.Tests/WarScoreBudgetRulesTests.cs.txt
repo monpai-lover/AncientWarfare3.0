@@ -1,0 +1,61 @@
+using AncientWarfare3.core.lineage;
+
+internal static class WarScoreBudgetRulesTests
+{
+    public static void Run()
+    {
+        Equal(60, WarScoreRules.CityScoreBudgetForWarType("tributary_war"),
+            "tributary wars use a limited city-score budget");
+        Equal(60, WarScoreRules.CityScoreBudgetForWarType("vassal_war"),
+            "vassal wars use a limited city-score budget");
+        Equal(75, WarScoreRules.CityScoreBudgetForWarType("reclaim"),
+            "reclamation wars use a territorial city-score budget");
+        Equal(75, WarScoreRules.CityScoreBudgetForWarType("restoration_war"),
+            "restoration wars use a territorial city-score budget");
+        Equal(85, WarScoreRules.CityScoreBudgetForWarType("aw_normal_war"),
+            "ordinary wars use the default city-score budget");
+        Equal(85, WarScoreRules.CityScoreBudgetForWarType("unknown_mod_war"),
+            "unknown war types use the default city-score budget");
+        Equal(85, WarScoreRules.CityScoreBudgetForWarType(""),
+            "missing war types use the default city-score budget");
+        Equal(100, WarScoreRules.CityScoreBudgetForWarType("tianming"),
+            "Mandate wars use the total-war city-score budget");
+        Equal(100, WarScoreRules.CityScoreBudgetForWarType("tianmingrebel"),
+            "Mandate rebellions use the total-war city-score budget");
+        Equal(60, WarScoreRules.NormalizeCityScoreBudget(1),
+            "city-score budgets have a supported lower bound");
+        Equal(100, WarScoreRules.NormalizeCityScoreBudget(999),
+            "city-score budgets have a supported upper bound");
+
+        var threeOfFive = new WarScoreCityFacts(1, 0f, 0, 0, 0,
+            false, false, false, 5);
+        Equal(20, WarScoreRules.CityControlValue(threeOfFive, 100),
+            "a city in a five-city total war contributes one fifth");
+        Equal(12, WarScoreRules.CityControlValue(threeOfFive, 60),
+            "a city in a five-city subject war contributes one fifth");
+        Equal(60, WarScoreRules.ClampCityScore(90, 60),
+            "the city component clamps to the war budget");
+        Equal(100, WarScoreRules.ClampCityScore(120, 100),
+            "total-war city control can reach one hundred");
+
+        Equal(15, WarScoreRules.CasualtyExhaustion(25, 100),
+            "one quarter of full mobilization produces fifteen exhaustion");
+        Equal(30, WarScoreRules.CasualtyExhaustion(50, 100),
+            "half of full mobilization produces thirty exhaustion");
+        Equal(45, WarScoreRules.CasualtyExhaustion(75, 100),
+            "three quarters of full mobilization produces forty-five exhaustion");
+        Equal(60, WarScoreRules.CasualtyExhaustion(100, 100),
+            "losing full mobilization reaches the casualty exhaustion cap");
+        Equal(60, WarScoreRules.CasualtyExhaustion(250, 100),
+            "casualties above the baseline remain capped");
+        Equal(0, WarScoreRules.CasualtyExhaustion(10, 0),
+            "a missing legacy baseline cannot invent exhaustion");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+}

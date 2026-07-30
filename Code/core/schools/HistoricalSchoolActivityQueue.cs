@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -21,6 +22,7 @@ namespace AncientWarfare3.core.schools
         public bool ReadyQueued { get; set; }
         public bool PersistenceQueued { get; set; }
         public long StartFrame { get; set; }
+        public int RetryCount { get; set; }
     }
 
     internal static class HistoricalSchoolActivityQueue
@@ -174,7 +176,21 @@ namespace AncientWarfare3.core.schools
                 if (ActiveLectures.TryGetValue(expired.ActorId,
                         out HistoricalSchoolLectureActivity expiredLecture) &&
                     expiredLecture.Plan.OperationKey == expired.ActivityId)
-                    FinishLecture(expiredLecture);
+                {
+                    Actor expiredActor = FindActor(
+                        expiredLecture.Plan.Candidate.ActorId);
+                    bool stillValid = IsValidLectureActor(expiredActor,
+                        expiredLecture);
+                    if (HistoricalSchoolActivityQueueRules.ShouldRetryExpiredLecture(
+                            expiredLecture.RetryCount, stillValid))
+                        RetryLecture(expiredLecture, expiredActor);
+                    else
+                        FinishLecture(expiredLecture);
+                }
+                else if (expired.TaskId == HistoricalSchoolContent.
+                             EducationTravelTaskId)
+                    HistoricalSchoolEducationJourneyService.
+                        CancelExpiredLease(expired);
                 else if (expired.TaskId == HistoricalSchoolContent.TravelTaskId)
                     HistoricalSchoolTravelService.CancelExpiredLease(expired);
                 else
@@ -215,8 +231,17 @@ namespace AncientWarfare3.core.schools
             }
             pending.Venue = venue;
             pending.StartFrame = _frame;
-            pending.CandidateActorIds = HistoricalSchoolRecruitCandidateCache.Get(city,
-                actor, pending.Plan.Year);
+            long candidateDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try
+            {
+                pending.CandidateActorIds = HistoricalSchoolRecruitCandidateCache.Get(
+                    city, actor, pending.Plan.Year);
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "school_lecture_candidates", candidateDiagnostic);
+            }
             ActiveLectures[actor.data.id] = pending;
             ValidationActors.Enqueue(actor.data.id);
             if (!HistoricalSchoolTaskLeaseService.TrySchedule(
@@ -257,6 +282,12 @@ namespace AncientWarfare3.core.schools
         private static bool QueueReadyLecture(HistoricalSchoolLectureActivity pActivity)
         {
             if (pActivity == null || pActivity.PersistenceQueued) return pActivity != null;
+            if (HistoricalSchoolActivityQueueRules.ShouldDiscardReadyPersistence(
+                    HistoricalSchoolActionService.IsLectureCommitValid(pActivity)))
+            {
+                FinishLecture(pActivity);
+                return true;
+            }
             if (HistoricalSchoolActionService.TryQueueLectureCommit(pActivity))
             {
                 pActivity.PersistenceQueued = true;
@@ -264,6 +295,25 @@ namespace AncientWarfare3.core.schools
             }
             EnqueueReady(pActivity);
             return false;
+        }
+
+        private static void RetryLecture(
+            HistoricalSchoolLectureActivity pActivity, Actor pActor)
+        {
+            if (pActivity == null) return;
+            long actorId = pActivity.Plan.Candidate.ActorId;
+            HistoricalSchoolAcademyService.Exit(pActor, pActivity.Venue?.Academy);
+            ActiveLectures.Remove(actorId);
+            HistoricalSchoolTaskLeaseService.ReleaseExact(actorId,
+                pActivity.Plan.OperationKey);
+            HistoricalSchoolVenueService.Release(pActivity.Plan.OperationKey);
+            pActivity.Venue = null;
+            pActivity.Ready = false;
+            pActivity.ReadyQueued = false;
+            pActivity.PersistenceQueued = false;
+            pActivity.StartFrame = 0L;
+            pActivity.RetryCount++;
+            PendingLectures.Enqueue(pActivity);
         }
 
         internal static void OnLectureWriteResolved(

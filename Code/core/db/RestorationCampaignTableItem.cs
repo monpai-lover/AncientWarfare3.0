@@ -22,6 +22,10 @@ namespace AncientWarfare3.core.db
         public long active_war_id = -1;
         public long target_city_id = -1;
         public long target_kingdom_id = -1;
+        public long rollback_seed_owner_id = -1;
+        public long rollback_previous_claimant_kingdom_id = -1;
+        public long rollback_previous_claimant_city_id = -1;
+        public int rollback_attempts = 0;
         public int started_year = -1;
         public int last_attempt_year = -1;
         public double started_time = -1;

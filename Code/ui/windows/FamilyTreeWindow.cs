@@ -1,5 +1,10 @@
+using System.Collections;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.uiquery;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
@@ -38,16 +43,21 @@ namespace AncientWarfare3.ui.windows
         private static long _rootActorId = -1;
         private static long _backShiId = -1;
         private static long _locateActorId = -1;
+        private static LineageTreeReadSpec _readSpec;
         private static bool _showHalfSiblingRelations = false;
 
-        private readonly HashSet<long> _expanded = new HashSet<long>();
-        private readonly HashSet<long> _foldDecided = new HashSet<long>(); // 已定过默认折叠状态的节点(防手动 toggle 后被自动规则覆盖)
-        private readonly List<FamilyTreeNodeView> _spawned = new List<FamilyTreeNodeView>();
-        private readonly List<GameObject> _lines = new List<GameObject>();
-        private readonly List<FamilyTreeNodeView> _nodePool = new List<FamilyTreeNodeView>();
-        private readonly List<GameObject> _linePool = new List<GameObject>();
+        private HashSet<long> _expanded = new HashSet<long>();
+        private HashSet<long> _foldDecided = new HashSet<long>(); // 已定过默认折叠状态的节点(防手动 toggle 后被自动规则覆盖)
+        private List<FamilyTreeNodeView> _spawned = new List<FamilyTreeNodeView>();
+        private List<GameObject> _lines = new List<GameObject>();
+        private List<FamilyTreeNodeView> _nodePool = new List<FamilyTreeNodeView>();
+        private List<GameObject> _linePool = new List<GameObject>();
+        private readonly Dictionary<long, FamilyTreeNodeView>
+            _bigTreeNodeViews =
+                new Dictionary<long, FamilyTreeNodeView>();
         private Transform _canvas;
         private RectTransform _canvasRect;
+        private RectTransform _viewportRect;
         private Button _backButton;
         private Text _backText;
         private Button _expandButton;
@@ -62,100 +72,145 @@ namespace AncientWarfare3.ui.windows
         private float _maxDepthY;
         private long _lastTreeRootId = -1;
         private const int MAX_AUTO_EXPAND_VISITS = 160;
-        private readonly Dictionary<long, List<long>> _childIdsCache = new Dictionary<long, List<long>>();
-        private readonly Dictionary<long, List<long>> _agnaticChildIdsCache = new Dictionary<long, List<long>>();
-        private readonly Dictionary<long, BranchProbe> _probeCache = new Dictionary<long, BranchProbe>();
-        private readonly Dictionary<long, bool> _aliveDescendantCache = new Dictionary<long, bool>();
-        private int _autoExpandVisited;
+        private const int MaterializationStepsPerFrame = 64;
         private bool _locateFound;
         private Vector2 _locateTarget;
-        private bool _preservePanOnNextRebuild;
-        private Vector2 _savedPanBeforeRebuild;
+        private bool _commandPending;
+        private bool _commandRefreshRequested;
+        private readonly AWUiBoundedRetryState _bulkReadRetry =
+            new AWUiBoundedRetryState(3, 2, 8);
+        private AWUiRetryTicket _bulkReadTicket;
+        private bool _bulkReadTicketActive;
+        private long _bulkReadRequestId = -1L;
+        private string _bulkReadRequestKey = string.Empty;
+        private LineageBulkSnapshot _bulkSnapshot;
+        private long _bulkSnapshotRootId = -1L;
+        private long _bulkSnapshotRevision = -1L;
+        private long _bulkSnapshotProjectionRevision = -1L;
+        private string _bulkSnapshotSpecKey = string.Empty;
+        private long _bulkRequestWorldGeneration = -1L;
+        private Dictionary<long, IReadOnlyList<long>> _childIdsCache =
+            new Dictionary<long, IReadOnlyList<long>>();
+        private readonly AWUiIncrementalWorkState _materializationState =
+            new AWUiIncrementalWorkState(MaterializationStepsPerFrame);
+        private readonly AWUiMaterializationIntentState _intentState =
+            new AWUiMaterializationIntentState();
+        private FamilyTreeMaterializationRequest _pendingMaterialization;
+        private FamilyTreeMaterializationRequest _activeMaterialization;
+        private IEnumerator _materializationSteps;
+        private bool _cleanupPending;
+        private bool _cleanupLinesOnly;
+        private bool _initialCenterRequested;
 
         public static void OpenBigTree(long pShiId)
         {
-            long founder = LineageQuery.GetShiBranchFounderId(pShiId);
-            if (founder < 0)
-            {
-                foreach (MemberInfo member in LineageQuery.GetShiMembers(pShiId))
-                {
-                    if (member.sex != 0) continue;
-                    founder = LineageQuery.GetEarliestReachableAgnaticAncestor(member.id);
-                    if (founder >= 0) break;
-                }
-            }
-            if (founder < 0) return;
-            _mode = Mode.BigTree;
-            _rootActorId = founder;
-            _backShiId = pShiId;
-            _locateActorId = -1;
-            EnsureCreated();
-            Instance?.ResetBigTreeDefault(founder);
-            ShowOrRefresh(false);
+            OpenDetachedSpec(LineageTreeReadSpec.ForBigTree(pShiId),
+                Mode.BigTree, -1L, pShiId, -1L);
         }
 
         public static void OpenBigTreeLocate(long pActorId, long pShiId)
         {
-            if (pShiId < 0) pShiId = LineageQuery.GetActorShiId(pActorId);
-            long founder = LineageQuery.GetShiBranchFounderId(pShiId);
-            if (founder < 0)
-            {
-                // 没有始祖记录 → 退回本人小家谱居中,绝不停在默认位置。
-                founder = ResolveFallbackBigTreeRoot(pActorId);
-                if (founder < 0) return;
-            }
-            List<long> path = LineageQuery.GetAgnaticPathToAncestor(pActorId, founder);
-            FamilyTreeNode requested = LineageQuery.GetFamilyTree(pActorId);
-            bool requestedVisible = requested != null &&
-                                    FamilyTreeRelationRules.ShouldShowInBigTree(
-                                        requested.sex, requested.status);
-            long nearestVisibleFather = requestedVisible
-                ? -1L
-                : FindNearestVisibleAgnaticAncestor(pActorId, founder);
-            long locateTarget = FamilyTreeRelationRules.ResolveLocateTarget(
-                pActorId, requestedVisible, nearestVisibleFather, founder, path.Count > 0);
-            _mode = Mode.BigTree;
-            _rootActorId = founder;
-            _backShiId = pShiId;
-            _locateActorId = locateTarget;
-            EnsureCreated();
-            Instance?.SeedLocateExpansion(locateTarget, founder);
-            ShowOrRefresh(false);
-        }
-
-        private static long ResolveFallbackBigTreeRoot(long pActorId)
-        {
-            FamilyTreeNode node = LineageQuery.GetFamilyTree(pActorId);
-            long agnaticActor = node != null && node.sex == 0
-                ? pActorId
-                : LineageQuery.GetFatherId(pActorId);
-            return LineageQuery.GetEarliestReachableAgnaticAncestor(agnaticActor);
-        }
-
-        private static long FindNearestVisibleAgnaticAncestor(long pActorId, long pRootId)
-        {
-            long current = LineageQuery.GetFatherId(pActorId);
-            var visited = new HashSet<long>();
-            for (int depth = 0; depth <= 96 && current >= 0 && visited.Add(current); depth++)
-            {
-                FamilyTreeNode node = LineageQuery.GetFamilyTree(current);
-                if (node != null && FamilyTreeRelationRules.ShouldShowInBigTree(node.sex, node.status) &&
-                    LineageQuery.GetAgnaticPathToAncestor(current, pRootId).Count > 0)
-                    return current;
-                current = LineageQuery.GetFatherId(current);
-            }
-            return -1L;
+            if (pShiId < 0L) return;
+            OpenDetachedSpec(LineageTreeReadSpec.ForLocate(pActorId, pShiId),
+                Mode.BigTree, -1L, pShiId, pActorId);
         }
 
         public static void OpenFamilyTree(long pCenterActorId, long pShiIdForBackButton)
         {
+            OpenDetachedSpec(LineageTreeReadSpec.ForFamily(pCenterActorId),
+                Mode.Family, pCenterActorId, pShiIdForBackButton, -1L);
+        }
+
+        public static void ResetWorldState()
+        {
+            _readSpec = null;
             _mode = Mode.Family;
-            _centerActorId = pCenterActorId;
-            _backShiId = pShiIdForBackButton;
-            _locateActorId = -1;
+            _centerActorId = -1L;
+            _rootActorId = -1L;
+            _backShiId = -1L;
+            _locateActorId = -1L;
+            Instance?.ResetWorldInstanceState();
+        }
+
+        private static void OpenDetachedSpec(LineageTreeReadSpec pSpec,
+            Mode pMode, long pCenterActorId, long pBackShiId,
+            long pLocateActorId)
+        {
+            if (pSpec == null) return;
             EnsureCreated();
-            Instance?.ResetQueryCache();
+            Instance?.CancelDetachedRead();
+            _readSpec = pSpec;
+            _mode = pMode;
+            _centerActorId = pCenterActorId;
+            _rootActorId = -1L;
+            _backShiId = pBackShiId;
+            _locateActorId = pLocateActorId;
+            Instance?.ResetDetachedTreeState();
+            Instance?.RequestInitialCenter();
+            Instance?.BeginDetachedRead();
             ShowOrRefresh(false);
+        }
+
+        private void ResetDetachedTreeState()
+        {
+            _bulkSnapshot = null;
+            _bulkSnapshotRootId = -1L;
+            _bulkSnapshotRevision = -1L;
+            _bulkSnapshotProjectionRevision = -1L;
+            _bulkSnapshotSpecKey = string.Empty;
+            _bulkRequestWorldGeneration = -1L;
+            _childIdsCache = new Dictionary<long, IReadOnlyList<long>>();
+            ResetFoldState();
+            _locateFound = false;
+            _locateTarget = Vector2.zero;
+            _initialCenterRequested = false;
+            _intentState.CancelAll();
+            CancelMaterialization(clearPendingRequest: true);
+            BeginBoundedCleanup();
+        }
+
+        private void ResetWorldInstanceState()
+        {
+            CancelDetachedRead();
+            ResetDetachedTreeState();
+            _commandPending = false;
+            _commandRefreshRequested = false;
+            if (_renameClanInput != null)
+                _renameClanInput.interactable = true;
+        }
+
+        private void RequestInitialCenter()
+        {
+            _initialCenterRequested = true;
+        }
+
+        private void BeginDetachedRead()
+        {
+            if (_readSpec == null) return;
+            _bulkReadTicket = _bulkReadRetry.Begin(
+                AWAsyncRuntime.WorldGeneration,
+                HistoricalContentRevision.Current, _readSpec.Key,
+                Time.frameCount);
+            _bulkReadTicketActive = true;
+        }
+
+        private void CancelDetachedRead()
+        {
+            if (_bulkReadRequestId >= 0L)
+                AWHistoricalReadService.ReleaseRequest(_bulkReadRequestId,
+                    _bulkReadRequestKey);
+            ClearBulkReadRequestIdentity();
+            _bulkReadRetry.Cancel();
+            _bulkReadTicketActive = false;
+            _bulkRequestWorldGeneration = -1L;
+        }
+
+        private void ClearBulkReadRequestIdentity(long pRequestId = -1L)
+        {
+            if (pRequestId >= 0L && pRequestId != _bulkReadRequestId)
+                return;
+            _bulkReadRequestId = -1L;
+            _bulkReadRequestKey = string.Empty;
         }
 
         /// <summary>
@@ -166,12 +221,6 @@ namespace AncientWarfare3.ui.windows
         {
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.FAMILY_TREE,
                 () => { if (Instance != null) Instance.Rebuild(); });
-        }
-
-        private System.Collections.IEnumerator RebuildNextFrame()
-        {
-            yield return null; // 等一帧让 Content/Viewport layout 结算
-            Rebuild();
         }
 
         private static void EnsureCreated()
@@ -196,6 +245,15 @@ namespace AncientWarfare3.ui.windows
             // 挂在最底层(SetAsFirstSibling),这样视口内**任意位置**(含空白、顶部)点下都能拖,
             // 节点 Button 在其之上仍可点击(Button 不实现 IDragHandler,拖动事件冒泡到本面 → 平移树画布)。
             Transform viewport = ContentTransform != null ? ContentTransform.parent : null;
+            _viewportRect = viewport as RectTransform;
+            if (FamilyTreeInteractionRules.ShouldAttachToViewport(
+                    viewport != null))
+            {
+                var viewportPan =
+                    viewport.GetComponent<TreeDragPanHandler>() ??
+                    viewport.gameObject.AddComponent<TreeDragPanHandler>();
+                viewportPan.Setup(_canvasRect, _viewportRect);
+            }
             Transform dragParent = viewport != null ? viewport : ContentTransform;
             var dragObj = new GameObject("TreeDragSurface", typeof(RectTransform), typeof(Image),
                 typeof(AncientWarfare3.ui.items.TreeDragPanHandler));
@@ -282,7 +340,18 @@ namespace AncientWarfare3.ui.windows
 
             Transform viewport = BackgroundTransform.Find("Scroll View/Viewport");
             var viewRect = viewport != null ? viewport.GetComponent<RectTransform>() : null;
-            if (viewRect != null) viewRect.sizeDelta = new Vector2(VIEWPORT_W, VIEWPORT_H);
+            if (viewRect != null)
+            {
+                float horizontalSpan = viewRect.anchorMax.x -
+                                       viewRect.anchorMin.x;
+                float verticalSpan = viewRect.anchorMax.y -
+                                     viewRect.anchorMin.y;
+                viewRect.sizeDelta = new Vector2(
+                    FamilyTreeViewportLayoutRules.SizeDeltaForDesiredExtent(
+                        VIEWPORT_W, VIEWPORT_W, horizontalSpan),
+                    FamilyTreeViewportLayoutRules.SizeDeltaForDesiredExtent(
+                        VIEWPORT_H, VIEWPORT_H, verticalSpan));
+            }
         }
 
         private Button MakeToolbarButton(string pName, string pText, Vector2 pTopRightOffset,
@@ -393,6 +462,7 @@ namespace AncientWarfare3.ui.windows
             _renameClanHintText.horizontalOverflow = HorizontalWrapMode.Overflow;
             _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_hint", "\u6539\u5F53\u524D\u6C0F\u652F\u6811\u5168\u90E8\u6210\u5458");
             _renameClanPanel.SetActive(false);
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
         }
 
         private Button MakeRenamePanelButton(Transform pParent, string pName, string pText,
@@ -429,22 +499,73 @@ namespace AncientWarfare3.ui.windows
 
         public override void OnNormalEnable()
         {
+            InvalidateBulkSnapshot();
             Rebuild();
-            // 首帧 Content/Viewport layout 可能未结算导致居中错位 → 隔一帧再重排一次。
-            // 此处 GameObject 已 active(OnEnable 才触发),StartCoroutine 安全(不会 inactive 报错)。
-            if (isActiveAndEnabled) StartCoroutine(RebuildNextFrame());
+        }
+
+        public override void OnNormalDisable()
+        {
+            CancelDetachedRead();
+            _bulkSnapshot = null;
+            _intentState.CancelAll();
+            CancelMaterialization(clearPendingRequest: true);
+            TransferOwnedCleanup();
+        }
+
+        private void OnDestroy()
+        {
+            CancelDetachedRead();
+            _intentState.CancelAll();
+            CancelMaterialization(clearPendingRequest: true);
+            TransferOwnedCleanup();
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
+        }
+
+        private void Update()
+        {
+            if (_commandRefreshRequested)
+            {
+                _commandRefreshRequested = false;
+                _commandPending = false;
+                if (_renameClanInput != null)
+                    _renameClanInput.interactable = true;
+                ResetQueryCache();
+                if (isActiveAndEnabled) Rebuild();
+            }
+            if (_bulkSnapshot != null && !_bulkReadTicketActive &&
+                _bulkSnapshotProjectionRevision !=
+                    FamilyTreeProjectionRevision.Current)
+            {
+                PreservePanForNextRebuild();
+                Rebuild();
+            }
+            TryScheduleBulkSnapshot();
+            AdvanceMaterialization();
+        }
+
+        private void OnCommandStateChanged()
+        {
+            if (_commandPending) _commandRefreshRequested = true;
         }
 
         private void OnBack()
         {
             if (_mode == Mode.BigTree)
             {
-                long parentShi = LineageQuery.GetParentShiId(_backShiId);
+                long parentShi = -1L;
+                if (_bulkSnapshot != null &&
+                    _bulkSnapshot.TryGetNode(_rootActorId,
+                        out LineageTreeNodeSnapshot rootNode))
+                    parentShi = rootNode.ParentShiId;
                 if (parentShi >= 0) OpenBigTree(parentShi);
                 return;
             }
 
-            long currentShi = LineageQuery.GetActorShiId(_centerActorId);
+            long currentShi = -1L;
+            if (_bulkSnapshot != null &&
+                _bulkSnapshot.TryGetNode(_centerActorId,
+                    out LineageTreeNodeSnapshot centerNode))
+                currentShi = centerNode.ShiId;
             if (currentShi < 0) currentShi = _backShiId;
             if (currentShi >= 0) OpenBigTreeLocate(_centerActorId, currentShi);
         }
@@ -456,9 +577,15 @@ namespace AncientWarfare3.ui.windows
             _renameClanPanel.SetActive(show);
             if (!show) return;
 
-            var branch = LineageQuery.GetShiBranchInfo(_backShiId);
             if (_renameClanInput != null)
-                _renameClanInput.text = branch != null && !string.IsNullOrEmpty(branch.clan_name) ? branch.clan_name : "";
+            {
+                string currentName = string.Empty;
+                if (_bulkSnapshot != null &&
+                    _bulkSnapshot.TryGetNode(_rootActorId,
+                        out LineageTreeNodeSnapshot rootNode))
+                    currentName = rootNode.ShiDisplay;
+                _renameClanInput.text = currentName ?? string.Empty;
+            }
             if (_renameClanHintText != null)
                 _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_hint", "\u6539\u5F53\u524D\u6C0F\u652F\u6811\u5168\u90E8\u6210\u5458");
             try { _renameClanInput?.ActivateInputField(); } catch { }
@@ -466,6 +593,7 @@ namespace AncientWarfare3.ui.windows
 
         private void ConfirmRenameVisibleClan()
         {
+            if (_commandPending) return;
             if (_mode != Mode.BigTree) return;
             string raw = _renameClanInput != null ? _renameClanInput.text : "";
             if (!VisibleClanRenameRules.TryNormalizeClanName(raw, out _))
@@ -475,11 +603,34 @@ namespace AncientWarfare3.ui.windows
                 return;
             }
 
-            int changed = VisibleClanRenameService.RenameWholeShiTree(_backShiId, raw);
-            if (changed <= 0)
+            long countryId = ResolveRenameCountryId(_backShiId);
+            if (countryId <= 0)
             {
                 if (_renameClanHintText != null)
                     _renameClanHintText.text = AW_L10n.Text("aw_rename_visible_clan_none", "\u6CA1\u6709\u53EF\u66F4\u65B0\u8282\u70B9");
+                return;
+            }
+
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.RenameClan(countryId,
+                        _backShiId, raw));
+            if (result.Status == AW3CommandStatus.Pending)
+            {
+                _commandPending = true;
+                if (_renameClanInput != null)
+                    _renameClanInput.interactable = false;
+                if (_renameClanHintText != null)
+                    _renameClanHintText.text = AW_L10n.Text(
+                        "aw3_command_pending", "Waiting for host");
+                return;
+            }
+            if (!result.Accepted)
+            {
+                if (_renameClanHintText != null)
+                    _renameClanHintText.text = AW_L10n.Text(
+                        "aw_rename_visible_clan_none",
+                        "No nodes can be updated");
                 return;
             }
 
@@ -487,6 +638,20 @@ namespace AncientWarfare3.ui.windows
             ResetQueryCache();
             PreservePanForNextRebuild();
             Rebuild();
+        }
+
+        private static long ResolveRenameCountryId(long pShiId)
+        {
+            if (pShiId <= 0 || World.world?.kingdoms == null) return -1L;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                Actor ruler = kingdom?.king;
+                if (ruler?.data == null || ruler.isRekt()) continue;
+                ruler.data.get(LineageKeys.SHI_ID, out long rulerShiId,
+                    -1L);
+                if (rulerShiId == pShiId) return kingdom.id;
+            }
+            return -1L;
         }
 
         private void ToggleHalfSiblingRelations()
@@ -507,8 +672,8 @@ namespace AncientWarfare3.ui.windows
 
         private void ResetBigTreeDefault(long pFounderId)
         {
-            _expanded.Clear();
-            _foldDecided.Clear();
+            InvalidateBulkSnapshot();
+            ResetFoldState();
             _foldDecided.Add(pFounderId);
             _lastTreeRootId = pFounderId;
             _locateFound = false;
@@ -516,164 +681,477 @@ namespace AncientWarfare3.ui.windows
             ResetQueryCache();
         }
 
-        private void SeedLocateExpansion(long pActorId, long pFounderId)
+        private void Rebuild()
         {
-            _expanded.Clear();
-            _foldDecided.Clear();
-            _lastTreeRootId = pFounderId;
-            _locateFound = false;
-            _locateTarget = Vector2.zero;
-            ResetQueryCache();
-
-            var path = LineageQuery.GetAgnaticPathToAncestor(pActorId, pFounderId);
-            if (path.Count == 0)
+            CancelMaterialization(clearPendingRequest: true);
+            if (_readSpec == null) return;
+            long revision = HistoricalContentRevision.Current;
+            if (_bulkSnapshot != null &&
+                _bulkSnapshotRevision == revision &&
+                string.Equals(_bulkSnapshotSpecKey, _readSpec.Key,
+                    System.StringComparison.Ordinal))
             {
-                _foldDecided.Add(pFounderId);
-                _expanded.Add(pFounderId);
+                QueueMaterialization(_bulkSnapshot, revision);
+                return;
+            }
+            BeginDetachedRead();
+            TryScheduleBulkSnapshot();
+        }
+
+        private bool TryScheduleBulkSnapshot()
+        {
+            if (!_bulkReadTicketActive || _readSpec == null) return false;
+            long revision = HistoricalContentRevision.Current;
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            LineageTreeReadSpec spec = _readSpec;
+            AWUiRetryTicket ticket = _bulkReadTicket;
+            if (!_bulkReadRetry.Accept(ticket, worldGeneration, revision,
+                    spec.Key))
+            {
+                return false;
+            }
+            if (_bulkReadRetry.Exhausted)
+            {
+                ShowDetachedReadUnavailable();
+                return false;
+            }
+            if (!_bulkReadRetry.TryStart(ticket, Time.frameCount))
+                return _bulkReadRetry.InFlight;
+
+            _bulkRequestWorldGeneration = worldGeneration;
+            ShowDetachedReadLoading();
+            var execution = new LineageTreeReadExecution(spec);
+            if (!AWAsyncRuntime.UiEnabled &&
+                !AWAsyncRuntime.ShadowEnabled)
+            {
+                try
+                {
+                    object result =
+                        AWHistoricalMainThreadReadService.Read(execution,
+                            System.Threading.CancellationToken.None);
+                    ApplyBulkSnapshot(ticket, spec, -1L, result);
+                    return !_bulkReadTicketActive;
+                }
+                catch (System.Exception error)
+                {
+                    HandleBulkReadFault(ticket, spec, -1L, error);
+                    return false;
+                }
+            }
+            if (!AWHistoricalReadService.Ready)
+            {
+                _bulkReadRetry.RecordFault(ticket, Time.frameCount);
+                ShowDetachedReadLoading();
+                return false;
+            }
+
+            long scheduledRequestId = -1L;
+            var request = new AWHistoricalReadRequest(
+                "lineage-tree:" + ticket.Generation + ":" + spec.Key,
+                new AWAsyncStamp(worldGeneration, 0L,
+                    revision), execution.Execute,
+                result => ApplyBulkSnapshot(ticket, spec,
+                    scheduledRequestId, result),
+                error => HandleBulkReadFault(ticket, spec,
+                    scheduledRequestId, error),
+                pDatabaseEpoch: LineageArchiveManager.RuntimeDatabaseEpoch);
+            if (AWHistoricalReadService.TrySchedule(request,
+                    out scheduledRequestId))
+            {
+                _bulkReadRequestId = scheduledRequestId;
+                _bulkReadRequestKey = request.Key;
+                return true;
+            }
+            CancelBulkQuery();
+            return false;
+        }
+
+        private void CancelBulkQuery()
+        {
+            if (!_bulkReadTicketActive) return;
+            _bulkReadRetry.RecordFault(_bulkReadTicket, Time.frameCount);
+            if (_bulkReadRetry.Exhausted) ShowDetachedReadUnavailable();
+        }
+
+        private void ApplyBulkSnapshot(AWUiRetryTicket pTicket,
+            LineageTreeReadSpec pSpec, long pRequestId, object pResult)
+        {
+            long revision = HistoricalContentRevision.Current;
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            if (_readSpec == null || !_bulkReadTicketActive ||
+                pTicket.Generation != _bulkReadTicket.Generation ||
+                !string.Equals(_readSpec.Key, pSpec.Key,
+                    System.StringComparison.Ordinal) ||
+                worldGeneration != _bulkRequestWorldGeneration) return;
+            if (!_bulkReadRetry.Accept(pTicket, worldGeneration, revision,
+                    _readSpec.Key))
+            {
+                RestartDetachedReadAfterStaleCompletion(pTicket, pSpec,
+                    pRequestId, worldGeneration);
                 return;
             }
 
-            foreach (long id in path)
-                _foldDecided.Add(id);
-            for (int i = 0; i < path.Count - 1; i++)
-                _expanded.Add(path[i]);
+            LineageBulkSnapshot snapshot = pResult as LineageBulkSnapshot;
+            if (snapshot == null || snapshot.RootActorId < 0L)
+            {
+                HandleBulkReadFault(pTicket, pSpec,
+                    pRequestId,
+                    new System.InvalidOperationException(
+                        "Detached lineage query returned no root actor."));
+                return;
+            }
+
+            _bulkReadRetry.RecordSuccess(pTicket);
+            ClearBulkReadRequestIdentity(pRequestId);
+            _bulkReadTicketActive = false;
+            _bulkSnapshot = snapshot;
+            _bulkSnapshotRootId = snapshot.RootActorId;
+            _bulkSnapshotRevision = revision;
+            _bulkSnapshotProjectionRevision =
+                FamilyTreeProjectionRevision.Current;
+            _bulkSnapshotSpecKey = pSpec.Key;
+            _rootActorId = snapshot.RootActorId;
+            if (pSpec.ShiId >= 0L) _backShiId = pSpec.ShiId;
+            _locateActorId = pSpec.Mode == LineageTreeReadMode.Locate
+                ? snapshot.LocateActorId
+                : -1L;
+            ApplyLocateExpansion(snapshot, pSpec.Mode);
+            var pKey = new AWUiQueryKey("family_tree", snapshot.RootActorId,
+                pSpec.Key, revision, pTicket.Generation);
+            if (isActiveAndEnabled)
+                QueueMaterialization(pKey, snapshot);
         }
 
-        private void Rebuild()
+        private void RestartDetachedReadAfterStaleCompletion(
+            AWUiRetryTicket pTicket, LineageTreeReadSpec pSpec,
+            long pRequestId, long pWorldGeneration)
         {
-            bool preservePan = _preservePanOnNextRebuild && _locateActorId < 0;
-            Vector2 savedPan = _savedPanBeforeRebuild;
-            _preservePanOnNextRebuild = false;
+            if (_readSpec == null || !_bulkReadTicketActive ||
+                pTicket.Generation != _bulkReadTicket.Generation ||
+                pWorldGeneration != AWAsyncRuntime.WorldGeneration ||
+                !string.Equals(_readSpec.Key, pSpec.Key,
+                    System.StringComparison.Ordinal)) return;
 
-            ClearSpawned();
-            _locateFound = false;
-            _locateTarget = Vector2.zero;
-            if (!preservePan)
-                _canvasRect.anchoredPosition = Vector2.zero; // 重建树时复位拖动平移到起点
-            bool showTreeTools = _mode == Mode.BigTree;
-            long parentShiId = _mode == Mode.BigTree ? LineageQuery.GetParentShiId(_backShiId) : -1;
-            if (_backButton != null)
-                _backButton.gameObject.SetActive(
-                    (_mode == Mode.Family && _backShiId >= 0) || parentShiId >= 0);
-            if (_backText != null)
-                _backText.text = _mode == Mode.BigTree
-                    ? AW_L10n.Text("aw_return_home_shi", "← 返回本家")
-                    : AW_L10n.Text("aw_locate_clan_tree", "\u5B9A\u4F4D\u6C0F\u65CF\u5927\u6811");
-            if (_expandButton != null) _expandButton.gameObject.SetActive(showTreeTools);
-            if (_collapseButton != null) _collapseButton.gameObject.SetActive(showTreeTools);
-            if (_halfSiblingButton != null) _halfSiblingButton.gameObject.SetActive(_mode == Mode.Family);
-            if (_renameClanButton != null) _renameClanButton.gameObject.SetActive(_mode == Mode.BigTree);
-            if (_renameClanPanel != null && _mode != Mode.BigTree) _renameClanPanel.SetActive(false);
-            UpdateHalfSiblingButtonText();
-            _titleText.text = _mode == Mode.BigTree
-                ? AW_L10n.Text("aw_clan_big_tree", "氏族大树")
-                : AW_L10n.Text("aw_family_tree_short", "家族树");
+            _bulkReadRetry.RecordFault(pTicket, Time.frameCount);
+            ClearBulkReadRequestIdentity(pRequestId);
+            _bulkReadTicketActive = false;
+            _bulkRequestWorldGeneration = -1L;
+            BeginDetachedRead();
+        }
 
-            TreeLayoutNode root = (_mode == Mode.Family) ? BuildFamilyRoot() : BuildBigTreeRoot();
-            if (root == null) return;
-
-            MeasureWidth(root);
-            float siblingRowW = _mode == Mode.Family ? GetSiblingRowWidth(root) : 0f;
-            float totalW = Mathf.Max(root.subtreeWidth, siblingRowW);
-            // 居中:树宽不足视口宽时整体右移居中。
-            float startX = PAD + Mathf.Max(0f, (VIEWPORT_W - totalW) / 2f);
-
-            // 小树:本人若有父母,先在顶部画父母行,本人树整体下移一层腾出空间。
-            bool hasParents = _mode == Mode.Family && root.parents.Count > 0;
-            float bodyTopY = PAD + (hasParents ? NODE_H + V_GAP : 0f);
-
-            float rootStartX = startX + (totalW - root.subtreeWidth) / 2f;
-            LayoutAndRender(root, rootStartX, bodyTopY, root.subtreeWidth);
-
-            if (hasParents) RenderParentsRow(root);
-            if (_mode == Mode.Family && root.siblings.Count > 0) RenderSiblingsRow(root);
-
-            float canvasW = Mathf.Max(VIEWPORT_W, totalW + PAD * 2);
-            _canvasRect.sizeDelta = new Vector2(canvasW, _maxDepthY + NODE_H + PAD);
-            if (_mode == Mode.BigTree && _locateActorId >= 0 && !_locateFound)
+        private void HandleBulkReadFault(AWUiRetryTicket pTicket,
+            LineageTreeReadSpec pSpec, long pRequestId,
+            System.Exception pError)
+        {
+            long revision = HistoricalContentRevision.Current;
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            if (_readSpec == null || !_bulkReadTicketActive ||
+                pTicket.Generation != _bulkReadTicket.Generation ||
+                !string.Equals(_readSpec.Key, pSpec.Key,
+                    System.StringComparison.Ordinal) ||
+                worldGeneration != _bulkRequestWorldGeneration) return;
+            if (!_bulkReadRetry.Accept(pTicket, worldGeneration, revision,
+                    _readSpec.Key))
             {
-                _locateActorId = root.data.id;
-                _locateTarget = new Vector2(root.centerX, root.topY);
-                _locateFound = true;
+                RestartDetachedReadAfterStaleCompletion(pTicket, pSpec,
+                    pRequestId, worldGeneration);
+                return;
             }
-            ApplyLocatePan();
-            if (preservePan)
-                _canvasRect.anchoredPosition = savedPan;
 
-            // 兜底:大树定位模式下没能把本人渲染出来(链断/不在该氏树内)→ 退回本人小家谱居中,
-            // 保证点击定位 100% 居中到目标,绝不停在默认位置。Family 模式清了 _locateActorId,不会递归。
+            ClearBulkReadRequestIdentity(pRequestId);
+            _bulkReadRetry.RecordFault(pTicket, Time.frameCount);
+            ModClass.LogWarning("Family tree bulk read failed: " +
+                                (pError?.Message ?? "unknown error"));
+            if (_bulkReadRetry.Exhausted) ShowDetachedReadUnavailable();
+        }
+
+        private void InvalidateBulkSnapshot()
+        {
+            CancelDetachedRead();
+            _bulkSnapshot = null;
+            _bulkSnapshotRootId = -1L;
+            _bulkSnapshotRevision = -1L;
+            _bulkSnapshotProjectionRevision = -1L;
+            _bulkSnapshotSpecKey = string.Empty;
+            _bulkRequestWorldGeneration = -1L;
+            _childIdsCache = new Dictionary<long, IReadOnlyList<long>>();
+            _intentState.CancelAll();
+            CancelMaterialization(clearPendingRequest: true);
+            BeginBoundedCleanup();
+        }
+
+        private void ApplyLocateExpansion(LineageBulkSnapshot pSnapshot,
+            LineageTreeReadMode pMode)
+        {
+            ResetFoldState();
+            _lastTreeRootId = pSnapshot.RootActorId;
+            if (pMode != LineageTreeReadMode.Locate ||
+                pSnapshot.LocatePath.Count == 0)
+            {
+                _foldDecided.Add(pSnapshot.RootActorId);
+                return;
+            }
+
+            for (int index = 0; index < pSnapshot.LocatePath.Count; index++)
+            {
+                long actorId = pSnapshot.LocatePath[index];
+                _foldDecided.Add(actorId);
+                if (index < pSnapshot.LocatePath.Count - 1)
+                    _expanded.Add(actorId);
+            }
+        }
+
+        private void ShowDetachedReadLoading()
+        {
+            if (_titleText != null)
+                _titleText.text = AW_L10n.Text(
+                    "aw_family_tree_loading", "Loading family tree");
+        }
+
+        private void ShowDetachedReadUnavailable()
+        {
+            if (_titleText != null)
+                _titleText.text = AW_L10n.Text(
+                    "aw_family_tree_unavailable", "Family tree unavailable");
+        }
+
+        private void QueueMaterialization(AWUiQueryKey pKey,
+            LineageBulkSnapshot pSnapshot)
+        {
+            QueueMaterialization(pSnapshot, pKey.Revision);
+        }
+
+        private void QueueMaterialization(LineageBulkSnapshot pSnapshot,
+            long pContentRevision,
+            LineageBulkSnapshot pShadowSnapshot = null)
+        {
+            if (pSnapshot == null) return;
+            CancelMaterialization(clearPendingRequest: true);
+            AWUiIncrementalTicket ticket = _materializationState.Begin(
+                AWAsyncRuntime.WorldGeneration, pContentRevision);
+            AWUiMaterializationIntentLease intentLease =
+                _intentState.Capture();
+            _pendingMaterialization = new FamilyTreeMaterializationRequest(
+                ticket, pSnapshot, _mode, _centerActorId, _rootActorId,
+                _backShiId, _locateActorId, _showHalfSiblingRelations,
+                intentLease, pShadowSnapshot,
+                pReuseRenderedViews: false,
+                pCenterOnTarget: _initialCenterRequested);
+        }
+
+        private void QueueBigTreeRelayout()
+        {
+            if (_mode != Mode.BigTree || _bulkSnapshot == null) return;
+            long revision = HistoricalContentRevision.Current;
+            if (_bulkSnapshotRevision != revision)
+            {
+                Rebuild();
+                return;
+            }
+
+            CancelMaterialization(clearPendingRequest: true);
+            BeginBoundedLineCleanup();
+            AWUiIncrementalTicket ticket = _materializationState.Begin(
+                AWAsyncRuntime.WorldGeneration, revision);
+            AWUiMaterializationIntentLease intentLease =
+                _intentState.Capture();
+            _pendingMaterialization = new FamilyTreeMaterializationRequest(
+                ticket, _bulkSnapshot, _mode, _centerActorId,
+                _rootActorId, _backShiId, _locateActorId,
+                _showHalfSiblingRelations, intentLease, null,
+                pReuseRenderedViews: true,
+                pCenterOnTarget: false);
+        }
+
+        private void AdvanceMaterialization()
+        {
+            FamilyTreeMaterializationRequest scheduledRequest =
+                _activeMaterialization ?? _pendingMaterialization;
+            if (scheduledRequest != null &&
+                !IsMaterializationCurrent(scheduledRequest))
+                CancelStaleMaterialization(scheduledRequest);
+
+            int budget = _materializationState.TakeFrameStepBudget(
+                int.MaxValue);
+            while (budget > 0)
+            {
+                if (_cleanupPending)
+                {
+                    if (AdvanceCleanupStep()) budget--;
+                    continue;
+                }
+
+                FamilyTreeMaterializationRequest request =
+                    _activeMaterialization ?? _pendingMaterialization;
+                if (request == null) return;
+                if (!IsMaterializationCurrent(request))
+                {
+                    CancelStaleMaterialization(request);
+                    continue;
+                }
+
+                if (_materializationSteps == null)
+                {
+                    _activeMaterialization = request;
+                    _pendingMaterialization = null;
+                    _locateFound = false;
+                    _locateTarget = Vector2.zero;
+                    _maxDepthY = 0f;
+                    if (_canvas != null)
+                        _canvas.gameObject.SetActive(true);
+                    _materializationSteps =
+                        MaterializeIncrementally(request).GetEnumerator();
+                }
+
+                bool advanced;
+                using (LineageBulkSnapshotContext.Push(request.Snapshot))
+                    advanced = _materializationSteps.MoveNext();
+                if (advanced)
+                {
+                    budget--;
+                    continue;
+                }
+
+                (_materializationSteps as System.IDisposable)?.Dispose();
+                _materializationSteps = null;
+                _activeMaterialization = null;
+                _materializationState.Cancel();
+            }
+        }
+
+        private void CancelStaleMaterialization(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            bool sameWorld = pRequest.Ticket.WorldGeneration ==
+                             AWAsyncRuntime.WorldGeneration;
+            if (!sameWorld) _intentState.CancelAll();
+            CancelMaterialization(clearPendingRequest: true);
+            BeginBoundedCleanup();
+        }
+
+        private bool IsMaterializationCurrent(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            long currentRoot = _mode == Mode.Family
+                ? _centerActorId
+                : _rootActorId;
+            return isActiveAndEnabled && pRequest.Mode == _mode &&
+                   pRequest.RootActorId == currentRoot &&
+                   _materializationState.AcceptAcceptedSnapshot(
+                       pRequest.Ticket, AWAsyncRuntime.WorldGeneration);
+        }
+
+        private void CancelMaterialization(bool clearPendingRequest)
+        {
+            _materializationState.Cancel();
+            (_materializationSteps as System.IDisposable)?.Dispose();
+            _materializationSteps = null;
+            _activeMaterialization = null;
+            if (clearPendingRequest) _pendingMaterialization = null;
+        }
+
+        private void BeginBoundedCleanup()
+        {
+            _cleanupLinesOnly = false;
+            _bigTreeNodeViews.Clear();
+            _cleanupPending = _spawned.Count > 0 || _lines.Count > 0;
+            if (_cleanupPending && _canvas != null)
+                _canvas.gameObject.SetActive(false);
+            if (!_cleanupPending) _maxDepthY = 0f;
+        }
+
+        private void BeginBoundedLineCleanup()
+        {
+            _cleanupLinesOnly = true;
+            _cleanupPending = _lines.Count > 0;
+        }
+
+        private bool AdvanceCleanupStep()
+        {
+            if (!_cleanupLinesOnly && _spawned.Count > 0)
+            {
+                int index = _spawned.Count - 1;
+                FamilyTreeNodeView view = _spawned[index];
+                _spawned.RemoveAt(index);
+                if (view != null)
+                {
+                    view.gameObject.SetActive(false);
+                    _nodePool.Add(view);
+                }
+                FinishCleanupIfEmpty();
+                return true;
+            }
+
+            if (_lines.Count > 0)
+            {
+                int index = _lines.Count - 1;
+                GameObject line = _lines[index];
+                _lines.RemoveAt(index);
+                if (line != null)
+                {
+                    line.SetActive(false);
+                    _linePool.Add(line);
+                }
+                FinishCleanupIfEmpty();
+                return true;
+            }
+
+            _cleanupPending = false;
+            _cleanupLinesOnly = false;
+            if (_spawned.Count == 0) _maxDepthY = 0f;
+            return false;
+        }
+
+        private void FinishCleanupIfEmpty()
+        {
+            if ((!_cleanupLinesOnly && _spawned.Count > 0) ||
+                _lines.Count > 0) return;
+            _cleanupPending = false;
+            _cleanupLinesOnly = false;
+            if (_spawned.Count == 0) _maxDepthY = 0f;
         }
 
         /// <summary>小树:在本人节点正上方画父母行(1~2 个),并连线到本人。点击父母 → 以其为中心重开小树(上溯)。</summary>
-        private void ApplyLocatePan()
+        private void ApplyInitialCenterPan(
+            FamilyTreeMaterializationRequest pRequest)
         {
-            if (_mode != Mode.BigTree || _locateActorId < 0 || !_locateFound || _canvasRect == null) return;
+            if (pRequest == null || !pRequest.CenterOnTarget ||
+                _canvasRect == null || pRequest.Root == null) return;
 
-            float x = VIEWPORT_W * 0.5f - _locateTarget.x;
-            float y = _locateTarget.y + NODE_H * 0.5f - VIEWPORT_H * 0.5f;
+            Vector2 target = pRequest.Mode == Mode.BigTree &&
+                             pRequest.LocateActorId >= 0 && _locateFound
+                ? _locateTarget
+                : new Vector2(pRequest.Root.centerX, pRequest.Root.topY);
+            float x = FamilyTreeViewportLayoutRules.CenterPanX(target.x,
+                LiveViewportWidth(), VIEWPORT_W);
+            float y = FamilyTreeViewportLayoutRules.CenterPanY(target.y,
+                NODE_H, LiveViewportHeight(), VIEWPORT_H);
             _canvasRect.anchoredPosition = new Vector2(x, y);
         }
 
-        private void RenderParentsRow(TreeLayoutNode pRoot)
+        private float LiveViewportWidth()
         {
-            int n = pRoot.parents.Count;
-            float rowWidth = n * NODE_W + (n - 1) * H_GAP;
-            float startX = pRoot.centerX - rowWidth / 2f;
-            float parentY = PAD; // 顶部行
-
-            for (int i = 0; i < n; i++)
-            {
-                FamilyTreeNode pData = pRoot.parents[i];
-                float cx = startX + NODE_W / 2f + i * (NODE_W + H_GAP);
-
-                var view = AcquireNode();
-                long pid = pData.id;
-                // 父母节点:点击 → 以父母为中心重开小树(继续上溯);本身再带 ▲(若其还有父母)。
-                System.Action onUp = LineageQuery.GetParentIds(pid, pUseReverseLiveLookup: true).Count > 0
-                    ? (System.Action)(() => OpenFamilyTree(pid, _backShiId)) : null;
-                view.Bind(pData, (_) => OpenFamilyTree(pid, _backShiId),
-                    null, false, false, onUp, null);
-                var rect = view.GetComponent<RectTransform>();
-                rect.anchorMin = new Vector2(0, 1); rect.anchorMax = new Vector2(0, 1);
-                rect.pivot = new Vector2(0.5f, 1f);
-                rect.anchoredPosition = new Vector2(cx, -parentY);
-                _spawned.Add(view);
-
-                // 连线:父母底 → 本人顶
-                DrawConnector(cx, parentY + NODE_H, pRoot.centerX, pRoot.topY);
-            }
+            return _viewportRect != null ? _viewportRect.rect.width : 0f;
         }
 
-        private void RenderSiblingsRow(TreeLayoutNode pRoot)
+        private float LiveViewportHeight()
         {
-            if (pRoot == null || pRoot.siblings.Count == 0) return;
-
-            var left = new List<FamilyTreeNode>();
-            var right = new List<FamilyTreeNode>();
-            foreach (var sibling in pRoot.siblings)
-            {
-                if (IsOlderThanCenter(sibling, pRoot.data)) left.Add(sibling);
-                else right.Add(sibling);
-            }
-
-            left.Sort(CompareByBirth);
-            right.Sort(CompareByBirth);
-
-            float y = pRoot.topY;
-            float leftStart = pRoot.centerX - NODE_W / 2f - H_GAP - left.Count * NODE_W - Mathf.Max(0, left.Count - 1) * H_GAP;
-            for (int i = 0; i < left.Count; i++)
-                SpawnFamilySideNode(left[i], leftStart + NODE_W / 2f + i * (NODE_W + H_GAP), y);
-
-            float rightStart = pRoot.centerX + NODE_W / 2f + H_GAP;
-            for (int i = 0; i < right.Count; i++)
-                SpawnFamilySideNode(right[i], rightStart + NODE_W / 2f + i * (NODE_W + H_GAP), y);
+            return _viewportRect != null ? _viewportRect.rect.height : 0f;
         }
 
-        private void SpawnFamilySideNode(FamilyTreeNode pData, float pCenterX, float pTopY)
+        private void CommitInitialCenter(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            if (pRequest?.CenterOnTarget == true)
+                _initialCenterRequested = false;
+        }
+
+        private void SpawnFamilySideNode(FamilyTreeNode pData, float pCenterX,
+            float pTopY, long pBackShiId)
         {
             var view = AcquireNode();
             long id = pData.id;
-            view.Bind(pData, (_) => OpenFamilyTree(id, _backShiId),
+            view.Bind(pData, (_) => OpenFamilyTree(id, pBackShiId),
                 null, false, false, null, null);
             var rect = view.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0, 1);
@@ -686,14 +1164,9 @@ namespace AncientWarfare3.ui.windows
         private static float GetSiblingRowWidth(TreeLayoutNode pRoot)
         {
             if (pRoot == null || pRoot.siblings.Count == 0) return 0f;
-            int left = 0;
-            int right = 0;
-            foreach (var sibling in pRoot.siblings)
-            {
-                if (IsOlderThanCenter(sibling, pRoot.data)) left++;
-                else right++;
-            }
-            return Mathf.Max(GetSiblingSideExtent(left), GetSiblingSideExtent(right)) * 2f;
+            return Mathf.Max(
+                GetSiblingSideExtent(pRoot.olderSiblingCount),
+                GetSiblingSideExtent(pRoot.youngerSiblingCount)) * 2f;
         }
 
         private static float GetSiblingSideExtent(int pCount)
@@ -701,75 +1174,6 @@ namespace AncientWarfare3.ui.windows
             float extent = NODE_W / 2f;
             if (pCount <= 0) return extent;
             return extent + H_GAP + pCount * NODE_W + (pCount - 1) * H_GAP;
-        }
-
-        private void AddSiblingNodes(TreeLayoutNode pRoot, FamilyTreeNode pCenter)
-        {
-            if (pRoot == null || pCenter == null) return;
-            var seen = new HashSet<long>();
-            var centerFatherIds = CollectParentIdsBySex(pCenter, 0);
-            var centerMotherIds = CollectParentIdsBySex(pCenter, 1);
-            foreach (long parentId in LineageQuery.GetParentIds(pCenter.id, pUseReverseLiveLookup: true))
-            {
-                foreach (long childId in GetChildIdsCached(parentId))
-                {
-                    if (childId == pCenter.id || !seen.Add(childId)) continue;
-                    var sibling = LineageQuery.GetFamilyTree(childId);
-                    if (sibling == null) continue;
-                    bool sharesFather = SharesKnownParent(sibling.parents, centerFatherIds, 0);
-                    bool sharesMother = SharesKnownParent(sibling.parents, centerMotherIds, 1);
-                    bool siblingHasFather = HasKnownParent(sibling.parents, 0);
-                    bool siblingHasMother = HasKnownParent(sibling.parents, 1);
-                    if (!_showHalfSiblingRelations && IsProvenHalfSibling(
-                            sharesFather, sharesMother,
-                            centerFatherIds.Count > 0, centerMotherIds.Count > 0,
-                            siblingHasFather, siblingHasMother))
-                        continue;
-                    sibling.parents.Clear();
-                    sibling.children.Clear();
-                    sibling.relation_label = _showHalfSiblingRelations
-                        ? BuildSiblingRelationLabel(sibling, pCenter,
-                            sharesFather, sharesMother,
-                            centerFatherIds.Count > 0, centerMotherIds.Count > 0,
-                            siblingHasFather, siblingHasMother)
-                        : BuildBasicSiblingRelationLabel(sibling, pCenter);
-                    ApplyTreeGeneration(sibling);
-                    pRoot.siblings.Add(sibling);
-                }
-            }
-            pRoot.siblings.Sort(CompareByBirth);
-        }
-
-        private static HashSet<long> CollectParentIdsBySex(FamilyTreeNode pNode, int pSex)
-        {
-            var ids = new HashSet<long>();
-            if (pNode?.parents == null) return ids;
-            foreach (var parent in pNode.parents)
-            {
-                if (parent != null && parent.sex == pSex) ids.Add(parent.id);
-            }
-            return ids;
-        }
-
-        private static bool SharesKnownParent(List<FamilyTreeNode> pSiblingParents,
-            HashSet<long> pCenterParentIds, int pSex)
-        {
-            if (pSiblingParents == null || pCenterParentIds == null || pCenterParentIds.Count == 0) return false;
-            foreach (var parent in pSiblingParents)
-            {
-                if (parent != null && parent.sex == pSex && pCenterParentIds.Contains(parent.id)) return true;
-            }
-            return false;
-        }
-
-        private static bool HasKnownParent(List<FamilyTreeNode> pParents, int pSex)
-        {
-            if (pParents == null) return false;
-            foreach (var parent in pParents)
-            {
-                if (parent != null && parent.sex == pSex) return true;
-            }
-            return false;
         }
 
         private static bool IsProvenHalfSibling(bool pSharedFather, bool pSharedMother,
@@ -829,11 +1233,66 @@ namespace AncientWarfare3.ui.windows
                 : AW_L10n.Text("aw_relation_younger_sister", "\u59B9");
         }
 
-        private static void ApplyTreeGeneration(FamilyTreeNode pNode)
+        private IEnumerable ApplyTreeGenerationIncrementally(
+            FamilyTreeNode pNode)
         {
-            if (pNode == null || pNode.tree_generation > 0) return;
-            int generation = LineageQuery.GetTreeGenerationInShi(pNode.id, pNode.shi_id);
-            if (generation > 0) pNode.tree_generation = generation;
+            if (pNode == null || pNode.tree_generation > 0) yield break;
+            LineageBulkSnapshot snapshot =
+                LineageBulkSnapshotContext.Current;
+            if (snapshot == null ||
+                !snapshot.TryGetNode(pNode.id,
+                    out LineageTreeNodeSnapshot nodeSnapshot)) yield break;
+            long founderId = nodeSnapshot.ShiFounderActorId;
+            yield return null;
+            if (founderId < 0) yield break;
+
+            var visited = new HashSet<long> { pNode.id };
+            var frames = new Stack<GenerationFrame>();
+            frames.Push(new GenerationFrame
+            {
+                ActorId = pNode.id,
+                Depth = 0
+            });
+            yield return null;
+            while (frames.Count > 0)
+            {
+                GenerationFrame frame = frames.Peek();
+                if (frame.ActorId == founderId)
+                {
+                    pNode.tree_generation = frame.Depth + 1;
+                    yield return null;
+                    yield break;
+                }
+                if (frame.Depth > 96)
+                {
+                    frames.Pop();
+                    yield return null;
+                    continue;
+                }
+                if (!frame.Loaded)
+                {
+                    frame.ParentIds = GetParentIdsForMaterialization(
+                        frame.ActorId, pUseReverseLiveLookup: false);
+                    frame.Loaded = true;
+                    yield return null;
+                    continue;
+                }
+                if (frame.ParentIndex < frame.ParentIds.Count)
+                {
+                    long parentId =
+                        frame.ParentIds[frame.ParentIndex++];
+                    if (parentId >= 0 && visited.Add(parentId))
+                        frames.Push(new GenerationFrame
+                        {
+                            ActorId = parentId,
+                            Depth = frame.Depth + 1
+                        });
+                    yield return null;
+                    continue;
+                }
+                frames.Pop();
+                yield return null;
+            }
         }
 
         private static string BuildSiblingRelationLabel(FamilyTreeNode pSibling, FamilyTreeNode pCenter)
@@ -868,6 +1327,144 @@ namespace AncientWarfare3.ui.windows
             return lid.CompareTo(rid);
         }
 
+        private sealed class FamilyTreeMaterializationRequest
+        {
+            public FamilyTreeMaterializationRequest(
+                AWUiIncrementalTicket pTicket,
+                LineageBulkSnapshot pSnapshot, Mode pMode,
+                long pCenterActorId, long pBigTreeRootId, long pBackShiId,
+                long pLocateActorId, bool pShowHalfSiblings,
+                AWUiMaterializationIntentLease pIntentLease,
+                LineageBulkSnapshot pShadowSnapshot,
+                bool pReuseRenderedViews, bool pCenterOnTarget)
+            {
+                Ticket = pTicket;
+                Snapshot = pSnapshot;
+                Mode = pMode;
+                CenterActorId = pCenterActorId;
+                BigTreeRootId = pBigTreeRootId;
+                RootActorId = pMode == Mode.Family
+                    ? pCenterActorId
+                    : pBigTreeRootId;
+                BackShiId = pBackShiId;
+                LocateActorId = pLocateActorId;
+                ShowHalfSiblings = pShowHalfSiblings;
+                IntentLease = pIntentLease;
+                ShadowSnapshot = pShadowSnapshot;
+                ReuseRenderedViews = pReuseRenderedViews;
+                CenterOnTarget = pCenterOnTarget;
+            }
+
+            public AWUiIncrementalTicket Ticket { get; }
+            public LineageBulkSnapshot Snapshot { get; }
+            public Mode Mode { get; }
+            public long CenterActorId { get; }
+            public long BigTreeRootId { get; }
+            public long RootActorId { get; }
+            public long BackShiId { get; }
+            public long LocateActorId { get; }
+            public bool ShowHalfSiblings { get; }
+            public AWUiMaterializationIntentLease IntentLease { get; }
+            public bool PreservePan => IntentLease.PreservePan;
+            public Vector2 SavedPan => new Vector2(IntentLease.PanX,
+                IntentLease.PanY);
+            public bool ExpandLiveBranches => IntentLease.ExpandLive;
+            public bool ExpandLiveCompleted;
+            public LineageBulkSnapshot ShadowSnapshot { get; }
+            public bool ReuseRenderedViews { get; }
+            public bool CenterOnTarget { get; }
+            public HashSet<long> RenderedActorIds { get; } =
+                new HashSet<long>();
+            public IReadOnlyList<long> SynchronousParentIds =
+                System.Array.Empty<long>();
+            public IReadOnlyList<long> SynchronousChildIds =
+                System.Array.Empty<long>();
+            public TreeLayoutNode Root;
+            public float TotalWidth;
+            public readonly Dictionary<long, bool> ParentHasParents =
+                new Dictionary<long, bool>();
+            public readonly AWUiActorVisitBudget VisitBudget =
+                new AWUiActorVisitBudget(MAX_AUTO_EXPAND_VISITS);
+            public readonly HashSet<long> VisitedNodeIds =
+                new HashSet<long>();
+        }
+
+        private sealed class BigTreeBuildFrame
+        {
+            public TreeLayoutNode Node;
+            public int Depth;
+            public IReadOnlyList<long> ChildIds;
+            public int ChildIndex;
+            public long CandidateId;
+            public bool CandidateIsAgnatic;
+            public FamilyTreeNode CandidateData;
+            public int Stage;
+        }
+
+        private sealed class ExpandLiveFrame
+        {
+            public long ActorId;
+            public int Depth;
+            public FamilyTreeNode ActorData;
+            public IReadOnlyList<long> ChildIds =
+                System.Array.Empty<long>();
+            public int ChildIndex;
+            public long CandidateId;
+            public bool CandidateIsAgnatic;
+            public FamilyTreeNode CandidateData;
+            public bool HasVisibleChildren;
+            public bool DescendantAlive;
+            public ExpandLiveFrame Parent;
+            public int Stage;
+        }
+
+        private sealed class GenerationFrame
+        {
+            public long ActorId;
+            public int Depth;
+            public IReadOnlyList<long> ParentIds =
+                System.Array.Empty<long>();
+            public int ParentIndex;
+            public bool Loaded;
+        }
+
+        private sealed class MeasureFrame
+        {
+            public TreeLayoutNode Node;
+            public MeasureFrame Parent;
+            public int ChildIndex;
+            public int MeasuredChildren;
+            public float ChildWidthSum;
+        }
+
+        private sealed class RenderFrame
+        {
+            public TreeLayoutNode Node;
+            public float XStart;
+            public float Y;
+            public float Width;
+            public float Cursor;
+            public int ChildIndex;
+            public bool Spawned;
+            public bool ConnectorPending;
+            public TreeLayoutNode ConnectorChild;
+            public int ConnectorSegment;
+        }
+
+        private sealed class FamilyTreeNodeBirthComparer :
+            IComparer<FamilyTreeNode>
+        {
+            public int Compare(FamilyTreeNode pLeft, FamilyTreeNode pRight)
+            {
+                int value = CompareByBirth(pLeft, pRight);
+                if (value != 0) return value;
+                if (ReferenceEquals(pLeft, pRight)) return 0;
+                long leftId = pLeft?.id ?? -1L;
+                long rightId = pRight?.id ?? -1L;
+                return leftId.CompareTo(rightId);
+            }
+        }
+
         private class TreeLayoutNode
         {
             public FamilyTreeNode data;
@@ -875,226 +1472,979 @@ namespace AncientWarfare3.ui.windows
             public bool hasChildren;
             public List<TreeLayoutNode> children = new List<TreeLayoutNode>();
             public float subtreeWidth;
+            public float childrenWidth;
             public float centerX;
             public float topY;
             public List<FamilyTreeNode> siblings = new List<FamilyTreeNode>();
+            public int olderSiblingCount;
+            public int youngerSiblingCount;
             // 小树根专用:本人的父母节点(画在本人正上方一层,可点击上溯)。
             public List<FamilyTreeNode> parents = new List<FamilyTreeNode>();
         }
 
-        // 小树:本人为根(父母画在上方、子女为子树)。
-        private TreeLayoutNode BuildFamilyRoot()
+        private IEnumerable MaterializeIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
         {
-            var center = LineageQuery.GetFamilyTree(_centerActorId);
-            if (center == null) return null;
-            var root = new TreeLayoutNode { data = center, expanded = true };
-            ApplyTreeGeneration(center);
-            center.relation_label = AW_L10n.Text("aw_relation_self", "本人");
+            ResetQueryCache();
+            yield return null;
 
-            // 父母:GetFamilyTree 已填 center.parents(死人查档案,活人实时),直接保留画在本人上方。
-            //   用户报"往上查不到父母" → 不再只靠根节点 ▲ 跳转,直接在小树里把父母画出来。
-            foreach (var p in center.parents)
-                if (p != null)
-                {
-                    p.relation_label = p.sex == 0
-                        ? AW_L10n.Text("aw_relation_father", "父")
-                        : AW_L10n.Text("aw_relation_mother", "母");
-                    ApplyTreeGeneration(p);
-                    root.parents.Add(p);
-                }
-            AddSiblingNodes(root, center);
-
-            var childIds = GetChildIdsCached(center.id);
-            root.hasChildren = childIds.Count > 0;
-            foreach (var cid in childIds)
+            if (pRequest.Mode == Mode.BigTree &&
+                pRequest.ExpandLiveBranches)
             {
-                var cn = BuildTreeNodeData(cid);
-                if (cn != null)
-                {
-                    cn.relation_label = cn.sex == 0
-                        ? AW_L10n.Text("aw_relation_son", "子")
-                        : AW_L10n.Text("aw_relation_daughter", "女");
-                    ApplyTreeGeneration(cn);
-                    root.children.Add(new TreeLayoutNode
-                    {
-                        data = cn, expanded = false,
-                        hasChildren = GetChildIdsCached(cid).Count > 0
-                    });
-                }
+                IEnumerator expandSteps =
+                    ExpandLiveBranchesIncrementally(pRequest)
+                        .GetEnumerator();
+                while (expandSteps.MoveNext()) yield return null;
+                (expandSteps as System.IDisposable)?.Dispose();
+                pRequest.ExpandLiveCompleted = true;
             }
-            return root;
+
+            IEnumerable build = pRequest.Mode == Mode.Family
+                ? BuildFamilyIncrementally(pRequest)
+                : BuildBigTreeIncrementally(pRequest);
+            IEnumerator buildSteps = build.GetEnumerator();
+            while (buildSteps.MoveNext()) yield return null;
+            (buildSteps as System.IDisposable)?.Dispose();
+            if (pRequest.ShadowSnapshot != null)
+            {
+                IEnumerator shadowSteps =
+                    CompareShadowAdjacencyIncrementally(pRequest)
+                        .GetEnumerator();
+                while (shadowSteps.MoveNext()) yield return null;
+                (shadowSteps as System.IDisposable)?.Dispose();
+            }
+            if (pRequest.Root == null) yield break;
+            PrepareMaterializationSurface(pRequest);
+            yield return null;
+
+            IEnumerator measureSteps = MeasureIncrementally(
+                pRequest.Root).GetEnumerator();
+            while (measureSteps.MoveNext()) yield return null;
+            (measureSteps as System.IDisposable)?.Dispose();
+
+            float siblingRowWidth = pRequest.Mode == Mode.Family
+                ? GetSiblingRowWidth(pRequest.Root)
+                : 0f;
+            pRequest.TotalWidth = Mathf.Max(
+                pRequest.Root.subtreeWidth, siblingRowWidth);
+            float startX = FamilyTreeViewportLayoutRules.CenteredTreeStartX(
+                pRequest.TotalWidth, PAD, LiveViewportWidth(), VIEWPORT_W);
+            bool hasParents = pRequest.Mode == Mode.Family &&
+                              pRequest.Root.parents.Count > 0;
+            float bodyTopY = PAD +
+                             (hasParents ? NODE_H + V_GAP : 0f);
+            float rootStartX = startX +
+                               (pRequest.TotalWidth -
+                                pRequest.Root.subtreeWidth) / 2f;
+            yield return null;
+
+            PrepareFullRenderSwap(pRequest);
+            while (_cleanupPending) yield return null;
+            if (_canvas != null) _canvas.gameObject.SetActive(true);
+
+            IEnumerator renderSteps = RenderTreeIncrementally(pRequest,
+                pRequest.Root, rootStartX, bodyTopY,
+                pRequest.Root.subtreeWidth).GetEnumerator();
+            while (renderSteps.MoveNext()) yield return null;
+            (renderSteps as System.IDisposable)?.Dispose();
+
+            if (hasParents)
+            {
+                IEnumerator parentSteps = RenderParentsIncrementally(
+                    pRequest, pRequest.Root).GetEnumerator();
+                while (parentSteps.MoveNext()) yield return null;
+                (parentSteps as System.IDisposable)?.Dispose();
+            }
+            if (pRequest.Mode == Mode.Family &&
+                pRequest.Root.siblings.Count > 0)
+            {
+                IEnumerator siblingSteps = RenderSiblingsIncrementally(
+                    pRequest, pRequest.Root).GetEnumerator();
+                while (siblingSteps.MoveNext()) yield return null;
+                (siblingSteps as System.IDisposable)?.Dispose();
+            }
+
+            if (pRequest.ReuseRenderedViews)
+            {
+                IEnumerator recycleSteps =
+                    RecycleUnusedBigTreeViewsIncrementally(pRequest)
+                        .GetEnumerator();
+                while (recycleSteps.MoveNext()) yield return null;
+                (recycleSteps as System.IDisposable)?.Dispose();
+            }
+
+            _canvasRect.sizeDelta = new Vector2(
+                FamilyTreeViewportLayoutRules.CanvasWidth(
+                    pRequest.TotalWidth, PAD, LiveViewportWidth(), VIEWPORT_W),
+                _maxDepthY + NODE_H + PAD);
+            if (pRequest.Mode == Mode.BigTree &&
+                pRequest.LocateActorId >= 0 && !_locateFound)
+            {
+                _locateActorId = pRequest.Root.data.id;
+                _locateTarget = new Vector2(pRequest.Root.centerX,
+                    pRequest.Root.topY);
+                _locateFound = true;
+            }
+            if (pRequest.CenterOnTarget)
+                ApplyInitialCenterPan(pRequest);
+            else if (pRequest.PreservePan)
+                _canvasRect.anchoredPosition = pRequest.SavedPan;
+            CommitInitialCenter(pRequest);
+            _intentState.Commit(pRequest.IntentLease);
+            yield return null;
         }
 
-        private TreeLayoutNode BuildBigTreeRoot()
+        private void PrepareFullRenderSwap(
+            FamilyTreeMaterializationRequest pRequest)
         {
-            var rootData = BuildTreeNodeData(_rootActorId);
-            if (rootData == null) return null;
-            if (_lastTreeRootId != _rootActorId)
+            if (pRequest?.ReuseRenderedViews == true) return;
+            BeginBoundedCleanup();
+        }
+
+        private IEnumerable CompareShadowAdjacencyIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            int synchronousLength =
+                pRequest.SynchronousParentIds.Count + 1 +
+                pRequest.SynchronousChildIds.Count;
+            var synchronous = new long[synchronousLength];
+            int synchronousIndex = 0;
+            yield return null;
+            for (int index = 0;
+                 index < pRequest.SynchronousParentIds.Count; index++)
+            {
+                synchronous[synchronousIndex++] =
+                    pRequest.SynchronousParentIds[index];
+                yield return null;
+            }
+            synchronous[synchronousIndex++] = long.MinValue;
+            yield return null;
+            for (int index = 0;
+                 index < pRequest.SynchronousChildIds.Count; index++)
+            {
+                synchronous[synchronousIndex++] =
+                    pRequest.SynchronousChildIds[index];
+                yield return null;
+            }
+
+            IReadOnlyList<long> asyncParents =
+                pRequest.ShadowSnapshot.ParentIds(pRequest.RootActorId);
+            yield return null;
+            IReadOnlyList<long> asyncChildren =
+                pRequest.ShadowSnapshot.ChildIds(pRequest.RootActorId);
+            yield return null;
+            var asynchronous = new long[
+                asyncParents.Count + 1 + asyncChildren.Count];
+            int asynchronousIndex = 0;
+            yield return null;
+            for (int index = 0; index < asyncParents.Count; index++)
+            {
+                asynchronous[asynchronousIndex++] = asyncParents[index];
+                yield return null;
+            }
+            asynchronous[asynchronousIndex++] = long.MinValue;
+            yield return null;
+            for (int index = 0; index < asyncChildren.Count; index++)
+            {
+                asynchronous[asynchronousIndex++] = asyncChildren[index];
+                yield return null;
+            }
+
+            var comparison = new AWUiIncrementalIdComparison(
+                synchronous, asynchronous);
+            while (comparison.MoveNext()) yield return null;
+            if (!comparison.IsMatch)
+                ModClass.LogWarning("Family tree shadow adjacency mismatch at " +
+                                    comparison.MismatchIndex);
+        }
+
+        private IEnumerable MeasureIncrementally(TreeLayoutNode pRoot)
+        {
+            if (pRoot == null) yield break;
+            var frames = new Stack<MeasureFrame>();
+            frames.Push(new MeasureFrame { Node = pRoot });
+            yield return null;
+
+            while (frames.Count > 0)
+            {
+                MeasureFrame frame = frames.Peek();
+                bool terminal = frame.Node.children.Count == 0 ||
+                                !frame.Node.expanded;
+                if (terminal)
+                {
+                    frame.Node.childrenWidth = 0f;
+                    frame.Node.subtreeWidth = NODE_W;
+                    frames.Pop();
+                    AccumulateMeasuredChild(frame);
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.ChildIndex < frame.Node.children.Count)
+                {
+                    TreeLayoutNode child =
+                        frame.Node.children[frame.ChildIndex++];
+                    frames.Push(new MeasureFrame
+                    {
+                        Node = child,
+                        Parent = frame
+                    });
+                    yield return null;
+                    continue;
+                }
+
+                frame.Node.childrenWidth = frame.ChildWidthSum +
+                    Mathf.Max(0, frame.MeasuredChildren - 1) * H_GAP;
+                frame.Node.subtreeWidth = Mathf.Max(NODE_W,
+                    frame.Node.childrenWidth);
+                frames.Pop();
+                AccumulateMeasuredChild(frame);
+                yield return null;
+            }
+        }
+
+        private static void AccumulateMeasuredChild(MeasureFrame pFrame)
+        {
+            if (pFrame.Parent == null) return;
+            pFrame.Parent.MeasuredChildren++;
+            pFrame.Parent.ChildWidthSum += pFrame.Node.subtreeWidth;
+        }
+
+        private IEnumerable RenderTreeIncrementally(
+            FamilyTreeMaterializationRequest pRequest,
+            TreeLayoutNode pRoot, float pXStart, float pY, float pWidth)
+        {
+            if (pRoot == null) yield break;
+            var frames = new Stack<RenderFrame>();
+            frames.Push(new RenderFrame
+            {
+                Node = pRoot,
+                XStart = pXStart,
+                Y = pY,
+                Width = pWidth
+            });
+            yield return null;
+
+            while (frames.Count > 0)
+            {
+                RenderFrame frame = frames.Peek();
+                if (!frame.Spawned)
+                {
+                    frame.Node.centerX = frame.XStart + frame.Width / 2f;
+                    frame.Node.topY = frame.Y;
+                    _maxDepthY = Mathf.Max(_maxDepthY, frame.Y + NODE_H);
+                    SpawnNode(frame.Node, pRequest);
+                    frame.Cursor = frame.XStart +
+                        (frame.Width - frame.Node.childrenWidth) / 2f;
+                    frame.Spawned = true;
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.ConnectorPending)
+                {
+                    DrawConnectorSegment(frame.Node.centerX,
+                        frame.Y + NODE_H,
+                        frame.ConnectorChild.centerX,
+                        frame.ConnectorChild.topY,
+                        frame.ConnectorSegment++);
+                    if (frame.ConnectorSegment >= 3)
+                    {
+                        frame.ConnectorPending = false;
+                        frame.ConnectorChild = null;
+                        frame.ConnectorSegment = 0;
+                    }
+                    yield return null;
+                    continue;
+                }
+
+                if (!frame.Node.expanded ||
+                    frame.ChildIndex >= frame.Node.children.Count)
+                {
+                    frames.Pop();
+                    yield return null;
+                    continue;
+                }
+
+                TreeLayoutNode child =
+                    frame.Node.children[frame.ChildIndex++];
+                float childX = frame.Cursor;
+                frame.Cursor += child.subtreeWidth + H_GAP;
+                frame.ConnectorPending = true;
+                frame.ConnectorChild = child;
+                frames.Push(new RenderFrame
+                {
+                    Node = child,
+                    XStart = childX,
+                    Y = frame.Y + NODE_H + V_GAP,
+                    Width = child.subtreeWidth
+                });
+                yield return null;
+            }
+        }
+
+        private IEnumerable RenderParentsIncrementally(
+            FamilyTreeMaterializationRequest pRequest,
+            TreeLayoutNode pRoot)
+        {
+            int count = pRoot.parents.Count;
+            float rowWidth = count * NODE_W +
+                             Mathf.Max(0, count - 1) * H_GAP;
+            float startX = pRoot.centerX - rowWidth / 2f;
+            for (int index = 0; index < count; index++)
+            {
+                FamilyTreeNode data = pRoot.parents[index];
+                float centerX = startX + NODE_W / 2f +
+                                index * (NODE_W + H_GAP);
+                FamilyTreeNodeView view = AcquireNode();
+                long actorId = data.id;
+                bool hasParents = pRequest.ParentHasParents.TryGetValue(
+                    actorId, out bool knownHasParents) && knownHasParents;
+                System.Action onUp = hasParents
+                    ? (System.Action)(() => OpenFamilyTree(actorId,
+                        pRequest.BackShiId))
+                    : null;
+                view.Bind(data,
+                    _ => OpenFamilyTree(actorId, pRequest.BackShiId),
+                    null, false, false, onUp, null);
+                RectTransform rect = view.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0, 1);
+                rect.anchorMax = new Vector2(0, 1);
+                rect.pivot = new Vector2(0.5f, 1f);
+                rect.anchoredPosition = new Vector2(centerX, -PAD);
+                _spawned.Add(view);
+                yield return null;
+
+                IEnumerator connector = DrawConnectorIncrementally(
+                    centerX, PAD + NODE_H, pRoot.centerX,
+                    pRoot.topY).GetEnumerator();
+                while (connector.MoveNext()) yield return null;
+                (connector as System.IDisposable)?.Dispose();
+            }
+        }
+
+        private IEnumerable RenderSiblingsIncrementally(
+            FamilyTreeMaterializationRequest pRequest,
+            TreeLayoutNode pRoot)
+        {
+            var left = new List<FamilyTreeNode>();
+            var right = new List<FamilyTreeNode>();
+            for (int index = 0; index < pRoot.siblings.Count; index++)
+            {
+                FamilyTreeNode sibling = pRoot.siblings[index];
+                if (IsOlderThanCenter(sibling, pRoot.data))
+                    left.Add(sibling);
+                else
+                    right.Add(sibling);
+                yield return null;
+            }
+
+            float y = pRoot.topY;
+            float leftStart = pRoot.centerX - NODE_W / 2f - H_GAP -
+                              left.Count * NODE_W -
+                              Mathf.Max(0, left.Count - 1) * H_GAP;
+            for (int index = 0; index < left.Count; index++)
+            {
+                SpawnFamilySideNode(left[index], leftStart + NODE_W / 2f +
+                    index * (NODE_W + H_GAP), y, pRequest.BackShiId);
+                yield return null;
+            }
+
+            float rightStart = pRoot.centerX + NODE_W / 2f + H_GAP;
+            for (int index = 0; index < right.Count; index++)
+            {
+                SpawnFamilySideNode(right[index],
+                    rightStart + NODE_W / 2f +
+                    index * (NODE_W + H_GAP), y, pRequest.BackShiId);
+                yield return null;
+            }
+        }
+
+        private IEnumerable DrawConnectorIncrementally(float pParentCx,
+            float pParentBottomY, float pChildCx, float pChildTopY)
+        {
+            for (int segment = 0; segment < 3; segment++)
+            {
+                DrawConnectorSegment(pParentCx, pParentBottomY, pChildCx,
+                    pChildTopY, segment);
+                yield return null;
+            }
+        }
+
+        private void DrawConnectorSegment(float pParentCx,
+            float pParentBottomY, float pChildCx, float pChildTopY,
+            int pSegment)
+        {
+            float midY = (pParentBottomY + pChildTopY) / 2f;
+            if (pSegment == 0)
+                DrawLine(pParentCx, pParentBottomY, pParentCx, midY);
+            else if (pSegment == 1)
+                DrawLine(pParentCx, midY, pChildCx, midY);
+            else
+                DrawLine(pChildCx, midY, pChildCx, pChildTopY);
+        }
+
+        private void PrepareMaterializationSurface(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            if (!pRequest.PreservePan)
+                _canvasRect.anchoredPosition = Vector2.zero;
+            bool showTreeTools = pRequest.Mode == Mode.BigTree;
+            long parentShiId = -1L;
+            if (showTreeTools && pRequest.Snapshot != null &&
+                pRequest.Snapshot.TryGetNode(pRequest.BigTreeRootId,
+                    out LineageTreeNodeSnapshot rootNode))
+                parentShiId = rootNode.ParentShiId;
+            if (_backButton != null)
+                _backButton.gameObject.SetActive(
+                    (pRequest.Mode == Mode.Family &&
+                     pRequest.BackShiId >= 0) || parentShiId >= 0);
+            if (_backText != null)
+                _backText.text = showTreeTools
+                    ? AW_L10n.Text("aw_return_home_shi", "Return home")
+                    : AW_L10n.Text("aw_locate_clan_tree", "Locate clan tree");
+            if (_expandButton != null)
+                _expandButton.gameObject.SetActive(showTreeTools);
+            if (_collapseButton != null)
+                _collapseButton.gameObject.SetActive(showTreeTools);
+            if (_halfSiblingButton != null)
+                _halfSiblingButton.gameObject.SetActive(!showTreeTools);
+            if (_renameClanButton != null)
+                _renameClanButton.gameObject.SetActive(showTreeTools);
+            if (_renameClanPanel != null && !showTreeTools)
+                _renameClanPanel.SetActive(false);
+            UpdateHalfSiblingButtonText();
+            if (_titleText != null)
+                _titleText.text = showTreeTools
+                    ? AW_L10n.Text("aw_clan_big_tree", "Clan tree")
+                    : AW_L10n.Text("aw_family_tree_short", "Family tree");
+        }
+
+        // 小树:本人为根(父母画在上方、子女为子树)。
+        private IEnumerable BuildFamilyIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            FamilyTreeNode center = BuildTreeNodeData(
+                pRequest.CenterActorId);
+            yield return null;
+            if (center == null) yield break;
+
+            var root = new TreeLayoutNode
+            {
+                data = center,
+                expanded = true
+            };
+            pRequest.Root = root;
+            IEnumerator centerGeneration =
+                ApplyTreeGenerationIncrementally(center).GetEnumerator();
+            while (centerGeneration.MoveNext()) yield return null;
+            (centerGeneration as System.IDisposable)?.Dispose();
+            center.relation_label = AW_L10n.Text(
+                "aw_relation_self", "Self");
+            yield return null;
+
+            IReadOnlyList<long> parentIds =
+                GetParentIdsForMaterialization(center.id,
+                    pUseReverseLiveLookup: true);
+            if (pRequest.ShadowSnapshot != null)
+                pRequest.SynchronousParentIds = parentIds;
+            yield return null;
+            var centerFatherIds = new HashSet<long>();
+            var centerMotherIds = new HashSet<long>();
+            var centerResolvedParentIds = new HashSet<long>();
+            for (int parentIndex = 0;
+                 parentIndex < parentIds.Count; parentIndex++)
+            {
+                long parentId = parentIds[parentIndex];
+                FamilyTreeNode parent = BuildTreeNodeData(parentId);
+                if (parent != null)
+                {
+                    parent.relation_label = parent.sex == 0
+                        ? AW_L10n.Text("aw_relation_father", "Father")
+                        : AW_L10n.Text("aw_relation_mother", "Mother");
+                    IEnumerator parentGeneration =
+                        ApplyTreeGenerationIncrementally(parent)
+                            .GetEnumerator();
+                    while (parentGeneration.MoveNext()) yield return null;
+                    (parentGeneration as System.IDisposable)?.Dispose();
+                    root.parents.Add(parent);
+                    centerResolvedParentIds.Add(parent.id);
+                    if (parent.sex == 0) centerFatherIds.Add(parent.id);
+                    else centerMotherIds.Add(parent.id);
+                }
+                yield return null;
+
+                IReadOnlyList<long> grandparentIds =
+                    GetParentIdsForMaterialization(parentId,
+                        pUseReverseLiveLookup: true);
+                pRequest.ParentHasParents[parentId] =
+                    grandparentIds.Count > 0;
+                yield return null;
+            }
+
+            var seenSiblings = new HashSet<long>();
+            var orderedSiblings = new SortedSet<FamilyTreeNode>(
+                new FamilyTreeNodeBirthComparer());
+            for (int parentIndex = 0;
+                 parentIndex < parentIds.Count; parentIndex++)
+            {
+                IReadOnlyList<long> siblingIds = GetChildIdsCached(
+                    parentIds[parentIndex]);
+                yield return null;
+                for (int siblingIndex = 0;
+                     siblingIndex < siblingIds.Count; siblingIndex++)
+                {
+                    long siblingId = siblingIds[siblingIndex];
+                    bool candidate = siblingId != center.id &&
+                                     seenSiblings.Add(siblingId);
+                    yield return null;
+                    if (!candidate) continue;
+
+                    FamilyTreeNode sibling = BuildTreeNodeData(siblingId);
+                    yield return null;
+                    if (sibling == null) continue;
+
+                    IReadOnlyList<long> siblingParentIds =
+                        GetParentIdsForMaterialization(siblingId,
+                            pUseReverseLiveLookup: true);
+                    bool sharesFather = false;
+                    bool sharesMother = false;
+                    bool siblingHasFather = false;
+                    bool siblingHasMother = false;
+                    var siblingResolvedParentIds = new HashSet<long>();
+                    yield return null;
+                    for (int relationIndex = 0;
+                         relationIndex < siblingParentIds.Count;
+                         relationIndex++)
+                    {
+                        long relationId = siblingParentIds[relationIndex];
+                        FamilyTreeNode relation = BuildTreeNodeData(
+                            relationId);
+                        if (relation != null)
+                            siblingResolvedParentIds.Add(relationId);
+                        if (relation != null && relation.sex == 0)
+                        {
+                            siblingHasFather = true;
+                            sharesFather |= centerFatherIds.Contains(
+                                relationId);
+                        }
+                        else if (relation != null)
+                        {
+                            siblingHasMother = true;
+                            sharesMother |= centerMotherIds.Contains(
+                                relationId);
+                        }
+                        yield return null;
+                    }
+
+                    if (!FamilyTreeRelationRules.ShouldIncludeSibling(
+                            parentIds, siblingParentIds,
+                            centerResolvedParentIds,
+                            siblingResolvedParentIds,
+                            pRequest.ShowHalfSiblings))
+                    {
+                        yield return null;
+                        continue;
+                    }
+
+                    sibling.relation_label = pRequest.ShowHalfSiblings
+                        ? BuildSiblingRelationLabel(sibling, center,
+                            sharesFather, sharesMother,
+                            centerFatherIds.Count > 0,
+                            centerMotherIds.Count > 0,
+                            siblingHasFather, siblingHasMother)
+                        : BuildBasicSiblingRelationLabel(sibling, center);
+                    IEnumerator siblingGeneration =
+                        ApplyTreeGenerationIncrementally(sibling)
+                            .GetEnumerator();
+                    while (siblingGeneration.MoveNext()) yield return null;
+                    (siblingGeneration as System.IDisposable)?.Dispose();
+                    orderedSiblings.Add(sibling);
+                    yield return null;
+                }
+            }
+
+            IEnumerator<FamilyTreeNode> ordered =
+                orderedSiblings.GetEnumerator();
+            while (ordered.MoveNext())
+            {
+                FamilyTreeNode sibling = ordered.Current;
+                root.siblings.Add(sibling);
+                if (IsOlderThanCenter(sibling, center))
+                    root.olderSiblingCount++;
+                else
+                    root.youngerSiblingCount++;
+                yield return null;
+            }
+            ordered.Dispose();
+
+            IReadOnlyList<long> childIds = GetChildIdsCached(center.id);
+            if (pRequest.ShadowSnapshot != null)
+                pRequest.SynchronousChildIds = childIds;
+            root.hasChildren = childIds.Count > 0;
+            yield return null;
+            for (int childIndex = 0;
+                 childIndex < childIds.Count; childIndex++)
+            {
+                long childId = childIds[childIndex];
+                yield return null;
+                FamilyTreeNode child = BuildTreeNodeData(childId);
+                yield return null;
+                if (child == null) continue;
+                child.relation_label = child.sex == 0
+                    ? AW_L10n.Text("aw_relation_son", "Son")
+                    : AW_L10n.Text("aw_relation_daughter", "Daughter");
+                IEnumerator childGeneration =
+                    ApplyTreeGenerationIncrementally(child)
+                        .GetEnumerator();
+                while (childGeneration.MoveNext()) yield return null;
+                (childGeneration as System.IDisposable)?.Dispose();
+                IReadOnlyList<long> grandchildIds =
+                    GetChildIdsCached(childId);
+                bool hasChildren = grandchildIds.Count > 0;
+                yield return null;
+                root.children.Add(new TreeLayoutNode
+                {
+                    data = child,
+                    expanded = false,
+                    hasChildren = hasChildren
+                });
+                yield return null;
+            }
+        }
+
+        private IEnumerable ExpandLiveBranchesIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            var frames = new Stack<ExpandLiveFrame>();
+            frames.Push(new ExpandLiveFrame
+            {
+                ActorId = pRequest.BigTreeRootId,
+                Depth = 0
+            });
+            int visited = 1;
+            yield return null;
+
+            while (frames.Count > 0)
+            {
+                ExpandLiveFrame frame = frames.Peek();
+                if (frame.Stage == 0)
+                {
+                    _foldDecided.Add(frame.ActorId);
+                    frame.ActorData ??= BuildTreeNodeData(frame.ActorId);
+                    frame.Stage = frame.ActorData == null ||
+                                  frame.Depth > 64
+                        ? 5
+                        : 1;
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.Stage == 1)
+                {
+                    frame.ChildIds = GetChildIdsCached(frame.ActorId);
+                    frame.Stage = 2;
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.Stage == 2)
+                {
+                    if (frame.ChildIndex >= frame.ChildIds.Count)
+                    {
+                        frame.Stage = 5;
+                        continue;
+                    }
+                    frame.CandidateId =
+                        frame.ChildIds[frame.ChildIndex++];
+                    LineageBulkSnapshot snapshot =
+                        LineageBulkSnapshotContext.Current;
+                    frame.CandidateIsAgnatic = snapshot != null &&
+                        snapshot.FatherId(frame.CandidateId) == frame.ActorId;
+                    frame.Stage = 3;
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.Stage == 3)
+                {
+                    if (!frame.CandidateIsAgnatic)
+                    {
+                        frame.Stage = 2;
+                        continue;
+                    }
+                    frame.CandidateData = BuildTreeNodeData(
+                        frame.CandidateId);
+                    frame.Stage = 4;
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.Stage == 4)
+                {
+                    FamilyTreeNode child = frame.CandidateData;
+                    frame.CandidateData = null;
+                    frame.Stage = 2;
+                    if (child != null &&
+                        FamilyTreeRelationRules.ShouldShowInBigTree(
+                            child.sex, child.status))
+                    {
+                        frame.HasVisibleChildren = true;
+                        if (visited < MAX_AUTO_EXPAND_VISITS &&
+                            frame.Depth < 64)
+                        {
+                            visited++;
+                            frames.Push(new ExpandLiveFrame
+                            {
+                                ActorId = child.id,
+                                ActorData = child,
+                                Depth = frame.Depth + 1,
+                                Parent = frame
+                            });
+                        }
+                        else if (child.is_alive)
+                            frame.DescendantAlive = true;
+                    }
+                    yield return null;
+                    continue;
+                }
+
+                if (frame.HasVisibleChildren &&
+                    (frame.ActorId == pRequest.BigTreeRootId ||
+                     frame.DescendantAlive))
+                    _expanded.Add(frame.ActorId);
+                else
+                    _expanded.Remove(frame.ActorId);
+                frames.Pop();
+                if (frame.Parent != null)
+                    frame.Parent.DescendantAlive |=
+                        frame.ActorData?.is_alive == true ||
+                        frame.DescendantAlive;
+                yield return null;
+            }
+        }
+
+        private IEnumerable BuildBigTreeIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
+        {
+            FamilyTreeNode rootData = BuildTreeNodeData(
+                pRequest.BigTreeRootId);
+            yield return null;
+            if (rootData == null) yield break;
+            if (pRequest.ShadowSnapshot != null)
+            {
+                pRequest.SynchronousParentIds =
+                    GetParentIdsForMaterialization(
+                        pRequest.BigTreeRootId,
+                        pUseReverseLiveLookup: true);
+                yield return null;
+            }
+            if (_lastTreeRootId != pRequest.BigTreeRootId)
             {
                 ResetQueryCache();
-                _expanded.Clear();
-                _foldDecided.Clear();
-                _lastTreeRootId = _rootActorId;
+                ResetFoldState();
+                _lastTreeRootId = pRequest.BigTreeRootId;
             }
-            if (!_foldDecided.Contains(_rootActorId))
+            if (!_foldDecided.Contains(pRequest.BigTreeRootId))
             {
-                _foldDecided.Add(_rootActorId);
-                _expanded.Remove(_rootActorId);
+                _foldDecided.Add(pRequest.BigTreeRootId);
+                _expanded.Remove(pRequest.BigTreeRootId);
             }
-            return BuildLayoutNode(rootData, 0);
-        }
 
-        /// <summary>
-        ///     懒加载构建:**折叠节点不查 SQL、不建子节点**(node.expanded=false 时直接返回,不递归)。
-        ///     展开节点才查直接子代 + 递归建子节点;每个子节点首次出现时按"自动折叠规则"(ProbeBranch,只看一层)
-        ///     决定其初始展开/折叠 —— 全死 OR 无 king/leader/heir 的分支默认折叠(用户定调,省性能)。
-        /// </summary>
-        private TreeLayoutNode BuildLayoutNode(FamilyTreeNode pData, int pDepth)
-        {
-            var node = new TreeLayoutNode { data = pData };
-            pData.tree_generation = pDepth + 1;
+            var root = new TreeLayoutNode { data = rootData };
+            pRequest.Root = root;
+            var frames = new Stack<BigTreeBuildFrame>();
+            frames.Push(CreateBigTreeBuildFrame(root, 0));
+            yield return null;
 
-            // 称王分封:若该节点开了新氏支(founded_branch_shi_id>=0)且**不是当前这棵树的根**,
-            //   则其子嗣只记在新支 → 原树里把他当叶子(不展开子代,改由"建支:X氏"徽标点击跳新支)。
-            //   注:他自己作为新支根打开时(_rootActorId==他)正常展开子代。
-            if (pData.founded_branch_shi_id >= 0 && pData.id != _rootActorId)
+            while (frames.Count > 0)
             {
-                node.hasChildren = false;
-                node.expanded = false;
-                return node;
-            }
-
-            // 轻量探测(只看一层子代):决定 hasChildren(显 +/−)与默认折叠。不递归全树。
-            var probe = ProbeBranchCached(pData.id);
-            node.hasChildren = probe.has_children;
-
-            // 首次见到该节点 → 按规则定默认折叠状态(之后用户手动 toggle 进 _expanded/_collapsedDecided 不再被覆盖)。
-            if (node.hasChildren && !_foldDecided.Contains(pData.id))
-            {
-                _foldDecided.Add(pData.id);
-                _expanded.Remove(pData.id);
-            }
-
-            node.expanded = _expanded.Contains(pData.id);
-
-            // 仅展开时才查子代 + 建节点(折叠 = 零查询零节点,真懒加载)。
-            if (node.expanded)
-                foreach (var cid in GetAgnaticChildIdsCached(pData.id))
+                BigTreeBuildFrame frame = frames.Peek();
+                if (frame.Stage == 0)
                 {
-                    var cd = BuildTreeNodeData(cid);
-                    if (cd == null) continue;
-                    // 平民/奴隶不进氏族大树;女性也不进氏族大树(只在家族树可见)。
-                    if (!FamilyTreeRelationRules.ShouldShowInBigTree(cd.sex, cd.status)) continue;
-                    node.children.Add(BuildLayoutNode(cd, pDepth + 1));
+                    frame.Node.data.tree_generation = frame.Depth + 1;
+                    frame.Node.expanded = _expanded.Contains(
+                        frame.Node.data.id);
+                    frame.ChildIds = GetChildIdsCached(
+                        frame.Node.data.id);
+                    if (pRequest.ShadowSnapshot != null &&
+                        frame.Node.data.id == pRequest.BigTreeRootId)
+                        pRequest.SynchronousChildIds = frame.ChildIds;
+                    frame.Stage = 1;
+                    yield return null;
+                    continue;
                 }
-            return node;
-        }
-
-        /// <summary>是否平民/奴隶身份(氏族大树跳过,不绘制)。</summary>
-        private static bool IsHiddenInBigTreeStatus(string pStatus)
-        {
-            return !FamilyTreeRelationRules.ShouldShowStatusInGenealogy(pStatus);
-        }
-
-        private void MeasureWidth(TreeLayoutNode pNode)
-        {
-            if (pNode.children.Count == 0 || !pNode.expanded) { pNode.subtreeWidth = NODE_W; return; }
-            float sum = 0;
-            for (int i = 0; i < pNode.children.Count; i++)
-            {
-                MeasureWidth(pNode.children[i]);
-                sum += pNode.children[i].subtreeWidth;
-                if (i > 0) sum += H_GAP;
-            }
-            pNode.subtreeWidth = Mathf.Max(NODE_W, sum);
-        }
-
-        private void LayoutAndRender(TreeLayoutNode pNode, float pXStart, float pY, float pWidth)
-        {
-            pNode.centerX = pXStart + pWidth / 2f;
-            pNode.topY = pY;
-            if (pY + NODE_H > _maxDepthY) _maxDepthY = pY + NODE_H;
-
-            SpawnNode(pNode);
-
-            if (pNode.children.Count == 0 || !pNode.expanded) return;
-            float childY = pY + NODE_H + V_GAP;
-            float cursor = pXStart + (pWidth - SumChildWidths(pNode)) / 2f;
-            foreach (var child in pNode.children)
-            {
-                LayoutAndRender(child, cursor, childY, child.subtreeWidth);
-                DrawConnector(pNode.centerX, pY + NODE_H, child.centerX, childY);
-                cursor += child.subtreeWidth + H_GAP;
-            }
-        }
-
-        private float SumChildWidths(TreeLayoutNode pNode)
-        {
-            float sum = 0;
-            for (int i = 0; i < pNode.children.Count; i++)
-            {
-                sum += pNode.children[i].subtreeWidth;
-                if (i > 0) sum += H_GAP;
-            }
-            return sum;
-        }
-
-        private void SpawnNode(TreeLayoutNode pNode)
-        {
-            var view = AcquireNode();
-            if (_mode == Mode.BigTree && pNode.data.id == _rootActorId)
-            {
-                ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(_backShiId);
-                if (branch != null)
+                if (frame.Stage == 1)
                 {
-                    pNode.data.branch_display = ShiBranchRules.BuildDisplayName(
-                        branch.origin_city_name, branch.clan_name);
-                    if (branch.parent_shi_id >= 0)
+                    if (frame.ChildIndex >= frame.ChildIds.Count)
                     {
-                        ShiBranchInfo parent = LineageQuery.GetShiBranchInfo(branch.parent_shi_id);
-                        if (parent != null)
-                            pNode.data.branch_home_display = ShiBranchRules.BuildDisplayName(
-                                parent.origin_city_name, parent.clan_name);
+                        frame.Stage = 4;
+                        continue;
                     }
+                    frame.CandidateId =
+                        frame.ChildIds[frame.ChildIndex++];
+                    LineageBulkSnapshot snapshot =
+                        LineageBulkSnapshotContext.Current;
+                    frame.CandidateIsAgnatic = snapshot != null &&
+                        snapshot.FatherId(frame.CandidateId) ==
+                        frame.Node.data.id;
+                    frame.Stage = 2;
+                    yield return null;
+                    continue;
                 }
+                if (frame.Stage == 2)
+                {
+                    if (!frame.CandidateIsAgnatic)
+                    {
+                        frame.Stage = 1;
+                        continue;
+                    }
+                    frame.CandidateData = BuildTreeNodeData(
+                        frame.CandidateId);
+                    frame.Stage = 3;
+                    yield return null;
+                    continue;
+                }
+                if (frame.Stage == 3)
+                {
+                    FamilyTreeNode childData = frame.CandidateData;
+                    frame.CandidateData = null;
+                    frame.Stage = 1;
+                    if (childData != null &&
+                        FamilyTreeRelationRules.ShouldShowInBigTree(
+                            childData.sex, childData.status))
+                    {
+                        frame.Node.hasChildren = true;
+                        if (!_foldDecided.Contains(frame.Node.data.id))
+                        {
+                            _foldDecided.Add(frame.Node.data.id);
+                            _expanded.Remove(frame.Node.data.id);
+                            frame.Node.expanded = false;
+                        }
+                        if (frame.Node.expanded)
+                        {
+                            var childNode = new TreeLayoutNode
+                            {
+                                data = childData
+                            };
+                            frame.Node.children.Add(childNode);
+                            frames.Push(CreateBigTreeBuildFrame(childNode,
+                                frame.Depth + 1));
+                        }
+                        else
+                            frame.Stage = 4;
+                    }
+                    yield return null;
+                    continue;
+                }
+
+                frames.Pop();
+                yield return null;
             }
-            if (_mode == Mode.BigTree && _locateActorId >= 0 && pNode.data.id == _locateActorId)
+        }
+
+        private static BigTreeBuildFrame CreateBigTreeBuildFrame(
+            TreeLayoutNode pNode, int pDepth)
+        {
+            return new BigTreeBuildFrame
+            {
+                Node = pNode,
+                Depth = pDepth,
+                ChildIds = new List<long>()
+            };
+        }
+
+        private void SpawnNode(TreeLayoutNode pNode,
+            FamilyTreeMaterializationRequest pRequest = null)
+        {
+            Mode mode = pRequest?.Mode ?? _mode;
+            long rootActorId = pRequest?.BigTreeRootId ?? _rootActorId;
+            long centerActorId = pRequest?.CenterActorId ?? _centerActorId;
+            long backShiId = pRequest?.BackShiId ?? _backShiId;
+            long locateActorId = pRequest?.LocateActorId ?? _locateActorId;
+            FamilyTreeNodeView view = null;
+            bool reuseView = mode == Mode.BigTree &&
+                             pRequest?.ReuseRenderedViews == true &&
+                             _bigTreeNodeViews.TryGetValue(pNode.data.id,
+                                 out view) && view != null;
+            if (!reuseView) view = AcquireNode();
+            if (mode == Mode.BigTree && locateActorId >= 0 &&
+                pNode.data.id == locateActorId)
             {
                 pNode.data.relation_label = AW_L10n.Text("aw_tree_locate_target", "\u76EE\u6807");
                 _locateFound = true;
                 _locateTarget = new Vector2(pNode.centerX, pNode.topY);
             }
 
-            bool isRoot = (_mode == Mode.Family) && pNode.data.id == _centerActorId;
+            bool isRoot = mode == Mode.Family &&
+                          pNode.data.id == centerActorId;
             System.Action onUp = null, onDown = null;
-            if (_mode == Mode.Family && isRoot)
+            if (mode == Mode.Family && isRoot)
             {
                 // 小树根节点:父母已在上方独立行画出并可点击上溯,这里不再重复 ▲(避免冗余);保留 ▼ 下溯。
                 if (pNode.hasChildren)
                 {
                     var kids = GetChildIdsCached(pNode.data.id);
-                    if (kids.Count > 0) { long down = kids[0]; onDown = () => OpenFamilyTree(down, _backShiId); }
+                    if (kids.Count > 0)
+                    {
+                        long down = kids[0];
+                        onDown = () => OpenFamilyTree(down, backShiId);
+                    }
                 }
             }
 
-            view.Bind(pNode.data, isRoot ? OnNodeClick : OnFamilyNodeClick,
-                (_mode == Mode.BigTree && pNode.hasChildren) ? (System.Action)(() => ToggleExpand(pNode.data.id)) : null,
-                pNode.hasChildren, pNode.expanded, onUp, onDown);
+            System.Action toggle = mode == Mode.BigTree && pNode.hasChildren
+                ? (System.Action)(() => ToggleExpand(pNode.data.id))
+                : null;
+            if (reuseView)
+                view.UpdateExpansionState(pNode.hasChildren,
+                    pNode.expanded, toggle);
+            else
+                view.Bind(pNode.data,
+                    isRoot ? OnNodeClick : OnFamilyNodeClick,
+                    toggle, pNode.hasChildren, pNode.expanded,
+                    onUp, onDown);
 
             var rect = view.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0, 1);
             rect.anchorMax = new Vector2(0, 1);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.anchoredPosition = new Vector2(pNode.centerX, -pNode.topY);
-            _spawned.Add(view);
+            if (!reuseView) _spawned.Add(view);
+            if (mode == Mode.BigTree)
+                _bigTreeNodeViews[pNode.data.id] = view;
+            if (pRequest?.ReuseRenderedViews == true)
+                pRequest.RenderedActorIds.Add(pNode.data.id);
         }
 
-        private void DrawConnector(float pParentCx, float pParentBottomY, float pChildCx, float pChildTopY)
+        private IEnumerable RecycleUnusedBigTreeViewsIncrementally(
+            FamilyTreeMaterializationRequest pRequest)
         {
-            float midY = (pParentBottomY + pChildTopY) / 2f;
-            DrawLine(pParentCx, pParentBottomY, pParentCx, midY);
-            DrawLine(pParentCx, midY, pChildCx, midY);
-            DrawLine(pChildCx, midY, pChildCx, pChildTopY);
+            var staleIds = new List<long>();
+            foreach (KeyValuePair<long, FamilyTreeNodeView> pair in
+                     _bigTreeNodeViews)
+            {
+                if (!pRequest.RenderedActorIds.Contains(pair.Key))
+                    staleIds.Add(pair.Key);
+                yield return null;
+            }
+
+            for (int index = 0; index < staleIds.Count; index++)
+            {
+                long actorId = staleIds[index];
+                if (_bigTreeNodeViews.TryGetValue(actorId,
+                        out FamilyTreeNodeView view))
+                {
+                    _bigTreeNodeViews.Remove(actorId);
+                    _spawned.Remove(view);
+                    if (view != null)
+                    {
+                        view.gameObject.SetActive(false);
+                        _nodePool.Add(view);
+                    }
+                }
+                yield return null;
+            }
         }
 
         private void DrawLine(float x1, float y1, float x2, float y2)
@@ -1116,11 +2466,12 @@ namespace AncientWarfare3.ui.windows
         private void ToggleExpand(long pId)
         {
             _locateActorId = -1;
+            _intentState.CancelForManualFold();
             _foldDecided.Add(pId); // 用户手动操作 → 标记已决定,自动折叠规则不再覆盖
             if (_expanded.Contains(pId)) _expanded.Remove(pId);
             else _expanded.Add(pId);
             PreservePanForNextRebuild();
-            Rebuild();
+            QueueBigTreeRelayout();
         }
 
         private void ExpandAllLiveBranches()
@@ -1128,11 +2479,9 @@ namespace AncientWarfare3.ui.windows
             _locateActorId = -1;
             if (_mode != Mode.BigTree || _rootActorId < 0) return;
             ResetQueryCache();
-            _expanded.Clear();
-            _foldDecided.Clear();
-            _expanded.Add(_rootActorId);
-            _autoExpandVisited = 0;
-            ExpandLiveRecursive(_rootActorId, 0);
+            ResetFoldState();
+            PreservePanForNextRebuild();
+            _intentState.RequestExpandLive();
             Rebuild();
         }
 
@@ -1140,49 +2489,12 @@ namespace AncientWarfare3.ui.windows
         {
             _locateActorId = -1;
             if (_mode != Mode.BigTree || _rootActorId < 0) return;
-            _expanded.Clear();
-            _foldDecided.Clear();
+            _intentState.CancelForManualFold();
+            ResetFoldState();
             _foldDecided.Add(_rootActorId);
             ResetQueryCache();
+            PreservePanForNextRebuild();
             Rebuild();
-        }
-
-        private void ExpandLiveRecursive(long pActorId, int pDepth)
-        {
-            if (pDepth > 64) return;
-            if (_autoExpandVisited++ >= MAX_AUTO_EXPAND_VISITS) return;
-            _foldDecided.Add(pActorId);
-            var probe = ProbeBranchCached(pActorId);
-            if (!probe.has_children) return;
-            if (pActorId == _rootActorId || probe.any_descendant_alive)
-                _expanded.Add(pActorId);
-            else
-                return;
-
-            foreach (long cid in GetAgnaticChildIdsCached(pActorId))
-            {
-                var child = BuildTreeNodeData(cid);
-                if (child == null ||
-                    !FamilyTreeRelationRules.ShouldShowInBigTree(child.sex, child.status)) continue;
-                if (child.founded_branch_shi_id >= 0 && child.id != _rootActorId) continue;
-                if (child.is_alive || HasAliveDescendantCached(child.id))
-                    ExpandLiveRecursive(child.id, pDepth + 1);
-                else
-                    _foldDecided.Add(child.id);
-            }
-        }
-
-        private void MarkCollapsedRecursive(long pActorId, int pDepth)
-        {
-            if (pDepth > 64) return;
-            _foldDecided.Add(pActorId);
-            foreach (long cid in GetAgnaticChildIdsCached(pActorId))
-            {
-                var child = BuildTreeNodeData(cid);
-                if (child == null ||
-                    !FamilyTreeRelationRules.ShouldShowInBigTree(child.sex, child.status)) continue;
-                MarkCollapsedRecursive(child.id, pDepth + 1);
-            }
         }
 
         // 点节点头像:大树→开该人小家庭树;小树根→打开 inspect。
@@ -1207,94 +2519,125 @@ namespace AncientWarfare3.ui.windows
 
         private FamilyTreeNode BuildTreeNodeData(long pId)
         {
-            var n = LineageQuery.GetFamilyTree(pId);
-            if (n == null) return null;
-            n.parents.Clear();
-            n.children.Clear();
-            return n;
+            FamilyTreeMaterializationRequest request =
+                _activeMaterialization;
+            LineageBulkSnapshot snapshot = request?.Snapshot ??
+                LineageBulkSnapshotContext.Current ?? _bulkSnapshot;
+            if (snapshot == null ||
+                !snapshot.TryGetNode(pId,
+                    out LineageTreeNodeSnapshot node)) return null;
+
+            if (request != null && !request.VisitedNodeIds.Contains(pId))
+            {
+                if (!request.VisitBudget.TryVisit(pId)) return null;
+                request.VisitedNodeIds.Add(pId);
+            }
+
+            ShiBranchDisplayProjection projection =
+                ShiBranchRules.ResolveDisplayProjection(
+                    node.ShiId, node.ParentShiId, node.ShiDisplay,
+                    node.ParentShiDisplay, node.RootShiDisplay);
+            string branchDisplay = node.FoundedBranchShiId >= 0L &&
+                                   !string.IsNullOrWhiteSpace(
+                                       node.BranchDisplay)
+                ? node.BranchDisplay
+                : projection.BranchDisplay;
+
+            var result = new FamilyTreeNode
+            {
+                id = node.Id,
+                display_name = node.DisplayName,
+                asset_id = node.AssetId,
+                sex = node.Sex,
+                is_alive = node.IsAlive,
+                status = node.Status,
+                clan_name = node.ClanName,
+                birth_time = node.BirthTime,
+                death_time = node.DeathTime,
+                kingdom_id = node.KingdomId,
+                kingdom_name = node.KingdomName,
+                kingdom_color = node.KingdomColor,
+                original_clan_id = node.OriginalClanId,
+                clan_color_text = node.ClanColorText,
+                clan_color_id = node.ClanColorId,
+                clan_banner_icon_id = node.ClanBannerIconId,
+                clan_banner_background_id = node.ClanBannerBackgroundId,
+                city_name = node.CityName,
+                social_title = node.SocialTitle,
+                social_title_color = node.SocialTitleColor,
+                shi_id = node.ShiId,
+                noble_distance = node.NobleDistance,
+                head = node.Head,
+                skin = node.Skin,
+                skin_set = node.SkinSet,
+                subspecies_id = node.SubspeciesId,
+                age_overgrowth = node.AgeOvergrowth,
+                phenotype_index = node.PhenotypeIndex,
+                phenotype_shade = node.PhenotypeShade,
+                founded_branch_shi_id = node.FoundedBranchShiId,
+                death_cause = node.DeathCause,
+                branch_home_display = "",
+                branch_display = branchDisplay,
+                parent_shi_display = projection.ParentDisplay,
+                root_shi_display = projection.RootDisplay,
+                origin_city_name = node.OriginCityName,
+                state_name = node.StateName,
+                ritual_appellation = node.RitualAppellation,
+                retrospective_relation = node.RetrospectiveRelation
+            };
+
+            FamilyTreeSnapshotOverlayService.ReconcileReadModel(result,
+                node);
+            return result;
         }
 
         private void ResetQueryCache()
         {
-            _childIdsCache.Clear();
-            _agnaticChildIdsCache.Clear();
-            _probeCache.Clear();
-            _aliveDescendantCache.Clear();
-            _autoExpandVisited = 0;
+            _childIdsCache = new Dictionary<long, IReadOnlyList<long>>();
         }
 
-        private List<long> GetChildIdsCached(long pActorId)
+        private void ResetFoldState()
+        {
+            _expanded = new HashSet<long>();
+            _foldDecided = new HashSet<long>();
+        }
+
+        private IReadOnlyList<long> GetChildIdsCached(long pActorId)
         {
             if (!_childIdsCache.TryGetValue(pActorId, out var ids))
             {
-                ids = LineageQuery.GetChildIds(pActorId);
+                LineageBulkSnapshot bulk =
+                    LineageBulkSnapshotContext.Current;
+                ids = bulk != null && bulk.ContainsNode(pActorId)
+                    ? bulk.ChildIds(pActorId)
+                    : System.Array.Empty<long>();
                 _childIdsCache[pActorId] = ids;
             }
             return ids;
         }
 
-        private List<long> GetAgnaticChildIdsCached(long pActorId)
+        private static IReadOnlyList<long> GetParentIdsForMaterialization(
+            long pActorId, bool pUseReverseLiveLookup)
         {
-            if (_agnaticChildIdsCache.TryGetValue(pActorId, out List<long> ids)) return ids;
-            ids = new List<long>();
-            foreach (long childId in GetChildIdsCached(pActorId))
-            {
-                if (LineageQuery.GetFatherId(childId) == pActorId) ids.Add(childId);
-            }
-            _agnaticChildIdsCache[pActorId] = ids;
-            return ids;
-        }
-
-        private BranchProbe ProbeBranchCached(long pActorId)
-        {
-            if (!_probeCache.TryGetValue(pActorId, out var probe))
-            {
-                probe = LineageQuery.ProbeBranch(pActorId);
-                _probeCache[pActorId] = probe;
-            }
-            return probe;
-        }
-
-        private bool HasAliveDescendantCached(long pActorId)
-        {
-            if (!_aliveDescendantCache.TryGetValue(pActorId, out bool value))
-            {
-                value = LineageQuery.HasAliveDescendant(pActorId);
-                _aliveDescendantCache[pActorId] = value;
-            }
-            return value;
-        }
-
-        private void ClearSpawned()
-        {
-            foreach (var v in _spawned)
-            {
-                if (v == null) continue;
-                v.gameObject.SetActive(false);
-                _nodePool.Add(v);
-            }
-            _spawned.Clear();
-            foreach (var l in _lines)
-            {
-                if (l == null) continue;
-                l.SetActive(false);
-                _linePool.Add(l);
-            }
-            _lines.Clear();
-            _maxDepthY = 0;
+            LineageBulkSnapshot bulk = LineageBulkSnapshotContext.Current;
+            if (bulk != null && bulk.ContainsNode(pActorId))
+                return bulk.ParentIds(pActorId);
+            return System.Array.Empty<long>();
         }
 
         private FamilyTreeNodeView AcquireNode()
         {
-            while (_nodePool.Count > 0)
+            if (_nodePool.Count > 0)
             {
                 int index = _nodePool.Count - 1;
                 var view = _nodePool[index];
                 _nodePool.RemoveAt(index);
-                if (view == null) continue;
-                view.transform.SetParent(_canvas, false);
-                view.gameObject.SetActive(true);
-                return view;
+                if (view != null)
+                {
+                    view.transform.SetParent(_canvas, false);
+                    view.gameObject.SetActive(true);
+                    return view;
+                }
             }
             return FamilyTreeNodeView.Create(_canvas);
         }
@@ -1302,12 +2645,11 @@ namespace AncientWarfare3.ui.windows
         private GameObject AcquireLine()
         {
             GameObject obj = null;
-            while (_linePool.Count > 0)
+            if (_linePool.Count > 0)
             {
                 int index = _linePool.Count - 1;
                 obj = _linePool[index];
                 _linePool.RemoveAt(index);
-                if (obj != null) break;
             }
 
             if (obj == null)
@@ -1319,10 +2661,82 @@ namespace AncientWarfare3.ui.windows
             return obj;
         }
 
+        private void TransferOwnedCleanup()
+        {
+            long worldGeneration = AWAsyncRuntime.WorldGeneration;
+            FamilyTreeDeferredCleanupHost.EnqueueOwned(
+                _spawned, _lines, worldGeneration);
+            FamilyTreeDeferredCleanupHost.EnqueueOwned(
+                _nodePool, _linePool, worldGeneration);
+            _spawned = new List<FamilyTreeNodeView>();
+            _lines = new List<GameObject>();
+            _nodePool = new List<FamilyTreeNodeView>();
+            _linePool = new List<GameObject>();
+            _bigTreeNodeViews.Clear();
+            _cleanupPending = false;
+            _cleanupLinesOnly = false;
+            _maxDepthY = 0f;
+        }
+
         private void PreservePanForNextRebuild()
         {
-            _preservePanOnNextRebuild = true;
-            _savedPanBeforeRebuild = _canvasRect != null ? _canvasRect.anchoredPosition : Vector2.zero;
+            Vector2 pan = _canvasRect != null
+                ? _canvasRect.anchoredPosition
+                : Vector2.zero;
+            _intentState.RequestPan(pan.x, pan.y);
+        }
+    }
+
+    internal static class FamilyTreeDeferredCleanupHost
+    {
+        private const int MaximumPerFrame = 8;
+        private static readonly AWUiBoundedCleanupQueue<FamilyTreeNodeView>
+            Nodes = new AWUiBoundedCleanupQueue<FamilyTreeNodeView>();
+        private static readonly AWUiBoundedCleanupQueue<GameObject> Lines =
+            new AWUiBoundedCleanupQueue<GameObject>();
+        private static int _lastDrainFrame = -1;
+        private static int _drainedThisFrame;
+
+        public static void EnqueueOwned(List<FamilyTreeNodeView> nodes,
+            List<GameObject> lines, long worldGeneration)
+        {
+            Nodes.EnqueueOwned(nodes, worldGeneration);
+            Lines.EnqueueOwned(lines, worldGeneration);
+        }
+
+        public static void Drain(int maximumSteps)
+        {
+            int frame = Time.frameCount;
+            if (_lastDrainFrame != frame)
+            {
+                _lastDrainFrame = frame;
+                _drainedThisFrame = 0;
+            }
+            int remaining = System.Math.Min(
+                System.Math.Max(0, maximumSteps),
+                System.Math.Max(0, MaximumPerFrame - _drainedThisFrame));
+            if (remaining == 0) return;
+            int drained = Nodes.Drain(remaining, DestroyNode);
+            remaining -= drained;
+            if (remaining > 0)
+                drained += Lines.Drain(remaining, DestroyLine);
+            _drainedThisFrame += drained;
+        }
+
+        public static void InvalidateWorld(long currentWorldGeneration)
+        {
+            Nodes.InvalidateWorld(currentWorldGeneration);
+            Lines.InvalidateWorld(currentWorldGeneration);
+        }
+
+        private static void DestroyNode(FamilyTreeNodeView node)
+        {
+            if (node != null) UnityEngine.Object.Destroy(node.gameObject);
+        }
+
+        private static void DestroyLine(GameObject line)
+        {
+            if (line != null) UnityEngine.Object.Destroy(line);
         }
     }
 }

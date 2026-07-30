@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.api.multiplayer;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -6,6 +7,16 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     public static class AW_VassalDiplomacyPatch
     {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DiplomacyHelpers), nameof(DiplomacyHelpers.getAllianceTarget))]
+        public static bool GetAllianceTarget_Prefix(Kingdom pKingdomStarter,
+            ref Kingdom __result)
+        {
+            if (!ShouldBlockAlliance(pKingdomStarter)) return true;
+            __result = null;
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DiplomacyHelpers), nameof(DiplomacyHelpers.getAllianceTarget))]
         public static void GetAllianceTarget_Postfix(Kingdom pKingdomStarter, ref Kingdom __result)
@@ -29,7 +40,9 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Alliance), nameof(Alliance.join))]
         public static bool AllianceJoin_Prefix(Kingdom pKingdom, bool pForce, ref bool __result)
         {
-            if (pForce || !ShouldBlockAlliance(pKingdom)) return true;
+            if (AW3MultiplayerReplicaScope.IsApplying) return true;
+            _ = pForce;
+            if (!ShouldBlockAlliance(pKingdom)) return true;
             __result = false;
             return false;
         }
@@ -37,7 +50,9 @@ namespace AncientWarfare3.patch
         private static bool ShouldBlockAlliance(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return false;
-            return !VassalWarPermissionRules.CanCreateAlliance(VassalService.IsVassalKingdom(pKingdom), out _);
+            bool subject = VassalService.IsVassalKingdom(pKingdom) ||
+                           VassalService.IsTributaryKingdom(pKingdom);
+            return !VassalWarPermissionRules.CanCreateAlliance(subject, out _);
         }
     }
 }

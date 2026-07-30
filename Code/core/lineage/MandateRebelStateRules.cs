@@ -23,5 +23,20 @@ namespace AncientWarfare3.core.lineage
         {
             return pCachedYear == pCurrentYear && pCachedKingdomCount == pCurrentKingdomCount;
         }
+
+        public static bool CanClaimFormerDynastyMandate(
+            bool pMandateActive, long pPreviousMandateKingdomId,
+            long pRebelOriginKingdomId, bool pOriginKingdomAlive,
+            bool pActiveRebellionAgainstOrigin, int pLegalCoreCount,
+            double pCoreControlRatio, double pClaimThreshold)
+        {
+            if (pMandateActive || pPreviousMandateKingdomId < 0 ||
+                pRebelOriginKingdomId != pPreviousMandateKingdomId)
+                return false;
+            if (!pOriginKingdomAlive || !pActiveRebellionAgainstOrigin ||
+                pLegalCoreCount <= 0)
+                return false;
+            return pCoreControlRatio + 0.0001d >= pClaimThreshold;
+        }
     }
 }

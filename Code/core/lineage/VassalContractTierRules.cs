@@ -52,6 +52,11 @@ namespace AncientWarfare3.core.lineage
             return !IsLooseTributary(pTier);
         }
 
+        public static bool CanInitiateForcedTributary(int attackerTitleRank)
+        {
+            return attackerTitleRank == 3 || attackerTitleRank == 4;
+        }
+
         public static bool CanForceTributary(bool pParticipantsValid,
             bool pTargetIndependent, bool pTargetAlreadyTributary,
             bool pDirectlyAdjacent, float pAttackerPower, float pDefenderPower)

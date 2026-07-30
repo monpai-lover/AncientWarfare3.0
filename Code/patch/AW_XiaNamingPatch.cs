@@ -41,6 +41,7 @@ namespace AncientWarfare3.patch
         private static void Kingdom_NewCivKingdom_Postfix(Kingdom __instance, Actor pActor)
         {
             XiaNamingRepair.TryRenameKingdom(__instance, pActor, pForce: false);
+            RulerAppellationService.RefreshLivingProjection(__instance);
         }
 
         [HarmonyPostfix]

@@ -59,23 +59,15 @@ namespace AncientWarfare3.core.court
                 case CourtSchoolId.Mohist:
                     if (decisionId == "aw_decision_change_capital" && unstable) score += 30;
                     break;
-                case CourtSchoolId.Military:
-                    if (decisionId == "aw_decision_declare_war" && !atWar && cities >= 2) score += 95;
-                    break;
                 case CourtSchoolId.Diplomat:
                     if (decisionId == "aw_decision_seek_suzerain" || decisionId == "aw_decision_absorb_vassal") score += 85;
-                    if (decisionId == "aw_decision_declare_war") score += 30;
                     break;
                 case CourtSchoolId.Ru:
                 case CourtSchoolId.YinYang:
                     if (decisionId == "aw_decision_claim_mandate") score += 85;
                     break;
-                case CourtSchoolId.Dao:
-                    if (decisionId == "aw_decision_declare_war") score -= 60;
-                    break;
             }
-            if (decisionId == "aw_decision_declare_war" ||
-                decisionId == "aw_decision_fabricate_core" ||
+            if (decisionId == "aw_decision_fabricate_core" ||
                 decisionId == "aw_decision_fabricate_weak_claim" ||
                 decisionId == "aw_decision_fabricate_strong_claim")
             {
@@ -149,7 +141,6 @@ namespace AncientWarfare3.core.court
             {
                 case "aw_policy_early_law":
                 case "aw_policy_household_registry":
-                case "aw_policy_favor_order":
                 case "aw_policy_xia_law_institutions":
                 case "aw_tech_official_court":
                     return true;

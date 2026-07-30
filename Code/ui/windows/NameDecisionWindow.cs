@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
 using AncientWarfare3.ui.items;
@@ -43,6 +44,7 @@ namespace AncientWarfare3.ui.windows
         private NameDecisionViewModel _model;
         private EraDecisionSnapshot _snapshot;
         private bool _pending;
+        private bool _commandRefreshRequested;
 
         public static void Open(long pKingdomId)
         {
@@ -63,11 +65,30 @@ namespace AncientWarfare3.ui.windows
                     _windowSize = size;
                     ApplyWindowLayout();
                 }, DefaultSize, MinimumSize, MaximumSize);
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
+        }
+
+        private void OnDestroy()
+        {
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
         }
 
         public override void OnNormalEnable()
         {
             Refresh();
+        }
+
+        private void Update()
+        {
+            if (!_commandRefreshRequested) return;
+            _commandRefreshRequested = false;
+            _pending = false;
+            if (isActiveAndEnabled) Refresh();
+        }
+
+        private void OnCommandStateChanged()
+        {
+            if (_pending) _commandRefreshRequested = true;
         }
 
         private void FocusExisting()
@@ -80,7 +101,6 @@ namespace AncientWarfare3.ui.windows
         {
             EnsureUi();
             ApplyWindowLayout();
-            _pending = false;
             Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
             _snapshot = YearNameService.PrepareVoluntaryDecision(kingdom);
             _candidateNames.Clear();
@@ -124,26 +144,24 @@ namespace AncientWarfare3.ui.windows
         private void Confirm()
         {
             if (_pending || _model == null || !_model.CanConfirm) return;
-            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
-            if (kingdom?.king?.data == null)
-            {
-                _model.ApplyBlockReason(EraChangeBlockReason.NotHereditaryEmperor);
-                RenderState();
-                return;
-            }
-
             _pending = true;
             RenderState();
-            EraChangeResult result = YearNameService.TryChangeEra(
-                kingdom, kingdom.king, _model.Input, EraChangeKind.Voluntary,
-                EraChangeReason.PlayerRequested);
-            if (result.Success)
+            AW3CommandResult result =
+                AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.ChangeEra(_kingdomId,
+                        _model.Input));
+            if (result.Status == AW3CommandStatus.Accepted)
             {
                 GetComponent<ScrollWindow>()?.clickHide();
                 return;
             }
+            if (result.Status == AW3CommandStatus.Pending) return;
             _pending = false;
-            _model.ApplyBlockReason(result.BlockReason);
+            EraChangeBlockReason reason = Enum.IsDefined(
+                    typeof(EraChangeBlockReason), result.DetailCode)
+                ? (EraChangeBlockReason)result.DetailCode
+                : EraChangeBlockReason.PersistenceFailed;
+            _model.ApplyBlockReason(reason);
             RenderState();
         }
 

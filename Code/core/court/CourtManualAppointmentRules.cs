@@ -125,7 +125,9 @@ namespace AncientWarfare3.core.court
 
         public static bool IsMilitaryCentralOffice(string pOfficeId)
         {
-            return string.Equals(pOfficeId, "marshal", StringComparison.Ordinal) ||
+            return string.Equals(pOfficeId, CourtOfficeId.SiMa,
+                       StringComparison.Ordinal) ||
+                   string.Equals(pOfficeId, "marshal", StringComparison.Ordinal) ||
                    string.Equals(pOfficeId, "bingbu", StringComparison.Ordinal);
         }
 

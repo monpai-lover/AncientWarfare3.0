@@ -28,6 +28,13 @@ namespace AncientWarfare3.ui.items
         private Button _manageOfficeButton;
         private Text _manageOfficeText;
         private TipButton _manageOfficeTip;
+        private GameObject _dispositionObject;
+        private Button _dispositionButton;
+        private TipButton _dispositionTip;
+        private long _boundActorId = -1L;
+
+        public bool HasPortrait => _avatar != null;
+        public bool NeedsPortrait => _boundActorId >= 0 && _avatar == null;
 
         public static CourtActorNodeView Create(Transform pParent)
         {
@@ -57,13 +64,8 @@ namespace AncientWarfare3.ui.items
 
             Actor actor = pNode.IsVacancy ? null : World.world?.units?.get(pNode.ActorId);
             bool live = actor?.data != null && actor.isAlive() && !actor.isRekt();
-            _avatarHolder.SetActive(live);
-            if (live && _avatar != null)
-            {
-                _avatar.enabled = true;
-                if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
-                _avatar.show(actor);
-            }
+            _boundActorId = live ? actor.data.id : -1L;
+            _avatarHolder.SetActive(live && EnsurePortrait(actor));
 
             Sprite schoolSprite = string.IsNullOrEmpty(pNode.SchoolIconPath)
                 ? null
@@ -80,13 +82,17 @@ namespace AncientWarfare3.ui.items
             }
 
             _name.text = pNode.IsVacancy
-                ? OfficeName(pNode.OfficeId) + " - " + AW_L10n.Text("aw_court_no_officer", "Vacant")
+                ? OfficeName(pKingdom, pNode.OfficeId) + " - " +
+                  AW_L10n.Text("aw_court_no_officer", "Vacant")
                 : pNode.ActorName;
             string roleLine = RoleLine(pNode, pKingdom);
-            string officialGrade = OfficialGradeShort(pNode);
-            _roles.text = string.IsNullOrEmpty(officialGrade)
-                ? roleLine
-                : roleLine + "\n" + officialGrade;
+            string jointTitle = live && CanShowOfficialJointTitle(pKingdom, pNode)
+                ? OfficialJointTitle(pKingdom, pNode, actor, compact: true)
+                : "";
+            string namedRank = live && CanShowOfficialJointTitle(pKingdom, pNode)
+                ? OfficialNamedRankName(pNode.OfficialTrack,
+                    pNode.OfficialRank)
+                : "";
 
             _button.onClick.RemoveAllListeners();
             bool canAppoint = pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId);
@@ -106,8 +112,19 @@ namespace AncientWarfare3.ui.items
                         pKingdom, pNode.OfficeId), incumbentActorId);
             bool canManageOffice = officeAction != CourtManualOfficeAction.None;
             _manageOfficeObject.SetActive(canManageOffice);
+            bool canDispose = live && !pNode.IsVacancy && !actor.isKing();
+            _dispositionObject.SetActive(canDispose);
+            bool constrainedByTwoActions = canDispose && canManageOffice;
+            _roles.text = OfficialCareerRankRules.ComposeCardCareerLabel(
+                roleLine, jointTitle, namedRank, constrainedByTwoActions);
+            _roles.resizeTextMinSize =
+                OfficialCareerRankRules.CardCareerMinimumFontSize(
+                    constrainedByTwoActions);
+            _roles.rectTransform.anchoredPosition = new Vector2(
+                canDispose ? 27f : 4f, -79f);
             _roles.rectTransform.sizeDelta = new Vector2(
-                canManageOffice ? Width - 56f : Width - 8f, 22f);
+                Width - (canDispose ? 31f : 8f) -
+                (canManageOffice ? 48f : 0f), 22f);
             _manageOfficeButton.onClick.RemoveAllListeners();
             if (canManageOffice)
             {
@@ -136,7 +153,73 @@ namespace AncientWarfare3.ui.items
                 _manageOfficeTip.enabled = false;
                 _manageOfficeTip.hoverAction = null;
             }
+            _dispositionButton.onClick.RemoveAllListeners();
+            if (canDispose)
+            {
+                long actorId = actor.data.id;
+                _dispositionButton.onClick.AddListener(() =>
+                    CourtDispositionWindow.Open(pKingdom.id, actorId));
+                _dispositionTip.enabled = true;
+                _dispositionTip.type = AW_RawTooltip.TYPE;
+                _dispositionTip.hoverAction = () => Tooltip.show(
+                    _dispositionObject, AW_RawTooltip.TYPE,
+                    new TooltipData
+                    {
+                        tip_name = AW_L10n.Text(
+                            "aw_court_disposition_window_title",
+                            "Court Disposition"),
+                        tip_description = AW_L10n.Text(
+                            "aw_court_disposition_window_desc",
+                            "Dispose this incumbent through the ruler's court.")
+                    });
+            }
+            else
+            {
+                _dispositionTip.enabled = false;
+                _dispositionTip.hoverAction = null;
+            }
             SetTip(pNode, actor, pKingdom);
+        }
+
+        public bool TryEnsurePortrait()
+        {
+            Actor actor = _boundActorId >= 0
+                ? World.world?.units?.get(_boundActorId)
+                : null;
+            if (actor?.data == null || !actor.isAlive() || actor.isRekt())
+            {
+                _boundActorId = -1L;
+                _avatarHolder?.SetActive(false);
+                return true;
+            }
+            bool ready = EnsurePortrait(actor);
+            _avatarHolder.SetActive(ready);
+            return ready;
+        }
+
+        private bool EnsurePortrait(Actor pActor)
+        {
+            if (pActor?.data == null) return false;
+            if (_avatar == null)
+            {
+                UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
+                if (prefab == null) return false;
+                _avatar = Instantiate(prefab, _avatarHolder.transform);
+                RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
+                if (avatarRect != null)
+                {
+                    avatarRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    avatarRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    avatarRect.pivot = new Vector2(0.5f, 0.5f);
+                    avatarRect.anchoredPosition = Vector2.zero;
+                    avatarRect.sizeDelta = new Vector2(SlotSize, SlotSize);
+                    avatarRect.localScale = Vector3.one;
+                }
+            }
+            _avatar.enabled = true;
+            if (_avatar.avatarLoader != null) _avatar.avatarLoader.enabled = true;
+            _avatar.show(pActor);
+            return true;
         }
 
         private void BuildUi()
@@ -155,21 +238,7 @@ namespace AncientWarfare3.ui.items
             portraitRect.anchoredPosition = new Vector2(10f, -6f);
             portraitRect.sizeDelta = new Vector2(SlotSize, SlotSize);
 
-            UiUnitAvatarElement prefab = FamilyTreeNodeView.GetAvatarPrefab();
-            if (prefab != null)
-            {
-                _avatar = Instantiate(prefab, _avatarHolder.transform);
-                RectTransform avatarRect = _avatar.GetComponent<RectTransform>();
-                if (avatarRect != null)
-                {
-                    avatarRect.anchorMin = new Vector2(0.5f, 0.5f);
-                    avatarRect.anchorMax = new Vector2(0.5f, 0.5f);
-                    avatarRect.pivot = new Vector2(0.5f, 0.5f);
-                    avatarRect.anchoredPosition = Vector2.zero;
-                    avatarRect.sizeDelta = new Vector2(SlotSize, SlotSize);
-                    avatarRect.localScale = Vector3.one;
-                }
-            }
+            _avatarHolder.SetActive(false);
 
             var schoolSlot = new GameObject("SchoolIconSlot", typeof(RectTransform), typeof(Image),
                 typeof(Button));
@@ -193,6 +262,9 @@ namespace AncientWarfare3.ui.items
             _roles = CreateText("Roles", new Vector2(4f, -79f), new Vector2(Width - 8f, 22f),
                 8, TextAnchor.UpperCenter);
             _roles.color = new Color(0.95f, 0.86f, 0.58f, 1f);
+            _roles.resizeTextForBestFit = true;
+            _roles.resizeTextMinSize = 6;
+            _roles.resizeTextMaxSize = 8;
 
             _manageOfficeObject = new GameObject("ManageOffice", typeof(RectTransform),
                 typeof(Image), typeof(Button), typeof(TipButton));
@@ -228,6 +300,43 @@ namespace AncientWarfare3.ui.items
             _manageOfficeText.resizeTextMinSize = 6;
             _manageOfficeText.resizeTextMaxSize = 7;
             _manageOfficeObject.SetActive(false);
+
+            _dispositionObject = new GameObject("Disposition",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            _dispositionObject.transform.SetParent(transform, false);
+            RectTransform dispositionRect =
+                _dispositionObject.GetComponent<RectTransform>();
+            dispositionRect.anchorMin = new Vector2(0f, 0f);
+            dispositionRect.anchorMax = new Vector2(0f, 0f);
+            dispositionRect.pivot = new Vector2(0f, 0f);
+            dispositionRect.anchoredPosition = new Vector2(5f, 5f);
+            dispositionRect.sizeDelta = new Vector2(18f, 18f);
+            AW_UIStyle.ApplyButton(
+                _dispositionObject.GetComponent<Image>(), 0.96f);
+            _dispositionButton =
+                _dispositionObject.GetComponent<Button>();
+            _dispositionTip =
+                _dispositionObject.GetComponent<TipButton>();
+            _dispositionTip.showOnClick = false;
+            var dispositionIcon = new GameObject("Icon",
+                typeof(RectTransform), typeof(Image));
+            dispositionIcon.transform.SetParent(
+                _dispositionObject.transform, false);
+            RectTransform iconRect =
+                dispositionIcon.GetComponent<RectTransform>();
+            iconRect.anchorMin = Vector2.zero;
+            iconRect.anchorMax = Vector2.one;
+            iconRect.offsetMin = new Vector2(2f, 2f);
+            iconRect.offsetMax = new Vector2(-2f, -2f);
+            Image icon = dispositionIcon.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(
+                              "ui/icons/iconDocument") ??
+                          SpriteTextureLoader.getSprite(
+                              "ui/icons/iconPlotsList");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            _dispositionObject.SetActive(false);
         }
 
         private Text CreateText(string pName, Vector2 pPosition, Vector2 pSize, int pFontSize,
@@ -255,7 +364,9 @@ namespace AncientWarfare3.ui.items
         {
             _tip.enabled = true;
             _tip.type = AW_RawTooltip.TYPE;
-            string title = pNode.IsVacancy ? OfficeName(pNode.OfficeId) : pNode.ActorName;
+            string title = pNode.IsVacancy
+                ? OfficeName(pKingdom, pNode.OfficeId)
+                : pNode.ActorName;
             string desc = BuildTooltip(pNode, pActor, pKingdom);
             _tip.hoverAction = () => Tooltip.show(gameObject, AW_RawTooltip.TYPE,
                 new TooltipData { tip_name = title, tip_description = desc });
@@ -265,6 +376,12 @@ namespace AncientWarfare3.ui.items
         {
             var lines = new List<string>();
             lines.Add(AW_L10n.Text("aw_court_roles", "Roles") + ": " + RoleLine(pNode, pKingdom));
+            string jointTitle = CanShowOfficialJointTitle(pKingdom, pNode)
+                ? OfficialJointTitle(pKingdom, pNode, pActor, compact: false)
+                : "";
+            if (!string.IsNullOrEmpty(jointTitle))
+                lines.Add(AW_L10n.Text("aw_court_joint_title", "Full style") +
+                          ": " + jointTitle);
             lines.Add(AW_L10n.Text("aw_court_school", "School") + ": " + SchoolName(pNode.SchoolId));
             if (pNode.IsVacancy && !string.IsNullOrEmpty(pNode.OfficeId))
                 lines.Add(AW_L10n.Text("aw_court_vacancy_click",
@@ -275,10 +392,15 @@ namespace AncientWarfare3.ui.items
                 lines.Add(AW_L10n.Text("aw_court_city", "City") + ": " + pNode.CityName);
             if (pNode.Merit > 0)
                 lines.Add(AW_L10n.Text("aw_general_merit", "Merit") + ": " + pNode.Merit);
-            if (pNode.OfficialRank > 0)
+            if (OfficialCareerRankRules.CanDisplayRankedCareer(
+                    CourtService.HasNineRankSystem(pKingdom),
+                    pNode.OfficialRank))
             {
                 lines.Add(AW_L10n.Text("aw_court_official_rank", "Official rank") + ": " +
-                          pNode.OfficialRank + "/18");
+                          OfficialRankName(pNode.OfficialRank));
+                if (pNode.OfficialLocalGrade > 0)
+                    lines.Add(AW_L10n.Text("aw_court_local_grade", "Local grade") + ": " +
+                              LocalGradeName(pNode.OfficialLocalGrade));
                 lines.Add(AW_L10n.Text("aw_court_official_track", "Career track") + ": " +
                           OfficialTrackName(pNode.OfficialTrack));
                 lines.Add(AW_L10n.Text("aw_court_official_merit", "Career merit") + ": " +
@@ -304,6 +426,18 @@ namespace AncientWarfare3.ui.items
             }
             if (pActor?.data != null)
             {
+                float petitionFavor = CourtPetitionService.AppointmentFavor(
+                    pActor, Date.getCurrentYear());
+                if (petitionFavor > 0f)
+                {
+                    pActor.data.get(LineageKeys.COURT_PETITION_UNTIL_YEAR,
+                        out int petitionUntil, -1);
+                    lines.Add(AW_L10n.Text("aw_court_petition_favor",
+                                  "Court favor") + ": " +
+                              petitionFavor.ToString("0.#"));
+                    lines.Add(AW_L10n.Text("aw_court_petition_until",
+                                  "Favor expires") + ": " + petitionUntil);
+                }
                 lines.Add(AW_L10n.Text("aw_court_age", "Age") + ": " + SafeAge(pActor));
                 lines.Add(AW_L10n.Text("aw_court_stat_stewardship", "Stewardship") + " " +
                           SafeStat(pActor, "stewardship").ToString("0") + "  " +
@@ -317,11 +451,60 @@ namespace AncientWarfare3.ui.items
             return string.Join("\n", lines.ToArray());
         }
 
-        private static string OfficialGradeShort(CourtPyramidNodeModel pNode)
+        private static string OfficialJointTitle(Kingdom pKingdom,
+            CourtPyramidNodeModel pNode, Actor pActor, bool compact)
         {
             if (pNode == null || pNode.OfficialRank <= 0) return "";
-            return string.Format(AW_L10n.Text("aw_court_official_rank_short", "{0} rank {1}"),
-                OfficialTrackName(pNode.OfficialTrack), pNode.OfficialRank);
+            string namedRank = OfficialNamedRankName(pNode.OfficialTrack,
+                pNode.OfficialRank);
+            string grade = OfficialRankName(pNode.OfficialRank);
+            string office = string.IsNullOrEmpty(pNode.OfficeId)
+                ? ""
+                : OfficeName(pKingdom, pNode.OfficeId);
+            if (pNode.OfficeId == CourtOfficeId.Governor &&
+                !string.IsNullOrEmpty(pNode.CityName))
+                office = pNode.CityName + " " + office;
+            string merit = !compact && pNode.OfficialMerit > 0f
+                ? string.Format(AW_L10n.Text(
+                        "aw_court_joint_merit", "Merit {0}"),
+                    pNode.OfficialMerit.ToString("0.##"))
+                : "";
+            string nobleTitle = pActor?.data == null
+                ? ""
+                : NobleRankService.GetDisplayTitle(pActor);
+            string track = AW_L10n.Text(
+                OfficialCareerRankRules.TrackTitleKey(pNode.OfficialTrack),
+                OfficialCareerRankRules.TrackTitleFallbackEnglish(
+                    pNode.OfficialTrack));
+            return OfficialCareerRankRules.ComposeCareerTitle(namedRank,
+                grade, office, compact, track, merit, nobleTitle);
+        }
+
+        private static bool CanShowOfficialJointTitle(Kingdom pKingdom,
+            CourtPyramidNodeModel pNode)
+        {
+            return pNode?.OfficialRank > 0 &&
+                   CourtService.HasNineRankSystem(pKingdom);
+        }
+
+        private static string OfficialRankName(int pRank)
+        {
+            return AW_L10n.Text(OfficialCareerRankRules.RankNameKey(pRank),
+                OfficialCareerRankRules.RankFallbackEnglish(pRank));
+        }
+
+        private static string OfficialNamedRankName(int pTrack, int pRank)
+        {
+            return AW_L10n.Text(
+                OfficialCareerRankRules.NamedRankKey(pTrack, pRank),
+                OfficialCareerRankRules.NamedRankFallbackEnglish(pTrack,
+                    pRank));
+        }
+
+        private static string LocalGradeName(int pGrade)
+        {
+            return AW_L10n.Text(NineRankRules.GradeNameKey(pGrade),
+                NineRankRules.GradeFallbackEnglish(pGrade));
         }
 
         private static string OfficialTrackName(int pTrack)
@@ -353,7 +536,7 @@ namespace AncientWarfare3.ui.items
                 if (!string.IsNullOrEmpty(label) && !labels.Contains(label)) labels.Add(label);
             }
             if (labels.Count == 0 && !string.IsNullOrEmpty(pNode.OfficeId))
-                labels.Add(OfficeName(pNode.OfficeId));
+                labels.Add(OfficeName(pKingdom, pNode.OfficeId));
             return string.Join(" / ", labels.ToArray());
         }
 
@@ -367,19 +550,21 @@ namespace AncientWarfare3.ui.items
                 case CourtPyramidRoleId.Heir:
                     return AW_L10n.Text(GovernmentTitleRules.SuccessorKey(
                         RepublicGovernmentService.IsRepublic(pKingdom),
+                        KingdomTitleService.IsEmperor(pKingdom) ||
                         MandateService.GetCurrentMandateKingdom() == pKingdom), "Heir");
                 case CourtPyramidRoleId.General: return AW_L10n.Text("aw_court_general", "General");
                 case CourtPyramidRoleId.Governor:
                     return string.IsNullOrEmpty(pCityName)
-                        ? OfficeName(CourtOfficeId.Governor)
-                        : pCityName + " " + OfficeName(CourtOfficeId.Governor);
-                default: return OfficeName(pRole);
+                        ? OfficeName(pKingdom, CourtOfficeId.Governor)
+                        : pCityName + " " +
+                          OfficeName(pKingdom, CourtOfficeId.Governor);
+                default: return OfficeName(pKingdom, pRole);
             }
         }
 
-        private static string OfficeName(string pOfficeId)
+        private static string OfficeName(Kingdom pKingdom, string pOfficeId)
         {
-            return AW_L10n.Text("aw_court_office_" + (pOfficeId ?? ""), pOfficeId ?? "");
+            return CourtInstitutionService.OfficeName(pKingdom, pOfficeId);
         }
 
         private static string SchoolName(string pSchoolId)

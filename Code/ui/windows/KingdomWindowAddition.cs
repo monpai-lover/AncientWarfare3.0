@@ -28,6 +28,7 @@ namespace AncientWarfare3.ui.windows
     internal class KingdomWindowAddition : MonoBehaviour
     {
         private const string MIDDLE_OBJ = "AW_KingdomMiddle";
+        private const float AvatarColumnWidth = 44f;
 
         private bool _inited;
         private KingdomWindow _window;
@@ -47,6 +48,12 @@ namespace AncientWarfare3.ui.windows
         private Text _courtText;
         private Image _courtIcon;
         private TipButton _courtTip;
+        private Text _reservedText;
+        private Image _reservedIcon;
+        private TipButton _reservedTip;
+        private Text _inheritanceText;
+        private Image _inheritanceIcon;
+        private TipButton _inheritanceTip;
         private UiUnitAvatarElement _kingAvatar;
         private UiUnitAvatarElement _heirAvatar;
         private GameObject _kingCol;   // 国王头像+标签竖列(整体显隐)
@@ -116,6 +123,18 @@ namespace AncientWarfare3.ui.windows
             middleBar.AddChild(BuildPolicyIconButton("CourtStatus",
                 new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
                 "ui/icons/iconDiplomacy", out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow));
+            GameObject reserved = BuildPolicyIconButton("ReservedStatus",
+                new Vector2(CourtUiRules.CourtButtonWidth, CourtUiRules.CourtButtonHeight),
+                "ui/icons/iconLock", out _reservedText, out _reservedIcon,
+                out _reservedTip, null);
+            ConfigureDiplomacyButton(reserved);
+            middleBar.AddChild(reserved);
+            middleBar.AddChild(BuildPolicyIconButton("InheritanceStatus",
+                new Vector2(CourtUiRules.CourtButtonWidth,
+                    CourtUiRules.CourtButtonHeight),
+                "ui/Icons/iconKings", out _inheritanceText,
+                out _inheritanceIcon, out _inheritanceTip,
+                OpenInheritanceWindow));
 
             // 右:继承人头像 + 下方"继承人"标签(与国王对称)。show(heir) 自带点击→打开继承人窗;
             //    无继承人时 Refresh 里整列隐藏(不顶国王位 —— 用户报"继承人顶替了国王显示位")。
@@ -127,7 +146,7 @@ namespace AncientWarfare3.ui.windows
         private GameObject BuildAvatarColumn(AutoHoriLayoutGroup pParentHori, UiUnitAvatarElement pTemplate,
             string pAvatarName, string pLabelKey, out UiUnitAvatarElement pAvatar)
         {
-            var col = pParentHori.BeginVertGroup(new Vector2(34, 36), TextAnchor.UpperCenter, 1, new RectOffset(0, 0, 0, 0));
+            var col = pParentHori.BeginVertGroup(new Vector2(AvatarColumnWidth, 36), TextAnchor.UpperCenter, 1, new RectOffset(0, 0, 0, 0));
             col.name = pAvatarName + "_Col";
 
             pAvatar = CloneAvatar(pTemplate, col.gameObject, pAvatarName);
@@ -136,14 +155,15 @@ namespace AncientWarfare3.ui.windows
             // 标签(国王/继承人),本地化键 aw_label_king / aw_label_heir。
             var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(LayoutElement));
             var lrt = labelObj.GetComponent<RectTransform>();
-            lrt.sizeDelta = new Vector2(34, 10);
+            lrt.sizeDelta = new Vector2(AvatarColumnWidth, 10);
             var le = labelObj.GetComponent<LayoutElement>();
-            le.minWidth = 34; le.preferredWidth = 34; le.minHeight = 10; le.preferredHeight = 10;
+            le.minWidth = AvatarColumnWidth; le.preferredWidth = AvatarColumnWidth;
+            le.minHeight = 10; le.preferredHeight = 10;
             var lt = labelObj.GetComponent<Text>();
             lt.alignment = TextAnchor.MiddleCenter;
             lt.font = LocalizedTextManager.current_font;
             lt.fontSize = 8;
-            lt.resizeTextForBestFit = true; lt.resizeTextMinSize = 1; lt.resizeTextMaxSize = 9;
+            lt.resizeTextForBestFit = true; lt.resizeTextMinSize = 5; lt.resizeTextMaxSize = 9;
             lt.horizontalOverflow = HorizontalWrapMode.Overflow;
             lt.color = Color.white;
             lt.raycastTarget = false;
@@ -210,6 +230,41 @@ namespace AncientWarfare3.ui.windows
             else
             {
                 CachePolicyBox(court, out _courtText, out _courtIcon, out _courtTip, OpenCourtWindow);
+            }
+            Transform reserved = middle.transform.FindRecursive("ReservedStatus");
+            if (reserved == null && middleBar != null)
+            {
+                GameObject obj = BuildPolicyIconButton("ReservedStatus",
+                    new Vector2(CourtUiRules.CourtButtonWidth,
+                        CourtUiRules.CourtButtonHeight),
+                    "ui/icons/iconLock", out _reservedText, out _reservedIcon,
+                    out _reservedTip, null);
+                ConfigureDiplomacyButton(obj);
+                obj.transform.SetParent(middleBar, false);
+            }
+            else if (reserved != null)
+            {
+                CachePolicyBox(reserved, out _reservedText, out _reservedIcon,
+                    out _reservedTip, null);
+                ConfigureDiplomacyButton(reserved.gameObject);
+            }
+            Transform inheritance = middle.transform.FindRecursive(
+                "InheritanceStatus");
+            if (inheritance == null && middleBar != null)
+            {
+                GameObject obj = BuildPolicyIconButton("InheritanceStatus",
+                    new Vector2(CourtUiRules.CourtButtonWidth,
+                        CourtUiRules.CourtButtonHeight),
+                    "ui/Icons/iconKings", out _inheritanceText,
+                    out _inheritanceIcon, out _inheritanceTip,
+                    OpenInheritanceWindow);
+                obj.transform.SetParent(middleBar, false);
+            }
+            else if (inheritance != null)
+            {
+                CachePolicyBox(inheritance, out _inheritanceText,
+                    out _inheritanceIcon, out _inheritanceTip,
+                    OpenInheritanceWindow);
             }
             var avatars = middle.GetComponentsInChildren<UiUnitAvatarElement>(true);
             // 约定建立顺序:[0]=国王(AW_KingAvatar)、[1]=继承人(AW_HeirAvatar)。
@@ -459,6 +514,30 @@ namespace AncientWarfare3.ui.windows
             CourtWindow.Open(kingdom.id);
         }
 
+        private void ConfigureDiplomacyButton(GameObject pObject)
+        {
+            if (pObject == null) return;
+            Button button = pObject.GetComponent<Button>();
+            if (button == null) return;
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(OpenDiplomacyWindow);
+            button.interactable = true;
+        }
+
+        private void OpenDiplomacyWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom?.data == null || kingdom.isRekt()) return;
+            DiplomacyConversationWindow.Open(kingdom.id);
+        }
+
+        private void OpenInheritanceWindow()
+        {
+            Kingdom kingdom = _window != null ? _window.meta_object : null;
+            if (kingdom?.data == null || kingdom.isRekt()) return;
+            InheritanceLawWindow.Open(kingdom.id);
+        }
+
         // ───────────────────────── 刷新数据(每次开窗) ─────────────────────────
 
         private void RefreshPolicyBoxes(Kingdom pKingdom)
@@ -581,6 +660,58 @@ namespace AncientWarfare3.ui.windows
             }
 
             SetPolicyTip(_courtTip, title, desc);
+        }
+
+        private void RefreshReservedButton()
+        {
+            string title = AW_L10n.Text("aw_diplomacy_window_title",
+                "Diplomacy");
+            if (_reservedText != null)
+            {
+                _reservedText.text = title;
+                _reservedText.color = Color.white;
+            }
+            SetPolicyIcon(_reservedIcon, "ui/icons/iconDiplomacy");
+            if (_reservedIcon != null)
+                _reservedIcon.color = Color.white;
+            SetPolicyTip(_reservedTip, title,
+                AW_L10n.Text("aw_diplomacy_window_desc",
+                    "Review diplomatic relations and event conversations."));
+        }
+
+        private void RefreshInheritanceButton(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            InheritanceLaw law = InheritanceLawService.GetEffectiveLaw(
+                pKingdom);
+            string title = law switch
+            {
+                InheritanceLaw.MilitaryAcclaim =>
+                    AW_L10n.Text("aw_inheritance_law_military",
+                        "\u519b\u4e2d\u62e5\u7acb"),
+                InheritanceLaw.CivilAcclaim =>
+                    AW_L10n.Text("aw_inheritance_law_civil",
+                        "\u6587\u5b98\u62e5\u7acb"),
+                _ => AW_L10n.Text("aw_inheritance_law_primogeniture",
+                    "\u5ae1\u957f\u7ee7\u627f")
+            };
+            if (_inheritanceText != null)
+            {
+                _inheritanceText.text = title;
+                _inheritanceText.color = Color.white;
+            }
+            SetPolicyIcon(_inheritanceIcon, "ui/Icons/iconKings");
+            pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
+                out string mode, SuccessionMode.NONE);
+            Actor heir = HeirService.PeekStoredHeirForMinimap(pKingdom);
+            string heirTitle = HeirTitleRules.DefaultTitleText(
+                pKingdom, mode);
+            string heirName = heir?.getName() ??
+                              AW_L10n.Text("aw_inheritance_no_candidate",
+                                  "\u6682\u65e0\u5019\u9009");
+            SetPolicyTip(_inheritanceTip,
+                AW_L10n.Text("aw_inheritance_window_title", "\u7ee7\u627f\u6cd5"),
+                title + "\n" + heirTitle + ": " + heirName);
         }
 
         private static string BuildCurrentPolicyText(Kingdom pKingdom)
@@ -727,7 +858,9 @@ namespace AncientWarfare3.ui.windows
             // 国王列(头像 + "国王"标签):有王整列显示,无王整列隐藏。
             RefreshPolicyBoxes(kingdom);
             RefreshCourtButton(kingdom);
+            RefreshReservedButton();
             RefreshVassalButton(kingdom);
+            RefreshInheritanceButton(kingdom);
             if (_kingCol != null && _kingAvatar != null)
             {
                 bool hasKing = kingdom.hasKing();
@@ -738,15 +871,35 @@ namespace AncientWarfare3.ui.windows
                     Transform kingLabel = _kingCol.transform.Find("Label");
                     if (kingLabel != null)
                     {
-                        string key = GovernmentTitleRules.RulerKey(
-                            RepublicGovernmentService.IsRepublic(kingdom));
+                        bool republic = RepublicGovernmentService.IsRepublic(kingdom);
+                        bool mandate = MandateService.IsRuntimeMandateKingdom(kingdom);
+                        bool empireRank = KingdomTitleService.IsEmperor(kingdom);
+                        bool ceremonialEmperor = empireRank || mandate;
+                        string key = GovernmentTitleRules.RulerKey(republic);
+                        string monarchyLabel = AW_L10n.Text("aw_label_king", "King");
+                        string republicLabel = AW_L10n.Text(
+                            GovernmentTitleRules.RepublicHeadKey, "Head of State");
+                        string mandateFallback = AW_L10n.Text(
+                            "aw_mandate_emperor", "Emperor");
+                        string livingAppellation = ceremonialEmperor && !republic
+                            ? RulerAppellationService.GetFullLivingAppellation(kingdom)
+                            : "";
+                        string label = RulerAppellationRules.ResolveWindowRulerLabel(
+                            republic, empireRank, mandate, livingAppellation, republicLabel,
+                            monarchyLabel, mandateFallback);
                         LocalizedText localized = kingLabel.GetComponent<LocalizedText>();
-                        if (localized != null) localized.setKeyAndUpdate(key);
-                        else
+                        Text text = kingLabel.GetComponent<Text>();
+                        if (ceremonialEmperor && !republic)
                         {
-                            Text text = kingLabel.GetComponent<Text>();
-                            if (text != null) text.text = AW_L10n.Text(key, key);
+                            if (localized != null) localized.enabled = false;
+                            if (text != null) text.text = label;
                         }
+                        else if (localized != null)
+                        {
+                            localized.enabled = true;
+                            localized.setKeyAndUpdate(key);
+                        }
+                        else if (text != null) text.text = label;
                     }
                 }
             }

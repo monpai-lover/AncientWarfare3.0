@@ -20,5 +20,20 @@ namespace AncientWarfare3.core.lineage
         {
             return pIsSpecialArmy;
         }
+
+        public static bool ShouldUseSafeSave(bool pIsSpecialArmy,
+            bool pCityReferenceValid, bool pKingdomReferenceValid,
+            bool pCaptainReferenceValid)
+        {
+            return pIsSpecialArmy || !pCityReferenceValid ||
+                   !pKingdomReferenceValid || !pCaptainReferenceValid;
+        }
+
+        public static bool ShouldRemoveUnrecoverableArmy(bool pHasKingdom,
+            bool pHasCity, bool pHasCaptain, int pUnitCount)
+        {
+            return !pHasKingdom && !pHasCity && !pHasCaptain &&
+                   pUnitCount <= 0;
+        }
     }
 }

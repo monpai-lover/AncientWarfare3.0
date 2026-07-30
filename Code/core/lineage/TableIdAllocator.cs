@@ -14,13 +14,27 @@ namespace AncientWarfare3.core.lineage
             if (pDb == null) return 1;
             try
             {
-                using var cmd = new SQLiteCommand(pDb);
-                cmd.CommandText = $"SELECT IFNULL(MAX({pPrimaryCol}), 0) FROM {pTable}";
-                object r = cmd.ExecuteScalar();
-                long max = (r == null || r == DBNull.Value) ? 0L : Convert.ToInt64(r);
-                return max + 1;
+                return Next(pDb, null, pTable, pPrimaryCol);
             }
             catch { return 1; }
+        }
+
+        public static long Next(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, string pTable,
+            string pPrimaryCol)
+        {
+            if (pDb == null) throw new ArgumentNullException(nameof(pDb));
+            using var cmd = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = $"SELECT IFNULL(MAX({pPrimaryCol}), 0) " +
+                              $"FROM {pTable}"
+            };
+            object result = cmd.ExecuteScalar();
+            long maximum = result == null || result == DBNull.Value
+                ? 0L
+                : Convert.ToInt64(result);
+            return maximum + 1;
         }
     }
 }

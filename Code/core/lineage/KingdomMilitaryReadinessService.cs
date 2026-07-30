@@ -105,6 +105,12 @@ namespace AncientWarfare3.core.lineage
             RequestMembershipRebuild(kingdom, state);
         }
 
+        public static void OnKingdomDestroying(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            States.Remove(pKingdom.id);
+        }
+
         public static void RebuildRuntime()
         {
             ClearRuntime();
@@ -229,7 +235,10 @@ namespace AncientWarfare3.core.lineage
         private static void UpdateCity(RealmReadiness pState, City pCity)
         {
             if (pState == null || pCity?.data == null || pCity.kingdom?.id != pState.KingdomId) return;
-            int required = StandingArmyRules.PeacetimeCore(pCity.status.warrior_slots);
+            int effectiveSlots = MandateMilitaryPhaseService.
+                EffectiveWarriorSlots(pCity.kingdom,
+                    pCity.status.warrior_slots);
+            int required = StandingArmyRules.PeacetimeCore(effectiveSlots);
             int filled = StandingArmyService.CountOrdinaryStandingFast(pCity);
             pState.Index.Observe(pCity.id, required > 0, required <= 0 || filled >= required);
         }

@@ -1,0 +1,37 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtMeritRewardFlowTests
+{
+    public static void Run()
+    {
+        GeneralRepairCursorIsBoundedAndWraps();
+        int landAttempts = 0;
+        int honorAttempts = 0;
+        bool committed = CourtMeritRewardRules.TryCommitSelectedReward(
+            CourtMeritRewardKind.Land,
+            () => { landAttempts++; return false; },
+            () => { honorAttempts++; return true; });
+
+        Assert(!committed && landAttempts == 1 && honorAttempts == 0,
+            "CourtMeritRewardFlowTests.LandAttemptFailureDoesNotFallBackToHonor: " +
+            "a selected land attempt is terminal for the reward cycle");
+    }
+
+    private static void GeneralRepairCursorIsBoundedAndWraps()
+    {
+        Assert(CourtMeritRepairCursorRules.Normalize(8, 6) == 2,
+            "CourtMeritRewardFlowTests.GeneralRepairCursorIsBoundedAndWraps: " +
+            "cursor normalizes after a population shrink");
+        Assert(CourtMeritRepairCursorRules.InspectionCount(6, 4) == 4,
+            "CourtMeritRewardFlowTests.GeneralRepairCursorIsBoundedAndWraps: " +
+            "inspection work remains bounded");
+        Assert(CourtMeritRepairCursorRules.Advance(4, 4, 6) == 2,
+            "CourtMeritRewardFlowTests.GeneralRepairCursorIsBoundedAndWraps: " +
+            "every inspected record advances the cursor through wrap");
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

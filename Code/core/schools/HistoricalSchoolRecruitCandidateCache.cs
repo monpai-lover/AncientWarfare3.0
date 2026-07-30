@@ -6,9 +6,6 @@ namespace AncientWarfare3.core.schools
 {
     internal static class HistoricalSchoolRecruitCandidateCache
     {
-        private const int MaxScanPerCityYear = 96;
-        private const int MaxCachedPerCityYear = 48;
-
         private sealed class Entry
         {
             public City City;
@@ -45,17 +42,28 @@ namespace AncientWarfare3.core.schools
 
         private static Entry BuildEntry(City pCity, int pYear)
         {
-            var actorIds = new List<long>(MaxCachedPerCityYear);
-            int scanned = 0;
+            var actorIds = new List<long>(
+                HistoricalSchoolRecruitCandidateRules.MaxCachedPerCityYear);
             try
             {
-                foreach (Actor actor in pCity.units)
+                int residentCount = pCity.units?.Count ?? 0;
+                int start = HistoricalSchoolRecruitCandidateRules.ScanStart(
+                    pCity.data.id, pYear, residentCount);
+                int scanCount = HistoricalSchoolRecruitCandidateRules.ScanCount(
+                    residentCount);
+                for (int offset = 0; offset < scanCount; offset++)
                 {
-                    if (++scanned > MaxScanPerCityYear) break;
+                    int index = HistoricalSchoolRecruitCandidateRules.ResidentIndex(
+                        start, offset, residentCount);
+                    Actor actor = pCity.units[index];
                     if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
-                        actor.isBaby()) continue;
+                        actor.isBaby() ||
+                        SchoolMembershipService.GetActive(actor.data.id) != null)
+                        continue;
                     actorIds.Add(actor.data.id);
-                    if (actorIds.Count >= MaxCachedPerCityYear) break;
+                    if (actorIds.Count >=
+                        HistoricalSchoolRecruitCandidateRules.MaxCachedPerCityYear)
+                        break;
                 }
             }
             catch { }

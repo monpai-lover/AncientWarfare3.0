@@ -1,4 +1,5 @@
 using System;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -24,22 +25,42 @@ namespace AncientWarfare3.core.lineage
         public const int GoldTributeCap = 25;
 
         public static VassalEffectiveTerms EffectiveTerms(int autonomy, int tributeRate,
-            int militaryObligation, CentralizationEffects effects)
+            int militaryObligation, CentralizationEffects effects,
+            int institutionAutonomyCapReduction = 0,
+            int institutionTributeRateBonus = 0,
+            bool applyRealmModifiers = true)
         {
+            if (!applyRealmModifiers)
+                return new VassalEffectiveTerms(NormalizePercent(autonomy),
+                    NormalizePercent(tributeRate),
+                    NormalizePercent(militaryObligation));
+            int autonomyCap = NormalizePercent(effects.AutonomyCap -
+                Math.Max(0, institutionAutonomyCapReduction));
             return new VassalEffectiveTerms(
-                Math.Min(NormalizePercent(autonomy), NormalizePercent(effects.AutonomyCap)),
-                NormalizePercent(tributeRate + effects.TributeRateBonus),
+                Math.Min(NormalizePercent(autonomy), autonomyCap),
+                NormalizePercent(tributeRate + effects.TributeRateBonus +
+                                 institutionTributeRateBonus),
                 NormalizePercent(militaryObligation + effects.MilitaryObligationBonus));
         }
 
         public static float PoliticalTribute(float annualTax, int tributeRate,
             float vassalBalance, float suzerainBalance, float maximumBalance)
         {
-            float tax = NonNegative(annualTax);
             float source = NonNegative(vassalBalance);
+            float transferable = Math.Max(0f,
+                source - PoliticalPointSpendingRules.CourtReserve);
             float capacity = Math.Max(0f, NonNegative(maximumBalance) - NonNegative(suzerainBalance));
-            float theoretical = tax * NormalizePercent(tributeRate) / 100f * 0.1f;
-            return Math.Min(Math.Min(Math.Min(theoretical, PoliticalTributeCap), source), capacity);
+            float theoretical = ForecastPoliticalTribute(annualTax,
+                tributeRate);
+            return Math.Min(Math.Min(Math.Min(theoretical, PoliticalTributeCap), transferable), capacity);
+        }
+
+        public static float ForecastPoliticalTribute(float annualTax,
+            int tributeRate)
+        {
+            float theoretical = NonNegative(annualTax) *
+                                NormalizePercent(tributeRate) / 100f * 0.1f;
+            return Math.Min(theoretical, PoliticalTributeCap);
         }
 
         public static int GoldTribute(float annualTax, int tributeRate, int availableGold)

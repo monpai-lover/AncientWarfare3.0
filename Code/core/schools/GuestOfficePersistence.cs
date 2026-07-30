@@ -83,18 +83,20 @@ namespace AncientWarfare3.core.schools
     {
         public GuestOfficeRecoveryResult(GuestOfficeRecoveryDecision pDecision,
             HistoricalSchoolAffiliationSnapshot pAffiliation, string pOfficeId,
-            string pSchoolId)
+            string pSchoolId, bool pIsActing)
         {
             Decision = pDecision;
             Affiliation = pAffiliation;
             OfficeId = pOfficeId ?? "";
             SchoolId = pSchoolId ?? "";
+            IsActing = pIsActing;
         }
 
         public GuestOfficeRecoveryDecision Decision { get; }
         public HistoricalSchoolAffiliationSnapshot Affiliation { get; }
         public string OfficeId { get; }
         public string SchoolId { get; }
+        public bool IsActing { get; }
     }
 
     internal static class GuestOfficePersistence
@@ -194,7 +196,7 @@ namespace AncientWarfare3.core.schools
                     result.Affiliation == null || result.Career == null) return Retry();
                 return new GuestOfficeRecoveryResult(result.Decision,
                     Snapshot(result.Affiliation), result.Career.OfficeId,
-                    result.Career.SchoolId);
+                    result.Career.SchoolId, result.Career.IsActing);
             }
             catch (Exception error)
             {
@@ -248,7 +250,11 @@ namespace AncientWarfare3.core.schools
                     EndedTime = -1d,
                     Active = 1,
                     EndReason = "",
-                    UpdatedTime = appointment.AppointedTime
+                    UpdatedTime = appointment.AppointedTime,
+                    InstitutionAtAppointment = appointment.InstitutionAtAppointment,
+                    RankAtAppointment = appointment.RankAtAppointment,
+                    LocalGradeAtAppointment = appointment.LocalGradeAtAppointment,
+                    IsActing = appointment.IsActing
                 },
                 EventType = pRequest.EventType,
                 ServiceEndYear = pRequest.EndYear
@@ -331,7 +337,7 @@ namespace AncientWarfare3.core.schools
         private static GuestOfficeRecoveryResult Retry()
         {
             return new GuestOfficeRecoveryResult(GuestOfficeRecoveryDecision.Retry,
-                null, "", "");
+                null, "", "", pIsActing: false);
         }
     }
 }

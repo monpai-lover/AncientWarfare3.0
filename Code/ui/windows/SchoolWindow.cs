@@ -20,6 +20,7 @@ namespace AncientWarfare3.ui.windows
         private const float Gap = 6f;
         private const float ContentMargin = 14f;
         private const float RefreshCheckInterval = 0.25f;
+        private const int PortraitRetryBudget = 2;
 
         private enum SortMode
         {
@@ -112,6 +113,7 @@ namespace AncientWarfare3.ui.windows
                 Time.unscaledTime < _nextRefreshCheckTime) return;
             _nextRefreshCheckTime = Time.unscaledTime + RefreshCheckInterval;
             if (CitySchoolSnapshotService.HasPendingDemand) return;
+            RetryMissingPortraits(PortraitRetryBudget);
             bool schoolRevisionCurrent = _selectedCity >= 0 ||
                 _displayedSchoolRevisionStamp != null &&
                 _displayedSchoolRevisionStamp.IsCurrent(_selectedSchool,
@@ -119,6 +121,25 @@ namespace AncientWarfare3.ui.windows
             if (_displayedSnapshotGeneration == CitySchoolSnapshotService.Generation &&
                 schoolRevisionCurrent) return;
             Refresh();
+        }
+
+        private void RetryMissingPortraits(int pBudget)
+        {
+            int remaining = Math.Max(0, pBudget);
+            foreach (SchoolActorCardView card in _actorCards)
+            {
+                if (remaining <= 0) return;
+                if (card == null || !card.gameObject.activeSelf || card.HasPortrait) continue;
+                remaining--;
+                card.TryEnsurePortrait();
+            }
+            foreach (SchoolMasterCardView card in _masterCards)
+            {
+                if (remaining <= 0) return;
+                if (card == null || !card.gameObject.activeSelf || card.HasPortrait) continue;
+                remaining--;
+                card.TryEnsurePortrait();
+            }
         }
 
         private void ConfigureWindow()

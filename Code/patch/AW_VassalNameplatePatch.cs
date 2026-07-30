@@ -1,4 +1,5 @@
 using AncientWarfare3.ui.components;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using UnityEngine;
 
@@ -25,7 +26,16 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(NameplateText), "showTextKingdom")]
         public static void ShowTextKingdom_Postfix(NameplateText __instance, Kingdom pMetaObject, Vector2 pPosition)
         {
-            VassalNameplateSuzerainFlag.Apply(__instance, pMetaObject);
+            long benchmark = RecentFeatureBenchmark.Begin();
+            try
+            {
+                VassalNameplateSuzerainFlag.Apply(__instance, pMetaObject);
+            }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.NameplatesIndex, benchmark);
+            }
         }
     }
 }

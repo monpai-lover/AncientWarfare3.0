@@ -30,6 +30,21 @@ namespace AncientWarfare3.core.lineage
             return state + Normalize(pEraName) + "皇帝";
         }
 
+        public static bool ShouldUseLivingEmperor(bool isEmpireRank,
+            bool isMandate)
+        {
+            return isEmpireRank || isMandate;
+        }
+
+        public static string ResolveFamilyTreeRitualAppellation(bool isAlive,
+            bool isCurrentRuler, string livingAppellation,
+            string posthumousAppellation)
+        {
+            return isAlive && isCurrentRuler
+                ? Normalize(livingAppellation)
+                : Normalize(posthumousAppellation);
+        }
+
         public static string DeadRanked(string pStateName, string pPosthumous,
             RulerRank pTitle)
         {
@@ -50,6 +65,30 @@ namespace AncientWarfare3.core.lineage
             return "元首";
         }
 
+        public static string ResolveWindowRulerLabel(bool pIsRepublic,
+            bool pIsEmpireRank, bool pIsMandate, string pLivingAppellation,
+            string pRepublicLabel, string pMonarchyLabel,
+            string pEmperorFallbackLabel)
+        {
+            if (pIsRepublic) return Normalize(pRepublicLabel);
+            if (!ShouldUseLivingEmperor(pIsEmpireRank, pIsMandate))
+                return Normalize(pMonarchyLabel);
+            string appellation = Normalize(pLivingAppellation);
+            return appellation.Length > 0
+                ? appellation
+                : Normalize(pEmperorFallbackLabel);
+        }
+
+        public static string ResolveWindowRulerLabel(bool pIsRepublic,
+            bool pIsMandate, string pLivingAppellation,
+            string pRepublicLabel, string pMonarchyLabel,
+            string pMandateFallbackLabel)
+        {
+            return ResolveWindowRulerLabel(pIsRepublic,
+                pIsEmpireRank: false, pIsMandate, pLivingAppellation,
+                pRepublicLabel, pMonarchyLabel, pMandateFallbackLabel);
+        }
+
         public static string Retrospective(string pTemple)
         {
             return Normalize(pTemple);
@@ -58,7 +97,29 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldProjectLiving(bool isXiaKingdom,
             bool usesXiaInstitutions, bool isRebel, bool isRepublic)
         {
-            return isXiaKingdom || usesXiaInstitutions || isRebel || isRepublic;
+            return ShouldProjectLiving(isXiaKingdom, usesXiaInstitutions,
+                isRebel, isRepublic, isEmpireOrMandate: false);
+        }
+
+        public static bool ShouldProjectLiving(bool isXiaKingdom,
+            bool usesXiaInstitutions, bool isRebel, bool isRepublic,
+            bool isEmpireOrMandate)
+        {
+            return isXiaKingdom || usesXiaInstitutions || isRebel ||
+                   isRepublic || isEmpireOrMandate;
+        }
+
+        public static string ResolveLiveProjection(string pLiveStateName,
+            string pCachedStateName, string pCachedAppellation)
+        {
+            string live = Normalize(pLiveStateName);
+            string cachedState = Normalize(pCachedStateName);
+            string cachedAppellation = Normalize(pCachedAppellation);
+            return live.Length > 0 &&
+                   string.Equals(live, cachedState, StringComparison.Ordinal) &&
+                   cachedAppellation.Length > 0
+                ? cachedAppellation
+                : live;
         }
 
         private static string RankSuffix(RulerRank pTitle)

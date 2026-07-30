@@ -2,6 +2,14 @@ using System;
 
 namespace AncientWarfare3.core.lineage
 {
+    public enum ProvisionalRollbackAction
+    {
+        None = 0,
+        RetryCleanup = 1,
+        RetrySeedReturn = 2,
+        Finalize = 3
+    }
+
     public static class RoyalRestorationRules
     {
         public const int MaxClaimGeneration = 3;
@@ -12,6 +20,36 @@ namespace AncientWarfare3.core.lineage
         public const int MaxInitialDescendants = 128;
         public const int AiMinimumClaimStrength = 85;
         public const int MinimumInheritedClaimStrength = 40;
+        public const int TreatyAnnexationDelayYears = 5;
+        public const int MinimumSeedPopulation = 30;
+        public const int MaxSeedResidentsInspected = 24;
+
+        public static int EarliestAutonomousYear(int extinctionYear,
+            string extinctionCause)
+        {
+            int delay = string.Equals(extinctionCause, "treaty_annexation",
+                StringComparison.Ordinal) ? TreatyAnnexationDelayYears : 0;
+            if (extinctionYear > int.MaxValue - delay) return int.MaxValue;
+            return extinctionYear + delay;
+        }
+
+        public static bool IsAutonomousYearEligible(int currentYear,
+            int earliestAutonomousYear)
+        {
+            return currentYear >= earliestAutonomousYear;
+        }
+
+        public static bool ShouldRollbackTreatyAnnexationMarker(
+            bool transferCommitted)
+        {
+            return !transferCommitted;
+        }
+
+        public static int InheritedEarliestAutonomousYear(
+            int parentEarliestYear, int inheritedFloorYear)
+        {
+            return Math.Max(parentEarliestYear, inheritedFloorYear);
+        }
 
         public static bool CanInheritClaim(int parentGeneration, bool fatherHasClaim,
             bool childMale, bool childValid)
@@ -75,11 +113,13 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanStartAutonomousCampaign(bool mandateExists,
             bool chaosPhase, bool playerRequested, int claimStrength, bool claimantValid,
-            bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady)
+            bool oldKingdomDead, bool hasEligibleSeed, bool cooldownReady,
+            bool rebellionTriggered = false)
         {
             return !mandateExists && chaosPhase && claimantValid && oldKingdomDead &&
                    hasEligibleSeed && cooldownReady &&
-                   (playerRequested || claimStrength >= AiMinimumClaimStrength);
+                   (playerRequested || rebellionTriggered ||
+                    claimStrength >= AiMinimumClaimStrength);
         }
 
         public static bool CanUseSeedCity(bool cityValid, bool oldCore,
@@ -88,9 +128,88 @@ namespace AncientWarfare3.core.lineage
             return cityValid && oldCore && !peacefulHostCity && ownerValid;
         }
 
+        public static int MinimumRequiredSupporters(int defenders)
+        {
+            return Math.Max(6, Math.Max(0, defenders) + 2);
+        }
+
+        public static bool HasRequiredSupporters(int supporters, int defenders)
+        {
+            return supporters >= MinimumRequiredSupporters(defenders);
+        }
+
+        public static int SeedResidentsToInspect(int remainingBudget,
+            int availableResidents)
+        {
+            return Math.Min(Math.Max(0, remainingBudget),
+                Math.Max(0, availableResidents));
+        }
+
+        public static int RemainingSeedResidentInspectionBudget(
+            int remainingBudget, int inspectedResidents)
+        {
+            return Math.Max(0, Math.Max(0, remainingBudget) -
+                               Math.Max(0, inspectedResidents));
+        }
+
+        public static bool CanFinalizeProvisionalRollback(
+            bool seedReturnedToOriginalOwner)
+        {
+            return seedReturnedToOriginalOwner;
+        }
+
+        public static bool CanAdvanceRestorationCampaign(string state)
+        {
+            return string.Equals(state, "uprising",
+                StringComparison.Ordinal);
+        }
+
+        public static ProvisionalRollbackAction
+            ResolveProvisionalRollbackAction(bool rollbackPending,
+                bool physicalCleanupComplete,
+                bool seedReturnedToOriginalOwner)
+        {
+            if (!rollbackPending) return ProvisionalRollbackAction.None;
+            if (!physicalCleanupComplete)
+                return ProvisionalRollbackAction.RetryCleanup;
+            return seedReturnedToOriginalOwner
+                ? ProvisionalRollbackAction.Finalize
+                : ProvisionalRollbackAction.RetrySeedReturn;
+        }
+
+        public static bool IsUprisingPhysicalCleanupComplete(bool actorAlive,
+            bool hasArmy, bool isWarrior)
+        {
+            return !actorAlive || (!hasArmy && !isWarrior);
+        }
+
+        public static bool ShouldRetainUprisingCleanupState(
+            bool physicalCleanupComplete)
+        {
+            return !physicalCleanupComplete;
+        }
+
+        public static bool CanUseSeedCity(bool cityValid, bool oldCore,
+            bool peacefulHostCity, bool ownerValid,
+            bool activeOrFrozenCapture, int population, int supporters,
+            int defenders)
+        {
+            return CanUseSeedCity(cityValid, oldCore, peacefulHostCity,
+                       ownerValid) && !activeOrFrozenCapture &&
+                   population >= MinimumSeedPopulation &&
+                   HasRequiredSupporters(supporters, defenders);
+        }
+
         public static bool HasRecoveredCoreThreshold(int controlled, int total)
         {
             return total > 0 && controlled >= 0 && controlled * 100 >= total * 65;
+        }
+
+        public static bool CanCompleteCampaign(bool hasRecoveredThreshold,
+            bool kingdomAlive, bool hasCity, bool hasActiveWar)
+        {
+            return hasRecoveredThreshold && kingdomAlive && hasCity &&
+                   !hasActiveWar;
         }
 
         public static bool CanLeaseOriginalKingdomId(long originalKingdomId,

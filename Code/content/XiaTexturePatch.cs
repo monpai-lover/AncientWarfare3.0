@@ -36,7 +36,8 @@ namespace AncientWarfare3.content
         {
             if (pActor.data == null) return false;
             pActor.data.get(LineageKeys.IS_HEIR, out bool isHeir, false);
-            if (!isHeir) return false;
+            if (!isHeir && !FeudatoryService.IsActivePrince(pActor))
+                return false;
             if (pActor.isBaby() || pActor.isEgg()) return false;
             if (pActor.isKing() || pActor.isCityLeader() || pActor.isWarrior()) return false;
             return true;

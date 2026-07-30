@@ -25,8 +25,11 @@ namespace AncientWarfare3.core.policy
             MoveSettlers(sourceCity, newCity, founder);
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.POLICY_COMPLETED,
-                HistoryText.Kingdom(pKingdom) + " \u6D3E" + HistoryText.Actor(founder) +
-                "\u5F00\u7586\uFF0C\u5EFA\u7ACB" + HistoryText.City(newCity, pKingdom),
+                HistoryText.Kingdom(pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_royal_expansion_sent_mid") +
+                HistoryText.Actor(founder) +
+                HistoryLocalizationRules.H("aw_hist_royal_expansion_founded_mid") +
+                HistoryText.City(newCity, pKingdom),
                 HistoryTarget.City(newCity));
             return true;
         }

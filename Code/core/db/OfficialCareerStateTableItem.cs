@@ -10,7 +10,10 @@ namespace AncientWarfare3.core.db
         public string actor_name = "";
         public long kingdom_id = -1;
         public long city_id = -1;
-        [TableItemDef(pDefaultValue: "1")] public int rank = 1;
+        public long native_city_id = -1;
+        public long previous_city_id = -1;
+        public int waiting_since_year = -1;
+        [TableItemDef(pDefaultValue: "0")] public int rank = 0;
         public int track = 0;
         public string office_id = "";
         public float merit = 0f;
@@ -20,6 +23,10 @@ namespace AncientWarfare3.core.db
         public int kaoke_mod_until = -1;
         public int seniority = 0;
         public int last_pop_snapshot = -1;
+        [TableItemDef(pDefaultValue: "0")] public int local_grade = 0;
+        public int local_grade_review_year = -1;
+        [TableItemDef(pDefaultValue: "-1")]
+        public int last_noble_reward_year = -1;
         public double updated_time = -1d;
     }
 }

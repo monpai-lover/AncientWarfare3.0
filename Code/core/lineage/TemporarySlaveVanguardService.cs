@@ -29,6 +29,7 @@ namespace AncientWarfare3.core.lineage
             public int SlaveCount;
             public int NonSlaveCount;
             public long AssaultTargetCityId = -1L;
+            public double AssaultHeadStartTime = -1d;
             public bool AssaultReleased;
             public bool Cleaning;
             public bool ForceCleanup;
@@ -55,6 +56,69 @@ namespace AncientWarfare3.core.lineage
                    state.ArmyId == pArmy.id && HasValidComposition(state);
         }
 
+        public static bool IsOperationalCaptain(Army pArmy,
+            Actor pCaptain)
+        {
+            try
+            {
+                return pArmy?.data != null && pCaptain?.data != null &&
+                       AWArmyService.IsRoleArmy(pArmy,
+                           AWArmyRole.SlaveArmy) &&
+                       pCaptain.army == pArmy && pCaptain.isAlive() &&
+                       !pCaptain.isRekt() &&
+                       pCaptain.is_profession_warrior &&
+                       !SlaveService.IsSlave(pCaptain);
+            }
+            catch { return false; }
+        }
+
+        public static void RequestCaptainRecovery(Kingdom pKingdom,
+            Army pArmy)
+        {
+            if (pKingdom?.data == null || pArmy?.data == null ||
+                !AWArmyService.IsRoleArmy(pArmy, AWArmyRole.SlaveArmy) ||
+                !CanOperate(pKingdom)) return;
+            Kingdom armyKingdom;
+            try { armyKingdom = pArmy.getKingdom(); }
+            catch { return; }
+            if (armyKingdom != pKingdom) return;
+
+            Actor captain = SafeCaptain(pArmy);
+            if (IsOperationalCaptain(pArmy, captain)) return;
+            bool captainAlive = false;
+            bool captainIsMember = false;
+            try
+            {
+                captainAlive = captain?.data != null && captain.isAlive() &&
+                               !captain.isRekt();
+                captainIsMember = captain?.data != null &&
+                                  captain.army == pArmy &&
+                                  pArmy.units.Contains(captain);
+            }
+            catch { }
+            if (ArmyCaptainContinuityRules.ShouldPreserveAssignedCaptain(
+                    captainExists: captain?.data != null,
+                    captainAlive, captainIsMember)) return;
+            if (captain?.data != null)
+            {
+                using (ArmyCaptainDisposalScope.Open(pArmy))
+                {
+                    try { pArmy.setCaptain(null); }
+                    catch { }
+                }
+            }
+
+            VanguardState state = States.TryGetValue(pKingdom.id,
+                out VanguardState existing)
+                ? existing
+                : CreateState(pKingdom);
+            Army tracked = ResolveArmy(state);
+            if (tracked?.data != null && tracked != pArmy) return;
+            AdoptArmy(state, pKingdom, pArmy);
+            EnsureScanPassAvailable(state, pKingdom);
+            Schedule(pKingdom.id);
+        }
+
         public static bool ShouldDelayBehindVanguard(Actor pActor)
         {
             if (pActor?.data == null || pActor.isRekt() || pActor.army?.data == null ||
@@ -76,24 +140,35 @@ namespace AncientWarfare3.core.lineage
             if (vanguardTarget?.data == null)
             {
                 state.AssaultTargetCityId = -1L;
+                state.AssaultHeadStartTime = -1d;
                 state.AssaultReleased = false;
             }
             else if (state.AssaultTargetCityId != vanguardTarget.id)
             {
                 state.AssaultTargetCityId = vanguardTarget.id;
+                state.AssaultHeadStartTime = LineageService.CurTime();
                 state.AssaultReleased = false;
+            }
+            else if (state.AssaultHeadStartTime < 0d)
+            {
+                state.AssaultHeadStartTime = LineageService.CurTime();
             }
 
             bool reached = state.AssaultReleased || HasReachedTarget(vanguardCaptain, vanguardTarget);
-            if (reached) state.AssaultReleased = true;
             bool retreating = IsRetreating(vanguard);
+            bool headStartExpired = SlaveVanguardAssaultRules
+                .IsHeadStartExpired(state.AssaultHeadStartTime,
+                    LineageService.CurTime());
+            if (reached || retreating || headStartExpired)
+                state.AssaultReleased = true;
             return SlaveVanguardAssaultRules.ShouldHoldOrdinaryArmy(
                 pActorIsCaptain: actorCaptain == pActor,
                 pActorArmyIsVanguard: false,
                 pVanguardReady: HasValidComposition(state) && vanguardCaptain?.current_tile != null,
                 pSameAttackTarget: sameTarget,
-                pVanguardReachedTarget: reached,
-                pVanguardRetreating: retreating);
+                pVanguardReachedTarget: state.AssaultReleased,
+                pVanguardRetreating: retreating,
+                pHeadStartExpired: headStartExpired);
         }
 
         public static void OnEmergencyChanged(Kingdom pKingdom)
@@ -223,6 +298,16 @@ namespace AncientWarfare3.core.lineage
             foreach (Kingdom kingdom in pWar.getDefenders()) OnEmergencyChanged(kingdom);
         }
 
+        public static void OnKingdomDestroying(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null ||
+                !States.TryGetValue(pKingdom.id, out VanguardState state))
+                return;
+            state.Cleaning = true;
+            state.ForceCleanup = true;
+            Schedule(pKingdom.id);
+        }
+
         public static void RebuildRuntime()
         {
             ClearRuntime();
@@ -270,6 +355,10 @@ namespace AncientWarfare3.core.lineage
             bool active = kingdom?.data != null && CanOperate(kingdom);
             if (!active)
             {
+                if (!TemporaryMilitaryServiceRules.ShouldDemobilize(
+                        temporaryRoleActive: true,
+                        kingdom?.data != null &&
+                        MilitaryEmergencyService.HasAny(kingdom))) return;
                 state.Cleaning = true;
                 state.ForceCleanup = false;
                 CleanupBatch(state, kingdom);
@@ -330,6 +419,13 @@ namespace AncientWarfare3.core.lineage
                     CompleteCurrentCity(pState);
                     visited++;
                     break;
+                }
+                if (!OccupiedCitySupplyService.CanProvideToRealm(
+                        city, pKingdom))
+                {
+                    CompleteCurrentCity(pState);
+                    visited++;
+                    continue;
                 }
 
                 ScanResidents(pState, pKingdom, city, pArmy);
@@ -621,6 +717,11 @@ namespace AncientWarfare3.core.lineage
                 Schedule(pState.KingdomId);
                 return;
             }
+            if (!pState.ForceCleanup &&
+                !TemporaryMilitaryServiceRules.ShouldDemobilize(
+                    temporaryRoleActive: true,
+                    pKingdom?.data != null &&
+                    MilitaryEmergencyService.HasAny(pKingdom))) return;
 
             long[] batch = pState.MutationBuffer;
             int count = 0;
@@ -639,9 +740,7 @@ namespace AncientWarfare3.core.lineage
                     RemoveMemberIndex(pState, actor);
                     ArmyDeploymentService.ReleaseActor(actor, restoreJob: false);
                     if (actor.army == army) DetachFromArmy(actor, army);
-                    bool sameKingdom = actor.kingdom?.id == pState.KingdomId;
                     bool living = !actor.isRekt() && actor.isAlive();
-                    if (sameKingdom && living && actor.isWarrior()) actor.stopBeingWarrior();
                     if (SlaveService.IsSlave(actor))
                     {
                         actor.data.set(LineageKeys.SLAVE_SOLDIER, false);
@@ -650,10 +749,9 @@ namespace AncientWarfare3.core.lineage
                             actor.city, actor.kingdom);
                     }
                     ClearMemberFields(actor);
-                    if (living && actor.ai != null)
-                    {
-                        try { actor.ai.setJob(actor.getNextJob()); } catch { }
-                    }
+                    if (living)
+                        TemporaryMilitaryDemobilizationService.RestoreCivilian(
+                            actor);
                 }
                 else
                 {

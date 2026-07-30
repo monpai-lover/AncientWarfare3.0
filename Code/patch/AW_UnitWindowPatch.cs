@@ -1,9 +1,12 @@
 using AncientWarfare3.content.schools;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 using HarmonyLib;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace AncientWarfare3.patch
 {
@@ -18,6 +21,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(UnitWindow), nameof(UnitWindow.showStatsRows))]
         public static void ShowStatsRows_Postfix(UnitWindow __instance)
         {
+            ArmyRtsOperationRowRefreshAdapter.Clear(__instance);
             var actor = __instance.actor;
             if (actor == null || actor.data == null) return;
             string appellation = "";
@@ -30,6 +34,16 @@ namespace AncientWarfare3.patch
                     actor.data.id);
             if (!string.IsNullOrEmpty(appellation))
                 ShowRawRow(__instance, "aw_ruler_appellation", appellation);
+            if (actorKingdom?.king != actor)
+            {
+                string dynasticTitle =
+                    DynasticTitleService.ResolveLivingTitle(actor);
+                if (!string.IsNullOrEmpty(dynasticTitle))
+                    ShowRawRow(__instance, "aw_social_title_label",
+                        dynasticTitle);
+            }
+            ShowOfficialCareerRow(__instance, actor);
+            ShowArmyRtsOperationRow(__instance, actor);
             if (RoyalAsylumService.IsActive(actor))
             {
                 City hostCity = RoyalAsylumService.ResolveHostCity(actor);
@@ -117,6 +131,118 @@ namespace AncientWarfare3.patch
             return pWindow.showStatRow(pId, pValue);
         }
 
+        private static void ShowArmyRtsOperationRow(UnitWindow pWindow,
+            Actor pActor)
+        {
+            if (pWindow == null ||
+                !ArmyRtsOperationRowRefreshAdapter.TryCompose(pActor,
+                    out string operation)) return;
+            KeyValueField row = ShowRawRow(pWindow,
+                "aw_army_rts_operation", operation);
+            if (row?.value == null) return;
+            row.value.horizontalOverflow = HorizontalWrapMode.Wrap;
+            row.value.verticalOverflow = VerticalWrapMode.Overflow;
+            row.value.resizeTextForBestFit = true;
+            row.value.resizeTextMinSize = 7;
+            row.value.resizeTextMaxSize = 9;
+            KeyValueField taskRow = pWindow.getStatRow("task");
+            ArmyRtsOperationRowRefreshAdapter.Bind(pWindow, pActor, row,
+                taskRow);
+        }
+
+        private static void ShowOfficialCareerRow(UnitWindow pWindow,
+            Actor pActor)
+        {
+            if (pWindow == null || pActor?.data == null) return;
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string officeId,
+                "");
+            bool activeGeneral = GeneralService.IsActiveGeneralFast(pActor);
+            bool usesGeneralFallback = string.IsNullOrWhiteSpace(officeId) &&
+                                       activeGeneral;
+            officeId = OfficialCareerRankRules.ResolveDisplayedOfficeId(
+                officeId, activeGeneral, CourtPyramidRoleId.General);
+            if (string.IsNullOrEmpty(officeId)) return;
+            Kingdom courtKingdom = ResolveCourtKingdom(pActor);
+            if (courtKingdom?.data == null ||
+                !CourtService.HasNineRankSystem(courtKingdom)) return;
+
+            int rank = OfficialCareerStateService.ReadRankFast(pActor);
+            if (rank <= OfficialCareerRankRules.Unranked) return;
+            pActor.data.get(LineageKeys.OFFICER_TRACK, out int track,
+                OfficialCareerRankRules.CivilTrack);
+            track = OfficialCareerRankRules.ResolveDisplayedTrack(track,
+                usesGeneralFallback);
+            pActor.data.get(LineageKeys.OFFICER_MERIT, out float merit, 0f);
+
+            string namedRank = AW_L10n.Text(
+                OfficialCareerRankRules.NamedRankKey(track, rank),
+                OfficialCareerRankRules.NamedRankFallbackEnglish(track, rank));
+            string grade = AW_L10n.Text(
+                OfficialCareerRankRules.RankNameKey(rank),
+                OfficialCareerRankRules.RankFallbackEnglish(rank));
+            string office = CourtInstitutionService.OfficeName(courtKingdom,
+                officeId);
+            if (officeId == CourtOfficeId.Governor &&
+                !string.IsNullOrWhiteSpace(pActor.city?.data?.name))
+                office = pActor.city.data.name + " " + office;
+            string trackTitle = AW_L10n.Text(
+                OfficialCareerRankRules.TrackTitleKey(track),
+                OfficialCareerRankRules.TrackTitleFallbackEnglish(track));
+            string meritTitle = merit > 0f
+                ? string.Format(AW_L10n.Text("aw_court_joint_merit",
+                    "Merit {0}"), merit.ToString("0.##"))
+                : "";
+            string nobleTitle = NobleRankService.GetDisplayTitle(pActor);
+            string compactTitle = OfficialCareerRankRules.ComposeCareerTitle(
+                namedRank, grade, office, compact: true);
+            string fullTitle = OfficialCareerRankRules.ComposeCareerTitle(
+                namedRank, grade, office, compact: false, track: trackTitle,
+                merit: meritTitle, nobleTitle: nobleTitle);
+
+            KeyValueField row = ShowRawRow(pWindow, "aw_court_joint_title",
+                compactTitle);
+            if (row?.value == null) return;
+            float rowHeight = OfficialCareerRankRules.UnitWindowCareerRowHeight();
+            RectTransform rowRect = row.GetComponent<RectTransform>();
+            rowRect?.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+                rowHeight);
+            LayoutElement layout = row.GetComponent<LayoutElement>() ??
+                                   row.gameObject.AddComponent<LayoutElement>();
+            layout.minHeight = rowHeight;
+            layout.preferredHeight = rowHeight;
+            row.value.horizontalOverflow = HorizontalWrapMode.Wrap;
+            row.value.verticalOverflow = VerticalWrapMode.Overflow;
+            row.value.resizeTextForBestFit = true;
+            row.value.resizeTextMinSize =
+                OfficialCareerRankRules.UnitWindowCareerMinimumFontSize();
+            row.value.resizeTextMaxSize = 9;
+            row.on_hover_value = () => Tooltip.show(
+                row, AW_RawTooltip.TYPE, new TooltipData
+                {
+                    tip_name = AW_L10n.Text("aw_court_joint_title",
+                        "Full style"),
+                    tip_description = fullTitle
+                });
+            row.on_hover_value_out = Tooltip.hideTooltip;
+        }
+
+        private static Kingdom ResolveCourtKingdom(Actor pActor)
+        {
+            pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                out long courtKingdomId, -1L);
+            if (courtKingdomId >= 0)
+            {
+                try
+                {
+                    Kingdom courtKingdom = World.world?.kingdoms?.get(
+                        courtKingdomId);
+                    if (courtKingdom?.data != null) return courtKingdom;
+                }
+                catch { }
+            }
+            return pActor.kingdom;
+        }
+
         private static bool IsKingdomIntegrated(Actor pActor)
         {
             var kingdom = pActor.kingdom;
@@ -127,10 +253,13 @@ namespace AncientWarfare3.patch
 
         private static string IdentityText(string pStatus)
         {
-            if (pStatus == LineageStatus.NOBLE) return "\u8D35\u65CF";
-            if (pStatus == LineageStatus.COMMON) return "\u5E73\u6C11";
-            if (pStatus == LineageStatus.SLAVE) return "\u5974\u96B6";
-            return "\u65E0";
+            if (pStatus == LineageStatus.NOBLE)
+                return AW_L10n.Text("aw_identity_noble", "Noble");
+            if (pStatus == LineageStatus.COMMON)
+                return AW_L10n.Text("aw_identity_common", "Commoner");
+            if (pStatus == LineageStatus.SLAVE)
+                return AW_L10n.Text("aw_identity_slave", "Slave");
+            return AW_L10n.Text("aw_identity_none", "None");
         }
     }
 }

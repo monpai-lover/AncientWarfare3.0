@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.lineage
         private const int MaxSweepZonesPerCycle = 64;
         private const int MaxCityBoundaryZonesPerCycle = 16;
         private const int MaxCityBoundaryRecordsPerCycle = 4;
+        private const int MaxEnclosedComponentZones = 64;
 
         private sealed class CityBoundaryScan
         {
@@ -171,26 +172,103 @@ namespace AncientWarfare3.core.lineage
 
         private static void TryRepair(TileZone pZone)
         {
-            TileZone[] neighbours = pZone?.neighbours;
-            if (pZone == null || neighbours == null ||
-                neighbours.Length != 4)
+            if (pZone == null || pZone.city != null) return;
+            TileZone[] seedNeighbours = pZone.neighbours;
+            if (seedNeighbours == null || seedNeighbours.Length != 4) return;
+            int ownedNeighbourCount = 0;
+            for (int i = 0; i < seedNeighbours.Length; i++)
+                if (seedNeighbours[i]?.city != null)
+                    ownedNeighbourCount++;
+            if (!EnclosedUnownedZoneRules.CanStartComponentScan(
+                    ownedNeighbourCount))
                 return;
 
-            var facts = new[]
-            {
-                BuildFacts(neighbours[0]),
-                BuildFacts(neighbours[1]),
-                BuildFacts(neighbours[2]),
-                BuildFacts(neighbours[3])
-            };
-            long targetCityId = EnclosedUnownedZoneRules.SelectTargetCity(
-                pZone.city != null, pZone.world_edge,
-                pZone.tiles_with_ground, neighbours.Length,
-                pZone.x, pZone.y, facts);
-            if (targetCityId < 0L) return;
+            var component = new List<TileZone>();
+            var frontier = new Queue<TileZone>();
+            var visited = new HashSet<long>();
+            var boundaryFacts = new List<EnclosedZoneNeighbourFacts>();
+            var boundaryCities = new Dictionary<long, City>();
+            long coordinateSumX = 0L;
+            long coordinateSumY = 0L;
+            bool touchesWorldEdge = false;
+            bool exceededZoneBudget = false;
 
-            City pTargetCity = FindTargetCity(neighbours, targetCityId);
-            if (!IsLiveTarget(pTargetCity) || pZone.city != null) return;
+            frontier.Enqueue(pZone);
+            visited.Add(Encode(pZone.x, pZone.y));
+            while (frontier.Count > 0)
+            {
+                if (component.Count >= MaxEnclosedComponentZones)
+                {
+                    exceededZoneBudget = true;
+                    break;
+                }
+
+                TileZone current = frontier.Dequeue();
+                if (current == null || current.city != null) return;
+                component.Add(current);
+                coordinateSumX += current.x;
+                coordinateSumY += current.y;
+                if (current.world_edge) touchesWorldEdge = true;
+                TileZone[] neighbours = current.neighbours;
+                if (neighbours == null || neighbours.Length != 4)
+                {
+                    touchesWorldEdge = true;
+                    continue;
+                }
+
+                for (int i = 0; i < neighbours.Length; i++)
+                {
+                    TileZone neighbour = neighbours[i];
+                    if (neighbour == null)
+                    {
+                        touchesWorldEdge = true;
+                        continue;
+                    }
+
+                    City city = neighbour.city;
+                    if (city == null)
+                    {
+                        long coordinate = Encode(neighbour.x, neighbour.y);
+                        if (visited.Add(coordinate))
+                            frontier.Enqueue(neighbour);
+                        continue;
+                    }
+
+                    EnclosedZoneNeighbourFacts facts = BuildFacts(neighbour);
+                    boundaryFacts.Add(facts);
+                    if (facts.CityId >= 0L &&
+                        !boundaryCities.ContainsKey(facts.CityId))
+                        boundaryCities.Add(facts.CityId, city);
+                }
+            }
+
+            int centerX = component.Count == 0
+                ? pZone.x
+                : (int)(coordinateSumX / component.Count);
+            int centerY = component.Count == 0
+                ? pZone.y
+                : (int)(coordinateSumY / component.Count);
+            long targetCityId =
+                EnclosedUnownedZoneRules.SelectComponentTargetCity(
+                    touchesWorldEdge, exceededZoneBudget,
+                    centerX, centerY, boundaryFacts);
+            if (targetCityId < 0L ||
+                !boundaryCities.TryGetValue(targetCityId,
+                    out City pTargetCity) ||
+                !IsLiveTarget(pTargetCity))
+                return;
+
+            for (int i = 0; i < component.Count; i++)
+            {
+                TileZone zone = component[i];
+                if (zone == null || zone.city != null) return;
+            }
+            for (int i = 0; i < component.Count; i++)
+                AssignZone(pTargetCity, component[i]);
+        }
+
+        private static void AssignZone(City pTargetCity, TileZone pZone)
+        {
             pTargetCity.addZone(pZone);
         }
 
@@ -205,6 +283,7 @@ namespace AncientWarfare3.core.lineage
                 centreZone = city?.getTile()?.zone;
                 live = city?.data != null && !city.isRekt() &&
                        kingdom?.data != null && !kingdom.isRekt() &&
+                       !kingdom.isNeutral() &&
                        centreZone != null;
             }
             catch { live = false; }
@@ -218,27 +297,14 @@ namespace AncientWarfare3.core.lineage
                 centreZone?.y ?? 0);
         }
 
-        private static City FindTargetCity(TileZone[] pNeighbours,
-            long pTargetCityId)
-        {
-            if (pNeighbours[0]?.city?.id == pTargetCityId)
-                return pNeighbours[0].city;
-            if (pNeighbours[1]?.city?.id == pTargetCityId)
-                return pNeighbours[1].city;
-            if (pNeighbours[2]?.city?.id == pTargetCityId)
-                return pNeighbours[2].city;
-            if (pNeighbours[3]?.city?.id == pTargetCityId)
-                return pNeighbours[3].city;
-            return null;
-        }
-
         private static bool IsLiveTarget(City pCity)
         {
             try
             {
                 return pCity?.data != null && !pCity.isRekt() &&
                        pCity.kingdom?.data != null &&
-                       !pCity.kingdom.isRekt();
+                       !pCity.kingdom.isRekt() &&
+                       !pCity.kingdom.isNeutral();
             }
             catch { return false; }
         }

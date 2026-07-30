@@ -22,6 +22,8 @@ namespace AncientWarfare3.content.schools
         public const string ActorJobId = "aw_historical_school_job";
         public const string IdleRoamTaskId = "aw_historical_school_idle_roam";
         public const string TravelTaskId = "aw_historical_school_travel";
+        public const string EducationTravelTaskId =
+            "aw_historical_school_education_travel";
         public const string LectureTaskId = "aw_historical_school_lecture";
         public const string DebateTravelTaskId = "aw_historical_school_debate_travel";
         public const string DebateTaskId = "aw_historical_school_debate";
@@ -49,19 +51,21 @@ namespace AncientWarfare3.content.schools
             HistoricalSchoolRuntime.LoadState();
         }
 
-        public static void AnnounceDescent(Actor pActor, City pCity)
+        public static void AnnounceDescent(Actor pActor, City pCity, string pSchoolId)
         {
-            Announce(DescentLogId, pActor, pCity, LogKingdom(pActor));
+            Announce(LogIdForSchool(DescentLogId, pSchoolId), pActor, pCity,
+                LogKingdom(pActor));
         }
 
-        public static void AnnounceDeath(Actor pActor, City pCity)
+        public static void AnnounceDeath(Actor pActor, City pCity, string pSchoolId)
         {
-            Announce(DeathLogId, pActor, pCity, LogKingdom(pActor));
+            Announce(LogIdForSchool(DeathLogId, pSchoolId), pActor, pCity,
+                LogKingdom(pActor));
         }
 
         public static void AnnounceLecture(Actor pActor, City pCity, string pSchoolId)
         {
-            Announce(LectureLogIdForSchool(pSchoolId), pActor, pCity,
+            Announce(LogIdForSchool(LectureLogId, pSchoolId), pActor, pCity,
                 LogKingdom(pActor));
         }
 
@@ -222,6 +226,25 @@ namespace AncientWarfare3.content.schools
                 travel.addBeh(new BehHistoricalSchoolArrive());
             }
 
+            if (!AssetManager.tasks_actor.has(EducationTravelTaskId))
+            {
+                var educationTravel = AssetManager.tasks_actor.add(
+                    new BehaviourTaskActor
+                    {
+                        id = EducationTravelTaskId,
+                        cancellable_by_reproduction = false,
+                        cancellable_by_socialize = false,
+                        speed_multiplier = 1f,
+                        locale_key = "task_unit_move"
+                    });
+                educationTravel.setIcon("ui/Icons/iconKnowledge");
+                educationTravel.addBeh(
+                    new BehHistoricalSchoolEducationTravel());
+                educationTravel.addBeh(new BehGoToTileTarget());
+                educationTravel.addBeh(
+                    new BehHistoricalSchoolEducationArrive());
+            }
+
             if (!AssetManager.tasks_actor.has(LectureTaskId))
             {
                 var lecture = AssetManager.tasks_actor.add(new BehaviourTaskActor
@@ -295,16 +318,22 @@ namespace AncientWarfare3.content.schools
             RegisterLog(LectureLogId, Toolbox.color_log_neutral,
                 "ui/Icons/iconKnowledge", LectureLogId);
             foreach (CourtSchoolDefinition definition in CourtSchoolRegistry.All)
-                RegisterLog(LectureLogIdForSchool(definition.Id),
+            {
+                RegisterLog(LogIdForSchool(DescentLogId, definition.Id),
+                    Toolbox.color_log_neutral, definition.IconPath, DescentLogId);
+                RegisterLog(LogIdForSchool(DeathLogId, definition.Id),
+                    Toolbox.color_log_warning, definition.IconPath, DeathLogId);
+                RegisterLog(LogIdForSchool(LectureLogId, definition.Id),
                     Toolbox.color_log_neutral, definition.IconPath, LectureLogId);
+            }
             RegisterLog(DebateLogId, Toolbox.color_log_neutral);
         }
 
-        private static string LectureLogIdForSchool(string pSchoolId)
+        private static string LogIdForSchool(string pBaseLogId, string pSchoolId)
         {
             return CourtSchoolRegistry.Find(pSchoolId) == null
-                ? LectureLogId
-                : LectureLogId + "__" + pSchoolId;
+                ? pBaseLogId
+                : pBaseLogId + "__" + pSchoolId;
         }
 
         private static void RegisterLog(string pId, Color pColor,

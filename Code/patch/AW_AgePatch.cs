@@ -18,8 +18,12 @@ namespace AncientWarfare3.patch
         public static void UpdateAge_Postfix(Actor __instance)
         {
             if (__instance?.data == null) return;
-            if (!LineageService.IsXia(__instance)) return;
             if (__instance.isRekt() || !__instance.isAlive()) return;
+            DynasticTitleService.OnAgeUpdated(__instance);
+            StandingArmyPeacetimeService.RefreshJob(__instance);
+            DynasticReproductionService.ReleaseExistingMilitaryRole(
+                __instance);
+            if (!LineageService.IsXia(__instance)) return;
 
             long benchmark = UpdateAgeBenchmark.Begin();
             try
@@ -152,7 +156,8 @@ namespace AncientWarfare3.patch
                 : Mathf.Clamp((ratio - XIA_AGE_PRESSURE_START_RATIO) * 0.5f, 0.02f, 0.35f);
             if (!Randy.randomChance(chance)) return;
 
-            __instance.data.set(LineageKeys.DEATH_CAUSE, "\u81EA\u7136\u8001\u6B7B");
+            __instance.data.set(LineageKeys.DEATH_CAUSE,
+                HistoryLocalizationRules.Text("aw_death_cause_age"));
             __instance.getHitFullHealth(AttackType.Age);
             __result = true;
         }

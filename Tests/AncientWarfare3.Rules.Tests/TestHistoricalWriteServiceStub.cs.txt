@@ -1,0 +1,29 @@
+using System;
+using System.Collections.Generic;
+
+namespace AncientWarfare3.core.db
+{
+    internal static class HistoricalWriteService
+    {
+        private static readonly Dictionary<string, long> NextIds =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+
+        public static bool FlushForSynchronousFallback(TimeSpan pTimeout,
+            out string pError)
+        {
+            pError = string.Empty;
+            return true;
+        }
+
+        public static bool TryReserveEventId(string pTable,
+            out long pEventId, out string pError)
+        {
+            string table = pTable ?? string.Empty;
+            NextIds.TryGetValue(table, out long next);
+            pEventId = next;
+            NextIds[table] = next + 1L;
+            pError = string.Empty;
+            return true;
+        }
+    }
+}

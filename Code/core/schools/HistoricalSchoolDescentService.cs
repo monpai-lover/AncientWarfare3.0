@@ -60,6 +60,10 @@ namespace AncientWarfare3.core.schools
         private const int MaxPendingDescentRetryBackoffFrames = 240;
         private const int MaxPendingDescentRetryQueueScan = 16;
         private static long _pendingDescentRetryFrame;
+        private static IReadOnlyList<HistoricalSchoolMasterDefinition> _dueMasters =
+            Array.Empty<HistoricalSchoolMasterDefinition>();
+        private static HistoricalSchoolBoundedWorkCursor _dueMasterCursor;
+        private static int _duePlanEligibleYear = -1;
 
         internal static bool HasPendingDescents => PendingDescentsByActor.Count > 0;
 
@@ -121,47 +125,92 @@ namespace AncientWarfare3.core.schools
             PendingDescentRetries.Clear();
             ActiveMasterSlots.Clear();
             _pendingDescentRetryFrame = 0L;
+            ResetDuePlan();
         }
 
         public static bool IsCanonicalMaster(Actor pActor)
         {
             if (pActor?.data == null) return false;
+            if (TryGetIndexedDefinition(pActor, out _)) return true;
             pActor.data.get(LineageKeys.SCHOOL_MASTER_ID, out string masterId, "");
-            if (HistoricalSchoolMasterRegistry.Find(masterId) != null) return true;
-            return MasterByActor.TryGetValue(pActor.data.id, out masterId) &&
-                   HistoricalSchoolMasterRegistry.Find(masterId) != null;
+            return HistoricalSchoolMasterRegistry.Find(masterId) != null;
+        }
+
+        internal static bool TryGetIndexedDefinition(Actor pActor,
+            out HistoricalSchoolMasterDefinition pDefinition)
+        {
+            pDefinition = null;
+            if (pActor?.data == null ||
+                !MasterByActor.TryGetValue(pActor.data.id,
+                    out string masterId)) return false;
+            pDefinition = HistoricalSchoolMasterRegistry.Find(masterId);
+            return pDefinition != null;
         }
 
         public static HistoricalSchoolMasterDefinition DefinitionFor(Actor pActor)
         {
             if (pActor?.data == null) return null;
+            if (TryGetIndexedDefinition(pActor, out var indexed))
+                return indexed;
             pActor.data.get(LineageKeys.SCHOOL_MASTER_ID, out string masterId, "");
-            if (string.IsNullOrEmpty(masterId)) MasterByActor.TryGetValue(pActor.data.id,
-                out masterId);
             return HistoricalSchoolMasterRegistry.Find(masterId);
         }
 
-        public static int ProcessDue(int pEligibleYear, IReadOnlyList<City> pLivingXiaCities)
+        public static bool ProcessDueFrame(int pEligibleYear,
+            IReadOnlyList<City> pLivingXiaCities)
         {
-            if (pLivingXiaCities == null || pLivingXiaCities.Count == 0) return 0;
+            if (pLivingXiaCities == null || pLivingXiaCities.Count == 0)
+            {
+                ResetDuePlan();
+                return true;
+            }
+
+            if (_dueMasterCursor == null || _duePlanEligibleYear != pEligibleYear)
+                PrepareDuePlan(pEligibleYear);
+            int remaining = _dueMasters.Count -
+                            (_dueMasterCursor?.Processed ?? 0);
+            if (remaining <= 0)
+            {
+                ResetDuePlan();
+                return true;
+            }
+
+            int budget = HistoricalSchoolSchedulerRules.DescentAttemptBudget(
+                HasPendingDescents, remaining);
+            if (budget <= 0) return false;
+            for (int i = 0; i < budget &&
+                            _dueMasterCursor.TryTake(out int index); i++)
+            {
+                HistoricalSchoolMasterDefinition master = _dueMasters[index];
+                City home = SelectHome(master, pLivingXiaCities);
+                if (home == null ||
+                    !ActiveMasterSlots.TryReserve(master.SchoolId, master.Id))
+                    continue;
+                TryDescend(master, home, pEligibleYear);
+            }
+
+            bool complete = _dueMasterCursor.IsComplete;
+            if (complete) ResetDuePlan();
+            return complete;
+        }
+
+        private static void PrepareDuePlan(int pEligibleYear)
+        {
             var occupiedSchools = new HashSet<string>(
                 HistoricalSchoolMasterRegistry.All.Select(p => p.SchoolId)
                     .Where(ActiveMasterSlots.IsOccupied), StringComparer.Ordinal);
-            IReadOnlyList<HistoricalSchoolMasterDefinition> due =
-                HistoricalSchoolRules.SelectDue(pEligibleYear, _ledger,
-                    HistoricalSchoolRules.MaxDescentsPerEligibleYear, occupiedSchools);
-            if (due.Count == 0) return 0;
-            int spawned = 0;
-            foreach (HistoricalSchoolMasterDefinition master in due)
-            {
-                if (HasPendingDescents) break;
-                City home = SelectHome(master, pLivingXiaCities);
-                if (home == null ||
-                    !ActiveMasterSlots.TryReserve(master.SchoolId, master.Id) ||
-                    !TryDescend(master, home, pEligibleYear)) continue;
-                spawned++;
-            }
-            return spawned;
+            _dueMasters = HistoricalSchoolRules.SelectDue(pEligibleYear, _ledger,
+                HistoricalSchoolRules.MaxDescentsPerEligibleYear, occupiedSchools);
+            _dueMasterCursor = new HistoricalSchoolBoundedWorkCursor(0,
+                _dueMasters.Count, _dueMasters.Count);
+            _duePlanEligibleYear = pEligibleYear;
+        }
+
+        private static void ResetDuePlan()
+        {
+            _dueMasters = Array.Empty<HistoricalSchoolMasterDefinition>();
+            _dueMasterCursor = null;
+            _duePlanEligibleYear = -1;
         }
 
         public static void OnCommittedDeath(Actor pActor,
@@ -169,13 +218,17 @@ namespace AncientWarfare3.core.schools
         {
             if (pActor?.data == null || pMaster == null) return;
             ActiveMasterSlots.TryRelease(pMaster.SchoolId, pMaster.Id, pActor.data.id);
-            HistoricalSchoolContent.AnnounceDeath(pActor, pCity);
+            HistoricalSchoolContent.AnnounceDeath(pActor, pCity, pMaster.SchoolId);
             HistoryWriter.RecordPerson(pActor.data.id,
                 HistoricalAffiliationService.HomeKingdom(pActor), pMaster.CanonicalName,
-                "school_master_death", pMaster.CanonicalName + "逝世", ChronicleCategory.LIFE);
+                "school_master_death",
+                HistoryText.Actor(pActor, pMaster.CanonicalName) +
+                HistoryLocalizationRules.H("aw_hist_school_master_died"),
+                ChronicleCategory.LIFE);
             if (pCity?.data != null)
                 HistoryWriter.RecordCity(pCity, pCity.kingdom, "school_master_death",
-                    pMaster.CanonicalName + "逝世");
+                    HistoryText.Actor(pActor, pMaster.CanonicalName) +
+                    HistoryLocalizationRules.H("aw_hist_school_master_died"));
         }
 
         private static City SelectHome(HistoricalSchoolMasterDefinition pMaster,
@@ -504,14 +557,19 @@ namespace AncientWarfare3.core.schools
             {
                 if (pActor.isAlive() && !pActor.isRekt())
                     LineageService.ArchiveActor(pActor, pAlive: true);
-                HistoricalSchoolContent.AnnounceDescent(pActor, pHome);
+                HistoricalSchoolContent.AnnounceDescent(pActor, pHome, pMaster.SchoolId);
                 HistoryWriter.RecordPerson(pActor.data.id, pHome?.kingdom,
                     pMaster.CanonicalName, "school_master_descent",
-                    pMaster.CanonicalName + "降临" + (pHome?.data?.name ?? ""),
+                    HistoryText.Actor(pActor, pMaster.CanonicalName) +
+                    HistoryLocalizationRules.H(
+                        "aw_hist_school_descended_at") +
+                    HistoryText.City(pHome, pHome?.kingdom),
                     ChronicleCategory.LIFE);
                 if (pHome?.data != null)
                     HistoryWriter.RecordCity(pHome, pHome.kingdom, "school_master_descent",
-                        pMaster.CanonicalName + "降临此城");
+                        HistoryText.Actor(pActor, pMaster.CanonicalName) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_descended_here"));
                 ModClass.LogInfo("Historical school master descended: " + pMaster.Id +
                                  " actor=" + pActor.data.id + " city=" +
                                  (pHome?.data?.id ?? -1L));

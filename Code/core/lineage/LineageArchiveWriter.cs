@@ -14,17 +14,29 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class LineageArchiveWriter
     {
-        public static void Upsert(Actor pActor, bool pAlive, bool pTraceOnly = false)
+        public static void Upsert(Actor pActor, bool pAlive,
+            bool pTraceOnly = false)
+        {
+            Upsert(pActor, pAlive, pTraceOnly, pForceSynchronous: false);
+        }
+
+        private static void Upsert(Actor pActor, bool pAlive,
+            bool pTraceOnly, bool pForceSynchronous)
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
-            if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful) return;
-            if (!LineageService.UsesAwLineageSystem(pActor) && (!pTraceOnly || !LineageService.IsHuman(pActor))) return;
+            if (db == null || !LineageArchiveManager.Instance.InitializeSuccessful)
+                return;
+            bool traceableSpecies = LineageService.IsHuman(pActor) ||
+                                    LineageService.IsNativeXiaCultureActor(pActor);
+            if (!LineageService.UsesAwLineageSystem(pActor) &&
+                !LineageService.HasOriginalClan(pActor) &&
+                (!pTraceOnly || !traceableSpecies)) return;
 
             long id = pActor.data.id;
             string table = ActorArchiveTableItem.GetTableName();
             ActorArchiveTableItem previous = LineageArchiveReader.ReadRow(id);
+            if (pAlive && IsArchivedDead(previous)) return;
 
-            // ── 读 actor.data 上的姓氏/谱系字段 ──
             pActor.data.get(LineageKeys.GIVEN_NAME, out string given, "");
             pActor.data.get("display_name", out string display, "");
             pActor.data.get(LineageKeys.FAMILY_NAME, out string family, "");
@@ -32,151 +44,219 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1);
             pActor.data.get(LineageKeys.SHI_ID, out long shiId, -1);
             pActor.data.get(LineageKeys.NOBLE_DISTANCE, out int nobleDist, 99);
-            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
-            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated, false);
-            pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID, out long foundedBranchShi, -1); // 称王分封:开的新支 id,无则 -1
+            pActor.data.get(LineageKeys.LINEAGE_STATUS, out string status,
+                LineageStatus.NONE);
+            pActor.data.get(LineageKeys.NAME_INTEGRATED, out bool integrated,
+                false);
+            pActor.data.get(LineageKeys.FOUNDED_BRANCH_SHI_ID,
+                out long foundedBranchShi, -1);
             pActor.data.get(LineageKeys.DEATH_CAUSE, out string deathCause, "");
-            var nobleBlood = ResolveNobleBloodSnapshot(pActor, previous, nobleDist);
+            var nobleBlood = ResolveNobleBloodSnapshot(pActor, previous,
+                nobleDist);
 
             string name = pActor.getName();
             if (string.IsNullOrEmpty(given)) given = name;
             if (string.IsNullOrEmpty(display)) display = name;
+            var kingdom = ResolveActorKingdomSnapshot(pActor, previous);
+            var city = ResolveActorCitySnapshot(pActor, previous);
+            var social = ResolveSocialTitleSnapshot(pActor,
+                kingdom.kingdomName, kingdom.kingdomColor, city.cityName);
+            long clanId = pActor.clan?.data?.id ?? -1L;
+            bool currentClan = clanId >= 0L;
+            double deathTime = pAlive
+                ? previous?.death_time ?? -1d
+                : LineageService.CurTime();
 
-            int sex = pActor.isSexMale() ? 0 : 1;
-            long subspeciesId = pActor.subspecies?.getID() ?? -1L;
-            string subspeciesName = pActor.subspecies?.data?.name ?? "";
-            double birth = pActor.data.created_time;
-            var kingdomSnapshot = ResolveActorKingdomSnapshot(pActor, previous);
-            long kingdomId = kingdomSnapshot.kingdomId;
-            string kingdomName = kingdomSnapshot.kingdomName;
-            string kingdomColor = kingdomSnapshot.kingdomColor;
-            var citySnapshot = ResolveActorCitySnapshot(pActor, previous);
-            long cityId = citySnapshot.cityId;
-            string cityName = citySnapshot.cityName;
-            var socialSnapshot = ResolveSocialTitleSnapshot(pActor, kingdomName, kingdomColor, cityName);
-            string socialTitle = socialSnapshot.title;
-            string socialTitleColor = socialSnapshot.color;
-            long clanId = pActor.clan?.data?.id ?? -1;
-            string clanColorText = pActor.clan?.getColor()?.color_text ?? "";
-            int clanColorId = pActor.clan?.data?.color_id ?? -1;
-            int clanBannerIconId = pActor.clan?.data?.banner_icon_id ?? -1;
-            int clanBannerBackgroundId = pActor.clan?.data?.banner_background_id ?? -1;
-            long parent1 = pActor.data.parent_id_1;
-            long parent2 = pActor.data.parent_id_2;
-            int generation = pActor.data.generation;
-            int head = pActor.data.head;
-            int ageOvergrowth = pActor.data.age_overgrowth;
-            int phenotypeIndex = pActor.data.phenotype_index;   // 死者画像重建用真实肤色 phenotype
-            int phenotypeShade = pActor.data.phenotype_shade;
-
-            bool exists = previous != null || db.CheckKeyExist(table, SimpleColumnConstraint.CreateEq("ID", id));
-            if (exists && pAlive && IsArchivedDead(previous))
-                return;
-
-            if (exists)
+            var snapshot = new ActorArchiveTableItem
             {
-                var cols = new List<ColumnVal>
-                {
-                    ColumnVal.Create("GIVEN_NAME", given),
-                    ColumnVal.Create("DISPLAY_NAME", display),
-                    ColumnVal.Create("FAMILY_NAME", family),
-                    ColumnVal.Create("CLAN_NAME", clan),
-                    ColumnVal.Create("LINEAGE_ID", lineageId),
-                    ColumnVal.Create("SHI_ID", shiId),
-                    ColumnVal.Create("SUBSPECIES_ID", subspeciesId),
-                    ColumnVal.Create("SUBSPECIES_NAME", subspeciesName),
-                    ColumnVal.Create("SEX", sex),
-                    ColumnVal.Create("STATUS", status),
-                    ColumnVal.Create("NOBLE_DISTANCE", nobleDist),
-                    ColumnVal.Create("EVER_NOBLE_BLOOD", nobleBlood.ever),
-                    ColumnVal.Create("NOBLE_ORIGIN_ACTOR_ID", nobleBlood.originId),
-                    ColumnVal.Create("NOBLE_ORIGIN_NAME", nobleBlood.originName),
-                    ColumnVal.Create("NOBLE_ORIGIN_DISTANCE", nobleBlood.distance),
-                    ColumnVal.Create("NAME_INTEGRATED", integrated ? 1 : 0),
-                    ColumnVal.Create("KINGDOM_ID", kingdomId),
-                    ColumnVal.Create("KINGDOM_NAME", kingdomName),
-                    ColumnVal.Create("CITY_ID", cityId),
-                    ColumnVal.Create("CITY_NAME", cityName),
-                    ColumnVal.Create("SOCIAL_TITLE", socialTitle),
-                    ColumnVal.Create("SOCIAL_TITLE_COLOR", socialTitleColor),
-                    ColumnVal.Create("PARENT_ID_1", parent1),
-                    ColumnVal.Create("PARENT_ID_2", parent2),
-                    ColumnVal.Create("GENERATION", generation),
-                    ColumnVal.Create("HEAD", head),
-                    ColumnVal.Create("AGE_OVERGROWTH", ageOvergrowth),
-                    ColumnVal.Create("PHENOTYPE_INDEX", phenotypeIndex),
-                    ColumnVal.Create("PHENOTYPE_SHADE", phenotypeShade),
-                    ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", foundedBranchShi),
-                    ColumnVal.Create("IS_ALIVE", pAlive ? 1 : 0)
-                };
-                if (!pAlive)
-                {
-                    cols.Add(ColumnVal.Create("DEATH_TIME", LineageService.CurTime()));
-                    cols.Add(ColumnVal.Create("DEATH_CAUSE", deathCause ?? ""));
-                }
-                // 仅在能取到国家颜色时更新,避免亡国/无国的死亡 upsert 把已存色覆盖成空(用户要求亡国不丢色)。
-                if (!string.IsNullOrEmpty(kingdomColor)) cols.Add(ColumnVal.Create("KINGDOM_COLOR", kingdomColor));
+                id = id,
+                given_name = given ?? "",
+                display_name = display ?? "",
+                family_name = family ?? "",
+                clan_name = clan ?? "",
+                lineage_id = lineageId,
+                shi_id = shiId,
+                asset_id = pActor.asset?.id ?? previous?.asset_id ?? "",
+                subspecies_id = pActor.subspecies?.getID() ?? -1L,
+                subspecies_name = pActor.subspecies?.data?.name ?? "",
+                sex = pActor.isSexMale() ? 0 : 1,
+                status = status ?? LineageStatus.NONE,
+                noble_distance = nobleDist,
+                ever_noble_blood = nobleBlood.ever,
+                noble_origin_actor_id = nobleBlood.originId,
+                noble_origin_name = nobleBlood.originName ?? "",
+                noble_origin_distance = nobleBlood.distance,
+                name_integrated = integrated ? 1 : 0,
+                kingdom_id = kingdom.kingdomId,
+                kingdom_name = kingdom.kingdomName ?? "",
+                kingdom_color = !string.IsNullOrEmpty(kingdom.kingdomColor)
+                    ? kingdom.kingdomColor
+                    : previous?.kingdom_color ?? "",
+                city_id = city.cityId,
+                city_name = city.cityName ?? "",
+                social_title = social.title ?? "",
+                social_title_color = social.color ?? "",
+                original_clan_id = currentClan
+                    ? clanId
+                    : previous?.original_clan_id ?? -1L,
+                clan_color_text = currentClan
+                    ? pActor.clan?.getColor()?.color_text ?? ""
+                    : previous?.clan_color_text ?? "",
+                clan_color_id = currentClan
+                    ? pActor.clan.data.color_id
+                    : previous?.clan_color_id ?? -1,
+                clan_banner_icon_id = currentClan
+                    ? pActor.clan.data.banner_icon_id
+                    : previous?.clan_banner_icon_id ?? -1,
+                clan_banner_background_id = currentClan
+                    ? pActor.clan.data.banner_background_id
+                    : previous?.clan_banner_background_id ?? -1,
+                parent_id_1 = pActor.data.parent_id_1,
+                parent_id_2 = pActor.data.parent_id_2,
+                generation = pActor.data.generation,
+                birth_time = previous?.birth_time ?? pActor.data.created_time,
+                death_time = deathTime,
+                death_cause = pAlive
+                    ? previous?.death_cause ?? ""
+                    : deathCause ?? "",
+                is_alive = pAlive ? 1 : 0,
+                head = ResolveArchivedHead(pActor, previous),
+                skin = FamilyTreePortraitIdentityRules.ResolveArchivedSkinId(
+                    currentSkinId: pActor.subspecies?.data?.skin_id ?? 0,
+                    hasCurrentSubspecies: pActor.subspecies?.data != null,
+                    previousSkinId: previous?.skin ?? 0),
+                skin_set = FamilyTreePortraitIdentityRules.
+                    ResolveArchivedSkinSet(
+                        hasCurrentSubspecies:
+                            pActor.subspecies?.data != null,
+                        previousSkinSet: previous?.skin_set ?? 0),
+                age_overgrowth = pActor.data.age_overgrowth,
+                phenotype_index = pActor.data.phenotype_index,
+                phenotype_shade = pActor.data.phenotype_shade,
+                founded_branch_shi_id = foundedBranchShi
+            };
 
-                if (clanId >= 0)
-                {
-                    cols.Add(ColumnVal.Create("ORIGINAL_CLAN_ID", clanId));
-                    cols.Add(ColumnVal.Create("CLAN_COLOR_TEXT", clanColorText));
-                    cols.Add(ColumnVal.Create("CLAN_COLOR_ID", clanColorId));
-                    cols.Add(ColumnVal.Create("CLAN_BANNER_ICON_ID", clanBannerIconId));
-                    cols.Add(ColumnVal.Create("CLAN_BANNER_BACKGROUND_ID", clanBannerBackgroundId));
-                }
-
-                db.UpdateValue(table,
-                    new List<SimpleColumnConstraint> { SimpleColumnConstraint.CreateEq("ID", id) },
-                    cols.ToArray());
+            HistoricalSqlColumn[] inserts = SnapshotColumns(snapshot,
+                pIncludeId: true);
+            HistoricalSqlColumn[] updates = SnapshotColumns(snapshot,
+                pIncludeId: false);
+            if (!pForceSynchronous &&
+                HistoricalWriteService.TryUpsertState(
+                    "actor-archive:" + id, table,
+                    new[] { new HistoricalSqlColumn("ID", id) }, updates,
+                    inserts, sequence => ActorArchivePendingStore.Complete(
+                        id, sequence), out long queuedSequence, out _))
+            {
+                ActorArchivePendingStore.Publish(id, queuedSequence, snapshot);
                 return;
             }
 
-            db.Insert(table,
-                ColumnVal.Create("ID", id),
-                ColumnVal.Create("GIVEN_NAME", given),
-                ColumnVal.Create("DISPLAY_NAME", display),
-                ColumnVal.Create("FAMILY_NAME", family),
-                ColumnVal.Create("CLAN_NAME", clan),
-                ColumnVal.Create("LINEAGE_ID", lineageId),
-                ColumnVal.Create("SHI_ID", shiId),
-                ColumnVal.Create("ASSET_ID", pActor.asset.id),
-                ColumnVal.Create("SUBSPECIES_ID", subspeciesId),
-                ColumnVal.Create("SUBSPECIES_NAME", subspeciesName),
-                ColumnVal.Create("SEX", sex),
-                ColumnVal.Create("STATUS", status),
-                ColumnVal.Create("NOBLE_DISTANCE", nobleDist),
-                ColumnVal.Create("EVER_NOBLE_BLOOD", nobleBlood.ever),
-                ColumnVal.Create("NOBLE_ORIGIN_ACTOR_ID", nobleBlood.originId),
-                ColumnVal.Create("NOBLE_ORIGIN_NAME", nobleBlood.originName),
-                ColumnVal.Create("NOBLE_ORIGIN_DISTANCE", nobleBlood.distance),
-                ColumnVal.Create("NAME_INTEGRATED", integrated ? 1 : 0),
-                ColumnVal.Create("KINGDOM_ID", kingdomId),
-                ColumnVal.Create("KINGDOM_NAME", kingdomName),
-                ColumnVal.Create("KINGDOM_COLOR", kingdomColor),
-                ColumnVal.Create("CITY_ID", cityId),
-                ColumnVal.Create("CITY_NAME", cityName),
-                ColumnVal.Create("SOCIAL_TITLE", socialTitle),
-                ColumnVal.Create("SOCIAL_TITLE_COLOR", socialTitleColor),
-                ColumnVal.Create("ORIGINAL_CLAN_ID", clanId),
-                ColumnVal.Create("CLAN_COLOR_TEXT", clanColorText),
-                ColumnVal.Create("CLAN_COLOR_ID", clanColorId),
-                ColumnVal.Create("CLAN_BANNER_ICON_ID", clanBannerIconId),
-                ColumnVal.Create("CLAN_BANNER_BACKGROUND_ID", clanBannerBackgroundId),
-                ColumnVal.Create("PARENT_ID_1", parent1),
-                ColumnVal.Create("PARENT_ID_2", parent2),
-                ColumnVal.Create("GENERATION", generation),
-                ColumnVal.Create("BIRTH_TIME", birth),
-                ColumnVal.Create("DEATH_TIME", pAlive ? -1.0 : LineageService.CurTime()),
-                ColumnVal.Create("DEATH_CAUSE", pAlive ? "" : (deathCause ?? "")),
-                ColumnVal.Create("IS_ALIVE", pAlive ? 1 : 0),
-                ColumnVal.Create("HEAD", head),
-                ColumnVal.Create("SKIN", 0),
-                ColumnVal.Create("SKIN_SET", 0),
-                ColumnVal.Create("AGE_OVERGROWTH", ageOvergrowth),
-                ColumnVal.Create("PHENOTYPE_INDEX", phenotypeIndex),
-                ColumnVal.Create("PHENOTYPE_SHADE", phenotypeShade),
-                ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", foundedBranchShi));
+            if (!HistoricalWriteService.FlushForSynchronousFallback(
+                    System.TimeSpan.FromSeconds(5), out string flushError))
+            {
+                ModClass.LogWarning("Actor archive ordering barrier failed: " +
+                                    flushError);
+                return;
+            }
+            bool exists = previous != null || db.CheckKeyExist(table,
+                SimpleColumnConstraint.CreateEq("ID", id));
+            ColumnVal[] values = SnapshotColumnValues(snapshot,
+                pIncludeId: !exists);
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () =>
+                {
+                    if (exists)
+                        db.UpdateValue(table,
+                            new List<SimpleColumnConstraint>
+                            {
+                                SimpleColumnConstraint.CreateEq("ID", id)
+                            }, values);
+                    else
+                        db.Insert(table, values);
+                });
+        }
+
+        private static int ResolveArchivedHead(Actor pActor,
+            ActorArchiveTableItem pPrevious)
+        {
+            if (pActor?.data == null) return pPrevious?.head ?? -1;
+            int headCount = 0;
+            try
+            {
+                AnimationContainerUnit container = pActor.animation_container ??
+                    DynamicActorSpriteCreatorUI.getContainerForUI(pActor);
+                var heads = pActor.isSexMale()
+                    ? container?.heads_male
+                    : container?.heads_female;
+                headCount = heads?.Length ?? 0;
+            }
+            catch { }
+            if (headCount <= 0 && pActor.data.head < 0 &&
+                pPrevious?.head >= 0) return pPrevious.head;
+            return FamilyTreePortraitIdentityRules.ResolveArchivedHeadId(
+                pActor.data.head, pActor.data.id, headCount);
+        }
+
+        private static HistoricalSqlColumn[] SnapshotColumns(
+            ActorArchiveTableItem pRow, bool pIncludeId)
+        {
+            ColumnVal[] values = SnapshotColumnValues(pRow, pIncludeId);
+            var result = new HistoricalSqlColumn[values.Length];
+            for (int index = 0; index < values.Length; index++)
+                result[index] = new HistoricalSqlColumn(values[index].Name,
+                    values[index].Value);
+            return result;
+        }
+
+        private static ColumnVal[] SnapshotColumnValues(
+            ActorArchiveTableItem pRow, bool pIncludeId)
+        {
+            var values = new List<ColumnVal>();
+            if (pIncludeId) values.Add(ColumnVal.Create("ID", pRow.id));
+            values.Add(ColumnVal.Create("GIVEN_NAME", pRow.given_name));
+            values.Add(ColumnVal.Create("DISPLAY_NAME", pRow.display_name));
+            values.Add(ColumnVal.Create("FAMILY_NAME", pRow.family_name));
+            values.Add(ColumnVal.Create("CLAN_NAME", pRow.clan_name));
+            values.Add(ColumnVal.Create("LINEAGE_ID", pRow.lineage_id));
+            values.Add(ColumnVal.Create("SHI_ID", pRow.shi_id));
+            values.Add(ColumnVal.Create("ASSET_ID", pRow.asset_id));
+            values.Add(ColumnVal.Create("SUBSPECIES_ID", pRow.subspecies_id));
+            values.Add(ColumnVal.Create("SUBSPECIES_NAME", pRow.subspecies_name));
+            values.Add(ColumnVal.Create("SEX", pRow.sex));
+            values.Add(ColumnVal.Create("STATUS", pRow.status));
+            values.Add(ColumnVal.Create("NOBLE_DISTANCE", pRow.noble_distance));
+            values.Add(ColumnVal.Create("EVER_NOBLE_BLOOD", pRow.ever_noble_blood));
+            values.Add(ColumnVal.Create("NOBLE_ORIGIN_ACTOR_ID", pRow.noble_origin_actor_id));
+            values.Add(ColumnVal.Create("NOBLE_ORIGIN_NAME", pRow.noble_origin_name));
+            values.Add(ColumnVal.Create("NOBLE_ORIGIN_DISTANCE", pRow.noble_origin_distance));
+            values.Add(ColumnVal.Create("NAME_INTEGRATED", pRow.name_integrated));
+            values.Add(ColumnVal.Create("KINGDOM_ID", pRow.kingdom_id));
+            values.Add(ColumnVal.Create("KINGDOM_NAME", pRow.kingdom_name));
+            values.Add(ColumnVal.Create("KINGDOM_COLOR", pRow.kingdom_color));
+            values.Add(ColumnVal.Create("CITY_ID", pRow.city_id));
+            values.Add(ColumnVal.Create("CITY_NAME", pRow.city_name));
+            values.Add(ColumnVal.Create("SOCIAL_TITLE", pRow.social_title));
+            values.Add(ColumnVal.Create("SOCIAL_TITLE_COLOR", pRow.social_title_color));
+            values.Add(ColumnVal.Create("ORIGINAL_CLAN_ID", pRow.original_clan_id));
+            values.Add(ColumnVal.Create("CLAN_COLOR_TEXT", pRow.clan_color_text));
+            values.Add(ColumnVal.Create("CLAN_COLOR_ID", pRow.clan_color_id));
+            values.Add(ColumnVal.Create("CLAN_BANNER_ICON_ID", pRow.clan_banner_icon_id));
+            values.Add(ColumnVal.Create("CLAN_BANNER_BACKGROUND_ID", pRow.clan_banner_background_id));
+            values.Add(ColumnVal.Create("PARENT_ID_1", pRow.parent_id_1));
+            values.Add(ColumnVal.Create("PARENT_ID_2", pRow.parent_id_2));
+            values.Add(ColumnVal.Create("GENERATION", pRow.generation));
+            values.Add(ColumnVal.Create("BIRTH_TIME", pRow.birth_time));
+            values.Add(ColumnVal.Create("DEATH_TIME", pRow.death_time));
+            values.Add(ColumnVal.Create("DEATH_CAUSE", pRow.death_cause));
+            values.Add(ColumnVal.Create("IS_ALIVE", pRow.is_alive));
+            values.Add(ColumnVal.Create("HEAD", pRow.head));
+            values.Add(ColumnVal.Create("SKIN", pRow.skin));
+            values.Add(ColumnVal.Create("SKIN_SET", pRow.skin_set));
+            values.Add(ColumnVal.Create("AGE_OVERGROWTH", pRow.age_overgrowth));
+            values.Add(ColumnVal.Create("PHENOTYPE_INDEX", pRow.phenotype_index));
+            values.Add(ColumnVal.Create("PHENOTYPE_SHADE", pRow.phenotype_shade));
+            values.Add(ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", pRow.founded_branch_shi_id));
+            return values.ToArray();
         }
 
         internal static bool ReplaceHistoricalMasterIdentity(Actor pActor,
@@ -190,13 +270,15 @@ namespace AncientWarfare3.core.lineage
                 clan?.data == null)
                 return false;
 
-            Upsert(pActor, pAlive: true);
+            Upsert(pActor, pAlive: true, pTraceOnly: false,
+                pForceSynchronous: true);
             long clanId = clan.data.id;
             string clanColorText = clan.getColor()?.color_text ?? "";
             int clanColorId = clan.data.color_id;
             int clanBannerIconId = clan.data.banner_icon_id;
             int clanBannerBackgroundId = clan.data.banner_background_id;
-            db.UpdateValue(ActorArchiveTableItem.GetTableName(),
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                () => db.UpdateValue(ActorArchiveTableItem.GetTableName(),
                 new List<SimpleColumnConstraint>
                 {
                     SimpleColumnConstraint.CreateEq("ID", pActor.data.id)
@@ -215,7 +297,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("FOUNDED_BRANCH_SHI_ID", -1L),
                 ColumnVal.Create("IS_ALIVE", 1),
                 ColumnVal.Create("DEATH_TIME", -1d),
-                ColumnVal.Create("DEATH_CAUSE", ""));
+                ColumnVal.Create("DEATH_CAUSE", "")));
 
             ActorArchiveTableItem row = LineageArchiveReader.ReadRow(pActor.data.id);
             return row != null && row.given_name == pIdentity.GivenName &&
@@ -314,24 +396,6 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                pActor.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
-                if (!string.IsNullOrEmpty(captiveTitle))
-                {
-                    pActor.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
-                    return (captiveTitle, string.IsNullOrEmpty(captiveColor) ? color : captiveColor);
-                }
-
-                pActor.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
-                if (!string.IsNullOrEmpty(formerTitle))
-                {
-                    pActor.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
-                    return (formerTitle, string.IsNullOrEmpty(formerColor) ? color : formerColor);
-                }
-            }
-            catch { }
-
-            try
-            {
                 if (pActor.isKing())
                 {
                     if (RepublicGovernmentService.IsRepublic(pActor.kingdom))
@@ -343,8 +407,28 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
 
+            try
+            {
+                pActor.data.get(LineageKeys.FORMER_KING_TITLE, out string formerTitle, "");
+                if (!string.IsNullOrEmpty(formerTitle))
+                {
+                    pActor.data.get(LineageKeys.FORMER_KINGDOM_COLOR, out string formerColor, "");
+                    return (formerTitle, string.IsNullOrEmpty(formerColor) ? color : formerColor);
+                }
+
+            }
+            catch { }
+
             var roles = new List<string>();
             string rolesColor = color;
+            try
+            {
+                string dynasticTitle =
+                    DynasticTitleService.ResolveLivingTitle(pActor);
+                if (!string.IsNullOrEmpty(dynasticTitle))
+                    roles.Add(dynasticTitle);
+            }
+            catch { }
             try
             {
                 pActor.data.get(LineageKeys.FORMER_HEIR_TITLE, out string formerHeirTitle, "");
@@ -389,10 +473,30 @@ namespace AncientWarfare3.core.lineage
 
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             if (!string.IsNullOrEmpty(office))
-                roles.Add(AW_L10n.Text("aw_court_office_" + office, office));
+            {
+                pActor.data.get(LineageKeys.COURT_KINGDOM_ID,
+                    out long courtKingdomId, -1L);
+                Kingdom courtKingdom = World.world?.kingdoms?.get(courtKingdomId) ??
+                                        pActor.kingdom;
+                roles.Add(CourtInstitutionService.OfficeName(
+                    courtKingdom, office));
+            }
 
             string combined = CourtTitleRules.Combine(roles.ToArray());
-            return (combined, string.IsNullOrEmpty(combined) ? "" : rolesColor);
+            if (!string.IsNullOrEmpty(combined)) return (combined, rolesColor);
+
+            try
+            {
+                pActor.data.get(LineageKeys.CAPTIVE_NOBLE_TITLE, out string captiveTitle, "");
+                if (!string.IsNullOrEmpty(captiveTitle))
+                {
+                    pActor.data.get(LineageKeys.CAPTIVE_NOBLE_COLOR, out string captiveColor, "");
+                    return (captiveTitle, string.IsNullOrEmpty(captiveColor) ? color : captiveColor);
+                }
+            }
+            catch { }
+
+            return ("", "");
         }
     }
 }

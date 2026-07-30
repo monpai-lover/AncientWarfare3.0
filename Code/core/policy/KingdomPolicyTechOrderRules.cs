@@ -17,7 +17,10 @@ namespace AncientWarfare3.core.policy
             "aw_tech_city_defense",
             "aw_tech_official_court",
             "aw_tech_rites_music",
-            "aw_tech_three_departments"
+            "aw_tech_nine_rank_system",
+            "aw_tech_civil_service_examination",
+            "aw_tech_three_departments",
+            "aw_tech_song_court"
         };
 
         public static int Count => Order.Length;
@@ -28,12 +31,26 @@ namespace AncientWarfare3.core.policy
         }
 
         public static bool CanConsider(string pId, bool pOfficialCourtCompleted,
-            bool pRitesMusicCompleted)
+            bool pRitesMusicCompleted, bool pNineRankCompleted)
         {
             if (pId == "aw_tech_rites_music") return pOfficialCourtCompleted;
-            if (pId == "aw_tech_three_departments")
-                return pOfficialCourtCompleted && pRitesMusicCompleted;
+            if (pId == "aw_tech_civil_service_examination") return pNineRankCompleted;
+            if (pId == "aw_tech_three_departments") return pNineRankCompleted;
             return true;
+        }
+
+        public static int CivilServiceExaminationContextScore(
+            int pCentralVacancies, int pEducatedWithoutQualification,
+            int pCityCount, bool pImperial)
+        {
+            int vacancyPressure = Math.Min(120,
+                Math.Max(0, pCentralVacancies) * 24);
+            int candidatePressure = Math.Min(100,
+                Math.Max(0, pEducatedWithoutQualification) * 5);
+            int realmScale = Math.Min(60,
+                Math.Max(0, pCityCount - 1) * 10);
+            return vacancyPressure + candidatePressure + realmScale +
+                   (pImperial ? 60 : 0);
         }
 
         public static int PreferredIndex(string pId, int pLayoutFallback)

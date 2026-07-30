@@ -1,0 +1,852 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
+
+internal static class NameSystemRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void SequenceEqual<T>(IEnumerable<T> expected, IEnumerable<T> actual, string name)
+    {
+        string expectedText = string.Join(",", expected);
+        string actualText = string.Join(",", actual);
+        if (expectedText != actualText)
+            throw new InvalidOperationException($"{name}: expected {expectedText}, got {actualText}");
+    }
+
+    public static void Run()
+    {
+        Equal("姬强", LineageDisplayNameRules.Build(
+                givenName: "强", familyName: "", clanName: "姬",
+                isNoble: true, isMale: false, isNameIntegrated: false),
+            "a pre-integration noble woman falls back to Shi-before-given-name when Xing is missing");
+        Equal("强姜", LineageDisplayNameRules.Build(
+                givenName: "强", familyName: "姜", clanName: "姬",
+                isNoble: true, isMale: false, isNameIntegrated: false),
+            "a pre-integration noble woman keeps given-name-plus-Xing when Xing exists");
+        Equal("姬强", LineageDisplayNameRules.Build(
+                givenName: "强", familyName: "姜", clanName: "姬",
+                isNoble: true, isMale: false, isNameIntegrated: true),
+            "name integration consistently uses Shi-before-given-name");
+        Equal("姬天", LineageDisplayNameRules.ProjectStored(
+                storedDisplayName: "天", givenName: "天", familyName: "",
+                clanName: "姬", isNoble: true, isMale: false,
+                isNameIntegrated: false),
+            "a stale single-name archive is repaired when projected into the family tree");
+        Equal("旧档姓名", LineageDisplayNameRules.ProjectStored(
+                storedDisplayName: "旧档姓名", givenName: "", familyName: "",
+                clanName: "姬", isNoble: true, isMale: false,
+                isNameIntegrated: false),
+            "an archive without a recoverable given name preserves its stored display name");
+
+        Equal(12, RulerTitleFactRules.NormalizeStat(162, 150),
+            "Mandate office bonuses are removed from personal stewardship");
+        Equal(0, RulerTitleFactRules.NormalizeStat(4, 8),
+            "normalization clamps temporary bonuses at zero");
+        Equal(true, RulerTitleFactRules.CanBuildReignSnapshot(-1, 77),
+            "a captured former ruler can use a synthetic reign snapshot");
+        Equal(false, RulerTitleFactRules.CanBuildReignSnapshot(-1, -1),
+            "an empty reign snapshot is rejected");
+
+        var facts = new RulerTitleFacts
+        {
+            ActorId = 101,
+            Stewardship = 14,
+            Intelligence = 13,
+            Diplomacy = 12,
+            Warfare = 15,
+            WarWins = 3,
+            WarLosses = 1,
+            CityDelta = 3,
+            ReignYears = 16,
+            MajorReforms = 2,
+            EndPopulation = 100,
+            StartPopulation = 100,
+            EndCityCount = 5,
+            Health = 12,
+            HasBiologicalChildren = true,
+            HasKnownPatriline = true,
+            Traits = RulerTraitFlags.Honest | RulerTraitFlags.Strong |
+                     RulerTraitFlags.Veteran
+        };
+        RulerTitleDerivedFacts derived = RulerTitleFactRules.Derive(facts);
+        Equal(true, derived.Diligent, "two reforms derive Diligent");
+        Equal(true, derived.Just, "honesty without grave crime derives Just");
+        Equal(true, derived.Administrator, "high stewardship derives Administrator");
+        Equal(true, derived.Strategist, "high warfare and two victories derive Strategist");
+        Equal(true, derived.GreatConquest, "three victories and three cities derive GreatConquest");
+        Equal(true, derived.FamilyFirst, "children and a known patriline derive FamilyFirst");
+        Equal(39, derived.CivilScore,
+            "civil score is stewardship plus learning plus diplomacy");
+        Equal(44, derived.MartialScore,
+            "martial score uses warfare, net wins, and city delta");
+
+        Equal(78, PosthumousTitleDefs.Pool.Length,
+            "the complete posthumous pool has 78 entries");
+        Equal(78, PosthumousTitleDefs.Pool.Select(x => x.Char).Distinct().Count(),
+            "the posthumous pool contains no duplicate character");
+        foreach (string required in new[] { "元", "宪", "贞", "僖", "节", "敏", "思" })
+            Equal(true, PosthumousTitleDefs.Pool.Any(x => x.Char == required),
+                $"posthumous pool contains {required}");
+
+        var wenBlocked = new RulerTitleFacts
+        {
+            ActorId = 8,
+            Stewardship = 20,
+            Intelligence = 20,
+            Diplomacy = 20,
+            EndPopulation = 100,
+            StartPopulation = 100,
+            Traits = RulerTraitFlags.Honest | RulerTraitFlags.Greedy
+        };
+        Equal(false, PosthumousTitleRules.AllowsWen(
+                wenBlocked, RulerTitleFactRules.Derive(wenBlocked)),
+            "greed invokes the Wen override");
+        wenBlocked.Traits = RulerTraitFlags.Honest;
+        wenBlocked.EndReason = "kingdom_fell";
+        Equal(false, PosthumousTitleRules.AllowsWen(
+                wenBlocked, RulerTitleFactRules.Derive(wenBlocked)),
+            "a fallen realm invokes the Wen override");
+
+        var wuBlocked = new RulerTitleFacts
+        {
+            ActorId = 9,
+            Warfare = 20,
+            WarWins = 4,
+            Health = 4,
+            Traits = RulerTraitFlags.Weak | RulerTraitFlags.FragileHealth
+        };
+        Equal(false, PosthumousTitleRules.AllowsWu(
+                wuBlocked, RulerTitleFactRules.Derive(wuBlocked)),
+            "weak and frail rulers cannot receive Wu");
+        wuBlocked.Health = 12;
+        wuBlocked.Traits = RulerTraitFlags.Strong;
+        wuBlocked.WarWins = 0;
+        Equal(false, PosthumousTitleRules.AllowsWu(
+                wuBlocked, RulerTitleFactRules.Derive(wuBlocked)),
+            "rulers without a victory cannot receive Wu");
+
+        PosthumousTitleDecision normalDecision = PosthumousTitleRules.Select(
+            facts, derived, Array.Empty<string>(), pMandateDouble: false);
+        Equal(1, normalDecision.Name.Length,
+            "ordinary rulers receive one posthumous character");
+        PosthumousTitleDecision mandateDecision = PosthumousTitleRules.Select(
+            facts, derived, Array.Empty<string>(), pMandateDouble: true);
+        Equal(2, mandateDecision.Name.Length,
+            "Mandate rulers receive a two-character title");
+        Equal(mandateDecision.Name, PosthumousTitleRules.Select(
+                facts, derived, Array.Empty<string>(), pMandateDouble: true).Name,
+            "the same facts and Actor ID produce a stable title");
+
+        PosthumousTitleDecision nextDecision = PosthumousTitleRules.Select(
+            facts, derived, new[] { normalDecision.Name }, pMandateDouble: false);
+        Equal(false, nextDecision.Name == normalDecision.Name,
+            "a Shi branch does not repeat an already used full title");
+        PosthumousTitleDecision exhaustedDecision = PosthumousTitleRules.Select(
+            facts, derived, PosthumousTitleDefs.Pool.Select(x => x.Char),
+            pMandateDouble: false);
+        Equal(1, exhaustedDecision.CycleNo,
+            "exhausting one-character titles advances the registry cycle");
+        Equal(true, !string.IsNullOrEmpty(exhaustedDecision.Name),
+            "title exhaustion never returns an empty name");
+
+        Equal("鲁武伯", PosthumousTitleRules.BuildRankedAppellation("鲁", "武", 0),
+            "baron posthumous appellation keeps the Zhou rank");
+        Equal("晋文侯", PosthumousTitleRules.BuildRankedAppellation("晋", "文", 1),
+            "marquis posthumous appellation keeps the Zhou rank");
+        Equal("宋桓公", PosthumousTitleRules.BuildRankedAppellation("宋", "桓", 2),
+            "duke posthumous appellation keeps the Zhou rank");
+        Equal("楚庄王", PosthumousTitleRules.BuildRankedAppellation("楚", "庄", 3),
+            "king posthumous appellation keeps the Zhou rank");
+        Equal("西虢武伯", PosthumousTitleRules.BuildRankedAppellation("西虢", "武", 0),
+            "multi-character state names are not truncated");
+
+        var failedCommander = new RulerTitleFacts
+        {
+            ActorId = 510,
+            Age = 52,
+            ReignYears = 8,
+            Warfare = 8,
+            Health = 12,
+            StartPopulation = 100,
+            EndPopulation = 100,
+            EndCityCount = 5,
+            WarWins = 0,
+            WarLosses = 4
+        };
+        RulerTitleDerivedFacts failedDerived = RulerTitleFactRules.Derive(failedCommander);
+        const string blameCharacters = "厉幽荒废炀灵戾刺谬惑蛊险悖傲逆暴虐昏愎";
+        PosthumousTitleDecision failedSingle = PosthumousTitleRules.Select(
+            failedCommander, failedDerived, Array.Empty<string>(), pMandateDouble: false);
+        Equal(true, blameCharacters.Contains(failedSingle.Name),
+            $"disastrous military performance qualifies for a blame title without invented vice " +
+            $"(name={failedSingle.Name}, grade={failedSingle.GradeKey}, " +
+            $"scores={failedSingle.Reason})");
+        PosthumousTitleDecision failedDouble = PosthumousTitleRules.Select(
+            failedCommander, failedDerived, Array.Empty<string>(), pMandateDouble: true);
+        Equal(true, failedDouble.Name.All(character => blameCharacters.Contains(character)),
+            "a disastrous Mandate reign combines two qualified blame characters");
+
+        Equal(67, TempleTitleRules.CommonCandidates.Count,
+            "the common temple-name table contains exactly 67 entries");
+        Equal(67, TempleTitleRules.CommonCandidates.Select(x => x.Name).Distinct().Count(),
+            "the common temple-name table contains no duplicate names");
+        Equal(true, TempleTitleRules.CommonCandidates.Any(x => x.Name == "崇宗"),
+            "the common temple-name table contains Chongzong");
+        Equal(true, TempleTitleRules.CommonCandidates.Any(x => x.Name == "康宗"),
+            "Kangzong is present under its correct name");
+
+        RulerTitleFacts lowFounder = facts.Clone();
+        lowFounder.IsFounder = true;
+        lowFounder.IsLowOrigin = true;
+        Equal("太祖", TempleTitleRules.Select(lowFounder,
+                RulerTitleFactRules.Derive(lowFounder), Array.Empty<string>()).Name,
+            "a low-origin first emperor receives Taizu");
+
+        RulerTitleFacts highFounder = facts.Clone();
+        highFounder.IsFounder = true;
+        Equal("高祖", TempleTitleRules.Select(highFounder,
+                RulerTitleFactRules.Derive(highFounder), Array.Empty<string>()).Name,
+            "a high-origin first emperor receives Gaozu");
+
+        RulerTitleFacts restored = facts.Clone();
+        restored.IsAutonomousRefounder = true;
+        restored.WasFormerMandateShi = true;
+        restored.RegainedMandate = true;
+        Equal("世祖", TempleTitleRules.Select(restored,
+                RulerTitleFactRules.Derive(restored), Array.Empty<string>()).Name,
+            "an autonomous former-Mandate restoration receives Shizu");
+
+        RulerTitleFacts second = facts.Clone();
+        second.ReignIndex = 2;
+        second.IsFounderDirectHeir = true;
+        second.MajorReforms = 0;
+        second.CityDelta = -1;
+        Equal(false, TempleTitleRules.Select(second,
+                RulerTitleFactRules.Derive(second), Array.Empty<string>()).Name == "太宗",
+            "the second ruler is not automatically Taizong");
+
+        RulerTitleFacts qualifiedTaizong = facts.Clone();
+        qualifiedTaizong.ReignIndex = 2;
+        qualifiedTaizong.IsFounderDirectHeir = true;
+        qualifiedTaizong.MajorReforms = 2;
+        qualifiedTaizong.CityDelta = 0;
+        Equal("太宗", TempleTitleRules.Select(qualifiedTaizong,
+                RulerTitleFactRules.Derive(qualifiedTaizong), Array.Empty<string>()).Name,
+            "a reforming direct heir who preserves the realm qualifies for Taizong");
+
+        RulerTitleFacts chengzu = facts.Clone();
+        chengzu.IsFounder = false;
+        chengzu.CapitalMoves = 1;
+        chengzu.RestoredLegalCore = true;
+        Equal("成祖", TempleTitleRules.Select(chengzu,
+                RulerTitleFactRules.Derive(chengzu), Array.Empty<string>()).Name,
+            "a conquering legal restorer who moved the capital qualifies for Chengzu");
+
+        Equal("宣祖", TempleTitleRules.SelectRetrospectiveAncestor(
+                civil: 24, martial: 4, healthy: true),
+            "civil and healthy ancestors receive Xuanzu");
+        Equal("景祖", TempleTitleRules.SelectRetrospectiveAncestor(
+                civil: 5, martial: 25, healthy: false),
+            "martial ancestors receive Jingzu");
+        Equal("德祖", TempleTitleRules.SelectRetrospectiveAncestor(
+                civil: 8, martial: 8, healthy: false),
+            "otherwise the retrospective title is Dezu");
+
+        string[] allCommonTempleNames = TempleTitleRules.CommonCandidates
+            .Select(candidate => candidate.Name).ToArray();
+        TempleTitleDecision generatedTemple = TempleTitleRules.Select(
+            facts, derived, allCommonTempleNames);
+        Equal(true, generatedTemple.Name.EndsWith("宗"),
+            "common temple-name exhaustion derives a legal X-zong fallback");
+        Equal(false, allCommonTempleNames.Contains(generatedTemple.Name),
+            "the derived temple fallback is not an exhausted common name");
+        Equal(generatedTemple.Name, TempleTitleRules.Select(
+                facts, derived, allCommonTempleNames).Name,
+            "temple selection is stable for the same facts and Actor ID");
+        Equal("太祖武皇帝", TempleTitleRules.BuildImperialAppellation("太祖", "武"),
+            "ordinary emperors use temple name, one posthumous character, and Huangdi");
+        Equal("太宗文成皇帝", TempleTitleRules.BuildImperialAppellation("太宗", "文成"),
+            "Mandate emperors use temple name, two posthumous characters, and Huangdi");
+
+        string[] statePool = { "齐", "鲁", "晋", "燕" };
+        string randomStateA = StateNameRules.SelectFirstAvailable(
+            statePool, new HashSet<string> { "鲁" }, shiId: 9,
+            founderActorId: 41, originKingdomId: 12);
+        string randomStateB = StateNameRules.SelectFirstAvailable(
+            statePool, new HashSet<string> { "鲁" }, shiId: 9,
+            founderActorId: 41, originKingdomId: 12);
+        Equal(randomStateA, randomStateB,
+            "first state-name randomization is stable");
+        Equal(true, randomStateA != "鲁",
+            "an active state name is skipped when alternatives exist");
+        Equal(true, statePool.Contains(randomStateA),
+            "the state name comes from the approved pool");
+        Equal("燕", StateNameRules.SelectFirstAvailable(statePool,
+                new HashSet<string> { "齐", "鲁", "晋" }, 9, 41, 12),
+            "the selector walks past every active candidate to the sole free name");
+        string exhaustedState = StateNameRules.SelectFirstAvailable(statePool,
+            new HashSet<string>(statePool), 9, 41, 12);
+        Equal(true, statePool.Contains(exhaustedState),
+            "full active-name exhaustion uses a stable approved fallback");
+
+        foreach (string invalid in new[]
+                 {
+                     "", "Name", "name", " 周 ", "aw_kingdom_name", "周国", "周國",
+                     "周朝", "周帝国", "周帝國", "周共和国"
+                 })
+        {
+            Equal(false, StateNameRules.IsValid(invalid),
+                $"state name rejects {invalid}");
+        }
+        Equal("周", StateNameRules.ResolveBoundName("周", statePool,
+                new HashSet<string>(), 9, 41, 12),
+            "a Shi with a bound state name never redraws");
+        Equal("鲁", StateNameRules.ResolveBoundName(" 周 ", new[] { "鲁" },
+                new HashSet<string>(), 9, 41, 12),
+            "an invalid padded binding is rejected instead of normalized");
+        Equal("", StateNameRules.SelectFirstAvailable(new[] { " 齐 " },
+                new HashSet<string>(), 9, 41, 12),
+            "the selector never trims an invalid pool entry into a valid state name");
+        Equal("周", StateNameRules.ResolveRestorationStateName("周", "鲁"),
+            "restoration always prefers the original Shi-bound state name");
+        Equal("鲁", StateNameRules.ResolveRestorationStateName(" 周 ", "鲁"),
+            "restoration rejects a padded bound state name at the source");
+        Equal("鲁", StateNameRules.ResolveRestorationStateName("", "鲁"),
+            "restoration uses its request snapshot only when the Shi has no bound name");
+        Equal("周", StateNameRules.ResolvePreferredBoundName("彭", "周"),
+            "a historical figure reserved state name replaces a random Shi binding");
+        Equal("彭", StateNameRules.ResolvePreferredBoundName("彭", " 周 "),
+            "an invalid historical preference cannot replace a valid bound state name");
+        Equal("复州", StateNameRules.ResolveInitialBoundName("", "", "复州"),
+            "the first ruler binds the kingdom's existing valid name instead of redrawing it");
+        Equal("周", StateNameRules.ResolveInitialBoundName("", "周", "复州"),
+            "a historical reserved name still overrides the kingdom's initial name");
+        Equal("彭", StateNameRules.ResolveInitialBoundName("彭", "", "复州"),
+            "an already bound Shi state name remains authoritative");
+        Equal(true, StateNameRules.IsSameShiContinuity(9, 9),
+            "the same Shi keeps one state-name continuity");
+        Equal(false, StateNameRules.IsSameShiContinuity(9, 10),
+            "different Shi branches do not merge because their clan labels match");
+
+        Equal(true, LineageBranchRules.ShouldFoundCollateralBranch(
+                newDynastyCreatedFromPreBranchIdentity: true,
+                isEmpireOrMandate: true,
+                collateral: true,
+                hasTraceableAncestor: true,
+                foreignThrone: true,
+                highInfluenceElsewhere: false,
+                directHeir: false,
+                previousKingDirectChild: false,
+                alreadyFoundedForDestination: false),
+            "a foreign collateral founder may branch only for a real imperial dynasty");
+        Equal(false, LineageBranchRules.ShouldFoundCollateralBranch(
+                false, true, true, true, true, false, false, false, false),
+            "a branch created during accession cannot manufacture its own new-dynasty predicate");
+        Equal(false, LineageBranchRules.ShouldFoundCollateralBranch(
+                true, false, true, true, true, false, false, false, false),
+            "a lower-rank non-Mandate realm cannot found an accession cadet branch");
+        Equal(false, LineageBranchRules.ShouldFoundCollateralBranch(
+                true, true, true, true, false, true, false, false, false),
+            "influence cannot substitute for becoming ruler of another state");
+        Equal(false, LineageBranchRules.ShouldFoundCollateralBranch(
+                true, true, true, true, true, false, true, false, false),
+            "a registered direct heir never founds a collateral branch");
+
+        Equal(82, EraNameRules.HistoricalSlots.Count,
+            "the weighted historical era pool has exactly 82 slots");
+        Equal(true, EraNameRules.HistoricalSlots.Count >
+                    EraNameRules.HistoricalSlots.Distinct().Count(),
+            "historically repeated slots remain as generation weights");
+        string eraA = EraNameRules.SelectAutomatic(shiId: 7, actorId: 91,
+            reignIndex: 3, used: Array.Empty<string>());
+        string eraB = EraNameRules.SelectAutomatic(shiId: 7, actorId: 91,
+            reignIndex: 3, used: Array.Empty<string>());
+        Equal(eraA, eraB, "automatic era selection is stable");
+        Equal(true, EraNameRules.IsValidCustom("武德"),
+            "two Han characters are a valid era name");
+        Equal(true, EraNameRules.IsValidCustom("太平兴国"),
+            "four Han characters are a valid era name");
+        Equal(false, EraNameRules.IsValidCustom("Name"),
+            "placeholder names are invalid era names");
+        Equal(false, EraNameRules.IsValidCustom(" 武德"),
+            "padded era names are rejected at the source");
+        Equal("元年", EraNameRules.FormatYear(1), "year one uses yuan");
+        Equal("十一年", EraNameRules.FormatYear(11),
+            "year eleven uses Chinese numerals");
+        Equal("二十一年", EraNameRules.FormatYear(21),
+            "year twenty-one uses Chinese numerals");
+        Equal("一百零一年", EraNameRules.FormatYear(101),
+            "years above one hundred use general Chinese numerals");
+
+        var eligibleEra = new EraChangeContext
+        {
+            IsHereditaryEmperor = true,
+            IsEmpireRank = true,
+            IsIndependent = true,
+            AtWar = false,
+            PoliticalPoints = 30,
+            YearsSinceVoluntaryChange = 10,
+            Candidate = "武德"
+        };
+        Equal(EraChangeBlockReason.None,
+            EraNameRules.ValidateVoluntaryChange(eligibleEra),
+            "an independent peaceful hereditary emperor can change era");
+        eligibleEra.AtWar = true;
+        Equal(EraChangeBlockReason.AtWar,
+            EraNameRules.ValidateVoluntaryChange(eligibleEra),
+            "war blocks a voluntary era change");
+        eligibleEra.AtWar = false;
+        eligibleEra.YearsSinceVoluntaryChange = 9;
+        Equal(EraChangeBlockReason.Cooldown,
+            EraNameRules.ValidateVoluntaryChange(eligibleEra),
+            "ten full years are required between voluntary era changes");
+        eligibleEra.YearsSinceVoluntaryChange = 10;
+        eligibleEra.PoliticalPoints = 29;
+        Equal(EraChangeBlockReason.InsufficientPoliticalPoints,
+            EraNameRules.ValidateVoluntaryChange(eligibleEra),
+            "voluntary era changes require thirty political points");
+        eligibleEra.PoliticalPoints = 30;
+        eligibleEra.UsedNames.Add("武德");
+        Equal(EraChangeBlockReason.DuplicateName,
+            EraNameRules.ValidateVoluntaryChange(eligibleEra),
+            "a Shi cannot reuse an era name in the same cycle");
+
+        var accessionEra = new EraChangeContext
+        {
+            IsHereditaryEmperor = true,
+            IsEmpireRank = true,
+            IsIndependent = false,
+            AtWar = true,
+            PoliticalPoints = 0,
+            YearsSinceVoluntaryChange = 0,
+            Candidate = "永徽"
+        };
+        Equal(EraChangeBlockReason.None,
+            EraNameRules.ValidateAccessionChange(accessionEra),
+            "accession era changes bypass independence, war, cooldown, and cost");
+        Equal(EraChangeBlockReason.None,
+            EraNameRules.Validate(accessionEra,
+                EraChangeKind.ImperialProclamation),
+            "imperial proclamation uses accession eligibility without recording another accession");
+        Equal(false, EraNameRules.RequiresPoliticalPoints(
+                EraChangeKind.ImperialProclamation),
+            "imperial proclamation does not consume voluntary reform points");
+        Equal("imperial_proclamation", EraNameRules.KindId(
+                EraChangeKind.ImperialProclamation),
+            "imperial proclamation persists as a distinct era change kind");
+        Equal(true, EraNameRules.IsMajorAiReason(EraChangeReason.RestoredMandate),
+            "regaining the Mandate is a major AI reason");
+        Equal(true, EraNameRules.IsMajorAiReason(
+                EraChangeReason.AutonomousRestoration),
+            "an autonomous restoration is a distinct major AI reason");
+        Equal(EraChangeReason.AutonomousRestoration,
+            EraNameRules.StrongerReason(EraChangeReason.MajorVictory,
+                EraChangeReason.AutonomousRestoration),
+            "restoring a state outranks an ordinary war victory marker");
+        Equal(false, EraNameRules.ShouldAiConsider(EraChangeReason.None,
+                alreadyCheckedThisYear: false),
+            "AI performs no work without a queued major event");
+        Equal(false, EraNameRules.ShouldAiConsider(EraChangeReason.MajorVictory,
+                alreadyCheckedThisYear: true),
+            "AI evaluates a queued era reason at most once per year");
+        Equal(EraChangeReason.RestoredMandate,
+            EraNameRules.StrongerReason(EraChangeReason.MajorVictory,
+                EraChangeReason.RestoredMandate),
+            "regaining the Mandate replaces a weaker queued victory reason");
+        Equal(EraChangeReason.RestoredMandate,
+            EraNameRules.StrongerReason(EraChangeReason.RestoredMandate,
+                EraChangeReason.CapitalRelocated),
+            "a weaker later event cannot replace the strongest queued reason");
+        Equal(false, EraNameRules.IsTerminalAiBlock(EraChangeBlockReason.AtWar),
+            "war keeps an AI era marker for a later peaceful year");
+        Equal(false, EraNameRules.IsTerminalAiBlock(EraChangeBlockReason.Cooldown),
+            "cooldown keeps an AI era marker for a later eligible year");
+        Equal(false, EraNameRules.IsTerminalAiBlock(
+                EraChangeBlockReason.InsufficientPoliticalPoints),
+            "insufficient points keep an AI era marker for a later eligible year");
+        Equal(true, EraNameRules.IsTerminalAiBlock(
+                EraChangeBlockReason.NotHereditaryEmperor),
+            "a non-hereditary ruler terminates the queued era event");
+        Equal(true, EraNameRules.IsTerminalAiBlock(
+                EraChangeBlockReason.NotIndependent),
+            "a vassal cannot retain an independent-emperor era event");
+        Equal(true, EraNameRules.IsCentralReform("aw_tech_official_court"),
+            "establishing the official court is an era-worthy central reform");
+        Equal(true, EraNameRules.IsCentralReform("aw_policy_imperial_court"),
+            "establishing the imperial court is an era-worthy central reform");
+        Equal(false, EraNameRules.IsCentralReform("aw_tech_iron_plow"),
+            "an economic technology is not mislabeled as a central reform");
+        Equal(true, MandatePhaseRules.IsRevivalTransition(
+                MandatePhase.Decline, MandatePhase.Golden),
+            "recovering from decline into a golden phase is a revival event");
+        Equal(false, MandatePhaseRules.IsRevivalTransition(
+                MandatePhase.Golden, MandatePhase.Golden),
+            "remaining prosperous does not queue a repeated revival event");
+        ChronologySourceChoice vassalChronology =
+            EraNameRules.ResolveChronologySource(localKingdomId: 12,
+                isEmpireRank: false, rootSuzerainId: 3,
+                rootHasCommittedEra: true);
+        Equal(3L, vassalChronology.SourceKingdomId,
+            "a non-imperial vassal observes its root suzerain chronology");
+        Equal(true, vassalChronology.UsesSuzerain,
+            "the effective chronology identifies suzerain usage");
+        ChronologySourceChoice imperialChronology =
+            EraNameRules.ResolveChronologySource(localKingdomId: 12,
+                isEmpireRank: true, rootSuzerainId: 3,
+                rootHasCommittedEra: true);
+        Equal(12L, imperialChronology.SourceKingdomId,
+            "an empire-rank state keeps its own chronology");
+        ChronologySourceChoice missingRootEra =
+            EraNameRules.ResolveChronologySource(localKingdomId: 12,
+                isEmpireRank: false, rootSuzerainId: 3,
+                rootHasCommittedEra: false);
+        Equal(12L, missingRootEra.SourceKingdomId,
+            "a vassal falls back locally when the root has no committed era");
+        Equal(0, KingdomDecisionPriorityRules.ScoreDecision(
+                "aw_decision_year_name", false, 1, false, 0, true),
+            "the generic policy AI never schedules era changes without an event marker");
+        Equal(true, EraNameRules.CanExposeChronology(
+                isHereditaryMonarchy: true, isEmpireRank: true),
+            "a hereditary empire can expose its committed era chronology");
+        Equal(false, EraNameRules.CanExposeChronology(
+                isHereditaryMonarchy: false, isEmpireRank: true),
+            "a republic cannot expose a stale imperial era chronology");
+        Equal(false, EraNameRules.CanExposeChronology(
+                isHereditaryMonarchy: true, isEmpireRank: false),
+            "a non-imperial independent state has no true local era chronology");
+        Equal("周伯发元年", RegnalChronologyRules.Format(
+                "周", "伯", "发", 1,
+                isHereditaryMonarchy: true, isRepublic: false),
+            "an ordinary ruler uses state-rank-given-name regnal chronology");
+        Equal("周伯发二十五年", RegnalChronologyRules.Format(
+                "周", "伯", "发", 25,
+                isHereditaryMonarchy: true, isRepublic: false),
+            "ordinary regnal chronology advances with the current reign");
+        Equal("", RegnalChronologyRules.Format(
+                "周", "伯", "发", 1,
+                isHereditaryMonarchy: false, isRepublic: true),
+            "a republic never exposes a stale monarch regnal chronology");
+        Equal("武德元年", RegnalChronologyRules.SelectDisplay(
+                "武德元年", "周伯发元年"),
+            "a committed formal era takes precedence over local ruler chronology");
+
+        Equal("鲁伯", RulerAppellationRules.LivingRanked("鲁", RulerRank.Bo),
+            "Bo remains distinct");
+        Equal("晋侯", RulerAppellationRules.LivingRanked("晋", RulerRank.Hou),
+            "Hou remains distinct");
+        Equal("宋公", RulerAppellationRules.LivingRanked("宋", RulerRank.Gong),
+            "Gong remains distinct");
+        Equal("楚王", RulerAppellationRules.LivingRanked("楚", RulerRank.King),
+            "King remains distinct");
+        Equal("大周武德皇帝", RulerAppellationRules.LivingEmperor("周", "武德"),
+            "a living emperor uses great-state-era-emperor order");
+        Equal("大周武德皇帝", RulerAppellationRules.LivingEmperor("大周", "武德"),
+            "a state name already beginning with great is not doubled");
+        Equal("大唐制胜皇帝", RulerAppellationRules.LivingEmperor("唐", "制胜"),
+            "an imperial living title includes great state and the current era");
+        Equal(true, RulerAppellationRules.ShouldUseLivingEmperor(
+                isEmpireRank: true, isMandate: false),
+            "a non-Mandate empire uses the full living emperor appellation");
+        Equal(true, RulerAppellationRules.ShouldUseLivingEmperor(
+                isEmpireRank: false, isMandate: true),
+            "a Mandate ruler uses the full living emperor appellation regardless of rank projection");
+        Equal(false, RulerAppellationRules.ShouldUseLivingEmperor(
+                isEmpireRank: false, isMandate: false),
+            "an ordinary lower-rank ruler keeps the ranked appellation");
+        Equal("大唐制胜皇帝", RulerAppellationRules.ResolveFamilyTreeRitualAppellation(
+                isAlive: true, isCurrentRuler: true,
+                livingAppellation: "大唐制胜皇帝",
+                posthumousAppellation: "太宗文皇帝"),
+            "a living current emperor never displays a cached posthumous title");
+        Equal("太宗文皇帝", RulerAppellationRules.ResolveFamilyTreeRitualAppellation(
+                isAlive: false, isCurrentRuler: true,
+                livingAppellation: "大唐制胜皇帝",
+                posthumousAppellation: "太宗文皇帝"),
+            "a dead emperor never retains the living era appellation");
+        Equal("太宗文皇帝", RulerAppellationRules.ResolveFamilyTreeRitualAppellation(
+                isAlive: true, isCurrentRuler: false,
+                livingAppellation: "大唐制胜皇帝",
+                posthumousAppellation: "太宗文皇帝"),
+            "a living former ruler does not borrow the current ruler's era appellation");
+        Equal("大唐制胜皇帝", RulerAppellationRules.ResolveWindowRulerLabel(
+                pIsRepublic: false, pIsEmpireRank: true, pIsMandate: false,
+                pLivingAppellation: "大唐制胜皇帝",
+                pRepublicLabel: "元首", pMonarchyLabel: "国王",
+                pEmperorFallbackLabel: "皇帝"),
+            "the kingdom window shows a non-Mandate empire's full living appellation");
+        Equal("大唐制胜皇帝", RulerAppellationRules.ResolveWindowRulerLabel(
+                false, false, true, "大唐制胜皇帝", "元首", "国王", "皇帝"),
+            "the kingdom window keeps the Mandate full living appellation");
+        Equal("国王", RulerAppellationRules.ResolveWindowRulerLabel(
+                false, false, false, "", "元首", "国王", "皇帝"),
+            "the kingdom window keeps the ordinary monarchy label below empire rank");
+        Equal("鲁武伯", RulerAppellationRules.DeadRanked("鲁", "武", RulerRank.Bo),
+            "dead Bo keeps the correct Zhou rank");
+        Equal("太祖武皇帝", RulerAppellationRules.DeadEmperor("太祖", "武", false),
+            "an ordinary emperor uses one posthumous character");
+        Equal("太宗文成皇帝", RulerAppellationRules.DeadEmperor("太宗", "文成", true),
+            "a Mandate emperor uses two posthumous characters");
+        Equal("元首", RulerAppellationRules.LivingRepublic(),
+            "a republic is excluded from imperial naming");
+        Equal("宣祖", RulerAppellationRules.Retrospective("宣祖"),
+            "retrospective ancestors do not gain fabricated suffixes");
+
+        Equal(HeirTitleSelectionRules.TaiziKey,
+            HeirTitleSelectionRules.TitleKey(
+                isEmpireOrMandate: true, "direct"),
+            "an imperial hereditary successor is Taizi");
+        Equal(HeirTitleSelectionRules.ShiziKey,
+            HeirTitleSelectionRules.TitleKey(
+                isEmpireOrMandate: false, "direct"),
+            "a lower-rank hereditary successor is Shizi");
+        Equal(HeirTitleSelectionRules.LiuhouKey,
+            HeirTitleSelectionRules.TitleKey(
+                isEmpireOrMandate: true,
+                HeirTitleSelectionRules.MilitaryAcclaimMode),
+            "military acclaim keeps Liuhou even in an empire");
+        Equal(HeirTitleSelectionRules.SijunKey,
+            HeirTitleSelectionRules.TitleKey(
+                isEmpireOrMandate: true,
+                HeirTitleSelectionRules.CivilAcclaimMode),
+            "civil acclaim keeps Sijun even in an empire");
+
+        foreach (FamilyTreeProjectionChange change in new[]
+                 {
+                     FamilyTreeProjectionChange.RulerAccession,
+                     FamilyTreeProjectionChange.RankOrMandate,
+                     FamilyTreeProjectionChange.Era,
+                     FamilyTreeProjectionChange.DynastyOrStateName,
+                     FamilyTreeProjectionChange.Heir,
+                     FamilyTreeProjectionChange.LifeStatus,
+                     FamilyTreeProjectionChange.PosthumousTitle
+                 })
+            Equal(true, FamilyTreeProjectionRevisionRules.ShouldAdvance(change),
+                $"family-tree projection change {change} advances its dedicated revision");
+        Equal(false, FamilyTreeProjectionRevisionRules.ShouldAdvance(
+                FamilyTreeProjectionChange.None),
+            "an empty projection change does not invalidate the family tree");
+        long projectionRevision = FamilyTreeProjectionRevision.Current;
+        Equal(projectionRevision,
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.None),
+            "an empty family-tree projection change preserves the revision");
+        Equal(projectionRevision + 1L,
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.Era),
+            "a family-tree projection event advances its dedicated revision exactly once");
+        Equal(false, RulerAppellationRules.ShouldProjectLiving(
+                isXiaKingdom: false, usesXiaInstitutions: false,
+                isRebel: false, isRepublic: false),
+            "ordinary non-Xia monarchies keep the vanilla ruler row");
+        Equal(true, RulerAppellationRules.ShouldProjectLiving(
+                isXiaKingdom: false, usesXiaInstitutions: false,
+                isRebel: false, isRepublic: false,
+                isEmpireOrMandate: true),
+            "a non-Xia empire still receives the full living emperor appellation");
+        Equal(true, RulerAppellationRules.ShouldProjectLiving(
+                isXiaKingdom: true, usesXiaInstitutions: false,
+                isRebel: false, isRepublic: false),
+            "Xia monarchies receive ritual appellations");
+        Equal(true, RulerAppellationRules.ShouldProjectLiving(
+                isXiaKingdom: false, usesXiaInstitutions: false,
+                isRebel: false, isRepublic: true),
+            "AW republics retain the head-of-state appellation");
+        Equal("Qi King", RulerAppellationRules.ResolveLiveProjection(
+                "Qi", "Qi", "Qi King"),
+            "a current appellation cache can decorate the live state name");
+        Equal("Zhou", RulerAppellationRules.ResolveLiveProjection(
+                "Zhou", "Qi", "Qi King"),
+            "a stale appellation cache never overwrites a projected state name");
+        Equal("Northern Qi", RulerAppellationRules.ResolveLiveProjection(
+                "Northern Qi", "Qi", "Qi King"),
+            "a newly projected dispute qualifier bypasses the stale canonical cache");
+        Equal(false, XiaizedKingdomNamingRules.ShouldDisplayStateSuffix(
+                originalXia: false, xiaizationLevel: 4, maximumLevel: 5),
+            "a partially Xiaized foreign state does not receive a Xia state suffix");
+        Equal(true, XiaizedKingdomNamingRules.ShouldDisplayStateSuffix(
+                originalXia: false, xiaizationLevel: 5, maximumLevel: 5),
+            "a fully Xiaized foreign state retains its state suffix");
+        Equal(true, XiaizedKingdomNamingRules.ShouldDisplayStateSuffix(
+                originalXia: true, xiaizationLevel: 0, maximumLevel: 5),
+            "an original Xia state retains its state suffix at every level");
+        string suffixRulesSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "lineage",
+            "KingdomNameplateSuffixRules.cs"));
+        Equal(true, suffixRulesSource.Contains("ProjectName"),
+            "one idempotent projection owns all Xia state-name suffix rendering");
+        string nameplatePatchSource = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_NameplateTitlePatch.cs"));
+        Equal(true, nameplatePatchSource.Contains("GetProjectedStateName"),
+            "kingdom nameplates resolve their suffix even when the living-title cache is cold");
+        Equal("周国", KingdomNameplateSuffixRules.ProjectName(
+                "周", "国", pShouldDisplaySuffix: true),
+            "a Xia state receives its current title suffix");
+        Equal("周国", KingdomNameplateSuffixRules.ProjectName(
+                "周国", "国", pShouldDisplaySuffix: true),
+            "state-name suffix projection is idempotent");
+        Equal("周", KingdomNameplateSuffixRules.ProjectName(
+                "周", "国", pShouldDisplaySuffix: false),
+            "a partially Xiaized foreign state keeps its unsuffixed canonical name");
+
+        NameDecisionViewModel eraModel = NameDecisionViewModel.ForEra(
+            "周", "武德", politicalPoints: 30);
+        Equal("大周武德皇帝", eraModel.Preview,
+            "the era window previews the full living title");
+        Equal(true, eraModel.CanConfirm,
+            "a valid unused era enables confirmation");
+        eraModel.SetInput("Name");
+        Equal(false, eraModel.CanConfirm,
+            "an invalid placeholder disables confirmation");
+        Equal(true, eraModel.ErrorKey.Length > 0,
+            "the invalid input has an explicit error key");
+        eraModel.SetInput("永徽");
+        eraModel.ApplyBlockReason(EraChangeBlockReason.DuplicateName);
+        Equal("aw_title_error_duplicate_name", eraModel.ErrorKey,
+            "a duplicate era has a dedicated validation key");
+        Equal(false, eraModel.CanConfirm,
+            "a server-side block disables confirmation");
+        NameDecisionViewModel poorEraModel = NameDecisionViewModel.ForEra(
+            "周", "武德", politicalPoints: 29);
+        Equal("aw_title_error_insufficient_points", poorEraModel.ErrorKey,
+            "the era window reports insufficient political points before submission");
+
+        var reservations = new PoliticalPointReservationLedger();
+        Equal(true, reservations.TryReserve(kingdomId: 12, amount: 30,
+                available: 30, out long reservationId),
+            "thirty available political points can be reserved");
+        Equal(false, reservations.TryReserve(kingdomId: 12, amount: 30,
+                available: 60, out _),
+            "one kingdom cannot reserve the same political points twice");
+        Equal(true, reservations.TryCommit(reservationId,
+                out long reservedKingdomId, out int reservedAmount),
+            "a valid political reservation commits once");
+        Equal(12L, reservedKingdomId,
+            "the committed reservation retains its kingdom id");
+        Equal(30, reservedAmount,
+            "the committed reservation deducts exactly thirty points");
+        Equal(false, reservations.TryCommit(reservationId, out _, out _),
+            "a committed reservation cannot deduct points twice");
+        Equal(true, reservations.TryReserve(kingdomId: 12, amount: 30,
+                available: 30, out long releasedId),
+            "committing releases the kingdom reservation slot");
+        reservations.Release(releasedId);
+        reservations.Release(releasedId);
+        Equal(true, reservations.TryReserve(kingdomId: 12, amount: 30,
+                available: 30, out _),
+            "releasing a reservation is idempotent and changes no balance");
+
+        ShiBranchSeed cadet = ShiBranchRules.ResolveSeed(
+            currentShiId: 18, currentClanName: "赵", generatedClanName: "韩");
+        Equal(18L, cadet.ParentShiId, "cadet branch points to its direct parent");
+        Equal("赵", cadet.ClanName, "cadet branch keeps its parent Shi name");
+        Equal(false, cadet.RequiresGeneratedClanName,
+            "an existing Shi never rolls a replacement clan name");
+
+        ShiBranchSeed first = ShiBranchRules.ResolveSeed(
+            currentShiId: -1, currentClanName: "", generatedClanName: "司马");
+        Equal(-1L, first.ParentShiId, "a first Shi is a root branch");
+        Equal("司马", first.ClanName, "a first Shi uses the generated historical name");
+        Equal(false, first.RequiresGeneratedClanName,
+            "a supplied first-Shi name is immediately usable");
+
+        ShiBranchSeed missing = ShiBranchRules.ResolveSeed(
+            currentShiId: -1, currentClanName: "", generatedClanName: "");
+        Equal(true, missing.RequiresGeneratedClanName,
+            "a person without a Shi requests first-time generation");
+
+        Equal("邯郸赵氏", ShiBranchRules.BuildDisplayName("邯郸", "赵"),
+            "the branch display combines origin city and retained Shi");
+        Equal("赵氏", ShiBranchRules.BuildDisplayName("", "赵"),
+            "a missing origin city does not create placeholder text");
+
+        ShiBranchDisplayProjection rootProjection = ShiBranchRules.ResolveDisplayProjection(
+            currentShiId: 1, parentShiId: -1,
+            currentDisplay: "新秦姬氏", parentDisplay: "", rootDisplay: "新秦姬氏");
+        Equal("", rootProjection.BranchDisplay,
+            "a root Shi is not presented as its own cadet branch");
+        Equal("新秦姬氏", rootProjection.RootDisplay,
+            "a root Shi is presented once as the ancestral house");
+
+        ShiBranchDisplayProjection cadetProjection = ShiBranchRules.ResolveDisplayProjection(
+            currentShiId: 2, parentShiId: 1,
+            currentDisplay: "燕姬氏", parentDisplay: "新秦姬氏", rootDisplay: "新秦姬氏");
+        Equal("燕姬氏", cadetProjection.BranchDisplay,
+            "a real cadet Shi retains its branch display");
+        Equal("新秦姬氏", cadetProjection.ParentDisplay,
+            "a real cadet Shi retains its direct parent display");
+        Equal("新秦姬氏", cadetProjection.RootDisplay,
+            "a real cadet Shi retains its ancestral house display");
+
+        var parents = new Dictionary<long, long>
+        {
+            [30] = 20,
+            [20] = 10,
+            [10] = -1
+        };
+        SequenceEqual(new long[] { 20, 10 }, ShiBranchRules.TraceParents(
+                30, id => parents.TryGetValue(id, out long parent) ? parent : -1, 64),
+            "parent tracing reaches the root in order");
+
+        parents[10] = 30;
+        SequenceEqual(new long[] { 20, 10 }, ShiBranchRules.TraceParents(
+                30, id => parents.TryGetValue(id, out long parent) ? parent : -1, 64),
+            "parent tracing stops before a corrupt cycle");
+
+        AssertTitleLocales();
+    }
+
+    private static void AssertTitleLocales()
+    {
+        string root = Directory.GetCurrentDirectory();
+        while (!Directory.Exists(Path.Combine(root, "Locales")))
+        {
+            DirectoryInfo parent = Directory.GetParent(root);
+            if (parent == null)
+                throw new InvalidOperationException("cannot locate repository Locales directory");
+            root = parent.FullName;
+        }
+        string path = Path.Combine(root, "Locales", "aw3_titles.csv");
+        if (!File.Exists(path))
+            throw new InvalidOperationException("title locale file is missing");
+
+        var rows = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (string line in File.ReadAllLines(path).Skip(1))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            string[] columns = line.Split(',');
+            if (columns.Length < 4)
+                throw new InvalidOperationException("title locale row has fewer than four columns: " + line);
+            rows[columns[0]] = columns;
+        }
+        string[] required =
+        {
+            "aw_title_era_window", "aw_title_preview", "aw_title_era_candidates",
+            "aw_title_era_input", "aw_title_era_cost", "aw_title_confirm",
+            "aw_title_cancel", "aw_title_committing", "aw_ruler_appellation",
+            "aw_ruler_real_name", "aw_title_error_not_hereditary_emperor",
+            "aw_title_error_below_empire_rank", "aw_title_error_not_independent",
+            "aw_title_error_at_war", "aw_title_error_cooldown",
+            "aw_title_error_insufficient_points", "aw_title_error_invalid_name",
+            "aw_title_error_duplicate_name", "aw_title_error_archive_unavailable",
+            "aw_title_error_missing_shi", "aw_title_error_missing_reign",
+            "aw_title_error_persistence_failed", "aw_hist_title_awarded",
+            "aw_hist_title_accession_era", "aw_hist_title_voluntary_era",
+            "aw_hist_title_state_name", "aw_hist_title_retrospective",
+            "aw_hist_title_shi_branch"
+        };
+        foreach (string key in required)
+        {
+            if (!rows.TryGetValue(key, out string[] columns))
+                throw new InvalidOperationException("missing title locale key " + key);
+            for (int i = 1; i <= 3; i++)
+                if (string.IsNullOrWhiteSpace(columns[i]) || columns[i] == key)
+                    throw new InvalidOperationException(
+                        $"title locale {key} has no value in column {i}");
+        }
+    }
+}

@@ -1,0 +1,68 @@
+using System.Reflection;
+using AncientWarfare3.core.performance;
+
+internal static class SchedulerLoadSafetyRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static MethodInfo RequireMethod(Type type, string methodName)
+    {
+        MethodInfo method = type?.GetMethod(methodName,
+            BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                $"missing safety rule {type?.FullName ?? "<missing type>"}.{methodName}");
+        return method;
+    }
+
+    public static void Run()
+    {
+        Type rtsSchedulingMode = typeof(AWFrameSchedulerRules).Assembly.
+            GetType("AncientWarfare3.core.performance.ArmyRtsSchedulingMode");
+        PropertyInfo rtsSchedulingCurrent = rtsSchedulingMode?.GetProperty(
+            "Current", BindingFlags.Public | BindingFlags.Static);
+        if (rtsSchedulingCurrent == null)
+            throw new InvalidOperationException(
+                "RTS scheduling mode must expose its active runtime owner");
+        AWPerformanceSettings.UseAw3ArmyRtsScheduler = false;
+        Equal("Native", rtsSchedulingCurrent.GetValue(null).ToString(),
+            "the native ArmyManager owns RTS work while the AW3 scheduler switch is disabled");
+        AWPerformanceSettings.UseAw3ArmyRtsScheduler = true;
+        Equal("Aw3", rtsSchedulingCurrent.GetValue(null).ToString(),
+            "switching the RTS scheduler at runtime transfers ownership to AW3 authority cycles");
+
+        MethodInfo parallelRule = RequireMethod(
+            typeof(AWFrameSchedulerRules),
+            "ShouldParallelizeBatchRunner");
+        Equal(true, (bool)parallelRule.Invoke(null, new object[] { true, true }),
+            "actor batches retain configured worker parallelism");
+        Equal(false, (bool)parallelRule.Invoke(null, new object[] { true, false }),
+            "building batches remain on the main thread");
+        Equal(false, (bool)parallelRule.Invoke(null, new object[] { false, true }),
+            "global parallelism setting still disables worker parallelism");
+
+        Type historyRules = typeof(AWFrameSchedulerRules).Assembly.GetType(
+            "AncientWarfare3.core.lineage.HistoryWriteTimingRules");
+        MethodInfo historyRule = RequireMethod(historyRules, "ShouldRecord");
+        Equal(false, (bool)historyRule.Invoke(null, new object[] { true, true }),
+            "save reconstruction cannot emit live history");
+        Equal(false, (bool)historyRule.Invoke(null, new object[] { false, false }),
+            "unloaded worlds cannot emit live history");
+        Equal(true, (bool)historyRule.Invoke(null, new object[] { true, false }),
+            "live loaded worlds can emit history");
+
+        Type professionRules = typeof(AWFrameSchedulerRules).Assembly.GetType(
+            "AncientWarfare3.core.lineage.ActorProfessionLoadSafetyRules");
+        MethodInfo professionRule = RequireMethod(professionRules,
+            "ShouldBypassTransitionRestrictions");
+        Equal(true, (bool)professionRule.Invoke(null, new object[] { false }),
+            "an actor without a restored profession must bypass transition restrictions");
+        Equal(false, (bool)professionRule.Invoke(null, new object[] { true }),
+            "an initialized actor remains subject to transition restrictions");
+    }
+}

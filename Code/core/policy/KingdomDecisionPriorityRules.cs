@@ -2,6 +2,22 @@ namespace AncientWarfare3.core.policy
 {
     public static class KingdomDecisionPriorityRules
     {
+        public static bool ShouldUseGeneralDecisionSlot(string pDecisionId)
+        {
+            return pDecisionId != "aw_decision_fabricate_core";
+        }
+
+        public static bool ShouldApplyGeneralCooldown(string pDecisionId)
+        {
+            return pDecisionId != "aw_decision_title_upgrade";
+        }
+
+        public static bool ShouldReleaseFailedCompletion(bool isDecision,
+            bool effectApplied)
+        {
+            return isDecision && !effectApplied;
+        }
+
         public static int ScoreDecision(string pDecisionId, bool pCanRoyalExpansion,
             int pCityCount, bool pSlaveryEnabled, int pXiaizationScore, bool pMissingYearName)
         {

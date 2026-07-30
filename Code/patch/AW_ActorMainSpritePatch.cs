@@ -20,15 +20,48 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.calculateMainSprite))]
         public static bool CalculateMainSprite_Prefix(Actor __instance, ref Sprite __result)
         {
-            if (__instance?.data == null || !LineageService.IsXia(__instance)) return true;
-
-            if (TryCalculateSafe(__instance, out Sprite sprite))
+            if (__instance?.data == null ||
+                !LineageService.IsXia(__instance))
+                return true;
+            try
             {
-                __result = sprite;
-                return false;
+                if (TryCalculateSafe(__instance, out Sprite sprite))
+                {
+                    __result = sprite;
+                    return false;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogSuspiciousContainer(__instance,
+                    "safe_calculation_exception:" +
+                    exception.GetType().Name, null, null);
+                if (TryGetActorFallback(__instance, out Sprite fallback))
+                {
+                    __result = fallback;
+                    return false;
+                }
             }
 
             return true;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(Actor), nameof(Actor.calculateMainSprite))]
+        private static Exception CalculateMainSprite_Finalizer(
+            Actor __instance, ref Sprite __result, Exception __exception)
+        {
+            if (__exception == null) return null;
+            if (__instance?.data == null ||
+                !LineageService.IsXia(__instance))
+                return __exception;
+            LogSuspiciousContainer(__instance,
+                "render_exception:" + __exception.GetType().Name,
+                __instance.animation_container, null);
+            if (!TryGetActorFallback(__instance, out Sprite fallback))
+                return __exception;
+            __result = fallback;
+            return null;
         }
 
         private static bool TryCalculateSafe(Actor pActor, out Sprite pSprite)
@@ -53,14 +86,14 @@ namespace AncientWarfare3.patch
             catch (Exception e)
             {
                 LogSuspiciousContainer(pActor, "check_container_exception:" + e.GetType().Name, null, null);
-                return TryGetKnownXiaFallback(out pSprite);
+                return TryGetActorFallback(pActor, out pSprite);
             }
 
             AnimationContainerUnit container = pActor.animation_container;
             if (container == null)
             {
                 LogSuspiciousContainer(pActor, "container_null", null, null);
-                return TryGetKnownXiaFallback(out pSprite);
+                return TryGetActorFallback(pActor, out pSprite);
             }
 
             if (pActor.ai?.action != null && pActor.ai.action.force_animation)
@@ -83,7 +116,7 @@ namespace AncientWarfare3.patch
                     return true;
                 }
                 LogSuspiciousContainer(pActor, "dead_no_fallback", container, null);
-                return TryGetKnownXiaFallback(out pSprite);
+                return TryGetActorFallback(pActor, out pSprite);
             }
 
             ActorAnimation selected = SelectAnimation(pActor, container);
@@ -97,7 +130,7 @@ namespace AncientWarfare3.patch
             if (TryGetAnySprite(container, out pSprite)) return true;
 
             LogSuspiciousContainer(pActor, "no_sprite_in_container", container, selected);
-            return TryGetKnownXiaFallback(out pSprite);
+            return TryGetActorFallback(pActor, out pSprite);
         }
 
         private static ActorAnimation SelectAnimation(Actor pActor, AnimationContainerUnit pContainer)
@@ -194,6 +227,36 @@ namespace AncientWarfare3.patch
             if (sprites == null || sprites.Length == 0) return false;
             pSprite = sprites[0];
             return pSprite != null;
+        }
+
+        private static bool TryGetActorFallback(Actor pActor,
+            out Sprite pSprite)
+        {
+            pSprite = null;
+            if (TryGetFallback(pActor?.animation_container, out pSprite) ||
+                TryGetAnySprite(pActor?.animation_container, out pSprite))
+                return true;
+            try
+            {
+                string texturePath = pActor?.getUnitTexturePath();
+                if (!string.IsNullOrEmpty(texturePath))
+                {
+                    Sprite[] sprites = SpriteTextureLoader.getSpriteList(
+                        texturePath, true);
+                    if (sprites != null)
+                    {
+                        foreach (Sprite sprite in sprites)
+                        {
+                            if (sprite == null) continue;
+                            pSprite = sprite;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return LineageService.IsXia(pActor) &&
+                   TryGetKnownXiaFallback(out pSprite);
         }
 
         private static bool HasFrames(ActorAnimation pAnimation)

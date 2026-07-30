@@ -3,16 +3,31 @@ using System.Collections.Generic;
 
 namespace AncientWarfare3.core.schools
 {
+    public enum GuestOfficeSubmissionOutcome
+    {
+        Rejected = 0,
+        Queued = 1,
+        Completed = 2
+    }
+
     public readonly struct SchoolGuestOfficeRankCandidate
     {
         public SchoolGuestOfficeRankCandidate(long pActorId, float pScore)
+            : this(pActorId, pScore, pActing: false)
+        {
+        }
+
+        public SchoolGuestOfficeRankCandidate(long pActorId, float pScore,
+            bool pActing)
         {
             ActorId = pActorId;
             Score = pScore;
+            IsActing = pActing;
         }
 
         public long ActorId { get; }
         public float Score { get; }
+        public bool IsActing { get; }
     }
 
     public static class SchoolGuestOfficeRules
@@ -20,12 +35,18 @@ namespace AncientWarfare3.core.schools
         public const int MinTermYears = 8;
         public const int MaxTermYears = 20;
 
-        public static bool CanInvite(bool realScholar, bool alive, bool foreignHome,
+        public static bool CanInvite(bool realScholar, bool alive, bool adult,
             bool residenceInHost, bool available, bool serviceFree, bool forbidden,
             bool centralOfficeMale, bool reputationFit, bool officeFit)
         {
-            return realScholar && alive && foreignHome && residenceInHost && available &&
+            return realScholar && alive && adult && residenceInHost && available &&
                    serviceFree && !forbidden && centralOfficeMale && reputationFit && officeFit;
+        }
+
+        public static int AppointmentBudgetForHost(int pVacancyCount,
+            int pMaxPerHost)
+        {
+            return Math.Min(Math.Max(0, pVacancyCount), Math.Max(0, pMaxPerHost));
         }
 
         public static bool IsQualifiedTeacher(
@@ -79,10 +100,18 @@ namespace AncientWarfare3.core.schools
         public static bool IsPreferred(SchoolGuestOfficeRankCandidate pCandidate,
             SchoolGuestOfficeRankCandidate pCurrent)
         {
+            if (pCandidate.IsActing != pCurrent.IsActing)
+                return !pCandidate.IsActing;
             int scoreOrder = Comparer<float>.Default.Compare(pCandidate.Score,
                 pCurrent.Score);
             return scoreOrder > 0 || scoreOrder == 0 &&
                    pCandidate.ActorId < pCurrent.ActorId;
+        }
+
+        public static bool ReservesOffice(GuestOfficeSubmissionOutcome pOutcome)
+        {
+            return pOutcome == GuestOfficeSubmissionOutcome.Queued ||
+                   pOutcome == GuestOfficeSubmissionOutcome.Completed;
         }
 
         private static float Bound01(float pValue)

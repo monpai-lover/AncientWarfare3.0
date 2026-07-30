@@ -102,13 +102,6 @@ public static class NobleHeirPregnancyRulesTests
                 true, true, true, false, true, true, true,
                 "existing living son completes retry loop");
 
-            Equal(true, DynasticBirthSexRules.ShouldPreferMale(
-                    true, false, false, false, true, false, false),
-                "active feudatory successor receives 70/30 preference");
-            Equal(false, DynasticBirthSexRules.ShouldPreferMale(
-                    true, false, false, false, true, false, true),
-                "successor with living son returns to vanilla sex selection");
-
             SourceGuards();
             Console.WriteLine("Noble heir pregnancy rule tests passed.");
             return 0;

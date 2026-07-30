@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using AncientWarfare3.content.policies;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
@@ -24,7 +25,7 @@ namespace AncientWarfare3.ui.windows
         private const float MaxHeight = 650f;
         private const float ScrollMarginX = 42f;
         private const float ScrollMarginY = 58f;
-        private const float SummaryHeight = 78f;
+        private const float SummaryHeight = 112f;
         private const float CanvasTopGap = 10f;
         private const float CanvasLeftInset = 8f;
         private const float CanvasPadding = 24f;
@@ -34,6 +35,8 @@ namespace AncientWarfare3.ui.windows
         private static Sprite _whiteSprite;
         private readonly List<CourtActorNodeView> _nodePool = new List<CourtActorNodeView>();
         private readonly List<GameObject> _linkPool = new List<GameObject>();
+        private readonly Queue<CourtActorNodeView> _portraitRetries =
+            new Queue<CourtActorNodeView>();
         private Vector2 _windowSize = new Vector2(DefaultWidth, DefaultHeight);
         private RectTransform _canvasRect;
         private GameObject _dragSurface;
@@ -42,6 +45,13 @@ namespace AncientWarfare3.ui.windows
         private Text _summarySecondary;
         private Image _summaryFlagBackground;
         private Image _summaryFlagIcon;
+        private Button _kingdomBack;
+        private Button _civilServiceExamButton;
+        private Text _civilServiceExamText;
+        private TipButton _civilServiceExamTip;
+        private Button _householdButton;
+        private Text _householdText;
+        private TipButton _householdTip;
         private Text _centralSectionLabel;
         private Text _localSectionLabel;
         private Image _localSectionDivider;
@@ -54,11 +64,25 @@ namespace AncientWarfare3.ui.windows
 
         public static void Open(long pKingdomId)
         {
+            OpenInternal(pKingdomId, pRefreshImmediately: false);
+        }
+
+        public static void OpenAndRefresh(long pKingdomId)
+        {
+            OpenInternal(pKingdomId, pRefreshImmediately: true);
+        }
+
+        private static void OpenInternal(long pKingdomId,
+            bool pRefreshImmediately)
+        {
             _kingdomId = pKingdomId;
             if (Instance == null) CreateAndInit(AW_LineageWindowIds.COURT);
             if (Instance != null) Instance._resetCanvasOnRefresh = true;
+            bool wasCurrent = ScrollWindow.isCurrentWindow(AW_LineageWindowIds.COURT);
             AW_LineageWindowIds.SafeShow(AW_LineageWindowIds.COURT,
                 () => { if (Instance != null) Instance.Refresh(); });
+            if (pRefreshImmediately && !wasCurrent && Instance != null)
+                Instance.Refresh();
         }
 
         protected override void Init()
@@ -69,6 +93,25 @@ namespace AncientWarfare3.ui.windows
         public override void OnNormalEnable()
         {
             Refresh();
+        }
+
+        private void Update()
+        {
+            if (!isActiveAndEnabled || _portraitRetries.Count == 0) return;
+            RetryMissingPortraits(PortraitsPerFrame);
+        }
+
+        private void RetryMissingPortraits(int pBudget)
+        {
+            if (pBudget <= 0 || FamilyTreeNodeView.GetAvatarPrefab() == null) return;
+            int count = Math.Min(pBudget, _portraitRetries.Count);
+            while (count-- > 0)
+            {
+                CourtActorNodeView node = _portraitRetries.Dequeue();
+                if (node == null || !node.gameObject.activeSelf || !node.NeedsPortrait)
+                    continue;
+                if (!node.TryEnsurePortrait()) _portraitRetries.Enqueue(node);
+            }
         }
 
         private void ConfigureWindow()
@@ -155,6 +198,24 @@ namespace AncientWarfare3.ui.windows
             EnsureSummaryFlag(summary.transform);
             _summaryPrimary = EnsureText(summary.transform, "Primary", 11, TextAnchor.UpperLeft);
             _summarySecondary = EnsureText(summary.transform, "Secondary", 9, TextAnchor.UpperLeft);
+            _kingdomBack = EnsureButton(summary.transform, "BackToKingdom",
+                AW_L10n.Text("aw_back_to_kingdom", "Back to Kingdom"),
+                BackToKingdom);
+            _civilServiceExamButton = EnsureButton(summary.transform,
+                "CivilServiceExam", "", OpenCivilServiceExam);
+            _civilServiceExamText = _civilServiceExamButton.transform
+                .Find("Text")?.GetComponent<Text>();
+            _civilServiceExamTip =
+                _civilServiceExamButton.GetComponent<TipButton>() ??
+                _civilServiceExamButton.gameObject.AddComponent<TipButton>();
+            _civilServiceExamTip.type = AW_RawTooltip.TYPE;
+            _householdButton = EnsureButton(summary.transform,
+                "RulerHousehold", "", OpenRulerHousehold);
+            _householdText = _householdButton.transform.Find("Text")
+                ?.GetComponent<Text>();
+            _householdTip = _householdButton.GetComponent<TipButton>() ??
+                _householdButton.gameObject.AddComponent<TipButton>();
+            _householdTip.type = AW_RawTooltip.TYPE;
 
             Transform existingSurface = ContentTransform.Find("CourtDragSurface");
             _dragSurface = existingSurface != null
@@ -198,8 +259,16 @@ namespace AncientWarfare3.ui.windows
                 _summaryRect.pivot = new Vector2(0f, 1f);
                 _summaryRect.anchoredPosition = Vector2.zero;
                 _summaryRect.sizeDelta = new Vector2(pContentWidth, SummaryHeight);
-                LayoutSummaryText(_summaryPrimary, 44f, 4f, pContentWidth - 52f, 25f);
-                LayoutSummaryText(_summarySecondary, 44f, 29f, pContentWidth - 52f, 45f);
+                LayoutSummaryText(_summaryPrimary, 44f, 4f,
+                    Mathf.Max(1f, pContentWidth - 294f), 25f);
+                LayoutSummaryText(_summarySecondary, 44f, 29f,
+                    pContentWidth - 52f, 79f);
+                LayoutSummaryButton(_kingdomBack,
+                    Mathf.Max(44f, pContentWidth - 84f), 4f, 76f, 23f);
+                LayoutSummaryButton(_civilServiceExamButton,
+                    Mathf.Max(44f, pContentWidth - 166f), 4f, 76f, 23f);
+                LayoutSummaryButton(_householdButton,
+                    Mathf.Max(44f, pContentWidth - 248f), 4f, 76f, 23f);
             }
             RectTransform surface = _dragSurface?.GetComponent<RectTransform>();
             if (surface != null)
@@ -284,15 +353,30 @@ namespace AncientWarfare3.ui.windows
                 ? AW_L10n.Text("aw_government_republic", "Republic")
                 : AW_L10n.Text("aw_government_monarchy", "Monarchy");
             string tier = TierName(CourtService.ResolveTier(pKingdom));
+            string institution = CourtInstitutionService.InstitutionName(pKingdom);
             _summaryPrimary.color = KingdomColor(pKingdom);
-            _summaryPrimary.text = pKingdom.name + "  |  " + government + "  |  " + tier + "  |  " +
+            _summaryPrimary.text = pKingdom.name + "  |  " + government + "  |  " +
+                                   institution + " · " + tier + "  |  " +
                                    AW_L10n.Text("aw_court_efficiency", "Court Efficiency") + " " +
                                    Mathf.FloorToInt(pSnapshot.efficiency);
             string schools = SchoolName(pSnapshot.dominant_school);
             if (!string.IsNullOrEmpty(pSnapshot.secondary_school))
                 schools += " / " + SchoolName(pSnapshot.secondary_school);
-            _summarySecondary.text = AW_L10n.Text("aw_court_dominant_school", "Dominant Schools") + ": " +
-                                     schools + "\n" +
+            string aristocraticGroups = AristocraticGroupSummary(pKingdom);
+            string institutionEffects =
+                CourtInstitutionService.EffectSummary(pKingdom);
+            string politicalPoints = AW_L10n.Text(
+                                         "aw_inheritance_political_points",
+                                         "Political points") + ": " +
+                                     KingdomPolicyService.GetPoliticalPoints(
+                                         pKingdom).ToString("0.#");
+            _summarySecondary.text = politicalPoints + "\n" +
+                                     AW_L10n.Text(
+                                          "aw_court_institution_effects",
+                                          "Institution Effects") + ": " +
+                                     institutionEffects + "\n" +
+                                     AW_L10n.Text("aw_court_dominant_school", "Dominant Schools") + ": " +
+                                     schools + "\n" + aristocraticGroups + "\n" +
                                      AW_L10n.Text("aw_court_direction_livelihood", "Livelihood") + " " +
                                      Percent(pSnapshot.livelihood) + "  " +
                                      AW_L10n.Text("aw_school_direction_war", "War") + " " +
@@ -305,8 +389,94 @@ namespace AncientWarfare3.ui.windows
                                      Percent(pSnapshot.order) + "  " +
                                      AW_L10n.Text("aw_school_direction_commerce", "Commerce") + " " +
                                      Percent(pSnapshot.commerce) + "  " +
-                                     AW_L10n.Text("aw_school_direction_technology", "Technology") + " " +
-                                     Percent(pSnapshot.technology);
+                                      AW_L10n.Text("aw_school_direction_technology", "Technology") + " " +
+                                      Percent(pSnapshot.technology);
+            UpdateCivilServiceExamEntry(pKingdom);
+            UpdateHouseholdEntry(pKingdom);
+        }
+
+        private void UpdateHouseholdEntry(Kingdom pKingdom)
+        {
+            if (_householdButton == null) return;
+            bool republic = RepublicGovernmentService.IsRepublic(pKingdom);
+            _householdButton.gameObject.SetActive(!republic);
+            if (republic) return;
+            string label = AW_L10n.Text("aw_household_button", "Household");
+            if (_householdText != null) _householdText.text = label;
+            if (_householdTip != null)
+                _householdTip.hoverAction = () => Tooltip.show(
+                    _householdButton.gameObject, AW_RawTooltip.TYPE,
+                    new TooltipData
+                    {
+                        tip_name = label,
+                        tip_description = AW_L10n.Text(
+                            "aw_household_button_desc",
+                            "View the ruler's principal wife and consorts.")
+                    });
+        }
+
+        private void UpdateCivilServiceExamEntry(Kingdom pKingdom)
+        {
+            if (_civilServiceExamButton == null) return;
+            _civilServiceExamButton.gameObject.SetActive(true);
+            bool hasNineRank = CourtService.HasNineRankSystem(pKingdom);
+            bool hasExamTechnology = KingdomPolicyService.IsCompleted(
+                pKingdom, PolicyNodeKind.Tech,
+                CivilServiceQualificationService.TechnologyId);
+            bool unlocked = hasNineRank && hasExamTechnology;
+            _civilServiceExamButton.interactable = unlocked;
+            string modeKey = CivilServiceExamReadModel.ModeLocalizationKey(
+                pKingdom);
+            string label = AW_L10n.Text(modeKey, "Examination");
+            if (_civilServiceExamText != null)
+                _civilServiceExamText.text = label;
+            AW_UIStyle.ApplyButton(
+                _civilServiceExamButton.GetComponent<Image>(),
+                unlocked ? .96f : .48f);
+
+            string description = !hasNineRank
+                ? AW_L10n.Text(
+                    "aw_civil_service_exam_locked_nine_rank",
+                    "Requires the Nine-Rank System.")
+                : !hasExamTechnology
+                    ? AW_L10n.Text(
+                        "aw_civil_service_exam_locked_policy",
+                        "Requires Civil Service Examinations research.")
+                    : AW_L10n.Text("aw_civil_service_exam_entry_desc",
+                        "Open the current and historical examination rolls.");
+            _civilServiceExamTip.enabled = true;
+            _civilServiceExamTip.hoverAction = () => Tooltip.show(
+                _civilServiceExamButton.gameObject, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = label,
+                    tip_description = description
+                });
+        }
+
+        private static string AristocraticGroupSummary(Kingdom pKingdom)
+        {
+            IReadOnlyList<CourtAristocraticGroup> groups =
+                CourtAristocraticGroupService.GetCachedGroups(pKingdom);
+            string label = AW_L10n.Text("aw_court_aristocratic_groups",
+                "Ministerial Clans");
+            if (groups.Count == 0)
+                return label + ": " + AW_L10n.Text(
+                    "aw_court_aristocratic_groups_none",
+                    "No established ministerial clan");
+            string format = AW_L10n.Text("aw_court_aristocratic_group_item",
+                "{0} clan P{1}·{2}");
+            return label + ": " + string.Join("  ", groups.Select(group =>
+                string.Format(format, ShiDisplayName(group.ShiName),
+                    group.Power, group.MemberCount)));
+        }
+
+        private static string ShiDisplayName(string pShiName)
+        {
+            string name = (pShiName ?? "").Trim();
+            return name.EndsWith("氏", StringComparison.Ordinal)
+                ? name.Substring(0, name.Length - 1)
+                : name;
         }
 
         private CourtActorNodeView GetNode(int pIndex)
@@ -336,6 +506,7 @@ namespace AncientWarfare3.ui.windows
                             pNodes[index].X + pOffset.x, pNodes[index].Y + pOffset.y);
                         view.Bind(pNodes[index], pKingdom);
                         view.gameObject.SetActive(true);
+                        if (view.NeedsPortrait) _portraitRetries.Enqueue(view);
                     }
                 }
                 finally
@@ -397,6 +568,7 @@ namespace AncientWarfare3.ui.windows
 
         private void HideNodesAndLinks()
         {
+            _portraitRetries.Clear();
             foreach (CourtActorNodeView node in _nodePool)
                 if (node != null) node.gameObject.SetActive(false);
             foreach (GameObject link in _linkPool)
@@ -510,6 +682,57 @@ namespace AncientWarfare3.ui.windows
             return text;
         }
 
+        private static Button EnsureButton(Transform pParent, string pName,
+            string pLabel, Action pAction)
+        {
+            Transform existing = pParent.Find(pName);
+            GameObject obj = existing != null
+                ? existing.gameObject
+                : new GameObject(pName, typeof(RectTransform), typeof(Image),
+                    typeof(Button), typeof(TipButton));
+            if (existing == null) obj.transform.SetParent(pParent, false);
+            if (obj.GetComponent<TipButton>() == null)
+                obj.AddComponent<TipButton>();
+            AW_UIStyle.ApplyButton(obj.GetComponent<Image>(), 0.96f);
+            Button button = obj.GetComponent<Button>();
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => pAction?.Invoke());
+            Text label = EnsureText(obj.transform, "Text", 8,
+                TextAnchor.MiddleCenter);
+            label.text = pLabel ?? "";
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.offsetMin = new Vector2(3f, 1f);
+            label.rectTransform.offsetMax = new Vector2(-3f, -1f);
+            return button;
+        }
+
+        private static void LayoutSummaryButton(Button pButton, float pX,
+            float pY, float pWidth, float pHeight)
+        {
+            if (pButton == null) return;
+            RectTransform rect = pButton.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(pX, -pY);
+            rect.sizeDelta = new Vector2(pWidth, pHeight);
+        }
+
+        private void BackToKingdom()
+        {
+            AW_LineageWindowIds.ShowKingdom(_kingdomId);
+        }
+
+        private void OpenCivilServiceExam()
+        {
+            CivilServiceExamWindow.Open(_kingdomId);
+        }
+
+        private void OpenRulerHousehold()
+        {
+            RulerHouseholdWindow.Open(_kingdomId);
+        }
+
         private void EnsureSummaryFlag(Transform pParent)
         {
             Transform existing = pParent.Find("KingdomFlag");
@@ -577,8 +800,10 @@ namespace AncientWarfare3.ui.windows
                     return AW_L10n.Text("aw_court_tier_sanshengliubu", "Three Departments and Six Ministries");
                 case CourtTier.SanGongJiuQing:
                     return AW_L10n.Text("aw_court_tier_sangongjiuqing", "Three Excellencies and Nine Ministers");
+                case CourtTier.EasternZhou:
+                    return AW_L10n.Text("aw_court_tier_easternzhou", "Eastern Zhou Six Ministers");
                 default:
-                    return AW_L10n.Text("aw_court_button_primitive", "Primitive Council");
+                    return AW_L10n.Text("aw_court_button_locked", "Court Locked");
             }
         }
 

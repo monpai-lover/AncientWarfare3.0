@@ -22,7 +22,7 @@ namespace AncientWarfare3.core.db
     {
         public static List<LineageArchiveIndexSpec> GetRequiredIndexes()
         {
-            return new List<LineageArchiveIndexSpec>
+            var result = new List<LineageArchiveIndexSpec>
             {
                 Index("idx_FamilyEdge_child_slot", FamilyEdgeTableItem.GetTableName(),
                     "CHILD_ID, PARENT_SLOT"),
@@ -41,6 +41,9 @@ namespace AncientWarfare3.core.db
                     "CITY_ID, IS_ALIVE, BIRTH_TIME, ID"),
                 Index("idx_ActorArchive_kingdom_alive_birth", ActorArchiveTableItem.GetTableName(),
                     "KINGDOM_ID, IS_ALIVE, BIRTH_TIME, ID"),
+                Index("idx_ActorArchive_kingdom_alive_status_id",
+                    ActorArchiveTableItem.GetTableName(),
+                    "KINGDOM_ID, IS_ALIVE, STATUS, ID"),
                 Index("idx_ActorArchive_original_clan", ActorArchiveTableItem.GetTableName(),
                     "ORIGINAL_CLAN_ID, IS_ALIVE, BIRTH_TIME, ID"),
 
@@ -96,11 +99,17 @@ namespace AncientWarfare3.core.db
                     "DEFENDER_KINGDOM_ID, START_TIME, END_TIME"),
                 Index("idx_PosthumousTitle_shi_kind", PosthumousTitleTableItem.GetTableName(),
                     "SHI_ID, TITLE_KIND, DECIDED_TIME, RECORD_ID"),
+                Index("idx_PosthumousTitle_kingdom_kind_time",
+                    PosthumousTitleTableItem.GetTableName(),
+                    "KINGDOM_ID, TITLE_KIND, DECIDED_TIME, RECORD_ID"),
                 Index("uq_PosthumousTitle_reign", PosthumousTitleTableItem.GetTableName(),
                     "REIGN_ID", "REIGN_ID>=0", pUnique: true),
                 Index("uq_PosthumousTitle_retrospective_actor",
                     PosthumousTitleTableItem.GetTableName(),
                     "SHI_ID, ACTOR_ID", "IS_RETROSPECTIVE=1", pUnique: true),
+                Index("uq_PosthumousTitle_conferred_actor_kingdom",
+                    PosthumousTitleTableItem.GetTableName(),
+                    "KINGDOM_ID, ACTOR_ID", "TITLE_KIND='conferred'", pUnique: true),
                 Index("uq_DynastyTitleRegistry_value", DynastyTitleRegistryTableItem.GetTableName(),
                     "SHI_ID, TITLE_TYPE, TITLE_VALUE, CYCLE_NO", pUnique: true),
                 Index("idx_DynastyTitleRegistry_shi_kind",
@@ -119,6 +128,35 @@ namespace AncientWarfare3.core.db
                     "SOURCE_KINGDOM_ID, TARGET_CITY_ID, ACTIVE, COMPLETED"),
                 Index("idx_WarProject_source_target_active", WarProjectTableItem.GetTableName(),
                     "SOURCE_KINGDOM_ID, TARGET_KINGDOM_ID, ACTIVE, COMPLETED"),
+                Index("idx_WarGoal_war_open_city", WarGoalTableItem.GetTableName(),
+                    "WAR_ID, RESOLVED, TARGET_CITY_ID, WAR_GOAL_ID"),
+                Index("idx_WarGoal_war_order", WarGoalTableItem.GetTableName(),
+                    "WAR_ID, POSITION, WAR_GOAL_ID"),
+                Index("idx_WarPeaceProposal_requester_status",
+                    WarPeaceSettlementProposalTableItem.GetTableName(),
+                    "REQUESTER_KINGDOM_ID, RECOVERY_ATTEMPTS, STATUS, PROPOSAL_ID"),
+                Index("idx_WarPeaceProposal_responder_status",
+                    WarPeaceSettlementProposalTableItem.GetTableName(),
+                    "RESPONDER_KINGDOM_ID, RECOVERY_ATTEMPTS, STATUS, PROPOSAL_ID"),
+                Index("idx_WarPeaceProposal_war_status",
+                    WarPeaceSettlementProposalTableItem.GetTableName(),
+                    "WAR_ID, STATUS, PROPOSAL_ID"),
+                Index("idx_WarParticipantEntry_war_kingdom_active",
+                    WarParticipantEntrySourceTableItem.GetTableName(),
+                    "WAR_ID, KINGDOM_ID, ACTIVE, CREATED_TIME, ENTRY_ID"),
+                Index("uq_WarParticipantEntry_active_source",
+                    WarParticipantEntrySourceTableItem.GetTableName(),
+                    "WAR_ID, KINGDOM_ID, SOURCE_KIND, SOURCE_KINGDOM_ID",
+                    "ACTIVE=1", pUnique: true),
+                Index("idx_WarPeaceParticipant_proposal_included",
+                    WarPeaceSettlementParticipantTableItem.GetTableName(),
+                    "PROPOSAL_ID, INCLUDED_IN_EXIT_GROUP, KINGDOM_ID"),
+                Index("uq_WarPeaceParticipant_proposal_kingdom",
+                    WarPeaceSettlementParticipantTableItem.GetTableName(),
+                    "PROPOSAL_ID, KINGDOM_ID", pUnique: true),
+                Index("idx_WarPeaceTerm_proposal_position",
+                    WarPeaceSettlementTermTableItem.GetTableName(),
+                    "PROPOSAL_ID, POSITION, TERM_ID"),
 
                 Index("idx_MandateCoreCity_kingdom_city_active", MandateCoreCityTableItem.GetTableName(),
                     "ORIGINAL_KINGDOM_ID, CITY_ID, ACTIVE"),
@@ -155,6 +193,15 @@ namespace AncientWarfare3.core.db
                     "CITY_ID", "ACTIVE=1", pUnique: true),
                 Index("idx_FeudatoryCity_feudatory_active", FeudatoryCityTableItem.GetTableName(),
                     "FEUDATORY_ID, ACTIVE, CITY_ID"),
+                Index("uq_Enfeoffment_actor_active",
+                    EnfeoffmentTableItem.GetTableName(), "ACTOR_ID",
+                    "ACTIVE=1", pUnique: true),
+                Index("uq_Enfeoffment_title_active",
+                    EnfeoffmentTableItem.GetTableName(), "TITLE_NAME",
+                    "ACTIVE=1 AND TITLE_NAME<>''", pUnique: true),
+                Index("idx_Enfeoffment_kingdom_active",
+                    EnfeoffmentTableItem.GetTableName(),
+                    "KINGDOM_ID, ACTIVE, NOBLE_RANK, ACTOR_ID"),
 
                 Index("idx_KingdomCourtState_kingdom", KingdomCourtStateTableItem.GetTableName(),
                     "KINGDOM_ID"),
@@ -167,6 +214,29 @@ namespace AncientWarfare3.core.db
                 Index("idx_CourtOfficer_actor_layer_active_unique",
                     CourtOfficerTableItem.GetTableName(), "ACTOR_ID, LAYER", "ACTIVE=1",
                     pUnique: true),
+                Index("idx_GeneralState_kingdom_actor",
+                    GeneralStateTableItem.GetTableName(), "KINGDOM_ID, ACTOR_ID"),
+                Index("idx_Enfeoffment_kingdom_actor_time",
+                    EnfeoffmentTableItem.GetTableName(),
+                    "KINGDOM_ID, ACTOR_ID, START_TIME, GRANT_ID"),
+                Index("idx_OfficialCareerState_kingdom_actor",
+                    OfficialCareerStateTableItem.GetTableName(),
+                    "KINGDOM_ID, ACTOR_ID"),
+                Index("uq_CivilServiceExamSession_kingdom_cycle",
+                    CivilServiceExamSessionTableItem.GetTableName(),
+                    "KINGDOM_ID, CYCLE_YEAR", pUnique: true),
+                Index("idx_CivilServiceExamSession_status_due",
+                    CivilServiceExamSessionTableItem.GetTableName(),
+                    "STATUS, NEXT_DUE_WORLD_DAY, ID"),
+                Index("uq_CivilServiceExamCandidate_session_actor",
+                    CivilServiceExamCandidateTableItem.GetTableName(),
+                    "SESSION_ID, ACTOR_ID", pUnique: true),
+                Index("idx_CivilServiceExamCandidate_session_id",
+                    CivilServiceExamCandidateTableItem.GetTableName(),
+                    "SESSION_ID, ID"),
+                Index("idx_CivilServiceExamCandidate_actor_kingdom",
+                    CivilServiceExamCandidateTableItem.GetTableName(),
+                    "ACTOR_ID, KINGDOM_ID, QUALIFICATION, UPDATED_TIME"),
                 Index("idx_CourtOfficer_central_host_office_unique",
                     CourtOfficerTableItem.GetTableName(), "KINGDOM_ID, LAYER, OFFICE_ID",
                     "ACTIVE=1 AND LAYER='central'", pUnique: true),
@@ -189,6 +259,10 @@ namespace AncientWarfare3.core.db
                 Index("idx_SchoolAffiliation_service",
                     SchoolAffiliationTableItem.GetTableName(),
                     "SERVICE_KINGDOM_ID, SERVICE_END_YEAR, ACTOR_ID"),
+                Index("idx_SchoolAffiliation_exam_travel",
+                    SchoolAffiliationTableItem.GetTableName(),
+                    "LIFECYCLE_STATE, SERVICE_KINGDOM_ID, " +
+                    "HOME_KINGDOM_ID, ACTOR_ID"),
                 Index("idx_SchoolInstitution_city_active",
                     SchoolInstitutionTableItem.GetTableName(),
                     "CITY_ID, ACTIVE, SCHOOL_ID, CONDITION"),
@@ -220,6 +294,18 @@ namespace AncientWarfare3.core.db
                     SchoolEventTableItem.GetTableName(),
                     "KINGDOM_ID, EVENT_YEAR, EVENT_ID", "EVENT_TYPE='persuasion'")
             };
+            foreach (DiplomacyActionIndexSpec spec in
+                     DiplomacyActionIndexRules.GetRequiredIndexes())
+                result.Add(Index(spec.Name, spec.Table, spec.Columns,
+                    spec.Where, spec.Unique));
+            foreach (SuccessionDisputeIndexSpec spec in
+                     SuccessionDisputeIndexRules.GetRequiredIndexes())
+                result.Add(Index(spec.Name, spec.Table, spec.Columns,
+                    spec.Where, spec.Unique));
+            foreach (CourtDispositionIndexSpec spec in
+                     CourtDispositionIndexRules.GetRequiredIndexes())
+                result.Add(Index(spec.Name, spec.Table, spec.Columns));
+            return result;
         }
 
         public static bool ContainsIndex(IEnumerable<LineageArchiveIndexSpec> pSpecs, string pName)

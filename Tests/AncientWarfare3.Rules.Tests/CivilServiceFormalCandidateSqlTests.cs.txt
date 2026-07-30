@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceFormalCandidateSqlTests
+{
+    public static void Run()
+    {
+        InvalidRecentGraduatesCannotConsumeTheResultLimit();
+        SlaveGraduatesCannotConsumeTheResultLimit();
+        JurenCannotEnterTheFormalAppointmentRoster();
+    }
+
+    private static void InvalidRecentGraduatesCannotConsumeTheResultLimit()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Candidate (ID INTEGER,ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT," +
+            "ENTRY_BONUS INTEGER)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,KINGDOM_ID INTEGER," +
+            "CYCLE_YEAR INTEGER,STATUS TEXT)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER," +
+            "SEX INTEGER,STATUS TEXT,KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER,LAYER TEXT," +
+            "ACTIVE INTEGER)");
+
+        Execute(db, "INSERT INTO Session VALUES (1,7,1,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(1,900,7,1,'jinshi',1)");
+        Execute(db, "INSERT INTO Archive VALUES " +
+            "(900,1,0,'common_lineage',7)");
+
+        for (int index = 0; index < 400; index++)
+        {
+            long actorId = 1000 + index;
+            long sessionId = 100 + index;
+            Execute(db, "INSERT INTO Session VALUES (" + sessionId +
+                ",7," + (100 + index) + ",'completed')");
+            Execute(db, "INSERT INTO Candidate VALUES (" + actorId + "," +
+                actorId + ",7," + sessionId + ",'jinshi',99)");
+            Execute(db, "INSERT INTO Archive VALUES (" + actorId +
+                ",0,0,'common_lineage',7)");
+        }
+
+        Execute(db, "INSERT INTO Session VALUES (999,7,999,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(999,800,7,999,'jinshi',100)");
+        Execute(db, "INSERT INTO Archive VALUES " +
+            "(800,1,0,'common_lineage',7)");
+        Execute(db, "INSERT INTO Officer VALUES (800,'central',1)");
+
+        List<long> result = CivilServiceFormalCandidateQuery.Load(db,
+            "Candidate", "Session", "Archive", "Officer",
+            pKingdomId: 7L, pLimit: 1);
+
+        Equal(1, result.Count, "one valid graduate is returned");
+        Equal(900L, result[0],
+            "dead and already-serving graduates cannot consume the SQL limit");
+    }
+
+    private static void SlaveGraduatesCannotConsumeTheResultLimit()
+    {
+        using var db = OpenDatabase();
+
+        Execute(db, "INSERT INTO Session VALUES (1,7,1,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(1,900,7,1,'jinshi',1)");
+        Execute(db, "INSERT INTO Archive VALUES " +
+            "(900,1,0,'common_lineage',7)");
+
+        for (int index = 0; index < 400; index++)
+        {
+            long actorId = 2000 + index;
+            long sessionId = 100 + index;
+            Execute(db, "INSERT INTO Session VALUES (" + sessionId +
+                ",7," + (100 + index) + ",'completed')");
+            Execute(db, "INSERT INTO Candidate VALUES (" + actorId + "," +
+                actorId + ",7," + sessionId + ",'jinshi',99)");
+            Execute(db, "INSERT INTO Archive VALUES (" + actorId +
+                ",1,0,'slave_lineage',7)");
+        }
+
+        List<long> result = CivilServiceFormalCandidateQuery.Load(db,
+            "Candidate", "Session", "Archive", "Officer",
+            pKingdomId: 7L, pLimit: 1);
+
+        Equal(1, result.Count,
+            "one valid graduate remains available after slave filtering");
+        Equal(900L, result[0],
+            "slave graduates cannot hide an appointable graduate");
+    }
+
+    private static void JurenCannotEnterTheFormalAppointmentRoster()
+    {
+        using var db = OpenDatabase();
+        Execute(db, "INSERT INTO Session VALUES " +
+            "(1,7,100,'completed'),(2,7,99,'completed')");
+        Execute(db, "INSERT INTO Candidate VALUES " +
+            "(1,700,7,1,'juren',99),(2,701,7,2,'gongshi',1)");
+        Execute(db, "INSERT INTO Archive VALUES " +
+            "(700,1,0,'common_lineage',7)," +
+            "(701,1,0,'common_lineage',7)");
+
+        List<long> result = CivilServiceFormalCandidateQuery.Load(db,
+            "Candidate", "Session", "Archive", "Officer",
+            pKingdomId: 7L, pLimit: 1);
+
+        Equal(1, result.Count, "one formally qualified graduate is returned");
+        Equal(701L, result[0],
+            "juren remains an examination credential, not an office credential");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Candidate (ID INTEGER,ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT," +
+            "ENTRY_BONUS INTEGER)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,KINGDOM_ID INTEGER," +
+            "CYCLE_YEAR INTEGER,STATUS TEXT)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER," +
+            "SEX INTEGER,STATUS TEXT,KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER,LAYER TEXT," +
+            "ACTIVE INTEGER)");
+        return db;
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+}

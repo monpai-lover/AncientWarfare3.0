@@ -1,0 +1,298 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class OfficialCareerCrossLayerPersistenceSqlTests
+{
+    public static void Run()
+    {
+        FormalPromotionClosesEveryPriorFormalPostAcrossLayers();
+        FormalPromotionClosesConflictingActingPosts();
+        FormalPromotionFromActingClosesTheActingPost();
+        ActingAppointmentRejectsExistingFormalPost();
+        FormalAppointmentBecomesAuthoritativeAfterActingEnd();
+        FailedPromotionRestoresEveryPriorFormalPost();
+        LegacyRepairKeepsNewestFormalPostAndClosesConflictingActingPost();
+        RuntimeRestoreRunsLegacyRepairBeforeProjectionCaches();
+    }
+
+    private static void FormalPromotionClosesEveryPriorFormalPostAcrossLayers()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "city", "governor", pActing: false);
+        InsertOfficer(db, 12, "feudatory", "chief_clerk", pActing: false);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence.
+            Appoint(db, CentralAppointment());
+
+        True(result.IsCommitted, "cross-layer promotion commits");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=1 AND IFNULL(IS_ACTING,0)=0"),
+            "only the promoted formal post remains active");
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=0 AND END_REASON='reassigned'"),
+            "every prior formal post closes as reassigned");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=1 AND LAYER='central' AND " +
+            "OFFICE_ID='chancellor'"),
+            "the central promotion becomes authoritative");
+    }
+
+    private static void FormalPromotionClosesConflictingActingPosts()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "city", "governor", pActing: false);
+        InsertOfficer(db, 12, "city", "acting_governor", pActing: true);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence.
+            Appoint(db, CentralAppointment());
+
+        True(result.IsCommitted, "formal promotion with acting post commits");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=12 AND ACTIVE=0 AND IS_ACTING=1 AND " +
+            "END_REASON='reassigned'"),
+            "formal promotion closes the conflicting acting projection");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=11 AND ACTIVE=0 AND END_REASON='reassigned'"),
+            "formal city post still closes");
+    }
+
+    private static void ActingAppointmentRejectsExistingFormalPost()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "central", "chancellor", pActing: false);
+        OfficialCareerAppointment acting = CentralAppointment();
+        acting.Layer = "city";
+        acting.OfficeId = "governor";
+        acting.CityId = 3;
+        acting.IsActing = true;
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence.
+            Appoint(db, acting);
+
+        False(result.IsCommitted,
+            "an acting appointment cannot cover an active formal office");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=11 AND ACTIVE=1 AND IS_ACTING=0"),
+            "the formal appointment remains authoritative");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=1 AND IS_ACTING=1"),
+            "no conflicting acting appointment is inserted");
+    }
+
+    private static void FormalPromotionFromActingClosesTheActingPost()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 12, "city", "governor", pActing: true);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence.
+            Appoint(db, CentralAppointment());
+
+        True(result.IsCommitted,
+            "formal promotion from an acting post commits (" +
+            result.Persistence + "/" + result.Mutation + ")");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=12 AND ACTIVE=0 AND IS_ACTING=1 AND " +
+            "END_REASON='reassigned'"),
+            "formal promotion closes the actor's prior acting post");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=1 AND IS_ACTING=0 AND " +
+            "LAYER='central' AND OFFICE_ID='chancellor'"),
+            "the formal appointment becomes the sole active projection");
+    }
+
+    private static void FormalAppointmentBecomesAuthoritativeAfterActingEnd()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "central", "chancellor", pActing: false);
+        InsertOfficer(db, 12, "city", "governor", pActing: true);
+        var close = new OfficialCareerCloseRequest(101, 7, "city",
+            "governor", 110, 6600d, "acting_term_ended");
+
+        OfficialCareerCloseResult result = OfficialCareerPersistence.
+            Close(db, close);
+        OfficialCareerRecord authoritative = OfficialCareerPersistence.
+            ReadAuthoritativeActiveAppointment(db, 101);
+
+        True(result.IsCommitted, "acting appointment end commits");
+        True(authoritative != null && !authoritative.IsActing,
+            "the remaining formal appointment becomes authoritative");
+        Equal(11L, authoritative?.OfficerId ?? -1L,
+            "the original formal office is selected for runtime restoration");
+    }
+
+    private static void FailedPromotionRestoresEveryPriorFormalPost()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "city", "governor", pActing: false);
+        InsertOfficer(db, 12, "feudatory", "chief_clerk", pActing: false);
+
+        OfficialCareerAppointmentResult result = OfficialCareerPersistence.
+            Appoint(db, CentralAppointment(), (connection, transaction) =>
+                throw new InvalidOperationException("injected projection failure"));
+
+        False(result.IsCommitted, "failed promotion does not commit");
+        Equal(2L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND ACTIVE=1 AND IFNULL(IS_ACTING,0)=0"),
+            "rollback preserves all prior formal posts");
+        Equal(0L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "ACTOR_ID=101 AND LAYER='central'"),
+            "rollback removes the staged central post");
+    }
+
+    private static void LegacyRepairKeepsNewestFormalPostAndClosesConflictingActingPost()
+    {
+        using var db = OpenDatabase();
+        InsertOfficer(db, 11, "city", "governor", pActing: false,
+            pYear: 100, pTime: 6000d);
+        InsertOfficer(db, 12, "central", "chancellor", pActing: false,
+            pYear: 108, pTime: 6480d);
+        InsertOfficer(db, 13, "city", "acting_governor", pActing: true,
+            pYear: 109, pTime: 6540d);
+
+        int repaired = OfficialCareerPersistence.
+            RepairDuplicateFormalAppointments(db);
+
+        Equal(2L, repaired,
+            "one duplicate formal and one conflicting acting post are repaired");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=12 AND ACTIVE=1"),
+            "newest formal post remains active");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=11 AND ACTIVE=0 AND ENDED_YEAR=108 AND " +
+            "ENDED_TIME=6480 AND END_REASON='reassigned'"),
+            "older formal post closes at the newer appointment time");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM CourtOfficer WHERE " +
+            "OFFICER_ID=13 AND ACTIVE=0 AND IS_ACTING=1 AND " +
+            "END_REASON='conflicting_appointment_repaired'"),
+            "legacy repair closes acting appointments that cover a formal office");
+    }
+
+    private static void RuntimeRestoreRunsLegacyRepairBeforeProjectionCaches()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "multiplayer",
+            "AW3RuntimeRestorePipeline.cs"));
+        string repair = "new AW3RestoreStage(\"official_career_repair\"";
+        string projection =
+            "new AW3RestoreStage(\"official_career_projection\"";
+        Equal(2L, CountOccurrences(source, repair),
+            "saved and generated worlds both repair formal careers");
+        Equal(2L, CountOccurrences(source, projection),
+            "saved and generated worlds both restore authoritative career projections");
+        int reset = source.IndexOf(
+            "new AW3RestoreStage(\"runtime_cache_reset\"",
+            StringComparison.Ordinal);
+        int repairIndex = source.IndexOf(repair, reset,
+            StringComparison.Ordinal);
+        int projectionIndex = source.IndexOf(projection, repairIndex,
+            StringComparison.Ordinal);
+        int cityCache = source.IndexOf(
+            "new AW3RestoreStage(\"city_tech_zone_cache\"", projectionIndex,
+            StringComparison.Ordinal);
+        True(reset >= 0 && repairIndex > reset &&
+             projectionIndex > repairIndex && cityCache > projectionIndex,
+            "career repair and runtime projection run before dependent caches");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE CourtOfficer (" +
+            "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+            "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+            "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
+            "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
+            "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +
+            "END_REASON TEXT,UPDATED_TIME REAL," +
+            "RANK_AT_APPOINTMENT INTEGER," +
+            "LOCAL_GRADE_AT_APPOINTMENT INTEGER," +
+            "INSTITUTION_AT_APPOINTMENT TEXT,IS_ACTING INTEGER)");
+        return db;
+    }
+
+    private static void InsertOfficer(SQLiteConnection pDb, long pOfficerId,
+        string pLayer, string pOfficeId, bool pActing, int pYear = 100,
+        double pTime = 6000d)
+    {
+        using var command = new SQLiteCommand(pDb);
+        command.CommandText = "INSERT INTO CourtOfficer VALUES " +
+            "(@id,7,101,'Official',3,@layer,@office,'ru',12.5," +
+            "@year,@time,-1,-1,1,'',@time,6,5,'zhou',@acting)";
+        command.Parameters.AddWithValue("@id", pOfficerId);
+        command.Parameters.AddWithValue("@layer", pLayer);
+        command.Parameters.AddWithValue("@office", pOfficeId);
+        command.Parameters.AddWithValue("@acting", pActing ? 1 : 0);
+        command.Parameters.AddWithValue("@year", pYear);
+        command.Parameters.AddWithValue("@time", pTime);
+        command.ExecuteNonQuery();
+    }
+
+    private static OfficialCareerAppointment CentralAppointment()
+    {
+        return new OfficialCareerAppointment
+        {
+            ActorId = 101,
+            ActorName = "Official",
+            KingdomId = 7,
+            CityId = -1,
+            Layer = "central",
+            OfficeId = "chancellor",
+            SchoolId = "ru",
+            InstitutionAtAppointment = "han_court",
+            Influence = 30d,
+            AppointedYear = 108,
+            AppointedTime = 6480d,
+            RankAtAppointment = 10,
+            LocalGradeAtAppointment = 3,
+            IsActing = false
+        };
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static int CountOccurrences(string pSource, string pValue)
+    {
+        int count = 0;
+        int offset = 0;
+        while (offset < pSource.Length)
+        {
+            int found = pSource.IndexOf(pValue, offset,
+                StringComparison.Ordinal);
+            if (found < 0) break;
+            count++;
+            offset = found + pValue.Length;
+        }
+        return count;
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pName + ": expected false");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}

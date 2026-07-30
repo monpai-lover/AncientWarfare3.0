@@ -1,0 +1,378 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ConferredPosthumousTitleRulesTests
+{
+    public static void Run()
+    {
+        Equal(96, ConferredPosthumousTitleRules.MaximumCandidates,
+            "candidate cap");
+        Equal(8, ConferredPosthumousTitleRules.MaximumFullEvaluations,
+            "full fact cap");
+        Equal(5, ConferredPosthumousTitleRules.CooldownYears,
+            "five-year cooldown");
+        Equal(4, ConferredPosthumousTitleRules.AiRetryIntervalYears,
+            "AI retries are spread across four years");
+        Equal(0, ConferredPosthumousTitleRules.CooldownRemaining(105, 100),
+            "ready at fifth year");
+        Equal(1, ConferredPosthumousTitleRules.CooldownRemaining(104, 100),
+            "one year remains");
+        Equal(0, ConferredPosthumousTitleRules.CooldownRemaining(20, -1),
+            "never conferred is ready");
+
+        True(ConferredPosthumousTitleRules.IsEligibleRole(
+                ConferredPosthumousRole.FormerRuler |
+                ConferredPosthumousRole.Official),
+            "a recorded former ruler or official is eligible");
+        False(ConferredPosthumousTitleRules.IsEligibleRole(
+                ConferredPosthumousRole.None),
+            "an unrelated civilian is ineligible");
+        False(ConferredPosthumousTitleRules.CanPreview(
+                pDead: false, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: false),
+            "living people cannot receive a posthumous title");
+        False(ConferredPosthumousTitleRules.CanPreview(
+                pDead: true, pHasKingdomContext: false,
+                pHasHistoricalRole: true, pAlreadyTitled: false),
+            "a granting realm must be explicit");
+        False(ConferredPosthumousTitleRules.CanPreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: true),
+            "an existing formal title blocks conferment");
+        True(ConferredPosthumousTitleRules.CanPreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: false),
+            "an untitled dead historical figure can be previewed");
+
+        Equal("郑国公文贞",
+            ConferredPosthumousTitleRules.ComposeDisplayTitle(
+                "魏征", "郑国公", "文贞"),
+            "persistent noble title precedes posthumous title");
+        Equal("魏征，谥文贞",
+            ConferredPosthumousTitleRules.ComposeDisplayTitle(
+                "魏征", "", "文贞"),
+            "untitled official keeps real name");
+
+        var high = new ConferredPosthumousCandidateScore(
+            pActorId: 20, pRoleWeight: 40, pNobleRank: 4,
+            pOfficeRank: 8, pTenureYears: 12, pMerit: 300,
+            pMilitaryMerit: 0);
+        var low = new ConferredPosthumousCandidateScore(
+            pActorId: 10, pRoleWeight: 20, pNobleRank: 0,
+            pOfficeRank: 3, pTenureYears: 2, pMerit: 30,
+            pMilitaryMerit: 0);
+        True(ConferredPosthumousTitleRules.CompareCandidate(high, low) < 0,
+            "higher-value candidates sort first");
+        Equal(10L, ConferredPosthumousTitleRules.StableActorTie(10, 20),
+            "actor-id tie breaking is stable");
+
+        Equal(8, ConferredPosthumousTitleRules.FullEvaluationCount(96),
+            "full evaluation is capped");
+        Equal(3, ConferredPosthumousTitleRules.FullEvaluationCount(3),
+            "small candidate sets are evaluated completely");
+
+        MapFormerRulerFacts();
+        MapCivilOfficialFacts();
+        MapGeneralFacts();
+        MapRoyalAndMissingSnapshotFacts();
+        CommitIdentityRules();
+        OrchestrationRules();
+    }
+
+    private static void OrchestrationRules()
+    {
+        Equal(ConferredPosthumousResult.TargetLiving,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: false, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: false,
+                pCooldownRemaining: 0),
+            "living target returns an explicit result");
+        Equal(ConferredPosthumousResult.MissingContext,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: true, pHasKingdomContext: false,
+                pHasHistoricalRole: true, pAlreadyTitled: false,
+                pCooldownRemaining: 0),
+            "missing granting realm is explicit");
+        Equal(ConferredPosthumousResult.NoHistoricalRelationship,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: false, pAlreadyTitled: false,
+                pCooldownRemaining: 0),
+            "unrelated dead person is explicit");
+        Equal(ConferredPosthumousResult.AlreadyTitled,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: true,
+                pCooldownRemaining: 0),
+            "existing formal title is explicit");
+        Equal(ConferredPosthumousResult.Cooldown,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: false,
+                pCooldownRemaining: 2),
+            "cooldown is explicit");
+        Equal(ConferredPosthumousResult.Success,
+            ConferredPosthumousTitleRules.ValidatePreview(
+                pDead: true, pHasKingdomContext: true,
+                pHasHistoricalRole: true, pAlreadyTitled: false,
+                pCooldownRemaining: 0),
+            "valid preview succeeds");
+
+        string token = ConferredPosthumousTitleRules.BuildPreviewToken(
+            7, 42, "文贞", 100, 91);
+        Equal(token, ConferredPosthumousTitleRules.BuildPreviewToken(
+                7, 42, "文贞", 100, 91),
+            "preview token is deterministic");
+        False(string.Equals(token,
+                ConferredPosthumousTitleRules.BuildPreviewToken(
+                    7, 42, "忠武", 100, 91),
+                StringComparison.Ordinal),
+            "title changes invalidate the preview token");
+        False(string.Equals(token,
+                ConferredPosthumousTitleRules.BuildPreviewToken(
+                    7, 42, "文贞", 101, 91),
+                StringComparison.Ordinal),
+            "year changes invalidate the preview token");
+
+        True(ConferredPosthumousTitleRules.ShouldQueueAi(100, 95, 96, 8),
+            "AI can queue at the fifth year");
+        False(ConferredPosthumousTitleRules.ShouldQueueAi(100, 96, 96, 8),
+            "AI respects the shared five-year cooldown");
+        False(ConferredPosthumousTitleRules.ShouldQueueAi(100, 95, 99, 8),
+            "AI waits four years after an unsuccessful search");
+        True(ConferredPosthumousTitleRules.ShouldQueueAi(100, -1, -1, 8),
+            "an uninitialized kingdom runs only in its deterministic slot");
+        False(ConferredPosthumousTitleRules.ShouldQueueAi(100, -1, -1, 9),
+            "initial AI searches are staggered across kingdoms");
+        Equal(40, ConferredPosthumousTitleRules.RoleWeight(
+                ConferredPosthumousRole.FormerRuler |
+                ConferredPosthumousRole.Official),
+            "former ruler has highest lightweight role weight");
+        Equal(30, ConferredPosthumousTitleRules.RoleWeight(
+                ConferredPosthumousRole.Royal),
+            "royal role remains below a former ruler");
+        Equal(25, ConferredPosthumousTitleRules.RoleWeight(
+                ConferredPosthumousRole.General),
+            "general role receives military priority");
+        Equal(20, ConferredPosthumousTitleRules.RoleWeight(
+                ConferredPosthumousRole.Official),
+            "official role receives civil priority");
+        int highFinal = ConferredPosthumousTitleRules.FinalCandidateValue(
+            new ConferredPosthumousCandidateScore(20, 25, 2, 5,
+                10, 100, 300), 12);
+        int lowFinal = ConferredPosthumousTitleRules.FinalCandidateValue(
+            new ConferredPosthumousCandidateScore(21, 25, 2, 5,
+                10, 100, 300), -8);
+        True(highFinal > lowFinal,
+            "full title facts distinguish otherwise equal candidates");
+        var highRole = new ConferredPosthumousCandidateScore(
+            30, 40, 4, 16, 18, 300, 200);
+        var lowRole = new ConferredPosthumousCandidateScore(
+            31, 20, 0, 3, 2, 10, 0);
+        True(ConferredPosthumousTitleRules.FinalCandidateValue(
+                 highRole, -100) >
+             ConferredPosthumousTitleRules.FinalCandidateValue(
+                 lowRole, 100),
+            "historical role and career value remain the primary weight");
+    }
+
+    private static void CommitIdentityRules()
+    {
+        True(ConferredPosthumousTitleRules.IsConferredKind("conferred"),
+            "conferred kind is explicit");
+        False(ConferredPosthumousTitleRules.IsConferredKind("posthumous"),
+            "automatic title kind remains separate");
+        True(ConferredPosthumousTitleRules.CanCommitIdentity(
+                "conferred", 10, 7, -1, -1),
+            "conferred non-ruler can lack Shi and reign ids");
+        False(ConferredPosthumousTitleRules.CanCommitIdentity(
+                "conferred", 10, -1, -1, -1),
+            "conferred title requires a granting realm");
+        False(ConferredPosthumousTitleRules.CanCommitIdentity(
+                "posthumous", 10, 7, -1, -1),
+            "automatic ruler title still requires Shi");
+        True(ConferredPosthumousTitleRules.CanCommitIdentity(
+                "posthumous", 10, 7, 9, -1),
+            "captured-ruler synthetic facts keep the existing no-reign path");
+        True(ConferredPosthumousTitleRules.ShouldReserveShiTitle(
+                "conferred", 8),
+            "known Shi receives a title reservation");
+        False(ConferredPosthumousTitleRules.ShouldReserveShiTitle(
+                "conferred", -1),
+            "unknown Shi skips only the reservation");
+        Equal("conferred_posthumous",
+            ConferredPosthumousTitleRules.HistoryEventType("conferred"),
+            "conferred history uses a dedicated event type");
+        Equal("posthumous",
+            ConferredPosthumousTitleRules.HistoryEventType("posthumous"),
+            "automatic history keeps its original event type");
+    }
+
+    private static void MapFormerRulerFacts()
+    {
+        var reign = new RulerTitleFacts
+        {
+            ActorId = 31,
+            KingdomId = 7,
+            ReignId = 9,
+            ReignYears = 18,
+            WarWins = 4,
+            WarLosses = 1,
+            CityDelta = 3,
+            HighestTitle = 3,
+            EndReason = "died"
+        };
+        RulerTitleFacts facts = ConferredPosthumousFactRules.MapArchivedFacts(
+            new ConferredPosthumousFactInput
+            {
+                ReignFacts = reign,
+                ActorName = "former",
+                DeathCause = "old_age",
+                Age = 48,
+                Diplomacy = 14,
+                Warfare = 13,
+                Stewardship = 12,
+                Intelligence = 15,
+                Health = 11,
+                Combat = 10,
+                HasPersonalSnapshot = true,
+                Traits = RulerTraitFlags.Wise | RulerTraitFlags.Patient
+            });
+        Equal(9L, facts.ReignId, "former ruler keeps the real reign id");
+        Equal(18, facts.ReignYears, "former ruler keeps real reign years");
+        Equal(4, facts.WarWins, "former ruler keeps real war wins");
+        Equal(1, facts.WarLosses, "former ruler keeps real war losses");
+        Equal(3, facts.CityDelta, "former ruler keeps real city delta");
+        Equal(3, facts.HighestTitle, "former ruler keeps real highest title");
+        Equal("old_age", facts.DeathCause,
+            "archived death cause fills the reign snapshot");
+        Equal(48, facts.Age,
+            "former ruler receives the archived age snapshot");
+        Equal(14, facts.Diplomacy,
+            "former ruler receives the archived ability snapshot");
+        Equal(RulerTraitFlags.Wise | RulerTraitFlags.Patient,
+            facts.Traits,
+            "former ruler receives the archived trait snapshot");
+    }
+
+    private static void MapCivilOfficialFacts()
+    {
+        RulerTitleFacts facts = ConferredPosthumousFactRules.MapArchivedFacts(
+            new ConferredPosthumousFactInput
+            {
+                ActorId = 41,
+                KingdomId = 7,
+                ShiId = 81,
+                ActorName = "official",
+                ServiceYears = 15,
+                HighestOfficeRank = 16,
+                CivilMerit = 260,
+                Stewardship = 13,
+                Intelligence = 14,
+                Diplomacy = 12,
+                Health = 10,
+                Traits = RulerTraitFlags.Diligent | RulerTraitFlags.Just
+            });
+        Equal(-1L, facts.ReignId, "official does not receive a synthetic reign");
+        Equal(15, facts.ReignYears, "service years drive non-ruler tenure");
+        True(facts.MajorReforms >= 2,
+            "proven civil merit contributes reform credit");
+        True(facts.Stewardship > facts.Warfare,
+            "civil service evaluates as civil rather than military");
+        True(RulerTitleFactRules.Derive(facts).Administrator,
+            "a senior civil official is an administrator");
+    }
+
+    private static void MapGeneralFacts()
+    {
+        RulerTitleFacts facts = ConferredPosthumousFactRules.MapArchivedFacts(
+            new ConferredPosthumousFactInput
+            {
+                ActorId = 51,
+                KingdomId = 7,
+                ActorName = "general",
+                ServiceYears = 10,
+                GeneralMerit = 340,
+                TroopPower = 180,
+                Warfare = 15,
+                Combat = 16,
+                Health = 12,
+                Traits = RulerTraitFlags.Veteran | RulerTraitFlags.Strong
+            });
+        True(facts.WarWins >= 3,
+            "archived general merit contributes military victories");
+        True(facts.Warfare > facts.Stewardship,
+            "a proven general evaluates as military");
+        True(RulerTitleFactRules.Derive(facts).Strategist,
+            "a high-merit general is a strategist");
+    }
+
+    private static void MapRoyalAndMissingSnapshotFacts()
+    {
+        RulerTitleFacts facts = ConferredPosthumousFactRules.MapArchivedFacts(
+            new ConferredPosthumousFactInput
+            {
+                ActorId = 61,
+                KingdomId = 7,
+                ActorName = "royal",
+                NobleRank = 8,
+                HasKnownPatriline = true
+            });
+        Equal(3, facts.HighestTitle,
+            "a prince maps to king-rank display facts");
+        Equal(0, facts.Diplomacy,
+            "missing personal snapshot falls back to zero");
+        Equal(0, facts.Warfare,
+            "missing military snapshot falls back to zero");
+        Equal(0, facts.MajorReforms,
+            "royal identity alone invents no civil merit");
+        Equal(0, facts.WarWins,
+            "royal identity alone invents no victories");
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue) throw new InvalidOperationException(pName);
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue) throw new InvalidOperationException(pName);
+    }
+
+    private static void Equal(int pExpected, int pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(string pExpected, string pActual, string pName)
+    {
+        if (!string.Equals(pExpected, pActual, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(ConferredPosthumousResult pExpected,
+        ConferredPosthumousResult pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Equal(RulerTraitFlags pExpected,
+        RulerTraitFlags pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+}

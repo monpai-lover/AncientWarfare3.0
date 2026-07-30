@@ -9,6 +9,7 @@ namespace AncientWarfare3.core.lineage
         MandateRebel,
         ForeignPseudoDynasty,
         AutonomousRestoration,
+        FeudatoryRestoration,
         PlayerGrant
     }
 
@@ -65,6 +66,10 @@ namespace AncientWarfare3.core.lineage
                 return MandateDeclarationSource.ForeignPseudoDynasty;
             if (reason == "self_restoration" || origin == "self_restoration")
                 return MandateDeclarationSource.AutonomousRestoration;
+            if (reason == MandateFeudatoryCompletionRules.RestorationReason ||
+                origin == MandateFeudatoryCompletionRules.RestorationOrigin ||
+                claimant == MandateFeudatoryCompletionRules.RestorationClaimant)
+                return MandateDeclarationSource.FeudatoryRestoration;
             if (reason == "player_grant" || origin == "player_grant" ||
                 claimant == "player_grant")
                 return MandateDeclarationSource.PlayerGrant;

@@ -1,0 +1,104 @@
+{
+  "AWPerformanceSettings": [
+    {
+      "Id": "AW3_ENABLE_FRAME_PRIORITY_SCHEDULER",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchFramePriorityScheduler"
+    },
+    {
+      "Id": "AW3_ENABLE_ARMY_RTS",
+      "Type": "SWITCH",
+      "BoolVal": true,
+      "Callback": "AWPerformanceSettings:SwitchArmyRts"
+    },
+    {
+      "Id": "AW3_SHOW_ARMY_RTS_VISUALS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchArmyRtsVisuals"
+    },
+    {
+      "Id": "AW3_SHOW_ARMY_MAP_INFORMATION",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchArmyMapInformation"
+    },
+    {
+      "Id": "AW3_ENABLE_ARMY_RTS_DIAGNOSTICS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchArmyRtsDiagnostics"
+    },
+    {
+      "Id": "AW3_USE_AW3_ARMY_RTS_SCHEDULER",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchArmyRtsScheduler"
+    },
+    {
+      "Id": "AW3_TARGET_RENDER_FPS",
+      "Type": "SLIDER",
+      "FloatVal": 60,
+      "MinFloatVal": 30,
+      "MaxFloatVal": 144,
+      "Callback": "AWPerformanceSettings:SetTargetRenderFps"
+    },
+    {
+      "Id": "AW3_MAX_SIMULATION_MS_PER_FRAME",
+      "Type": "SLIDER",
+      "FloatVal": 16,
+      "MinFloatVal": 0.5,
+      "MaxFloatVal": 1000,
+      "Callback": "AWPerformanceSettings:SetMaxSimulationMillisecondsPerFrame"
+    },
+    {
+      "Id": "AW3_ENABLE_PRESENTATION_SMOOTHING",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchPresentationSmoothing"
+    },
+    {
+      "Id": "AW3_ENABLE_SCHEDULER_DIAGNOSTICS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchSchedulerDiagnostics"
+    },
+    {
+      "Id": "AW3_ENABLE_PERFORMANCE_DIAGNOSTICS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchPerformanceDiagnostics"
+    },
+    {
+      "Id": "AW3_ENABLE_ASYNC_DATABASE_WRITES",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchAsyncDatabaseWrites"
+    },
+    {
+      "Id": "AW3_ENABLE_ASYNC_STRATEGY_PLANNING",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchAsyncStrategyPlanning"
+    },
+    {
+      "Id": "AW3_ENABLE_ASYNC_TRAVERSAL_BUILDS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchAsyncTraversalBuilds"
+    },
+    {
+      "Id": "AW3_ENABLE_ASYNC_UI_QUERIES",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchAsyncUiQueries"
+    },
+    {
+      "Id": "AW3_ENABLE_ASYNC_SHADOW_CHECKS",
+      "Type": "SWITCH",
+      "BoolVal": false,
+      "Callback": "AWPerformanceSettings:SwitchAsyncShadowChecks"
+    }
+  ]
+}

@@ -59,6 +59,56 @@ namespace AncientWarfare3.core.lineage
             return established;
         }
 
+        public static bool TrySelectRelocationCities(Kingdom pKingdom,
+            FeudatorySnapshot pSnapshot, out List<City> pCities)
+        {
+            pCities = new List<City>(
+                FeudatoryRevocationRules.MaximumRelocationCities);
+            if (pKingdom?.data == null || pSnapshot == null ||
+                pSnapshot.EmpireKingdomId != pKingdom.id ||
+                pSnapshot.CityIds.Count == 0)
+                return false;
+            City oldSeat = null;
+            try { oldSeat = World.world?.cities?.get(pSnapshot.SeatCityId); }
+            catch { }
+            int oldDistance = DistanceToCapital(pKingdom, oldSeat);
+            if (oldDistance < 0) return false;
+
+            List<FeudatoryCityCandidate> baseCandidates = BuildCityCandidates(
+                pKingdom, out Dictionary<long, City> cityById);
+            var currentIds = new HashSet<long>(pSnapshot.CityIds);
+            var relocationCandidates = new List<FeudatoryCityCandidate>(
+                baseCandidates.Count);
+            for (int i = 0; i < baseCandidates.Count; i++)
+            {
+                FeudatoryCityCandidate candidate = baseCandidates[i];
+                cityById.TryGetValue(candidate.CityId, out City city);
+                int distance = DistanceToCapital(pKingdom, city);
+                bool eligible =
+                    FeudatoryRevocationRules.CanUseRelocationCity(
+                        candidate.Eligible,
+                        currentIds.Contains(candidate.CityId), distance,
+                        oldDistance);
+                relocationCandidates.Add(new FeudatoryCityCandidate(
+                    candidate.CityId, eligible, -distance,
+                    candidate.NeighborIds));
+            }
+
+            long seatId = FeudatorySelectionRules.SelectSeat(
+                relocationCandidates);
+            if (seatId < 0) return false;
+            int targetCount =
+                FeudatoryRevocationRules.RelocationTargetCityCount(
+                    pSnapshot.CityIds.Count);
+            long[] selectedIds = FeudatorySelectionRules.SelectConnected(
+                relocationCandidates, seatId, targetCount);
+            for (int i = 0; i < selectedIds.Length; i++)
+                if (cityById.TryGetValue(selectedIds[i], out City city) &&
+                    city?.data != null)
+                    pCities.Add(city);
+            return pCities.Count > 0;
+        }
+
         private static bool IsMandateRealm(Kingdom pKingdom)
         {
             return pKingdom?.data != null && !pKingdom.isRekt() &&
@@ -147,6 +197,19 @@ namespace AncientWarfare3.core.lineage
             }
             catch { }
             return score;
+        }
+
+        private static int DistanceToCapital(Kingdom pKingdom, City pCity)
+        {
+            try
+            {
+                if (pKingdom?.capital?.getTile() == null ||
+                    pCity?.getTile() == null)
+                    return -1;
+                return Mathf.RoundToInt(Toolbox.DistVec2(
+                    pKingdom.capital.getTile().pos, pCity.getTile().pos));
+            }
+            catch { return -1; }
         }
 
         private static List<FeudatoryCityCandidate> BuildAvailableCandidates(

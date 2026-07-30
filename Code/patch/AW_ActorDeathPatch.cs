@@ -1,5 +1,9 @@
 using System;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.asyncwork;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 
 namespace AncientWarfare3.patch
@@ -9,49 +13,112 @@ namespace AncientWarfare3.patch
     {
         internal static long DyingKingActorId = -1L;
 
+        public sealed class DieState
+        {
+            public long Diagnostic;
+            public Kingdom DyingKingdom;
+            public long DyingKingActorId = -1L;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MapBox), nameof(MapBox.clearWorld))]
+        public static void ClearWorld_Prefix()
+        {
+            if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
+            NobleRankService.ClearPendingDeathSuccessions();
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), "die", new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        public static void Die_Prefix(Actor __instance, AttackType pType)
+        public static void Die_Prefix(Actor __instance, AttackType pType,
+            out DieState __state)
         {
+            __state = new DieState();
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
             if (!__instance.isAlive()) return;
+            __state.Diagnostic = RuntimePerformanceDiagnostic.BeginDeathEvent();
+            if (__instance.isKing() && __instance.kingdom != null)
+            {
+                __state.DyingKingdom = __instance.kingdom;
+                __state.DyingKingActorId = __instance.data.id;
+            }
 
-            KingdomMilitaryReadinessService.MarkOrdinaryArmyActorDirty(__instance);
-            WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
-            TemporaryLevyService.OnActorInvalidated(__instance);
-            TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
-            SlavePopulationIndexService.Deactivate(__instance);
+            long militaryStage = RuntimePerformanceDiagnostic.BeginDeathStage(
+                ActorDeathPerformanceStage.MilitaryIndexes);
+            try
+            {
+                ArmyLogisticsService.OnActorDying(__instance);
+                ArmyRetreatService.OnActorDying(__instance);
+                KingdomMilitaryReadinessService.MarkOrdinaryArmyActorDirty(__instance);
+                WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
+                TemporaryLevyService.OnMilitaryCasualty(__instance);
+                TemporaryLevyService.OnActorInvalidated(__instance);
+                WartimeGarrisonService.OnActorInvalidated(__instance);
+                TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
+                SlavePopulationIndexService.Deactivate(__instance);
+                DynasticLivingSonIndexService.OnActorDying(__instance);
+                HeirService.MarkSuccessionDirtyForActor(__instance);
+                NobleRemarriageService.MarkDirtyForPartnerDeath(__instance);
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDeathStage(
+                    ActorDeathPerformanceStage.MilitaryIndexes, militaryStage);
+            }
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.DynasticTitle,
+                "dynastic title and feudatory succession",
+                () => DynasticTitleService.OnActorDying(__instance));
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.NobleTitle,
+                "noble title succession", () =>
+                NobleRankService.OnActorDying(__instance));
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.BondDeath,
+                "ruler household closure", () =>
+                RulerHouseholdService.OnActorDying(__instance));
 
-            TryRunDeathStage(__instance, "death cause", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.DeathCause,
+                "death cause", () =>
                 EnsureDeathCause(__instance, pType));
-            TryRunDeathStage(__instance, "ruler fact snapshot", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.RulerSnapshot,
+                "ruler fact snapshot", () =>
                 RulerTitleFactService.ArchivePersonalSnapshot(__instance));
-            TryRunDeathStage(__instance, "historical figure death", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.HistoricalFigure,
+                "historical figure death", () =>
             {
                 if (__instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIRST) ||
                     __instance.hasTrait(content.figures.HistoricalFigureService.TRAIT_FIGURE))
                     content.figures.HistoricalFigureService.OnFigureDied(__instance);
             });
 
-            if (!TryEvaluateDeathStage(__instance, "lineage eligibility",
+            if (!TryEvaluateDeathStage(__instance,
+                    ActorDeathPerformanceStage.LineageEligibility,
+                    "lineage eligibility",
                     () => LineageService.UsesAwLineageSystem(__instance),
                     out bool usesAwLineage)) return;
             if (!usesAwLineage)
             {
-                if (!TryEvaluateDeathStage(__instance, "traceable archive eligibility",
+                if (!TryEvaluateDeathStage(__instance,
+                        ActorDeathPerformanceStage.LineageEligibility,
+                        "traceable archive eligibility",
                         () => LineageService.HasTraceableArchive(__instance),
                         out bool hasTraceableArchive) || !hasTraceableArchive) return;
-                TryRunDeathStage(__instance, "traceable actor archive", () =>
+                TryRunDeathStage(__instance,
+                    ActorDeathPerformanceStage.LineageArchive,
+                    "traceable actor archive", () =>
                     LineageService.ArchiveTraceableActor(__instance, pAlive: false));
                 return;
             }
 
-            TryRunDeathStage(__instance, "lineage actor archive", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.LineageArchive,
+                "lineage actor archive", () =>
                 LineageService.ArchiveActor(__instance, pAlive: false));
 
             bool dyingKing = false;
             Kingdom dyingKingdom = null;
-            TryRunDeathStage(__instance, "king death context", () =>
+            TryRunDeathStage(__instance,
+                ActorDeathPerformanceStage.KingSuccession,
+                "king death context", () =>
             {
                 if (__instance.isKing() && __instance.kingdom != null)
                 {
@@ -63,42 +130,77 @@ namespace AncientWarfare3.patch
             if (dyingKing)
             {
                 DyingKingActorId = __instance.data.id;
-                TryRunDeathStage(__instance, "king succession preparation", () =>
+                TryRunDeathStage(__instance,
+                    ActorDeathPerformanceStage.KingSuccession,
+                    "king succession preparation", () =>
                     HeirService.PrepareSuccessionBeforeKingDeath(dyingKingdom, __instance));
-                TryRunDeathStage(__instance, "king death chronicle", () =>
+                TryRunDeathStage(__instance,
+                    ActorDeathPerformanceStage.KingSuccession,
+                    "king death chronicle", () =>
                     ChronicleEvents.OnKingDied(dyingKingdom, __instance));
             }
             else
             {
-                TryRunDeathStage(__instance, "former ruler death", () =>
+                TryRunDeathStage(__instance,
+                    ActorDeathPerformanceStage.FormerRuler,
+                    "former ruler death", () =>
                     PosthumousTitleService.OnFormerRulerDied(__instance));
             }
 
-            TryRunDeathStage(__instance, "person death history", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.PersonHistory,
+                "person death history", () =>
             {
                 __instance.data.get(LineageKeys.LINEAGE_ID, out long lid, -1L);
                 if (lid >= 0)
                 {
                     string name = __instance.getName();
                     __instance.data.get(LineageKeys.DEATH_CAUSE, out string cause, "");
-                    string causeText = string.IsNullOrEmpty(cause) ? "" : "\uFF08\u6B7B\u56E0\uFF1A" + cause + "\uFF09";
+                    HistoryText causeText = string.IsNullOrEmpty(cause)
+                        ? HistoryText.PlainText("")
+                        : HistoryLocalizationRules.H("aw_hist_death_cause_prefix") +
+                          HistoryText.PlainText(cause) +
+                          HistoryLocalizationRules.H("aw_hist_death_cause_suffix");
                     Kingdom deathContext = PosthumousTitleService.ResolveCapturedRulerLiveKingdom(__instance) ??
                                            __instance.kingdom;
                     HistoryWriter.RecordPerson(
                         __instance.data.id, deathContext, name,
                         PersonEvent.DEATH,
-                        HistoryText.Actor(__instance, name) + " \u901D\u4E16" + causeText,
+                        HistoryText.Actor(__instance, name) +
+                        HistoryLocalizationRules.H("aw_hist_person_died") + causeText,
                         ChronicleCategory.LIFE);
                 }
             });
 
-            TryRunDeathStage(__instance, "bond death", () =>
+            TryRunDeathStage(__instance, ActorDeathPerformanceStage.BondDeath,
+                "bond death", () =>
                 ChronicleEvents.OnBondDeath(__instance));
         }
 
-        private static void TryRunDeathStage(Actor pActor, string pStage, Action pAction)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Actor), "die", new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
+        public static void Die_Postfix(Actor __instance, DieState __state,
+            bool __runOriginal)
+        {
+            if (!__runOriginal) return;
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                AW3MultiplayerReplicaScope.IsReplicaSession) return;
+            if (__state?.DyingKingdom == null ||
+                __state.DyingKingActorId < 0L || __instance == null ||
+                __instance.isAlive()) return;
+            TryRunDeathStage(__instance,
+                ActorDeathPerformanceStage.KingSuccession,
+                "civil-service ranking ruler death", () =>
+                CivilServiceExamService.OnCurrentRulerDied(
+                    __state.DyingKingdom));
+        }
+
+        private static void TryRunDeathStage(Actor pActor,
+            ActorDeathPerformanceStage pPerformanceStage, string pStage,
+            Action pAction)
         {
             if (pAction == null) return;
+            long diagnostic = RuntimePerformanceDiagnostic.BeginDeathStage(
+                pPerformanceStage);
             try
             {
                 pAction();
@@ -107,13 +209,21 @@ namespace AncientWarfare3.patch
             {
                 LogDeathStageFailure(pActor, pStage, error);
             }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDeathStage(pPerformanceStage,
+                    diagnostic);
+            }
         }
 
-        private static bool TryEvaluateDeathStage(Actor pActor, string pStage,
+        private static bool TryEvaluateDeathStage(Actor pActor,
+            ActorDeathPerformanceStage pPerformanceStage, string pStage,
             Func<bool> pAction, out bool pResult)
         {
             pResult = false;
             if (pAction == null) return false;
+            long diagnostic = RuntimePerformanceDiagnostic.BeginDeathStage(
+                pPerformanceStage);
             try
             {
                 pResult = pAction();
@@ -123,6 +233,11 @@ namespace AncientWarfare3.patch
             {
                 LogDeathStageFailure(pActor, pStage, error);
                 return false;
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDeathStage(pPerformanceStage,
+                    diagnostic);
             }
         }
 
@@ -141,11 +256,21 @@ namespace AncientWarfare3.patch
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Actor), "die", new[] { typeof(bool), typeof(AttackType), typeof(bool), typeof(bool) })]
-        public static Exception Die_Finalizer(Actor __instance, Exception __exception)
+        public static Exception Die_Finalizer(Actor __instance, DieState __state,
+            Exception __exception)
         {
-            if (__instance?.data != null && DyingKingActorId == __instance.data.id)
-                DyingKingActorId = -1L;
-            return __exception;
+            try
+            {
+                if (__state != null &&
+                    DyingKingActorId == __state.DyingKingActorId)
+                    DyingKingActorId = -1L;
+                return __exception;
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDeathEvent(
+                    __state?.Diagnostic ?? 0L);
+            }
         }
 
         private static void EnsureDeathCause(Actor pActor, AttackType pType)
@@ -160,27 +285,27 @@ namespace AncientWarfare3.patch
         {
             switch (pType)
             {
-                case AttackType.Acid: return "\u9178\u8680\u800C\u6B7B";
-                case AttackType.Fire: return "\u711A\u70E7\u800C\u6B7B";
-                case AttackType.Age: return "\u81EA\u7136\u8001\u6B7B";
-                case AttackType.Starvation: return "\u9965\u997F\u800C\u6B7B";
+                case AttackType.Acid: return HistoryLocalizationRules.Text("aw_death_cause_acid");
+                case AttackType.Fire: return HistoryLocalizationRules.Text("aw_death_cause_fire");
+                case AttackType.Age: return HistoryLocalizationRules.Text("aw_death_cause_age");
+                case AttackType.Starvation: return HistoryLocalizationRules.Text("aw_death_cause_starvation");
                 case AttackType.Plague:
                 case AttackType.Infection:
                 case AttackType.Tumor:
-                case AttackType.AshFever: return "\u75BE\u75C5\u800C\u6B7B";
-                case AttackType.Eaten: return "\u88AB\u541E\u98DF";
-                case AttackType.Weapon: return "\u6218\u6597\u8EAB\u4EA1";
-                case AttackType.Poison: return "\u4E2D\u6BD2\u800C\u6B7B";
-                case AttackType.Drowning: return "\u6EBA\u4EA1";
-                case AttackType.Water: return "\u6C34\u4E2D\u9047\u96BE";
-                case AttackType.Gravity: return "\u5760\u843D\u800C\u6B7B";
-                case AttackType.Explosion: return "\u7206\u70B8\u8EAB\u4EA1";
-                case AttackType.Divine: return "\u795E\u529B\u6240\u6740";
-                case AttackType.Metamorphosis: return "\u5F02\u53D8\u6D88\u4EA1";
-                case AttackType.Smile: return "\u795E\u79D8\u6B7B\u4EA1";
-                case AttackType.Other: return "\u610F\u5916\u6B7B\u4EA1";
-                case AttackType.None: return "\u81EA\u7136\u6B7B\u4EA1";
-                default: return "\u672A\u77E5\u6B7B\u56E0";
+                case AttackType.AshFever: return HistoryLocalizationRules.Text("aw_death_cause_disease");
+                case AttackType.Eaten: return HistoryLocalizationRules.Text("aw_death_cause_eaten");
+                case AttackType.Weapon: return HistoryLocalizationRules.Text("aw_death_cause_weapon");
+                case AttackType.Poison: return HistoryLocalizationRules.Text("aw_death_cause_poison");
+                case AttackType.Drowning: return HistoryLocalizationRules.Text("aw_death_cause_drowning");
+                case AttackType.Water: return HistoryLocalizationRules.Text("aw_death_cause_water");
+                case AttackType.Gravity: return HistoryLocalizationRules.Text("aw_death_cause_gravity");
+                case AttackType.Explosion: return HistoryLocalizationRules.Text("aw_death_cause_explosion");
+                case AttackType.Divine: return HistoryLocalizationRules.Text("aw_death_cause_divine");
+                case AttackType.Metamorphosis: return HistoryLocalizationRules.Text("aw_death_cause_metamorphosis");
+                case AttackType.Smile: return HistoryLocalizationRules.Text("aw_death_cause_mysterious");
+                case AttackType.Other: return HistoryLocalizationRules.Text("aw_death_cause_accident");
+                case AttackType.None: return HistoryLocalizationRules.Text("aw_death_cause_natural");
+                default: return HistoryLocalizationRules.Text("aw_death_cause_unknown");
             }
         }
     }

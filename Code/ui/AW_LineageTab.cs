@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using AncientWarfare3.core.policy;
 using NeoModLoader.General;
 using NeoModLoader.General.UI.Tab;
+using NeoModLoader.ui;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace AncientWarfare3.ui
 {
     internal static class AW_LineageTab
     {
         private const string TAB_ID = "AW3Lineage";
-        private const string GROUP_LINEAGE = "lineage";
-        private const string GROUP_CREATURE = "creature";
         private static bool _inited;
 
         public static void Init()
@@ -25,33 +25,39 @@ namespace AncientWarfare3.ui
                 "AW3 Lineage Description",
                 SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
 
-            tab.SetLayout(new List<string> { GROUP_LINEAGE, GROUP_CREATURE });
+            tab.SetLayout(new List<string> { AWLineageTabLayoutRules.Manual });
+            Dictionary<string, List<PowerButton>> groups = CreateButtonGroups();
+
+            PowerButton spawnButton = PowerButtonCreator.CreateGodPowerButton(
+                content.GodPowerLibrary.SPAWN_XIA,
+                SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
+            Register(groups, AWLineageTabLayoutRules.XiaSpawn, spawnButton);
 
             PowerButton overviewButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_lineage_overview_btn",
                 () => OpenOverview(),
                 SpriteTextureLoader.getSprite("ui/icons/iconClan"));
-            tab.AddPowerButton(GROUP_LINEAGE, overviewButton);
+            Register(groups, AWLineageTabLayoutRules.Archives, overviewButton);
 
             PowerButton rosterButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_kingdom_roster_btn",
                 () => OpenRoster(),
                 SpriteTextureLoader.getSprite("ui/icons/iconKingdomList")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconClan"));
-            tab.AddPowerButton(GROUP_LINEAGE, rosterButton);
+            Register(groups, AWLineageTabLayoutRules.Archives, rosterButton);
 
             PowerButton schoolMapButton = CreateMapModeToggleButton(
                 SchoolMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconRujia")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
-            if (schoolMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, schoolMapButton);
+            Register(groups, AWLineageTabLayoutRules.Schools, schoolMapButton);
 
             PowerButton schoolOverviewButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_school_overview_btn",
                 () => windows.SchoolWindow.OpenSchool(),
                 SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
                 ?? SpriteTextureLoader.getSprite("ui/Icons/traits/iconRujia"));
-            if (schoolOverviewButton != null) tab.AddPowerButton(GROUP_LINEAGE, schoolOverviewButton);
+            Register(groups, AWLineageTabLayoutRules.Schools, schoolOverviewButton);
 
             PowerButton schoolRosterButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_school_roster_btn",
@@ -59,82 +65,138 @@ namespace AncientWarfare3.ui
                 SpriteTextureLoader.getSprite("ui/icons/iconClan")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
                 ?? SpriteTextureLoader.getSprite("ui/Icons/traits/iconRujia"));
-            if (schoolRosterButton != null) tab.AddPowerButton(GROUP_LINEAGE, schoolRosterButton);
+            Register(groups, AWLineageTabLayoutRules.Schools, schoolRosterButton);
 
             PowerButton techMapButton = CreateMapModeToggleButton(
                 TechMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconKnowledge")
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
-            if (techMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, techMapButton);
+            Register(groups, AWLineageTabLayoutRules.Schools, techMapButton);
 
             PowerButton coreMapButton = CreateMapModeToggleButton(
                 WarCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
-            if (coreMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, coreMapButton);
+            Register(groups, AWLineageTabLayoutRules.Territory, coreMapButton);
 
             PowerButton vassalMapButton = CreateMapModeToggleButton(
                 VassalMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/wars/war_vassal")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
-            if (vassalMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, vassalMapButton);
+            Register(groups, AWLineageTabLayoutRules.Territory, vassalMapButton);
 
             PowerButton mandateButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_mandate_dynasty_btn",
                 () => windows.MandateDynastyWindow.Open(),
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
-            if (mandateButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateButton);
+            Register(groups, AWLineageTabLayoutRules.Mandate, mandateButton);
 
             PowerButton mandateMapButton = CreateMapModeToggleButton(
                 MandateDynastyMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
-            if (mandateMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateMapButton);
+            Register(groups, AWLineageTabLayoutRules.Mandate, mandateMapButton);
 
             PowerButton feudatoryMapButton = CreateMapModeToggleButton(
                 FeudatoryMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconzhuhou")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconMap"));
-            if (feudatoryMapButton != null)
-                tab.AddPowerButton(GROUP_LINEAGE, feudatoryMapButton);
+            Register(groups, AWLineageTabLayoutRules.Territory, feudatoryMapButton);
 
             PowerButton grantMandateButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.GRANT_MANDATE,
                 SpriteTextureLoader.getSprite("ui/Icons/traits/iconTianming")
                 ?? SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
-            if (grantMandateButton != null)
-                tab.AddPowerButton(GROUP_LINEAGE, grantMandateButton);
+            Register(groups, AWLineageTabLayoutRules.Mandate, grantMandateButton);
 
             PowerButton mandateCoreMapButton = CreateMapModeToggleButton(
                 MandateCoreMapModeService.POWER_ID,
                 SpriteTextureLoader.getSprite("ui/icons/iconMap")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
-            if (mandateCoreMapButton != null) tab.AddPowerButton(GROUP_LINEAGE, mandateCoreMapButton);
+            Register(groups, AWLineageTabLayoutRules.Mandate, mandateCoreMapButton);
 
             PowerButton vassalSetButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.VASSAL_SET,
                 SpriteTextureLoader.getSprite("ui/wars/war_vassal")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
-            if (vassalSetButton != null) tab.AddPowerButton(GROUP_LINEAGE, vassalSetButton);
+            Register(groups, AWLineageTabLayoutRules.Administration, vassalSetButton);
 
             PowerButton vassalRemoveButton = PowerButtonCreator.CreateGodPowerButton(
                 content.GodPowerLibrary.VASSAL_REMOVE,
                 SpriteTextureLoader.getSprite("ui/wars/war_independent")
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconPeace"));
-            if (vassalRemoveButton != null) tab.AddPowerButton(GROUP_LINEAGE, vassalRemoveButton);
+            Register(groups, AWLineageTabLayoutRules.Administration, vassalRemoveButton);
 
-            PowerButton spawnButton = PowerButtonCreator.CreateGodPowerButton(
-                content.GodPowerLibrary.SPAWN_XIA,
-                SpriteTextureLoader.getSprite("ui/Icons/iconXias"));
-            tab.AddPowerButton(GROUP_CREATURE, spawnButton);
+            PowerButton settingsButton = PowerButtonCreator.CreateSimpleButton(
+                "aw_settings_btn",
+                () => OpenSettings(),
+                SpriteTextureLoader.getSprite("ui/icons/iconOptions")
+                ?? SpriteTextureLoader.getSprite("ui/icons/iconKnowledge"));
+            Register(groups, AWLineageTabLayoutRules.Settings, settingsButton);
 
             PowerButton figureToggle = PowerButtonCreator.CreateToggleButton(
                 content.figures.HistoricalFigureService.TOGGLE_POWER_ID,
                 SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
-            if (figureToggle != null) tab.AddPowerButton(GROUP_CREATURE, figureToggle);
+            Register(groups, AWLineageTabLayoutRules.Settings, figureToggle);
 
-            tab.UpdateLayout();
+            ApplyNativeLayout(tab, groups);
+        }
+
+        private static Dictionary<string, List<PowerButton>> CreateButtonGroups()
+        {
+            var groups = new Dictionary<string, List<PowerButton>>();
+            foreach (string groupId in AWLineageTabLayoutRules.OrderedGroups)
+                groups[groupId] = new List<PowerButton>();
+            return groups;
+        }
+
+        private static void Register(Dictionary<string, List<PowerButton>> pGroups,
+            string pGroupId, PowerButton pButton)
+        {
+            if (pButton == null || pGroups == null ||
+                !pGroups.TryGetValue(pGroupId, out List<PowerButton> buttons)) return;
+            buttons.Add(pButton);
+        }
+
+        private static void ApplyNativeLayout(PowersTab pTab,
+            Dictionary<string, List<PowerButton>> pGroups)
+        {
+            GameObject linePrefab = ResourcesFinder.FindResource<GameObject>("_line");
+            bool hasPreviousGroup = false;
+            foreach (string groupId in AWLineageTabLayoutRules.OrderedGroups)
+            {
+                if (!pGroups.TryGetValue(groupId,
+                        out List<PowerButton> buttons) || buttons.Count == 0)
+                    continue;
+
+                if (hasPreviousGroup && linePrefab != null)
+                    AddNativeDivider(pTab, linePrefab, groupId);
+
+                foreach (PowerButton button in buttons)
+                    pTab.AddPowerButton(AWLineageTabLayoutRules.Manual, button);
+
+                hasPreviousGroup = true;
+            }
+
+            // UpdateLayout refreshes NML's button/navigation cache. The final
+            // positions deliberately come from the vanilla sibling-order
+            // layout, which recognizes every _line-prefixed child as a group
+            // boundary.
+            pTab.UpdateLayout();
+            pTab.sortButtons();
+        }
+
+        private static void AddNativeDivider(PowersTab pTab,
+            GameObject pLinePrefab, string pFollowingGroupId)
+        {
+            GameObject divider = UnityEngine.Object.Instantiate(
+                pLinePrefab, pTab.transform);
+            divider.name = "_line_aw3_" + pFollowingGroupId;
+            Image image = divider.GetComponent<Image>();
+            if (image != null) image.enabled = true;
+            divider.transform.localScale = new Vector3(1f, 48.3f, 1f);
+            divider.SetActive(true);
         }
 
         private static void OpenOverview()
@@ -145,6 +207,13 @@ namespace AncientWarfare3.ui
         private static void OpenRoster()
         {
             windows.KingdomRosterWindow.Open();
+        }
+
+        private static void OpenSettings()
+        {
+            var config = global::AncientWarfare3.ModClass.Instance?.GetConfig();
+            if (config == null) return;
+            ModConfigureWindow.ShowWindow(config);
         }
 
         private static PowerButton CreateMapModeToggleButton(string pPowerId, Sprite pIcon)

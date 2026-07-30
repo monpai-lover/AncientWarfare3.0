@@ -10,6 +10,20 @@ namespace AncientWarfare3.core.lineage
         public const string LINEAGE_ID = "aw_lineage_id";
         public const string SHI_ID = "aw_shi_id";
         public const string NOBLE_DISTANCE = "aw_noble_distance";
+        public const string NOBLE_RANK = "aw_noble_rank";
+        public const string NOBLE_TITLE_STYLE = "aw_noble_title_style";
+        public const string NOBLE_TITLE_NAME = "aw_noble_title_name";
+        public const string NOBLE_RANK_KINGDOM_ID = "aw_noble_rank_kingdom_id";
+        public const string NOBLE_GRANT_ID = "aw_noble_grant_id";
+        public const string NOBLE_GREAT_GRANT_RULER_ID = "aw_noble_great_grant_ruler_id";
+        public const string NOBLE_GREAT_GRANT_CHECK_RULER_ID =
+            "aw_noble_great_grant_check_ruler_id";
+        public const string NOBLE_GREAT_GRANT_CHECK_YEAR =
+            "aw_noble_great_grant_check_year";
+        public const string NOBLE_GREAT_GRANT_AVAILABLE =
+            "aw_noble_great_grant_available";
+        public const string NOBLE_AI_LAST_REWARD_YEAR =
+            "aw_noble_ai_last_reward_year";
         public const string EVER_NOBLE_BLOOD = "aw_ever_noble_blood";
         public const string NOBLE_ORIGIN_ACTOR_ID = "aw_noble_origin_actor_id";
         public const string NOBLE_ORIGIN_NAME = "aw_noble_origin_name";
@@ -43,6 +57,18 @@ namespace AncientWarfare3.core.lineage
         public const string MANDATE_REBEL_LEADER = "aw_mandate_rebel_leader";
         public const string MANDATE_REBEL_BUFF_UNTIL = "aw_mandate_rebel_buff_until";
         public const string MANDATE_REBEL_LAST_YEAR = "aw_mandate_rebel_last_year";
+        public const string MANDATE_REBEL_ORIGIN_KINGDOM_ID =
+            "aw_mandate_rebel_origin_kingdom_id";
+        public const string MANDATE_DECLINE_REBEL =
+            "aw_mandate_decline_rebel";
+        public const string MANDATE_DECLINE_REBEL_ORIGIN_ID =
+            "aw_mandate_decline_rebel_origin_id";
+        public const string MANDATE_DECLINE_REBELLION_ROSTER =
+            "aw_mandate_decline_rebellion_roster";
+        public const string MANDATE_DECLINE_REBELLION_LAST_YEAR =
+            "aw_mandate_decline_rebellion_last_year";
+        public const string MANDATE_DECLINE_CITY_CURSOR =
+            "aw_mandate_decline_city_cursor";
         public const string MANDATE_BORDER_LAST_YEAR = "aw_mandate_border_last_year";
         public const string MANDATE_BORDER_GUARD = "aw_mandate_border_guard";
         public const string MANDATE_BORDER_WALL_LAST_YEAR = "aw_mandate_border_wall_last_year";
@@ -62,6 +88,46 @@ namespace AncientWarfare3.core.lineage
         public const string DIPLOMACY_RITES_SCORE = "aw_diplomacy_rites_score";
         public const string DIPLOMACY_TITLE_RANK = "aw_diplomacy_title_rank";
         public const string DIPLOMACY_IS_MANDATE = "aw_diplomacy_is_mandate";
+        public const string DIPLOMACY_CULTURE_ID = "aw_diplomacy_culture_id";
+        public const string DIPLOMACY_AI_LAST_PROPOSAL_YEAR = "aw_diplomacy_ai_last_proposal_year";
+        public const string DIPLOMACY_AI_CITY_CURSOR = "aw_diplomacy_ai_city_cursor";
+        public const string DIPLOMACY_COVERT_CITY_CURSOR = "aw_diplomacy_covert_city_cursor";
+        public const string DIPLOMACY_MARRIAGE_CURSOR =
+            "aw_diplomacy_marriage_cursor";
+        public const string RULER_HOUSEHOLD_RULER_ID =
+            "aw_ruler_household_ruler_id";
+        public const string RULER_HOUSEHOLD_CURSOR =
+            "aw_ruler_household_cursor";
+        public const string NOBLE_REMARRIAGE_DIRTY =
+            "aw_noble_remarriage_dirty";
+        public const string DYNASTIC_PREGNANCY_MANAGED =
+            "aw_dynastic_pregnancy_managed";
+        public const string DYNASTIC_PREGNANCY_FATHER_ID =
+            "aw_dynastic_pregnancy_father_id";
+        public const string DYNASTIC_PREGNANCY_KIND =
+            "aw_dynastic_pregnancy_kind";
+        public const string BIRTH_LEGITIMACY =
+            "aw_birth_legitimacy";
+        public const string DYNASTIC_HEIR_RETRY_PENDING =
+            "aw_dynastic_heir_retry_pending";
+        public const string DYNASTIC_HEIR_RETRY_FATHER_ID =
+            "aw_dynastic_heir_retry_father_id";
+        public const string DYNASTIC_HEIR_RETRY_REQUEST_TIME =
+            "aw_dynastic_heir_retry_request_time";
+        public const string DYNASTIC_LOVER_HEIR_PENDING =
+            "aw_dynastic_lover_heir_pending";
+        public const string DYNASTIC_LOVER_HEIR_ACTIVE =
+            "aw_dynastic_lover_heir_active";
+        public const string DYNASTIC_LOVER_HEIR_FATHER_ID =
+            "aw_dynastic_lover_heir_father_id";
+        public const string DYNASTIC_LOVER_HEIR_RELATION_TOKEN =
+            "aw_dynastic_lover_heir_relation_token";
+        public const string DYNASTIC_LOVER_HEIR_LAST_RELATION_TOKEN =
+            "aw_dynastic_lover_heir_last_relation_token";
+        public const string DYNASTIC_LOVER_HEIR_ATTEMPTS =
+            "aw_dynastic_lover_heir_attempts";
+        public const string DYNASTIC_LOVER_HEIR_SON_BORN =
+            "aw_dynastic_lover_heir_son_born";
         public const string VASSAL_OBLIGATION_DECISIONS = "aw_vassal_obligation_decisions";
         public const string RESTORATION_CAMPAIGN_ACTIVE = "aw_restoration_campaign_active";
         public const string RESTORATION_CAMPAIGN_ID = "aw_restoration_campaign_id";
@@ -71,6 +137,10 @@ namespace AncientWarfare3.core.lineage
         public const string RESTORATION_COMPLETED = "aw_restoration_completed";
         public const string RESTORATION_REFUNDER_ELIGIBLE = "aw_restoration_refounder_eligible";
         public const string RESTORATION_LAST_YEAR = "aw_restoration_last_year";
+        public const string KINGDOM_EXTINCTION_CAUSE =
+            "aw_kingdom_extinction_cause";
+        public const string KINGDOM_EARLIEST_AUTONOMOUS_YEAR =
+            "aw_kingdom_earliest_autonomous_year";
         public const string RESTORATION_UPRISING_ACTIVE = "aw_restoration_uprising_active";
         public const string RESTORATION_UPRISING_CAMPAIGN_ID = "aw_restoration_uprising_campaign_id";
         public const string RESTORATION_UPRISING_KINGDOM_ID = "aw_restoration_uprising_kingdom_id";
@@ -89,13 +159,33 @@ namespace AncientWarfare3.core.lineage
         public const string AW_ARMY_CITY_ID = "aw_army_city_id";
         public const string AW_ARMY_ANCHOR_X = "aw_army_anchor_x";
         public const string AW_ARMY_ANCHOR_Y = "aw_army_anchor_y";
+        public const string AW_ARMY_NON_REPLACING_SHELL =
+            "aw_army_non_replacing_shell";
         public const string AW_ARMY_RETREAT_BASELINE = "aw_army_retreat_baseline";
         public const string AW_ARMY_RETREAT_UNTIL_YEAR = "aw_army_retreat_until_year";
         public const string AW_ARMY_RETREAT_CITY_ID = "aw_army_retreat_city_id";
         public const string AW_ARMY_RETREAT_TARGET_CITY_ID = "aw_army_retreat_target_city_id";
+        public const string AW_ARMY_RETREAT_SUPPRESSED_TARGET_CITY_ID =
+            "aw_army_retreat_suppressed_target_city_id";
+        public const string AW_ARMY_RTS_WAR_ID = "aw_army_rts_war_id";
+        public const string AW_ARMY_RTS_FRONT_ID = "aw_army_rts_front_id";
+        public const string AW_ARMY_RTS_ROLE = "aw_army_rts_role";
+        public const string AW_ARMY_RTS_POSTURE = "aw_army_rts_posture";
+        public const string AW_ARMY_RTS_PROPOSAL_KIND =
+            "aw_army_rts_proposal_kind";
+        public const string AW_ARMY_RTS_TARGET_CITY_ID =
+            "aw_army_rts_target_city_id";
+        public const string AW_ARMY_RTS_TARGET_STRENGTH =
+            "aw_army_rts_target_strength";
+        public const string AW_ARMY_RTS_PLAYER_ORDER =
+            "aw_army_rts_player_order";
+        public const string AW_ARMY_RTS_ISSUED_TIME =
+            "aw_army_rts_issued_time";
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";
+        public const string MANDATE_DECISION_LAST_SUCCESS_PREFIX =
+            "aw_mandate_decision_last_success_";
         public const string MANDATE_SUCCESSION_CRISIS_YEAR = "aw_mandate_succession_crisis_year";
         public const string CITY_TECH_LAST_YEAR = "aw_city_tech_last_year";
         public const string CITY_ECONOMY_LAST_YEAR = "aw_city_economy_last_year";
@@ -138,6 +228,7 @@ namespace AncientWarfare3.core.lineage
         public const string CAPTURED_RULER_TITLE = "aw_captured_ruler_title";
         public const string SLAVE_SOLDIER = "aw_slave_soldier";
         public const string SOLDIER_SERVICE_START_TIME = "aw_soldier_service_start_time";
+        public const string MILITARY_BIOGRAPHY_ACTIVE = "aw_military_biography_active";
         public const string STANDING_ARMY_SCAN_CURSOR = "aw_standing_army_scan_cursor";
         public const string STANDING_ARMY_ROSTER_SCAN_CURSOR = "aw_standing_army_roster_scan_cursor";
         public const string TEMPORARY_LEVY = "aw_temporary_levy";
@@ -152,6 +243,15 @@ namespace AncientWarfare3.core.lineage
         public const string TEMPORARY_LEVY_SCANNED = "aw_temporary_levy_scanned";
         public const string TEMPORARY_LEVY_RECRUITED = "aw_temporary_levy_recruited";
         public const string TEMPORARY_LEVY_FRONTIER_CURSOR = "aw_temporary_levy_frontier_cursor";
+        public const string TEMPORARY_LEVY_PREPARATION_MONTH = "aw_temporary_levy_preparation_month";
+        public const string TEMPORARY_LEVY_PREPARATION_IN_PROGRESS = "aw_temporary_levy_preparation_in_progress";
+        public const string TEMPORARY_LEVY_PREPARATION_VISITED_CITIES = "aw_temporary_levy_preparation_visited_cities";
+        public const string TEMPORARY_LEVY_PREPARATION_CURRENT_CITY = "aw_temporary_levy_preparation_current_city";
+        public const string TEMPORARY_LEVY_PREPARATION_FRONTIER_CURSOR = "aw_temporary_levy_preparation_frontier_cursor";
+        public const string WARTIME_GARRISON = "aw_wartime_garrison";
+        public const string WARTIME_GARRISON_KINGDOM_ID = "aw_wartime_garrison_kingdom_id";
+        public const string WARTIME_GARRISON_CITY_ID = "aw_wartime_garrison_city_id";
+        public const string WARTIME_GARRISON_SCAN_CURSOR = "aw_wartime_garrison_scan_cursor";
         public const string SLAVE_MERIT = "aw_slave_merit";
         public const string FREEDMAN = "aw_freedman";
         public const string CAPTIVE_NOBLE_TITLE = "aw_captive_noble_title";
@@ -231,6 +331,26 @@ namespace AncientWarfare3.core.lineage
         public const string DECISION_NOTICE_EARLIEST_YEAR = "aw_decision_notice_earliest_year";
         public const string DECISION_NOTICE_FORCED_YEAR = "aw_decision_notice_forced_year";
         public const string DECISION_NOTICE_RECORDED = "aw_decision_notice_recorded";
+        public const string DIPLOMATIC_WAR_PENDING = "aw_diplomatic_war_pending";
+        public const string DIPLOMATIC_WAR_TARGET_KINGDOM_ID = "aw_diplomatic_war_target_kingdom_id";
+        public const string DIPLOMATIC_WAR_TARGET_KINGDOM_NAME = "aw_diplomatic_war_target_kingdom_name";
+        public const string DIPLOMATIC_WAR_TYPE = "aw_diplomatic_war_type";
+        public const string DIPLOMATIC_WAR_GOAL_TYPE = "aw_diplomatic_war_goal_type";
+        public const string DIPLOMATIC_WAR_REASON_KEY = "aw_diplomatic_war_reason_key";
+        public const string DIPLOMATIC_WAR_REASON_LABEL = "aw_diplomatic_war_reason_label";
+        public const string DIPLOMATIC_WAR_TARGET_CITY_ID = "aw_diplomatic_war_target_city_id";
+        public const string DIPLOMATIC_WAR_TARGET_CITY_NAME = "aw_diplomatic_war_target_city_name";
+        public const string DIPLOMATIC_WAR_SOURCE_CLAIM_ID = "aw_diplomatic_war_source_claim_id";
+        public const string DIPLOMATIC_WAR_SOURCE_CORE_ID = "aw_diplomatic_war_source_core_id";
+        public const string DIPLOMATIC_WAR_RESTORATION_CLAIM_ID = "aw_diplomatic_war_restoration_claim_id";
+        public const string DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID = "aw_diplomatic_war_claimant_actor_id";
+        public const string DIPLOMATIC_WAR_NOTICE_SIGNATURE = "aw_diplomatic_war_notice_signature";
+        public const string DIPLOMATIC_WAR_NOTICE_YEAR = "aw_diplomatic_war_notice_year";
+        public const string DIPLOMATIC_WAR_NOTICE_EARLIEST_YEAR = "aw_diplomatic_war_notice_earliest_year";
+        public const string DIPLOMATIC_WAR_NOTICE_FORCED_YEAR = "aw_diplomatic_war_notice_forced_year";
+        public const string DIPLOMATIC_WAR_NOTICE_RECORDED = "aw_diplomatic_war_notice_recorded";
+        public const string DIPLOMATIC_WAR_LAST_CANCEL_REASON = "aw_diplomatic_war_last_cancel_reason";
+        public const string DIPLOMATIC_WAR_LAST_CANCEL_YEAR = "aw_diplomatic_war_last_cancel_year";
         public const string DEPLOYMENT_NOTICE_SIGNATURE = "aw_deployment_notice_signature";
         public const string DEPLOYMENT_TARGET_CITY_ID = "aw_deployment_target_city_id";
         public const string DEPLOYMENT_TARGET_X = "aw_deployment_target_x";
@@ -252,9 +372,23 @@ namespace AncientWarfare3.core.lineage
         public const string POLICY_AI_LAST_XIA_APPEASE_YEAR = "aw_policy_ai_last_xia_appease_year";
         public const string COURT_MODE = "aw_court_mode";
         public const string COURT_TIER = "aw_court_tier";
+        public const string COURT_INSTITUTION = "aw_court_institution";
+        public const string COURT_TERM_LAW = "aw_court_term_law";
+        public const string COURT_TERM_LAW_LAST_CHANGE_YEAR = "aw_court_term_law_last_change_year";
+        public const string COURT_BORDER_COMMAND_LAW = "aw_court_border_command_law";
+        public const string COURT_BORDER_COMMAND_LAW_LAST_CHANGE_YEAR = "aw_court_border_command_law_last_change_year";
+        public const string COURT_APPOINTMENT_CULTURE_LAW = "aw_court_appointment_culture_law";
+        public const string COURT_APPOINTMENT_CULTURE_LAW_LAST_CHANGE_YEAR = "aw_court_appointment_culture_law_last_change_year";
+        public const string COURT_AUXILIARY_LAW_AI_LAST_EVALUATION_YEAR = "aw_court_auxiliary_law_ai_last_evaluation_year";
+        public const string COURT_BORDER_PETITION_LAST_YEAR = "aw_court_border_petition_last_year";
+        public const string COURT_BORDER_VASSAL_CURSOR = "aw_court_border_vassal_cursor";
+        public const string COURT_BORDER_CITY_CURSOR = "aw_court_border_city_cursor";
+        public const string COURT_BORDER_REQUEST_CITY_CURSOR = "aw_court_border_request_city_cursor";
         public const string COURT_DOMINANT_SCHOOL = "aw_court_dominant_school";
         public const string COURT_SECONDARY_SCHOOL = "aw_court_secondary_school";
         public const string COURT_FACTION_CACHE = "aw_court_faction_cache";
+        public const string COURT_ARISTOCRATIC_GROUP_CACHE =
+            "aw_court_aristocratic_group_cache";
         public const string COURT_EFFICIENCY = "aw_court_efficiency";
         public const string COURT_CONCENTRATION = "aw_court_concentration";
         public const string COURT_LAST_REFRESH_YEAR = "aw_court_last_refresh_year";
@@ -268,6 +402,34 @@ namespace AncientWarfare3.core.lineage
         public const string SCHOOL_MEMBERSHIP_ID = "aw_school_membership_id";
         public const string SCHOOL_MEMBERSHIP_SOURCE = "aw_school_membership_source";
         public const string SCHOOL_TEACHER_GONE_YEAR = "aw_school_teacher_gone_year";
+        public const string SCHOOL_NOBLE_EDUCATION_CURSOR =
+            "aw_school_noble_education_cursor";
+        public const string SCHOOL_DECLINED_NOBLE_EDUCATION_CURSOR =
+            "aw_school_declined_noble_education_cursor";
+        public const string SCHOOL_ACADEMY_EDUCATION_CURSOR =
+            "aw_school_academy_education_cursor";
+        public const string SCHOOL_EDUCATION_STUDENT_ID =
+            "aw_school_education_student_id";
+        public const string SCHOOL_EDUCATION_TEACHER_ID =
+            "aw_school_education_teacher_id";
+        public const string SCHOOL_EDUCATION_SCHOOL_ID =
+            "aw_school_education_school_id";
+        public const string SCHOOL_EDUCATION_DESTINATION_CITY_ID =
+            "aw_school_education_destination_city_id";
+        public const string SCHOOL_EDUCATION_KINGDOM_ID =
+            "aw_school_education_kingdom_id";
+        public const string SCHOOL_EDUCATION_START_YEAR =
+            "aw_school_education_start_year";
+        public const string SCHOOL_EDUCATION_RETRY_COUNT =
+            "aw_school_education_retry_count";
+        public const string SCHOOL_EDUCATION_ADMISSION_YEAR =
+            "aw_school_education_admission_year";
+        public const string SCHOOL_EDUCATION_ADMISSION_COUNT =
+            "aw_school_education_admission_count";
+        public const string SCHOOL_EDUCATION_ADMISSION_BASE_LIMIT =
+            "aw_school_education_admission_base_limit";
+        public const string SCHOOL_EDUCATION_ADMISSION_LIMIT =
+            "aw_school_education_admission_limit";
         public const string COURT_KINGDOM_ID = "aw_court_kingdom_id";
         public const string COURT_CITY_ID = "aw_court_city_id";
         public const string OFFICER_RANK = "aw_officer_rank";
@@ -279,14 +441,42 @@ namespace AncientWarfare3.core.lineage
         public const string OFFICER_KAOKE_MOD_UNTIL = "aw_officer_kaoke_mod_until";
         public const string OFFICER_SENIORITY = "aw_officer_seniority";
         public const string OFFICER_LAST_POP_SNAPSHOT = "aw_officer_last_pop_snapshot";
+        public const string OFFICER_NATIVE_CITY_ID = "aw_officer_native_city_id";
+        public const string OFFICER_PREVIOUS_CITY_ID = "aw_officer_previous_city_id";
+        public const string OFFICER_WAITING_SINCE_YEAR = "aw_officer_waiting_since_year";
+        public const string OFFICER_LOCAL_GRADE = "aw_officer_local_grade";
+        public const string OFFICER_LOCAL_GRADE_REVIEW_YEAR = "aw_officer_local_grade_review_year";
+        public const string CIVIL_SERVICE_QUALIFICATION =
+            "aw_civil_service_qualification";
+        public const string CIVIL_SERVICE_ISSUING_KINGDOM_ID =
+            "aw_civil_service_issuing_kingdom_id";
+        public const string CIVIL_SERVICE_SESSION_ID =
+            "aw_civil_service_session_id";
+        public const string CIVIL_SERVICE_RESULT_YEAR =
+            "aw_civil_service_result_year";
+        public const string CIVIL_SERVICE_ENTRY_BONUS =
+            "aw_civil_service_entry_bonus";
+        public const string CIVIL_SERVICE_EXAM_ANCHOR_YEAR =
+            "aw_civil_service_exam_anchor_year";
+        public const string CIVIL_SERVICE_FIRST_APPOINTMENT_RECORDED =
+            "aw_civil_service_first_appointment_recorded";
         public const string OFFICIAL_CAREER_LAST_YEAR = "aw_official_career_last_year";
+        public const string COURT_PETITION_FAVOR = "aw_court_petition_favor";
+        public const string COURT_PETITION_UNTIL_YEAR = "aw_court_petition_until_year";
+        public const string COURT_PETITION_LAST_YEAR = "aw_court_petition_last_year";
         public const string MINISTERIAL_POWER = "aw_ministerial_power";
         public const string MINISTERIAL_POWER_KINGDOM_ID = "aw_ministerial_power_kingdom_id";
         public const string MINISTERIAL_POWER_LAST_KINGDOM_ID = "aw_ministerial_power_last_kingdom_id";
         public const string MINISTERIAL_POWER_ACTOR_LAST_YEAR = "aw_ministerial_power_actor_last_year";
+        public const string MINISTERIAL_NINE_BESTOWMENTS_GRANTED =
+            "aw_ministerial_nine_bestowments_granted";
         public const string MINISTERIAL_PREMIER_ID = "aw_ministerial_premier_id";
         public const string MINISTERIAL_PREMIER_POWER = "aw_ministerial_premier_power";
         public const string MINISTERIAL_POWER_LAST_YEAR = "aw_ministerial_power_last_year";
+        public const string MINISTERIAL_COUP_PREPARATION_YEARS =
+            "aw_ministerial_coup_preparation_years";
+        public const string MINISTERIAL_COUP_LAST_ATTEMPT_YEAR =
+            "aw_ministerial_coup_last_attempt_year";
         public const string COURT_IMPERIAL_PHYSICIAN_ID = "aw_court_imperial_physician_id";
         public const string COURT_MEDICAL_KING_ID = "aw_court_medical_king_id";
         public const string COURT_MEDICAL_HEIR_ID = "aw_court_medical_heir_id";
@@ -303,14 +493,71 @@ namespace AncientWarfare3.core.lineage
         public const string GENERAL_LAST_REFRESH_YEAR = "aw_general_last_refresh_year";
         public const string GENERAL_LAST_FIEF_YEAR = "aw_general_last_fief_year";
         public const string GENERAL_LAST_RISK_YEAR = "aw_general_last_risk_year";
+        public const string COURT_MERIT_REWARD_LAST_YEAR =
+            "aw_court_merit_reward_last_year";
         public const string GENERAL_ACTIVE = "aw_general_active";
         public const string GENERAL_MERIT = "aw_general_merit";
         public const string GENERAL_FIEF_CITY_ID = "aw_general_fief_city_id";
         public const string CITY_FIEF_GENERAL_ID = "aw_city_fief_general_id";
         public const string CITY_FIEF_GENERAL_NAME = "aw_city_fief_general_name";
         public const string FEUDATORY_ID = "aw_feudatory_id";
+        public const string FEUDATORY_BRANCH_SHI_ID =
+            "aw_feudatory_branch_shi_id";
+        public const string FEUDATORY_PARENT_ACTOR_ID =
+            "aw_feudatory_parent_actor_id";
+        public const string FEUDATORY_LINE_ID = "aw_feudatory_line_id";
+        public const string FEUDATORY_ADULT_REFRESHED =
+            "aw_feudatory_adult_refreshed";
+        public const string ROYAL_CHILD = "aw_royal_child";
+        public const string ROYAL_PARENT_ACTOR_ID =
+            "aw_royal_parent_actor_id";
+        public const string ROYAL_PARENT_KINGDOM_ID =
+            "aw_royal_parent_kingdom_id";
+        public const string ROYAL_ADULT_TITLE_PROCESSED =
+            "aw_royal_adult_title_processed";
+        public const string HISTORICAL_DYNASTIC_TITLE =
+            "aw_historical_dynastic_title";
         public const string CITY_FEUDATORY_ID = "aw_city_feudatory_id";
+        public const string FEUDATORY_GARRISON_ID = "aw_feudatory_garrison_id";
+        public const string FEUDATORY_GARRISON_SCAN_CURSOR = "aw_feudatory_garrison_scan_cursor";
+        public const string FEUDATORY_AI_LAST_REVOCATION_YEAR = "aw_feudatory_ai_last_revocation_year";
+        public const string FEUDATORY_OFFICE_SCAN_CURSOR = "aw_feudatory_office_scan_cursor";
         public const string FAVOR_ORDER_ENABLED = "aw_favor_order_enabled";
+        public const string JINGNAN_FEUDATORY_ID = "aw_jingnan_feudatory_id";
+        public const string JINGNAN_PRINCE_ACTOR_ID = "aw_jingnan_prince_actor_id";
+        public const string JINGNAN_EMPIRE_KINGDOM_ID = "aw_jingnan_empire_kingdom_id";
+        public const string JINGNAN_REBEL_KINGDOM_ID = "aw_jingnan_rebel_kingdom_id";
+        public const string FEUDATORY_AMBITION = "aw_feudatory_ambition";
+        public const string JINGNAN_KIN_RULER_ID = "aw_jingnan_kin_ruler_id";
+        public const string JINGNAN_KIN_RULER_DEPTH = "aw_jingnan_kin_ruler_depth";
+        public const string JINGNAN_KIN_PRINCE_DEPTH = "aw_jingnan_kin_prince_depth";
+        public const string JINGNAN_LAST_RISK = "aw_jingnan_last_risk";
+        public const string JINGNAN_WAR_ID = "aw_jingnan_war_id";
+        public const string JINGNAN_RISK = "aw_jingnan_risk";
+        public const string JINGNAN_REASON = "aw_jingnan_reason";
+        public const string JINGNAN_CAPITAL_CITY_ID = "aw_jingnan_capital_city_id";
+        public const string JINGNAN_VICTOR_REBEL_ID = "aw_jingnan_victor_rebel_id";
+        public const string JINGNAN_MANDATE_COLLAPSE = "aw_jingnan_mandate_collapse";
+        public const string COUP_RESTORATION_WAR_ID =
+            "aw_coup_restoration_war_id";
+        public const string COUP_RESTORATION_ORIGINAL_KINGDOM_ID =
+            "aw_coup_restoration_original_kingdom_id";
+        public const string COUP_RESTORATION_REBEL_KINGDOM_ID =
+            "aw_coup_restoration_rebel_kingdom_id";
+        public const string COUP_RESTORATION_OLD_RULER_ID =
+            "aw_coup_restoration_old_ruler_id";
+        public const string COUP_RESTORATION_ALTERNATE_CLAIMANT_ID =
+            "aw_coup_restoration_alternate_claimant_id";
+        public const string COUP_RESTORATION_SUPPORTER_ID =
+            "aw_coup_restoration_supporter_id";
+        public const string COUP_RESTORATION_SUPPORTER_IDS =
+            "aw_coup_restoration_supporter_ids";
+        public const string COUP_RESTORATION_SEAT_CITY_IDS =
+            "aw_coup_restoration_seat_city_ids";
+        public const string COUP_RESTORATION_CAPITAL_CITY_ID =
+            "aw_coup_restoration_capital_city_id";
+        public const string COUP_RESTORATION_VICTOR_REBEL_ID =
+            "aw_coup_restoration_victor_rebel_id";
         public const string GENERAL_RISK_RECORDED_YEAR = "aw_general_risk_recorded_year";
         public const string FORMER_KINGDOM_ID = "aw_former_kingdom_id";
         public const string FORMER_KINGDOM_NAME = "aw_former_kingdom_name";
@@ -328,6 +575,8 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_HEIR_LAST_RECONCILE_YEAR = "aw_heir_last_reconcile_year";
         public const string KINGDOM_HEIR_RELATION_ACTOR_ID = "aw_heir_relation_actor_id";
         public const string KINGDOM_HEIR_RELATION_KING_ID = "aw_heir_relation_king_id";
+        public const string KINGDOM_HEIR_SELECTION_DIRTY =
+            "aw_heir_selection_dirty";
         public const string IS_HEIR = "aw_is_heir";
         public const string KINGDOM_PRE_SUCCESSION_KING_ID = "aw_pre_succession_king_id";
         public const string KINGDOM_LEGITIMATE_SHI_ID = "aw_legitimate_shi_id";
@@ -335,10 +584,45 @@ namespace AncientWarfare3.core.lineage
         public const string KINGDOM_MONARCHY_ESTABLISHED = "aw_monarchy_established";
         public const string KINGDOM_RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string KINGDOM_SUCCESSION_MODE = "aw_succession_mode";
+        public const string INHERITANCE_LAW_EFFECTIVE = "aw_inheritance_law_effective";
+        public const string INHERITANCE_LAW_LOCKED = "aw_inheritance_law_locked";
+        public const string INHERITANCE_LAW_LAST_EVALUATION_YEAR =
+            "aw_inheritance_law_last_evaluation_year";
+        public const string INHERITANCE_LAW_LAST_CHANGE_YEAR =
+            "aw_inheritance_law_last_change_year";
+        public const string INHERITANCE_CANDIDATE_ID =
+            "aw_inheritance_candidate_id";
+        public const string INHERITANCE_CANDIDATE_MODE =
+            "aw_inheritance_candidate_mode";
+        public const string INHERITANCE_CANDIDATE_REFERENCE_KING_ID =
+            "aw_inheritance_candidate_reference_king_id";
+        public const string INHERITANCE_RULER_COURT_INFLUENCE =
+            "aw_inheritance_ruler_court_influence";
+        public const string ACTIVE_SUCCESSION_DISPUTE_ID =
+            "aw_active_succession_dispute_id";
+        public const string SUCCESSION_DISPUTE_ID =
+            "aw_succession_dispute_id";
+        public const string SUCCESSION_DISPUTE_ORIGINAL_KINGDOM_ID =
+            "aw_succession_dispute_original_kingdom_id";
+        public const string SUCCESSION_DISPUTE_RIVAL_KINGDOM_ID =
+            "aw_succession_dispute_rival_kingdom_id";
+        public const string SUCCESSION_REUNIFICATION_GENERATION =
+            "aw_succession_reunification_generation";
+        public const string INHERITANCE_SCORE_PRIMOGENITURE =
+            "aw_inheritance_score_primogeniture";
+        public const string INHERITANCE_SCORE_MILITARY =
+            "aw_inheritance_score_military";
+        public const string INHERITANCE_SCORE_CIVIL =
+            "aw_inheritance_score_civil";
+        public const string INHERITANCE_MILITARY_UNLOCKED =
+            "aw_inheritance_military_unlocked";
+        public const string INHERITANCE_CIVIL_UNLOCKED =
+            "aw_inheritance_civil_unlocked";
         public const string RESTORED_SHI_ID = "aw_restored_shi_id";
         public const string COLLATERAL_NONAGNATIC = "aw_collateral_nonagnatic";
         public const string KINGDOM_YEAR_NAME = "aw_year_name";
         public const string KINGDOM_YEAR_START = "aw_year_start";
+        public const string KINGDOM_REIGN_START = "aw_reign_start";
         public const string KINGDOM_ERA_CHANGE_REASON = "aw_era_change_reason";
         public const string KINGDOM_ERA_SOURCE_EVENT_ID = "aw_era_source_event_id";
         public const string KINGDOM_ERA_LAST_AI_CHECK_YEAR = "aw_era_last_ai_check_year";
@@ -355,6 +639,8 @@ namespace AncientWarfare3.core.lineage
         public const string CLAN_FALLBACK = "clan_fallback";
         public const string LEADER_FALLBACK = "leader_fallback";
         public const string REPUBLIC_ELECTIVE = "republic_elective";
+        public const string MILITARY_ACCLAIM = "military_acclaim";
+        public const string CIVIL_ACCLAIM = "civil_acclaim";
     }
 
     internal static class LineageStatus
@@ -370,7 +656,8 @@ namespace AncientWarfare3.core.lineage
         King,
         CityLeader,
         Figure,
-        Official
+        Official,
+        ArmyCaptain
     }
 
     internal static class ShiSourceType
@@ -382,5 +669,6 @@ namespace AncientWarfare3.core.lineage
         public const string SPECIAL_FIGURE = "special_figure";
         public const string KING_FOUNDED = "king_founded";
         public const string OFFICIAL_GRANT = "official_grant";
+        public const string FEUDATORY = "feudatory";
     }
 }

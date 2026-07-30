@@ -28,6 +28,18 @@ namespace AncientWarfare3.core.lineage
         public const int MaximumCities = 5;
         public const int MaximumPrincesPerDecision = 8;
         public const int AnnualModulo = 4;
+        public const int StatusActive = 0;
+        public const int StatusRebelling = 2;
+        public const int StatusAbolished = 4;
+
+        public static string BuildFeudatoryName(string pTitleName)
+        {
+            string titleName = (pTitleName ?? "").Trim();
+            if (titleName.EndsWith("藩", StringComparison.Ordinal))
+                titleName = titleName.Substring(0, titleName.Length - 1)
+                    .Trim();
+            return titleName.Length == 0 ? "" : titleName + "藩";
+        }
 
         public static bool IsEligiblePrince(bool pIsMandateDynast, bool pAdult,
             bool pMale, bool pKing, bool pHeir, bool pAlreadyPrince,

@@ -15,7 +15,6 @@ namespace AncientWarfare3.core.lineage
 
         private const int DEFAULT_CLAIM_YEARS = 30;
         private const int NO_CB_COOLDOWN_YEARS = 20;
-        private const float NO_CB_POLITICAL_COST = 35f;
 
         [ThreadStatic] private static int _allowWarStartDepth;
 
@@ -53,6 +52,14 @@ namespace AncientWarfare3.core.lineage
             catch { }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
+            if (DiplomacyProposalRules.BlocksWarWithActivePact(
+                    DiplomacyProposalService.HasActiveWarBlocker(
+                        pAttacker, pDefender), systemWar: false,
+                    independenceWar: type == "independence_war"))
+            {
+                pReason = "non_aggression_pact";
+                return false;
+            }
             if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar: false, out pReason)) return false;
             if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
             if (HasValidCasusBelli(pAttacker, pDefender, type)) return true;
@@ -78,8 +85,9 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
-        public static bool CanQueueWarPair(Kingdom pAttacker, Kingdom pDefender, string pWarType,
-            out string pReason)
+        public static bool CanQueueWarPair(Kingdom pAttacker,
+            Kingdom pDefender, string pWarType, out string pReason,
+            bool pSystemWar = false)
         {
             pReason = "";
             if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) || pAttacker == pDefender)
@@ -89,8 +97,19 @@ namespace AncientWarfare3.core.lineage
             }
 
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
-            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar: false, out pReason)) return false;
-            if (!CanPassVassalWarRules(pAttacker, pDefender, type, out pReason)) return false;
+            if (DiplomacyProposalRules.BlocksWarWithActivePact(
+                    DiplomacyProposalService.HasActiveWarBlocker(
+                        pAttacker, pDefender), systemWar: pSystemWar,
+                    independenceWar: type == "independence_war"))
+            {
+                pReason = "non_aggression_pact";
+                return false;
+            }
+            if (!CanPassAllianceWarRules(pAttacker, pDefender, type,
+                    pSystemWar, out pReason)) return false;
+            if (!pSystemWar &&
+                !CanPassVassalWarRules(pAttacker, pDefender, type,
+                    out pReason)) return false;
             try
             {
                 if (World.world?.wars?.getWar(pAttacker, pDefender, pOnlyMain: false) != null)
@@ -107,20 +126,33 @@ namespace AncientWarfare3.core.lineage
         public static bool TryStartWar(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             string pReasonKey, bool pNoCb = false)
         {
-            War war = StartWar(pAttacker, pDefender, pWarType, pReasonKey, pNoCb, pSystemWar: false);
+            War war = StartWar(pAttacker, pDefender, pWarType, pReasonKey,
+                pNoCb, pSystemWar: false, pCasusBelliLocked: false, out _);
             return war?.data != null;
         }
 
         public static War TryStartWarWithResult(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             string pReasonKey, bool pNoCb = false)
         {
-            return StartWar(pAttacker, pDefender, pWarType, pReasonKey, pNoCb, pSystemWar: false);
+            return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
+                pNoCb, pSystemWar: false, pCasusBelliLocked: false, out _);
         }
 
         public static War TryStartSystemWar(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             string pReasonKey)
         {
-            return StartWar(pAttacker, pDefender, pWarType, pReasonKey, pNoCb: false, pSystemWar: true);
+            return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
+                pNoCb: false, pSystemWar: true, pCasusBelliLocked: false,
+                out _);
+        }
+
+        public static War TryStartNotifiedWarWithResult(Kingdom pAttacker,
+            Kingdom pDefender, string pWarType, string pReasonKey,
+            bool pNoCb, bool pSystemWar, out string pFailureReason)
+        {
+            return StartWar(pAttacker, pDefender, pWarType, pReasonKey,
+                pNoCb, pSystemWar, pCasusBelliLocked: true,
+                out pFailureReason);
         }
 
         public static bool HasValidCasusBelli(Kingdom pAttacker, Kingdom pDefender, string pWarType)
@@ -139,42 +171,19 @@ namespace AncientWarfare3.core.lineage
             string pClaimType, string pWarType, string pReasonKey, int pYearsValid = DEFAULT_CLAIM_YEARS)
         {
             if (!Ready || !IsCivilKingdom(pSource) || !IsCivilKingdom(pTarget) || pSource == pTarget) return -1L;
-
-            long existing = FindActiveClaimId(pSource.id, pTarget.id, pWarType);
-            if (existing >= 0) return existing;
-
-            long claimId = TableIdAllocator.Next(DB, WarClaimTableItem.GetTableName(), "CLAIM_ID");
-            double now = LineageService.CurTime();
-            double expires = pYearsValid <= 0 ? -1.0 : now + pYearsValid * 365.0;
-            Actor king = pSource.king;
-
             try
             {
-                DB.Insert(WarClaimTableItem.GetTableName(),
-                    ColumnVal.Create("CLAIM_ID", claimId),
-                    ColumnVal.Create("SOURCE_KINGDOM_ID", pSource.id),
-                    ColumnVal.Create("SOURCE_KINGDOM_NAME", pSource.name ?? ""),
-                    ColumnVal.Create("SOURCE_KINGDOM_COLOR", HistoryColors.FromKingdom(pSource)),
-                    ColumnVal.Create("TARGET_KINGDOM_ID", pTarget.id),
-                    ColumnVal.Create("TARGET_KINGDOM_NAME", pTarget.name ?? ""),
-                    ColumnVal.Create("TARGET_KINGDOM_COLOR", HistoryColors.FromKingdom(pTarget)),
-                    ColumnVal.Create("TARGET_CITY_ID", pTargetCity?.data?.id ?? -1L),
-                    ColumnVal.Create("TARGET_CITY_NAME", pTargetCity?.data?.name ?? ""),
-                    ColumnVal.Create("CLAIM_TYPE", pClaimType ?? ""),
-                    ColumnVal.Create("WAR_TYPE", pWarType ?? WAR_NORMAL),
-                    ColumnVal.Create("REASON_KEY", pReasonKey ?? ""),
-                    ColumnVal.Create("CREATED_TIME", now),
-                    ColumnVal.Create("EXPIRES_TIME", expires),
-                    ColumnVal.Create("ACTIVE", 1),
-                    ColumnVal.Create("CONSUMED", 0),
-                    ColumnVal.Create("CREATED_BY_ACTOR_ID", king?.data?.id ?? -1L),
-                    ColumnVal.Create("CREATED_BY_NAME", king?.getName() ?? ""));
-
-                HistoryWriter.RecordKingdom(pSource, "war_claim_created",
-                    HistoryText.Kingdom(pSource) + H("aw_hist_war_claim_created_mid") +
-                    HistoryText.Kingdom(pTarget) + H("aw_hist_war_claim_created_reason") +
-                    HistoryText.PlainText(ReasonLabel(pReasonKey, pWarType)),
-                    HistoryTarget.Kingdom(pTarget));
+                using SQLiteTransaction transaction = DB.BeginTransaction();
+                if (!TryCreateClaimInTransaction(pSource, pTarget,
+                        pTargetCity, pClaimType, pWarType, pReasonKey,
+                        pYearsValid, transaction, out long claimId))
+                {
+                    transaction.Rollback();
+                    return FindActiveClaimId(pSource.id, pTarget.id,
+                        pWarType);
+                }
+                transaction.Commit();
+                RecordClaimCreated(pSource, pTarget, pReasonKey, pWarType);
                 return claimId;
             }
             catch (Exception e)
@@ -182,6 +191,84 @@ namespace AncientWarfare3.core.lineage
                 ModClass.LogWarning("WarDecisionService.CreateClaim failed: " + e.Message);
                 return -1L;
             }
+        }
+
+        internal static bool TryCreateClaimInTransaction(Kingdom pSource,
+            Kingdom pTarget, City pTargetCity, string pClaimType,
+            string pWarType, string pReasonKey, int pYearsValid,
+            SQLiteTransaction pTransaction, out long pClaimId)
+        {
+            pClaimId = -1L;
+            if (!Ready || pTransaction == null ||
+                !IsCivilKingdom(pSource) || !IsCivilKingdom(pTarget) ||
+                pSource == pTarget) return false;
+            string warType = string.IsNullOrEmpty(pWarType)
+                ? WAR_NORMAL
+                : pWarType;
+            using (var existing = new SQLiteCommand(
+                       "SELECT CLAIM_ID FROM WarClaim WHERE " +
+                       "SOURCE_KINGDOM_ID=@source AND " +
+                       "TARGET_KINGDOM_ID=@target AND WAR_TYPE=@warType " +
+                       "AND ACTIVE=1 LIMIT 1", DB, pTransaction))
+            {
+                existing.Parameters.AddWithValue("@source", pSource.id);
+                existing.Parameters.AddWithValue("@target", pTarget.id);
+                existing.Parameters.AddWithValue("@warType", warType);
+                if (existing.ExecuteScalar() != null) return false;
+            }
+            using (var allocate = new SQLiteCommand(
+                       "SELECT COALESCE(MAX(CLAIM_ID),0)+1 FROM WarClaim",
+                       DB, pTransaction))
+                pClaimId = Convert.ToInt64(allocate.ExecuteScalar());
+            double now = LineageService.CurTime();
+            double expires = pYearsValid <= 0
+                ? -1d
+                : now + pYearsValid * 365d;
+            Actor king = pSource.king;
+            using var insert = new SQLiteCommand(
+                "INSERT INTO WarClaim(CLAIM_ID,SOURCE_KINGDOM_ID," +
+                "SOURCE_KINGDOM_NAME,SOURCE_KINGDOM_COLOR," +
+                "TARGET_KINGDOM_ID,TARGET_KINGDOM_NAME," +
+                "TARGET_KINGDOM_COLOR,TARGET_CITY_ID,TARGET_CITY_NAME," +
+                "CLAIM_TYPE,WAR_TYPE,REASON_KEY,CREATED_TIME,EXPIRES_TIME," +
+                "ACTIVE,CONSUMED,CREATED_BY_ACTOR_ID,CREATED_BY_NAME) " +
+                "VALUES(@id,@source,@sourceName,@sourceColor,@target," +
+                "@targetName,@targetColor,@city,@cityName,@claimType," +
+                "@warType,@reason,@created,@expires,1,0,@actor,@actorName)",
+                DB, pTransaction);
+            insert.Parameters.AddWithValue("@id", pClaimId);
+            insert.Parameters.AddWithValue("@source", pSource.id);
+            insert.Parameters.AddWithValue("@sourceName", pSource.name ?? "");
+            insert.Parameters.AddWithValue("@sourceColor",
+                HistoryColors.FromKingdom(pSource));
+            insert.Parameters.AddWithValue("@target", pTarget.id);
+            insert.Parameters.AddWithValue("@targetName", pTarget.name ?? "");
+            insert.Parameters.AddWithValue("@targetColor",
+                HistoryColors.FromKingdom(pTarget));
+            insert.Parameters.AddWithValue("@city",
+                pTargetCity?.data?.id ?? -1L);
+            insert.Parameters.AddWithValue("@cityName",
+                pTargetCity?.data?.name ?? "");
+            insert.Parameters.AddWithValue("@claimType", pClaimType ?? "");
+            insert.Parameters.AddWithValue("@warType", warType);
+            insert.Parameters.AddWithValue("@reason", pReasonKey ?? "");
+            insert.Parameters.AddWithValue("@created", now);
+            insert.Parameters.AddWithValue("@expires", expires);
+            insert.Parameters.AddWithValue("@actor", king?.data?.id ?? -1L);
+            insert.Parameters.AddWithValue("@actorName", king?.getName() ?? "");
+            return insert.ExecuteNonQuery() == 1;
+        }
+
+        internal static void RecordClaimCreated(Kingdom pSource,
+            Kingdom pTarget, string pReasonKey, string pWarType)
+        {
+            HistoryWriter.RecordKingdom(pSource, "war_claim_created",
+                HistoryText.Kingdom(pSource) +
+                H("aw_hist_war_claim_created_mid") +
+                HistoryText.Kingdom(pTarget) +
+                H("aw_hist_war_claim_created_reason") +
+                HistoryText.PlainText(ReasonLabel(pReasonKey, pWarType)),
+                HistoryTarget.Kingdom(pTarget));
         }
 
         public static void ConsumeClaim(Kingdom pSource, Kingdom pTarget, string pWarType)
@@ -200,6 +287,13 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
+        internal static bool HasActiveNormalClaim(Kingdom pSource,
+            Kingdom pTarget)
+        {
+            return pSource?.data != null && pTarget?.data != null &&
+                   FindActiveClaimId(pSource.id, pTarget.id, WAR_NORMAL) >= 0;
+        }
+
         public static bool ShouldBlockWarStart(Kingdom pAttacker, Kingdom pDefender, WarTypeAsset pType)
         {
             if (IsAw3AllowedWarStart) return false;
@@ -211,26 +305,73 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
-        private static War StartWar(Kingdom pAttacker, Kingdom pDefender, string pWarType, string pReasonKey,
-            bool pNoCb, bool pSystemWar)
+        private static War StartWar(Kingdom pAttacker, Kingdom pDefender,
+            string pWarType, string pReasonKey, bool pNoCb, bool pSystemWar,
+            bool pCasusBelliLocked, out string pFailureReason)
         {
-            if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) || pAttacker == pDefender) return null;
+            pFailureReason = "";
+            if (!IsCivilKingdom(pAttacker) || !IsCivilKingdom(pDefender) ||
+                pAttacker == pDefender)
+            {
+                pFailureReason = "invalid_participants";
+                return null;
+            }
             string type = string.IsNullOrEmpty(pWarType) ? WAR_NORMAL : pWarType;
             if (type == MandateService.WAR_TIANMING && !MandatePhaseService.CanContestMandate)
+            {
+                pFailureReason = "mandate_contest_closed";
                 return null;
+            }
+            if (DiplomacyProposalRules.BlocksWarWithActivePact(
+                    DiplomacyProposalService.HasActiveWarBlocker(
+                        pAttacker, pDefender), pSystemWar,
+                    independenceWar: type == "independence_war"))
+            {
+                pFailureReason = "active_war_blocker";
+                return null;
+            }
             WarTypeAsset asset = AssetManager.war_types_library.get(type);
-            if (asset == null) return null;
+            if (asset == null)
+            {
+                pFailureReason = "missing_war_type";
+                return null;
+            }
 
-            if (!pSystemWar && !CanPassVassalWarRules(pAttacker, pDefender, type, out _)) return null;
-            if (!CanPassAllianceWarRules(pAttacker, pDefender, type, pSystemWar, out _)) return null;
-            if (!pSystemWar && !pNoCb && !HasValidCasusBelli(pAttacker, pDefender, type)) return null;
-            if (pNoCb && !CanForceNoCb(pAttacker)) return null;
+            if (!pSystemWar && !CanPassVassalWarRules(pAttacker, pDefender,
+                    type, out pFailureReason)) return null;
+            if (!CanPassAllianceWarRules(pAttacker, pDefender, type,
+                    pSystemWar, out pFailureReason)) return null;
+            try
+            {
+                if (World.world?.wars?.getWar(pAttacker, pDefender,
+                        pOnlyMain: false) != null)
+                {
+                    pFailureReason = "already_at_war";
+                    return null;
+                }
+            }
+            catch { }
+            if (!pCasusBelliLocked && !pSystemWar && !pNoCb &&
+                !HasValidCasusBelli(pAttacker, pDefender, type))
+            {
+                pFailureReason = "missing_cb";
+                return null;
+            }
+            if (!pCasusBelliLocked && pNoCb && !CanForceNoCb(pAttacker))
+            {
+                pFailureReason = "no_cb_cooldown";
+                return null;
+            }
 
             try
             {
                 _allowWarStartDepth++;
                 War war = World.world.diplomacy.startWar(pAttacker, pDefender, asset);
-                if (war?.data == null) return null;
+                if (war?.data == null)
+                {
+                    pFailureReason = "engine_rejected_start";
+                    return null;
+                }
 
                 if (pNoCb) ApplyNoCbPenalty(pAttacker, pDefender);
                 else if (!pSystemWar) ConsumeClaim(pAttacker, pDefender, type);
@@ -240,6 +381,7 @@ namespace AncientWarfare3.core.lineage
             }
             catch (Exception e)
             {
+                pFailureReason = "start_exception";
                 ModClass.LogWarning("WarDecisionService.TryStartWar failed: " + e.Message);
                 return null;
             }
@@ -252,8 +394,13 @@ namespace AncientWarfare3.core.lineage
         private static bool CanPassVassalWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             out string pReason)
         {
-            Kingdom attackerSuzerain = VassalService.GetSuzerain(pAttacker);
+            Kingdom attackerSuzerain =
+                VassalService.GetDiplomaticSuzerain(pAttacker);
             bool attackerIsVassal = attackerSuzerain?.data != null && !attackerSuzerain.isRekt();
+            Kingdom defenderSuzerain =
+                VassalService.GetDiplomaticSuzerain(pDefender);
+            bool defenderIsSubject = defenderSuzerain?.data != null &&
+                                     !defenderSuzerain.isRekt();
             bool defenderIsSuzerain = attackerSuzerain != null && attackerSuzerain == pDefender;
             Kingdom attackerRoot = attackerIsVassal ? VassalService.GetRootSuzerain(pAttacker) : null;
             Kingdom defenderRoot = VassalService.GetRootSuzerain(pDefender);
@@ -262,8 +409,9 @@ namespace AncientWarfare3.core.lineage
             bool blockInternalWar = sameRootSuzerain &&
                                     CentralizationService.ReadSnapshot(attackerRoot)
                                         .effects.BlocksInternalVassalWar;
-            return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal, defenderIsSuzerain,
-                sameRootSuzerain, blockInternalWar, pWarType, out pReason);
+            return VassalWarPermissionRules.CanDeclareWar(attackerIsVassal,
+                defenderIsSubject, defenderIsSuzerain, sameRootSuzerain,
+                blockInternalWar, pWarType, out pReason);
         }
 
         private static bool CanPassAllianceWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
@@ -296,7 +444,7 @@ namespace AncientWarfare3.core.lineage
             switch (pWarType)
             {
                 case "independence_war":
-                    return VassalService.GetSuzerain(pAttacker) == pDefender;
+                    return VassalService.GetDiplomaticSuzerain(pAttacker) == pDefender;
                 case "reclaim":
                     return WarTerritoryService.FindBestCoreTargetCityForDecision(pAttacker, pDefender)?.data != null;
                 case "vassal_war":
@@ -311,8 +459,12 @@ namespace AncientWarfare3.core.lineage
                 case MandateService.WAR_TIANMING_REBEL:
                 case GeneralRebellionService.WAR_GENERAL_REBELLION:
                 case GeneralRebellionService.WAR_FIEF_INDEPENDENCE:
+                case FeudatoryJingnanRules.WarTypeId:
                 case WAR_RESTORATION:
                     return true;
+                case SuccessionDisputeRules.WarTypeId:
+                    return SuccessionDisputeService.CanDeclareReunification(
+                        pAttacker, pDefender);
                 default:
                     return false;
             }
@@ -323,21 +475,24 @@ namespace AncientWarfare3.core.lineage
             if (!VassalService.CanSetVassal(pDefender, pAttacker)) return false;
             if (VassalService.IsVassalKingdom(pAttacker)) return false;
             if (VassalService.IsSuzerain(pDefender)) return false;
-            float own = VassalService.GetPowerScore(pAttacker, pIncludeVassals: true);
-            float target = Mathf.Max(1f, VassalService.GetPowerScore(pDefender, pIncludeVassals: true));
+            float own = VassalService.GetWarPowerScore(pAttacker, pIncludeVassals: true);
+            float target = Mathf.Max(1f, VassalService.GetWarPowerScore(pDefender, pIncludeVassals: true));
             return own >= target * 1.25f;
         }
 
         public static bool CanForceTributary(Kingdom pAttacker, Kingdom pDefender)
         {
-            bool participantsValid = VassalService.CanSetVassal(pDefender, pAttacker) &&
-                                     !VassalService.IsVassalKingdom(pAttacker);
+            KingdomTitle attackerTitle = KingdomTitleService.GetTitle(pAttacker);
+            bool titleEligible = VassalContractTierRules.
+                CanInitiateForcedTributary((int)attackerTitle);
+            bool participantsValid = VassalService.CanSetTributary(
+                pDefender, pAttacker);
             bool targetIndependent = !VassalService.IsVassalKingdom(pDefender);
             bool targetAlreadyTributary = VassalService.IsTributaryKingdom(pDefender);
             bool adjacent = KingdomAdjacency.AreDirectNeighbors(pAttacker, pDefender);
-            float own = VassalService.GetPowerScore(pAttacker, pIncludeVassals: true);
-            float target = VassalService.GetPowerScore(pDefender, pIncludeVassals: true);
-            return VassalContractTierRules.CanForceTributary(participantsValid,
+            float own = VassalService.GetWarPowerScore(pAttacker, pIncludeVassals: true);
+            float target = VassalService.GetWarPowerScore(pDefender, pIncludeVassals: true);
+            return titleEligible && VassalContractTierRules.CanForceTributary(participantsValid,
                 targetIndependent, targetAlreadyTributary, adjacent, own, target);
         }
 
@@ -397,8 +552,6 @@ namespace AncientWarfare3.core.lineage
         {
             if (pAttacker?.data == null) return;
             int year = Date.getCurrentYear();
-            pAttacker.data.get(LineageKeys.POLICY_POINTS, out float policyPoints, 0f);
-            pAttacker.data.set(LineageKeys.POLICY_POINTS, Mathf.Max(0f, policyPoints - NO_CB_POLITICAL_COST));
             pAttacker.data.set("aw_no_cb_last_year", year);
             pAttacker.data.set("aw_no_cb_penalty_until_year", year + NO_CB_COOLDOWN_YEARS);
             pAttacker.data.get("aw_war_legitimacy_penalty", out int penalty, 0);
@@ -437,6 +590,7 @@ namespace AncientWarfare3.core.lineage
                 case "restoration": return WarDisplayLabelRules.Label("restoration");
                 case "tianming": return WarDisplayLabelRules.Label("tianming");
                 case "mandate_conquest": return WarDisplayLabelRules.Label("mandate_conquest");
+                case "jingnan": return WarDisplayLabelRules.Label("jingnan_war");
                 case "no_cb": return WarDisplayLabelRules.Label("no_cb");
             }
 
@@ -451,6 +605,9 @@ namespace AncientWarfare3.core.lineage
                 case MandateService.WAR_TIANMING_REBEL: return WarDisplayLabelRules.Label("tianmingrebel");
                 case GeneralRebellionService.WAR_GENERAL_REBELLION: return WarDisplayLabelRules.Label("general_rebellion_war");
                 case GeneralRebellionService.WAR_FIEF_INDEPENDENCE: return WarDisplayLabelRules.Label("fief_independence_war");
+                case FeudatoryJingnanRules.WarTypeId: return WarDisplayLabelRules.Label("jingnan_war");
+                case SuccessionDisputeRules.WarTypeId: return WarDisplayLabelRules.Label("succession_dispute_war");
+                case CoupRestorationRules.WarTypeId: return WarDisplayLabelRules.Label("coup_restoration_war");
                 default: return string.IsNullOrEmpty(pReasonKey) ? T("aw_hist_goal_generic") : pReasonKey;
             }
         }

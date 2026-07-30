@@ -24,25 +24,30 @@ namespace AncientWarfare3.patch
         [HarmonyPrefix]
         public static void Prefix(Actor __instance)
         {
-            if (__instance?.asset == null) return;
+            EnsureWildKingdom(__instance?.asset);
+        }
 
-            string wildId = __instance.asset.kingdom_id_wild;
-            if (string.IsNullOrEmpty(wildId)) return;
+        internal static Kingdom EnsureWildKingdom(ActorAsset pActorAsset)
+        {
+            string wildId = pActorAsset?.kingdom_id_wild;
+            if (string.IsNullOrEmpty(wildId)) return null;
 
             WildKingdomsManager mgr = World.world?.kingdoms_wild;
-            if (mgr == null) return;
+            if (mgr == null) return null;
 
-            if (mgr.get(wildId) != null) return; // 野生王国已在,放行
+            Kingdom existing = mgr.get(wildId);
+            if (existing != null) return existing;
 
             KingdomAsset asset = AssetManager.kingdoms.get(wildId);
             if (asset == null)
             {
                 ModClass.LogWarning("setDefaultKingdom: 野生王国 " + wildId + " 的 KingdomAsset 缺失,无法补建。");
-                return;
+                return null;
             }
 
-            mgr.newWildKingdom(asset); // private,publicized dll 可访问;补建后下面原方法 get 即可拿到
+            Kingdom created = mgr.newWildKingdom(asset); // private,publicized dll 可访问
             ModClass.LogInfo("[补建] 野生王国 " + wildId + " 不在 kingdoms_wild,已补建(spawn 单位 kingdom 不再为 null)。");
+            return created ?? mgr.get(wildId);
         }
     }
 }

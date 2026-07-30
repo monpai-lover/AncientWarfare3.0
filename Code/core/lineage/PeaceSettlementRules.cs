@@ -5,6 +5,7 @@ namespace AncientWarfare3.core.lineage
         None,
         TransferCity,
         ForceVassal,
+        ForceTributary,
         ReleaseVassal,
         RestoreKingdom,
         ApplyNoCbOutcome,
@@ -39,6 +40,8 @@ namespace AncientWarfare3.core.lineage
                     return PeaceSettlementAction.TransferCity;
                 case WarTerritoryService.GOAL_FORCE_VASSAL:
                     return PeaceSettlementAction.ForceVassal;
+                case WarTerritoryService.GOAL_FORCE_TRIBUTARY:
+                    return PeaceSettlementAction.ForceTributary;
                 case WarTerritoryService.GOAL_INDEPENDENCE:
                     return PeaceSettlementAction.ReleaseVassal;
                 case WarTerritoryService.GOAL_RESTORE_KINGDOM:

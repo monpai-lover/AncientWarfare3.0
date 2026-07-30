@@ -2,22 +2,40 @@ namespace AncientWarfare3.core.lineage
 {
     public static class HeirTitleRules
     {
-        public const string ShiziKey = "aw_heir_shizi";
-        public const string TaiziKey = "aw_heir_taizi";
+        public const string ShiziKey = HeirTitleSelectionRules.ShiziKey;
+        public const string TaiziKey = HeirTitleSelectionRules.TaiziKey;
+        public const string LiuhouKey = HeirTitleSelectionRules.LiuhouKey;
+        public const string SijunKey = HeirTitleSelectionRules.SijunKey;
 
-        public static string TitleKey(bool pIsMandateKingdom)
+        public static string TitleKey(bool pIsEmpireOrMandate)
         {
-            return pIsMandateKingdom ? TaiziKey : ShiziKey;
+            return HeirTitleSelectionRules.TitleKey(pIsEmpireOrMandate, "");
         }
 
-        public static string DefaultTitleText(bool pIsMandateKingdom)
+        public static string DefaultTitleText(bool pIsEmpireOrMandate)
         {
-            return pIsMandateKingdom ? "\u592a\u5b50" : "\u4e16\u5b50";
+            return HeirTitleSelectionRules.DefaultTitleText(
+                pIsEmpireOrMandate, "");
         }
 
-        public static string BuildSocialTitle(string pKingdomName, bool pIsMandateKingdom)
+        public static string TitleKey(bool pIsEmpireOrMandate,
+            string pSuccessionMode)
         {
-            string title = DefaultTitleText(pIsMandateKingdom);
+            return HeirTitleSelectionRules.TitleKey(
+                pIsEmpireOrMandate, pSuccessionMode);
+        }
+
+        public static string DefaultTitleText(bool pIsEmpireOrMandate,
+            string pSuccessionMode)
+        {
+            return HeirTitleSelectionRules.DefaultTitleText(
+                pIsEmpireOrMandate, pSuccessionMode);
+        }
+
+        public static string BuildSocialTitle(string pKingdomName,
+            bool pIsEmpireOrMandate)
+        {
+            string title = DefaultTitleText(pIsEmpireOrMandate);
             return string.IsNullOrEmpty(pKingdomName) ? title : pKingdomName + " " + title;
         }
 
@@ -26,23 +44,50 @@ namespace AncientWarfare3.core.lineage
             return !string.IsNullOrEmpty(pTitle) && pTitle.Contains("\u7ee7\u627f\u4eba");
         }
 
-        public static string RoleSnapshot(bool pIsMandateKingdom)
+        public static string RoleSnapshot(bool pIsEmpireOrMandate)
         {
-            return pIsMandateKingdom ? "heir_taizi" : "heir_shizi";
+            return HeirTitleSelectionRules.RoleSnapshot(pIsEmpireOrMandate);
+        }
+
+        internal static bool IsImperialOrMandate(Kingdom pKingdom)
+        {
+            return KingdomTitleService.IsEmperor(pKingdom) ||
+                   MandateService.IsMandateKingdom(pKingdom);
         }
 
         internal static string TitleKey(Kingdom pKingdom)
         {
-            return GovernmentTitleRules.SuccessorKey(
-                RepublicGovernmentService.IsRepublic(pKingdom),
-                MandateService.IsMandateKingdom(pKingdom));
+            if (RepublicGovernmentService.IsRepublic(pKingdom))
+                return GovernmentTitleRules.SuccessorKey(true,
+                    IsImperialOrMandate(pKingdom));
+            string successionMode = SuccessionMode.NONE;
+            if (pKingdom?.data != null)
+                pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
+                    out successionMode, SuccessionMode.NONE);
+            return TitleKey(IsImperialOrMandate(pKingdom),
+                successionMode);
+        }
+
+        internal static string DefaultTitleText(Kingdom pKingdom,
+            string pSuccessionMode)
+        {
+            return DefaultTitleText(IsImperialOrMandate(pKingdom),
+                pSuccessionMode);
         }
 
         internal static string BuildSocialTitle(string pKingdomName, Kingdom pKingdom)
         {
             if (RepublicGovernmentService.IsRepublic(pKingdom))
                 return GovernmentTitleRules.BuildSocialTitle(pKingdomName, pIsHead: false, pIsElder: true);
-            return BuildSocialTitle(pKingdomName, MandateService.IsMandateKingdom(pKingdom));
+            string successionMode = SuccessionMode.NONE;
+            if (pKingdom?.data != null)
+                pKingdom.data.get(LineageKeys.INHERITANCE_CANDIDATE_MODE,
+                    out successionMode, SuccessionMode.NONE);
+            string title = DefaultTitleText(
+                IsImperialOrMandate(pKingdom), successionMode);
+            return string.IsNullOrEmpty(pKingdomName)
+                ? title
+                : pKingdomName + " " + title;
         }
 
         public static bool ShouldRewriteOriginalHeirTitle(string pTitle)

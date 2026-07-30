@@ -1,0 +1,11 @@
+key,cz,en,ch
+aw_war_peace_score_total,战争分数：{0},War score: {0},戰爭分數：{0}
+aw_war_peace_score_decisive,决定性胜利,Decisive,決定性勝利
+aw_war_peace_demand_gross,索取：{0}/100,Demands: {0}/100,索取：{0}/100
+aw_war_peace_concession_gross,让步：{0}/100,Concessions: {0}/100,讓步：{0}/100
+aw_war_peace_net_demand,净索取：{0},Net demand: {0},淨索取：{0}
+aw_war_peace_disabled_side_capacity,该项需要 {0} 点，本侧仅余 {1} 点,Needs {0}; this side has {1} capacity left,該項需要 {0} 點，本側僅餘 {1} 點
+aw_war_peace_disabled_side_capacity_short,索取或让步超过各自的100点上限,Demands or concessions exceed their 100-point cap,索取或讓步超過各自的100點上限
+aw_war_peace_disabled_demand_cap,索取超过100点上限,Demands exceed the 100-point cap,索取超過100點上限
+aw_war_peace_disabled_concession_cap,让步超过100点上限,Concessions exceed the 100-point cap,讓步超過100點上限
+aw_hist_noble_remarried,续弦于, remarried ,續弦於

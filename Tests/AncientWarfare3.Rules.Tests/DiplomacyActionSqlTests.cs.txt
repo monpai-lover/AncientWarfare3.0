@@ -1,0 +1,453 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.db;
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyActionSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+
+        IReadOnlyList<DiplomacyActionIndexSpec> specs =
+            DiplomacyActionIndexRules.GetRequiredIndexes();
+        Equal(33, specs.Count,
+            "diplomacy expansion owns a fixed append-only index set");
+        True(specs.Any(spec =>
+                spec.Name == "idx_DiplomaticMarriage_actor_a_active"),
+            "active marriage lookup indexes the first actor slot");
+        True(specs.Any(spec =>
+                spec.Name == "idx_DiplomaticMarriage_actor_b_active"),
+            "active marriage lookup indexes the second actor slot");
+        True(specs.Any(spec => spec.Name ==
+                "idx_DiplomacyProposal_responder_status_created"),
+            "oldest incoming proposals use a responder-status-time index");
+        True(specs.Any(spec => spec.Name ==
+                "idx_DiplomacyProposal_pending_due"),
+            "due pending responses use a status-due-time index");
+        True(specs.Any(spec => spec.Name ==
+                "idx_DiplomacyProposal_war_truce_coverage"),
+            "war settlement truce coverage uses a war-leading index");
+        foreach (DiplomacyActionIndexSpec spec in specs)
+            using (var command = new SQLiteCommand(spec.BuildSql(), db))
+                command.ExecuteNonQuery();
+
+        string trucePlan = Explain(db, "SELECT REQUESTER_KINGDOM_ID," +
+            "RESPONDER_KINGDOM_ID FROM DiplomacyProposal WHERE " +
+            "WAR_ID=7 AND PROPOSAL_TYPE='truce' AND STATUS='accepted' " +
+            "AND TREATY_UNTIL_YEAR>=20");
+        True(trucePlan.Contains(
+                "idx_DiplomacyProposal_war_truce_coverage",
+                StringComparison.OrdinalIgnoreCase),
+            "truce coverage lookup does not scan the proposal table");
+
+        RejectsDuplicateActiveCoalition(db);
+        RejectsDuplicateActiveMarriage(db);
+        RejectsDuplicatePendingOperation(db);
+        RejectsReversePendingOperation(db);
+        RejectsDuplicateActiveModifierSource(db);
+        DueQueryUsesCompositeIndex(db);
+        ModifierPairQueryUsesCompositeIndex(db);
+        RoyalCandidatesUseBoundedRealmLineageIndex(db);
+        ActiveDynasticMarriageExcludesRoyalCandidate(db);
+        MarriageRealmQueriesUseIndexes(db);
+        RejectedProposalCooldownUsesPairTypeIndex(db);
+        RejectsDuplicateOutstandingProposalPair(db);
+        PendingIncomingUsesResponderCreatedIndex(db);
+        PendingResponseUsesDueIndex(db);
+        ProcessingRecoveryUsesDueIndex(db);
+        FailedResponseBackoffLetsQueueAdvance(db);
+    }
+
+    private static void RejectsDuplicateActiveCoalition(SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO DiplomaticCoalition VALUES" +
+                    "(1,1,2,9,10,22,10,-1,0,5,-1);");
+        True(ThrowsSqlite(db, "INSERT INTO DiplomaticCoalition VALUES" +
+            "(2,1,2,9,11,23,11,-1,0,6,-1);"),
+            "one normalized pair cannot duplicate an active coalition target");
+        Execute(db, "UPDATE DiplomaticCoalition SET STATUS=1,END_TIME=22 " +
+                    "WHERE COALITION_ID=1;");
+        Execute(db, "INSERT INTO DiplomaticCoalition VALUES" +
+                    "(3,1,2,9,23,35,23,-1,0,7,-1);");
+    }
+
+    private static void RejectsDuplicateActiveMarriage(SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO DiplomaticMarriage VALUES" +
+                    "(1,1,2,101,202,10,10,-1,0,8);");
+        True(ThrowsSqlite(db, "INSERT INTO DiplomaticMarriage VALUES" +
+            "(2,1,2,101,202,11,11,-1,0,9);"),
+            "the same living actor pair cannot own two active marriages");
+    }
+
+    private static void RejectsDuplicatePendingOperation(SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO DiplomaticOperation VALUES" +
+            "(1,1,2,'spy_network',0,-1,'',0,10,12,10,12,0,70,20,0,'',1);");
+        True(ThrowsSqlite(db, "INSERT INTO DiplomaticOperation VALUES" +
+            "(2,1,2,'spy_network',0,-1,'',0,11,13,11,13,0,70,20,0,'',1);"),
+            "a realm pair cannot queue duplicate covert actions");
+    }
+
+    private static void RejectsReversePendingOperation(SQLiteConnection db)
+    {
+        Execute(db, "DELETE FROM DiplomaticOperation;");
+        Execute(db, "INSERT INTO DiplomaticOperation VALUES" +
+                    "(10,1,2,'spy_network',0,-1,'',0,10,12,10,12,0,70,20,0,'',1);");
+        True(ThrowsSqlite(db, "INSERT INTO DiplomaticOperation VALUES" +
+            "(11,2,1,'forge_documents',0,9,'fabricate_weak_claim',0," +
+            "10,12,10,12,50,60,30,0,'',1);"),
+            "an unordered realm pair cannot run opposite covert actions at once");
+    }
+
+    private static void RejectsDuplicateActiveModifierSource(
+        SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO DiplomaticRelationModifier VALUES" +
+                    "(1,1,2,'marriage',7,20,10,20,1);");
+        True(ThrowsSqlite(db,
+            "INSERT INTO DiplomaticRelationModifier VALUES" +
+            "(2,1,2,'marriage',7,20,11,21,1);"),
+            "one source record cannot apply its relation effect twice");
+    }
+
+    private static void DueQueryUsesCompositeIndex(SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT OPERATION_ID FROM " +
+            "DiplomaticOperation WHERE STATUS=0 AND DUE_TIME<=20 " +
+            "ORDER BY DUE_TIME,OPERATION_ID LIMIT 1");
+        True(plan.Contains("idx_DiplomaticOperation_due",
+                StringComparison.OrdinalIgnoreCase),
+            "due operations use the status-time index");
+    }
+
+    private static void ModifierPairQueryUsesCompositeIndex(
+        SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT VALUE FROM " +
+            "DiplomaticRelationModifier WHERE KINGDOM_A_ID=1 AND " +
+            "KINGDOM_B_ID=2 AND ACTIVE=1 AND UNTIL_YEAR>=10");
+        True(plan.Contains("idx_DiplomaticRelationModifier_pair_active",
+                StringComparison.OrdinalIgnoreCase),
+            "opinion modifiers use the normalized pair index");
+    }
+
+    private static void RoyalCandidatesUseBoundedRealmLineageIndex(
+        SQLiteConnection db)
+    {
+        for (int i = 1; i <= 24; i++)
+        {
+            using var insert = new SQLiteCommand(
+                "INSERT INTO ActorArchive VALUES" +
+                "(@id,500,2,@alive,@birth);", db);
+            insert.Parameters.AddWithValue("@id", i);
+            insert.Parameters.AddWithValue("@alive", i == 5 ? 0 : 1);
+            insert.Parameters.AddWithValue("@birth", i);
+            insert.ExecuteNonQuery();
+        }
+        Execute(db, "INSERT INTO ActorArchive VALUES(100,500,1,1,100);");
+        Execute(db, "INSERT INTO ActorArchive VALUES(101,700,1,1,0);");
+
+        var query = new DiplomaticMarriageQuery(db);
+        IReadOnlyList<long> ids = ReadRealmCandidates(query, 500, 1, 500);
+        Equal(1, ids.Count,
+            "foreign royal kin cannot consume the domestic candidate limit");
+        Equal(100L, ids[0],
+            "a domestic collateral royal remains visible after twenty-four foreign relatives");
+        Equal(false, ids.Contains(5L),
+            "dead lineage members are excluded before actor resolution");
+        Equal(false, ids.Contains(101L),
+            "another lineage cannot enter the candidate set");
+        for (int i = 5000; i < 5040; i++)
+            Execute(db, "INSERT INTO ActorArchive VALUES(" + i +
+                        ",800,1,1," + i + ");");
+        IReadOnlyList<long> scanIds = ReadRealmCandidates(query, 800, 1, 500);
+        Equal(40, scanIds.Count,
+            "the bounded archive scan can look past twenty-four live royals before eligibility filtering");
+        True(scanIds.Count <= 96,
+            "the royal archive over-read remains bounded");
+        string plan = ExplainRealmCandidatePlan(query, 500, 1, 24);
+        True(plan.Contains("idx_ActorArchive_lineage_kingdom_alive_birth",
+                StringComparison.OrdinalIgnoreCase),
+            "royal candidate ids use the lineage-realm-alive-birth index");
+        True(plan.Contains("idx_DiplomaticMarriage_actor_a_active",
+                StringComparison.OrdinalIgnoreCase),
+            "candidate exclusion uses the active first-actor index");
+        True(plan.Contains("idx_DiplomaticMarriage_actor_b_active",
+                StringComparison.OrdinalIgnoreCase),
+            "candidate exclusion uses the active second-actor index");
+    }
+
+    private static void MarriageRealmQueriesUseIndexes(SQLiteConnection db)
+    {
+        string firstPlan = Explain(db, "SELECT MARRIAGE_ID FROM " +
+            "DiplomaticMarriage WHERE KINGDOM_A_ID=1 AND STATUS=0 " +
+            "AND MARRIAGE_ID>8 " +
+            "ORDER BY MARRIAGE_ID LIMIT 8");
+        True(firstPlan.Contains("idx_DiplomaticMarriage_kingdom_a_active",
+                StringComparison.OrdinalIgnoreCase),
+            "marriage maintenance uses the first-realm index");
+        string secondPlan = Explain(db, "SELECT MARRIAGE_ID FROM " +
+            "DiplomaticMarriage WHERE KINGDOM_B_ID=2 AND STATUS=0 " +
+            "AND MARRIAGE_ID>8 " +
+            "ORDER BY MARRIAGE_ID LIMIT 8");
+        True(secondPlan.Contains("idx_DiplomaticMarriage_kingdom_b_active",
+                StringComparison.OrdinalIgnoreCase),
+            "marriage maintenance uses the second-realm index");
+    }
+
+    private static void ActiveDynasticMarriageExcludesRoyalCandidate(
+        SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO ActorArchive VALUES(400,900,1,1,400);");
+        Execute(db, "INSERT INTO ActorArchive VALUES(401,900,1,1,401);");
+        Execute(db, "INSERT INTO DiplomaticMarriage VALUES" +
+                    "(40,1,2,400,999,10,10,-1,0,40);");
+
+        var query = new DiplomaticMarriageQuery(db);
+        IReadOnlyList<long> ids = ReadRealmCandidates(query, 900, 1, 24);
+
+        Equal(false, ids.Contains(400L),
+            "an actor in an active dynastic marriage is unavailable");
+        Equal(true, ids.Contains(401L),
+            "an otherwise eligible collateral royal remains available");
+    }
+
+    private static void RejectedProposalCooldownUsesPairTypeIndex(
+        SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT 1 FROM DiplomacyProposal WHERE " +
+            "MIN(REQUESTER_KINGDOM_ID,RESPONDER_KINGDOM_ID)=1 AND " +
+            "MAX(REQUESTER_KINGDOM_ID,RESPONDER_KINGDOM_ID)=2 AND " +
+            "PROPOSAL_TYPE='alliance' AND PLAYER_INITIATED=0 AND " +
+            "STATUS='rejected' AND " +
+            "RESPONSE_YEAR>9 LIMIT 1");
+        True(plan.Contains("idx_DiplomacyProposal_pair_type_rejection",
+                StringComparison.OrdinalIgnoreCase),
+            "AI rejection cooldown uses the normalized pair and type index");
+    }
+
+    private static void RejectsDuplicateOutstandingProposalPair(
+        SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO DiplomacyProposal VALUES" +
+                    "(1,1,2,'alliance',1,'processing',-1,-1,20,100,10,-1);");
+        True(ThrowsSqlite(db, "INSERT INTO DiplomacyProposal VALUES" +
+            "(2,2,1,'peace',0,'pending',-1,-1,-1,-1,11,11);"),
+            "pending and processing proposals share one unordered pair slot");
+        Execute(db, "UPDATE DiplomacyProposal SET STATUS='accepted' " +
+                    "WHERE PROPOSAL_ID=1;");
+        Execute(db, "INSERT INTO DiplomacyProposal VALUES" +
+                    "(3,2,1,'peace',0,'pending',-1,-1,-1,-1,12,12);");
+    }
+
+    private static void PendingIncomingUsesResponderCreatedIndex(
+        SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT PROPOSAL_ID FROM " +
+            "DiplomacyProposal WHERE RESPONDER_KINGDOM_ID=2 AND " +
+            "STATUS='pending' ORDER BY CREATED_TIME,PROPOSAL_ID LIMIT 1");
+        True(plan.Contains(
+                "idx_DiplomacyProposal_responder_status_created",
+                StringComparison.OrdinalIgnoreCase),
+            "oldest incoming lookup uses its responder-status-time index");
+        True(!plan.Contains("TEMP B-TREE",
+                StringComparison.OrdinalIgnoreCase),
+            "oldest incoming lookup does not sort into a temp b-tree");
+    }
+
+    private static void PendingResponseUsesDueIndex(SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT PROPOSAL_ID FROM " +
+            "DiplomacyProposal WHERE STATUS='pending' AND " +
+            "RESPONSE_DUE_TIME>=0 AND RESPONSE_DUE_TIME<=20 " +
+            "ORDER BY RESPONSE_DUE_TIME,PROPOSAL_ID LIMIT 1");
+        True(plan.Contains("idx_DiplomacyProposal_pending_due",
+                StringComparison.OrdinalIgnoreCase),
+            "due response lookup uses the complete status-due-time index");
+        True(!plan.Contains("TEMP B-TREE",
+                StringComparison.OrdinalIgnoreCase),
+            "due response lookup does not sort into a temp b-tree");
+    }
+
+    private static void ProcessingRecoveryUsesDueIndex(SQLiteConnection db)
+    {
+        string plan = Explain(db, "SELECT PROPOSAL_ID FROM " +
+            "DiplomacyProposal WHERE STATUS='processing' " +
+            "ORDER BY RESPONSE_TIME,PROPOSAL_ID LIMIT 1");
+        True(plan.Contains("idx_DiplomacyProposal_processing_due",
+                StringComparison.OrdinalIgnoreCase),
+            "reserved proposal recovery uses the bounded due index");
+        True(!plan.Contains("TEMP B-TREE",
+                StringComparison.OrdinalIgnoreCase),
+            "processing recovery does not sort into a temp b-tree");
+    }
+
+    private static void FailedResponseBackoffLetsQueueAdvance(
+        SQLiteConnection db)
+    {
+        Execute(db, "DELETE FROM DiplomacyProposal;");
+        Execute(db, "INSERT INTO DiplomacyProposal VALUES" +
+                    "(10,1,2,'peace',0,'pending',-1,-1,-1,-1,1,10)," +
+                    "(11,3,4,'peace',0,'pending',-1,-1,-1,-1,2,10);");
+        Equal(10L, FindDue(db, 10d),
+            "the oldest due proposal is selected first");
+        double next = DiplomacyProposalRules.NextResponseRuntimeTime(10d);
+        using (var command = new SQLiteCommand(
+                   "UPDATE DiplomacyProposal SET RESPONSE_DUE_TIME=@next " +
+                   "WHERE PROPOSAL_ID=10", db))
+        {
+            command.Parameters.AddWithValue("@next", next);
+            command.ExecuteNonQuery();
+        }
+        Equal(11L, FindDue(db, 10d),
+            "deferring a failed first row lets the queue advance");
+        Execute(db, "UPDATE DiplomacyProposal SET STATUS='accepted' " +
+                    "WHERE PROPOSAL_ID=11;");
+        Equal(-1L, FindDue(db, next - 0.000001d),
+            "the failed row is not retried before NextResponseRuntimeTime");
+        Equal(10L, FindDue(db, next),
+            "the failed row becomes retryable at NextResponseRuntimeTime");
+    }
+
+    private static void CreateSchema(SQLiteConnection db)
+    {
+        Execute(db,
+            "CREATE TABLE DiplomaticCoalition(" +
+            "COALITION_ID INTEGER PRIMARY KEY,MEMBER_A_ID INTEGER," +
+            "MEMBER_B_ID INTEGER,TARGET_KINGDOM_ID INTEGER," +
+            "START_YEAR INTEGER,END_YEAR INTEGER,START_TIME REAL," +
+            "END_TIME REAL,STATUS INTEGER,SOURCE_PROPOSAL_ID INTEGER," +
+            "JOINED_WAR_ID INTEGER);" +
+            "CREATE TABLE DiplomaticMarriage(" +
+            "MARRIAGE_ID INTEGER PRIMARY KEY,KINGDOM_A_ID INTEGER," +
+            "KINGDOM_B_ID INTEGER,ACTOR_A_ID INTEGER,ACTOR_B_ID INTEGER," +
+            "START_YEAR INTEGER,START_TIME REAL,END_TIME REAL," +
+            "STATUS INTEGER,SOURCE_PROPOSAL_ID INTEGER);" +
+            "CREATE TABLE RulerHousehold(" +
+            "RELATIONSHIP_ID INTEGER PRIMARY KEY,RULER_ACTOR_ID INTEGER," +
+            "PARTNER_ACTOR_ID INTEGER,SOURCE_KINGDOM_ID INTEGER," +
+            "RECIPIENT_KINGDOM_ID INTEGER,RELATIONSHIP_KIND TEXT," +
+            "RANK_CODE TEXT,START_YEAR INTEGER,START_TIME REAL," +
+            "END_TIME REAL,STATUS INTEGER,SOURCE_PROPOSAL_ID INTEGER);" +
+            "CREATE TABLE DiplomaticOperation(" +
+            "OPERATION_ID INTEGER PRIMARY KEY,SOURCE_KINGDOM_ID INTEGER," +
+            "TARGET_KINGDOM_ID INTEGER,OPERATION_TYPE TEXT,STATUS INTEGER," +
+            "TARGET_CITY_ID INTEGER,PROJECT_TYPE TEXT,STRONG_FORGERY INTEGER," +
+            "START_YEAR INTEGER,DUE_YEAR INTEGER,START_TIME REAL,DUE_TIME REAL," +
+            "NETWORK_STRENGTH INTEGER,SUCCESS_CHANCE INTEGER," +
+            "DISCOVERY_CHANCE INTEGER,DISCOVERED INTEGER,RESULT TEXT," +
+            "PLAYER_INITIATED INTEGER);" +
+            "CREATE TABLE SpyNetwork(" +
+            "NETWORK_ID INTEGER PRIMARY KEY,SOURCE_KINGDOM_ID INTEGER," +
+            "TARGET_KINGDOM_ID INTEGER,POINTS INTEGER," +
+            "LAST_ACCRUAL_YEAR INTEGER,LAST_ACCRUAL_TIME REAL," +
+            "ACTIVE INTEGER);" +
+            "CREATE TABLE SpyNetworkClaimPurchase(" +
+            "PURCHASE_ID INTEGER PRIMARY KEY,SOURCE_KINGDOM_ID INTEGER," +
+            "TARGET_KINGDOM_ID INTEGER,PURCHASE_KEY TEXT," +
+            "PURCHASE_YEAR INTEGER,COST INTEGER);" +
+            "CREATE TABLE DiplomaticRelationModifier(" +
+            "MODIFIER_ID INTEGER PRIMARY KEY,KINGDOM_A_ID INTEGER," +
+            "KINGDOM_B_ID INTEGER,SOURCE_TYPE TEXT,SOURCE_ID INTEGER," +
+            "VALUE INTEGER,START_YEAR INTEGER,UNTIL_YEAR INTEGER," +
+            "ACTIVE INTEGER);" +
+            "CREATE TABLE DiplomacyProposal(" +
+            "PROPOSAL_ID INTEGER PRIMARY KEY," +
+            "REQUESTER_KINGDOM_ID INTEGER,RESPONDER_KINGDOM_ID INTEGER," +
+            "PROPOSAL_TYPE TEXT,PLAYER_INITIATED INTEGER,STATUS TEXT," +
+            "WAR_ID INTEGER,TREATY_UNTIL_YEAR INTEGER," +
+            "RESPONSE_YEAR INTEGER,RESPONSE_TIME REAL," +
+            "CREATED_TIME REAL,RESPONSE_DUE_TIME REAL);" +
+            "CREATE TABLE ActorArchive(" +
+            "ID INTEGER PRIMARY KEY,LINEAGE_ID INTEGER,KINGDOM_ID INTEGER," +
+            "IS_ALIVE INTEGER," +
+            "BIRTH_TIME REAL);" +
+            "CREATE INDEX idx_ActorArchive_lineage_alive_birth ON " +
+            "ActorArchive(LINEAGE_ID,IS_ALIVE,BIRTH_TIME,ID);");
+    }
+
+    private static IReadOnlyList<long> ReadRealmCandidates(
+        DiplomaticMarriageQuery query, long lineageId, long kingdomId,
+        int limit)
+    {
+        var method = typeof(DiplomaticMarriageQuery).GetMethod(
+            "ReadCandidateIds", new[] { typeof(long), typeof(long), typeof(int) });
+        if (method == null)
+            throw new InvalidOperationException(
+                "realm-aware royal candidate query is missing");
+        return (IReadOnlyList<long>)method.Invoke(query,
+            new object[] { lineageId, kingdomId, limit });
+    }
+
+    private static string ExplainRealmCandidatePlan(
+        DiplomaticMarriageQuery query, long lineageId, long kingdomId,
+        int limit)
+    {
+        var method = typeof(DiplomaticMarriageQuery).GetMethod(
+            "ExplainCandidatePlan",
+            new[] { typeof(long), typeof(long), typeof(int) });
+        if (method == null)
+            throw new InvalidOperationException(
+                "realm-aware royal candidate query plan is missing");
+        return (string)method.Invoke(query,
+            new object[] { lineageId, kingdomId, limit });
+    }
+
+    private static string Explain(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand("EXPLAIN QUERY PLAN " + sql, db);
+        using SQLiteDataReader reader = command.ExecuteReader();
+        var lines = new List<string>();
+        while (reader.Read()) lines.Add(Convert.ToString(reader.GetValue(3)) ?? "");
+        return string.Join("\n", lines);
+    }
+
+    private static long FindDue(SQLiteConnection db, double now)
+    {
+        using var command = new SQLiteCommand(
+            "SELECT PROPOSAL_ID FROM DiplomacyProposal " +
+            "WHERE STATUS='pending' AND RESPONSE_DUE_TIME>=0 AND " +
+            "RESPONSE_DUE_TIME<=@now ORDER BY RESPONSE_DUE_TIME," +
+            "PROPOSAL_ID LIMIT 1", db);
+        command.Parameters.AddWithValue("@now", now);
+        object value = command.ExecuteScalar();
+        return value == null || value == DBNull.Value
+            ? -1L
+            : Convert.ToInt64(value);
+    }
+
+    private static bool ThrowsSqlite(SQLiteConnection db, string sql)
+    {
+        try
+        {
+            Execute(db, sql);
+            return false;
+        }
+        catch (SQLiteException)
+        {
+            return true;
+        }
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+}

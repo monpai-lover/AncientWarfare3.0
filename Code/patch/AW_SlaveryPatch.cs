@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.policy;
 using HarmonyLib;
 
@@ -12,7 +13,12 @@ namespace AncientWarfare3.patch
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
             if (pActor?.data == null || !pActor.isWarrior()) return;
-            if (!MilitaryRecruitmentScope.SuppressesPermanentEnlistmentHistory)
+            bool initializeTemporaryMilitaryIdentity =
+                MilitaryRecruitmentScope.SuppressesPermanentEnlistmentHistory &&
+                (SlaveService.IsSlave(pActor) ||
+                 SlaveService.IsRetiredSoldier(pActor));
+            if (!MilitaryRecruitmentScope.SuppressesPermanentEnlistmentHistory ||
+                initializeTemporaryMilitaryIdentity)
                 SlaveService.OnMadeWarrior(__instance, pActor);
             RoyalGuardService.StripActorFromNormalArmy(pActor);
             if (__instance != null && __instance.hasArmy())
@@ -33,6 +39,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
         public static void SetKingdom_Postfix(Actor __instance, Kingdom __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.kingdom == __state) return;
             WarNoticeService.QueueArmyChanged(__state, __instance.army);
             ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
@@ -44,6 +51,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.joinCity))]
         public static void JoinCity_Postfix(Actor __instance)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             SlavePopulationIndexService.OnActorCityChanged(__instance);
         }
 
@@ -66,6 +74,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
         public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             SlaveKingAbdicationService.TryForceCurrentSlaveKing(__instance, pActor, "slave_king");
         }
 
@@ -112,6 +121,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(City), nameof(City.joinAnotherKingdom))]
         public static void JoinAnotherKingdom_Postfix(City __instance, Kingdom pNewSetKingdom, bool pCaptured, bool pRebellion, Kingdom __state)
         {
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (!pCaptured) return;
             SlaveService.HandleCityCaptured(__instance, __state, pNewSetKingdom);
         }

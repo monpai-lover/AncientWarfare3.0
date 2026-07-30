@@ -99,6 +99,14 @@ namespace AncientWarfare3.core.court
                 ? pRuntimePrior
                 : null;
         }
+
+        public static bool ShouldReleasePriorCityLeader(
+            OfficialCareerPrior pPrior, string pTargetLayer)
+        {
+            return pPrior != null && pPrior.CityId >= 0L &&
+                   pPrior.Layer == CourtOfficeLayer.City &&
+                   pTargetLayer != CourtOfficeLayer.City;
+        }
     }
 
     public static class OfficialCareerReadbackRules

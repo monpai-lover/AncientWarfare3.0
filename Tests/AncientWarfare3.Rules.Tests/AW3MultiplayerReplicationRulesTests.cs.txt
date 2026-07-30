@@ -1,0 +1,329 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using System.IO;
+using AncientWarfare3.api.multiplayer;
+using AncientWarfare3.core.multiplayer;
+
+internal static class AW3MultiplayerReplicationRulesTests
+{
+    public static void Run()
+    {
+        CaptureRequiresMainThreadAndEmptyDirectory();
+        CaptureReturnsImmutableTypedMetadata();
+        InstallVerifiesAndRefreshesInOrder();
+        InstallFailureNeverRebuildsOrRefreshes();
+        RealArchiveInspectionChecksSqliteAndFullHash();
+        ProductionFacadeAndArchiveManagerStayTyped();
+    }
+
+    private static void CaptureRequiresMainThreadAndEmptyDirectory()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new FakeStore { IsMainThreadValue = false };
+        Guid epoch = Guid.NewGuid();
+
+        AW3MultiplayerArchiveCaptureResult wrongThread =
+            AW3MultiplayerReplicationCoordinator.CaptureArchiveKeyframe(
+                temporary.Path, epoch, 1, store);
+        Equal(AW3MultiplayerReplicationError.WrongThread,
+            wrongThread.Error, "archive capture requires main thread");
+
+        store.IsMainThreadValue = true;
+        AW3MultiplayerArchiveCaptureResult emptyEpoch =
+            AW3MultiplayerReplicationCoordinator.CaptureArchiveKeyframe(
+                temporary.Path, Guid.Empty, 1, store);
+        Equal(AW3MultiplayerReplicationError.InvalidEpoch,
+            emptyEpoch.Error, "archive capture requires epoch");
+        AW3MultiplayerArchiveCaptureResult zeroRevision =
+            AW3MultiplayerReplicationCoordinator.CaptureArchiveKeyframe(
+                temporary.Path, epoch, 0, store);
+        Equal(AW3MultiplayerReplicationError.InvalidRevision,
+            zeroRevision.Error, "archive capture requires positive revision");
+
+        File.WriteAllText(System.IO.Path.Combine(temporary.Path,
+            "occupied.txt"), "occupied");
+        AW3MultiplayerArchiveCaptureResult nonEmpty =
+            AW3MultiplayerReplicationCoordinator.CaptureArchiveKeyframe(
+                temporary.Path, epoch, 1, store);
+        Equal(AW3MultiplayerReplicationError.InvalidDirectory,
+            nonEmpty.Error, "capture destination must already be empty");
+        Equal(0, store.CaptureCalls,
+            "invalid destination never reaches live archive store");
+    }
+
+    private static void CaptureReturnsImmutableTypedMetadata()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new FakeStore();
+        Guid epoch = Guid.NewGuid();
+        byte[] digest = store.Digest;
+
+        AW3MultiplayerArchiveCaptureResult result =
+            AW3MultiplayerReplicationCoordinator.CaptureArchiveKeyframe(
+                temporary.Path, epoch, 7, store);
+        digest[0] ^= 0xff;
+        byte[] firstRead = result.Sha256;
+        firstRead[1] ^= 0xff;
+
+        Equal(true, result.IsSuccess, "archive capture succeeds");
+        Equal(epoch, result.Epoch, "capture epoch retained");
+        Equal(7L, result.Revision, "capture revision retained");
+        Equal(4096, result.PageSize, "SQLite page size retained");
+        Equal(2L, result.PageCount, "SQLite page count retained");
+        Equal(8192L, result.FileLength, "archive length retained");
+        Equal(3, result.SchemaVersion, "schema version retained");
+        Equal(AW3MultiplayerReplicationMetadata.CatalogVersion,
+            result.CatalogVersion, "catalog version retained");
+        Equal((byte)1, result.Sha256[0],
+            "capture result copies store digest");
+        Equal((byte)2, result.Sha256[1],
+            "capture result returns copied digest");
+        True(System.IO.Path.GetFullPath(result.ArchivePath).StartsWith(
+                System.IO.Path.GetFullPath(temporary.Path) +
+                System.IO.Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase),
+            "captured archive remains inside requested directory");
+    }
+
+    private static void InstallVerifiesAndRefreshesInOrder()
+    {
+        using var temporary = new TemporaryDirectory();
+        string archive = System.IO.Path.Combine(temporary.Path,
+            "verified.db");
+        File.WriteAllBytes(archive, new byte[] { 1, 2, 3 });
+        var store = new FakeStore();
+        Guid epoch = Guid.NewGuid();
+
+        AW3MultiplayerArchiveInstallResult result =
+            AW3MultiplayerReplicationCoordinator.InstallArchiveKeyframe(
+                archive, epoch, 9, store.Digest, store);
+
+        Equal(true, result.IsSuccess, "archive install succeeds");
+        SequenceEqual(new[] { "install", "rebuild", "refresh" },
+            store.Calls, "install rebuilds projections then refreshes UI");
+        Equal(epoch, result.Epoch, "install epoch retained");
+        Equal(9L, result.Revision, "install revision retained");
+        SequenceEqual(store.Digest, result.Sha256,
+            "installed archive digest retained");
+    }
+
+    private static void InstallFailureNeverRebuildsOrRefreshes()
+    {
+        using var temporary = new TemporaryDirectory();
+        string archive = System.IO.Path.Combine(temporary.Path,
+            "verified.db");
+        File.WriteAllBytes(archive, new byte[] { 1, 2, 3 });
+        var store = new FakeStore { InstallSucceeds = false };
+
+        AW3MultiplayerArchiveInstallResult result =
+            AW3MultiplayerReplicationCoordinator.InstallArchiveKeyframe(
+                archive, Guid.NewGuid(), 2, store.Digest, store);
+
+        Equal(AW3MultiplayerReplicationError.InstallFailed, result.Error,
+            "install failure has stable typed error");
+        SequenceEqual(new[] { "install" }, store.Calls,
+            "failed install cannot rebuild or refresh");
+
+        var mismatchStore = new FakeStore();
+        byte[] wrongDigest = new byte[32];
+        AW3MultiplayerArchiveInstallResult mismatch =
+            AW3MultiplayerReplicationCoordinator.InstallArchiveKeyframe(
+                archive, Guid.NewGuid(), 2, wrongDigest, mismatchStore);
+        Equal(AW3MultiplayerReplicationError.HashMismatch, mismatch.Error,
+            "store metadata must match expected full hash");
+        SequenceEqual(new[] { "install" }, mismatchStore.Calls,
+            "hash mismatch blocks projection rebuild");
+    }
+
+    private static void RealArchiveInspectionChecksSqliteAndFullHash()
+    {
+        using var temporary = new TemporaryDirectory();
+        string archive = System.IO.Path.Combine(temporary.Path, "archive.db");
+        SQLiteConnection.CreateFile(archive);
+        using (var connection = new SQLiteConnection(
+                   "data source=" + archive))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "PRAGMA journal_mode=DELETE;" +
+                "CREATE TABLE facts(id INTEGER PRIMARY KEY, value TEXT);" +
+                "INSERT INTO facts(value) VALUES ('authority');";
+            command.ExecuteNonQuery();
+        }
+
+        True(AW3MultiplayerArchiveInspector.TryInspect(archive,
+                out AW3MultiplayerArchiveFileMetadata metadata,
+                out string error),
+            "valid SQLite archive inspection: " + error);
+        True(metadata.PageSize > 0, "page size inspected");
+        True(metadata.PageCount > 0, "page count inspected");
+        Equal(new FileInfo(archive).Length, metadata.FileLength,
+            "file length inspected");
+        Equal(32, metadata.Sha256.Length, "full SHA-256 inspected");
+        True(metadata.SchemaVersion > 0, "SQLite schema version inspected");
+        Equal(AW3MultiplayerReplicationMetadata.CatalogVersion,
+            metadata.CatalogVersion, "AW3 catalog version inspected");
+
+        File.WriteAllText(archive + "-wal", "forged");
+        Equal(false, AW3MultiplayerArchiveInspector.TryInspect(archive,
+                out _, out _),
+            "archive with WAL sidecar is rejected");
+    }
+
+    private static void ProductionFacadeAndArchiveManagerStayTyped()
+    {
+        string facade = File.ReadAllText(System.IO.Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "api", "multiplayer",
+            "AW3MultiplayerReplicationFacade.cs"));
+        Contains(facade,
+            "CaptureArchiveKeyframe(string emptyDestinationDirectory,",
+            "typed archive capture facade exists");
+        Contains(facade,
+            "InstallArchiveKeyframe(string verifiedArchivePath,",
+            "typed archive install facade exists");
+        Equal(false, facade.Contains("SQLiteConnection"),
+            "public facade exposes no SQLite connection");
+        Equal(false, facade.Contains("Lan") || facade.Contains("Transport"),
+            "public facade exposes no multiplayer transport");
+
+        string manager = File.ReadAllText(System.IO.Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "db",
+            "LineageArchiveManager.cs"));
+        Contains(manager, "BackupDatabase(destinationConnection",
+            "capture uses SQLite backup instead of live file copy");
+        Contains(manager, "TryInstallReplicationArchive(",
+            "manager owns checked replication install");
+        Contains(manager, "TryValidateSnapshot(",
+            "capture and install require SQLite quick_check");
+        Contains(manager, "expectedSha256",
+            "runtime install rechecks expected full hash");
+        Contains(manager, "replication-install",
+            "runtime install uses a temporary file");
+        Contains(manager, "OpenRuntimeDatabase",
+            "runtime readers close and reopen around installation");
+
+        string coordinator = File.ReadAllText(System.IO.Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "multiplayer",
+            "AW3MultiplayerReplicationCoordinator.cs"));
+        Contains(coordinator, "TryRebuildAfterReplicationInstall",
+            "install rebuilds all AW3 projections");
+        Contains(coordinator, "RefreshCurrentWindows",
+            "install refreshes current AW3 windows");
+    }
+
+    private sealed class FakeStore : IAW3MultiplayerReplicationStore
+    {
+        private readonly List<string> _calls = new List<string>();
+
+        public bool IsMainThreadValue { get; set; } = true;
+        public bool InstallSucceeds { get; set; } = true;
+        public int CaptureCalls { get; private set; }
+        public byte[] Digest { get; } = CreateDigest();
+        public IReadOnlyList<string> Calls => _calls;
+        public bool IsMainThread => IsMainThreadValue;
+
+        public bool TryCaptureArchive(string destinationDirectory,
+            out AW3MultiplayerArchiveFileMetadata metadata,
+            out string error)
+        {
+            CaptureCalls++;
+            string path = System.IO.Path.Combine(destinationDirectory,
+                "aw3_lineage_archive.db");
+            File.WriteAllBytes(path, new byte[8192]);
+            metadata = Metadata(path, Digest);
+            error = string.Empty;
+            return true;
+        }
+
+        public bool TryInstallArchive(string verifiedArchivePath,
+            byte[] expectedSha256,
+            out AW3MultiplayerArchiveFileMetadata metadata,
+            out string error)
+        {
+            _calls.Add("install");
+            metadata = Metadata(verifiedArchivePath, Digest);
+            error = InstallSucceeds ? string.Empty : "install failed";
+            return InstallSucceeds;
+        }
+
+        public bool TryRebuildAfterReplicationInstall(out string error)
+        {
+            _calls.Add("rebuild");
+            error = string.Empty;
+            return true;
+        }
+
+        public void RefreshCurrentWindows()
+        {
+            _calls.Add("refresh");
+        }
+
+        private static AW3MultiplayerArchiveFileMetadata Metadata(
+            string path, byte[] digest)
+        {
+            return new AW3MultiplayerArchiveFileMetadata(path, 8192, 4096,
+                2, digest, 3,
+                AW3MultiplayerReplicationMetadata.CatalogVersion);
+        }
+
+        private static byte[] CreateDigest()
+        {
+            var result = new byte[32];
+            for (var index = 0; index < result.Length; index++)
+                result[index] = (byte)(index + 1);
+            return result;
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "aw3-replication-rules-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Path, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static void True(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected={expected}, actual={actual}");
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void SequenceEqual<T>(IReadOnlyList<T> expected,
+        IReadOnlyList<T> actual, string message)
+    {
+        if (expected.Count != actual.Count)
+            throw new InvalidOperationException(message);
+        for (var index = 0; index < expected.Count; index++)
+        {
+            if (!EqualityComparer<T>.Default.Equals(expected[index],
+                    actual[index]))
+                throw new InvalidOperationException(message);
+        }
+    }
+}

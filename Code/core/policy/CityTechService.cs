@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.content.policies;
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui;
@@ -41,25 +42,60 @@ namespace AncientWarfare3.core.policy
         private static int _adoptedCityCacheYear = int.MinValue;
         private static readonly Dictionary<string, HashSet<long>> AdoptedCityIdsByTech =
             new Dictionary<string, HashSet<long>>();
+        private static readonly CityTechAdoptedCountCache ZoneExpansionTechCache =
+            new CityTechAdoptedCountCache(
+                XiaExpansionDecisionRules.FullyUnlockedTechCount);
+
+        public static void ClearRuntime()
+        {
+            _neighborCacheYear = int.MinValue;
+            NeighborInfluenceCache.Clear();
+            NeighborBonusCache.Clear();
+            _adoptedCityCacheYear = int.MinValue;
+            AdoptedCityIdsByTech.Clear();
+            ZoneExpansionTechCache.Clear();
+        }
+
+        public static bool CanXiaCityGrowZones(City pCity,
+            bool pUpstreamAllowed)
+        {
+            if (!pUpstreamAllowed || pCity?.data == null) return false;
+            bool isXia = LineageService.IsXiaKingdom(pCity.kingdom);
+            int adoptedTechCount = ReadCachedAdoptedTechCount(pCity.id);
+            return XiaExpansionDecisionRules.CanClaimZone(pUpstreamAllowed,
+                isXia, adoptedTechCount, pCity.countZones());
+        }
+
+        public static int GetXiaCityZoneAllowance(City pCity)
+        {
+            if (pCity?.data == null) return 0;
+            return XiaExpansionDecisionRules.ZoneAllowance(
+                ReadCachedAdoptedTechCount(pCity.id));
+        }
 
         public static void OnNationalTechCompleted(Kingdom pKingdom, KingdomPolicyDef pTech)
         {
             if (pKingdom?.data == null || pTech == null || pTech.Kind != PolicyNodeKind.Tech) return;
+            TryEnsureZoneExpansionCache();
             City capital = pKingdom.capital;
             if (capital?.data == null) return;
 
             bool changed = UpsertProgress(capital, pTech.Id, ADOPTED, 0, "capital", capital, pKingdom, true);
             if (!changed) return;
+            string techName = AncientWarfare3.ui.AW_L10n.Text(pTech.NameKey, pTech.FallbackName);
 
             if (CityTechChronicleRules.ShouldRecordCityAdoptionInKingdomHistory())
                 HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.CITY_TECH_ADOPTED,
-                    HistoryText.Kingdom(pKingdom) + " \u5B8C\u6210\u79D1\u6280 " +
-                    HistoryText.PlainText(pTech.FallbackName) + "\uFF0C\u5148\u884C\u4F20\u5165" +
+                    HistoryText.Kingdom(pKingdom) +
+                    HistoryLocalizationRules.H("aw_hist_city_tech_completed_mid") +
+                    HistoryText.PlainText(techName) +
+                    HistoryLocalizationRules.H("aw_hist_city_tech_reached_capital_mid") +
                     HistoryText.City(capital, pKingdom),
                     HistoryTarget.City(capital));
             HistoryWriter.RecordCity(capital, pKingdom, CityEvent.TECH_ADOPTED,
-                HistoryText.City(capital, pKingdom) + " \u9996\u5148\u91C7\u7EB3\u79D1\u6280 " +
-                HistoryText.PlainText(pTech.FallbackName));
+                HistoryText.City(capital, pKingdom) +
+                HistoryLocalizationRules.H("aw_hist_city_tech_capital_adopted_mid") +
+                HistoryText.PlainText(techName));
             TechMapModeService.DirtyMapIfActive();
             DevelopmentMapModeService.DirtyMapIfActive();
         }
@@ -69,6 +105,7 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null || pKingdom.isRekt()) return;
             if (!KingdomPolicyService.IsPolicyEnabledForKingdom(pKingdom)) return;
             if (!Ready) return;
+            TryEnsureZoneExpansionCache();
 
             int year = Date.getCurrentYear();
             pKingdom.data.get(LineageKeys.CITY_TECH_LAST_YEAR, out int lastYear, int.MinValue);
@@ -115,7 +152,7 @@ namespace AncientWarfare3.core.policy
             if (best == null) return "";
             int pct = Mathf.RoundToInt((CalculateNeighborBonus(pKingdom, best) - 1f) * 100f);
             if (pct <= 0) return "";
-            return "\u90BB\u56FD\u601D\u6F6E +" + pct + "%: " +
+            return AW_L10n.Text("aw_tech_mapmode_neighbor_ideas", "Neighbor ideas") + " +" + pct + "%: " +
                    (best.sourceKingdom?.name ?? "") + " " + (best.sourceCity?.data?.name ?? "");
         }
 
@@ -315,6 +352,7 @@ namespace AncientWarfare3.core.policy
         {
             Kingdom kingdom = pCity?.kingdom;
             if (pCity?.data == null || kingdom?.data == null || !Ready) return;
+            TryEnsureZoneExpansionCache();
             SyncCompletedTechsToCity(pCity, kingdom, "new_city");
         }
 
@@ -424,6 +462,9 @@ namespace AncientWarfare3.core.policy
             if (adopted.Count == 0 && capital?.data != null) adopted.Add(capital);
             if (adopted.Count == 0) return;
             if (CityTechSpreadRules.ShouldSkipFullyAdoptedSpread(cities.Count, adopted.Count)) return;
+            float institutionSpreadMultiplier =
+                CourtInstitutionEffectService.Read(pKingdom).
+                    DomesticTechSpreadMultiplier;
 
             foreach (City city in cities)
             {
@@ -434,22 +475,27 @@ namespace AncientWarfare3.core.policy
                 if (source?.data == null) continue;
 
                 double oldProgress = state == null ? 0.0 : Math.Max(state.adoption_progress, state.exposure_progress);
-                float gain = CalculateSameKingdomGain(city, source, pKingdom, source == capital);
+                float gain = CalculateSameKingdomGain(city, source, pKingdom,
+                    source == capital, institutionSpreadMultiplier);
                 double next = Math.Min(ADOPTED, oldProgress + gain);
                 bool becameAdopted = oldProgress < ADOPTED && next >= ADOPTED;
                 UpsertProgress(city, pTech.Id, next, 0, source == capital ? "capital" : "same_kingdom",
                     source, pKingdom, becameAdopted, states);
 
                 if (!becameAdopted) continue;
+                string techName = AncientWarfare3.ui.AW_L10n.Text(pTech.NameKey, pTech.FallbackName);
                 HistoryWriter.RecordCity(city, pKingdom, CityEvent.TECH_ADOPTED,
-                    HistoryText.City(city, pKingdom) + " \u91C7\u7EB3\u79D1\u6280 " +
-                    HistoryText.PlainText(pTech.FallbackName));
+                    HistoryText.City(city, pKingdom) +
+                    HistoryLocalizationRules.H("aw_hist_city_tech_adopted_mid") +
+                    HistoryText.PlainText(techName));
                 TechMapModeService.DirtyMapIfActive();
                 DevelopmentMapModeService.DirtyMapIfActive();
             }
         }
 
-        private static float CalculateSameKingdomGain(City pCity, City pSource, Kingdom pKingdom, bool pCapitalSource)
+        private static float CalculateSameKingdomGain(City pCity,
+            City pSource, Kingdom pKingdom, bool pCapitalSource,
+            float pInstitutionSpreadMultiplier)
         {
             float distance = Distance(pCity, pSource);
             float distanceFactor = Mathf.Clamp(1f / (1f + distance / 45f), 0.12f, 1f);
@@ -459,7 +505,9 @@ namespace AncientWarfare3.core.policy
                 policyBonus = 1.15f;
             if (KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_early_law"))
                 policyBonus = 1.25f;
-            return Mathf.Min(MAX_YEARLY_GAIN, SAME_KINGDOM_BASE_GAIN * distanceFactor * capitalBonus * policyBonus);
+            return Mathf.Min(MAX_YEARLY_GAIN,
+                SAME_KINGDOM_BASE_GAIN * distanceFactor * capitalBonus *
+                policyBonus * Mathf.Max(0f, pInstitutionSpreadMultiplier));
         }
 
         private static void AddNeighborExposure(Kingdom pKingdom, string pTechId)
@@ -671,7 +719,11 @@ namespace AncientWarfare3.core.policy
                         values);
                     UpdateCachedState(pStateByCity, pCity, pTechId, existing, adopted, nextAdoption, exposure,
                         adoptedTime);
-                    if (adopted && !alreadyAdopted) InvalidateTechCaches(pTechId);
+                    if (adopted && !alreadyAdopted)
+                    {
+                        RecordZoneExpansionTechAdopted(pCity.id);
+                        InvalidateTechCaches(pTechId);
+                    }
                     return adopted && !alreadyAdopted;
                 }
 
@@ -685,7 +737,11 @@ namespace AncientWarfare3.core.policy
                 DB.Insert(CityTechStateTableItem.GetTableName(), insert.ToArray());
                 UpdateCachedState(pStateByCity, pCity, pTechId, id, adopted, nextAdoption, exposure,
                     adopted ? now : -1.0);
-                if (adopted) InvalidateTechCaches(pTechId);
+                if (adopted)
+                {
+                    RecordZoneExpansionTechAdopted(pCity.id);
+                    InvalidateTechCaches(pTechId);
+                }
                 return adopted;
             }
             catch (Exception e)
@@ -788,6 +844,58 @@ namespace AncientWarfare3.core.policy
                 AdoptedCityIdsByTech.Remove(pTechId);
             NeighborInfluenceCache.Clear();
             NeighborBonusCache.Clear();
+        }
+
+        private static int ReadCachedAdoptedTechCount(long pCityId)
+        {
+            return ZoneExpansionTechCache.Read(pCityId);
+        }
+
+        private static void RecordZoneExpansionTechAdopted(long pCityId)
+        {
+            if (pCityId < 0) return;
+            ZoneExpansionTechCache.RecordAdoption(pCityId,
+                XiaExpansionDecisionRules.FullyUnlockedTechCount);
+        }
+
+        public static void RebuildZoneExpansionCache()
+        {
+            ZoneExpansionTechCache.BeginRebuild();
+            if (!Ready)
+                throw new InvalidOperationException(
+                    "CityTech zone cache requires an operational archive.");
+            try
+            {
+                using var cmd = new SQLiteCommand(DB);
+                cmd.CommandText = "SELECT CITY_ID,COUNT(DISTINCT TECH_ID) FROM " +
+                                  CityTechStateTableItem.GetTableName() +
+                                  " WHERE ADOPTED=1 GROUP BY CITY_ID";
+                using SQLiteDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    long cityId = ToLong(reader, 0);
+                    if (cityId < 0) continue;
+                    ZoneExpansionTechCache.AddRebuiltCount(cityId,
+                        ToInt(reader, 1));
+                }
+                ZoneExpansionTechCache.CompleteRebuild();
+            }
+            catch (Exception e)
+            {
+                ZoneExpansionTechCache.Clear();
+                throw new InvalidOperationException(
+                    "CityTech zone cache rebuild failed.", e);
+            }
+        }
+
+        private static void TryEnsureZoneExpansionCache()
+        {
+            if (ZoneExpansionTechCache.Ready || !Ready) return;
+            try { RebuildZoneExpansionCache(); }
+            catch (Exception e)
+            {
+                ModClass.LogWarning(e.Message);
+            }
         }
 
         private static long FindRecordId(long pCityId, string pTechId)

@@ -46,6 +46,18 @@ namespace AncientWarfare3.core.schools
             return pReady;
         }
 
+        public static bool ShouldDiscardReadyPersistence(
+            bool activityStillValid)
+        {
+            return !activityStillValid;
+        }
+
+        public static bool ShouldRetryExpiredLecture(int retryCount,
+            bool activityStillValid)
+        {
+            return activityStillValid && retryCount < 1;
+        }
+
         internal static bool IsPersistenceResolved(
             HistoricalSchoolTeachingPersistenceOutcome pOutcome)
         {

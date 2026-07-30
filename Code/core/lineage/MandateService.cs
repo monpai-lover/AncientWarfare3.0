@@ -61,6 +61,8 @@ namespace AncientWarfare3.core.lineage
         private static int _autoCandidateYear = int.MinValue;
         private static int _autoCandidateKingdomCount = -1;
         private static long _autoCandidateKingdomId = -1L;
+        private static long _pendingFallenMandateKingdomId = -1L;
+        private static long _pendingMandateConquerorKingdomId = -1L;
 
         public static bool Exists => GetCurrentMandateKingdom() != null;
 
@@ -70,6 +72,14 @@ namespace AncientWarfare3.core.lineage
         public static bool IsMandateKingdom(Kingdom pKingdom)
         {
             return pKingdom?.data != null && GetCurrentMandateKingdom()?.id == pKingdom.id;
+        }
+
+        public static bool IsMandateKingdomReadOnly(Kingdom pKingdom,
+            MandateReport pReport = null)
+        {
+            MandateReport report = pReport ?? ReadReportReadOnly();
+            return pKingdom?.data != null && report.active &&
+                   report.kingdom_id == pKingdom.id;
         }
 
         public static bool IsRuntimeMandateKingdom(Kingdom pKingdom)
@@ -87,8 +97,77 @@ namespace AncientWarfare3.core.lineage
 
         public static void RebuildRuntimeMarkerProjection()
         {
+            _cachedReport = null;
+            _runtimeMarkerKingdomId = -1L;
+            _runtimeMarkerKind = "";
+            _coreCityIds = new HashSet<long>();
+            _autoCandidateYear = int.MinValue;
+            _autoCandidateKingdomCount = -1;
+            _autoCandidateKingdomId = -1L;
+            _pendingFallenMandateKingdomId = -1L;
+            _pendingMandateConquerorKingdomId = -1L;
+            MandateRebelService.ClearRuntime();
             _cacheDirty = true;
             ReadReport();
+        }
+
+        public static void RefreshKingdomNameProjection(Kingdom pKingdom)
+        {
+            if (!Ready || pKingdom?.data == null || pKingdom.isRekt()) return;
+            MandateReport report = ReadReport();
+            string kingdomName = pKingdom.name?.Trim() ?? "";
+            if (!MandateNameProjectionRules.ShouldRefresh(report.active,
+                    report.kingdom_id, pKingdom.id, report.period_id,
+                    StateNameRules.IsValid(kingdomName))) return;
+
+            string dynastyName = MakeDynastyName(pKingdom);
+            try
+            {
+                using SQLiteTransaction transaction = DB.BeginTransaction();
+                using (var state = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    state.CommandText = "UPDATE " +
+                        MandateStateTableItem.GetTableName() +
+                        " SET KINGDOM_NAME=@name,DYNASTY_NAME=@dynasty," +
+                        "UPDATED_TIME=@time WHERE STATE_ID=@state AND ACTIVE=1 " +
+                        "AND KINGDOM_ID=@kingdom";
+                    state.Parameters.AddWithValue("@name", kingdomName);
+                    state.Parameters.AddWithValue("@dynasty", dynastyName);
+                    state.Parameters.AddWithValue("@time", LineageService.CurTime());
+                    state.Parameters.AddWithValue("@state", STATE_ID);
+                    state.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                    if (state.ExecuteNonQuery() != 1)
+                    {
+                        transaction.Rollback();
+                        return;
+                    }
+                }
+
+                using (var period = new SQLiteCommand(DB) { Transaction = transaction })
+                {
+                    period.CommandText = "UPDATE " +
+                        MandatePeriodTableItem.GetTableName() +
+                        " SET KINGDOM_NAME=@name,DYNASTY_NAME=@dynasty " +
+                        "WHERE PERIOD_ID=@period AND KINGDOM_ID=@kingdom AND END_TIME=-1";
+                    period.Parameters.AddWithValue("@name", kingdomName);
+                    period.Parameters.AddWithValue("@dynasty", dynastyName);
+                    period.Parameters.AddWithValue("@period", report.period_id);
+                    period.Parameters.AddWithValue("@kingdom", pKingdom.id);
+                    if (period.ExecuteNonQuery() != 1)
+                    {
+                        transaction.Rollback();
+                        return;
+                    }
+                }
+
+                transaction.Commit();
+                MarkDirty();
+            }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Mandate name projection failed: " +
+                                    error.Message);
+            }
         }
 
         public static Kingdom GetCurrentMandateKingdom()
@@ -107,6 +186,24 @@ namespace AncientWarfare3.core.lineage
             return null;
         }
 
+        public static Kingdom GetCurrentMandateKingdomReadOnly(
+            MandateReport pReport = null)
+        {
+            MandateReport report = pReport ?? ReadReportReadOnly();
+            if (!report.active || report.kingdom_id < 0 ||
+                World.world?.kingdoms == null) return null;
+            try
+            {
+                Kingdom kingdom = World.world.kingdoms.get(report.kingdom_id);
+                if (kingdom?.data != null && !kingdom.isRekt()) return kingdom;
+            }
+            catch { }
+            foreach (Kingdom kingdom in World.world.kingdoms)
+                if (kingdom?.data != null && kingdom.id == report.kingdom_id &&
+                    !kingdom.isRekt()) return kingdom;
+            return null;
+        }
+
         public static MandateReport ReadReport()
         {
             if (!_cacheDirty && _cachedReport != null) return _cachedReport;
@@ -117,6 +214,12 @@ namespace AncientWarfare3.core.lineage
             PublishRuntimeMarkerProjection(_cachedReport.active, _cachedReport.kingdom_id,
                 _cachedReport.map_marker_kind);
             return _cachedReport;
+        }
+
+        public static MandateReport ReadReportReadOnly()
+        {
+            if (!_cacheDirty && _cachedReport != null) return _cachedReport;
+            return ReadReportFromDb();
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -155,6 +258,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_PRESTIGE, prestige);
             MandatePhaseService.EvaluateActiveMandateYear(
                 ReadReport(), currentYear, nextValue, authority, delta);
+            MandateDeclineRebellionService.OnMandateYear(pKingdom,
+                nextValue, authority, MandatePhaseService.CatalystScore);
 
             if (Mathf.Abs(delta) >= 5 || crisis == "collapse" || crisis == "lost")
                 RecordEvent("mandate_yearly", pKingdom, pKingdom.king, null, delta, nextValue,
@@ -196,7 +301,12 @@ namespace AncientWarfare3.core.lineage
             if (!MandateDeclarationRules.CanCreateNewPeriod(
                     previousReport.active, previousReport.kingdom_id, pKingdom.id))
                 return false;
-            long previousPeriodId = previousReport.active ? previousReport.period_id : -1L;
+            long previousPeriodId = previousReport.active ||
+                                    MandateFeudatoryCompletionRules.
+                                        ShouldInheritPreviousLegalCores(
+                                            hadPreviousMandate, pOriginType)
+                ? previousReport.period_id
+                : -1L;
             if (previousReport.active && previousReport.kingdom_id != pKingdom.id)
                 ClearMandate(pReason == "player_grant"
                     ? "player_grant_replaced"
@@ -237,7 +347,8 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(LineageKeys.MANDATE_MAP_MARKER_KIND, MarkerKind(pOriginType, pClaimantKind));
             MandatePhaseService.OnMandateEstablished(
                 hadPreviousMandate, Date.getCurrentYear());
-            if (pOriginType == "self_restoration")
+            if (pOriginType == "self_restoration" ||
+                pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin)
             {
                 pKingdom.data.set(LineageKeys.RESTORATION_REFUNDER_ELIGIBLE, false);
                 RulerTitleRestorationStateService.MarkMandateRegained(pKingdom);
@@ -247,9 +358,12 @@ namespace AncientWarfare3.core.lineage
             bool wasAlreadyEmperor = KingdomTitleService.IsEmperor(pKingdom);
             KingdomTitleService.SetTitle(pKingdom, KingdomTitle.Emperor);
             RulerAppellationService.RefreshLivingProjection(pKingdom);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RankOrMandate);
             if (king != null && !king.hasTrait(TRAIT_TIANMING)) king.addTrait(TRAIT_TIANMING);
             if (wasAlreadyEmperor &&
-                (hadPreviousMandate || pOriginType == "self_restoration"))
+                (hadPreviousMandate || pOriginType == "self_restoration" ||
+                 pOriginType == MandateFeudatoryCompletionRules.RestorationOrigin))
                 EraChangeTriggerService.Mark(pKingdom,
                     EraChangeReason.RestoredMandate, "mandate:" + periodId);
             CreateLegalCores(pKingdom, periodId, previousPeriodId);
@@ -257,16 +371,20 @@ namespace AncientWarfare3.core.lineage
 
             string startEventType = MandateStartRecordRules.EventType(pOriginType, pClaimantKind);
             RecordEvent(startEventType, pKingdom, king, null, 0, START_VALUE,
-                pKingdom.name + T("aw_hist_mandate_claimed_mid") + dynastyName);
+                pKingdom.name + T("aw_hist_edict_mandate_claimed_mid") + dynastyName +
+                T("aw_hist_edict_mandate_claimed_suffix"));
             HistoryWriter.RecordKingdom(pKingdom, startEventType,
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_claimed_mid") + HistoryText.PlainText(dynastyName),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_mandate_claimed_mid") +
+                HistoryText.PlainText(dynastyName) +
+                H("aw_hist_edict_mandate_claimed_suffix"),
                 HistoryTarget.Kingdom(pKingdom));
             if (king?.data != null)
                 HistoryWriter.RecordPerson(king.data.id, pKingdom, king.getName(), startEventType,
-                    HistoryText.Actor(king) + H("aw_hist_actor_claimed_mandate"), ChronicleCategory.HONOR,
+                    HistoryText.Actor(king) + H("aw_hist_edict_actor_claimed_mandate"), ChronicleCategory.HONOR,
                     HistoryTarget.Kingdom(pKingdom));
 
             DirtyAllMaps();
+            ClearPendingMandateConqueror();
             return true;
         }
 
@@ -376,6 +494,8 @@ namespace AncientWarfare3.core.lineage
             bool rebelOrigin = source == MandateDeclarationSource.MandateRebel;
             bool foreignPseudo = source == MandateDeclarationSource.ForeignPseudoDynasty;
             bool successfulOrdinaryWar = source == MandateDeclarationSource.MandateWarVictory;
+            bool successfulDynasticRestoration =
+                source == MandateDeclarationSource.FeudatoryRestoration;
             if (source == MandateDeclarationSource.PlayerGrant)
             {
                 Kingdom current = GetCurrentMandateKingdom();
@@ -386,7 +506,7 @@ namespace AncientWarfare3.core.lineage
                     current?.id == pKingdom?.id,
                     out pReason);
             }
-            if (successfulOrdinaryWar)
+            if (successfulOrdinaryWar || successfulDynasticRestoration)
             {
                 pReason = "";
                 if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
@@ -550,7 +670,8 @@ namespace AncientWarfare3.core.lineage
             return _coreCityIds.Contains(pCity.id);
         }
 
-        public static void OnCityTransferred(City pCity)
+        public static void OnCityTransferred(City pCity, Kingdom pOldKingdom,
+            Kingdom pNewKingdom)
         {
             if (pCity?.data == null || pCity.isRekt()) return;
             if (_cacheDirty || _cachedReport == null) return;
@@ -559,6 +680,48 @@ namespace AncientWarfare3.core.lineage
 
             MarkDirty();
             MandateCoreMapModeService.DirtyMapIfActive();
+        }
+
+        public static void OnCityTransferStarting(City pCity,
+            Kingdom pOldKingdom, Kingdom pNewKingdom)
+        {
+            if (pCity?.data == null || pCity.kingdom != pOldKingdom) return;
+            TrackHostileMandateFinalCityConqueror(pOldKingdom,
+                pNewKingdom);
+        }
+
+        private static void TrackHostileMandateFinalCityConqueror(
+            Kingdom pOldKingdom,
+            Kingdom pNewKingdom)
+        {
+            if (pOldKingdom?.data == null ||
+                pOldKingdom.id != _runtimeMarkerKingdomId) return;
+
+            int losingCityCount;
+            try { losingCityCount = pOldKingdom.countCities(); }
+            catch { losingCityCount = pOldKingdom.hasCities() ? 2 : 0; }
+
+            bool gainingValid = pNewKingdom?.data != null &&
+                                !pNewKingdom.isRekt() &&
+                                pNewKingdom.isCiv() &&
+                                !pNewKingdom.isNeutral();
+            bool hostile = false;
+            if (gainingValid)
+            {
+                try { hostile = pNewKingdom.isEnemy(pOldKingdom); }
+                catch { hostile = false; }
+            }
+
+            _pendingFallenMandateKingdomId = pOldKingdom.id;
+            _pendingMandateConquerorKingdomId =
+                MandateDeclarationRules.ResolveHostileMandateFinalCityConqueror(
+                    mandateActive: true,
+                    mandateKingdomId: _runtimeMarkerKingdomId,
+                    losingKingdomId: pOldKingdom.id,
+                    gainingKingdomId: pNewKingdom?.id ?? -1L,
+                    gainingKingdomValid: gainingValid,
+                    hostileTransfer: hostile,
+                    losingCityCountBeforeTransfer: losingCityCount);
         }
 
         public static void OnKingdomCoreCreated(Kingdom pKingdom, City pCity, string pSourceType)
@@ -631,6 +794,7 @@ namespace AncientWarfare3.core.lineage
                 ColumnVal.Create("CRISIS_LEVEL", "ended"));
 
             PublishRuntimeMarkerProjection(false, -1L, "");
+            MandateMilitaryPhaseService.OnMandateEnded(current);
 
             if (current?.king != null && current.king.hasTrait(TRAIT_TIANMING))
                 current.king.removeTrait(TRAIT_TIANMING);
@@ -638,18 +802,22 @@ namespace AncientWarfare3.core.lineage
             if (current?.data != null)
             {
                 HistoryWriter.RecordKingdom(current, "mandate_end",
-                    HistoryText.Kingdom(current) + H("aw_hist_mandate_lost_prefix") +
-                    HistoryText.PlainText(EndReasonLabel(pReason)) + H("aw_hist_paren_close"),
+                    HistoryText.Kingdom(current) + H("aw_hist_edict_mandate_lost_prefix") +
+                    HistoryText.PlainText(EndReasonLabel(pReason)) +
+                    H("aw_hist_edict_mandate_lost_suffix"),
                     HistoryTarget.Kingdom(current));
                 RecordEvent("mandate_end", current, current.king, null, 0, report.mandate_value,
-                    current.name + T("aw_hist_mandate_lost_prefix") + EndReasonLabel(pReason) +
-                    T("aw_hist_paren_close"));
+                    current.name + T("aw_hist_edict_mandate_lost_prefix") +
+                    EndReasonLabel(pReason) + T("aw_hist_edict_mandate_lost_suffix"));
             }
 
             RulerAppellationService.RefreshLivingProjection(current);
+            FamilyTreeProjectionRevision.Advance(
+                FamilyTreeProjectionChange.RankOrMandate);
 
             MarkDirty();
             DirtyAllMaps();
+            ClearPendingMandateConqueror();
         }
 
         public static void CollapseMandate(Kingdom pKingdom, string pReason)
@@ -657,8 +825,9 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return;
             MandatePhaseService.ForceChaos("mandate_collapse");
             HistoryWriter.RecordKingdom(pKingdom, "mandate_collapse",
-                HistoryText.Kingdom(pKingdom) + H("aw_hist_mandate_collapse"),
+                HistoryText.Kingdom(pKingdom) + H("aw_hist_edict_mandate_collapse"),
                 HistoryTarget.Kingdom(pKingdom));
+            FeudatoryCollapseService.ScheduleOnMandateCollapse(pKingdom);
             MandateRebelService.OnMandateCollapse(pKingdom, pReason);
             ClearMandate(pReason);
         }
@@ -666,6 +835,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnWarStarted(War pWar)
         {
             if (pWar?.data == null) return;
+            MandateBorderDefenseService.OnMandateWarStarted(pWar);
             string type = GetWarType(pWar);
             if (type != WAR_TIANMING && type != WAR_TIANMING_REBEL) return;
 
@@ -676,7 +846,6 @@ namespace AncientWarfare3.core.lineage
                 attacker.name + T("aw_hist_mandate_war_declared_mid") + defender.name +
                 T("aw_hist_mandate_war_declared_suffix"));
             ChangeMandate(defender, -5, "mandate_war_start");
-            MandateBorderDefenseService.OnMandateWarStarted(pWar);
         }
 
         public static void OnWarEnded(War pWar, WarWinner pWinner)
@@ -710,13 +879,51 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomDestroyed(Kingdom pKingdom)
         {
-            Kingdom mandate = GetCurrentMandateKingdom();
-            if (mandate != null && pKingdom == mandate)
+            if (pKingdom?.data == null) return;
+            MandateReport report = ReadReport();
+            if (MandateDeclarationRules.ShouldEndDestroyedMandate(
+                    report.active, report.kingdom_id, pKingdom.id))
             {
+                long candidateId = _pendingFallenMandateKingdomId == pKingdom.id
+                    ? _pendingMandateConquerorKingdomId
+                    : -1L;
+                Kingdom candidate = FindKingdom(candidateId);
+                bool candidateValid = candidate?.data != null &&
+                                      !candidate.isRekt() &&
+                                      candidate.isCiv() &&
+                                      !candidate.isNeutral();
+                bool transfer = MandateDeclarationRules.CanTransferDestroyedMandate(
+                    report.active, report.kingdom_id, pKingdom.id, candidateId,
+                    candidateValid, candidateValid && candidate.hasKing() &&
+                                    candidate.king?.data != null);
                 RulerTitleRestorationStateService.MarkMandateLost(pKingdom);
                 MandatePhaseService.ForceChaos("mandate_kingdom_fell");
                 ClearMandate("kingdom_fell");
+                if (transfer) TryDeclareMandateAfterVictory(candidate, pKingdom);
             }
+        }
+
+        private static void TryDeclareMandateAfterVictory(Kingdom pVictor,
+            Kingdom pFormerMandate)
+        {
+            if (pVictor?.data == null) return;
+            bool rebel = MandateRebelService.IsRebelKingdom(pVictor);
+            bool pseudo = !LineageService.IsXiaKingdom(pVictor) ||
+                          IsPseudoForeignClaimant(pVictor);
+            if (rebel)
+                TryDeclareMandate(pVictor, "tianmingrebel_war",
+                    "rebel", "rebel", pFormerMandate);
+            else if (pseudo)
+                TryDeclareMandate(pVictor, "pseudo_foreign_war",
+                    "pseudo_foreign", "foreign_pseudo", pFormerMandate);
+            else
+                TryDeclareMandate(pVictor, "tianming_war");
+        }
+
+        private static void ClearPendingMandateConqueror()
+        {
+            _pendingFallenMandateKingdomId = -1L;
+            _pendingMandateConquerorKingdomId = -1L;
         }
 
         public static void NormalizeMapMarkerAfterRebelSettlement(Kingdom pKingdom)
@@ -993,6 +1200,9 @@ namespace AncientWarfare3.core.lineage
                 case "rebel": return WarDisplayLabelRules.EventLabel("mandate_declared_rebel");
                 case "pseudo_foreign": return WarDisplayLabelRules.EventLabel("mandate_declared_foreign_pseudo");
                 case "self_restoration": return WarDisplayLabelRules.EventLabel("mandate_declared_refounder");
+                case MandateFeudatoryCompletionRules.RestorationOrigin:
+                    return WarDisplayLabelRules.EventLabel(
+                        "mandate_declared_dynastic_restoration");
                 default: return WarDisplayLabelRules.EventLabel("mandate_declared_orthodox");
             }
         }

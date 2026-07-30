@@ -95,6 +95,15 @@ namespace AncientWarfare3.core.lineage
                     pActor.data.set(LineageKeys.ROYAL_PARENT_KINGDOM_ID,
                         emperor.kingdom?.id ?? -1L);
                 }
+                else if (DynasticTitleRules
+                    .ShouldMarkUnresolvedAdultRoyalProbeAsProcessed(
+                        adult: true, royalChild: false, processed: processed,
+                        foundCurrentEmperorParent: false))
+                {
+                    pActor.data.set(
+                        LineageKeys.ROYAL_ADULT_TITLE_PROCESSED, true);
+                    return;
+                }
             }
             if (!royalChild || processed) return;
 

@@ -2,6 +2,29 @@ namespace AncientWarfare3.core.lineage
 {
     public static class DeferredRuntimeWorkRules
     {
+        public const int MaximumConsecutiveCriticalRuntimeWork = 3;
+        public const int MaximumConsecutiveRuntimeWork = 3;
+
+        public static bool ShouldPrioritizeCriticalRuntimeWork(
+            bool pCriticalRuntimePending, bool pRuntimePending,
+            bool pPersistentPending, int pConsecutiveCriticalRuntimeWork)
+        {
+            if (!pCriticalRuntimePending) return false;
+            if (!pRuntimePending && !pPersistentPending) return true;
+            return pConsecutiveCriticalRuntimeWork <
+                   MaximumConsecutiveCriticalRuntimeWork;
+        }
+
+        public static bool ShouldPrioritizeRuntimeWork(
+            bool pRuntimePending, bool pPersistentPending,
+            int pConsecutiveRuntimeWork)
+        {
+            if (!pRuntimePending) return false;
+            if (!pPersistentPending) return true;
+            return pConsecutiveRuntimeWork <
+                   MaximumConsecutiveRuntimeWork;
+        }
+
         public static bool ShouldStopDrain(int pProcessed, int pMaxItems,
             long pElapsedTicks, long pBudgetTicks)
         {
@@ -17,6 +40,20 @@ namespace AncientWarfare3.core.lineage
         public static string CoalescingKey(string pKind, long pObjectId)
         {
             return (pKind ?? "") + ":" + pObjectId;
+        }
+
+        public static string FormatFailure(string pKey,
+            System.Exception pError)
+        {
+            string key = string.IsNullOrEmpty(pKey)
+                ? "<ordered>"
+                : pKey;
+            string type = pError?.GetType().FullName ?? "<unknown>";
+            string message = pError?.Message ?? "<no message>";
+            string detail = pError?.ToString() ?? "<no exception>";
+            return "Deferred work failed: key=" + key +
+                   " type=" + type + " message=" + message +
+                   System.Environment.NewLine + detail;
         }
     }
 }

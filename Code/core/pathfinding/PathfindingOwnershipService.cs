@@ -16,10 +16,25 @@ namespace AncientWarfare3.core.pathfinding
 
         public static AWPathOwnerState State => Rules.State;
         public static bool IsAw3Owner => State == AWPathOwnerState.Aw3;
-        public static bool ShouldIntercept => IsAw3Owner;
+        public static bool ShouldIntercept =>
+            AWPathfindingRuntimeMode.IsAw3 && IsAw3Owner &&
+            AWPathfindingBootstrap.ReadyToIntercept;
+
+        public static bool HasAw3MovementPatch()
+        {
+            MethodBase method = AccessTools.Method(typeof(Actor),
+                nameof(Actor.goTo));
+            Patches patches = method == null ? null : Harmony.GetPatchInfo(method);
+            if (patches?.Owners == null) return false;
+            foreach (string owner in patches.Owners)
+                if (string.Equals(owner, ModClass.GUID,
+                        StringComparison.Ordinal)) return true;
+            return false;
+        }
 
         public static void Prepare()
         {
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
             if (_prepared) return;
             _prepared = true;
             AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
@@ -27,11 +42,13 @@ namespace AncientWarfare3.core.pathfinding
 
         public static void BeginStabilization()
         {
+            if (!AWPathfindingRuntimeMode.IsAw3) return;
             Rules.BeginStabilization();
         }
 
         public static AWPathOwnerState ProcessMainThreadTick()
         {
+            if (!AWPathfindingRuntimeMode.IsAw3) return AWPathOwnerState.Pending;
             if (Interlocked.Exchange(ref _assemblyInvalidated, 0) != 0)
                 Rules.OnMatchingAssemblyLoad();
             _auditTicks++;

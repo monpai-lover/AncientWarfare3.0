@@ -117,6 +117,12 @@ namespace AncientWarfare3.core.lineage
                 ClearRazeIntent(pCity);
         }
 
+        public static bool ShouldKeepFormalOwner(City pCity)
+        {
+            return EmptyCitySurvivalRules.ShouldKeepFormalOwner(
+                WarScoreService.ShouldHoldFrozenOccupation(pCity));
+        }
+
         private static bool HasRazeIntent(City pCity)
         {
             if (pCity?.data == null) return false;

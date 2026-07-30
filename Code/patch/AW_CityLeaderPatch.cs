@@ -1,4 +1,6 @@
+using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.schools;
 using ai;
 using ai.behaviours;
 using HarmonyLib;
@@ -8,6 +10,28 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_CityLeaderPatch
     {
+        internal static int FillVacanciesAfterCivilServiceExam(
+            Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
+            int attempts = 0;
+            foreach (City city in pKingdom.getCities())
+            {
+                if (city?.data == null || city.isRekt()) continue;
+                bool shouldAttempt = CivilServiceExamRules.
+                    ShouldAttemptCityVacancyFill(city.hasLeader(),
+                        city.isGettingCaptured(), city.kingdom == pKingdom,
+                        CivilServiceExamRules.CityVacancyFillBudget -
+                        attempts);
+                if (!shouldAttempt) continue;
+                attempts++;
+                CheckFindLeader_Prefix(city);
+                if (attempts >= CivilServiceExamRules.CityVacancyFillBudget)
+                    break;
+            }
+            return attempts;
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CityBehCheckLeader), "checkFindLeader")]
         public static bool CheckFindLeader_Prefix(City pCity)
@@ -17,16 +41,54 @@ namespace AncientWarfare3.patch
 
             Kingdom kingdom = pCity.kingdom;
             long heirId = GetHeirId(kingdom);
+            bool hasNineRankSystem = CourtService.HasNineRankSystem(kingdom);
+            bool civilServiceCareer = CivilServiceExamRules.
+                ShouldUseCivilServiceGovernorPipeline(hasNineRankSystem);
+            bool circulating = CivilServiceExamRules.
+                ShouldUseIntercityGovernorCirculation(hasNineRankSystem,
+                    CountLiveCities(kingdom));
 
-            Actor actor = TryGetClanLeader(pCity, kingdom, heirId);
+            Actor actor = TryGetRealmLeader(pCity, kingdom, heirId, circulating);
+            bool acting = false;
+            if (actor == null && civilServiceCareer)
+            {
+                actor = TryGetActingLocalLeader(pCity, kingdom, heirId);
+                acting = actor != null;
+            }
+            if (actor != null &&
+                !ActiveMilitaryLifecycleService.
+                    TryPrepareCivilAppointment(actor))
+                actor = null;
             if (actor != null)
             {
-                if (actor.city != pCity)
-                    actor.stopBeingWarrior();
-                actor.joinCity(pCity);
-                pCity.setLeader(actor, pNew: true);
+                City previousCity = actor.city;
+                if (circulating)
+                    OfficialCareerStateService.FreezeNativeCityFast(actor);
+                using (GovernorRotationRuntimeScope.Enter())
+                {
+                    actor.joinCity(pCity);
+                    pCity.setLeader(actor, pNew: true);
+                    bool appointed = acting
+                        ? CourtService.TryAssignActingCityGovernor(actor, kingdom,
+                            pCity)
+                        : CourtService.TryAssignCityGovernor(actor, kingdom, pCity);
+                    if (appointed)
+                    {
+                        CityGovernorPlacementService.OnCommittedAssignment(
+                            pCity, actor);
+                    }
+                    else
+                    {
+                        if (pCity.leader == actor)
+                            pCity.removeLeader();
+                        if (previousCity != null && actor.city != previousCity)
+                            actor.joinCity(previousCity);
+                    }
+                }
                 return false;
             }
+
+            if (civilServiceCareer) return false;
 
             int bestScore = 0;
             foreach (Actor unit in pCity.units)
@@ -43,12 +105,15 @@ namespace AncientWarfare3.patch
                 }
             }
 
-            if (actor != null)
+            if (actor != null &&
+                ActiveMilitaryLifecycleService.
+                    TryPrepareCivilAppointment(actor))
                 pCity.setLeader(actor, pNew: true);
             return false;
         }
 
-        private static Actor TryGetClanLeader(City pCity, Kingdom pKingdom, long pHeirId)
+        private static Actor TryGetRealmLeader(City pCity, Kingdom pKingdom,
+            long pHeirId, bool pCirculating)
         {
             if (pCity == null || pKingdom?.data == null) return null;
 
@@ -58,21 +123,49 @@ namespace AncientWarfare3.patch
 
             using ListPool<Actor> royalCandidates = new ListPool<Actor>();
             using ListPool<Actor> otherCandidates = new ListPool<Actor>();
+            using ListPool<Actor> commonCandidates = new ListPool<Actor>();
             foreach (City city in pKingdom.getCities())
             {
                 foreach (Actor unit in city.getUnits())
                 {
-                    if (!IsClanLeaderCandidate(unit, pHeirId)) continue;
-                    if (royalClan != null && unit.clan == royalClan)
+                    if (!IsRealmLeaderCandidate(unit, pHeirId)) continue;
+                    if (!HistoricalSchoolEducationService.CanAppoint(unit,
+                            pKingdom, CourtOfficeLayer.City,
+                            CourtOfficeId.Governor)) continue;
+                    if (!CivilServiceQualificationService.
+                            CanReceiveFormalCivilAppointment(unit, pKingdom,
+                                CourtOfficeLayer.City,
+                                CourtOfficeId.Governor)) continue;
+                    if (pCirculating && !CanServeTarget(unit, pCity)) continue;
+                    if (unit.hasClan() && royalClan != null && unit.clan == royalClan)
                         royalCandidates.Add(unit);
-                    else
+                    else if (unit.hasClan())
                         otherCandidates.Add(unit);
+                    else if (pCirculating && unit.is_profession_citizen)
+                        commonCandidates.Add(unit);
                 }
             }
 
             Actor royal = PickLeader(royalCandidates, pCity);
             if (royal != null) return royal;
-            return PickLeader(otherCandidates, pCity);
+            Actor other = PickLeader(otherCandidates, pCity);
+            return other ?? PickLeader(commonCandidates, pCity);
+        }
+
+        private static Actor TryGetActingLocalLeader(City pCity,
+            Kingdom pKingdom, long pHeirId)
+        {
+            if (pCity?.data == null || pKingdom?.data == null) return null;
+            using ListPool<Actor> candidates = new ListPool<Actor>();
+            foreach (Actor unit in pCity.getUnits())
+            {
+                if (!IsDirectLeaderCandidate(unit, pHeirId)) continue;
+                if (!HistoricalSchoolEducationService.CanAppoint(unit,
+                        pKingdom, CourtOfficeLayer.City,
+                        CourtOfficeId.Governor)) continue;
+                candidates.Add(unit);
+            }
+            return PickLeader(candidates, pCity);
         }
 
         private static Actor PickLeader(ListPool<Actor> pCandidates, City pCity)
@@ -84,25 +177,54 @@ namespace AncientWarfare3.patch
             return pCandidates[0];
         }
 
-        private static bool IsClanLeaderCandidate(Actor pUnit, long pHeirId)
+        private static bool IsRealmLeaderCandidate(Actor pUnit, long pHeirId)
         {
             if (pUnit?.data == null) return false;
+            if (ActiveMilitaryLifecycleService.
+                    HasActiveMilitaryIdentity(pUnit)) return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
                     RoyalAsylumService.IsActive(pUnit))) return false;
             if (pUnit.data.id == pHeirId) return false;
             if (!pUnit.isSexMale()) return false;
-            return pUnit.isUnitFitToRule() && !pUnit.isKing() && !pUnit.isCityLeader() && pUnit.hasClan();
+            pUnit.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string currentOffice, "");
+            if (!string.IsNullOrEmpty(currentOffice)) return false;
+            return pUnit.isUnitFitToRule() && !pUnit.isKing() &&
+                   !pUnit.isCityLeader();
+        }
+
+        private static bool CanServeTarget(Actor pActor, City pTarget)
+        {
+            if (pActor?.data == null || pTarget?.data == null) return false;
+            pActor.data.get(LineageKeys.OFFICER_NATIVE_CITY_ID,
+                out long nativeCityId, pActor.city?.data?.id ?? -1L);
+            long currentCityId = pActor.city?.data?.id ?? pActor.data.cityID;
+            if (currentCityId < 0) return false;
+            return OfficialCirculationRules.CanServeCity(nativeCityId,
+                currentCityId, pTarget.data.id);
+        }
+
+        private static int CountLiveCities(Kingdom pKingdom)
+        {
+            try { return pKingdom?.countCities() ?? 0; }
+            catch { return 0; }
         }
 
         private static bool IsDirectLeaderCandidate(Actor pUnit, long pHeirId)
         {
             if (pUnit?.data == null) return false;
+            if (ActiveMilitaryLifecycleService.
+                    HasActiveMilitaryIdentity(pUnit)) return false;
             if (!RoyalAsylumRules.CanPerformProtectedRole(
                     RoyalAsylumService.IsActive(pUnit))) return false;
             if (pUnit.data.id == pHeirId) return false;
             if (!pUnit.isSexMale()) return false;
             if (pUnit.isKing() || pUnit.isCityLeader()) return false;
-            return pUnit.is_profession_citizen;
+            pUnit.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string currentOffice, "");
+            return CivilServiceExamRules.CanEnterActingGovernorCandidatePool(
+                pUnit.is_profession_citizen,
+                !string.IsNullOrEmpty(currentOffice));
         }
 
         private static long GetHeirId(Kingdom pKingdom)

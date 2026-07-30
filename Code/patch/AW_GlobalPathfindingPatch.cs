@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using AncientWarfare3.core.pathfinding;
+using AncientWarfare3.core.policy;
 using HarmonyLib;
 using ai;
 using ai.behaviours;
@@ -19,6 +20,12 @@ namespace AncientWarfare3.patch
         private static readonly ConcurrentDictionary<long, CalibrationState>
             CalibrationStates = new ConcurrentDictionary<long, CalibrationState>();
 
+        [HarmonyPrepare]
+        private static bool Prepare()
+        {
+            return AWPathfindingRuntimeMode.IsAw3;
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Actor), nameof(Actor.goTo))]
         private static bool GoTo_Prefix(Actor __instance, WorldTile pTile, bool pPathOnWater,
@@ -26,8 +33,22 @@ namespace AncientWarfare3.patch
             ref ExecuteEvent __result)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
-            __result = AWPathMovementBridge.Submit(__instance, pTile, pPathOnWater,
-                pWalkOnBlocks, pWalkOnLava, pLimitPathfindingRegions);
+            long benchmark = RecentFeatureBenchmark.Begin();
+            RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
+                RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
+            try
+            {
+                __result = AWPathMovementBridge.Submit(__instance, pTile,
+                    pPathOnWater, pWalkOnBlocks, pWalkOnLava,
+                    pLimitPathfindingRegions);
+            }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.PathSubmitIndex, benchmark);
+                RuntimePerformanceDiagnostic.EndActorRaceScope(
+                    ActorRacePerformanceMetric.PathSubmit, raceToken);
+            }
             return false;
         }
 
@@ -38,7 +59,21 @@ namespace AncientWarfare3.patch
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
             if (__instance != null &&
                 (__instance.isFollowingLocalPath() || __instance.current_path_global != null)) return true;
-            AWPathMovementBridge.Update(__instance);
+            if (!AWPathMovementBridge.HasOwnership(__instance)) return true;
+            if (!AWPathMovementBridge.ShouldPollNow(__instance)) return false;
+            long benchmark = RecentFeatureBenchmark.Begin();
+            long diagnostic = RuntimePerformanceDiagnostic.BeginPathStep();
+            RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
+                RuntimePerformanceDiagnostic.BeginActorRaceScope(__instance);
+            try { AWPathMovementBridge.Update(__instance); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndPathStep(diagnostic);
+                RuntimePerformanceDiagnostic.EndActorRaceScope(
+                    ActorRacePerformanceMetric.PathStep, raceToken);
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.PathMovementIndex, benchmark);
+            }
             return false;
         }
 
@@ -47,7 +82,7 @@ namespace AncientWarfare3.patch
         private static void IsUsingPath_Postfix(Actor __instance, ref bool __result)
         {
             if (!PathfindingOwnershipService.ShouldIntercept || __result) return;
-            __result = AWPathMovementBridge.IsUsing(__instance);
+            __result = AWPathMovementBridge.HasOwnership(__instance);
         }
 
         [HarmonyPrefix]
@@ -116,21 +151,27 @@ namespace AncientWarfare3.patch
             BaseSimObject target = actor?.beh_actor_target;
             if (target == null || actor.hasRangeAttack()) return;
 
-            BehaviourActionActor action = actor.hasTask() ? actor.ai?.action : null;
+            BehaviourActionActor action = actor.hasTask()
+                ? actor.ai?.action
+                : null;
             if (action == null || !action.calibrate_target_position) return;
 
             bool isActorTarget = target.isActor();
             Actor targetActor = target.a;
             WorldTile targetTile = targetActor?.current_tile;
             WorldTile tileTarget = actor.tile_target;
-            if (!isActorTarget || targetTile == null || tileTarget == null) return;
+            if (!isActorTarget || targetTile == null || tileTarget == null)
+                return;
 
             float dx = targetTile.x - tileTarget.x;
             float dy = targetTile.y - tileTarget.y;
-            float maximumDistance = action.check_actor_target_position_distance;
-            if (dx * dx + dy * dy <= maximumDistance * maximumDistance) return;
+            float maximumDistance =
+                action.check_actor_target_position_distance;
+            if (dx * dx + dy * dy <= maximumDistance * maximumDistance)
+                return;
             if (actor.ai?.task?.id == SocializeGoToTargetTaskId) return;
-            if (ShouldSkipRepeatedCalibration(actor, action, targetActor, targetTile)) return;
+            if (ShouldSkipRepeatedCalibration(actor, action, targetActor,
+                    targetTile)) return;
 
             actor.clearPathForCalibration();
             action.startExecute(actor);
@@ -162,7 +203,8 @@ namespace AncientWarfare3.patch
             float pWalkedDistance = 0f)
         {
             if (!PathfindingOwnershipService.ShouldIntercept) return true;
-            UpdateMovementDirect(__instance, pElapsed, pWalkedDistance);
+            if (!AWPathMovementBridge.ShouldUseCustomSmoothMovement(__instance)) return true;
+            UpdateCustomSmoothMovement(__instance, pElapsed, pWalkedDistance);
             return false;
         }
 
@@ -170,13 +212,37 @@ namespace AncientWarfare3.patch
         private static void UpdateMovementDirect(Actor pActor, float pElapsed,
             float pWalkedDistance)
         {
-            if (PathfindingOwnershipService.ShouldIntercept)
+            if (PathfindingOwnershipService.ShouldIntercept &&
+                AWPathMovementBridge.ShouldUseCustomSmoothMovement(pActor))
             {
-                AWPathMovementBridge.UpdateSmoothMovement(pActor, pElapsed, pWalkedDistance);
+                UpdateCustomSmoothMovement(pActor, pElapsed, pWalkedDistance);
                 return;
             }
 
             pActor.updateMovement(pElapsed, pWalkedDistance);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void UpdateCustomSmoothMovement(Actor pActor, float pElapsed,
+            float pWalkedDistance)
+        {
+            long benchmark = RecentFeatureBenchmark.Begin();
+            long diagnostic = RuntimePerformanceDiagnostic.BeginPathSmooth();
+            RuntimePerformanceDiagnostic.ActorRaceScopeToken raceToken =
+                RuntimePerformanceDiagnostic.BeginActorRaceScope(pActor);
+            try
+            {
+                AWPathMovementBridge.UpdateSmoothMovement(pActor, pElapsed,
+                    pWalkedDistance);
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndPathSmooth(diagnostic, pActor);
+                RuntimePerformanceDiagnostic.EndActorRaceScope(
+                    ActorRacePerformanceMetric.PathSmooth, raceToken);
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.PathMovementIndex, benchmark);
+            }
         }
 
         [HarmonyPostfix]

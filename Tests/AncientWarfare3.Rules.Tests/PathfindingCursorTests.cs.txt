@@ -1,0 +1,229 @@
+using AncientWarfare3.core.pathfinding;
+
+internal static class PathfindingCursorTests
+{
+    public static void Run()
+    {
+        ActiveRequestReuseAvoidsNewWork();
+        SubmissionDispositionExplainsPendingReplacement();
+        PriorityRequestsRunAheadOfQueuedCivilianWork();
+        QueuedRequestExposesWorkerWaitState();
+        BoundedRegionalPathsContinueUntilFinalTarget();
+
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(1, 1, 1, new[] { tile });
+        using var finder = new AWPathFinder(new TwoStepGenerator());
+        finder.Start(1);
+
+        var request = new AWPathRequest(77, 0, 0, AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f), generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "cursor test request is accepted once");
+        Assert(SpinUntil(() => request.Stream.Count == 2),
+            "cursor test generator publishes both steps");
+
+        AWPathPollResult first = finder.OpenReadyCursor(77, out var cursor);
+        Assert(first.Kind == AWPathPollKind.StepReady && cursor.IsValid,
+            "one actor lookup opens a valid ready cursor");
+        Assert(first.Step.TileId == 10, "cursor exposes the first step");
+
+        cursor.Consume();
+        AWPathPollResult second = cursor.Poll();
+        Assert(second.Kind == AWPathPollKind.StepReady && second.Step.TileId == 11,
+            "the retained cursor exposes the second step without reopening");
+
+        cursor.Consume();
+        Assert(cursor.Poll().Kind == AWPathPollKind.Completed,
+            "the retained cursor observes the terminal state");
+        Assert(finder.ActiveCount == 0,
+            "consuming the final step removes the owned actor request");
+        finder.StopAndDrain();
+    }
+
+    private static void SubmissionDispositionExplainsPendingReplacement()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(6, 1, 1,
+            new[] { tile });
+        var generator = new OrderedGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(long actorId, int targetTileId) =>
+            new AWPathRequest(actorId, 0, targetTileId,
+                AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d);
+
+        Assert(finder.Request(Request(1, 1),
+                out AWPathSubmissionDisposition initial) &&
+               initial == AWPathSubmissionDisposition.Submitted &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the initial path submission enters the active worker");
+        Assert(finder.Request(Request(2, 2),
+                out AWPathSubmissionDisposition pending) &&
+               pending == AWPathSubmissionDisposition.Submitted,
+            "a second actor path is queued as a new submission");
+        Assert(finder.Request(Request(2, 3),
+                out AWPathSubmissionDisposition replacement) &&
+               replacement == AWPathSubmissionDisposition.ReplacedPending,
+            "retargeting queued work reports pending replacement");
+        Assert(finder.Request(Request(2, 3),
+                out AWPathSubmissionDisposition reused) &&
+               reused == AWPathSubmissionDisposition.Reused,
+            "an exact queued target is reused rather than generating another path");
+
+        generator.Release.Set();
+        finder.StopAndDrain();
+    }
+
+    private static void BoundedRegionalPathsContinueUntilFinalTarget()
+    {
+        Assert(AWPathLifecycleRules.ShouldContinueBoundedSegment(
+                regionLimit: 6, currentTileId: 120, targetTileId: 900),
+            "a bounded regional path continues until its final target is reached");
+        Assert(!AWPathLifecycleRules.ShouldContinueBoundedSegment(
+                regionLimit: 0, currentTileId: 120, targetTileId: 900),
+            "an unrestricted path never creates artificial continuation work");
+        Assert(!AWPathLifecycleRules.ShouldContinueBoundedSegment(
+                regionLimit: 6, currentTileId: 900, targetTileId: 900),
+            "a bounded regional path stops after reaching its final target");
+    }
+
+    private static void ActiveRequestReuseAvoidsNewWork()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(3, 1, 1,
+            new[] { tile });
+        var generator = new OrderedGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+        var request = new AWPathRequest(1, 0, 17,
+            AWPathRequestOptions.Default,
+            AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+            generation, 0d);
+        Assert(finder.Request(request, out bool reused) && !reused,
+            "the first request creates work");
+        Assert(generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the active request reaches the worker");
+        Assert(finder.TryReuse(1, 17, AWPathRequestOptions.Default),
+            "the same active target is reused before another request is allocated");
+        Assert(!finder.TryReuse(1, 18, AWPathRequestOptions.Default),
+            "a changed target cannot reuse active work");
+        generator.Release.Set();
+        finder.StopAndDrain();
+    }
+
+    private static void PriorityRequestsRunAheadOfQueuedCivilianWork()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(2, 1, 1,
+            new[] { tile });
+        var generator = new OrderedGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(long actorId, bool priority = false) =>
+            new AWPathRequest(actorId, 0, 0, AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d, priority);
+
+        Assert(finder.Request(Request(1), out bool _),
+            "the blocking civilian request is accepted");
+        Assert(generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the first request reaches the only worker");
+        Assert(finder.Request(Request(2), out bool _),
+            "the queued civilian request is accepted");
+        Assert(finder.Request(Request(3, priority: true), out bool _),
+            "the military-priority request is accepted");
+        generator.Release.Set();
+        Assert(SpinUntil(() => generator.Order.Count >= 3),
+            "all queued requests complete");
+        Assert(generator.Order.ToArray().SequenceEqual(new long[] { 1, 3, 2 }),
+            "military-priority work runs before already queued civilian work");
+        finder.StopAndDrain();
+    }
+
+    private static void QueuedRequestExposesWorkerWaitState()
+    {
+        var tile = new AWTileTraversalSnapshot(0, 0, 0, ground: true,
+            pNeighbors: Array.Empty<int>());
+        using var generation = AWTraversalGeneration.FromTiles(4, 1, 1,
+            new[] { tile });
+        var generator = new OrderedGateGenerator();
+        using var finder = new AWPathFinder(generator);
+        finder.Start(1);
+
+        AWPathRequest Request(long actorId, bool priority = false) =>
+            new AWPathRequest(actorId, 0, 0, AWPathRequestOptions.Default,
+                AWActorTraversalProfile.CreateWalker(100f, 100f, 5f),
+                generation, 0d, priority);
+
+        Assert(finder.Request(Request(1), out bool _) &&
+               generator.Started.Wait(TimeSpan.FromSeconds(3)),
+            "the first request occupies the only worker");
+        Assert(finder.Request(Request(2, priority: true), out bool _),
+            "a second military request remains queued");
+        Assert(!finder.IsWaitingForWorker(1),
+            "running work is never treated as queue starvation");
+        Assert(finder.IsWaitingForWorker(2),
+            "queued work exposes an exact starvation signal");
+
+        generator.Release.Set();
+        finder.StopAndDrain();
+    }
+
+    private static bool SpinUntil(Func<bool> condition)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (timeout.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            if (condition()) return true;
+            Thread.Sleep(1);
+        }
+        return false;
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private sealed class TwoStepGenerator : IAWPathGenerator
+    {
+        public void Generate(AWPathRequest request, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.AddStep(new AWPathStep(10, AWMovementMethod.Walk,
+                AWTraversalEstimate.Direct));
+            request.Stream.AddStep(new AWPathStep(11, AWMovementMethod.Walk,
+                AWTraversalEstimate.Direct));
+            request.Stream.Complete();
+        }
+    }
+
+    private sealed class OrderedGateGenerator : IAWPathGenerator
+    {
+        public readonly ManualResetEventSlim Started = new(false);
+        public readonly ManualResetEventSlim Release = new(false);
+        public readonly System.Collections.Concurrent.ConcurrentQueue<long>
+            Order = new();
+
+        public void Generate(AWPathRequest request,
+            CancellationToken cancellation)
+        {
+            Order.Enqueue(request.ActorId);
+            if (request.ActorId == 1)
+            {
+                Started.Set();
+                Release.Wait(cancellation);
+            }
+            cancellation.ThrowIfCancellationRequested();
+            request.Stream.Complete();
+        }
+    }
+}

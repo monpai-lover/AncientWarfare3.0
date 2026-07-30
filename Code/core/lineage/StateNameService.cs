@@ -49,13 +49,20 @@ namespace AncientWarfare3.core.lineage
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
 
         public static StateNameCommitResult EnsureBoundStateName(Kingdom pKingdom,
-            Actor pFounder, long pShiId, long pDynastyId, long pOriginKingdomId)
+            Actor pFounder, long pShiId, long pDynastyId, long pOriginKingdomId,
+            string pPreferredStateName = "")
         {
             if (!Ready || pKingdom?.data == null || pShiId < 0)
                 return StateNameCommitResult.Failed;
             if (!TryReadBranchSeed(pShiId, out BranchSeed seed))
                 return StateNameCommitResult.Failed;
-            if (StateNameRules.IsValid(seed.StateName))
+            string resolved = StateNameRules.ResolveInitialBoundName(
+                seed.StateName, pPreferredStateName, pKingdom.name);
+            bool hasPreferred = StateNameRules.IsValid(pPreferredStateName);
+            bool hasCurrentKingdomName = StateNameRules.IsValid(pKingdom.name);
+            if (StateNameRules.IsValid(seed.StateName) &&
+                (!hasPreferred || string.Equals(seed.StateName, resolved,
+                    StringComparison.Ordinal)))
             {
                 return new StateNameCommitResult(true, true,
                     pShiId, pDynastyId, seed.StateName);
@@ -67,60 +74,103 @@ namespace AncientWarfare3.core.lineage
             long originKingdomId = seed.OriginKingdomId >= 0
                 ? seed.OriginKingdomId
                 : pOriginKingdomId;
-            HashSet<string> activeNames = ReadActiveStateNames(pShiId);
-            string stateName = StateNameRules.SelectFirstAvailable(
-                XiaPreQinKingdomNameRules.All(), activeNames,
-                pShiId, founderActorId, originKingdomId);
+            string stateName;
+            if (StateNameRules.IsValid(resolved))
+            {
+                stateName = resolved;
+            }
+            else
+            {
+                HashSet<string> activeNames = ReadActiveStateNames(pShiId);
+                stateName = StateNameRules.SelectFirstAvailable(
+                    XiaPreQinKingdomNameRules.All(), activeNames,
+                    pShiId, founderActorId, originKingdomId);
+            }
             if (!StateNameRules.IsValid(stateName)) return StateNameCommitResult.Failed;
 
             double now = LineageService.CurTime();
-            try
-            {
-                using SQLiteTransaction transaction = DB.BeginTransaction();
-                using (var updateShi = new SQLiteCommand(DB) { Transaction = transaction })
+            string[] historyTables = pFounder?.data?.id >= 0
+                ? new[]
                 {
-                    updateShi.CommandText = "UPDATE " + ShiBranchTableItem.GetTableName() +
-                                            " SET STATE_NAME=@name,STATE_NAME_SOURCE=@source," +
-                                            "STATE_NAME_DECIDED_TIME=@time WHERE SHI_ID=@shi " +
-                                            "AND IFNULL(STATE_NAME,'')=''";
-                    updateShi.Parameters.AddWithValue("@name", stateName);
-                    updateShi.Parameters.AddWithValue("@source", "random");
-                    updateShi.Parameters.AddWithValue("@time", now);
-                    updateShi.Parameters.AddWithValue("@shi", pShiId);
-                    if (updateShi.ExecuteNonQuery() != 1)
-                    {
-                        transaction.Rollback();
-                        string committed = ReadBoundName(pShiId);
-                        return StateNameRules.IsValid(committed)
-                            ? new StateNameCommitResult(true, true,
-                                pShiId, pDynastyId, committed)
-                            : StateNameCommitResult.Failed;
-                    }
+                    KingdomHistoryTableItem.GetTableName(),
+                    PersonBiographyTableItem.GetTableName()
                 }
+                : new[] { KingdomHistoryTableItem.GetTableName() };
+            if (HistoricalSynchronousWriteCoordinator.TryExecute(
+                    TimeSpan.FromSeconds(5), historyTables,
+                    HistoricalWriteService.FlushForSynchronousFallback,
+                    HistoricalWriteService.TryReserveEventId,
+                    eventIds => CommitReserved(pKingdom, pFounder, pShiId,
+                        pDynastyId, stateName, hasPreferred,
+                        hasCurrentKingdomName, now, eventIds[0],
+                        eventIds.Count > 1 ? eventIds[1] : -1L),
+                    out StateNameCommitResult result, out string error))
+                return result;
+            ModClass.LogWarning("State-name binding transaction failed: " +
+                                error);
+            return StateNameCommitResult.Failed;
+        }
 
-                if (pDynastyId >= 0)
-                {
-                    using var updateDynasty = new SQLiteCommand(DB) { Transaction = transaction };
-                    updateDynasty.CommandText = "UPDATE " + DynastyPeriodTableItem.GetTableName() +
-                                                " SET STATE_NAME=@name WHERE DYNASTY_ID=@dynasty " +
-                                                "AND SHI_ID=@shi AND END_TIME=-1";
-                    updateDynasty.Parameters.AddWithValue("@name", stateName);
-                    updateDynasty.Parameters.AddWithValue("@dynasty", pDynastyId);
-                    updateDynasty.Parameters.AddWithValue("@shi", pShiId);
-                    updateDynasty.ExecuteNonQuery();
-                }
-
-                InsertHistory(transaction, pKingdom, pFounder, pShiId,
-                    stateName, now);
-                transaction.Commit();
-                return new StateNameCommitResult(true, false,
-                    pShiId, pDynastyId, stateName);
-            }
-            catch (Exception error)
+        private static StateNameCommitResult CommitReserved(Kingdom pKingdom,
+            Actor pFounder, long pShiId, long pDynastyId, string pStateName,
+            bool pHasPreferred, bool pHasCurrentKingdomName, double pNow,
+            long pKingdomEventId, long pPersonEventId)
+        {
+            using SQLiteTransaction transaction = DB.BeginTransaction();
+            using (var updateShi = new SQLiteCommand(DB)
+                   {
+                       Transaction = transaction
+                   })
             {
-                ModClass.LogWarning("State-name binding transaction failed: " + error.Message);
-                return StateNameCommitResult.Failed;
+                updateShi.CommandText = "UPDATE " +
+                    ShiBranchTableItem.GetTableName() +
+                    " SET STATE_NAME=@name,STATE_NAME_SOURCE=@source," +
+                    "STATE_NAME_DECIDED_TIME=@time WHERE SHI_ID=@shi" +
+                    (pHasPreferred
+                        ? ""
+                        : " AND IFNULL(STATE_NAME,'')=''");
+                updateShi.Parameters.AddWithValue("@name", pStateName);
+                updateShi.Parameters.AddWithValue("@source",
+                    pHasPreferred
+                        ? "historical_figure"
+                        : pHasCurrentKingdomName
+                            ? "existing_kingdom"
+                            : "random");
+                updateShi.Parameters.AddWithValue("@time", pNow);
+                updateShi.Parameters.AddWithValue("@shi", pShiId);
+                if (updateShi.ExecuteNonQuery() != 1)
+                {
+                    transaction.Rollback();
+                    string committed = ReadBoundName(pShiId);
+                    return StateNameRules.IsValid(committed)
+                        ? new StateNameCommitResult(true, true,
+                            pShiId, pDynastyId, committed)
+                        : StateNameCommitResult.Failed;
+                }
             }
+
+            if (pDynastyId >= 0)
+            {
+                using var updateDynasty = new SQLiteCommand(DB)
+                {
+                    Transaction = transaction
+                };
+                updateDynasty.CommandText = "UPDATE " +
+                    DynastyPeriodTableItem.GetTableName() +
+                    " SET STATE_NAME=@name WHERE DYNASTY_ID=@dynasty " +
+                    "AND SHI_ID=@shi AND END_TIME=-1";
+                updateDynasty.Parameters.AddWithValue("@name", pStateName);
+                updateDynasty.Parameters.AddWithValue("@dynasty", pDynastyId);
+                updateDynasty.Parameters.AddWithValue("@shi", pShiId);
+                updateDynasty.ExecuteNonQuery();
+            }
+
+            InsertHistory(transaction, pKingdom, pFounder, pShiId,
+                pStateName, pNow, pKingdomEventId, pPersonEventId);
+            HistoricalContentRevision.AdvanceAfterSuccessfulSynchronousWrite(
+                transaction.Commit);
+            return new StateNameCommitResult(true, false,
+                pShiId, pDynastyId, pStateName);
         }
 
         public static string GetBoundOrCurrentName(Kingdom pKingdom, long pShiId = -1)
@@ -158,6 +208,19 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool ProjectExistingStateName(Kingdom pKingdom,
+            long pShiId, string pStateName)
+        {
+            if (pKingdom?.data == null || pShiId < 0 ||
+                !StateNameRules.IsValid(pStateName)) return false;
+            string committed = ReadBoundName(pShiId);
+            if (!string.Equals(committed, pStateName,
+                    StringComparison.Ordinal)) return false;
+            return ProjectCommittedStateName(pKingdom,
+                new StateNameCommitResult(true, true, pShiId, -1L,
+                    committed));
+        }
+
         private static bool RetryCommittedProjection(Kingdom pKingdom, long pShiId)
         {
             string committed = ReadBoundName(pShiId);
@@ -176,11 +239,12 @@ namespace AncientWarfare3.core.lineage
 
         private static void ApplyCommittedProjection(Kingdom pKingdom, string pStateName)
         {
-            if (!string.Equals(pKingdom.data.name, pStateName, StringComparison.Ordinal))
+            bool changed = !string.Equals(pKingdom.data.name, pStateName,
+                StringComparison.Ordinal);
+            if (changed)
                 pKingdom.setName(pStateName, pTrack: false);
             pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
-            KingdomArchiveWriter.Upsert(pKingdom);
-            RulerAppellationService.RefreshLivingProjection(pKingdom);
+            if (!changed) KingdomRenameProjectionService.Refresh(pKingdom);
         }
 
         private static bool TryReadBranchSeed(long pShiId, out BranchSeed pSeed)
@@ -249,7 +313,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void InsertHistory(SQLiteTransaction pTransaction,
             Kingdom pKingdom, Actor pFounder, long pShiId, string pStateName,
-            double pTime)
+            double pTime, long pKingdomEventId, long pPersonEventId)
         {
             string color = HistoryColors.FromKingdom(pKingdom);
             string founderName = pFounder?.getName() ?? "";
@@ -270,8 +334,6 @@ namespace AncientWarfare3.core.lineage
             string year = HistoryWriter.BuildYearPrefix(pTime, pKingdom);
             string yearRich = HistoryWriter.BuildYearPrefixRich(pTime, pKingdom);
 
-            long kingdomEventId = NextId(pTransaction,
-                KingdomHistoryTableItem.GetTableName(), "EVENT_ID");
             using (var kingdom = new SQLiteCommand(DB) { Transaction = pTransaction })
             {
                 kingdom.CommandText = "INSERT INTO " + KingdomHistoryTableItem.GetTableName() +
@@ -280,15 +342,13 @@ namespace AncientWarfare3.core.lineage
                     "CONTEXT_KINGDOM_ID,CONTEXT_KINGDOM_NAME,CONTEXT_KINGDOM_COLOR," +
                     "TARGET_TYPE,TARGET_ID) VALUES (@id,@kingdom,@time,@year,@yearRich," +
                     "@state,@color,@content,@rich,@type,@kingdom,@state,@color,'actor',@actor)";
-                AddHistoryParameters(kingdom, kingdomEventId, pKingdom.id, founderId,
+                AddHistoryParameters(kingdom, pKingdomEventId, pKingdom.id, founderId,
                     pTime, year, yearRich, pStateName, color,
                     content, richContent.Rich);
                 kingdom.ExecuteNonQuery();
             }
 
             if (founderId < 0) return;
-            long personEventId = NextId(pTransaction,
-                PersonBiographyTableItem.GetTableName(), "EVENT_ID");
             using var person = new SQLiteCommand(DB) { Transaction = pTransaction };
             person.CommandText = "INSERT INTO " + PersonBiographyTableItem.GetTableName() +
                 " (EVENT_ID,ACTOR_ID,WORLD_TIME,YEAR_PREFIX,YEAR_PREFIX_RICH,SUBJECT_NAME," +
@@ -301,7 +361,7 @@ namespace AncientWarfare3.core.lineage
             person.Parameters.AddWithValue("@actorName", founderName);
             person.Parameters.AddWithValue("@category", ChronicleCategory.HONOR);
             person.Parameters.AddWithValue("@age", SafeAge(pFounder));
-            AddHistoryParameters(person, personEventId, pKingdom.id, founderId,
+            AddHistoryParameters(person, pPersonEventId, pKingdom.id, founderId,
                 pTime, year, yearRich, pStateName, color,
                 content, richContent.Rich);
             person.ExecuteNonQuery();
@@ -323,14 +383,6 @@ namespace AncientWarfare3.core.lineage
             pCommand.Parameters.AddWithValue("@content", pContent ?? "");
             pCommand.Parameters.AddWithValue("@rich", pRich ?? pContent ?? "");
             pCommand.Parameters.AddWithValue("@type", "state_name_bound");
-        }
-
-        private static long NextId(SQLiteTransaction pTransaction,
-            string pTable, string pColumn)
-        {
-            using var command = new SQLiteCommand(DB) { Transaction = pTransaction };
-            command.CommandText = "SELECT IFNULL(MAX(" + pColumn + "),-1)+1 FROM " + pTable;
-            return Convert.ToInt64(command.ExecuteScalar());
         }
 
         private static int SafeAge(Actor pActor)

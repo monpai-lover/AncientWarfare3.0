@@ -29,8 +29,11 @@ namespace AncientWarfare3.core.court
                 out long previousPremierId, -1L);
             pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_POWER,
                 out int previousRealmPower, 0);
-            if (RepublicGovernmentService.IsRepublic(pKingdom) ||
-                !HasLivingKing(pKingdom))
+            bool hasCourt = CourtService.HasOfficialCourt(pKingdom) || CourtService.HasPrimitiveCourt(pKingdom);
+            if (!MinisterialPowerRules.ShouldLoadOfficers(
+                    hasCourt,
+                    RepublicGovernmentService.IsRepublic(pKingdom),
+                    HasLivingKing(pKingdom)))
             {
                 DecayPreviousPremier(pKingdom, previousPremierId, -1L, year);
                 ClearRealmProjection(pKingdom, year);
@@ -87,16 +90,19 @@ namespace AncientWarfare3.core.court
             pKingdom.data.set(LineageKeys.MINISTERIAL_POWER_LAST_YEAR, year);
             if (previousPremierId != actor.data.id || previousRealmPower != nextPower)
                 CourtDirectionService.MarkDirty(pKingdom);
-            TryHandleCoupAttempt(pKingdom, actor, nextPower, weakRuler,
-                HasLowMandate(pKingdom), year);
+            bool puppetEligibleRuler = IsPuppetEligibleRuler(pKingdom.king);
+            bool ambitiousUsurper = IsAmbitiousUsurper(actor);
+            int preparationYears = UpdateCoupPreparation(pKingdom,
+                previousPremierId == actor.data.id, nextPower,
+                puppetEligibleRuler, ambitiousUsurper);
+            if (preparationYears >= MinisterialPowerRules.CoupPreparationYears)
+                TryHandleCoupAttempt(pKingdom, actor, nextPower, year);
         }
 
         private static bool TryHandleCoupAttempt(Kingdom pKingdom, Actor pPremier,
-            int pPower, bool pWeakRuler, bool pMandateCrisis, int pYear)
+            int pPower, int pYear)
         {
-            bool monarchy = !RepublicGovernmentService.IsRepublic(pKingdom);
-            if (!MinisterialPowerRules.CanAttemptCoup(monarchy, IsAtWar(pKingdom),
-                    pPower, pWeakRuler, pMandateCrisis)) return false;
+            if (!CanResolvePalaceCoup(pPremier, pKingdom)) return false;
 
             bool success = GeneralRebellionService.TryResolvePalaceCoup(
                 pPremier, pKingdom, pPower);
@@ -124,9 +130,119 @@ namespace AncientWarfare3.core.court
             pPremier.data.set(LineageKeys.MINISTERIAL_POWER_LAST_KINGDOM_ID,
                 pKingdom.id);
             pPremier.data.set(LineageKeys.MINISTERIAL_POWER_ACTOR_LAST_YEAR, pYear);
+            pKingdom.data.set(LineageKeys.MINISTERIAL_COUP_LAST_ATTEMPT_YEAR,
+                pYear);
+            pKingdom.data.set(LineageKeys.MINISTERIAL_COUP_PREPARATION_YEARS,
+                0);
             ClearRealmProjection(pKingdom, pYear);
             CourtDirectionService.MarkDirty(pKingdom);
-            return true;
+            return success;
+        }
+
+        internal static CourtDispositionResistanceResult
+            TryStartDispositionCoup(Actor pPremier, Kingdom pKingdom,
+                int pIntensity)
+        {
+            if (pPremier?.data == null || pKingdom?.data == null ||
+                pPremier.isRekt() || !pPremier.isAlive())
+                return CourtDispositionResistanceResult.FailedToStart;
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_ID,
+                out long premierId, -1L);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_POWER,
+                out int power, 0);
+            if (premierId != pPremier.data.id ||
+                !IsCurrentOfficer(pPremier, pKingdom,
+                    CurrentOfficeId(pPremier)))
+                return CourtDispositionResistanceResult.FailedToStart;
+
+            if (!CanResolvePalaceCoup(pPremier, pKingdom))
+                return CourtDispositionResistanceResult.Accepted;
+            return TryHandleCoupAttempt(pKingdom, pPremier, power,
+                Date.getCurrentYear())
+                ? CourtDispositionResistanceResult.Rebelled
+                : CourtDispositionResistanceResult.FailedToStart;
+        }
+
+        private static int UpdateCoupPreparation(Kingdom pKingdom,
+            bool pSamePremier, int pPower, bool pWeakRuler,
+            bool pAmbitiousUsurper)
+        {
+            if (pKingdom?.data == null) return 0;
+            bool preparing = MinisterialPowerRules.CanPrepareCoup(
+                !RepublicGovernmentService.IsRepublic(pKingdom),
+                IsAtWar(pKingdom), pPower, pWeakRuler,
+                pAmbitiousUsurper);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_COUP_PREPARATION_YEARS,
+                out int current, 0);
+            int next = preparing
+                ? Math.Min(MinisterialPowerRules.CoupPreparationYears,
+                    pSamePremier ? Math.Max(0, current) + 1 : 1)
+                : 0;
+            pKingdom.data.set(LineageKeys.MINISTERIAL_COUP_PREPARATION_YEARS,
+                next);
+            return next;
+        }
+
+        internal static bool CanResolvePalaceCoup(Actor pPremier,
+            Kingdom pKingdom)
+        {
+            if (pPremier?.data == null || pKingdom?.data == null ||
+                pPremier.isRekt() || !pPremier.isAlive() ||
+                pKingdom.king == pPremier ||
+                RepublicGovernmentService.IsRepublic(pKingdom)) return false;
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_ID,
+                out long premierId, -1L);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_PREMIER_POWER,
+                out int power, 0);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_COUP_PREPARATION_YEARS,
+                out int preparationYears, 0);
+            pKingdom.data.get(LineageKeys.MINISTERIAL_COUP_LAST_ATTEMPT_YEAR,
+                out int lastAttemptYear, -100000);
+            if (premierId != pPremier.data.id ||
+                !IsCurrentOfficer(pPremier, pKingdom,
+                    CurrentOfficeId(pPremier))) return false;
+
+            bool puppet = MinisterialPowerRules.IsPuppetRuler(
+                HasLivingKing(pKingdom),
+                IsPuppetEligibleRuler(pKingdom.king), power,
+                preparationYears);
+            int currentYear = Date.getCurrentYear();
+            int yearsSinceLastAttempt = lastAttemptYear < 0
+                ? int.MaxValue
+                : Math.Max(0, currentYear - lastAttemptYear);
+            return MinisterialPowerRules.CanAttemptCoup(
+                monarchy: true, atWar: IsAtWar(pKingdom),
+                puppetRuler: puppet,
+                ambitiousUsurper: IsAmbitiousUsurper(pPremier),
+                yearsSinceLastAttempt: yearsSinceLastAttempt);
+        }
+
+        private static bool IsAmbitiousUsurper(Actor pActor)
+        {
+            return pActor?.data != null &&
+                   MinisterialPowerRules.IsAmbitiousUsurper(
+                       pActor.hasTrait("ambitious"),
+                       pActor.hasTrait("content"));
+        }
+
+        private static bool IsPuppetEligibleRuler(Actor pKing)
+        {
+            if (pKing?.data == null || !pKing.isAlive() || pKing.isRekt())
+                return false;
+            try
+            {
+                if (!pKing.isAdult()) return true;
+            }
+            catch { return false; }
+            return IsWeakRuler(pKing);
+        }
+
+        private static string CurrentOfficeId(Actor pActor)
+        {
+            if (pActor?.data == null) return "";
+            pActor.data.get(LineageKeys.COURT_OFFICE_ID,
+                out string officeId, "");
+            return officeId ?? "";
         }
 
         private static void RecordCrossedThresholds(Kingdom pKingdom, Actor pPremier,
@@ -149,6 +265,36 @@ namespace AncientWarfare3.core.court
                 HistoryWriter.RecordKingdom(pKingdom, eventId, text,
                     HistoryTarget.Actor(pPremier));
             }
+            RecordNineBestowments(pKingdom, pPremier, pPreviousPower,
+                pNextPower);
+        }
+
+        private static void RecordNineBestowments(Kingdom pKingdom,
+            Actor pPremier, int pPreviousPower, int pNextPower)
+        {
+            if (pKingdom?.data == null || pPremier?.data == null) return;
+            pPremier.data.get(
+                LineageKeys.MINISTERIAL_NINE_BESTOWMENTS_GRANTED,
+                out bool alreadyGranted, false);
+            if (!MinisterialPowerRules.ShouldGrantNineBestowments(
+                    pPreviousPower, pNextPower, alreadyGranted)) return;
+
+            pPremier.data.set(
+                LineageKeys.MINISTERIAL_NINE_BESTOWMENTS_GRANTED, true);
+            HistoryText text = HistoryLocalizationRules.H(
+                                   "aw_hist_nine_bestowments_prefix") +
+                               HistoryText.Actor(pPremier) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_nine_bestowments_mid") +
+                               HistoryText.Kingdom(pKingdom) +
+                               HistoryLocalizationRules.H(
+                                   "aw_hist_nine_bestowments_suffix");
+            HistoryWriter.RecordPerson(pPremier.data.id, pKingdom,
+                pPremier.getName(), PersonEvent.NINE_BESTOWMENTS, text,
+                ChronicleCategory.HONOR, HistoryTarget.Kingdom(pKingdom));
+            HistoryWriter.RecordKingdom(pKingdom,
+                KingdomEvent.NINE_BESTOWMENTS, text,
+                HistoryTarget.Actor(pPremier));
         }
 
         private static PremierCandidate SelectPremier(Kingdom pKingdom,
@@ -214,6 +360,8 @@ namespace AncientWarfare3.core.court
             pKingdom.data.set(LineageKeys.MINISTERIAL_PREMIER_ID, -1L);
             pKingdom.data.set(LineageKeys.MINISTERIAL_PREMIER_POWER, 0);
             pKingdom.data.set(LineageKeys.MINISTERIAL_POWER_LAST_YEAR, pYear);
+            pKingdom.data.set(LineageKeys.MINISTERIAL_COUP_PREPARATION_YEARS,
+                0);
         }
 
         private static bool HasLivingKing(Kingdom pKingdom)

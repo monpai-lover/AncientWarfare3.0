@@ -8,6 +8,12 @@ namespace AncientWarfare3.patch
     [HarmonyPatch]
     internal static class AW_PathfindingSafetyPatch
     {
+        [HarmonyPrepare]
+        private static bool Prepare()
+        {
+            return AWPathfindingRuntimeMode.IsAw3;
+        }
+
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(RegionPathFinder), nameof(RegionPathFinder.getGlobalPath))]
         public static Exception GetGlobalPath_Finalizer(

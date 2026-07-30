@@ -1,0 +1,586 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class TitleAtomicSqlTests
+{
+    private static void Equal(long expected, long actual, string name)
+    {
+        if (expected != actual)
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    public static void Run()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE Registry(shi INTEGER,kind TEXT,value TEXT,cycle INTEGER);" +
+            "CREATE UNIQUE INDEX uq_registry ON Registry(shi,kind,value,cycle);" +
+            "CREATE TABLE Titles(id INTEGER PRIMARY KEY,value TEXT);", db))
+            schema.ExecuteNonQuery();
+
+        using (SQLiteTransaction tx = db.BeginTransaction())
+        {
+            using var first = new SQLiteCommand(
+                "INSERT INTO Registry VALUES(7,'temple','太宗',0);" +
+                "INSERT INTO Titles VALUES(1,'太宗文皇帝');", db, tx);
+            first.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        try
+        {
+            using SQLiteTransaction tx = db.BeginTransaction();
+            using var duplicate = new SQLiteCommand(
+                "INSERT INTO Titles VALUES(2,'must_rollback');" +
+                "INSERT INTO Registry VALUES(7,'temple','太宗',0);", db, tx);
+            duplicate.ExecuteNonQuery();
+            tx.Commit();
+        }
+        catch (SQLiteException)
+        {
+        }
+
+        using var countTitles = new SQLiteCommand("SELECT COUNT(*) FROM Titles;", db);
+        using var countRegistry = new SQLiteCommand("SELECT COUNT(*) FROM Registry;", db);
+        Equal(1, Convert.ToInt64(countTitles.ExecuteScalar()),
+            "a uniqueness failure rolls back the title row");
+        Equal(1, Convert.ToInt64(countRegistry.ExecuteScalar()),
+            "a uniqueness failure leaves one reservation");
+
+        StateNameTransactionIsAtomicAndIdempotent();
+        EraChangeTransactionIsAtomicAndIdempotent();
+        LegacyCurrentEraRecoveryIsBoundedAndIdempotent();
+        MandateHistoryReadsEveryEraPeriod();
+        HistoryJoinReadsOnlyAuthoritativeReignTitles();
+        ConferredTitleTransactionIsAtomicAndIdempotent();
+    }
+
+    private static void LegacyCurrentEraRecoveryIsBoundedAndIdempotent()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE KingdomReign(reign_id INTEGER PRIMARY KEY," +
+            "kingdom_id INTEGER,kingdom_color TEXT,king_actor_id INTEGER," +
+            "shi_id INTEGER,reign_index INTEGER,start_time REAL," +
+            "end_time REAL,year_name_stem TEXT);" +
+            "CREATE TABLE EraPeriod(era_id INTEGER PRIMARY KEY," +
+            "kingdom_id INTEGER,kingdom_color TEXT,shi_id INTEGER," +
+            "actor_id INTEGER,reign_id INTEGER,era_stem TEXT," +
+            "era_color TEXT,change_kind TEXT,change_reason TEXT," +
+            "source_event_id TEXT,decided_time REAL,start_time REAL," +
+            "end_time REAL,start_year INTEGER);" +
+            "CREATE UNIQUE INDEX uq_era_event ON EraPeriod" +
+            "(reign_id,change_kind,source_event_id) " +
+            "WHERE source_event_id<>'';" +
+            "CREATE TABLE DynastyTitleRegistry(" +
+            "registry_id INTEGER PRIMARY KEY,shi_id INTEGER," +
+            "title_type TEXT,title_value TEXT,cycle_no INTEGER," +
+            "actor_id INTEGER,reign_id INTEGER,used_time REAL);" +
+            "CREATE UNIQUE INDEX uq_registry ON DynastyTitleRegistry" +
+            "(shi_id,title_type,title_value,cycle_no);" +
+            "INSERT INTO KingdomReign VALUES" +
+            "(31,12,'#abc',88,9,4,5,-1,'')," +
+            "(32,13,'#def',99,10,2,7,-1,'')," +
+            "(33,14,'#fed',100,11,1,8,12,'')," +
+            "(34,15,'#aaa',101,12,3,9,-1,'');" +
+            "INSERT INTO EraPeriod VALUES" +
+            "(7,15,'#aaa',12,101,34,'\u5efa\u5143','#aaa'," +
+            "'accession','accession','accession:34',9,9,10,9);", db))
+            schema.ExecuteNonQuery();
+
+        EraAtomicCommitRequest recovery = LegacyRecoveryRequest(
+            kingdomId: 12, actorId: 88, shiId: 9, reignId: 31,
+            eraName: "\u6c38\u5b89", startTime: 5, startYear: 5);
+        InvokeLegacyEraRecovery(db, recovery);
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM EraPeriod WHERE kingdom_id=12 " +
+                "AND reign_id=31 AND actor_id=88 AND era_stem='\u6c38\u5b89' " +
+                "AND change_kind='legacy_recovery' AND end_time=-1 " +
+                "AND start_time=5 AND start_year=5"),
+            "a legacy load restores only the current open reign");
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM DynastyTitleRegistry WHERE shi_id=9 " +
+                "AND title_type='era' AND title_value='\u6c38\u5b89'"),
+            "the recovered era name is reserved for later changes");
+
+        InvokeLegacyEraRecovery(db, recovery);
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM EraPeriod WHERE kingdom_id=12"),
+            "legacy recovery is idempotent across repeated restore stages");
+
+        InvokeLegacyEraRecovery(db, LegacyRecoveryRequest(
+            kingdomId: 13, actorId: 100, shiId: 10, reignId: 32,
+            eraName: "\u666f\u9686", startTime: 7, startYear: 7));
+        Equal(0, Scalar(db,
+                "SELECT COUNT(*) FROM EraPeriod WHERE kingdom_id=13"),
+            "a ruler mismatch cannot fabricate a legacy era");
+
+        InvokeLegacyEraRecovery(db, LegacyRecoveryRequest(
+            kingdomId: 14, actorId: 100, shiId: 11, reignId: 33,
+            eraName: "\u5efa\u5fb7", startTime: 8, startYear: 8));
+        Equal(0, Scalar(db,
+                "SELECT COUNT(*) FROM EraPeriod WHERE kingdom_id=14"),
+            "a closed historical reign is never backfilled");
+
+        InvokeLegacyEraRecovery(db, LegacyRecoveryRequest(
+            kingdomId: 15, actorId: 101, shiId: 12, reignId: 34,
+            eraName: "\u5929\u5b9d", startTime: 10, startYear: 10));
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM EraPeriod WHERE kingdom_id=15"),
+            "an existing era period is never replaced or supplemented");
+    }
+
+    private static EraAtomicCommitRequest LegacyRecoveryRequest(
+        long kingdomId, long actorId, long shiId, long reignId,
+        string eraName, double startTime, int startYear)
+    {
+        return new EraAtomicCommitRequest
+        {
+            KingdomId = kingdomId,
+            KingdomColor = "#abc",
+            ShiId = shiId,
+            ActorId = actorId,
+            ReignId = reignId,
+            EraName = eraName,
+            ChangeKind = "legacy_recovery",
+            ChangeReason = "legacy_load_recovery",
+            SourceEventId = "legacy_recovery:" + reignId,
+            DecidedTime = startTime,
+            StartYear = startYear
+        };
+    }
+
+    private static void InvokeLegacyEraRecovery(SQLiteConnection db,
+        EraAtomicCommitRequest request)
+    {
+        System.Reflection.MethodInfo method = typeof(EraAtomicPersistence)
+            .GetMethod("TryRecoverLegacyCurrent",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static);
+        if (method == null)
+            throw new InvalidOperationException(
+                "EraAtomicPersistence.TryRecoverLegacyCurrent is missing");
+        method.Invoke(null, new object[] { db, request });
+    }
+
+    private static void MandateHistoryReadsEveryEraPeriod()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE EraPeriod(era_id INTEGER PRIMARY KEY," +
+            "kingdom_id INTEGER,reign_id INTEGER,era_stem TEXT," +
+            "era_color TEXT,start_time REAL,end_time REAL);" +
+            "INSERT INTO EraPeriod VALUES" +
+            "(1,12,31,'\u54b8\u4ea8','#a',5,20)," +
+            "(2,12,31,'\u666f\u9686','#b',20,-1)," +
+            "(3,99,44,'\u5efa\u5143','#c',1,-1);", db))
+            schema.ExecuteNonQuery();
+
+        IReadOnlyList<MandateEraHistoryRecord> eras =
+            MandateEraHistoryPersistence.Read(db, 12,
+                pPeriodStart: 0d, pPeriodEnd: -1d, pLimit: 16);
+        Equal(2, eras.Count,
+            "Mandate history reads every era in the selected kingdom");
+        if (eras[0].EraName != "\u54b8\u4ea8" ||
+            eras[1].EraName != "\u666f\u9686")
+            throw new InvalidOperationException(
+                "Mandate eras must remain ordered by start time");
+        Equal(31, eras[0].ReignId,
+            "the first era remains attached to its authoritative reign");
+        Equal(31, eras[1].ReignId,
+            "the changed era remains attached to the same reign");
+        if (eras[0].EndTime != eras[1].StartTime)
+            throw new InvalidOperationException(
+                "adjacent Mandate eras must share one non-overlapping boundary");
+    }
+
+    private static void ConferredTitleTransactionIsAtomicAndIdempotent()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE PosthumousTitle(record_id INTEGER PRIMARY KEY," +
+            "actor_id INTEGER,kingdom_id INTEGER,shi_id INTEGER," +
+            "title_kind TEXT,full_title TEXT,decided_time REAL);" +
+            "CREATE UNIQUE INDEX uq_conferred ON PosthumousTitle" +
+            "(kingdom_id,actor_id) WHERE title_kind='conferred';" +
+            "CREATE TABLE DynastyTitleRegistry(registry_id INTEGER PRIMARY KEY," +
+            "shi_id INTEGER,title_type TEXT,title_value TEXT,cycle_no INTEGER);" +
+            "CREATE UNIQUE INDEX uq_registry ON DynastyTitleRegistry" +
+            "(shi_id,title_type,title_value,cycle_no);" +
+            "CREATE TABLE KingdomHistory(event_id INTEGER PRIMARY KEY," +
+            "kingdom_id INTEGER,event_type TEXT,content TEXT);" +
+            "CREATE TABLE PersonBiography(event_id INTEGER PRIMARY KEY," +
+            "actor_id INTEGER,event_type TEXT,content TEXT);" +
+            "CREATE TRIGGER fail_conferred_biography BEFORE INSERT ON " +
+            "PersonBiography BEGIN SELECT RAISE(ABORT," +
+            "'injected conferred biography failure'); END;", db))
+            schema.ExecuteNonQuery();
+
+        bool failed = false;
+        try
+        {
+            CommitConferred(db, 7, 42, 9, "文贞");
+        }
+        catch (SQLiteException)
+        {
+            failed = true;
+        }
+        Equal(1, failed ? 1L : 0L,
+            "injected biography failure aborts conferred commit");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM PosthumousTitle"),
+            "failed conferred commit leaves no title");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry"),
+            "failed conferred commit leaves no Shi reservation");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "failed conferred commit leaves no kingdom history");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "failed conferred commit leaves no biography");
+
+        using (var drop = new SQLiteCommand(
+                   "DROP TRIGGER fail_conferred_biography;", db))
+            drop.ExecuteNonQuery();
+        Equal(1, CommitConferred(db, 7, 42, 9, "文贞") ? 1L : 0L,
+            "complete conferred transaction commits");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM PosthumousTitle"),
+            "successful conferment writes one title");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry"),
+            "successful conferment reserves one Shi title");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "successful conferment writes one kingdom event");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "successful conferment writes one biography event");
+
+        Equal(0, CommitConferred(db, 7, 42, 9, "文贞") ? 1L : 0L,
+            "replay returns the existing conferred title");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM PosthumousTitle"),
+            "replay creates no duplicate title");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "replay creates no duplicate kingdom history");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "replay creates no duplicate biography");
+
+        Equal(1, CommitConferred(db, 7, 43, -1, "忠武") ? 1L : 0L,
+            "unknown Shi skips reservation but keeps formal conferment");
+        Equal(2, Scalar(db, "SELECT COUNT(*) FROM PosthumousTitle"),
+            "unknown-Shi conferment still writes a title");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry"),
+            "unknown Shi creates no fake reservation");
+    }
+
+    private static bool CommitConferred(SQLiteConnection pDb,
+        long pKingdomId, long pActorId, long pShiId, string pTitle)
+    {
+        using (var existing = new SQLiteCommand(
+                   "SELECT 1 FROM PosthumousTitle WHERE kingdom_id=@kingdom " +
+                   "AND actor_id=@actor AND title_kind='conferred' LIMIT 1", pDb))
+        {
+            existing.Parameters.AddWithValue("@kingdom", pKingdomId);
+            existing.Parameters.AddWithValue("@actor", pActorId);
+            if (existing.ExecuteScalar() != null) return false;
+        }
+
+        using SQLiteTransaction transaction = pDb.BeginTransaction();
+        if (pShiId >= 0)
+        {
+            using var registry = new SQLiteCommand(
+                "INSERT INTO DynastyTitleRegistry VALUES(" +
+                "(SELECT IFNULL(MAX(registry_id),-1)+1 FROM " +
+                "DynastyTitleRegistry),@shi,'posthumous',@title,0)",
+                pDb, transaction);
+            registry.Parameters.AddWithValue("@shi", pShiId);
+            registry.Parameters.AddWithValue("@title", pTitle);
+            registry.ExecuteNonQuery();
+        }
+        using (var title = new SQLiteCommand(
+                   "INSERT INTO PosthumousTitle VALUES(" +
+                   "(SELECT IFNULL(MAX(record_id),-1)+1 FROM PosthumousTitle)," +
+                   "@actor,@kingdom,@shi,'conferred',@title,100)",
+                   pDb, transaction))
+        {
+            title.Parameters.AddWithValue("@actor", pActorId);
+            title.Parameters.AddWithValue("@kingdom", pKingdomId);
+            title.Parameters.AddWithValue("@shi", pShiId);
+            title.Parameters.AddWithValue("@title", pTitle);
+            title.ExecuteNonQuery();
+        }
+        using (var kingdom = new SQLiteCommand(
+                   "INSERT INTO KingdomHistory VALUES(" +
+                   "(SELECT IFNULL(MAX(event_id),-1)+1 FROM KingdomHistory)," +
+                   "@kingdom,'conferred_posthumous',@title)",
+                   pDb, transaction))
+        {
+            kingdom.Parameters.AddWithValue("@kingdom", pKingdomId);
+            kingdom.Parameters.AddWithValue("@title", pTitle);
+            kingdom.ExecuteNonQuery();
+        }
+        using (var person = new SQLiteCommand(
+                   "INSERT INTO PersonBiography VALUES(" +
+                   "(SELECT IFNULL(MAX(event_id),-1)+1 FROM PersonBiography)," +
+                   "@actor,'conferred_posthumous',@title)",
+                   pDb, transaction))
+        {
+            person.Parameters.AddWithValue("@actor", pActorId);
+            person.Parameters.AddWithValue("@title", pTitle);
+            person.ExecuteNonQuery();
+        }
+        transaction.Commit();
+        return true;
+    }
+
+    private static void HistoryJoinReadsOnlyAuthoritativeReignTitles()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE KingdomReign(reign_id INTEGER PRIMARY KEY,kingdom_id INTEGER," +
+            "king_actor_id INTEGER,start_time REAL);" +
+            "CREATE TABLE PosthumousTitle(record_id INTEGER PRIMARY KEY,reign_id INTEGER," +
+            "is_retrospective INTEGER,full_title TEXT);" +
+            "CREATE UNIQUE INDEX uq_title_reign ON PosthumousTitle(reign_id) " +
+            "WHERE reign_id>=0;" +
+            "INSERT INTO KingdomReign VALUES(11,7,101,1);" +
+            "INSERT INTO KingdomReign VALUES(12,7,102,2);" +
+            "INSERT INTO PosthumousTitle VALUES(21,11,0,'太祖武皇帝');" +
+            "INSERT INTO PosthumousTitle VALUES(22,-1,1,'宣祖');", db))
+            schema.ExecuteNonQuery();
+
+        const string joined =
+            " FROM KingdomReign reign LEFT JOIN PosthumousTitle title ON " +
+            "title.reign_id=reign.reign_id AND title.is_retrospective=0 " +
+            "WHERE reign.kingdom_id=7";
+        Equal(2, Scalar(db, "SELECT COUNT(*)" + joined),
+            "history joins preserve every reign exactly once");
+        Equal(1, Scalar(db, "SELECT COUNT(*)" + joined +
+                            " AND IFNULL(title.full_title,'')='太祖武皇帝'"),
+            "history joins read the committed reign title");
+        Equal(0, Scalar(db, "SELECT COUNT(*)" + joined +
+                            " AND IFNULL(title.full_title,'')='宣祖'"),
+            "history joins exclude retrospective ancestor rows");
+
+        bool duplicateRejected = false;
+        try
+        {
+            using var duplicate = new SQLiteCommand(
+                "INSERT INTO PosthumousTitle VALUES(23,11,0,'重复谥号');", db);
+            duplicate.ExecuteNonQuery();
+        }
+        catch (SQLiteException)
+        {
+            duplicateRejected = true;
+        }
+        Equal(1, duplicateRejected ? 1 : 0,
+            "one reign cannot own two authoritative title rows");
+    }
+
+    private static void EraChangeTransactionIsAtomicAndIdempotent()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE EraPeriod(era_id INTEGER PRIMARY KEY,kingdom_id INTEGER," +
+            "kingdom_color TEXT,shi_id INTEGER,actor_id INTEGER,reign_id INTEGER," +
+            "era_stem TEXT,era_color TEXT,change_kind TEXT,change_reason TEXT," +
+            "source_event_id TEXT,decided_time REAL,start_time REAL,end_time REAL," +
+            "start_year INTEGER);" +
+            "CREATE UNIQUE INDEX uq_era_event ON EraPeriod(reign_id,change_kind,source_event_id) " +
+            "WHERE source_event_id<>'';" +
+            "CREATE TABLE DynastyTitleRegistry(registry_id INTEGER PRIMARY KEY," +
+            "shi_id INTEGER,title_type TEXT,title_value TEXT,cycle_no INTEGER," +
+            "actor_id INTEGER,reign_id INTEGER,used_time REAL);" +
+            "CREATE UNIQUE INDEX uq_registry ON DynastyTitleRegistry" +
+            "(shi_id,title_type,title_value,cycle_no);" +
+            "CREATE TABLE KingdomHistory(event_id INTEGER PRIMARY KEY,kingdom_id INTEGER," +
+            "world_time REAL,year_prefix TEXT,year_prefix_rich TEXT,subject_name TEXT," +
+            "subject_color TEXT,content TEXT,content_rich TEXT,event_type TEXT," +
+            "context_kingdom_id INTEGER,context_kingdom_name TEXT," +
+            "context_kingdom_color TEXT,target_type TEXT,target_id INTEGER);" +
+            "CREATE TABLE PersonBiography(event_id INTEGER PRIMARY KEY,actor_id INTEGER," +
+            "world_time REAL,year_prefix TEXT,year_prefix_rich TEXT,subject_name TEXT," +
+            "subject_color TEXT,content TEXT,content_rich TEXT,event_type TEXT," +
+            "category TEXT,age_at_event INTEGER,is_king_at_event INTEGER," +
+            "role_snapshot TEXT,role_label TEXT,context_kingdom_id INTEGER," +
+            "context_kingdom_name TEXT,context_kingdom_color TEXT,target_type TEXT," +
+            "target_id INTEGER);" +
+            "INSERT INTO EraPeriod VALUES(4,12,'#abc',9,88,31,'建元','#abc'," +
+            "'accession','accession','accession:31',5,5,-1,5);" +
+            "CREATE TRIGGER fail_era_history BEFORE INSERT ON KingdomHistory " +
+            "BEGIN SELECT RAISE(ABORT,'injected era history failure'); END;", db))
+            schema.ExecuteNonQuery();
+
+        EraAtomicCommitRequest request = EraRequest(5, "武德", "major_victory:701");
+        EraAtomicCommitResult failed = EraAtomicPersistence.TryCommit(db, request);
+        Equal(0, failed.Success ? 1 : 0,
+            "an injected era-history failure rejects the era transaction");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM EraPeriod WHERE era_id=4 AND end_time=-1"),
+            "a failed era transaction leaves the previous era open");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM EraPeriod WHERE era_id=5"),
+            "a failed era transaction leaves no new era");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry"),
+            "a failed era transaction leaves no title reservation");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "a failed era transaction leaves no kingdom history");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "a failed era transaction leaves no biography history");
+
+        using (var drop = new SQLiteCommand("DROP TRIGGER fail_era_history;", db))
+            drop.ExecuteNonQuery();
+        EraAtomicCommitResult committed = EraAtomicPersistence.TryCommit(db, request);
+        Equal(1, committed.Success ? 1 : 0,
+            "a complete era transaction succeeds");
+        Equal(0, committed.AlreadyCommitted ? 1 : 0,
+            "the first era transaction is not an idempotent replay");
+        Equal(5, committed.EraId, "the committed era id is returned");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM EraPeriod WHERE era_id=4 AND end_time=20"),
+            "a successful era transaction closes the previous era");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM EraPeriod WHERE era_id=5 AND end_time=-1"),
+            "a successful era transaction opens exactly one new era");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry WHERE title_value='武德'"),
+            "a successful era transaction reserves the name for its Shi");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "a successful era transaction writes one kingdom history row");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM PersonBiography"),
+            "a successful era transaction writes one biography row");
+
+        EraAtomicCommitResult replay = EraAtomicPersistence.TryCommit(db, request);
+        Equal(1, replay.Success ? 1 : 0,
+            "replaying the same era event succeeds idempotently");
+        Equal(1, replay.AlreadyCommitted ? 1 : 0,
+            "replaying the same era event reports the committed record");
+        Equal(committed.EraId, replay.EraId,
+            "replaying the same era event returns the original era id");
+        Equal(2, Scalar(db, "SELECT COUNT(*) FROM EraPeriod"),
+            "replaying the same era event creates no duplicate era");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM DynastyTitleRegistry"),
+            "replaying the same era event creates no duplicate reservation");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "replaying the same era event creates no duplicate history");
+    }
+
+    private static EraAtomicCommitRequest EraRequest(long eraId, string eraName,
+        string sourceEventId)
+    {
+        return new EraAtomicCommitRequest
+        {
+            EraId = eraId,
+            KingdomId = 12,
+            KingdomColor = "#abc",
+            ShiId = 9,
+            ActorId = 88,
+            ReignId = 31,
+            EraName = eraName,
+            ChangeKind = "ai_major_event",
+            ChangeReason = "major_victory",
+            SourceEventId = sourceEventId,
+            DecidedTime = 20,
+            StartYear = 20,
+            YearPrefix = "建元十六年",
+            YearPrefixRich = "建元十六年",
+            StateName = "周",
+            ActorName = "姬发",
+            HistoryContent = "大周建元皇帝以大胜改元武德。",
+            HistoryContentRich = "大周建元皇帝以大胜改元武德。",
+            BiographyCategory = "honor",
+            BiographyRole = "king",
+            BiographyRoleLabel = "皇帝",
+            AgeAtEvent = 42
+        };
+    }
+
+    private static void StateNameTransactionIsAtomicAndIdempotent()
+    {
+        using var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using (var schema = new SQLiteCommand(
+            "CREATE TABLE ShiBranch(shi_id INTEGER PRIMARY KEY,state_name TEXT," +
+            "state_name_source TEXT,state_name_decided_time REAL);" +
+            "CREATE TABLE DynastyPeriod(dynasty_id INTEGER PRIMARY KEY,shi_id INTEGER," +
+            "state_name TEXT,end_time REAL);" +
+            "CREATE TABLE KingdomHistory(event_id INTEGER PRIMARY KEY,content TEXT);" +
+            "INSERT INTO ShiBranch VALUES(9,'','',-1);" +
+            "INSERT INTO DynastyPeriod VALUES(3,9,'',-1);", db))
+            schema.ExecuteNonQuery();
+
+        bool injected = false;
+        try
+        {
+            BindStateName(db, "鲁", injectFailure: true);
+        }
+        catch (InvalidOperationException)
+        {
+            injected = true;
+        }
+        if (!injected) throw new InvalidOperationException("state-name failure was not injected");
+        Equal(0, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "a failed state-name transaction writes no history");
+        Equal(0, Scalar(db, "SELECT LENGTH(state_name) FROM ShiBranch WHERE shi_id=9"),
+            "a failed state-name transaction leaves the Shi unbound");
+        Equal(0, Scalar(db, "SELECT LENGTH(state_name) FROM DynastyPeriod WHERE dynasty_id=3"),
+            "a failed state-name transaction leaves the dynasty snapshot unchanged");
+
+        Equal(1, BindStateName(db, "鲁", injectFailure: false),
+            "the first state-name compare-and-set succeeds");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "a successful state-name transaction writes one history row");
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM ShiBranch WHERE state_name='鲁' " +
+                "AND state_name_source='random' AND state_name_decided_time=12"),
+            "the Shi stores the selected random state name");
+        Equal(1, Scalar(db,
+                "SELECT COUNT(*) FROM DynastyPeriod WHERE dynasty_id=3 AND state_name='鲁'"),
+            "the active dynasty stores the same state-name snapshot");
+
+        Equal(0, BindStateName(db, "晋", injectFailure: false),
+            "an already bound Shi rejects a second compare-and-set");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM KingdomHistory"),
+            "an already bound Shi receives no second state-name history row");
+        Equal(1, Scalar(db, "SELECT COUNT(*) FROM ShiBranch WHERE state_name='鲁'"),
+            "an already bound Shi never redraws its state name");
+    }
+
+    private static int BindStateName(SQLiteConnection db, string name, bool injectFailure)
+    {
+        using SQLiteTransaction transaction = db.BeginTransaction();
+        int updated;
+        using (var shi = new SQLiteCommand(
+            "UPDATE ShiBranch SET state_name=@name,state_name_source='random'," +
+            "state_name_decided_time=12 WHERE shi_id=9 AND IFNULL(state_name,'')=''", db, transaction))
+        {
+            shi.Parameters.AddWithValue("@name", name);
+            updated = shi.ExecuteNonQuery();
+        }
+        if (updated == 0)
+        {
+            transaction.Rollback();
+            return 0;
+        }
+        using (var dynasty = new SQLiteCommand(
+            "UPDATE DynastyPeriod SET state_name=@name WHERE dynasty_id=3 " +
+            "AND shi_id=9 AND end_time=-1", db, transaction))
+        {
+            dynasty.Parameters.AddWithValue("@name", name);
+            dynasty.ExecuteNonQuery();
+        }
+        using (var history = new SQLiteCommand(
+            "INSERT INTO KingdomHistory VALUES(1,@name)", db, transaction))
+        {
+            history.Parameters.AddWithValue("@name", name);
+            history.ExecuteNonQuery();
+        }
+        if (injectFailure) throw new InvalidOperationException("injected before commit");
+        transaction.Commit();
+        return updated;
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+}

@@ -105,6 +105,7 @@ namespace AncientWarfare3.core.policy
 
         public static void DirtyMap()
         {
+            long benchmark = RecentFeatureBenchmark.Begin();
             try
             {
                 ClearCache();
@@ -114,12 +115,24 @@ namespace AncientWarfare3.core.policy
             catch
             {
             }
+            finally
+            {
+                RecentFeatureBenchmark.End(
+                    RecentFeatureBenchmarkRules.MapDirtyIndex, benchmark);
+            }
         }
 
         public static void ClearCache()
         {
             CityScoreCache.Clear();
             KingdomAverageCache.Clear();
+        }
+
+        internal static void ResetRuntime()
+        {
+            ClearCache();
+            ColorAssetCache.Clear();
+            _lastDirtyTime = -1.0;
         }
 
         public static void DirtyMapIfActive()

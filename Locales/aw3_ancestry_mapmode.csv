@@ -48,3 +48,10 @@ aw_ancestry_marker_unknown,未知,Unknown,未知
 aw_ancestry_noble_ancestor_section,可追溯贵族祖先,Traceable Noble Ancestors,可追溯貴族祖先
 aw_ancestry_no_noble_ancestors,暂无可追溯贵族祖先,No traceable noble ancestors,暫無可追溯貴族祖先
 aw_ancestry_no_traceable,暂无可追溯祖源,No traceable ancestry,暫無可追溯祖源
+aw_ancestry_original_clan,原版氏族,Vanilla clan,原版氏族
+aw_ancestry_subspecies,亚种,Subspecies,亞種
+aw_ancestry_unknown_subspecies,未知亚种,Unknown subspecies,未知亞種
+aw_ancestry_ancestor,祖先,Ancestor,祖先
+aw_ancestry_lineage,氏族,Lineage,氏族
+aw_ancestry_generation_distance,代距,Generations,代距
+aw_ancestry_estimated_share,估算占比,Estimated share,估算佔比

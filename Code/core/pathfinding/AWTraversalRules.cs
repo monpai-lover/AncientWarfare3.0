@@ -5,6 +5,13 @@ namespace AncientWarfare3.core.pathfinding
 {
     public static class AWTraversalRules
     {
+        public static bool CanPublishInitialGeneration(
+            bool tileCaptureComplete, int pendingDirtyChunkCount)
+        {
+            _ = pendingDirtyChunkCount;
+            return tileCaptureComplete;
+        }
+
         public static bool CanEnter(AWTileTraversalSnapshot pTile,
             AWActorTraversalProfile pActor, AWPathRequestOptions pOptions)
         {
@@ -16,6 +23,7 @@ namespace AncientWarfare3.core.pathfinding
             if (!pTile.Ocean && !pTile.Liquid) return pTile.Ground || pTile.Block || pTile.Lava;
             if (pActor.IsWaterCreature) return true;
             if (pActor.StartsInLiquid) return true;
+            if (pOptions.BoundedMilitaryWater) return true;
             return pOptions.PathOnWater && !pActor.DamagedByOcean;
         }
 

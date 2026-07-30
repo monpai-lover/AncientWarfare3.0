@@ -20,5 +20,15 @@ namespace AncientWarfare3.core.policy
                    !string.IsNullOrEmpty(nextDecisionId) &&
                    currentDecisionId != nextDecisionId;
         }
+
+        public static bool IsSameTargetedDecision(string existingDecisionId,
+            long existingTargetId, string requestedDecisionId,
+            long requestedTargetId)
+        {
+            return requestedTargetId >= 0 &&
+                   existingTargetId == requestedTargetId &&
+                   string.Equals(existingDecisionId, requestedDecisionId,
+                       System.StringComparison.Ordinal);
+        }
     }
 }

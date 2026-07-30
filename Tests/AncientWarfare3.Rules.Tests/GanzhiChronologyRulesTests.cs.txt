@@ -1,0 +1,49 @@
+using AncientWarfare3.core.lineage;
+
+internal static class GanzhiChronologyRulesTests
+{
+    public static void Run()
+    {
+        Equal("甲子", GanzhiChronologyRules.GetYearName(1),
+            "world year one starts at jia-zi");
+        Equal("乙丑", GanzhiChronologyRules.GetYearName(2),
+            "world year two advances both cycles");
+        Equal("癸酉", GanzhiChronologyRules.GetYearName(10),
+            "the tenth year closes the first heavenly-stem cycle");
+        Equal("乙亥", GanzhiChronologyRules.GetYearName(12),
+            "the twelfth year closes the first earthly-branch cycle");
+        Equal("癸亥", GanzhiChronologyRules.GetYearName(60),
+            "world year sixty closes the sexagenary cycle");
+        Equal("甲子", GanzhiChronologyRules.GetYearName(61),
+            "world year sixty-one restarts the cycle");
+        Equal("癸亥", GanzhiChronologyRules.GetYearName(0),
+            "zero uses a stable positive modulo");
+        Equal("壬戌", GanzhiChronologyRules.GetYearName(-1),
+            "negative years use a stable positive modulo");
+        Equal("武德三年·丙寅（3年5月2日）",
+            GanzhiChronologyRules.FormatPrefix(
+                "武德三年", "3年5月2日", 3),
+            "era chronology retains the full date without a world label");
+        Equal("丙寅（3年5月2日）",
+            GanzhiChronologyRules.FormatPrefix("", "3年5月2日", 3),
+            "a realm without an era still retains the full date");
+        Equal("大荔伯昆二十一年·戊子（85年10月15日）",
+            GanzhiChronologyRules.RemoveWorldLabel(
+                "大荔伯昆二十一年·戊子（世界85年10月15日）"),
+            "persisted chronology text no longer displays the world label");
+        string canonical = GanzhiChronologyRules.FormatPrefix(
+            "\u54b8\u4ea8\u5143\u5e74", "121\u5e748\u670815\u65e5", 121);
+        Equal(true, GanzhiChronologyRules.IsCanonicalPrefix(canonical),
+            "a generated full-width dated prefix is recognized as canonical");
+        Equal(false, GanzhiChronologyRules.IsCanonicalPrefix(
+                "\u54b8\u4ea8\u5143\u5e74"),
+            "an undated legacy era label still requires normalization");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

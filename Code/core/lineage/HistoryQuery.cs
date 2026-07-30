@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.db;
@@ -37,7 +38,21 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class HistoryQuery
     {
-        private static SQLiteConnection DB => LineageArchiveManager.Instance.OperatingDB;
+        [ThreadStatic]
+        private static SQLiteConnection _backgroundConnection;
+        [ThreadStatic]
+        private static bool _backgroundRead;
+
+        private static SQLiteConnection DB => _backgroundConnection ??
+            (_backgroundRead ? null :
+                LineageArchiveManager.Instance.OperatingDB);
+
+        public static IDisposable EnterBackgroundRead(SQLiteConnection pConnection)
+        {
+            if (pConnection == null)
+                throw new ArgumentNullException(nameof(pConnection));
+            return new BackgroundReadScope(pConnection);
+        }
 
         public static List<HistoryEntry> ReadPerson(long pActorId)
         {
@@ -106,6 +121,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void NormalizeFigureFoundEvent(long pKingdomId, List<HistoryEntry> pEntries)
         {
+            if (_backgroundRead) return;
             if (pEntries == null || pEntries.Count == 0) return;
             if (!FigureStateStore.TryGetAppliedKingdomName(pKingdomId, out string appliedName)) return;
 
@@ -120,7 +136,8 @@ namespace AncientWarfare3.core.lineage
                 if (string.IsNullOrEmpty(color)) color = entry.context_kingdom_color;
                 if (string.IsNullOrEmpty(color)) color = entry.subject_color;
 
-                HistoryText text = HistoryText.Colored(appliedName, color) + " 建立";
+                HistoryText text = HistoryText.Colored(appliedName, color) +
+                                   HistoryLocalizationRules.H("aw_hist_kingdom_founded_suffix");
                 entry.subject_name = appliedName;
                 entry.context_kingdom_name = appliedName;
                 entry.content = text.Plain;
@@ -265,6 +282,7 @@ namespace AncientWarfare3.core.lineage
             if (string.Equals(pInfo.kingdom_name, "neutral", System.StringComparison.OrdinalIgnoreCase)) return false;
             if (string.Equals(pInfo.banner_id, "neutral", System.StringComparison.OrdinalIgnoreCase)) return false;
 
+            if (_backgroundRead) return true;
             Kingdom live = World.world?.kingdoms?.get(pInfo.kingdom_id);
             if (live?.data == null) return true;
             try
@@ -314,37 +332,48 @@ namespace AncientWarfare3.core.lineage
             var events = ReadKingdom(pKingdomId); // 已按 world_time 升序
             var periods = new List<ReignPeriod>();
             if (events.Count == 0) return periods;
-            double destroyedTime = GetKingdomDestroyedTime(pKingdomId);
 
-            // 1) 用 rule_change 切分点建段骨架。首段从最早事件时间起(可能是 found / 无王)。
-            ReignPeriod current = new ReignPeriod
+            var transitionEntries = new List<HistoryEntry>();
+            var transitionTimes = new List<double>();
+            var beginsKingPeriods = new List<bool>();
+            var transitionEventIds = new List<long>();
+            foreach (HistoryEntry entry in events)
             {
-                has_king = false,
-                king_name = "",
-                start_time = events[0].world_time,
-                year_prefix_snapshot = events[0].year_prefix,
-                period_color = events[0].context_kingdom_color
-            };
-            periods.Add(current);
+                bool accession = entry.event_type == KingdomEvent.RULE_CHANGE;
+                bool destroyed = entry.event_type == KingdomEvent.DESTROYED;
+                if (!accession && !destroyed) continue;
+                transitionEntries.Add(entry);
+                transitionTimes.Add(entry.world_time);
+                beginsKingPeriods.Add(accession);
+                transitionEventIds.Add(entry.event_id);
+            }
 
-            foreach (var e in events)
+            List<HistoryReignTimelineSegment> timeline =
+                HistoryDynastyAssignmentRules.BuildReignTimeline(
+                    events[0].world_time, transitionTimes,
+                    beginsKingPeriods, transitionEventIds);
+            foreach (HistoryReignTimelineSegment segment in timeline)
             {
-                if (e.event_type == KingdomEvent.DESTROYED) destroyedTime = e.world_time;
-                if (e.event_type == "rule_change")
+                HistoryEntry opening = segment.OpeningTransitionIndex >= 0 &&
+                                       segment.OpeningTransitionIndex <
+                                       transitionEntries.Count
+                    ? transitionEntries[segment.OpeningTransitionIndex]
+                    : events[0];
+                periods.Add(new ReignPeriod
                 {
-                    // 关闭上一段、开新王段。
-                    current.end_time = e.world_time;
-                    current = new ReignPeriod
-                    {
-                        has_king = true,
-                        king_name = e.subject_name,
-                        king_color = e.subject_color,
-                        start_time = e.world_time,
-                        year_prefix_snapshot = e.year_prefix,
-                        period_color = e.context_kingdom_color
-                    };
-                    periods.Add(current);
-                }
+                    has_king = segment.HasKing,
+                    king_name = segment.HasKing ? opening.subject_name : "",
+                    king_color = segment.HasKing ? opening.subject_color : "",
+                    king_actor_id = segment.HasKing &&
+                                    opening.target_type == "actor"
+                        ? opening.target_id
+                        : -1L,
+                    start_time = segment.StartTime,
+                    end_time = segment.EndTime,
+                    year_prefix_snapshot = opening.year_prefix,
+                    state_name_snapshot = opening.context_kingdom_name,
+                    period_color = opening.context_kingdom_color
+                });
             }
 
             // 2) 把每个事件归入其所属段([start, end))。
@@ -362,12 +391,6 @@ namespace AncientWarfare3.core.lineage
 
             // 3) 丢弃既无王又无事件的空首段(found 紧接 rule_change 时首段可能为空无意义)。
             periods.RemoveAll(p => !p.has_king && p.events.Count == 0);
-            if (destroyedTime >= 0)
-            {
-                foreach (var p in periods)
-                    if (p.end_time < 0 && p.start_time <= destroyedTime)
-                        p.end_time = destroyedTime;
-            }
             ClearNonXiaReignDecoration(pKingdomId, periods);
             return periods;
         }
@@ -587,16 +610,19 @@ namespace AncientWarfare3.core.lineage
             }
 
             // 将每个 reign 分配到时间最接近的朝代
-            foreach (var r in reigns)
+            var dynastyStarts = new List<double>(dynasties.Count);
+            var dynastyEnds = new List<double>(dynasties.Count);
+            foreach (DynastyView dynasty in dynasties)
             {
-                DynastyView best = null;
-                foreach (var d in dynasties)
-                {
-                    bool afterStart = r.start_time >= d.start_time;
-                    bool beforeEnd  = d.end_time < 0 || r.start_time < d.end_time;
-                    if (afterStart && beforeEnd) best = d;
-                }
-                (best ?? dynasties[dynasties.Count - 1]).reigns.Add(r);
+                dynastyStarts.Add(dynasty.start_time);
+                dynastyEnds.Add(dynasty.end_time);
+            }
+            foreach (ReignPeriod reign in reigns)
+            {
+                int dynastyIndex = HistoryDynastyAssignmentRules.SelectIndex(
+                    reign.start_time, dynastyStarts, dynastyEnds);
+                if (dynastyIndex >= 0)
+                    dynasties[dynastyIndex].reigns.Add(reign);
             }
             return dynasties;
         }
@@ -705,6 +731,8 @@ namespace AncientWarfare3.core.lineage
         private static long GetDynastyLineageId(DynastyView pDynasty)
         {
             if (pDynasty == null || pDynasty.shi_id < 0) return -1;
+            if (_backgroundRead)
+                return ReadShiLineageId(pDynasty.shi_id);
             var shi = LineageQuery.GetShiBranchInfo(pDynasty.shi_id);
             return shi?.lineage_id ?? -1;
         }
@@ -715,6 +743,11 @@ namespace AncientWarfare3.core.lineage
             foreach (var dyn in pDynasties)
             {
                 if (dyn == null || dyn.shi_id < 0) continue;
+                if (_backgroundRead)
+                {
+                    FillDynastyOriginFromReader(dyn);
+                    continue;
+                }
                 var shi = LineageQuery.GetShiBranchInfo(dyn.shi_id);
                 if (shi == null) continue;
                 if (string.IsNullOrEmpty(dyn.clan_name)) dyn.clan_name = shi.clan_name ?? "";
@@ -725,8 +758,11 @@ namespace AncientWarfare3.core.lineage
         private static string ReadActorName(long pActorId)
         {
             if (pActorId < 0) return "";
-            Actor live = World.world?.units?.get(pActorId);
-            if (live?.data != null) return live.getName();
+            if (!_backgroundRead)
+            {
+                Actor live = World.world?.units?.get(pActorId);
+                if (live?.data != null) return live.getName();
+            }
 
             var db = DB;
             if (db == null) return "";
@@ -775,6 +811,21 @@ namespace AncientWarfare3.core.lineage
             catch { return -1; }
         }
 
+        private sealed class ReignDecoration
+        {
+            public long ReignId = -1L;
+            public long ActorId;
+            public string KingName = "";
+            public string KingColor = "";
+            public double StartTime;
+            public string PosthumousTitle = "";
+            public string PosthumousColor = "";
+            public string StateName = "";
+            public int TitleRank = -1;
+            public string GivenName = "";
+            public string EraStem = "";
+        }
+
         // KingdomReign supplies reign identity; PosthumousTitle supplies the committed title.
         private static void EnrichPosthumous(long pKingdomId, List<ReignPeriod> pReigns)
         {
@@ -787,39 +838,142 @@ namespace AncientWarfare3.core.lineage
                 cmd.CommandText =
                     $"SELECT reign.KING_ACTOR_ID,reign.KING_NAME,reign.KING_COLOR," +
                     $"reign.START_TIME,IFNULL(title.FULL_TITLE,'')," +
-                    $"IFNULL(title.FULL_TITLE_COLOR,'') FROM " +
+                    $"IFNULL(title.FULL_TITLE_COLOR,'')," +
+                    $"IFNULL(reign.STATE_NAME_SNAPSHOT,'')," +
+                    $"IFNULL(reign.HIGHEST_TITLE,-1)," +
+                    $"IFNULL(actor.GIVEN_NAME,'')," +
+                    $"IFNULL(reign.YEAR_NAME_STEM,''),reign.REIGN_ID FROM " +
                     $"{KingdomReignTableItem.GetTableName()} reign LEFT JOIN " +
                     $"{PosthumousTitleTableItem.GetTableName()} title ON " +
                     $"title.REIGN_ID=reign.REIGN_ID AND title.IS_RETROSPECTIVE=0 " +
+                    $"LEFT JOIN {ActorArchiveTableItem.GetTableName()} actor ON " +
+                    $"actor.ID=reign.KING_ACTOR_ID " +
                     $"WHERE reign.KINGDOM_ID=@kid ORDER BY reign.START_TIME ASC";
                 cmd.Parameters.AddWithValue("@kid", pKingdomId);
                 using var r = (SQLiteDataReader)cmd.ExecuteReader();
-                var rows = new System.Collections.Generic.List<(long actorId, string kingName, string kingColor, double startTime, string title, string titleColor)>();
+                var rows = new List<ReignDecoration>();
                 while (r.Read())
                 {
-                    rows.Add((r.GetInt64(0), SafeStr(r, 1), SafeStr(r, 2), r.GetDouble(3), SafeStr(r, 4), SafeStr(r, 5)));
+                    rows.Add(new ReignDecoration
+                    {
+                        ActorId = ToLong(r, 0, -1L),
+                        KingName = SafeStr(r, 1),
+                        KingColor = SafeStr(r, 2),
+                        StartTime = ToDouble(r, 3, -1d),
+                        PosthumousTitle = SafeStr(r, 4),
+                        PosthumousColor = SafeStr(r, 5),
+                        StateName = SafeStr(r, 6),
+                        TitleRank = (int)ToLong(r, 7, -1L),
+                        GivenName = SafeStr(r, 8),
+                        EraStem = SafeStr(r, 9),
+                        ReignId = ToLong(r, 10, -1L)
+                    });
                 }
+                r.Close();
+                Dictionary<long, List<EraChronologyPeriod>> erasByReign =
+                    ReadEraChronologyPeriods(pKingdomId);
                 foreach (var reign in pReigns)
                 {
                     if (string.IsNullOrEmpty(reign.king_name)) continue;
-                    (long actorId, string kingName, string kingColor, double startTime, string title, string titleColor) best = (-1, "", "", 0, "", "");
+                    ReignDecoration best = null;
                     double bestDelta = double.MaxValue;
                     foreach (var row in rows)
                     {
-                        double delta = System.Math.Abs(row.startTime - reign.start_time);
+                        if (reign.king_actor_id >= 0 &&
+                            row.ActorId != reign.king_actor_id) continue;
+                        double delta = System.Math.Abs(
+                            row.StartTime - reign.start_time);
                         if (delta >= bestDelta) continue;
                         best = row;
                         bestDelta = delta;
                     }
-                    if (best.actorId < 0) continue;
-                    reign.king_actor_id = best.actorId;
-                    if (!string.IsNullOrEmpty(best.kingName)) reign.king_name = best.kingName;
-                    if (!string.IsNullOrEmpty(best.kingColor)) reign.king_color = best.kingColor;
-                    if (!string.IsNullOrEmpty(best.title)) reign.posthumous_title = best.title;
-                    if (!string.IsNullOrEmpty(best.titleColor)) reign.posthumous_color = best.titleColor;
+                    if (best != null && (reign.king_actor_id >= 0 ||
+                                         bestDelta < 0.01d))
+                    {
+                        reign.king_actor_id = best.ActorId;
+                        if (!string.IsNullOrEmpty(best.KingName))
+                            reign.king_name = best.KingName;
+                        if (!string.IsNullOrEmpty(best.KingColor))
+                            reign.king_color = best.KingColor;
+                        reign.posthumous_title = best.PosthumousTitle;
+                        reign.posthumous_color = best.PosthumousColor;
+                        reign.state_name_snapshot = best.StateName;
+                        reign.title_rank = best.TitleRank;
+                        reign.given_name = best.GivenName;
+                        reign.formal_era_stem = best.EraStem;
+                        if (erasByReign.TryGetValue(best.ReignId,
+                                out List<EraChronologyPeriod> eras))
+                            reign.era_periods.AddRange(eras);
+                    }
+                    FillMissingReignIdentity(pKingdomId, reign);
                 }
             }
             catch { }
+        }
+
+        private static Dictionary<long, List<EraChronologyPeriod>>
+            ReadEraChronologyPeriods(long pKingdomId)
+        {
+            var result =
+                new Dictionary<long, List<EraChronologyPeriod>>();
+            var db = DB;
+            if (db == null || pKingdomId < 0) return result;
+            using var command = new SQLiteCommand(db);
+            command.CommandText =
+                "SELECT REIGN_ID,IFNULL(ERA_STEM,'')," +
+                "IFNULL(ERA_COLOR,''),START_TIME,END_TIME FROM " +
+                EraPeriodTableItem.GetTableName() +
+                " WHERE KINGDOM_ID=@kingdom ORDER BY REIGN_ID," +
+                "START_TIME,ERA_ID";
+            command.Parameters.AddWithValue("@kingdom", pKingdomId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                long reignId = ToLong(reader, 0, -1L);
+                if (reignId < 0) continue;
+                if (!result.TryGetValue(reignId,
+                        out List<EraChronologyPeriod> periods))
+                {
+                    periods = new List<EraChronologyPeriod>();
+                    result[reignId] = periods;
+                }
+                periods.Add(new EraChronologyPeriod
+                {
+                    era_stem = SafeStr(reader, 1),
+                    era_color = SafeStr(reader, 2),
+                    start_time = ToDouble(reader, 3, -1d),
+                    end_time = ToDouble(reader, 4, -1d)
+                });
+            }
+            return result;
+        }
+
+        private static void FillMissingReignIdentity(long pKingdomId,
+            ReignPeriod pReign)
+        {
+            if (pReign == null) return;
+            if (pReign.king_actor_id >= 0 &&
+                string.IsNullOrWhiteSpace(pReign.given_name))
+            {
+                if (_backgroundRead)
+                    pReign.given_name = ReadActorGivenName(
+                        pReign.king_actor_id);
+                else
+                {
+                    ActorArchiveTableItem actor =
+                        LineageArchiveReader.ReadRow(pReign.king_actor_id);
+                    if (actor != null) pReign.given_name = actor.given_name;
+                }
+            }
+
+            if (_backgroundRead) return;
+            Kingdom live = World.world?.kingdoms?.get(pKingdomId);
+            if (live?.data == null || live.king?.data == null ||
+                live.king.data.id != pReign.king_actor_id) return;
+            if (string.IsNullOrWhiteSpace(pReign.state_name_snapshot))
+                pReign.state_name_snapshot = live.name;
+            if (pReign.title_rank < 0)
+                pReign.title_rank = (int)KingdomTitleService.GetTitle(live);
         }
         private static List<HistoryEntry> Read(string pTable, string pIdColumn, long pId)
         {
@@ -863,6 +1017,7 @@ namespace AncientWarfare3.core.lineage
 
         private static void NormalizeLegacyCityEconomyRoles(List<HistoryEntry> pEntries)
         {
+            if (_backgroundRead) return;
             if (pEntries == null || pEntries.Count == 0) return;
             foreach (HistoryEntry entry in pEntries)
             {
@@ -928,8 +1083,12 @@ namespace AncientWarfare3.core.lineage
         {
             if (pKingdomId < 0) return false;
 
-            Kingdom live = World.world?.kingdoms?.get(pKingdomId);
-            if (live?.data != null) return LineageService.IsXiaKingdom(live);
+            if (!_backgroundRead)
+            {
+                Kingdom live = World.world?.kingdoms?.get(pKingdomId);
+                if (live?.data != null)
+                    return LineageService.IsXiaKingdom(live);
+            }
 
             var db = DB;
             if (db == null) return false;
@@ -996,6 +1155,123 @@ namespace AncientWarfare3.core.lineage
         private static double ToDouble(SQLiteDataReader pReader, int pOrdinal, double pDefault = 0)
         {
             return pReader.IsDBNull(pOrdinal) ? pDefault : pReader.GetDouble(pOrdinal);
+        }
+
+        private static long ReadShiLineageId(long pShiId)
+        {
+            SQLiteConnection db = DB;
+            if (db == null || pShiId < 0L) return -1L;
+            try
+            {
+                using var command = new SQLiteCommand(db);
+                command.CommandText = "SELECT IFNULL(LINEAGE_ID,-1) FROM " +
+                    ShiBranchTableItem.GetTableName() +
+                    " WHERE SHI_ID=@id LIMIT 1";
+                command.Parameters.AddWithValue("@id", pShiId);
+                object value = command.ExecuteScalar();
+                return value == null || value == DBNull.Value
+                    ? -1L
+                    : Convert.ToInt64(value);
+            }
+            catch { return -1L; }
+        }
+
+        private static void FillDynastyOriginFromReader(DynastyView pDynasty)
+        {
+            SQLiteConnection db = DB;
+            if (db == null || pDynasty == null || pDynasty.shi_id < 0L)
+                return;
+            try
+            {
+                using var command = new SQLiteCommand(db);
+                command.CommandText = "SELECT IFNULL(s.CLAN_NAME,'')," +
+                    "IFNULL(a.CITY_NAME,'') FROM " +
+                    ShiBranchTableItem.GetTableName() + " s LEFT JOIN " +
+                    ActorArchiveTableItem.GetTableName() +
+                    " a ON a.ID=s.FOUNDER_ACTOR_ID " +
+                    "WHERE s.SHI_ID=@id LIMIT 1";
+                command.Parameters.AddWithValue("@id", pDynasty.shi_id);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                if (!reader.Read()) return;
+                if (string.IsNullOrEmpty(pDynasty.clan_name))
+                    pDynasty.clan_name = SafeStr(reader, 0);
+                if (string.IsNullOrEmpty(pDynasty.origin_city_name))
+                    pDynasty.origin_city_name = SafeStr(reader, 1);
+            }
+            catch { }
+        }
+
+        private static string ReadActorGivenName(long pActorId)
+        {
+            SQLiteConnection db = DB;
+            if (db == null || pActorId < 0L) return string.Empty;
+            try
+            {
+                using var command = new SQLiteCommand(db);
+                command.CommandText = "SELECT IFNULL(GIVEN_NAME,'') FROM " +
+                    ActorArchiveTableItem.GetTableName() +
+                    " WHERE ID=@id LIMIT 1";
+                command.Parameters.AddWithValue("@id", pActorId);
+                object value = command.ExecuteScalar();
+                return value == null || value == DBNull.Value
+                    ? string.Empty
+                    : value.ToString();
+            }
+            catch { return string.Empty; }
+        }
+
+        public static void FinalizePersonEntries(
+            List<HistoryEntry> pEntries)
+        {
+            NormalizeLegacyCityEconomyRoles(pEntries);
+        }
+
+        public static void FinalizeCityPeriods(List<ReignPeriod> pPeriods)
+        {
+            if (pPeriods == null) return;
+            foreach (ReignPeriod period in pPeriods)
+                NormalizeLegacyCityEconomyRoles(period?.events);
+        }
+
+        public static void FinalizeKingdomDynasties(long pKingdomId,
+            List<DynastyView> pDynasties)
+        {
+            if (pDynasties == null) return;
+            foreach (DynastyView dynasty in pDynasties)
+            {
+                if (dynasty == null) continue;
+                foreach (ReignPeriod reign in dynasty.reigns)
+                {
+                    if (reign == null) continue;
+                    NormalizeFigureFoundEvent(pKingdomId, reign.events);
+                    NormalizeLegacyCityEconomyRoles(reign.events);
+                    FillMissingReignIdentity(pKingdomId, reign);
+                }
+            }
+            FillDynastyOrigins(pDynasties);
+        }
+
+        private sealed class BackgroundReadScope : IDisposable
+        {
+            private readonly SQLiteConnection _previousConnection;
+            private readonly bool _previousBackgroundRead;
+            private bool _disposed;
+
+            public BackgroundReadScope(SQLiteConnection pConnection)
+            {
+                _previousConnection = _backgroundConnection;
+                _previousBackgroundRead = _backgroundRead;
+                _backgroundConnection = pConnection;
+                _backgroundRead = true;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _backgroundConnection = _previousConnection;
+                _backgroundRead = _previousBackgroundRead;
+            }
         }
     }
 }

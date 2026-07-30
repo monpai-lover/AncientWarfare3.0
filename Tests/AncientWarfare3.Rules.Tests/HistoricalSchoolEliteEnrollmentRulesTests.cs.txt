@@ -1,0 +1,162 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AncientWarfare3.core.schools;
+
+internal static class HistoricalSchoolEliteEnrollmentRulesTests
+{
+    public static void Run()
+    {
+        DeclinedNoblesAreARealEducationStratum();
+        AnnualSelectionReservesDeclinedNobleEducation();
+        ExamPipelineDeficitExpandsAnnualAdmissions();
+        ExpandedAdmissionSlotsAreReservedForExamEligibleMen();
+        DeficitSelectionKeepsMaleExamCandidatesBeyondTheNormalQuota();
+        YoungAdultsLeadTheirEducationStratum();
+    }
+
+    private static void DeclinedNoblesAreARealEducationStratum()
+    {
+        True(HistoricalSchoolEliteEnrollmentRules.
+                IsDeclinedNobleCandidateEligible(valid: true, adult: true,
+                    currentNoble: false, everNoble: false, lineageId: 9,
+                    domestic: true),
+            "a living domestic lineage member is eligible as declined nobility");
+        False(HistoricalSchoolEliteEnrollmentRules.
+                IsDeclinedNobleCandidateEligible(valid: true, adult: true,
+                    currentNoble: true, everNoble: true, lineageId: 9,
+                    domestic: true),
+            "a current noble remains in the noble education source");
+    }
+
+    private static void AnnualSelectionReservesDeclinedNobleEducation()
+    {
+        var candidates = new List<HistoricalSchoolEliteCandidate>();
+        for (long actorId = 1; actorId <= 12; actorId++)
+            candidates.Add(new HistoricalSchoolEliteCandidate(7, actorId,
+                HistoricalSchoolElitePriority.UntitledNoble));
+        candidates.Add(new HistoricalSchoolEliteCandidate(7, 100,
+            HistoricalSchoolElitePriority.DeclinedNoble));
+        candidates.Add(new HistoricalSchoolEliteCandidate(7, 200,
+            HistoricalSchoolElitePriority.AcademyCommoner, 10));
+
+        IReadOnlyList<HistoricalSchoolEliteCandidate> selected =
+            HistoricalSchoolEliteEnrollmentRules.SelectCandidates(candidates,
+                pYear: 30, pPerRealmLimit: 4);
+
+        True(selected.Any(p => p.ActorId == 100),
+            "one declined noble receives a stable annual education place");
+        True(selected.Any(p => p.ActorId == 200),
+            "the declined-noble reserve does not remove commoner education");
+        Equal(4, selected.Count, "education reservations remain bounded");
+    }
+
+    private static void ExamPipelineDeficitExpandsAnnualAdmissions()
+    {
+        Equal(HistoricalSchoolEliteEnrollmentRules.
+                MaxSuccessfulJoinsPerRealmHardCap,
+            HistoricalSchoolEliteEnrollmentRules.
+                RealmSuccessfulJoinLimitForExamPipeline(
+                    examinationEnabled: true, qualifiedTeachers: 3,
+                    academies: 1,
+                    eligibleLocalCandidates: 2,
+                    targetCandidates: 24),
+            "a realm with only two exam-ready students uses the annual hard cap");
+        Equal(10, HistoricalSchoolEliteEnrollmentRules.
+                RealmSuccessfulJoinLimitForExamPipeline(
+                    examinationEnabled: true, qualifiedTeachers: 4,
+                    academies: 1,
+                    eligibleLocalCandidates: 24,
+                    targetCandidates: 24),
+            "a full exam pipeline retains normal replacement admissions");
+        Equal(10, HistoricalSchoolEliteEnrollmentRules.
+                RealmSuccessfulJoinLimitForExamPipeline(
+                    examinationEnabled: false, qualifiedTeachers: 4,
+                    academies: 1,
+                    eligibleLocalCandidates: 0,
+                    targetCandidates: 0),
+            "a realm without examinations retains normal education admissions");
+    }
+
+    private static void ExpandedAdmissionSlotsAreReservedForExamEligibleMen()
+    {
+        True(HistoricalSchoolEliteEnrollmentRules.CanUseAdmissionSlot(
+                currentReservations: 5, normalLimit: 6, expandedLimit: 16,
+                examPipelineEligible: false),
+            "a normal education slot remains available to either sex");
+        False(HistoricalSchoolEliteEnrollmentRules.CanUseAdmissionSlot(
+                currentReservations: 6, normalLimit: 6, expandedLimit: 16,
+                examPipelineEligible: false),
+            "a non-exam student cannot consume a deficit-expanded slot");
+        True(HistoricalSchoolEliteEnrollmentRules.CanUseAdmissionSlot(
+                currentReservations: 6, normalLimit: 6, expandedLimit: 16,
+                examPipelineEligible: true),
+            "an exam-eligible male may consume a deficit-expanded slot");
+    }
+
+    private static void DeficitSelectionKeepsMaleExamCandidatesBeyondTheNormalQuota()
+    {
+        var candidates = new List<HistoricalSchoolEliteCandidate>();
+        for (long actorId = 1; actorId <= 24; actorId++)
+            candidates.Add(new HistoricalSchoolEliteCandidate(7, actorId,
+                HistoricalSchoolElitePriority.CentralOfficial,
+                pCityId: -1L, pAge: 18, pExamPipelineEligible: false));
+        candidates.Add(new HistoricalSchoolEliteCandidate(7, 999,
+            HistoricalSchoolElitePriority.UntitledNoble,
+            pCityId: -1L, pAge: 25, pExamPipelineEligible: true));
+        var normal = new Dictionary<long, int> { [7L] = 6 };
+        var expanded = new Dictionary<long, int> { [7L] = 16 };
+
+        IReadOnlyList<HistoricalSchoolEliteCandidate> selected =
+            HistoricalSchoolEliteEnrollmentRules.SelectCandidates(candidates,
+                pYear: 30, pPerRealmLimit: 24,
+                pNormalAdmissionLimits: normal,
+                pExpandedAdmissionLimits: expanded);
+
+        int examIndex = selected.ToList().FindIndex(p => p.ActorId == 999L);
+        True(examIndex >= 0 && examIndex < 16,
+            "a male exam candidate cannot be hidden behind the old first window");
+    }
+
+    private static void YoungAdultsLeadTheirEducationStratum()
+    {
+        var candidates = new[]
+        {
+            new HistoricalSchoolEliteCandidate(7, 10,
+                HistoricalSchoolElitePriority.UntitledNoble,
+                pCityId: -1L, pAge: 68),
+            new HistoricalSchoolEliteCandidate(7, 11,
+                HistoricalSchoolElitePriority.UntitledNoble,
+                pCityId: -1L, pAge: 22),
+            new HistoricalSchoolEliteCandidate(7, 12,
+                HistoricalSchoolElitePriority.UntitledNoble,
+                pCityId: -1L, pAge: 31)
+        };
+
+        IReadOnlyList<HistoricalSchoolEliteCandidate> selected =
+            HistoricalSchoolEliteEnrollmentRules.SelectCandidates(candidates,
+                pYear: 30, pPerRealmLimit: 2);
+
+        Equal("11,12", string.Join(",", selected.Select(p => p.ActorId)),
+            "young adults receive scarce education places before elders");
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pMessage + ": expected true");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pMessage + ": expected false");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+}

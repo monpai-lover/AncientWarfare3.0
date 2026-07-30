@@ -1,0 +1,21 @@
+using System;
+using AncientWarfare3.api.multiplayer;
+
+namespace AncientWarfare3.core.multiplayer.commands
+{
+    internal static class AW3AuthoritativeCommandRouter
+    {
+        internal static int DispatchCalls { get; private set; }
+
+        internal static AW3CommandResult Dispatch(AW3CommandRequest request)
+        {
+            DispatchCalls++;
+            return AW3CommandResult.Success("aw3_command_accepted");
+        }
+
+        internal static void Reset()
+        {
+            DispatchCalls = 0;
+        }
+    }
+}

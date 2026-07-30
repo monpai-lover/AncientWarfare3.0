@@ -1,0 +1,52 @@
+using AncientWarfare3.core.lineage;
+
+internal static class GarrisonSortieRuntimeIndexRulesTests
+{
+    public static void Run()
+    {
+        RejectsBelowMinimumForce();
+        RejectsDuplicateIdsBelowMinimumForce();
+        AcceptsMinimumForce();
+        WaitsOnlyForAnIncompleteFieldArmyScan();
+    }
+
+    private static void RejectsBelowMinimumForce()
+    {
+        var index = new GarrisonSortieRuntimeIndex();
+
+        Assert(!index.TryBegin(1L, 10L, 100L,
+                new long[] { 101L, 102L, 103L }),
+            "a sortie with three members must not start");
+    }
+
+    private static void RejectsDuplicateIdsBelowMinimumForce()
+    {
+        var index = new GarrisonSortieRuntimeIndex();
+
+        Assert(!index.TryBegin(1L, 10L, 100L,
+                new long[] { 101L, 101L, 102L, 103L }),
+            "a sortie with only three unique members must not start");
+    }
+
+    private static void AcceptsMinimumForce()
+    {
+        var index = new GarrisonSortieRuntimeIndex();
+
+        Assert(index.TryBegin(1L, 10L, 100L,
+                new long[] { 101L, 102L, 103L, 104L }),
+            "a sortie with four members must start");
+    }
+
+    private static void WaitsOnlyForAnIncompleteFieldArmyScan()
+    {
+        Assert(GarrisonSortieRules.ShouldWaitForFieldArmyScan(false),
+            "a partial field-army scan must defer the sortie decision");
+        Assert(!GarrisonSortieRules.ShouldWaitForFieldArmyScan(true),
+            "a completed scan with no usable field army must permit a sortie");
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition) throw new InvalidOperationException(name);
+    }
+}

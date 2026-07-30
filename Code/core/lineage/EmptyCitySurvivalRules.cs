@@ -34,5 +34,10 @@ namespace AncientWarfare3.core.lineage
             return residentJoined || ownerChanged && !newOwnerNeutral;
         }
 
+        public static bool ShouldKeepFormalOwner(bool frozenOccupation)
+        {
+            return frozenOccupation;
+        }
+
     }
 }

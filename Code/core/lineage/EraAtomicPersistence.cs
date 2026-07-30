@@ -1,5 +1,6 @@
 using System;
 using System.Data.SQLite;
+using AncientWarfare3.core.db;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -66,34 +67,84 @@ namespace AncientWarfare3.core.lineage
             if (TryReadExisting(pDb, null, pRequest, out EraAtomicCommitResult existing))
                 return existing;
 
+            if (HistoricalSynchronousWriteCoordinator.TryExecute(
+                    TimeSpan.FromSeconds(5),
+                    new[] { KingdomHistoryTable, PersonBiographyTable },
+                    HistoricalWriteService.FlushForSynchronousFallback,
+                    HistoricalWriteService.TryReserveEventId,
+                    eventIds => CommitReserved(pDb, pRequest,
+                        eventIds[0], eventIds[1]),
+                    out EraAtomicCommitResult result, out string error))
+                return result;
+            if (TryReadExisting(pDb, null, pRequest, out existing))
+                return existing;
+            return EraAtomicCommitResult.Failed(error);
+        }
+
+        public static EraAtomicCommitResult TryRecoverLegacyCurrent(
+            SQLiteConnection pDb, EraAtomicCommitRequest pRequest)
+        {
+            if (!IsValidLegacyRecovery(pDb, pRequest))
+                return EraAtomicCommitResult.Failed(
+                    "invalid legacy era recovery request");
+
             try
             {
                 using SQLiteTransaction transaction = pDb.BeginTransaction();
-                if (TryReadExisting(pDb, transaction, pRequest, out existing))
+                if (TryReadBlockingEra(pDb, transaction, pRequest,
+                        out EraAtomicCommitResult existing))
                 {
                     transaction.Rollback();
                     return existing;
+                }
+                if (!MatchesOpenReign(pDb, transaction, pRequest))
+                {
+                    transaction.Rollback();
+                    return EraAtomicCommitResult.Failed(
+                        "legacy era recovery has no matching open reign");
                 }
 
                 long eraId = pRequest.EraId >= 0
                     ? pRequest.EraId
                     : NextId(pDb, transaction, EraTable, "ERA_ID");
-                ClosePreviousEra(pDb, transaction, pRequest);
                 InsertEra(pDb, transaction, eraId, pRequest);
-                InsertRegistry(pDb, transaction, pRequest);
-                InsertKingdomHistory(pDb, transaction, pRequest);
-                if (pRequest.ActorId >= 0)
-                    InsertPersonBiography(pDb, transaction, pRequest);
+                InsertRegistryIfMissing(pDb, transaction, pRequest);
                 transaction.Commit();
                 return new EraAtomicCommitResult(true, false, eraId,
                     pRequest.EraName, "");
             }
             catch (Exception error)
             {
-                if (TryReadExisting(pDb, null, pRequest, out existing))
-                    return existing;
                 return EraAtomicCommitResult.Failed(error.Message);
             }
+        }
+
+        private static EraAtomicCommitResult CommitReserved(
+            SQLiteConnection pDb, EraAtomicCommitRequest pRequest,
+            long pKingdomEventId, long pPersonEventId)
+        {
+            using SQLiteTransaction transaction = pDb.BeginTransaction();
+            if (TryReadExisting(pDb, transaction, pRequest,
+                    out EraAtomicCommitResult existing))
+            {
+                transaction.Rollback();
+                return existing;
+            }
+
+            long eraId = pRequest.EraId >= 0
+                ? pRequest.EraId
+                : NextId(pDb, transaction, EraTable, "ERA_ID");
+            ClosePreviousEra(pDb, transaction, pRequest);
+            InsertEra(pDb, transaction, eraId, pRequest);
+            InsertRegistry(pDb, transaction, pRequest);
+            InsertKingdomHistory(pDb, transaction, pKingdomEventId,
+                pRequest);
+            if (pRequest.ActorId >= 0)
+                InsertPersonBiography(pDb, transaction, pPersonEventId,
+                    pRequest);
+            transaction.Commit();
+            return new EraAtomicCommitResult(true, false, eraId,
+                pRequest.EraName, "");
         }
 
         private static bool IsValid(SQLiteConnection pDb,
@@ -106,6 +157,72 @@ namespace AncientWarfare3.core.lineage
                    !string.IsNullOrWhiteSpace(pRequest.EraName) &&
                    !string.IsNullOrWhiteSpace(pRequest.ChangeKind) &&
                    !string.IsNullOrWhiteSpace(pRequest.SourceEventId);
+        }
+
+        private static bool IsValidLegacyRecovery(SQLiteConnection pDb,
+            EraAtomicCommitRequest pRequest)
+        {
+            return IsValid(pDb, pRequest) &&
+                   pRequest.ChangeKind == "legacy_recovery" &&
+                   pRequest.ChangeReason == "legacy_load_recovery" &&
+                   pRequest.SourceEventId ==
+                   "legacy_recovery:" + pRequest.ReignId &&
+                   pRequest.DecidedTime >= 0d &&
+                   EraNameRules.IsValidCustom(pRequest.EraName);
+        }
+
+        private static bool TryReadBlockingEra(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction,
+            EraAtomicCommitRequest pRequest,
+            out EraAtomicCommitResult pResult)
+        {
+            pResult = EraAtomicCommitResult.Failed();
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "SELECT ERA_ID,IFNULL(ERA_STEM,'')," +
+                              "START_TIME,END_TIME FROM " + EraTable +
+                              " WHERE REIGN_ID=@reign OR " +
+                              "(KINGDOM_ID=@kingdom AND END_TIME=-1) " +
+                              "ORDER BY CASE WHEN END_TIME=-1 THEN 0 ELSE 1 END," +
+                              "START_TIME DESC,ERA_ID DESC LIMIT 1"
+            };
+            command.Parameters.AddWithValue("@reign", pRequest.ReignId);
+            command.Parameters.AddWithValue("@kingdom", pRequest.KingdomId);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read()) return false;
+
+            bool open = reader.IsDBNull(3) || reader.GetDouble(3) < 0d;
+            pResult = open
+                ? new EraAtomicCommitResult(true, true,
+                    reader.GetInt64(0),
+                    reader.IsDBNull(1) ? "" : reader.GetString(1), "")
+                : EraAtomicCommitResult.Failed(
+                    "legacy reign already has era history");
+            return true;
+        }
+
+        private static bool MatchesOpenReign(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction,
+            EraAtomicCommitRequest pRequest)
+        {
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "SELECT START_TIME FROM KingdomReign " +
+                              "WHERE REIGN_ID=@reign AND " +
+                              "KINGDOM_ID=@kingdom AND " +
+                              "KING_ACTOR_ID=@actor AND SHI_ID=@shi AND " +
+                              "END_TIME=-1 LIMIT 1"
+            };
+            command.Parameters.AddWithValue("@reign", pRequest.ReignId);
+            command.Parameters.AddWithValue("@kingdom", pRequest.KingdomId);
+            command.Parameters.AddWithValue("@actor", pRequest.ActorId);
+            command.Parameters.AddWithValue("@shi", pRequest.ShiId);
+            object value = command.ExecuteScalar();
+            if (value == null || value == DBNull.Value) return false;
+            double reignStart = Convert.ToDouble(value);
+            return reignStart >= 0d && pRequest.DecidedTime >= reignStart;
         }
 
         private static void ClosePreviousEra(SQLiteConnection pDb,
@@ -161,8 +278,30 @@ namespace AncientWarfare3.core.lineage
             command.ExecuteNonQuery();
         }
 
-        private static void InsertKingdomHistory(SQLiteConnection pDb,
+        private static void InsertRegistryIfMissing(SQLiteConnection pDb,
             SQLiteTransaction pTransaction, EraAtomicCommitRequest pRequest)
+        {
+            using var command = new SQLiteCommand(pDb)
+            {
+                Transaction = pTransaction,
+                CommandText = "INSERT OR IGNORE INTO " + RegistryTable +
+                              " (REGISTRY_ID,SHI_ID,TITLE_TYPE,TITLE_VALUE," +
+                              "CYCLE_NO,ACTOR_ID,REIGN_ID,USED_TIME) VALUES " +
+                              "((SELECT IFNULL(MAX(REGISTRY_ID),-1)+1 FROM " +
+                              RegistryTable + "),@shi,'era',@name,0,@actor," +
+                              "@reign,@time)"
+            };
+            command.Parameters.AddWithValue("@shi", pRequest.ShiId);
+            command.Parameters.AddWithValue("@name", pRequest.EraName.Trim());
+            command.Parameters.AddWithValue("@actor", pRequest.ActorId);
+            command.Parameters.AddWithValue("@reign", pRequest.ReignId);
+            command.Parameters.AddWithValue("@time", pRequest.DecidedTime);
+            command.ExecuteNonQuery();
+        }
+
+        private static void InsertKingdomHistory(SQLiteConnection pDb,
+            SQLiteTransaction pTransaction, long pEventId,
+            EraAtomicCommitRequest pRequest)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + KingdomHistoryTable +
@@ -172,14 +311,14 @@ namespace AncientWarfare3.core.lineage
                 "TARGET_TYPE,TARGET_ID) VALUES (@id,@kingdom,@time,@year,@yearRich," +
                 "@state,@color,@content,@rich,'era_change',@kingdom,@state,@color," +
                 "'actor',@actor)";
-            command.Parameters.AddWithValue("@id",
-                NextId(pDb, pTransaction, KingdomHistoryTable, "EVENT_ID"));
+            command.Parameters.AddWithValue("@id", pEventId);
             AddHistoryParameters(command, pRequest);
             command.ExecuteNonQuery();
         }
 
         private static void InsertPersonBiography(SQLiteConnection pDb,
-            SQLiteTransaction pTransaction, EraAtomicCommitRequest pRequest)
+            SQLiteTransaction pTransaction, long pEventId,
+            EraAtomicCommitRequest pRequest)
         {
             using var command = new SQLiteCommand(pDb) { Transaction = pTransaction };
             command.CommandText = "INSERT INTO " + PersonBiographyTable +
@@ -190,8 +329,7 @@ namespace AncientWarfare3.core.lineage
                 "TARGET_TYPE,TARGET_ID) VALUES (@id,@actor,@time,@year,@yearRich," +
                 "@actorName,@color,@content,@rich,'era_change',@category,@age,1," +
                 "@role,@roleLabel,@kingdom,@state,@color,'kingdom',@kingdom)";
-            command.Parameters.AddWithValue("@id",
-                NextId(pDb, pTransaction, PersonBiographyTable, "EVENT_ID"));
+            command.Parameters.AddWithValue("@id", pEventId);
             command.Parameters.AddWithValue("@actorName", pRequest.ActorName ?? "");
             command.Parameters.AddWithValue("@category", pRequest.BiographyCategory ?? "");
             command.Parameters.AddWithValue("@age", pRequest.AgeAtEvent);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using AncientWarfare3.core.db;
+using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -222,7 +223,8 @@ namespace AncientWarfare3.core.lineage
 
             long originalClan = pActor?.clan?.data?.id ?? pRow?.original_clan_id ?? -1;
             if (originalClan >= 0)
-                return NewContribution("original_clan:" + originalClan, "\u539F\u7248\u6C0F\u65CF " + originalClan,
+                return NewContribution("original_clan:" + originalClan,
+                    AW_L10n.Text("aw_ancestry_original_clan", "Vanilla clan") + " " + originalClan,
                     "original_clan", pActorId, NameOf(pActor, pRow, pActorId),
                     pRow?.clan_color_text ?? "");
 
@@ -231,7 +233,8 @@ namespace AncientWarfare3.core.lineage
                 return NewContribution("species:" + asset, asset, "species", pActorId,
                     NameOf(pActor, pRow, pActorId), "");
 
-            return NewContribution("unknown:social", "\u672A\u77E5\u7956\u6E90", "unknown", -1, "", "");
+            return NewContribution("unknown:social",
+                AW_L10n.Text("aw_ancestry_unknown", "Unknown ancestry"), "unknown", -1, "", "");
         }
 
         private static AncestryContribution BuildGeneticContribution(Actor pActor, ActorArchiveTableItem pRow,
@@ -245,7 +248,7 @@ namespace AncientWarfare3.core.lineage
                     : "subspecies_name:" + subspecies.name;
                 string label = !string.IsNullOrEmpty(subspecies.name)
                     ? subspecies.name
-                    : "\u4E9A\u79CD " + subspecies.id;
+                    : AW_L10n.Text("aw_ancestry_subspecies", "Subspecies") + " " + subspecies.id;
                 return NewContribution(key, label, "subspecies", pActorId,
                     NameOf(pActor, pRow, pActorId), pRow?.kingdom_color ?? "");
             }
@@ -255,7 +258,9 @@ namespace AncientWarfare3.core.lineage
                 return NewContribution("species:" + asset, asset, "species", pActorId,
                     NameOf(pActor, pRow, pActorId), "");
 
-            return NewContribution("unknown:genetic", "\u672A\u77E5\u4E9A\u79CD", "unknown", -1, "", "");
+            return NewContribution("unknown:genetic",
+                AW_L10n.Text("aw_ancestry_unknown_subspecies", "Unknown subspecies"),
+                "unknown", -1, "", "");
         }
 
         private static AncestryMarker ResolveDirectMarker(long pActorId, bool pWantMale)
@@ -283,7 +288,7 @@ namespace AncientWarfare3.core.lineage
                         known = true,
                         label = !string.IsNullOrEmpty(subspecies.name)
                             ? subspecies.name
-                            : "\u4E9A\u79CD " + subspecies.id,
+                            : AW_L10n.Text("aw_ancestry_subspecies", "Subspecies") + " " + subspecies.id,
                         source_actor_id = parentId,
                         source_actor_name = NameOf(parent, parentRow, parentId),
                         distance = pDistance + 1
@@ -373,9 +378,12 @@ namespace AncientWarfare3.core.lineage
                 .ToList();
 
             if (pUnknownPercent > 0.05f)
-                parts.Add("\u672A\u77E5 " + pUnknownPercent.ToString("0.0") + "%");
+                parts.Add(AW_L10n.Text("aw_ancestry_marker_unknown", "Unknown") + " " +
+                          pUnknownPercent.ToString("0.0") + "%");
 
-            return parts.Count == 0 ? "\u672A\u77E5" : string.Join(" / ", parts.ToArray());
+            return parts.Count == 0
+                ? AW_L10n.Text("aw_ancestry_marker_unknown", "Unknown")
+                : string.Join(" / ", parts.ToArray());
         }
 
         private static NobleBloodEvidence ResolveNobleBlood(long pActorId, Actor pActor, ActorArchiveTableItem pRow)
@@ -512,11 +520,17 @@ namespace AncientWarfare3.core.lineage
                 pItem.social_title,
                 pItem.percent);
             pItem.tooltip =
-                "\u7956\u5148: " + pItem.actor_name + " #" + pItem.actor_id +
-                "\n\u6c0f\u65cf: " + AncestryDisplayRules.FormatLineageLabel(pItem.city_name, pItem.clan_name) +
-                "\n\u4ee3\u8ddd: +" + pItem.distance +
-                "\n\u4f30\u7b97\u5360\u6bd4: " + pItem.percent.ToString("0.0") + "%" +
-                (string.IsNullOrEmpty(pItem.social_title) ? "" : "\n\u8eab\u4efd: " + pItem.social_title);
+                AW_L10n.Text("aw_ancestry_ancestor", "Ancestor") + ": " +
+                pItem.actor_name + " #" + pItem.actor_id +
+                "\n" + AW_L10n.Text("aw_ancestry_lineage", "Lineage") + ": " +
+                AncestryDisplayRules.FormatLineageLabel(pItem.city_name, pItem.clan_name) +
+                "\n" + AW_L10n.Text("aw_ancestry_generation_distance", "Generations") + ": +" +
+                pItem.distance +
+                "\n" + AW_L10n.Text("aw_ancestry_estimated_share", "Estimated share") + ": " +
+                pItem.percent.ToString("0.0") + "%" +
+                (string.IsNullOrEmpty(pItem.social_title)
+                    ? ""
+                    : "\n" + AW_L10n.Text("aw_ancestry_identity", "Identity") + ": " + pItem.social_title);
         }
 
         private static string ResolveCityName(Actor pActor, ActorArchiveTableItem pRow)
@@ -584,8 +598,34 @@ namespace AncientWarfare3.core.lineage
                             return GovernmentTitleRules.BuildSocialTitle(
                                 kingdomName, pIsHead: true, pIsElder: false);
                         string titleChar = KingdomTitleService.GetTitleChar(KingdomTitleService.GetTitle(pActor.kingdom));
-                        return string.IsNullOrEmpty(kingdomName) ? "\u541b\u4e3b" : kingdomName + titleChar;
+                        return string.IsNullOrEmpty(kingdomName)
+                            ? AW_L10n.Text("aw_role_king", "Ruler")
+                            : kingdomName + titleChar;
                     }
+                }
+                catch { }
+
+                try
+                {
+                    pActor.data.get(LineageKeys.FORMER_KING_TITLE,
+                        out string formerTitle, "");
+                    if (!string.IsNullOrEmpty(formerTitle))
+                    {
+                        pActor.data.get(LineageKeys.FORMER_KINGDOM_COLOR,
+                            out string formerColor, "");
+                        if (!string.IsNullOrEmpty(formerColor))
+                            pColor = formerColor;
+                        return formerTitle;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    string dynasticTitle =
+                        DynasticTitleService.ResolveLivingTitle(pActor);
+                    if (!string.IsNullOrEmpty(dynasticTitle))
+                        return dynasticTitle;
                 }
                 catch { }
 
@@ -606,10 +646,12 @@ namespace AncientWarfare3.core.lineage
                     {
                         City fief = FiefService.GetFiefCity(pActor);
                         string cityName = fief?.data?.name ?? pActor.city?.data?.name ?? pRow?.city_name ?? "";
-                        return string.IsNullOrEmpty(cityName) ? "\u5c01\u5730\u5927\u5c06" : cityName + " \u5c01\u5730\u5927\u5c06";
+                        string role = AW_L10n.Text("aw_role_fief_holder", "Fief general");
+                        return string.IsNullOrEmpty(cityName) ? role : cityName + " " + role;
                     }
 
-                    if (GeneralService.IsGeneral(pActor)) return "\u5927\u5c06";
+                    if (GeneralService.IsGeneral(pActor))
+                        return AW_L10n.Text("aw_role_general", "General");
                 }
                 catch { }
 
@@ -618,7 +660,8 @@ namespace AncientWarfare3.core.lineage
                     if (pActor.isCityLeader())
                     {
                         string cityName = pActor.city?.data?.name ?? pRow?.city_name ?? "";
-                        return string.IsNullOrEmpty(cityName) ? "\u592a\u5b88" : cityName + " \u592a\u5b88";
+                        string role = AW_L10n.Text("aw_role_city_leader", "City leader");
+                        return string.IsNullOrEmpty(cityName) ? role : cityName + " " + role;
                     }
                 }
                 catch { }

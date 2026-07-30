@@ -40,7 +40,9 @@ namespace AncientWarfare3.core.court
             if (!IsDomestic(pActor, pHost))
             {
                 if (!IsValidGuestService(pActor, pHost)) return false;
-                return pLayer != CourtOfficeLayer.Central || pActor.isSexMale();
+                bool maleCivilOffice = pLayer == CourtOfficeLayer.Central ||
+                                       pLayer == CourtOfficeLayer.Feudatory;
+                return !maleCivilOffice || pActor.isSexMale();
             }
             return true;
         }

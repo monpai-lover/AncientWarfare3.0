@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AncientWarfare3.api.multiplayer;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.ui.components;
 using AncientWarfare3.ui.items;
@@ -17,12 +18,16 @@ namespace AncientWarfare3.ui.windows
         private readonly List<CentralPowerVassalRowView> _rowPool = new();
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
+        private RectTransform _rowsViewport;
         private RectTransform _rows;
         private Text _body;
         private Text _status;
         private Button _reform;
         private TipButton _reformTip;
+        private WideWindowChrome _chrome;
         private int _tab;
+        private bool _commandPending;
+        private bool _commandRefreshRequested;
 
         public static void Open(long pKingdomId)
         {
@@ -38,12 +43,31 @@ namespace AncientWarfare3.ui.windows
         {
             EnsureUi();
             ApplyLayout();
-            WideWindowChrome.Attach(BackgroundTransform, () => _windowSize,
+            _chrome = WideWindowChrome.Attach(BackgroundTransform, () => _windowSize,
                 size => { _windowSize = size; ApplyLayout(); },
                 DefaultSize, MinimumSize, MaximumSize);
+            AW3MultiplayerCommandFacade.Changed += OnCommandStateChanged;
         }
 
         public override void OnNormalEnable() => Refresh();
+
+        private void OnDestroy()
+        {
+            AW3MultiplayerCommandFacade.Changed -= OnCommandStateChanged;
+        }
+
+        private void Update()
+        {
+            if (!_commandRefreshRequested) return;
+            _commandRefreshRequested = false;
+            _commandPending = false;
+            if (isActiveAndEnabled) Refresh();
+        }
+
+        private void OnCommandStateChanged()
+        {
+            _commandRefreshRequested = true;
+        }
 
         private void EnsureUi()
         {
@@ -62,9 +86,26 @@ namespace AncientWarfare3.ui.windows
             }
             _status = CreateText(_root, "Status", 9, TextAnchor.UpperLeft);
             _body = CreateText(_root, "Body", 10, TextAnchor.UpperLeft);
+            var rowsViewport = new GameObject("VassalRowsViewport",
+                typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
+            rowsViewport.transform.SetParent(_root, false);
+            _rowsViewport = rowsViewport.GetComponent<RectTransform>();
+            Image rowsBackground = rowsViewport.GetComponent<Image>();
+            rowsBackground.color = new Color(0.06f, 0.055f, 0.045f, 0.5f);
+            rowsViewport.GetComponent<Mask>().showMaskGraphic = false;
             var rows = new GameObject("VassalRows", typeof(RectTransform));
-            rows.transform.SetParent(_root, false);
+            rows.transform.SetParent(rowsViewport.transform, false);
             _rows = rows.GetComponent<RectTransform>();
+            _rows.anchorMin = _rows.anchorMax = new Vector2(0f, 1f);
+            _rows.pivot = new Vector2(0f, 1f);
+            _rows.anchoredPosition = Vector2.zero;
+            ScrollRect rowsScroll = rowsViewport.GetComponent<ScrollRect>();
+            rowsScroll.viewport = _rowsViewport;
+            rowsScroll.content = _rows;
+            rowsScroll.horizontal = false;
+            rowsScroll.vertical = true;
+            rowsScroll.movementType = ScrollRect.MovementType.Clamped;
+            rowsScroll.scrollSensitivity = 22f;
             _reform = CreateButton(_root, "Reform", "aw_central_reform", "Reform", Reform);
             _reformTip = _reform.gameObject.AddComponent<TipButton>();
             _reformTip.type = AW_RawTooltip.TYPE;
@@ -77,7 +118,7 @@ namespace AncientWarfare3.ui.windows
             Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
             _kingdomId = kingdom?.id ?? -1L;
             foreach (CentralPowerVassalRowView row in _rowPool) row.gameObject.SetActive(false);
-            _rows.gameObject.SetActive(_tab == 2);
+            _rowsViewport.gameObject.SetActive(_tab == 2);
             _reform.gameObject.SetActive(_tab == 0);
             if (kingdom?.data == null || kingdom.isRekt()) { _body.text = AW_L10n.Text("aw_central_unavailable", "Unavailable"); return; }
             if (_tab == 0) RenderCentral(kingdom);
@@ -101,7 +142,8 @@ namespace AncientWarfare3.ui.windows
                          "\n" + AW_L10n.Text("aw_central_mandate_progress", "Mandate decision progress") + ": " +
                          progress.ToString("0.0") + "/" + snapshot.reform_cost +
                          (snapshot.can_reform ? "" : "\n" + Reason(snapshot.block_reason));
-            _reform.interactable = snapshot.can_reform && !queued;
+            _reform.interactable = snapshot.can_reform && !queued &&
+                                   !_commandPending;
             string tooltip = AW_L10n.Text("aw_central_reform_cost", "Reform cost") + ": " + snapshot.reform_cost +
                              "\n" + AW_L10n.Text("aw_central_required_tech", "Required technology") + ": " +
                              (string.IsNullOrEmpty(snapshot.required_tech_id) ? "-" : snapshot.required_tech_id) +
@@ -133,36 +175,101 @@ namespace AncientWarfare3.ui.windows
             {
                 while (_rowPool.Count <= i) _rowPool.Add(CentralPowerVassalRowView.Create(_rows));
                 _rowPool[i].Bind(summary.vassals[i]);
-                _rowPool[i].Layout(4f + i * 24f, _windowSize.x - 28f);
+                _rowPool[i].Layout(4f + i * 24f, _root.sizeDelta.x - 12f);
                 _rowPool[i].gameObject.SetActive(true);
             }
+            _rows.sizeDelta = new Vector2(_root.sizeDelta.x,
+                Mathf.Max(_rowsViewport.sizeDelta.y, 8f + summary.vassals.Count * 24f));
         }
 
         private void Reform()
         {
+            if (_commandPending) return;
             Kingdom kingdom = MandateService.GetCurrentMandateKingdom();
             CentralizationSnapshot snapshot = CentralizationService.ReadSnapshot(kingdom);
             string decisionId = CentralizationRules.DecisionIdForTargetLevel(
                 snapshot.next_target_level);
-            bool queued = !string.IsNullOrEmpty(decisionId) &&
-                          MandateDecisionService.ForceStart(kingdom, decisionId);
+            AW3CommandResult result = string.IsNullOrEmpty(decisionId) ||
+                                      kingdom?.data == null
+                ? null
+                : AW3MultiplayerCommandFacade.DispatchFromUi(
+                    AW3CommandRequest.StartMandateDecision(
+                        kingdom.id, decisionId));
+            bool queued = result != null &&
+                          result.Status != AW3CommandStatus.Rejected;
+            _commandPending = result?.Status == AW3CommandStatus.Pending;
+            Refresh();
             _status.text = queued
                 ? AW_L10n.Text("aw_central_reform_queued", "Central reform queued as a Mandate decision")
                 : Reason(snapshot.block_reason);
-            Refresh();
         }
 
         private void ApplyLayout()
         {
             if (_root == null) return;
+            float contentWidth = Mathf.Max(1f, _windowSize.x - 42f);
+            float contentHeight = Mathf.Max(1f, _windowSize.y - 58f);
             RectTransform background = BackgroundTransform as RectTransform;
             if (background != null) background.sizeDelta = _windowSize;
-            _root.anchorMin = new Vector2(0.5f, 0.5f); _root.anchorMax = new Vector2(0.5f, 0.5f);
-            _root.pivot = new Vector2(0.5f, 0.5f); _root.sizeDelta = new Vector2(_windowSize.x - 24f, _windowSize.y - 54f);
+            Transform close = BackgroundTransform?.parent?.Find("CloseBackground");
+            if (close != null)
+                close.localPosition = new Vector3(_windowSize.x * 0.5f - 20f,
+                    _windowSize.y * 0.5f - 12f);
+            Transform titleBackground = BackgroundTransform?.Find("TitleBackground");
+            RectTransform titleRect = titleBackground?.GetComponent<RectTransform>();
+            if (titleRect != null)
+            {
+                titleRect.sizeDelta = new Vector2(_windowSize.x * 0.52f, 30f);
+                titleRect.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+            }
+            ScrollWindow window = GetComponent<ScrollWindow>();
+            if (window?.titleText != null)
+            {
+                window.titleText.text = AW_L10n.Text("aw_central_power_entry",
+                    "Central Power");
+                window.titleText.transform.localPosition = new Vector3(0f,
+                    _windowSize.y * 0.5f - 16f, 0f);
+                window.titleText.raycastTarget = false;
+            }
+            Transform nativeScroll = BackgroundTransform?.Find("Scroll View");
+            RectTransform nativeScrollRect = nativeScroll?.GetComponent<RectTransform>();
+            if (nativeScrollRect != null)
+            {
+                nativeScrollRect.sizeDelta = new Vector2(contentWidth, contentHeight);
+                nativeScrollRect.localPosition = new Vector3(0f, -20f, 0f);
+            }
+            ScrollRect nativeScrollComponent = nativeScroll?.GetComponent<ScrollRect>();
+            if (nativeScrollComponent != null)
+            {
+                nativeScrollComponent.horizontal = false;
+                nativeScrollComponent.vertical = false;
+            }
+            Transform nativeScrollbar = BackgroundTransform?.Find(
+                "Scroll View/Scrollbar Vertical");
+            if (nativeScrollbar != null)
+                foreach (Graphic graphic in nativeScrollbar.GetComponentsInChildren<Graphic>(true))
+                {
+                    graphic.enabled = false;
+                    graphic.raycastTarget = false;
+                }
+            RectTransform nativeViewport = ContentTransform?.parent as RectTransform;
+            if (nativeViewport != null)
+                nativeViewport.sizeDelta = new Vector2(contentWidth, contentHeight);
+            RectTransform nativeContent = ContentTransform as RectTransform;
+            if (nativeContent != null)
+                nativeContent.sizeDelta = new Vector2(contentWidth, contentHeight);
+
+            _root.anchorMin = _root.anchorMax = new Vector2(0f, 1f);
+            _root.pivot = new Vector2(0f, 1f);
+            _root.anchoredPosition = Vector2.zero;
+            _root.sizeDelta = new Vector2(contentWidth, contentHeight);
             Layout(_status.rectTransform, 8f, 38f, _root.sizeDelta.x - 16f, 22f);
             Layout(_body.rectTransform, 8f, 64f, _root.sizeDelta.x - 16f, _root.sizeDelta.y - 104f);
-            Layout(_rows, 0f, 94f, _root.sizeDelta.x, Mathf.Max(20f, _root.sizeDelta.y - 100f));
+            Layout(_rowsViewport, 0f, 94f, _root.sizeDelta.x,
+                Mathf.Max(20f, _root.sizeDelta.y - 100f));
             Layout(_reform.GetComponent<RectTransform>(), _root.sizeDelta.x - 98f, 8f, 90f, 22f);
+            _chrome?.RepositionResizeHandle();
         }
 
         private static string Reason(string pReason) => AW_L10n.Text("aw_central_reason_" + (pReason ?? "unknown"), pReason ?? "Unavailable");

@@ -20,6 +20,15 @@ namespace AncientWarfare3.core.lineage
                 : EraAtomicCommitResult.Failed("lineage archive unavailable");
         }
 
+        public static EraAtomicCommitResult TryRecoverLegacyCurrent(
+            EraAtomicCommitRequest pRequest)
+        {
+            return Ready
+                ? EraAtomicPersistence.TryRecoverLegacyCurrent(DB, pRequest)
+                : EraAtomicCommitResult.Failed(
+                    "lineage archive unavailable");
+        }
+
         public static bool TryReadEvent(long pReignId, EraChangeKind pKind,
             string pSourceEventId, out long pEraId, out string pEraName,
             out double pStartTime)
@@ -122,13 +131,7 @@ namespace AncientWarfare3.core.lineage
 
         public static string KindId(EraChangeKind pKind)
         {
-            return pKind switch
-            {
-                EraChangeKind.Accession => "accession",
-                EraChangeKind.Voluntary => "voluntary",
-                EraChangeKind.AiMajorEvent => "ai_major_event",
-                _ => ""
-            };
+            return EraNameRules.KindId(pKind);
         }
     }
 }

@@ -48,7 +48,9 @@ namespace AncientWarfare3.core.court
 
         public static bool CanHoldLayerOffice(string pLayer, bool isMale, bool otherwiseEligible)
         {
-            return otherwiseEligible && (pLayer != CourtOfficeLayer.Central || isMale);
+            bool maleCivilOffice = pLayer == CourtOfficeLayer.Central ||
+                                   pLayer == CourtOfficeLayer.Feudatory;
+            return otherwiseEligible && (!maleCivilOffice || isMale);
         }
     }
 }

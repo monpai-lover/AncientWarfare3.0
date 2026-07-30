@@ -1,139 +1,64 @@
-# RTS War Plan PNG Design
+# RTS War Plan Animated GIF Design
 
-## Goal
+## Purpose
 
-Generate a strategic debug image when a war starts and whenever its RTS plan
-materially changes. The image must show country and city control areas, fronts,
-Army assignments, recovery of friendly occupied cities, and cross-water
-transport. It is a diagnostic artifact, not a screenshot, so the whole war is
-visible regardless of the current camera position or map mode.
+Army RTS diagnostics emit a compact visual history of each war/session sequence. The history is retained during play and written only during a normal WorldBox/mod shutdown as one animated GIF89a and, optionally, one compact text manifest per sequence.
 
-## Output Contract
+## Enable And Lifecycle Contract
 
-Images are written beneath the active WorldBox save directory:
+`AWPerformanceSettings.ArmyRtsDiagnosticsEnabled` is the sole diagnostics gate. When it is false, snapshot capture, raster work, queueing, and file output stop, and all pending in-memory sequences are discarded. Existing artifacts in save directories are never deleted.
 
-`aw3_rts_plans/war_<war-id>_<world-year>_<revision>.png`
+Save/load callbacks only associate a sequence with its normalized save directory. They do not publish frames. World clear closes the current world generation and retains its bounded completed sequences for shutdown. Normal shutdown synchronously encodes retained sequences within the existing finite shutdown budget. A crash may lose an unfinished sequence.
 
-The initial image uses revision `000`. Later revisions are emitted only when a
-stable plan fingerprint changes, with a bounded cooldown to prevent file and
-log spam. A small adjacent text manifest records the war id, world time,
-participants, revision reason, and every Army-to-city assignment so failures
-remain inspectable even when labels cannot contain all details.
+## Main-Thread Capture
 
-If a new world has not yet acquired a save directory, snapshots are staged in
-the AW3 runtime directory. The next successful save copies staged artifacts
-into that save's `aw3_rts_plans` directory. Loading or clearing a world resets
-all pending revision and path state so files cannot leak between worlds.
+All WorldBox and Unity state is read on the authoritative main thread. Capture samples actual `WorldTile.getColor()` values into the projected canvas and derives zone ownership from `tile.zone?.city?.kingdom`. The immutable snapshot also records participant kingdoms, cities and controllers, active fronts, Army missions, route anchors, transport state, recovery state, player orders, and stalled state.
 
-## Strategic Snapshot
+Material fingerprints exclude position-only movement but include terrain/ownership changes and strategic assignments. A five-second per-war revision cadence and newest-pending coalescing prevent request churn.
 
-The authoritative main thread captures one immutable snapshot containing:
+## Indexed Rendering
 
-- map dimensions and land/water classification;
-- kingdom colors and the current owner of every city zone;
-- city id, center, owner, original owner, and wartime controller;
-- war attackers and defenders;
-- Army id, kingdom, captain position, role, state, target city, route anchor,
-  transport state, and player-order flag;
-- fronts and each friendly city currently occupied by another kingdom.
+The renderer writes directly into an indexed frame using a deterministic 256-entry 3-3-2 RGB global palette. One retained pixel consumes one byte; full RGBA frames are never retained. Real terrain colors form the base, kingdom-zone tint and ownership boundaries remain visible, and city/front/arrow overlays use stable nearest-palette colors.
 
-The capture reuses the RTS strategic indexes and mission projections. It never
-scans Actors and never reads Unity or WorldBox objects after leaving the main
-thread. Multiplayer clients do not generate authoritative plans.
+Arrow semantics remain distinct:
 
-## Rendering
+- attack and pursuit: red;
+- friendly-city recovery: gold;
+- defense, retreat, and redeploy: blue;
+- active transport: cyan dashed route with transport marker;
+- rally/hold: white;
+- stalled assignment: magenta marker.
 
-The renderer builds a fixed-aspect raster directly from the immutable
-snapshot. It does not render the Unity camera.
+The projected canvas preserves world aspect ratio and has a configurable default maximum long edge of 768 pixels.
 
-- dark blue: water;
-- neutral dark gray: unowned land;
-- muted kingdom color: owned city zones;
-- brighter outline: the war's participant boundary;
-- city marker and compact id label: city center;
-- red arrow: attack or pursuit;
-- gold arrow: reclaim a friendly occupied city;
-- blue dashed arrow: retreat or defensive redeployment;
-- cyan dashed arrow with ship marker: queued or active sea transport;
-- white line: rally or march without a combat endpoint;
-- thicker front segment: active border/front assignment.
+## Bounded Retention
 
-Each arrow starts at the Army captain, passes through a route/transport anchor
-when one exists, and terminates at the assigned city. Arrowheads indicate the
-actual movement direction. The legend includes war id, year, participant
-colors, revision reason, and counts for assigned, unassigned, stalled, and
-transporting Armies.
+Bounds are named constants and constructor parameters where tests need smaller values:
 
-The canvas is at most 2048 pixels on its long edge and preserves the WorldBox
-map aspect ratio. Zone and terrain samples are reduced deterministically when
-the world is larger, preventing image generation cost from scaling without a
-bound.
+- maximum 32 frames in one sequence;
+- maximum 48 frames across all retained sequences;
+- maximum 8 retained sequences;
+- default GIF display delay 75 centiseconds.
 
-## Trigger And Revision Rules
+Identical material fingerprints are suppressed. When a sequence reaches its frame limit, the first and latest frames are preserved and interior history is deterministically decimated before the new latest frame is appended. Global pressure evicts the oldest completed sequence first; the active sequence remains bounded by the same rules. At a 768-pixel square worst case, 48 indexed frames retain about 28 MiB plus small metadata overhead.
 
-The war-start hook requests revision `000` only after the war director and RTS
-mission assignment have completed. If mission assignment is deferred, the
-request remains pending until at least one planning pass has run.
+## GIF Encoding And Files
 
-A new revision is requested when any of these material facts changes:
+The repository-native encoder writes GIF89a with one deterministic global color table, a looping Netscape application extension, a graphics control extension and image descriptor per frame, GIF LZW image data, and the `0x3B` trailer. No external package or DLL is introduced.
 
-- an Army receives a different target city, role, or front;
-- a friendly occupied city is added or removed from recovery objectives;
-- a target city is captured and the Army is handed to the next city;
-- a land operation enters, changes, or leaves the transport queue;
-- a participant joins or leaves the war.
-
-Position-only movement does not create another image. Repeated requests with
-the same plan fingerprint are discarded. Each war has a short cooldown and a
-bounded pending slot; the newest pending plan replaces an obsolete one.
-
-## Threading And Failure Handling
-
-WorldBox and Unity state is read only on the authoritative main thread. Plain
-data rasterization, PNG encoding, manifest formatting, directory creation, and
-file writing run through one bounded AW3 background worker. Writes use a
-temporary file followed by an atomic rename, so interrupted output does not
-leave a valid-looking partial PNG.
-
-An image failure logs one concise warning containing war id, revision, stage,
-and exception message. It never cancels the war, changes an Army mission, or
-retries every frame. Queue overflow drops the oldest superseded revision but
-preserves the newest state for each active war.
-
-## Integration Boundaries
-
-- `AW_WarPatch` announces war creation after RTS war-start services run.
-- `KingdomWarDirectorService` and mission persistence announce material plan
-  changes through a small snapshot scheduler API.
-- a presentation-side capture adapter converts live indexed state to immutable
-  DTOs on the main thread;
-- a pure renderer converts DTOs to pixels and PNG bytes;
-- `AW_SavePatch` publishes staged files into the successful save directory;
-- world clear, load, war end, and mod shutdown flush or invalidate runtime
-  state without blocking gameplay.
-
-The PNG feature is controlled by the existing RTS visualization setting. It
-does not introduce an environment-variable switch.
+At shutdown the writer creates the save's `aw3_rts_plans` directory and writes each GIF and manifest to unique temporary files. After successful flush it atomically replaces the destination files. Failures are isolated and reported once without changing simulation state; partial temporary files never appear as completed GIF artifacts.
 
 ## Verification
 
-Tests must first demonstrate failure, then cover:
+Focused tests must demonstrate RED before implementation, then prove:
 
-- war-start output waits for the first plan assignment;
-- identical fingerprints do not produce duplicate revisions;
-- changing an Army target or adding a friendly recovery objective does;
-- a friendly occupied city produces a gold recovery arrow;
-- transport produces a cyan dashed arrow and ship marker;
-- the pixel projection preserves map aspect ratio and stays in bounds;
-- generated bytes have a valid PNG signature and decodable dimensions;
-- unsaved-world staging is copied to the next successful save;
-- replica clients never write plans;
-- clear/load/end-war removes pending runtime state;
-- renderer or file failures do not change war or Army state.
-
-Runtime acceptance starts a fresh war in a real save, verifies revision `000`
-appears under `aw3_rts_plans`, opens the PNG, and compares every rendered Army
-assignment with the live RTS mission view. It then captures one enemy city,
-confirms the Army receives a next-city arrow, occupies one friendly city,
-confirms a gold recovery assignment, and checks a cross-water target produces
-the transport path.
+- deterministic indexed palette and real terrain/ownership pixels;
+- recovery, redeploy, transport, attack, and stalled colors remain distinct;
+- fingerprint deduplication and cadence coalescing;
+- per-sequence/global bounds preserve first/latest frames;
+- GIF89a signature, loop extension, dimensions, frame count, LZW decodability, and trailer;
+- no PNG or per-frame manifest files are created;
+- save observation writes nothing before shutdown;
+- diagnostics-off discard leaves historical artifacts untouched;
+- shutdown writes GIF/manifest atomically and isolates failures;
+- Debug and Release builds succeed.

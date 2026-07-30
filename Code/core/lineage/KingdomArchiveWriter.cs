@@ -38,7 +38,7 @@ namespace AncientWarfare3.core.lineage
             string table = KingdomArchiveTableItem.GetTableName();
 
             string name = pKingdom.name ?? "";
-            string colorText = pKingdom.getColor()?.color_text ?? "";
+            string colorText = HistoryColors.FromKingdom(pKingdom);
             int colorId = pKingdom.data.color_id;
             int bannerIcon = pKingdom.data.banner_icon_id;
             int bannerBg = pKingdom.data.banner_background_id;
@@ -235,7 +235,7 @@ namespace AncientWarfare3.core.lineage
                         SimpleColumnConstraint.CreateEq("KINGDOM_ID", pKingdom.id)
                     },
                     ColumnVal.Create("KINGDOM_NAME", pKingdom.name ?? ""),
-                    ColumnVal.Create("COLOR_TEXT", pKingdom.getColor()?.color_text ?? ""),
+                    ColumnVal.Create("COLOR_TEXT", HistoryColors.FromKingdom(pKingdom)),
                     ColumnVal.Create("COLOR_ID", pKingdom.data.color_id),
                     ColumnVal.Create("BANNER_ICON_ID", pKingdom.data.banner_icon_id),
                     ColumnVal.Create("BANNER_BACKGROUND_ID", pKingdom.data.banner_background_id),

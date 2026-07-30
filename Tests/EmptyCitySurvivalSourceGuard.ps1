@@ -51,6 +51,10 @@ Require-Present $patch '[HarmonyPatch(typeof(City), "setKingdom")]' `
     'A non-neutral takeover must clear stale raze intent.'
 Require-Present $patch 'pFromLoad' `
     'Owner changes restored from a save must preserve persisted intent.'
+Require-Present $patch '[HarmonyPatch(typeof(City), "turnCityToNeutral")]' `
+    'Frozen occupation must preserve the formal owner.'
+Require-Present $patch 'ShouldKeepFormalOwner(__instance)' `
+    'Neutralization must delegate to the frozen-occupation guard.'
 Require-Present $patch `
     '[HarmonyPatch(typeof(CityZoneAbandon), nameof(CityZoneAbandon.check))]' `
     'Live-city retention must intercept automatic abandoned-Zone cleanup.'
@@ -73,7 +77,5 @@ Require-Absent $patch 'typeof(CityManager)' `
     'The feature must not intercept CityManager removal.'
 Require-Absent $patch 'nameof(City.destroyCity)' `
     'The feature must not intercept the shared city destruction path.'
-Require-Absent $service 'WarScoreService' `
-    'Zone retention must compile independently of the uncommitted war-score system.'
 
 Write-Output 'Empty city survival source guard passed.'

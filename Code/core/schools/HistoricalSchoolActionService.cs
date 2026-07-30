@@ -4,6 +4,7 @@ using System.Linq;
 using AncientWarfare3.content.schools;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -16,63 +17,154 @@ namespace AncientWarfare3.core.schools
         private static readonly Queue<DeferredActionState> DeferredActions =
             new Queue<DeferredActionState>();
         private static readonly HashSet<int> DeferredYears = new HashSet<int>();
+        private static LecturePlanningState _lecturePlanning;
+
+        private sealed class LecturePlanningState
+        {
+            public LecturePlanningState(int pYear,
+                HistoricalSchoolTeachingBudget pTeachingBudget,
+                int[] pSchoolOrder, int pSchoolCount)
+            {
+                Year = pYear;
+                TeachingBudget = pTeachingBudget;
+                SchoolOrder = pSchoolOrder ?? Array.Empty<int>();
+                Candidates = new List<LectureTeacherCandidate>[pSchoolCount];
+                CandidateIndices = new int[pSchoolCount];
+            }
+
+            public int Year { get; }
+            public HistoricalSchoolTeachingBudget TeachingBudget { get; }
+            public int[] SchoolOrder { get; }
+            public List<LectureTeacherCandidate>[] Candidates { get; }
+            public int[] CandidateIndices { get; }
+            public int Pass { get; set; }
+            public int Offset { get; set; }
+            public int Examined { get; set; }
+            public int Planned { get; set; }
+        }
 
         public static void ClearRuntime()
         {
             _lastProcessedYear = -1;
             DeferredActions.Clear();
             DeferredYears.Clear();
+            _lecturePlanning = null;
         }
 
-        public static void ProcessYear(int pYear)
+        public static bool ProcessYearFrame(int pYear)
         {
-            if (pYear < 0 || pYear == _lastProcessedYear) return;
-            _lastProcessedYear = pYear;
-
-            HistoricalSchoolTeachingBudget teachingBudget =
-                HistoricalSchoolActivityQueue.CreateTeachingBudget(pYear);
-            PlanLecturesFairly(pYear, teachingBudget);
-            ScheduleDeferredActions(pYear);
-        }
-
-        private static void PlanLecturesFairly(int pYear,
-            HistoricalSchoolTeachingBudget pTeachingBudget)
-        {
-            int schoolCount = CourtSchoolRegistry.All.Count;
-            if (schoolCount == 0 || pTeachingBudget == null) return;
-            int start = PositiveModulo(pYear, schoolCount);
-            var candidates = new List<LectureTeacherCandidate>[schoolCount];
-            var candidateIndices = new int[schoolCount];
-            int examined = 0;
-            int planned = 0;
-            for (int pass = 0; pass < 2 &&
-                 planned < HistoricalSchoolLectureRules.MaxWorldLecturesPerYear &&
-                 examined < MaxTeachersPerYear; pass++)
+            if (pYear < 0 || pYear == _lastProcessedYear) return true;
+            if (_lecturePlanning == null || _lecturePlanning.Year != pYear)
             {
-                for (int offset = 0; offset < schoolCount &&
-                     planned < HistoricalSchoolLectureRules.MaxWorldLecturesPerYear &&
-                     examined < MaxTeachersPerYear; offset++)
+                long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                try { _lecturePlanning = BeginLecturePlanning(pYear); }
+                finally
                 {
-                    int schoolIndex = (start + offset) % schoolCount;
-                    string schoolId = CourtSchoolRegistry.All[schoolIndex].Id;
-                    if (candidates[schoolIndex] == null)
-                        candidates[schoolIndex] = BuildSeniorTeachers(schoolId);
-                    int schoolAttempts = 0;
-                    while (examined < MaxTeachersPerYear && schoolAttempts++ < 16)
-                    {
-                        int candidateIndex = candidateIndices[schoolIndex]++;
-                        if (candidateIndex >= candidates[schoolIndex].Count) break;
-                        Actor teacher = candidates[schoolIndex][candidateIndex].Actor;
-                        examined++;
-                        int directCount = HistoricalSchoolRuntimeIndex.Instance
-                            .DirectDiscipleCount(teacher.data.id);
-                        if (!PlanLecture(teacher, pYear, directCount, pTeachingBudget))
-                            continue;
-                        planned++;
-                        break;
-                    }
+                    RuntimePerformanceDiagnostic.EndDetail(
+                        "school_lecture_begin", diagnostic);
                 }
             }
+            LecturePlanningState planning = _lecturePlanning;
+            if (IsLecturePlanningComplete(planning))
+                return FinishLecturePlanningMeasured(planning);
+
+            long schoolDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { ProcessLectureSchool(planning); }
+            catch (Exception error)
+            {
+                ModClass.LogWarning("Historical school lecture planning failed: " +
+                                    error.Message);
+            }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "school_lecture_school", schoolDiagnostic);
+                AdvanceLecturePlanning(planning);
+            }
+            return IsLecturePlanningComplete(planning)
+                ? FinishLecturePlanningMeasured(planning)
+                : false;
+        }
+
+        private static bool FinishLecturePlanningMeasured(
+            LecturePlanningState pPlanning)
+        {
+            long diagnostic = RuntimePerformanceDiagnostic.BeginScope();
+            try { return FinishLecturePlanning(pPlanning); }
+            finally
+            {
+                RuntimePerformanceDiagnostic.EndDetail(
+                    "school_lecture_finish", diagnostic);
+            }
+        }
+
+        private static LecturePlanningState BeginLecturePlanning(int pYear)
+        {
+            int schoolCount = CourtSchoolRegistry.All.Count;
+            int start = PositiveModulo(pYear, schoolCount);
+            int[] schoolOrder = Enumerable.Range(0, schoolCount)
+                .OrderByDescending(index =>
+                    HistoricalSchoolLectureRules.PopulationPriority(
+                        HistoricalSchoolRuntimeIndex.Instance.MemberCount(
+                            CourtSchoolRegistry.All[index].Id)))
+                .ThenBy(index => PositiveModulo(index - start, schoolCount))
+                .ToArray();
+            HistoricalSchoolTeachingBudget teachingBudget =
+                HistoricalSchoolActivityQueue.CreateTeachingBudget(pYear);
+            return new LecturePlanningState(pYear, teachingBudget,
+                schoolOrder, schoolCount);
+        }
+
+        private static void ProcessLectureSchool(LecturePlanningState pPlanning)
+        {
+            if (pPlanning?.TeachingBudget == null ||
+                pPlanning.Offset < 0 ||
+                pPlanning.Offset >= pPlanning.SchoolOrder.Length) return;
+            int schoolIndex = pPlanning.SchoolOrder[pPlanning.Offset];
+            string schoolId = CourtSchoolRegistry.All[schoolIndex].Id;
+            if (pPlanning.Candidates[schoolIndex] == null)
+                pPlanning.Candidates[schoolIndex] = BuildSeniorTeachers(schoolId);
+            int schoolAttempts = 0;
+            while (pPlanning.Examined < MaxTeachersPerYear && schoolAttempts++ < 16)
+            {
+                int candidateIndex = pPlanning.CandidateIndices[schoolIndex]++;
+                if (candidateIndex >= pPlanning.Candidates[schoolIndex].Count) break;
+                LectureTeacherCandidate candidate =
+                    pPlanning.Candidates[schoolIndex][candidateIndex];
+                pPlanning.Examined++;
+                if (!PlanLecture(candidate.Actor, pPlanning.Year,
+                        candidate.DirectDiscipleCount,
+                        pPlanning.TeachingBudget)) continue;
+                pPlanning.Planned++;
+                break;
+            }
+        }
+
+        private static void AdvanceLecturePlanning(LecturePlanningState pPlanning)
+        {
+            if (pPlanning == null || pPlanning.SchoolOrder.Length == 0) return;
+            pPlanning.Offset++;
+            if (pPlanning.Offset < pPlanning.SchoolOrder.Length) return;
+            pPlanning.Offset = 0;
+            pPlanning.Pass++;
+        }
+
+        private static bool IsLecturePlanningComplete(LecturePlanningState pPlanning)
+        {
+            return pPlanning == null || pPlanning.TeachingBudget == null ||
+                   pPlanning.SchoolOrder.Length == 0 || pPlanning.Pass >= 2 ||
+                   pPlanning.Planned >=
+                   HistoricalSchoolLectureRules.MaxWorldLecturesPerYear ||
+                   pPlanning.Examined >= MaxTeachersPerYear;
+        }
+
+        private static bool FinishLecturePlanning(LecturePlanningState pPlanning)
+        {
+            if (pPlanning == null) return true;
+            ScheduleDeferredActions(pPlanning.Year);
+            _lastProcessedYear = pPlanning.Year;
+            if (ReferenceEquals(_lecturePlanning, pPlanning)) _lecturePlanning = null;
+            return true;
         }
 
         private static List<LectureTeacherCandidate> BuildSeniorTeachers(string pSchoolId)
@@ -86,7 +178,10 @@ namespace AncientWarfare3.core.schools
                     SchoolMembershipService.GetActive(actorId);
                 if (actor?.data == null || !actor.isAlive() || actor.isRekt() ||
                     membership == null || membership.SchoolId != pSchoolId) continue;
-                var candidate = new LectureTeacherCandidate(actor, membership.StartYear);
+                int directDiscipleCount = HistoricalSchoolRuntimeIndex.Instance
+                    .DirectDiscipleCount(actorId);
+                var candidate = new LectureTeacherCandidate(actor,
+                    membership.StartYear, directDiscipleCount);
                 int insert = result.Count;
                 while (insert > 0 && candidate.Precedes(result[insert - 1])) insert--;
                 if (insert >= 16) continue;
@@ -98,19 +193,29 @@ namespace AncientWarfare3.core.schools
 
         private sealed class LectureTeacherCandidate
         {
-            public LectureTeacherCandidate(Actor pActor, int pStartYear)
+            public LectureTeacherCandidate(Actor pActor, int pStartYear,
+                int pDirectDiscipleCount)
             {
                 Actor = pActor;
                 StartYear = pStartYear;
+                DirectDiscipleCount = Math.Max(0, pDirectDiscipleCount);
+                HasDiscipleCapacity = HistoricalSchoolLectureRules
+                    .HasDiscipleCapacity(DirectDiscipleCount,
+                        SchoolLineageService.DirectDiscipleCap);
             }
 
             public Actor Actor { get; }
+            public int DirectDiscipleCount { get; }
             private int StartYear { get; }
+            private bool HasDiscipleCapacity { get; }
 
             public bool Precedes(LectureTeacherCandidate pOther)
             {
-                return pOther == null || StartYear < pOther.StartYear ||
-                       StartYear == pOther.StartYear && Actor.data.id < pOther.Actor.data.id;
+                return pOther == null ||
+                       HistoricalSchoolLectureRules.TeacherPrecedesForLecture(
+                           HasDiscipleCapacity, StartYear, Actor.data.id,
+                           pOther.HasDiscipleCapacity, pOther.StartYear,
+                           pOther.Actor.data.id);
             }
         }
 
@@ -312,6 +417,8 @@ namespace AncientWarfare3.core.schools
             int pDirectCount,
             HistoricalSchoolTeachingBudget pTeachingBudget)
         {
+            if (pTeacher?.data == null || !pTeacher.isAlive() ||
+                pTeacher.isRekt()) return false;
             SchoolMembershipRecord teacherMembership =
                 SchoolMembershipService.GetActive(pTeacher.data.id);
             if (teacherMembership == null || pTeachingBudget == null) return false;
@@ -320,6 +427,14 @@ namespace AncientWarfare3.core.schools
                 residence.kingdom?.data == null ||
                 !HistoricalAffiliationService.IsAvailableForOffice(pTeacher) ||
                 !HistoricalAffiliationService.IsPresentForInfluence(pTeacher)) return false;
+            bool academyUsable =
+                HistoricalSchoolAcademyService.FindUsable(residence) != null;
+            bool academyBuildingPresent =
+                HistoricalSchoolAcademyService.HasLiveAcademy(residence);
+            if (SchoolAcademyConstructionRules.ShouldRequestForLecture(
+                    cityValid: true, academyUsable, academyBuildingPresent))
+                HistoricalSchoolAcademyConstructionService.TryStart(residence);
+            if (!academyUsable) return false;
             bool canonical = HistoricalSchoolDescentService.IsCanonicalMaster(pTeacher);
             var lectureCandidate = new HistoricalSchoolLectureCandidate(pTeacher.data.id,
                 teacherMembership.SchoolId, residence.data.id, residence.kingdom.id,
@@ -335,19 +450,10 @@ namespace AncientWarfare3.core.schools
         internal static bool TryQueueLectureCommit(
             HistoricalSchoolLectureActivity pActivity)
         {
-            if (pActivity == null || !pActivity.Plan.IsValid) return false;
+            if (!IsLectureCommitValid(pActivity)) return false;
             HistoricalSchoolTeachingPlan plan = pActivity.Plan;
             Actor teacher = FindActor(plan.Candidate.ActorId);
-            SchoolMembershipRecord teacherMembership = teacher?.data == null
-                ? null
-                : SchoolMembershipService.GetActive(teacher.data.id);
             City residence = HistoricalAffiliationService.ResidenceCity(teacher) ?? teacher?.city;
-            if (teacher?.data == null || !teacher.isAlive() || teacher.isRekt() ||
-                teacherMembership == null || teacherMembership.SchoolId !=
-                plan.Candidate.SchoolId || residence?.data == null || residence.isRekt() ||
-                residence.data.id != plan.Candidate.CityId ||
-                !HistoricalAffiliationService.IsAvailableForOffice(teacher) ||
-                !HistoricalAffiliationService.IsPresentForInfluence(teacher)) return false;
 
             Actor target = residence.kingdom?.king;
             long targetActorId = plan.IncludePersuasion
@@ -359,6 +465,25 @@ namespace AncientWarfare3.core.schools
                 World.world?.getCurWorldTime() ?? 0d);
             return HistoricalSchoolWriteBufferService.TryEnqueue(
                 new LectureWriteOperation(pActivity, request));
+        }
+
+        internal static bool IsLectureCommitValid(
+            HistoricalSchoolLectureActivity pActivity)
+        {
+            if (pActivity == null || !pActivity.Plan.IsValid) return false;
+            HistoricalSchoolTeachingPlan plan = pActivity.Plan;
+            Actor teacher = FindActor(plan.Candidate.ActorId);
+            SchoolMembershipRecord teacherMembership = teacher?.data == null
+                ? null
+                : SchoolMembershipService.GetActive(teacher.data.id);
+            City residence = HistoricalAffiliationService.ResidenceCity(teacher) ??
+                             teacher?.city;
+            return teacher?.data != null && teacher.isAlive() && !teacher.isRekt() &&
+                   teacherMembership?.SchoolId == plan.Candidate.SchoolId &&
+                   residence?.data != null && !residence.isRekt() &&
+                   residence.data.id == plan.Candidate.CityId &&
+                   HistoricalAffiliationService.IsAvailableForOffice(teacher) &&
+                   HistoricalAffiliationService.IsPresentForInfluence(teacher);
         }
 
         private static void ApplyCommittedLecture(
@@ -420,8 +545,11 @@ namespace AncientWarfare3.core.schools
                             CitySchoolSnapshotService.MarkDirty(residence);
                             HistoryWriter.RecordPerson(candidate.data.id,
                                 candidate.kingdom, candidate.getName(),
-                                "school_disciple", candidate.getName() +
-                                " studied under " + teacher.getName(),
+                                "school_disciple",
+                                HistoryText.Actor(candidate) +
+                                HistoryLocalizationRules.H(
+                                    "aw_hist_school_studied_under") +
+                                HistoryText.Actor(teacher),
                                 ChronicleCategory.LIFE);
                         })) continue;
                 recruited++;
@@ -429,7 +557,8 @@ namespace AncientWarfare3.core.schools
             TryFoundInstitutionAfterLecture(teacher, residence, plan.Year);
         }
 
-        private sealed class LectureWriteOperation : IHistoricalSchoolWriteOperation
+        private sealed class LectureWriteOperation : IHistoricalSchoolWriteOperation,
+            IHistoricalSchoolAsyncWriteOperation
         {
             private readonly HistoricalSchoolLectureActivity _activity;
             private readonly HistoricalSchoolTeachingDbRequest _request;
@@ -449,6 +578,11 @@ namespace AncientWarfare3.core.schools
             {
                 return HistoricalSchoolStore.RecordTeachingInTransaction(pDb,
                     pTransaction, _request).Outcome;
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return new LectureBackgroundWrite(_request.CloneForBackground());
             }
 
             public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
@@ -475,6 +609,27 @@ namespace AncientWarfare3.core.schools
             {
                 HistoricalSchoolActivityQueue.OnLectureWriteResolved(_activity,
                     HistoricalSchoolTeachingPersistenceOutcome.CleanFailure);
+            }
+        }
+
+        private sealed class LectureBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly HistoricalSchoolTeachingDbRequest _request;
+
+            public LectureBackgroundWrite(
+                HistoricalSchoolTeachingDbRequest pRequest)
+            {
+                _request = pRequest ??
+                    throw new ArgumentNullException(nameof(pRequest));
+            }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.RecordTeachingInTransaction(pDb,
+                    pTransaction, _request).Outcome;
             }
         }
 
@@ -531,9 +686,14 @@ namespace AncientWarfare3.core.schools
                 HistoryWriter.RecordPerson(pTeacher.data.id,
                     HistoricalAffiliationService.HomeKingdom(pTeacher) ?? pTeacher.kingdom,
                     definition.CanonicalName, "school_work_authored",
-                    definition.CanonicalName + " authored " + work, ChronicleCategory.HONOR);
+                    HistoryText.Actor(pTeacher, definition.CanonicalName) +
+                    HistoryLocalizationRules.H("aw_hist_school_authored") +
+                    HistoryText.PlainText(work), ChronicleCategory.HONOR);
                 HistoryWriter.RecordCity(residence, residence.kingdom, "school_work_authored",
-                    definition.CanonicalName + " preserved " + work);
+                    HistoryText.Actor(pTeacher, definition.CanonicalName) +
+                    HistoryLocalizationRules.H("aw_hist_school_authored") +
+                    HistoryText.PlainText(work) +
+                    HistoryLocalizationRules.H("aw_hist_school_preserved"));
                 return true;
             }
             return false;
@@ -575,7 +735,17 @@ namespace AncientWarfare3.core.schools
                     HistoryWriter.RecordPerson(pActor.data.id,
                         HistoricalAffiliationService.HomeKingdom(pActor) ?? pActor.kingdom,
                         pActor.getName(), "school_conversion",
-                        "Converted from " + current.SchoolId + " to " + pTargetSchoolId,
+                        HistoryText.Actor(pActor) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_converted_from") +
+                        HistoryText.PlainText(
+                            CaptiveTreatmentRules.SchoolLabel(
+                                current.SchoolId)) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_converted_to") +
+                        HistoryText.PlainText(
+                            CaptiveTreatmentRules.SchoolLabel(
+                                pTargetSchoolId)),
                         ChronicleCategory.SOCIAL);
                 });
         }
@@ -615,10 +785,21 @@ namespace AncientWarfare3.core.schools
                     HistoryWriter.RecordPerson(pReader.data.id,
                         HistoricalAffiliationService.HomeKingdom(pReader) ?? pReader.kingdom,
                         pReader.getName(), "school_rediscovery",
-                        "Rediscovered " + pWorkKey + " and joined " + pSchoolId,
+                        HistoryText.Actor(pReader) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_rediscovered") +
+                        HistoryText.PlainText(pWorkKey) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_revived") +
+                        HistoryText.PlainText(
+                            CaptiveTreatmentRules.SchoolLabel(pSchoolId)),
                         ChronicleCategory.HONOR);
                     HistoryWriter.RecordCity(city, city.kingdom, "school_rediscovery",
-                        pReader.getName() + " revived " + pSchoolId);
+                        HistoryText.Actor(pReader) +
+                        HistoryLocalizationRules.H(
+                            "aw_hist_school_revived") +
+                        HistoryText.PlainText(
+                            CaptiveTreatmentRules.SchoolLabel(pSchoolId)));
                 });
         }
 

@@ -45,12 +45,16 @@ namespace AncientWarfare3.core.lineage
             {
                 Add(WarIdsByKingdom, kingdom, warId);
                 ArmyDeploymentService.OnKingdomEnteredWar(kingdom);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(kingdom);
             }
             foreach (Kingdom kingdom in pWar.getDefenders())
             {
                 Add(WarIdsByKingdom, kingdom, warId);
                 Add(DefensiveWarIdsByKingdom, kingdom, warId);
                 ArmyDeploymentService.OnKingdomEnteredWar(kingdom);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(kingdom);
             }
         }
 
@@ -60,6 +64,8 @@ namespace AncientWarfare3.core.lineage
             Add(WarIdsByKingdom, pKingdom, pWar.data.id);
             if (pDefender) Add(DefensiveWarIdsByKingdom, pKingdom, pWar.data.id);
             ArmyDeploymentService.OnKingdomEnteredWar(pKingdom);
+            StandingArmyPeacetimeService.OnMilitaryEmergencyChanged(
+                pKingdom);
         }
 
         public static void OnKingdomLeftWar(War pWar, Kingdom pKingdom)
@@ -67,18 +73,35 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null || pKingdom?.data == null) return;
             Remove(WarIdsByKingdom, pKingdom, pWar.data.id);
             Remove(DefensiveWarIdsByKingdom, pKingdom, pWar.data.id);
+            StandingArmyPeacetimeService.OnMilitaryEmergencyChanged(
+                pKingdom);
         }
 
         public static void OnWarEnded(War pWar)
         {
             if (pWar?.data == null) return;
             long warId = pWar.data.id;
-            foreach (Kingdom kingdom in pWar.getAttackers()) Remove(WarIdsByKingdom, kingdom, warId);
+            foreach (Kingdom kingdom in pWar.getAttackers())
+            {
+                Remove(WarIdsByKingdom, kingdom, warId);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(kingdom);
+            }
             foreach (Kingdom kingdom in pWar.getDefenders())
             {
                 Remove(WarIdsByKingdom, kingdom, warId);
                 Remove(DefensiveWarIdsByKingdom, kingdom, warId);
+                StandingArmyPeacetimeService
+                    .OnMilitaryEmergencyChanged(kingdom);
             }
+        }
+
+        public static void OnKingdomDestroying(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            WarIdsByKingdom.Remove(pKingdom.id);
+            DefensiveWarIdsByKingdom.Remove(pKingdom.id);
+            StandingArmyPeacetimeService.OnKingdomDestroying(pKingdom);
         }
 
         public static void RebuildRuntime()
@@ -93,6 +116,7 @@ namespace AncientWarfare3.core.lineage
         {
             WarIdsByKingdom.Clear();
             DefensiveWarIdsByKingdom.Clear();
+            StandingArmyPeacetimeService.ClearRuntime();
         }
 
         private static void Add(Dictionary<long, HashSet<long>> pIndex, Kingdom pKingdom, long pWarId)

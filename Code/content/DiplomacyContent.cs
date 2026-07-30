@@ -10,6 +10,11 @@ namespace AncientWarfare3.content
             AddWarNameTemplate("war_reclaim", "收复战争,收复旧土之战");
             AddWarNameTemplate("war_restoration", "复国战争,恢复旧统之战");
             AddWarNameTemplate("war_tributary", "叩关战争,入贡之战");
+            AddWarNameTemplate("war_jingnan", "靖难之役,清君侧之战,宗室靖难");
+            AddWarNameTemplate("war_succession_dispute",
+                "争位之战,宗统之争,两朝争位");
+            AddWarNameTemplate("war_coup_restoration",
+                "勤王复统之战,讨逆复统之役,宗室复位之战");
 
             AddWarType("aw_normal_war", "war_conquest", "war_type_aw_normal_war", "ui/wars/war_conquest", true);
             AddWarType("reclaim", "war_reclaim", "war_type_reclaim", "ui/wars/war_reclaim", true);
@@ -24,6 +29,15 @@ namespace AncientWarfare3.content
                 "ui/wars/war_rebellion", false, pRebellion: true);
             AddWarType("fief_independence_war", "war_conquest", "war_type_fief_independence_war",
                 "ui/wars/war_independent", false, pRebellion: true);
+            AddWarType(FeudatoryJingnanRules.WarTypeId, "war_jingnan",
+                "war_type_jingnan_war", "ui/wars/war_rebellion", false,
+                pRebellion: true);
+            AddWarType(SuccessionDisputeRules.WarTypeId,
+                "war_succession_dispute", "war_type_succession_dispute_war",
+                "ui/wars/war_rebellion", false, pRebellion: true);
+            AddWarType(CoupRestorationRules.WarTypeId,
+                "war_coup_restoration", "war_type_coup_restoration_war",
+                "ui/wars/war_rebellion", false, pRebellion: true);
         }
 
         private static void AddWarType(string pId, string pNameTemplate, string pLocalizedType, string pIcon,

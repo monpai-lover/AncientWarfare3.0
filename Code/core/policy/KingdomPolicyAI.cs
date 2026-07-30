@@ -24,7 +24,6 @@ namespace AncientWarfare3.core.policy
             "aw_policy_military_merit",
             "aw_policy_base_enfeoffment",
             "aw_policy_border_enfeoffment",
-            "aw_policy_favor_order",
             "aw_policy_continuous_enfeoffment",
             "aw_policy_early_law",
             "aw_policy_imperial_court",
@@ -49,6 +48,8 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return null;
             return KingdomPolicyDefs.Decisions
+                .Where(def => KingdomDecisionPriorityRules.
+                    ShouldUseGeneralDecisionSlot(def.Id))
                 .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
                 .Where(def => IsAvailable(pKingdom, def))
                 .Where(def => ShouldAutoStartDecision(pKingdom, def))
@@ -67,10 +68,12 @@ namespace AncientWarfare3.core.policy
                 KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_official_court");
             bool ritesMusicCompleted = pKind != PolicyNodeKind.Tech ||
                 KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_rites_music");
+            bool nineRankCompleted = pKind != PolicyNodeKind.Tech ||
+                KingdomPolicyService.IsCompleted(pKingdom, PolicyNodeKind.Tech, "aw_tech_nine_rank_system");
 
             return defs
                 .Where(def => pKind != PolicyNodeKind.Tech || KingdomPolicyTechOrderRules.CanConsider(
-                    def.Id, officialCourtCompleted, ritesMusicCompleted))
+                    def.Id, officialCourtCompleted, ritesMusicCompleted, nineRankCompleted))
                 .Where(def => !KingdomPolicyService.IsNodeLocked(pKingdom, def.Id))
                 .Where(def => IsAvailable(pKingdom, def))
                 .OrderByDescending(def => ScoreResearch(pKingdom, def))
@@ -137,7 +140,11 @@ namespace AncientWarfare3.core.policy
         private static bool ShouldAutoStartDecision(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pKingdom?.data == null || pDef == null) return false;
-            if (YearsSince(pKingdom, LineageKeys.POLICY_AI_LAST_DECISION_YEAR, -99999) < 8) return false;
+            if (KingdomDecisionPriorityRules.ShouldApplyGeneralCooldown(
+                    pDef.Id) &&
+                YearsSince(pKingdom,
+                    LineageKeys.POLICY_AI_LAST_DECISION_YEAR,
+                    -99999) < 8) return false;
 
             switch (pDef.Id)
             {
@@ -171,6 +178,8 @@ namespace AncientWarfare3.core.policy
             int orderScore = 1000 - PreferredIndex(pDef) * 20;
             int context = 0;
             context += XiaizationService.ScoreResearch(pKingdom, pDef);
+            context += CourtInstitutionRules.ResearchEraScore(
+                pDef.Id, Date.getCurrentYear());
 
             int cities = CountCities(pKingdom);
             int units = CountUnits(pKingdom);
@@ -191,6 +200,19 @@ namespace AncientWarfare3.core.policy
                 case "aw_tech_granary_accounting":
                 case "aw_tech_iron_plow":
                     if (cities >= 2 || units >= 60) context += 70;
+                    break;
+                case "aw_tech_civil_service_examination":
+                    int vacancies = CountCivilServiceVacancies(pKingdom);
+                    int educatedWithoutQualification =
+                        CivilServiceExamCandidateQuery.
+                            CountEducatedWithoutQualification(pKingdom, 32);
+                    bool imperial =
+                        MandateService.IsMandateKingdom(pKingdom) ||
+                        KingdomTitleService.GetTitle(pKingdom) >=
+                        KingdomTitle.Emperor;
+                    context += KingdomPolicyTechOrderRules.
+                        CivilServiceExaminationContextScore(vacancies,
+                            educatedWithoutQualification, cities, imperial);
                     break;
                 case "aw_policy_control_slaves":
                     if (SlaveService.IsSlaveryEnabled(pKingdom)) context += 70;
@@ -233,18 +255,35 @@ namespace AncientWarfare3.core.policy
 
         private static int CountCities(Kingdom pKingdom)
         {
-            int count = 0;
-            foreach (City city in pKingdom.getCities())
-                if (city?.data != null && !city.isRekt()) count++;
-            return count;
+            try { return Math.Max(0, pKingdom?.countCities() ?? 0); }
+            catch { return 0; }
         }
 
         private static int CountUnits(Kingdom pKingdom)
         {
-            int count = 0;
-            foreach (Actor unit in pKingdom.getUnits())
-                if (unit?.data != null && !unit.isRekt()) count++;
-            return count;
+            try { return Math.Max(0, pKingdom?.getPopulationTotal() ?? 0); }
+            catch { return 0; }
+        }
+
+        private static int CountCivilServiceVacancies(Kingdom pKingdom)
+        {
+            string[] expected = CourtTierRules.CentralOfficesForTier(
+                CourtService.ResolveTier(pKingdom));
+            if (expected.Length == 0) return 0;
+
+            var occupied = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CourtOfficerView officer in CourtService.GetActiveOfficers(
+                         pKingdom, 96))
+            {
+                if (officer?.layer == CourtOfficeLayer.Central &&
+                    !string.IsNullOrEmpty(officer.office_id))
+                    occupied.Add(officer.office_id);
+            }
+
+            int vacancies = 0;
+            for (int index = 0; index < expected.Length; index++)
+                if (!occupied.Contains(expected[index])) vacancies++;
+            return vacancies;
         }
 
         private static bool IsAtWar(Kingdom pKingdom)

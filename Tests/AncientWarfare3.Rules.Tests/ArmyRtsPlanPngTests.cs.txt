@@ -1,0 +1,778 @@
+using AncientWarfare3.core.presentation;
+using AncientWarfare3.core.lineage;
+using System.Reflection;
+using System.Text;
+
+internal static class ArmyRtsPlanGifTests
+{
+    public static void WriteSample(string pPath)
+    {
+        string full = Path.GetFullPath(pPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        ArmyRtsPlanIndexedRaster first = ArmyRtsPlanRasterizer.Render(
+            RenderSnapshot(12), maximumLongEdge: 64);
+        ArmyRtsPlanIndexedRaster second = ArmyRtsPlanRasterizer.Render(
+            RenderSnapshot(18), maximumLongEdge: 64);
+        byte[] gif = ArmyRtsPlanGifEncoder.Encode(new[]
+        {
+            Frame(1, 0, first),
+            Frame(2, 1, second)
+        }, pDelayCentiseconds: 75);
+        File.WriteAllBytes(full, gif);
+    }
+
+    public static void Run()
+    {
+        ArrowStylesExposeAllMissionSemantics();
+        ProjectionPreservesWorldAspectRatio();
+        FingerprintTracksPlansButNotMovement();
+        FingerprintTracksCompleteStrategicIntent();
+        RevisionLedgerDefersExpensiveCaptureUntilCadence();
+        RevisionLedgerSuppressesDuplicatesAndReleasesNewestPending();
+        TerrainComposerTintsKingdomZonesAndDrawsBoundaries();
+        IndexedPaletteAndRasterPreserveTerrainAndPlanColors();
+        SequenceLedgerBoundsFramesAndPreservesEndpoints();
+        GifEncoderWritesDecodableAnimatedGif89a();
+        WriterCreatesNothingUntilShutdown();
+        WriterRollsBackPairWhenManifestPublishFails();
+        ManifestContainsOnlySequenceAndFrameSummaries();
+        EncodingAndWriteHonorShutdownCancellation();
+        DiagnosticsDiscardPreservesHistoricalArtifacts();
+    }
+
+    private static void ArrowStylesExposeAllMissionSemantics()
+    {
+        Equal(ArmyRtsPlanArrowStyle.Recovery,
+            ArmyRtsPlanRules.ArrowStyle(Army(
+                operation: ArmyRtsPlanOperation.Defense,
+                friendlyRecovery: true)), "friendly recovery style");
+        Equal(ArmyRtsPlanArrowStyle.Transport,
+            ArmyRtsPlanRules.ArrowStyle(Army(transportActive: true)),
+            "transport style");
+        Equal(ArmyRtsPlanArrowStyle.Redeploy,
+            ArmyRtsPlanRules.ArrowStyle(Army(
+                operation: ArmyRtsPlanOperation.Retreat)),
+            "redeploy style");
+        Equal(ArmyRtsPlanArrowStyle.Attack,
+            ArmyRtsPlanRules.ArrowStyle(Army()), "attack style");
+        Equal(ArmyRtsPlanArrowStyle.March,
+            ArmyRtsPlanRules.ArrowStyle(Army(
+                operation: ArmyRtsPlanOperation.Hold)),
+            "hold remains a white stationary plan");
+    }
+
+    private static void ProjectionPreservesWorldAspectRatio()
+    {
+        ArmyRtsPlanCanvas wide = ArmyRtsPlanRules.Project(400, 200,
+            maximumLongEdge: 768);
+        Equal(768, wide.Width, "wide canvas width");
+        Equal(384, wide.Height, "wide canvas height");
+        True(wide.Contains(wide.ProjectPoint(new ArmyRtsPlanPoint(0, 0))),
+            "projected origin is inside");
+        True(wide.Contains(wide.ProjectPoint(
+            new ArmyRtsPlanPoint(399, 199))),
+            "projected maximum is inside");
+    }
+
+    private static void FingerprintTracksPlansButNotMovement()
+    {
+        ArmyRtsPlanSnapshot first = Snapshot(Army(captainX: 10,
+            targetCityId: 30));
+        ArmyRtsPlanSnapshot moved = Snapshot(Army(captainX: 50,
+            targetCityId: 30));
+        ArmyRtsPlanSnapshot retargeted = Snapshot(Army(captainX: 50,
+            targetCityId: 31));
+        Equal(ArmyRtsPlanRules.Fingerprint(first),
+            ArmyRtsPlanRules.Fingerprint(moved),
+            "position-only movement is deduplicated");
+        NotEqual(ArmyRtsPlanRules.Fingerprint(first),
+            ArmyRtsPlanRules.Fingerprint(retargeted),
+            "target change is material");
+        NotEqual(ArmyRtsPlanRules.Fingerprint(SnapshotWithTerrain(7)),
+            ArmyRtsPlanRules.Fingerprint(SnapshotWithTerrain(8)),
+            "sampled terrain color change is material");
+    }
+
+    private static void FingerprintTracksCompleteStrategicIntent()
+    {
+        ArmyRtsPlanSnapshot baseline = Snapshot(Army(
+            proposalKind: ArmyRtsProposalKind.Attack,
+            role: ArmyRtsRole.Assault,
+            posture: ArmyRtsPosture.Automatic));
+        NotEqual(ArmyRtsPlanRules.Fingerprint(baseline),
+            ArmyRtsPlanRules.Fingerprint(Snapshot(Army(
+                proposalKind: ArmyRtsProposalKind.FrontHold,
+                role: ArmyRtsRole.Assault,
+                posture: ArmyRtsPosture.Automatic))),
+            "proposal kind change is material");
+        NotEqual(ArmyRtsPlanRules.Fingerprint(baseline),
+            ArmyRtsPlanRules.Fingerprint(Snapshot(Army(
+                proposalKind: ArmyRtsProposalKind.Attack,
+                role: ArmyRtsRole.Reserve,
+                posture: ArmyRtsPosture.Automatic))),
+            "role change is material");
+        NotEqual(ArmyRtsPlanRules.Fingerprint(baseline),
+            ArmyRtsPlanRules.Fingerprint(Snapshot(Army(
+                proposalKind: ArmyRtsProposalKind.Attack,
+                role: ArmyRtsRole.Assault,
+                posture: ArmyRtsPosture.Defend))),
+            "posture change is material");
+    }
+
+    private static void RevisionLedgerSuppressesDuplicatesAndReleasesNewestPending()
+    {
+        var revisions = new ArmyRtsPlanRevisionLedger(10d);
+        True(revisions.TryReserve(9, 101UL, 100d, out int revision),
+            "first plan reserves");
+        Equal(0, revision, "first revision");
+        Equal(false, revisions.TryReserve(9, 101UL, 120d, out _),
+            "identical plan is suppressed");
+        Equal(false, revisions.TryReserve(9, 202UL, 105d, out _),
+            "change inside cadence waits");
+        Equal(false, revisions.TryReserve(9, 303UL, 106d, out _),
+            "newest pending replaces obsolete state");
+        True(revisions.TryReleasePending(9, 110d,
+            out ulong fingerprint, out revision),
+            "pending plan releases at cadence");
+        Equal(303UL, fingerprint, "newest fingerprint releases");
+        Equal(1, revision, "released revision increments");
+    }
+
+    private static void RevisionLedgerDefersExpensiveCaptureUntilCadence()
+    {
+        var revisions = new ArmyRtsPlanRevisionLedger(10d);
+        True(revisions.TryReserve(7, 101UL, 100d, out _),
+            "first plan establishes the capture cadence");
+        True(revisions.TryGetCaptureDeferral(7, 102d,
+                out double retryAt),
+            "a changed plan inside cadence must defer before a full-map capture");
+        Equal(110d, retryAt,
+            "deferred full-map capture waits for the latest allowed time");
+        Equal(false, revisions.TryGetCaptureDeferral(7, 110d,
+                out _),
+            "a full-map capture resumes exactly at cadence");
+    }
+
+    private static void IndexedPaletteAndRasterPreserveTerrainAndPlanColors()
+    {
+        Equal(256, ArmyRtsPlanPalette.Colors.Count,
+            "global palette has 256 entries");
+        byte terrainIndex = ArmyRtsPlanPalette.IndexOf(
+            new ArmyRtsPlanColor(24, 164, 72));
+        Equal(terrainIndex, ArmyRtsPlanPalette.IndexOf(
+            new ArmyRtsPlanColor(24, 164, 72)),
+            "palette mapping is deterministic");
+
+        ArmyRtsPlanIndexedRaster raster = ArmyRtsPlanRasterizer.Render(
+            RenderSnapshot(12), maximumLongEdge: 64);
+        Equal(64, raster.Width, "indexed width");
+        Equal(32, raster.Height, "indexed height");
+        Equal(64 * 32, raster.Pixels.Length,
+            "one retained byte per pixel");
+        True(raster.Pixels.Contains(terrainIndex),
+            "actual sampled terrain index survives rendering");
+
+        byte recovery = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.RecoveryColor);
+        byte transport = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.TransportColor);
+        byte stalled = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.StalledColor);
+        byte attack = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.AttackColor);
+        byte redeploy = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.RedeployColor);
+        Equal(5, new HashSet<byte>
+        {
+            recovery, transport, stalled, attack, redeploy
+        }.Count, "mission colors remain distinct in indexed palette");
+        True(raster.Pixels.Contains(recovery), "recovery pixels render");
+        True(raster.Pixels.Contains(transport), "transport pixels render");
+        True(raster.Pixels.Contains(stalled), "stalled pixels render");
+        True(raster.Pixels.Contains(attack),
+            "stalled attack keeps its attack-colored route");
+    }
+
+    private static void TerrainComposerTintsKingdomZonesAndDrawsBoundaries()
+    {
+        var colors = Enumerable.Repeat(
+            new ArmyRtsPlanColor(24, 164, 72), 8).ToArray();
+        long[] owners = { 1, 1, 2, 2, 1, 1, 2, 2 };
+        var kingdomColors = new Dictionary<long, ArmyRtsPlanColor>
+        {
+            [1] = new ArmyRtsPlanColor(220, 35, 35),
+            [2] = new ArmyRtsPlanColor(35, 75, 220)
+        };
+        ArmyRtsPlanTerrain terrain = ArmyRtsPlanTerrainBuilder.Build(4, 2,
+            colors, owners, new HashSet<long> { 1, 2 }, kingdomColors);
+        byte boundary = ArmyRtsPlanPalette.IndexOf(
+            ArmyRtsPlanRasterizer.ParticipantBorderColor);
+        Equal(boundary, terrain.Pixels[1], "left zone boundary pixel");
+        Equal(boundary, terrain.Pixels[2], "right zone boundary pixel");
+        NotEqual(ArmyRtsPlanPalette.IndexOf(colors[0]), terrain.Pixels[0],
+            "kingdom zone tint changes sampled terrain");
+        NotEqual(terrain.Pixels[0], terrain.Pixels[3],
+            "different kingdom zones retain different tints");
+    }
+
+    private static void SequenceLedgerBoundsFramesAndPreservesEndpoints()
+    {
+        var ledger = new ArmyRtsPlanSequenceLedger(
+            pMaximumFramesPerSequence: 3,
+            pMaximumGlobalFrames: 6, pMaximumSequences: 2);
+        for (int revision = 0; revision < 7; revision++)
+            True(ledger.TryAdd(0, 9, "save", Frame(
+                    (ulong)(revision + 1), revision,
+                    SolidRaster((byte)(revision + 1)))),
+                "unique frame " + revision + " is retained");
+        ArmyRtsPlanSequence sequence = ledger.Sequences.Single();
+        True(sequence.Frames.Count <= 3, "per-sequence bound");
+        Equal(1UL, sequence.Frames[0].Fingerprint,
+            "first frame survives decimation");
+        Equal(7UL, sequence.Frames[^1].Fingerprint,
+            "latest frame survives decimation");
+
+        ledger.CloseWar(0, 9);
+        ledger.TryAdd(0, 10, "save", Frame(10, 0, SolidRaster(10)));
+        ledger.CloseWar(0, 10);
+        ledger.TryAdd(0, 11, "save", Frame(11, 0, SolidRaster(11)));
+        True(ledger.Sequences.Count <= 2, "sequence bound");
+        True(ledger.FrameCount <= 6, "global frame bound");
+
+        var pressure = new ArmyRtsPlanSequenceLedger(
+            pMaximumFramesPerSequence: 4,
+            pMaximumGlobalFrames: 4, pMaximumSequences: 3);
+        pressure.TryAdd(0, 1, "save", Frame(1, 0, SolidRaster(1)));
+        pressure.TryAdd(0, 1, "save", Frame(2, 1, SolidRaster(2)));
+        pressure.CloseWar(0, 1);
+        pressure.TryAdd(0, 2, "save", Frame(3, 0, SolidRaster(3)));
+        pressure.TryAdd(0, 2, "save", Frame(4, 1, SolidRaster(4)));
+        pressure.TryAdd(0, 2, "save", Frame(5, 2, SolidRaster(5)));
+        Equal(false, pressure.Sequences.Any(pRow => pRow.WarId == 1),
+            "oldest completed sequence is evicted before active frames");
+        Equal(3, pressure.Sequences.Single().Frames.Count,
+            "active sequence history remains intact after eviction");
+    }
+
+    private static void GifEncoderWritesDecodableAnimatedGif89a()
+    {
+        ArmyRtsPlanIndexedRaster first = PatternRaster(4, 3, 1);
+        ArmyRtsPlanIndexedRaster second = PatternRaster(4, 3, 17);
+        byte[] gif = ArmyRtsPlanGifEncoder.Encode(new[]
+        {
+            Frame(1, 0, first), Frame(2, 1, second)
+        }, pDelayCentiseconds: 75);
+        Equal("GIF89a", Encoding.ASCII.GetString(gif, 0, 6),
+            "GIF signature");
+        Equal((byte)0x3b, gif[^1], "GIF trailer");
+        True(Encoding.ASCII.GetString(gif).Contains("NETSCAPE2.0"),
+            "loop extension");
+
+        DecodedGif decoded = DecodeGif(gif);
+        Equal(4, decoded.Width, "decoded width");
+        Equal(3, decoded.Height, "decoded height");
+        Equal(2, decoded.Frames.Count, "decoded frame count");
+        SequenceEqual(first.Pixels, decoded.Frames[0],
+            "first LZW frame");
+        SequenceEqual(second.Pixels, decoded.Frames[1],
+            "second LZW frame");
+        SequenceEqual(new[] { 75, 75 }, decoded.Delays,
+            "frame delays");
+    }
+
+    private static void WriterCreatesNothingUntilShutdown()
+    {
+        string root = TempRoot("writer");
+        string runtime = Path.Combine(root, "runtime");
+        string save = Path.Combine(root, "save");
+        try
+        {
+            var writer = new ArmyRtsPlanArtifactWriter(runtime,
+                pStartWorker: false, pCapacity: 2,
+                pMaximumFramesPerSequence: 4,
+                pMaximumGlobalFrames: 8, pMaximumSequences: 2,
+                pSessionId: "test-session");
+            writer.ObserveSaveDirectory(save);
+            True(writer.TryEnqueue(Artifact(0, 101)), "first frame queues");
+            True(writer.TryEnqueue(Artifact(1, 202)), "second frame queues");
+            writer.PublishToSave(save);
+            Equal(0, Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                .Length, "no files exist before shutdown");
+
+            writer.Shutdown(TimeSpan.FromSeconds(5));
+            string output = ArmyRtsPlanRules.ResolveOutputDirectory(save);
+            string[] gifs = Directory.GetFiles(output, "*.gif");
+            string[] manifests = Directory.GetFiles(output, "*.txt");
+            Equal(1, gifs.Length, "one GIF per war sequence");
+            Equal(1, manifests.Length, "one manifest per GIF");
+            Equal(0, Directory.GetFiles(output, "*.png").Length,
+                "no PNG artifacts");
+            Equal(0, Directory.GetFiles(output, "*.tmp.*").Length,
+                "no completed temporary files");
+            Equal(2, DecodeGif(File.ReadAllBytes(gifs[0])).Frames.Count,
+                "shutdown GIF contains both revisions");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void WriterRollsBackPairWhenManifestPublishFails()
+    {
+        string root = TempRoot("pair-rollback");
+        string runtime = Path.Combine(root, "runtime");
+        string save = Path.Combine(root, "save");
+        string output = ArmyRtsPlanRules.ResolveOutputDirectory(save);
+        string stem = ArmyRtsPlanRules.SequenceFileStem(9, 42, 0,
+            "pair-failure");
+        string basePath = Path.Combine(output, stem);
+        Exception fault = null;
+        try
+        {
+            Directory.CreateDirectory(output);
+            Directory.CreateDirectory(basePath + ".txt");
+            var writer = new ArmyRtsPlanArtifactWriter(runtime,
+                pStartWorker: false, pSessionId: "pair-failure",
+                pFault: error => fault = error);
+            writer.ObserveSaveDirectory(save);
+            True(writer.TryEnqueue(Artifact(0, 101)), "frame queues");
+
+            writer.Shutdown(TimeSpan.FromSeconds(5));
+
+            True(fault != null, "manifest publish failure is reported");
+            Equal(0, Directory.GetFiles(output, "*.gif").Length,
+                "failed manifest publish rolls back its GIF");
+            Equal(0, Directory.GetFiles(output, "*.tmp.*").Length,
+                "failed pair publish removes GUID temporary files");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void ManifestContainsOnlySequenceAndFrameSummaries()
+    {
+        string root = TempRoot("compact-manifest");
+        string runtime = Path.Combine(root, "runtime");
+        string save = Path.Combine(root, "save");
+        try
+        {
+            var writer = new ArmyRtsPlanArtifactWriter(runtime,
+                pStartWorker: false, pSessionId: "compact-manifest");
+            writer.ObserveSaveDirectory(save);
+            True(writer.TryEnqueue(Artifact(0, 101)),
+                "frame queues");
+            writer.Shutdown(TimeSpan.FromSeconds(5));
+
+            string output = ArmyRtsPlanRules.ResolveOutputDirectory(save);
+            string manifest = File.ReadAllText(
+                Directory.GetFiles(output, "*.txt").Single());
+            True(manifest.Contains("format=aw3_rts_plan_gif_v2"),
+                "compact manifest version");
+            True(manifest.Contains(
+                    "kingdoms=2 cities=2 armies=3 fronts=1"),
+                "frame summary retains tactical locator counts");
+            Equal(false, manifest.Contains("kingdom id="),
+                "kingdom objects are not repeated per frame");
+            Equal(false, manifest.Contains("city id="),
+                "city objects are not repeated per frame");
+            Equal(false, manifest.Contains("army id="),
+                "army objects are not repeated per frame");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void EncodingAndWriteHonorShutdownCancellation()
+    {
+        MethodInfo encode = typeof(ArmyRtsPlanGifEncoder).GetMethod(
+            "Encode", new[]
+            {
+                typeof(IReadOnlyList<ArmyRtsPlanGifFrame>), typeof(int),
+                typeof(Func<bool>)
+            });
+        True(encode != null, "cancellable GIF encoder overload exists");
+        int encodeChecks = 0;
+        bool encodeCancelled = false;
+        try
+        {
+            encode.Invoke(null, new object[]
+            {
+                new[] { Frame(1, 0, PatternRaster(256, 256, 1)) },
+                75, (Func<bool>)(() => ++encodeChecks >= 5)
+            });
+        }
+        catch (TargetInvocationException error)
+            when (error.InnerException is OperationCanceledException)
+        {
+            encodeCancelled = true;
+        }
+        True(encodeCancelled && encodeChecks >= 5,
+            "encoder cancellation is checked inside a frame");
+
+        MethodInfo shutdown = typeof(ArmyRtsPlanArtifactWriter).GetMethod(
+            "Shutdown", new[] { typeof(TimeSpan), typeof(Func<bool>) });
+        True(shutdown != null, "cancellable writer shutdown overload exists");
+        string root = TempRoot("cancel-write");
+        string runtime = Path.Combine(root, "runtime");
+        string save = Path.Combine(root, "save");
+        string output = ArmyRtsPlanRules.ResolveOutputDirectory(save);
+        bool cancelledDuringStaging = false;
+        try
+        {
+            var writer = new ArmyRtsPlanArtifactWriter(runtime,
+                pStartWorker: false, pSessionId: "cancel-write");
+            writer.ObserveSaveDirectory(save);
+            writer.TryEnqueue(Artifact(0, 101));
+            Func<bool> cancel = () =>
+            {
+                cancelledDuringStaging = Directory.Exists(output) &&
+                    Directory.GetFiles(output, "*.tmp.*").Length > 0;
+                return cancelledDuringStaging;
+            };
+            shutdown.Invoke(writer, new object[]
+            {
+                TimeSpan.FromSeconds(5), cancel
+            });
+
+            True(cancelledDuringStaging,
+                "shutdown observes cancellation during staged write");
+            Equal(0, Directory.GetFiles(output, "*.gif").Length,
+                "cancelled write publishes no GIF");
+            Equal(0, Directory.GetFiles(output, "*.txt").Length,
+                "cancelled write publishes no manifest");
+            Equal(0, Directory.GetFiles(output, "*.tmp.*").Length,
+                "cancelled write removes temporary files");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void DiagnosticsDiscardPreservesHistoricalArtifacts()
+    {
+        string root = TempRoot("disabled");
+        string runtime = Path.Combine(root, "runtime");
+        string save = Path.Combine(root, "save");
+        string output = ArmyRtsPlanRules.ResolveOutputDirectory(save);
+        Directory.CreateDirectory(output);
+        string historical = Path.Combine(output, "historical.gif");
+        File.WriteAllBytes(historical, Encoding.ASCII.GetBytes("GIF89a"));
+        try
+        {
+            var writer = new ArmyRtsPlanArtifactWriter(runtime,
+                pStartWorker: false, pSessionId: "disabled-session");
+            writer.ObserveSaveDirectory(save);
+            writer.TryEnqueue(Artifact(0, 101));
+            writer.DiscardPending();
+            writer.Shutdown(TimeSpan.FromSeconds(5));
+            True(File.Exists(historical),
+                "diagnostics-off discard preserves history");
+            Equal(1, Directory.GetFiles(output).Length,
+                "discard writes no new artifact");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static ArmyRtsPlanArtifact Artifact(int pRevision,
+        ulong pFingerprint)
+    {
+        return new ArmyRtsPlanArtifact(RenderSnapshot(12 + pRevision),
+            pRevision, pWorldGeneration: 0,
+            pFingerprint: pFingerprint);
+    }
+
+    private static ArmyRtsPlanGifFrame Frame(ulong pFingerprint,
+        int pRevision, ArmyRtsPlanIndexedRaster pRaster)
+    {
+        return new ArmyRtsPlanGifFrame(pFingerprint, pRevision, 42,
+            "test", new ArmyRtsPlanFrameSummary(pRaster.Width,
+                pRaster.Height, 0, 0, 0, 0, 0, 0, 0), pRaster);
+    }
+
+    private static ArmyRtsPlanSnapshot RenderSnapshot(int pCaptainX)
+    {
+        byte terrain = ArmyRtsPlanPalette.IndexOf(
+            new ArmyRtsPlanColor(24, 164, 72));
+        var pixels = Enumerable.Repeat(terrain, 64 * 32).ToArray();
+        var armies = new[]
+        {
+            Army(pCaptainX, 30, ArmyRtsPlanOperation.Defense, true,
+                pArmyId: 20),
+            Army(pCaptainX + 2, 31, transportActive: true, pArmyId: 21),
+            Army(pCaptainX + 4, 31, pStalled: true, pArmyId: 22)
+        };
+        return new ArmyRtsPlanSnapshot(9, 42, 64, 32, "render-test",
+            new[]
+            {
+                new ArmyRtsPlanKingdom(1, "A",
+                    new ArmyRtsPlanColor(160, 35, 35), true),
+                new ArmyRtsPlanKingdom(2, "B",
+                    new ArmyRtsPlanColor(35, 75, 175), false)
+            }, Array.Empty<ArmyRtsPlanZone>(), new[]
+            {
+                new ArmyRtsPlanCity(30, 1, 2,
+                    new ArmyRtsPlanPoint(52, 20), true),
+                new ArmyRtsPlanCity(31, 2, 2,
+                    new ArmyRtsPlanPoint(55, 26), false)
+            }, armies, new[]
+            {
+                new ArmyRtsPlanFront(4, 1,
+                    new ArmyRtsPlanPoint(30, 2),
+                    new ArmyRtsPlanPoint(30, 28))
+            }, new ArmyRtsPlanTerrain(64, 32, pixels));
+    }
+
+    private static ArmyRtsPlanArmy Army(int captainX = 10,
+        long targetCityId = 30,
+        ArmyRtsPlanOperation operation = ArmyRtsPlanOperation.Attack,
+        bool friendlyRecovery = false, bool transportActive = false,
+        bool pStalled = false, long pArmyId = 20,
+        ArmyRtsProposalKind proposalKind = ArmyRtsProposalKind.Attack,
+        ArmyRtsRole role = ArmyRtsRole.Assault,
+        ArmyRtsPosture posture = ArmyRtsPosture.Automatic)
+    {
+        return new ArmyRtsPlanArmy(pArmyId, 1,
+            new ArmyRtsPlanPoint(captainX, Math.Min(28, captainX)),
+            targetCityId, new ArmyRtsPlanPoint(
+                targetCityId == 30 ? 52 : 55,
+                targetCityId == 30 ? 20 : 26),
+            new ArmyRtsPlanPoint(32, 15), 4, operation,
+            friendlyRecovery, transportActive, false, pStalled,
+            proposalKind, role, posture);
+    }
+
+    private static ArmyRtsPlanSnapshot Snapshot(ArmyRtsPlanArmy pArmy)
+    {
+        return new ArmyRtsPlanSnapshot(9, 42, 100, 80, "test",
+            Array.Empty<ArmyRtsPlanKingdom>(),
+            Array.Empty<ArmyRtsPlanZone>(),
+            Array.Empty<ArmyRtsPlanCity>(), new[] { pArmy },
+            Array.Empty<ArmyRtsPlanFront>());
+    }
+
+    private static ArmyRtsPlanSnapshot SnapshotWithTerrain(byte pPixel)
+    {
+        return new ArmyRtsPlanSnapshot(9, 42, 1, 1, "terrain-test",
+            Array.Empty<ArmyRtsPlanKingdom>(),
+            Array.Empty<ArmyRtsPlanZone>(),
+            Array.Empty<ArmyRtsPlanCity>(), new[] { Army() },
+            Array.Empty<ArmyRtsPlanFront>(),
+            new ArmyRtsPlanTerrain(1, 1, new[] { pPixel }));
+    }
+
+    private static ArmyRtsPlanIndexedRaster SolidRaster(byte pValue)
+    {
+        return new ArmyRtsPlanIndexedRaster(2, 2,
+            new[] { pValue, pValue, pValue, pValue });
+    }
+
+    private static ArmyRtsPlanIndexedRaster PatternRaster(int pWidth,
+        int pHeight, byte pSeed)
+    {
+        var pixels = new byte[pWidth * pHeight];
+        for (int i = 0; i < pixels.Length; i++)
+            pixels[i] = (byte)(pSeed + i);
+        return new ArmyRtsPlanIndexedRaster(pWidth, pHeight, pixels);
+    }
+
+    private static string TempRoot(string pName)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "aw3-rts-gif-" +
+            pName + "-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private sealed class DecodedGif
+    {
+        internal int Width;
+        internal int Height;
+        internal readonly List<byte[]> Frames = new();
+        internal readonly List<int> Delays = new();
+    }
+
+    private static DecodedGif DecodeGif(byte[] pGif)
+    {
+        if (Encoding.ASCII.GetString(pGif, 0, 6) != "GIF89a")
+            throw new InvalidOperationException("not GIF89a");
+        var result = new DecodedGif
+        {
+            Width = ReadUInt16(pGif, 6),
+            Height = ReadUInt16(pGif, 8)
+        };
+        int offset = 13;
+        byte packed = pGif[10];
+        if ((packed & 0x80) != 0)
+            offset += 3 * (1 << ((packed & 0x07) + 1));
+        int pendingDelay = 0;
+        while (offset < pGif.Length)
+        {
+            byte marker = pGif[offset++];
+            if (marker == 0x3b) return result;
+            if (marker == 0x21)
+            {
+                byte label = pGif[offset++];
+                if (label == 0xf9)
+                {
+                    Equal((byte)4, pGif[offset++], "GCE block size");
+                    offset++;
+                    pendingDelay = ReadUInt16(pGif, offset);
+                    offset += 3;
+                    Equal((byte)0, pGif[offset++], "GCE terminator");
+                }
+                else SkipSubBlocks(pGif, ref offset, pGif[offset++]);
+                continue;
+            }
+            Equal((byte)0x2c, marker, "GIF block marker");
+            offset += 4;
+            int width = ReadUInt16(pGif, offset);
+            int height = ReadUInt16(pGif, offset + 2);
+            byte descriptor = pGif[offset + 4];
+            offset += 5;
+            if ((descriptor & 0x80) != 0)
+                offset += 3 * (1 << ((descriptor & 0x07) + 1));
+            int minimumCodeSize = pGif[offset++];
+            byte[] compressed = ReadSubBlocks(pGif, ref offset);
+            byte[] pixels = DecodeLzw(compressed, minimumCodeSize,
+                width * height);
+            result.Frames.Add(pixels);
+            result.Delays.Add(pendingDelay);
+            pendingDelay = 0;
+        }
+        throw new InvalidOperationException("GIF trailer is missing");
+    }
+
+    private static void SkipSubBlocks(byte[] pBytes, ref int pOffset,
+        int pInitialSize)
+    {
+        int size = pInitialSize;
+        while (true)
+        {
+            pOffset += size;
+            size = pBytes[pOffset++];
+            if (size == 0) return;
+        }
+    }
+
+    private static byte[] ReadSubBlocks(byte[] pBytes, ref int pOffset)
+    {
+        using var output = new MemoryStream();
+        while (true)
+        {
+            int size = pBytes[pOffset++];
+            if (size == 0) return output.ToArray();
+            output.Write(pBytes, pOffset, size);
+            pOffset += size;
+        }
+    }
+
+    private static byte[] DecodeLzw(byte[] pData, int pMinimumCodeSize,
+        int pExpectedLength)
+    {
+        int clear = 1 << pMinimumCodeSize;
+        int end = clear + 1;
+        var dictionary = new List<byte[]>(4096);
+        ResetDictionary(dictionary, clear);
+        int codeSize = pMinimumCodeSize + 1;
+        int nextCode = end + 1;
+        int bitOffset = 0;
+        byte[] previous = null;
+        using var output = new MemoryStream(pExpectedLength);
+        while (bitOffset + codeSize <= pData.Length * 8)
+        {
+            int code = ReadCode(pData, bitOffset, codeSize);
+            bitOffset += codeSize;
+            if (code == clear)
+            {
+                ResetDictionary(dictionary, clear);
+                codeSize = pMinimumCodeSize + 1;
+                nextCode = end + 1;
+                previous = null;
+                continue;
+            }
+            if (code == end) break;
+            byte[] entry;
+            if (code < dictionary.Count && dictionary[code] != null)
+                entry = dictionary[code];
+            else if (code == nextCode && previous != null)
+                entry = previous.Concat(new[] { previous[0] }).ToArray();
+            else throw new InvalidOperationException("invalid GIF LZW code");
+            output.Write(entry, 0, entry.Length);
+            if (previous != null && nextCode < 4096)
+            {
+                while (dictionary.Count <= nextCode) dictionary.Add(null);
+                dictionary[nextCode++] = previous.Concat(
+                    new[] { entry[0] }).ToArray();
+                if (nextCode == 1 << codeSize && codeSize < 12)
+                    codeSize++;
+            }
+            previous = entry;
+        }
+        byte[] decoded = output.ToArray();
+        Equal(pExpectedLength, decoded.Length, "decoded pixel count");
+        return decoded;
+    }
+
+    private static void ResetDictionary(List<byte[]> pDictionary,
+        int pClear)
+    {
+        pDictionary.Clear();
+        for (int i = 0; i < pClear; i++)
+            pDictionary.Add(new[] { (byte)i });
+        pDictionary.Add(null);
+        pDictionary.Add(null);
+    }
+
+    private static int ReadCode(byte[] pData, int pBitOffset,
+        int pCodeSize)
+    {
+        int value = 0;
+        for (int bit = 0; bit < pCodeSize; bit++)
+            if ((pData[(pBitOffset + bit) >> 3] &
+                 1 << ((pBitOffset + bit) & 7)) != 0)
+                value |= 1 << bit;
+        return value;
+    }
+
+    private static int ReadUInt16(byte[] pBytes, int pOffset)
+    {
+        return pBytes[pOffset] | pBytes[pOffset + 1] << 8;
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+
+    private static void NotEqual<T>(T pUnexpected, T pActual,
+        string pName)
+    {
+        if (EqualityComparer<T>.Default.Equals(pUnexpected, pActual))
+            throw new InvalidOperationException(pName +
+                ": did not expect " + pActual);
+    }
+
+    private static void SequenceEqual<T>(IReadOnlyList<T> pExpected,
+        IReadOnlyList<T> pActual, string pName)
+    {
+        Equal(pExpected.Count, pActual.Count, pName + " length");
+        for (int i = 0; i < pExpected.Count; i++)
+            Equal(pExpected[i], pActual[i], pName + " item " + i);
+    }
+
+    private static void True(bool pCondition, string pName)
+    {
+        if (!pCondition) throw new InvalidOperationException(pName);
+    }
+}

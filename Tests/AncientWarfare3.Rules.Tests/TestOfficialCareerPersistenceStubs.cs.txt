@@ -1,0 +1,10 @@
+namespace AncientWarfare3.core.db
+{
+    internal static class CourtOfficerTableItem
+    {
+        public static string GetTableName()
+        {
+            return "CourtOfficer";
+        }
+    }
+}

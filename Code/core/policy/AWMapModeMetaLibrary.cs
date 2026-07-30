@@ -90,6 +90,7 @@ namespace AncientWarfare3.core.policy
             FeudatoryAsset = AddOrGet(AWMapModeMetaTypes.FeudatoryId,
                 AWMapModeMetaTypes.Feudatory, FeudatoryMapModeService.POWER_ID,
                 GetFeudatoryMetaForZone);
+            FeudatoryAsset.click_action_zone = FeudatoryMapModeService.SelectPrince;
         }
 
         private static void ConfigureSchoolSelectionAsset(MetaTypeAsset pAsset)
@@ -358,15 +359,13 @@ namespace AncientWarfare3.core.policy
             if (FeudatoryMapModeService.TryGetSnapshot(city,
                     out FeudatorySnapshot snapshot))
             {
-                string seatName = string.IsNullOrEmpty(snapshot.SeatName)
-                    ? "#" + snapshot.SeatCityId
-                    : snapshot.SeatName;
-                string name = seatName +
-                    AW_L10n.Text("aw_feudatory_name_suffix", " Feudatory");
+                string name = FeudatoryMapModeRules.BuildCityLabel(
+                    snapshot.FeudatoryName, city.data.name);
                 string colorHex = FeudatoryMapModeService.GetColorHex(snapshot,
                     empire);
                 return GetMeta(AWMapModeMetaTypes.Feudatory,
-                    "feudatory:" + snapshot.FeudatoryId, name,
+                    "feudatory:" + snapshot.FeudatoryId + ":city:" + city.id,
+                    name,
                     MakeColor(colorHex));
             }
 
@@ -375,6 +374,21 @@ namespace AncientWarfare3.core.policy
             return GetMeta(AWMapModeMetaTypes.Feudatory,
                 "direct:" + empire.id, directName,
                 DirectKingdomColor(empire, MakeColor("#808080")));
+        }
+
+        internal static AWMapModeMetaObject GetFeudatoryIdentityMeta(
+            FeudatorySnapshot pSnapshot, Kingdom pEmpire)
+        {
+            if (pSnapshot == null || pSnapshot.FeudatoryId < 0L ||
+                pEmpire?.data == null || pEmpire.isRekt()) return null;
+            string name = FeudatoryMapModeRules.BuildCityLabel(
+                pSnapshot.FeudatoryName, pSnapshot.SeatName);
+            if (string.IsNullOrEmpty(name)) return null;
+            string colorHex = FeudatoryMapModeService.GetColorHex(pSnapshot,
+                pEmpire);
+            return GetMeta(AWMapModeMetaTypes.Feudatory,
+                "feudatory:" + pSnapshot.FeudatoryId + ":nameplate",
+                name, MakeColor(colorHex));
         }
 
         private static IMetaObject GetSchoolIdentityMetaForZone(TileZone pZone)
@@ -408,7 +422,11 @@ namespace AncientWarfare3.core.policy
         {
             string typeKey = AWMapModeMetaTypes.TryAsString(pType, out string id) ? id : pType.ToString();
             string fullKey = typeKey + ":" + pKey;
-            if (Metas.TryGetValue(fullKey, out AWMapModeMetaObject meta)) return meta;
+            if (Metas.TryGetValue(fullKey, out AWMapModeMetaObject meta))
+            {
+                if (meta.data.name != pName) meta.data.name = pName ?? "";
+                return meta;
+            }
             var obj = new AWMapModeMetaObject(StableId(pType, pKey), pName, pType, pColor);
             Metas[fullKey] = obj;
             if (MapModeMetaCacheRules.IsDynamicMetaKey(fullKey))
@@ -503,6 +521,15 @@ namespace AncientWarfare3.core.policy
         {
             ClearDynamicMetaCache();
             ClearMandateDynastyStatusCache();
+            TechMapModeService.ResetRuntime();
+            DevelopmentMapModeService.ResetRuntime();
+            WarClaimMapModeService.ResetRuntime();
+            WarCoreMapModeService.ResetRuntime();
+            VassalMapModeService.ResetRuntime();
+            MandateCoreMapModeService.ResetRuntime();
+            MandateDynastyMapModeService.ResetRuntime();
+            FeudatoryMapModeService.ResetRuntime();
+            SchoolMapModeService.ResetRuntime();
         }
 
         private static ColorAsset MandateDynastyColor(string pStatus)

@@ -1,0 +1,73 @@
+using AncientWarfare3.core.court;
+using System.Data.SQLite;
+
+internal static class OfficialCareerClosePersistenceSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE CourtOfficer (" +
+                    "OFFICER_ID INTEGER PRIMARY KEY,KINGDOM_ID INTEGER," +
+                    "ACTOR_ID INTEGER,ACTOR_NAME TEXT,CITY_ID INTEGER," +
+                    "LAYER TEXT,OFFICE_ID TEXT,SCHOOL_ID TEXT,INFLUENCE REAL," +
+                    "APPOINTED_YEAR INTEGER,APPOINTED_TIME REAL," +
+                    "ENDED_YEAR INTEGER,ENDED_TIME REAL,ACTIVE INTEGER," +
+                    "END_REASON TEXT,UPDATED_TIME REAL," +
+                    "RANK_AT_APPOINTMENT INTEGER," +
+                    "LOCAL_GRADE_AT_APPOINTMENT INTEGER," +
+                    "INSTITUTION_AT_APPOINTMENT TEXT,IS_ACTING INTEGER)");
+        Execute(db, "INSERT INTO CourtOfficer VALUES " +
+                    "(11,7,101,'Old Name',3,'central','chancellor','ru'," +
+                    "12.5,100,6000,-1,-1,1,'',6000,4,2,'zhou',0)");
+
+        using (SQLiteTransaction transaction = db.BeginTransaction())
+        {
+            var request = new OfficialCareerCloseRequest(101, 7,
+                "central", "chancellor", 108, 6480, "guest_service_ended");
+            OfficialCareerCloseToken token = OfficialCareerPersistence
+                .CaptureClose(db, transaction, request);
+            Execute(db, transaction,
+                "UPDATE CourtOfficer SET ACTOR_NAME='New Name'," +
+                "SCHOOL_ID='fa',INFLUENCE=33.75,UPDATED_TIME=6479 " +
+                "WHERE OFFICER_ID=11");
+            OfficialCareerPersistence.StageClose(db, transaction, token);
+            transaction.Commit();
+        }
+
+        Equal(0L, Scalar(db,
+            "SELECT ACTIVE FROM CourtOfficer WHERE OFFICER_ID=11"),
+            "stable career identity closes despite mutable projection changes");
+        Equal(108L, Scalar(db,
+            "SELECT ENDED_YEAR FROM CourtOfficer WHERE OFFICER_ID=11"),
+            "career close still writes the requested end year");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection pDb,
+        SQLiteTransaction pTransaction, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb, pTransaction);
+        command.ExecuteNonQuery();
+    }
+
+    private static long Scalar(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Equal(long pExpected, long pActual, string pName)
+    {
+        if (pExpected != pActual)
+            throw new InvalidOperationException(pName + ": expected " +
+                                                pExpected + ", got " +
+                                                pActual);
+    }
+}

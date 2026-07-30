@@ -33,7 +33,8 @@ namespace AncientWarfare3.core.lineage
             string pFeudatoryName = "", string pParentColor = "",
             string pPrinceShiLabel = "", int pGarrisonSize = 0,
             long pSuccessorActorId = -1, string pSuccessorName = "",
-            IReadOnlyList<FeudatoryCityDisplayRow> pCityRows = null)
+            IReadOnlyList<FeudatoryCityDisplayRow> pCityRows = null,
+            long pShiBranchId = -1)
         {
             FeudatoryId = pFeudatoryId;
             EmpireKingdomId = pEmpireKingdomId;
@@ -52,6 +53,7 @@ namespace AncientWarfare3.core.lineage
             GarrisonSize = Math.Max(0, pGarrisonSize);
             SuccessorActorId = pSuccessorActorId;
             SuccessorName = pSuccessorName ?? "";
+            ShiBranchId = pShiBranchId;
             int count = Math.Min(FeudatoryRules.MaximumCities, pCityIds?.Count ?? 0);
             _cityIds = new long[count];
             for (int i = 0; i < count; i++) _cityIds[i] = pCityIds[i];
@@ -78,6 +80,7 @@ namespace AncientWarfare3.core.lineage
         public int GarrisonSize { get; }
         public long SuccessorActorId { get; }
         public string SuccessorName { get; }
+        public long ShiBranchId { get; }
         public IReadOnlyList<long> CityIds => _cityIds;
         public IReadOnlyList<FeudatoryCityDisplayRow> CityRows => _cityRows;
 
@@ -89,7 +92,7 @@ namespace AncientWarfare3.core.lineage
                 pArmyId, pCaptainActorId, EmpireName, PrinceName, SeatName,
                 FeudatoryName, ParentColor, PrinceShiLabel,
                 pGarrisonSize < 0 ? GarrisonSize : pGarrisonSize,
-                SuccessorActorId, SuccessorName, _cityRows);
+                SuccessorActorId, SuccessorName, _cityRows, ShiBranchId);
         }
 
         public FeudatorySnapshot WithCitiesAndSeat(
@@ -104,7 +107,30 @@ namespace AncientWarfare3.core.lineage
                 pSeatName ?? SeatName, pFeudatoryName ?? FeudatoryName,
                 ParentColor,
                 PrinceShiLabel, GarrisonSize, SuccessorActorId, SuccessorName,
-                pCityRows ?? _cityRows);
+                pCityRows ?? _cityRows, ShiBranchId);
+        }
+
+        public FeudatorySnapshot WithPrince(long princeActorId,
+            string princeName, long shiBranchId, string princeShiLabel,
+            long successorActorId, string successorName)
+        {
+            return new FeudatorySnapshot(FeudatoryId, EmpireKingdomId,
+                princeActorId, SeatCityId, Autonomy, Loyalty, _cityIds,
+                GarrisonArmyId, GarrisonCaptainActorId, EmpireName,
+                princeName, SeatName, FeudatoryName, ParentColor,
+                princeShiLabel, GarrisonSize, successorActorId,
+                successorName, _cityRows, shiBranchId);
+        }
+
+        public FeudatorySnapshot WithAutonomyLoyalty(int autonomy,
+            int loyalty)
+        {
+            return new FeudatorySnapshot(FeudatoryId, EmpireKingdomId,
+                PrinceActorId, SeatCityId, autonomy, loyalty, _cityIds,
+                GarrisonArmyId, GarrisonCaptainActorId, EmpireName,
+                PrinceName, SeatName, FeudatoryName, ParentColor,
+                PrinceShiLabel, GarrisonSize, SuccessorActorId,
+                SuccessorName, _cityRows, ShiBranchId);
         }
     }
 }

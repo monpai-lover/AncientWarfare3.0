@@ -1,0 +1,55 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class OfficialCareerRewardCooldownPersistenceSqlTests
+{
+    public static void Run()
+    {
+        using var db = OpenDatabase("");
+        bool inserted = OfficialCareerRewardCooldownPersistence.TryRecord(
+            db, "OfficialCareerState", actorId: 44, kingdomId: 7,
+            rewardYear: 100, updatedTime: 12.5d);
+        Assert(inserted && Scalar(db,
+                "SELECT LAST_NOBLE_REWARD_YEAR FROM OfficialCareerState " +
+                "WHERE ACTOR_ID=44") == 100L,
+            "OfficialCareerRewardCooldownPersistenceSqlTests.GeneralWithoutCareerRowIsUpserted: detached cooldown persistence creates the missing row");
+
+        using var failingDb = OpenDatabase("CHECK(LAST_NOBLE_REWARD_YEAR<50)");
+        bool failed = OfficialCareerRewardCooldownPersistence.TryRecord(
+            failingDb, "OfficialCareerState", actorId: 45, kingdomId: 7,
+            rewardYear: 100, updatedTime: 13d);
+        Assert(!failed && !CourtMeritRewardRules.ShouldWriteHotCooldown(failed),
+            "OfficialCareerRewardCooldownPersistenceSqlTests.DbFailureBlocksHotCooldown: failed detached persistence cannot authorize hot cooldown writes");
+
+        using var zeroRowDb = OpenDatabase("");
+        bool zeroRow = OfficialCareerRewardCooldownPersistence.TryRecord(
+            zeroRowDb, "OfficialCareerState", actorId: -1, kingdomId: 7,
+            rewardYear: 100, updatedTime: 13d);
+        Assert(!zeroRow && Scalar(zeroRowDb,
+                "SELECT COUNT(*) FROM OfficialCareerState") == 0L,
+            "OfficialCareerRewardCooldownPersistenceSqlTests.InvalidIdentityReturnsZeroRowFailure: invalid identity cannot be persisted or authorize hot state");
+    }
+
+    private static SQLiteConnection OpenDatabase(string check)
+    {
+        var db = new SQLiteConnection("Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using var command = new SQLiteCommand(
+            "CREATE TABLE OfficialCareerState (ACTOR_ID INTEGER PRIMARY KEY," +
+            "KINGDOM_ID INTEGER,LAST_NOBLE_REWARD_YEAR INTEGER " + check +
+            ",UPDATED_TIME REAL)", db);
+        command.ExecuteNonQuery();
+        return db;
+    }
+
+    private static long Scalar(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static void Assert(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

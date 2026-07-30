@@ -19,6 +19,7 @@ namespace AncientWarfare3.core.lineage
     {
         private static SQLiteConnection DB => LineageArchiveManager.Instance?.OperatingDB;
         private static bool Ready => DB != null && LineageArchiveManager.Instance.InitializeSuccessful;
+        private static HistoryText H(string pKey) => HistoryLocalizationRules.H(pKey);
 
         public static bool TryGrantBestFief(Kingdom pKingdom, Actor pGeneral, string pReason)
         {
@@ -31,7 +32,7 @@ namespace AncientWarfare3.core.lineage
         public static bool GrantFief(Kingdom pKingdom, Actor pGeneral, City pCity, string pReason)
         {
             if (pKingdom?.data == null || pGeneral?.data == null || pCity?.data == null || !Ready) return false;
-            if (!CanGrantCity(pKingdom, pGeneral, pCity)) return false;
+            if (!CanGrantFief(pKingdom, pGeneral, pCity)) return false;
 
             long grantId = TableIdAllocator.Next(DB, FiefGrantTableItem.GetTableName(), "GRANT_ID");
             double now = LineageService.CurTime();
@@ -147,54 +148,73 @@ namespace AncientWarfare3.core.lineage
 
         public static void RevokeFief(City pCity, string pReason)
         {
-            if (!Ready || pCity?.data == null) return;
-            FiefInfo info = GetActiveFief(pCity);
-            if (info == null) return;
-            try
-            {
-                DB.UpdateValue(FiefGrantTableItem.GetTableName(),
-                    new List<SimpleColumnConstraint>
-                    {
-                        SimpleColumnConstraint.CreateEq("CITY_ID", pCity.id),
-                        SimpleColumnConstraint.CreateEq("REVOKED", 0)
-                    },
-                    ColumnVal.Create("END_TIME", LineageService.CurTime()),
-                    ColumnVal.Create("REVOKED", 1),
-                    ColumnVal.Create("REVOKE_REASON", pReason ?? ""));
-
-                Actor general = FindActor(info.general_actor_id);
-                if (general?.data != null)
-                    general.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
-                CacheNoActiveFief(pCity);
-            }
-            catch { }
+            TryRevokeFief(pCity, pReason);
         }
 
         public static void RevokeActorFief(Actor pActor, string pReason)
         {
-            if (pActor?.data == null) return;
-            City city = GetFiefCity(pActor);
-            if (city?.data != null)
-            {
-                RevokeFief(city, pReason);
-                return;
-            }
+            TryRevokeActorFief(pActor, pReason);
+        }
 
-            pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
-            if (!Ready) return;
+        public static bool TryRevokeActorFief(Actor pActor, string pReason)
+        {
+            if (!Ready || pActor?.data == null) return false;
+            City city = GetFiefCity(pActor);
+            if (city?.data != null) return TryRevokeFief(city, pReason);
+
             try
             {
-                DB.UpdateValue(FiefGrantTableItem.GetTableName(),
-                    new List<SimpleColumnConstraint>
-                    {
-                        SimpleColumnConstraint.CreateEq("GENERAL_ACTOR_ID", pActor.data.id),
-                        SimpleColumnConstraint.CreateEq("REVOKED", 0)
-                    },
-                    ColumnVal.Create("END_TIME", LineageService.CurTime()),
-                    ColumnVal.Create("REVOKED", 1),
-                    ColumnVal.Create("REVOKE_REASON", pReason ?? ""));
+                using var update = new SQLiteCommand(DB);
+                update.CommandText = "UPDATE " +
+                    FiefGrantTableItem.GetTableName() +
+                    " SET END_TIME=@time,REVOKED=1,REVOKE_REASON=@reason" +
+                    " WHERE GENERAL_ACTOR_ID=@actor AND REVOKED=0" +
+                    " AND END_TIME<0";
+                update.Parameters.AddWithValue("@time", LineageService.CurTime());
+                update.Parameters.AddWithValue("@reason", pReason ?? "");
+                update.Parameters.AddWithValue("@actor", pActor.data.id);
+                if (update.ExecuteNonQuery() != 1) return false;
+                pActor.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+                return true;
             }
-            catch { }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Actor fief revocation failed: " +
+                                    exception.Message);
+                return false;
+            }
+        }
+
+        private static bool TryRevokeFief(City pCity, string pReason)
+        {
+            if (!Ready || pCity?.data == null) return false;
+            FiefInfo info = GetActiveFief(pCity);
+            if (info == null) return false;
+            try
+            {
+                using var update = new SQLiteCommand(DB);
+                update.CommandText = "UPDATE " +
+                    FiefGrantTableItem.GetTableName() +
+                    " SET END_TIME=@time,REVOKED=1,REVOKE_REASON=@reason" +
+                    " WHERE CITY_ID=@city AND GENERAL_ACTOR_ID=@actor" +
+                    " AND REVOKED=0 AND END_TIME<0";
+                update.Parameters.AddWithValue("@time", LineageService.CurTime());
+                update.Parameters.AddWithValue("@reason", pReason ?? "");
+                update.Parameters.AddWithValue("@city", pCity.id);
+                update.Parameters.AddWithValue("@actor", info.general_actor_id);
+                if (update.ExecuteNonQuery() != 1) return false;
+                Actor general = FindActor(info.general_actor_id);
+                if (general?.data != null)
+                    general.data.set(LineageKeys.GENERAL_FIEF_CITY_ID, -1L);
+                CacheNoActiveFief(pCity);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Fief revocation failed: " +
+                                    exception.Message);
+                return false;
+            }
         }
 
         private static bool TryReadCachedFief(City pCity, out FiefInfo pInfo)
@@ -272,6 +292,14 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool CanGrantFief(Kingdom pKingdom, Actor pGeneral,
+            City pCity)
+        {
+            return Ready && pGeneral?.data != null &&
+                   GetFiefCityId(pGeneral) < 0 &&
+                   CanGrantCity(pKingdom, pGeneral, pCity);
+        }
+
         private static float ScoreCity(City pCity, Actor pGeneral)
         {
             float score = 10f;
@@ -302,19 +330,22 @@ namespace AncientWarfare3.core.lineage
 
         private static void RecordFiefGranted(Kingdom pKingdom, Actor pGeneral, City pCity)
         {
+            HistoryText content = H("aw_hist_edict_fief_grant_prefix") +
+                                  HistoryText.Actor(pGeneral) +
+                                  H("aw_hist_edict_fief_grant_mid") +
+                                  HistoryText.City(pCity, pKingdom) +
+                                  H("aw_hist_edict_fief_grant_suffix");
             HistoryWriter.RecordPerson(pGeneral.data.id, pKingdom, pGeneral.getName(),
-                PersonEvent.FIEF_GRANTED,
-                HistoryText.Actor(pGeneral) + " \u53D7\u5C01\u4E8E" + HistoryText.City(pCity, pKingdom),
+                PersonEvent.FIEF_GRANTED, content,
                 ChronicleCategory.HONOR,
                 HistoryTarget.City(pCity));
 
             HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.FIEF_GRANTED,
-                HistoryText.Kingdom(pKingdom) + " \u5C01" + HistoryText.Actor(pGeneral) +
-                " \u4E8E" + HistoryText.City(pCity, pKingdom),
+                content,
                 HistoryTarget.Actor(pGeneral));
 
             HistoryWriter.RecordCity(pCity, pKingdom, CityEvent.FIEF_GRANTED,
-                HistoryText.City(pCity, pKingdom) + " \u6210\u4E3A" + HistoryText.Actor(pGeneral) + " \u5C01\u5730",
+                content,
                 HistoryTarget.Actor(pGeneral));
         }
 

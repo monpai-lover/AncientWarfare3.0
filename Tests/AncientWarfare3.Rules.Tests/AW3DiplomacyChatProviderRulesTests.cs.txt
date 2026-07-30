@@ -1,0 +1,249 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using AncientWarfare3.api.multiplayer;
+
+internal static class AW3DiplomacyChatProviderRulesTests
+{
+    public static void Run()
+    {
+        ProviderOwnershipIsReferenceBased();
+        FacadeForwardsOnlyTheOwnedProvider();
+        FacadeIsolatesChangedSubscribers();
+        PublicModelsAreImmutableAndTransportFree();
+        DiplomacyComposerKeepsActionsAndAddsOptionalChat();
+        DiplomacyChatTextIsLocalized();
+    }
+
+    private static void ProviderOwnershipIsReferenceBased()
+    {
+        var first = new FakeProvider();
+        var second = new FakeProvider();
+
+        Equal(true, AW3MultiplayerDiplomacyChatFacade.Register(first),
+            "the first provider owns the AW3 chat surface");
+        Equal(true, AW3MultiplayerDiplomacyChatFacade.Register(first),
+            "same-reference registration is idempotent");
+        Same(first, AW3MultiplayerDiplomacyChatFacade.Current,
+            "the owned provider is observable");
+        Equal(false, AW3MultiplayerDiplomacyChatFacade.Register(second),
+            "a different provider cannot replace the live owner");
+        Equal(false, AW3MultiplayerDiplomacyChatFacade.Unregister(second),
+            "a non-owner cannot unregister chat");
+        Same(first, AW3MultiplayerDiplomacyChatFacade.Current,
+            "failed unregister preserves the owner");
+        Equal(true, AW3MultiplayerDiplomacyChatFacade.Unregister(first),
+            "the owner can unregister itself");
+        Same(null, AW3MultiplayerDiplomacyChatFacade.Current,
+            "unregister clears the provider");
+    }
+
+    private static void FacadeForwardsOnlyTheOwnedProvider()
+    {
+        var provider = new FakeProvider();
+        var other = new FakeProvider();
+        int changed = 0;
+        Action handler = () => changed++;
+        AW3MultiplayerDiplomacyChatFacade.Changed += handler;
+        try
+        {
+            Equal(true, AW3MultiplayerDiplomacyChatFacade.Register(provider),
+                "provider registration succeeds");
+            Equal(1, changed,
+                "registration refreshes an open AW3 diplomacy window");
+            provider.RaiseChanged();
+            Equal(2, changed,
+                "the owned provider refreshes the AW3 diplomacy window");
+            Equal(false, AW3MultiplayerDiplomacyChatFacade.Register(other),
+                "a refused provider remains detached");
+            other.RaiseChanged();
+            Equal(2, changed,
+                "a refused provider cannot refresh the AW3 window");
+            Equal(true, AW3MultiplayerDiplomacyChatFacade.Unregister(provider),
+                "owned provider unregisters");
+            Equal(3, changed,
+                "unregister refreshes the AW3 diplomacy window");
+            provider.RaiseChanged();
+            Equal(3, changed,
+                "an unregistered provider is detached");
+        }
+        finally
+        {
+            AW3MultiplayerDiplomacyChatFacade.Changed -= handler;
+            AW3MultiplayerDiplomacyChatFacade.Unregister(provider);
+            AW3MultiplayerDiplomacyChatFacade.Unregister(other);
+        }
+    }
+
+    private static void FacadeIsolatesChangedSubscribers()
+    {
+        var provider = new FakeProvider();
+        int healthyCalls = 0;
+        Action failing = () => throw new InvalidOperationException("ui failed");
+        Action healthy = () => healthyCalls++;
+        AW3MultiplayerDiplomacyChatFacade.Changed += failing;
+        AW3MultiplayerDiplomacyChatFacade.Changed += healthy;
+        try
+        {
+            Equal(true, AW3MultiplayerDiplomacyChatFacade.Register(provider),
+                "a failing window listener cannot break provider ownership");
+            Equal(1, healthyCalls,
+                "later window listeners still receive registration change");
+            provider.RaiseChanged();
+            Equal(2, healthyCalls,
+                "provider changes isolate one failing window listener");
+        }
+        finally
+        {
+            AW3MultiplayerDiplomacyChatFacade.Changed -= failing;
+            AW3MultiplayerDiplomacyChatFacade.Changed -= healthy;
+            AW3MultiplayerDiplomacyChatFacade.Unregister(provider);
+        }
+    }
+
+    private static void PublicModelsAreImmutableAndTransportFree()
+    {
+        var entry = new AW3DiplomacyChatEntry(7, "player-one", 11, 21,
+            1234, "hello");
+        Equal(7L, entry.HostSequence, "host sequence is retained");
+        Equal("player-one", entry.SenderPlayerId,
+            "sender player identity is retained");
+        Equal(11L, entry.SenderCountryId,
+            "sender country identity is retained");
+        Equal(21L, entry.SenderRulerActorId,
+            "sender ruler identity is retained");
+        Equal(1234L, entry.HostTimestampTicks,
+            "host timestamp is retained");
+        Equal("hello", entry.Text, "chat text is retained");
+
+        Type[] publicTypes = typeof(IAW3DiplomacyChatProvider).Assembly
+            .GetExportedTypes()
+            .Where(type => type.Namespace ==
+                "AncientWarfare3.api.multiplayer" &&
+                (type.Name.StartsWith("AW3DiplomacyChat",
+                     StringComparison.Ordinal) ||
+                 type == typeof(IAW3DiplomacyChatProvider) ||
+                 type == typeof(AW3MultiplayerDiplomacyChatFacade)))
+            .ToArray();
+        foreach (Type type in publicTypes)
+        {
+            foreach (PropertyInfo property in type.GetProperties())
+                Equal(null, property.SetMethod,
+                    type.Name + "." + property.Name + " is immutable");
+            foreach (MethodInfo method in type.GetMethods())
+            {
+                AssertTransportFree(method.ReturnType,
+                    type.Name + "." + method.Name + " return type");
+                foreach (ParameterInfo parameter in method.GetParameters())
+                    AssertTransportFree(parameter.ParameterType,
+                        type.Name + "." + method.Name + " parameter");
+            }
+        }
+    }
+
+    private static void DiplomacyComposerKeepsActionsAndAddsOptionalChat()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string window = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "windows", "DiplomacyConversationWindow.cs"));
+        string bubble = File.ReadAllText(Path.Combine(root, "Code", "ui",
+            "items", "AW3DiplomacyChatBubbleItem.cs"));
+
+        Contains(window,
+            "AW3MultiplayerDiplomacyChatFacade.Changed += OnMultiplayerChatChanged;",
+            "the open diplomacy window subscribes to provider changes");
+        Contains(window,
+            "AW3MultiplayerDiplomacyChatFacade.Changed -= OnMultiplayerChatChanged;",
+            "destroying the diplomacy window detaches provider changes");
+        Contains(window, "private void SendComposer()",
+            "the existing send button routes through one composer command");
+        Contains(window, "private void SendMultiplayerChat(",
+            "chat send remains distinct from AW3 proposal execution");
+        Contains(window,
+            "bool chatMode = provider != null && !hasSelection;",
+            "chat replaces the summary only with no selected AW3 action");
+        Contains(window, "_composerSummary.gameObject.SetActive(!chatMode);",
+            "the original no-provider/action summary remains available");
+        Contains(window, "_chatInput.gameObject.SetActive(chatMode);",
+            "one optional chat input occupies the composer");
+        Contains(window, "_chatInput.lineType = InputField.LineType.SingleLine;",
+            "diplomacy chat is a single-line input");
+        Contains(window, "_chatInput.text = string.Empty;",
+            "changing country pair resets drafted text");
+        Contains(window, "provider.Read(baseKingdom.id, selected.id)",
+            "messages are read for the visible country pair");
+        Contains(window,
+            "AW3DiplomacyChatBubbleItem.Create(_chatContent)",
+            "multiplayer entries use the existing conversation viewport");
+        Contains(bubble, "internal sealed class AW3DiplomacyChatBubbleItem",
+            "multiplayer messages have a distinct bubble item");
+        Contains(bubble, "public void Bind(AW3DiplomacyChatEntry",
+            "the distinct bubble binds immutable public chat entries");
+    }
+
+    private static void DiplomacyChatTextIsLocalized()
+    {
+        string localization = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Locales", "aw3_diplomacy.csv"));
+        Contains(localization, "aw_diplomacy_chat_placeholder,",
+            "the chat composer placeholder is localized");
+        Contains(localization, "aw_diplomacy_chat_send_failed,",
+            "chat send failure is localized");
+    }
+
+    private static void AssertTransportFree(Type type, string message)
+    {
+        string surface = type.FullName ?? type.Name;
+        string[] forbidden =
+        {
+            "Network", "Connection", "Socket", "Transport", "Tcp", "Lan"
+        };
+        foreach (string token in forbidden)
+            Equal(false, surface.Contains(token,
+                    StringComparison.OrdinalIgnoreCase),
+                message + " contains " + token);
+    }
+
+    private sealed class FakeProvider : IAW3DiplomacyChatProvider
+    {
+        public event Action Changed;
+
+        public AW3DiplomacyChatAvailability GetAvailability(
+            long baseCountryId, long targetCountryId) =>
+            new AW3DiplomacyChatAvailability(
+                AW3DiplomacyChatAvailabilityStatus.Available, string.Empty);
+
+        public IReadOnlyList<AW3DiplomacyChatEntry> Read(
+            long baseCountryId, long targetCountryId) =>
+            Array.Empty<AW3DiplomacyChatEntry>();
+
+        public AW3DiplomacyChatSendResult Send(long baseCountryId,
+            long targetCountryId, string text) =>
+            new AW3DiplomacyChatSendResult(
+                AW3DiplomacyChatSendStatus.Queued, string.Empty);
+
+        public void RaiseChanged() => Changed?.Invoke();
+    }
+
+    private static void Contains(string source, string expected,
+        string message)
+    {
+        if (!source.Contains(expected, StringComparison.Ordinal))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Same(object expected, object actual, string message)
+    {
+        if (!ReferenceEquals(expected, actual))
+            throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(message +
+                $": expected={expected}, actual={actual}");
+    }
+}

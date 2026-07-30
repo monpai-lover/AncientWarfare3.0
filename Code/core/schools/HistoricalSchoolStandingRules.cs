@@ -46,10 +46,21 @@ namespace AncientWarfare3.core.schools
             float pReputation)
         {
             if (pCurrent != HistoricalSchoolStanding.Disciple) return pCurrent;
-            return pMembershipYears >= TeacherMembershipYears &&
-                   pReputation >= TeacherReputation
+            return pMembershipYears >= TeacherMembershipYears
                 ? HistoricalSchoolStanding.Teacher
                 : pCurrent;
+        }
+
+        public static int PromotionDueYear(
+            HistoricalSchoolStanding pCurrent,
+            int pMembershipStartYear)
+        {
+            if (pCurrent != HistoricalSchoolStanding.Disciple ||
+                pMembershipStartYear < 0)
+                return -1;
+            return pMembershipStartYear > int.MaxValue - TeacherMembershipYears
+                ? int.MaxValue
+                : pMembershipStartYear + TeacherMembershipYears;
         }
 
         public static bool CanConvert(

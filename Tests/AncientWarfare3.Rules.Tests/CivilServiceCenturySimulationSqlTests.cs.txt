@@ -1,0 +1,360 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceCenturySimulationSqlTests
+{
+    private const long KingdomId = 7L;
+    private static long _nextActorId = 10000L;
+    private static long _nextCandidateId = 1L;
+
+    public static void Run()
+    {
+        ACompleteCenturyMaintainsSupplyAndClearsExamVacancies();
+        DynamicReserveConvergesAcrossACompleteCentury();
+    }
+
+    private static void DynamicReserveConvergesAcrossACompleteCentury()
+    {
+        const int establishedPosts = 20;
+        const int finalCapacity = 20;
+        int activeOfficials = 14;
+        int vacancies = establishedPosts - activeOfficials;
+        long nextActorId = 900000L;
+        var waiting = new List<CivilServiceExamCandidateFacts>();
+        var admittedByOrigin = new Dictionary<string, int>
+        {
+            [CivilServiceExamRules.NobleOrigin] = 0,
+            [CivilServiceExamRules.DeclinedNobleOrigin] = 0,
+            [CivilServiceExamRules.CommonerOrigin] = 0
+        };
+        int completedSittings = 0;
+        int maxWaiting = 0;
+        int frozenFirstWaiting = -1;
+        int frozenFirstReserve = -1;
+        int frozenFirstQuota = -1;
+
+        for (int year = 1; year <= 100; year++)
+        {
+            if (year > 1)
+            {
+                int retired = Math.Min(2, activeOfficials);
+                activeOfficials -= retired;
+                vacancies += retired;
+            }
+            if ((year - 1) % 3 != 0) continue;
+
+            int waitingAtOpening = waiting.Count;
+            int reserveTarget = CivilServiceExamRules.ReserveTarget(
+                establishedPosts);
+            int admissionQuota = CivilServiceExamRules.FinalAdmissionQuota(
+                centralVacancies: vacancies, cityVacancies: 0,
+                waitingCandidateCount: waitingAtOpening,
+                reserveTarget: reserveTarget,
+                candidateCapacity: finalCapacity);
+            if (completedSittings == 0)
+            {
+                frozenFirstWaiting = waitingAtOpening;
+                frozenFirstReserve = reserveTarget;
+                frozenFirstQuota = admissionQuota;
+            }
+
+            var finalists = new List<CivilServiceExamCandidateFacts>();
+            foreach (string origin in admittedByOrigin.Keys)
+            {
+                for (int index = 0; index < 8; index++)
+                {
+                    finalists.Add(new CivilServiceExamCandidateFacts(
+                        nextActorId++, origin, 90 - index,
+                        80 - index, 70 - index));
+                }
+            }
+            IReadOnlyList<CivilServiceExamCandidateFacts> admitted =
+                CivilServiceExamRules.SelectCandidates(finalists,
+                    admissionQuota);
+            True(admitted.Count > 0,
+                "every triennial sitting admits at least one graduate");
+            foreach (CivilServiceExamCandidateFacts candidate in admitted)
+            {
+                waiting.Add(candidate);
+                admittedByOrigin[candidate.SocialOrigin]++;
+            }
+
+            int appointments = Math.Min(vacancies, waiting.Count);
+            waiting.RemoveRange(0, appointments);
+            activeOfficials += appointments;
+            vacancies -= appointments;
+            maxWaiting = Math.Max(maxWaiting, waiting.Count);
+            completedSittings++;
+        }
+
+        Equal(0, vacancies,
+            "the dynamic reserve clears every accumulated vacancy by year 100");
+        Equal(establishedPosts, activeOfficials,
+            "all established posts are occupied after the final sitting");
+        Equal(CivilServiceExamRules.ReserveTarget(establishedPosts),
+            waiting.Count,
+            "the waiting pool converges on the bounded reserve target");
+        True(maxWaiting <= CivilServiceExamRules.MaximumWaitingReserve,
+            "the century waiting pool never exceeds the configured ceiling");
+        True(completedSittings >= 34,
+            "the full century contains every triennial sitting");
+        foreach (KeyValuePair<string, int> origin in admittedByOrigin)
+            True(origin.Value > 0,
+                origin.Key + " participation does not collapse");
+        Equal(0, frozenFirstWaiting,
+            "the first session keeps its opening waiting snapshot");
+        Equal(10, frozenFirstReserve,
+            "the first session keeps its reserve target snapshot");
+        Equal(16, frozenFirstQuota,
+            "the first session keeps its admission quota snapshot");
+
+        Console.WriteLine("AW3 civil-service reserve simulation: sittings=" +
+            completedSittings + ", waiting=" + waiting.Count +
+            ", max-waiting=" + maxWaiting + ", vacancies=" + vacancies +
+            ".");
+    }
+
+    private static void ACompleteCenturyMaintainsSupplyAndClearsExamVacancies()
+    {
+        using var db = OpenDatabase();
+        var slaveActorIds = new HashSet<long>();
+        var periodCandidates = new int[4];
+        var periodQualifications = new int[4];
+        var periodCompletedSittings = new int[4];
+        var periodZeroCandidateSittings = new int[4];
+        int vacancies = 6;
+        int totalAppointments = 0;
+
+        for (int year = 1; year <= 100; year++)
+        {
+            AddEducatedCohort(db, year);
+            AddArchivedSlaveNoise(db, year, slaveActorIds);
+            AddRecentSlaveGraduateNoise(db, year, slaveActorIds);
+            if (year > 1) vacancies += RetireOfficers(db, count: 2);
+            if ((year - 1) % 3 != 0) continue;
+
+            long sessionId = 100000L + year;
+            Execute(db, "INSERT INTO Session VALUES (" + sessionId + "," +
+                KingdomId + "," + year + ",'completed')");
+            int sittingCandidates = 0;
+            foreach (string origin in new[]
+                     {
+                         CivilServiceExamRules.NobleOrigin,
+                         CivilServiceExamRules.DeclinedNobleOrigin,
+                         CivilServiceExamRules.CommonerOrigin
+                     })
+            {
+                List<long> candidates =
+                    CivilServiceExamCandidatePoolQuery.LoadLocal(db,
+                        "Membership", "Archive", "Officer", "Career",
+                        "Institution", "Candidate", "Session", KingdomId,
+                        origin, pYear: year, pTributeMode: true,
+                        pLimit: CivilServiceExamRules.CandidateLimit);
+                foreach (long actorId in candidates)
+                {
+                    False(slaveActorIds.Contains(actorId),
+                        "slave archive noise cannot enter the sitting at year " +
+                        year);
+                    Execute(db, "INSERT INTO Candidate VALUES (" +
+                        _nextCandidateId++ + "," + actorId + "," + KingdomId +
+                        "," + sessionId + ",'gongshi',1)");
+                    sittingCandidates++;
+                }
+            }
+
+            int period = Math.Min(3, (year - 1) / 25);
+            periodCompletedSittings[period]++;
+            periodCandidates[period] += sittingCandidates;
+            periodQualifications[period] += sittingCandidates;
+            if (sittingCandidates == 0)
+                periodZeroCandidateSittings[period]++;
+
+            List<long> appointees = CivilServiceFormalCandidateQuery.Load(db,
+                "Candidate", "Session", "Archive", "Officer", KingdomId,
+                vacancies);
+            foreach (long actorId in appointees)
+            {
+                False(slaveActorIds.Contains(actorId),
+                    "slave graduate noise cannot enter office at year " + year);
+                Execute(db, "INSERT INTO Officer VALUES (" + actorId + "," +
+                    KingdomId + ",'central','granary_officer',1)");
+            }
+            vacancies -= appointees.Count;
+            totalAppointments += appointees.Count;
+            Equal(0, vacancies,
+                "each completed sitting clears accumulated vacancies at year " +
+                year);
+        }
+
+        for (int period = 0; period < 4; period++)
+        {
+            True(periodCompletedSittings[period] >= 8,
+                "every 25-year period contains regular completed sittings");
+            True(periodCandidates[period] >= 140,
+                "candidate supply remains stable in period " + (period + 1));
+            Equal(periodCandidates[period], periodQualifications[period],
+                "the simulation preserves every awarded qualification");
+            Equal(0, periodZeroCandidateSittings[period],
+                "no completed sitting has zero candidates in period " +
+                (period + 1));
+        }
+        True(totalAppointments >= 190,
+            "a century of retirements is replaced without vacancy accumulation");
+
+        Console.WriteLine(
+            "AW3 civil-service century simulation: candidates=" +
+            string.Join("/", periodCandidates) + ", completed=" +
+            string.Join("/", periodCompletedSittings) +
+            ", zero-candidate=0/0/0/0, remaining-vacancies=" + vacancies +
+            ", appointments=" + totalAppointments + ".");
+    }
+
+    private static void AddEducatedCohort(SQLiteConnection pDb, int pYear)
+    {
+        AddStudents(pDb, pYear, CivilServiceExamRules.NobleOrigin,
+            count: 2);
+        AddStudents(pDb, pYear, CivilServiceExamRules.DeclinedNobleOrigin,
+            count: 2);
+        AddStudents(pDb, pYear, CivilServiceExamRules.CommonerOrigin,
+            count: 2);
+    }
+
+    private static void AddStudents(SQLiteConnection pDb, int pYear,
+        string pOrigin, int count)
+    {
+        for (int index = 0; index < count; index++)
+        {
+            long actorId = _nextActorId++;
+            string status = pOrigin == CivilServiceExamRules.NobleOrigin
+                ? "noble"
+                : "none";
+            int everNoble = pOrigin ==
+                            CivilServiceExamRules.DeclinedNobleOrigin
+                ? 1
+                : 0;
+            long lineageId = everNoble == 1 ? actorId : -1L;
+            InsertArchive(pDb, actorId, status, everNoble, lineageId,
+                alive: 1);
+            InsertMembership(pDb, actorId, pYear - 1);
+        }
+    }
+
+    private static void AddArchivedSlaveNoise(SQLiteConnection pDb, int pYear,
+        HashSet<long> pSlaveActorIds)
+    {
+        for (int index = 0; index < 2; index++)
+        {
+            long actorId = _nextActorId++;
+            pSlaveActorIds.Add(actorId);
+            InsertArchive(pDb, actorId, "slave_lineage",
+                everNoble: index, lineageId: index == 0 ? -1L : actorId,
+                alive: 1);
+            InsertMembership(pDb, actorId, pYear);
+        }
+    }
+
+    private static void AddRecentSlaveGraduateNoise(SQLiteConnection pDb,
+        int pYear, HashSet<long> pSlaveActorIds)
+    {
+        long actorId = _nextActorId++;
+        pSlaveActorIds.Add(actorId);
+        InsertArchive(pDb, actorId, "slave_lineage", everNoble: 0,
+            lineageId: -1L, alive: 1);
+        long sessionId = 500000L + pYear;
+        Execute(pDb, "INSERT INTO Session VALUES (" + sessionId + "," +
+            KingdomId + "," + (1000 + pYear) + ",'completed')");
+        Execute(pDb, "INSERT INTO Candidate VALUES (" + _nextCandidateId++ +
+            "," + actorId + "," + KingdomId + "," + sessionId +
+            ",'gongshi',99)");
+    }
+
+    private static int RetireOfficers(SQLiteConnection pDb, int count)
+    {
+        var actorIds = new List<long>();
+        using (var command = new SQLiteCommand(
+                   "SELECT ACTOR_ID FROM Officer WHERE ACTIVE=1 " +
+                   "ORDER BY ACTOR_ID LIMIT @limit", pDb))
+        {
+            command.Parameters.AddWithValue("@limit", count);
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+                actorIds.Add(Convert.ToInt64(reader.GetValue(0)));
+        }
+        foreach (long actorId in actorIds)
+        {
+            Execute(pDb, "UPDATE Officer SET ACTIVE=0 WHERE ACTOR_ID=" +
+                actorId);
+            Execute(pDb, "UPDATE Archive SET IS_ALIVE=0 WHERE ID=" + actorId);
+        }
+        return actorIds.Count;
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        _nextActorId = 10000L;
+        _nextCandidateId = 1L;
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        Execute(db, "CREATE TABLE Membership (ACTOR_ID INTEGER," +
+            "SCHOOL_ID TEXT,ACTIVE INTEGER,START_YEAR INTEGER," +
+            "REPUTATION REAL)");
+        Execute(db, "CREATE TABLE Archive (ID INTEGER,IS_ALIVE INTEGER," +
+            "SEX INTEGER,STATUS TEXT,KINGDOM_ID INTEGER," +
+            "EVER_NOBLE_BLOOD INTEGER,LINEAGE_ID INTEGER)");
+        Execute(db, "CREATE TABLE Officer (ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,LAYER TEXT,OFFICE_ID TEXT,ACTIVE INTEGER)");
+        Execute(db, "CREATE TABLE Career (ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER)");
+        Execute(db, "CREATE TABLE Institution (SCHOOL_ID TEXT," +
+            "INSTITUTION_ID INTEGER,ACTIVE INTEGER)");
+        Execute(db, "CREATE TABLE Candidate (ID INTEGER,ACTOR_ID INTEGER," +
+            "KINGDOM_ID INTEGER,SESSION_ID INTEGER,QUALIFICATION TEXT," +
+            "ENTRY_BONUS INTEGER)");
+        Execute(db, "CREATE TABLE Session (ID INTEGER,KINGDOM_ID INTEGER," +
+            "CYCLE_YEAR INTEGER,STATUS TEXT)");
+        return db;
+    }
+
+    private static void InsertMembership(SQLiteConnection pDb, long pActorId,
+        int pStartYear)
+    {
+        Execute(pDb, "INSERT INTO Membership VALUES (" + pActorId +
+            ",'ru',1," + pStartYear + ",10)");
+    }
+
+    private static void InsertArchive(SQLiteConnection pDb, long pActorId,
+        string pStatus, int everNoble, long lineageId, int alive)
+    {
+        Execute(pDb, "INSERT INTO Archive VALUES (" + pActorId + "," +
+            alive + ",0,'" + pStatus + "'," + KingdomId + "," +
+            everNoble + "," + lineageId + ")");
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static void True(bool pValue, string pMessage)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pMessage + ": expected true");
+    }
+
+    private static void False(bool pValue, string pMessage)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pMessage + ": expected false");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (EqualityComparer<T>.Default.Equals(pExpected, pActual)) return;
+        throw new InvalidOperationException(pMessage + ": expected " +
+            pExpected + ", actual " + pActual);
+    }
+}

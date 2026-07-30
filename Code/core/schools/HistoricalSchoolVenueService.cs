@@ -124,11 +124,13 @@ namespace AncientWarfare3.core.schools
             WorldTile origin = pActor?.current_tile;
             if (pCity?.data == null || origin == null) return false;
             OccupiedByCity.TryGetValue(pCity.data.id, out HashSet<long> occupied);
-            int start = PositiveModulo(StableHash(pActor, pSchoolId, pKind),
+            long stableKey = StableHash(pActor, pSchoolId, pKind);
+            int probeCount = HistoricalSchoolVenueRules.IdleRoamProbeCount(
                 LocalSearchCount);
-            for (int offset = 0; offset < LocalSearchCount; offset++)
+            for (int probe = 0; probe < probeCount; probe++)
             {
-                int index = (start + offset) % LocalSearchCount;
+                int index = HistoricalSchoolVenueRules.IdleRoamProbeIndex(
+                    stableKey, probe, LocalSearchCount);
                 int dx = index % LocalDiameter - 18;
                 int dy = index / LocalDiameter - 18;
                 int distanceSquared = dx * dx + dy * dy;

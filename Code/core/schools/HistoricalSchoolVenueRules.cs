@@ -23,6 +23,7 @@ namespace AncientWarfare3.core.schools
     {
         public const int IdleRoamMinDistanceSquared = 6 * 6;
         public const int IdleRoamMaxDistanceSquared = 18 * 18;
+        public const int IdleRoamProbeBudget = 64;
 
         public static HistoricalSchoolVenueSourceKind SelectSource(
             bool pAcademyAvailable,
@@ -51,6 +52,12 @@ namespace AncientWarfare3.core.schools
         {
             return buildingExists && buildingUsable && !underConstruction &&
                    attachedToCity && belongsToRequestedCity;
+        }
+
+        public static bool IsAttachedToRequestedCity(
+            bool directAttachment, bool tileAttachment)
+        {
+            return directAttachment || tileAttachment;
         }
 
         public static bool IsDebateLayoutValid(
@@ -90,6 +97,23 @@ namespace AncientWarfare3.core.schools
                    pDistanceSquared <= IdleRoamMaxDistanceSquared;
         }
 
+        public static int IdleRoamProbeCount(int pCandidateCount)
+        {
+            return Math.Max(0, Math.Min(IdleRoamProbeBudget,
+                pCandidateCount));
+        }
+
+        public static int IdleRoamProbeIndex(long pStableKey, int pProbe,
+            int pCandidateCount)
+        {
+            int probeCount = IdleRoamProbeCount(pCandidateCount);
+            if (pProbe < 0 || pProbe >= probeCount) return -1;
+            int start = StableIndex(pStableKey, pCandidateCount);
+            int stride = CoprimeProbeStride(pCandidateCount);
+            return (int)((start + (long)pProbe * stride) %
+                         pCandidateCount);
+        }
+
         public static bool TrySelect(long pStableKey, int pCandidateCount,
             ISet<int> pOccupied, out int pIndex)
         {
@@ -113,6 +137,28 @@ namespace AncientWarfare3.core.schools
                 long mixed = (pStableKey ^ (pStableKey >> 32)) * 1103515245L + 12345L;
                 return (int)(Math.Abs(mixed % pCount));
             }
+        }
+
+        private static int CoprimeProbeStride(int pCount)
+        {
+            if (pCount <= 1) return 1;
+            int stride = Math.Min(31, pCount - 1);
+            while (stride > 1 && GreatestCommonDivisor(stride, pCount) != 1)
+                stride--;
+            return Math.Max(1, stride);
+        }
+
+        private static int GreatestCommonDivisor(int pFirst, int pSecond)
+        {
+            int first = Math.Abs(pFirst);
+            int second = Math.Abs(pSecond);
+            while (second != 0)
+            {
+                int remainder = first % second;
+                first = second;
+                second = remainder;
+            }
+            return first;
         }
     }
 }

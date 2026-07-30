@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.api.multiplayer;
 using ai.behaviours;
 using HarmonyLib;
 
@@ -16,9 +17,12 @@ namespace AncientWarfare3.patch
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Kingdom), nameof(Kingdom.setKing))]
-        public static void SetKing_Postfix(Kingdom __instance, Actor pActor, bool pFromLoad)
+        public static void SetKing_Postfix(Kingdom __instance, Actor pActor,
+            bool pFromLoad, bool __runOriginal)
         {
-            if (pFromLoad || __instance?.data == null || pActor?.data == null) return;
+            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (!__runOriginal || pFromLoad || __instance?.data == null ||
+                pActor?.data == null || __instance.king != pActor) return;
             bool wasRepublic = RepublicGovernmentService.IsRepublic(__instance);
             bool registeredSuccessor =
                 RepublicGovernmentService.IsRegisteredRepublicSuccessor(__instance, pActor);

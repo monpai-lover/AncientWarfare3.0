@@ -55,5 +55,32 @@ namespace AncientWarfare3.core.lineage
             if (alreadyFoundedForKingdom) return false;
             return true;
         }
+
+        public static bool ShouldFoundCollateralBranch(
+            bool newDynastyCreatedFromPreBranchIdentity,
+            bool isEmpireOrMandate, bool collateral,
+            bool hasTraceableAncestor, bool foreignThrone,
+            bool highInfluenceElsewhere, bool directHeir,
+            bool previousKingDirectChild,
+            bool alreadyFoundedForDestination)
+        {
+            return newDynastyCreatedFromPreBranchIdentity &&
+                   isEmpireOrMandate && collateral &&
+                   hasTraceableAncestor && foreignThrone &&
+                   !directHeir && !previousKingDirectChild &&
+                   !alreadyFoundedForDestination;
+        }
+
+        public static bool ShouldFoundCollateralBranch(bool collateral,
+            bool hasTraceableAncestor, bool foreignThrone,
+            bool highInfluenceElsewhere, bool directHeir,
+            bool previousKingDirectChild,
+            bool alreadyFoundedForDestination)
+        {
+            return collateral && hasTraceableAncestor &&
+                   (foreignThrone || highInfluenceElsewhere) &&
+                   !directHeir && !previousKingDirectChild &&
+                   !alreadyFoundedForDestination;
+        }
     }
 }

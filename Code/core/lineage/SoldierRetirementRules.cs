@@ -2,14 +2,41 @@ namespace AncientWarfare3.core.lineage
 {
     public static class SoldierRetirementRules
     {
+        public const float HardRetirementAge = 65f;
+
+        public static bool IsOrdinaryServiceAgeAllowed(float age)
+        {
+            return age >= 0f && age < HardRetirementAge;
+        }
+
+        public static bool HasReachedHardRetirementAge(float age)
+        {
+            return age >= HardRetirementAge;
+        }
+
+        public static bool ShouldDeferTemporaryServiceRetirement(
+            bool temporaryService, float age)
+        {
+            return temporaryService && !HasReachedHardRetirementAge(age);
+        }
+
+        public static bool CanRecallReserve(bool wartimeMobilization,
+            bool isRetired, float age, float maximumAge)
+        {
+            return wartimeMobilization && isRetired && age >= 0f &&
+                   maximumAge > 0f && age < maximumAge;
+        }
+
         public static bool CanConsiderForRetirement(bool isSupportedActor, bool isRekt, bool isWarrior,
-            bool alreadyRetired, bool isGeneral, bool isFiefHolder, bool isRoyalGuard = false)
+            bool alreadyRetired, bool isGeneral, bool isFiefHolder,
+            bool isRoyalGuard = false, bool hardRetirement = false)
         {
             if (!isSupportedActor) return false;
             if (isRekt || !isWarrior) return false;
             if (alreadyRetired) return false;
-            if (isRoyalGuard) return false;
-            return !isGeneral && !isFiefHolder;
+            if (isGeneral || isRoyalGuard) return false;
+            if (hardRetirement) return true;
+            return !isFiefHolder;
         }
 
         public static bool ShouldRunExpensiveRetirementChecks(bool isSupportedActor, bool isRekt, bool isWarrior,
@@ -18,6 +45,7 @@ namespace AncientWarfare3.core.lineage
             if (!isSupportedActor) return false;
             if (isRekt || !isWarrior) return false;
             if (alreadyRetired) return false;
+            if (HasReachedHardRetirementAge(age)) return true;
             if (lifespan <= 0f) return false;
             return age >= lifespan * retirementAgeRatio;
         }

@@ -10,7 +10,7 @@ namespace AncientWarfare3.content
     ///     Xia 直接 clone human,再覆盖自己的贴图、建筑和命名。这样继承原版 human 的完整文明/繁殖/窗口字段,
     ///     避免从通用模板手动补字段时漏出 NAME 或无小孩出生之类的问题。
     ///
-    ///     参数取自 AW2 旧 Xia(蓝图 1.1):军事起步弱(army_multiplier 0.5)、基础城市 1、
+    ///     参数基于 AW2 旧 Xia(蓝图 1.1)，基础城市容量提升到可进入爵位晋升循环的最低值，
     ///     产出 bread/pie/tea、地图色 #33724D、贴图复用 actors/races/Xia/。
     ///     旧版被移除的字段(civ_base_zone_range/hateRaces/偏好武器池等)用新版机制替代或暂略。
     /// </summary>
@@ -64,7 +64,7 @@ namespace AncientWarfare3.content
             Xia.build_order_template_id = "build_order_advanced"; // 种族建造技术树,与建筑外观无关,保留
 
             // —— 文明属性(蓝图 1.1)——
-            Xia.civ_base_cities = 1;             // 旧 civ_baseCities
+            Xia.civ_base_cities = core.lineage.KingdomTitleProgressionRules.MinimumBaseCityCapacity;
             Xia.civ_base_army_multiplier = 1.2f; // 军事加强:原 0.5(军事起步弱)→ 1.2,军队规模略强于原版(默认 0.35)
             Xia.production = new[] { "bread", "pie", "tea" };
 
@@ -88,7 +88,6 @@ namespace AncientWarfare3.content
 
             // —— 基因(genome):继承 human 后只追加相对 human 的差额 ——
             // addGenome 对同名基因是累加,所以这里不能再写一整套最终值。
-            // Human offspring 5 + Xia delta 5 = 10.
             // Human birth_rate 3 + Xia delta 4 = 7.
             Xia.addGenome(
                 ("health", 30f),        // human 100 -> Xia 130
@@ -96,7 +95,6 @@ namespace AncientWarfare3.content
                 ("lifespan", 20f),      // human 70 -> Xia 90
                 ("damage", 5f),         // human 15 -> Xia 20
                 ("speed", 1f),          // human 15 -> Xia 16
-                ("offspring", XiaFertilityRules.XiaOffspringDelta),
                 // ⚠ birth_rate 必须显式给(每帧繁殖 BabyMaker.cs:123 用 (int)stats["birth_rate"] 决定额外子女数)。
                 //   human 基线没有稳定显式值;Xia 仍单独给 4,避免贵族/平民生育被取整成 0。
                 ("birth_rate", XiaFertilityRules.XiaBirthRateDelta),

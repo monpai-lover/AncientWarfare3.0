@@ -39,6 +39,10 @@ namespace AncientWarfare3.core.schools
                 return Sources[0].TryFind(
                     pCity, pActor, pSchoolId, pKind,
                     out pPrimary, out pSecondary, out pAcademy);
+            if (pKind == HistoricalSchoolVenueKind.IdleRoam)
+                return Sources[2].TryFind(
+                    pCity, pActor, pSchoolId, pKind,
+                    out pPrimary, out pSecondary, out pAcademy);
             for (int i = 0; i < Sources.Length; i++)
                 if (Sources[i].TryFind(
                         pCity, pActor, pSchoolId, pKind,

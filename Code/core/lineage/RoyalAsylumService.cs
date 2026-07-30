@@ -80,10 +80,16 @@ namespace AncientWarfare3.core.lineage
             if (pHome?.data == null || pHome.isNeutral() || pHome.wild) return;
             bool homeAlive = IsLivingKingdom(pHome);
             bool hasDefensiveWar = homeAlive && HasActiveDefensiveWar(pHome);
+            List<long> roster = ReadRoster(pHome);
+            if (!RoyalAsylumRules.NeedsAnnualProcessing(hasDefensiveWar,
+                    roster.Count))
+                return;
             bool monarchy = homeAlive && !RepublicGovernmentService.IsRepublic(pHome) &&
                             IsLivingActor(pHome.king);
             Actor heir = monarchy ? HeirService.PeekRegisteredHeir(pHome) : null;
-            List<Actor> protectedFamily = monarchy
+            List<Actor> protectedFamily =
+                RoyalAsylumRules.NeedsProtectedFamilyScan(homeAlive,
+                    monarchy, hasDefensiveWar)
                 ? CollectProtectedFamily(pHome, pHome.king, heir)
                 : new List<Actor>();
             var protectedIds = new HashSet<long>();
@@ -91,7 +97,9 @@ namespace AncientWarfare3.core.lineage
                 protectedIds.Add(protectedFamily[i].data.id);
 
             List<long> retained = new List<long>();
-            foreach (long actorId in ReadRoster(pHome))
+            List<HostCandidate> hostCandidates = null;
+            var hostWarCache = new Dictionary<long, bool>();
+            foreach (long actorId in roster)
             {
                 Actor actor = ResolveActor(actorId);
                 if (!IsActiveForHome(actor, pHome))
@@ -102,32 +110,46 @@ namespace AncientWarfare3.core.lineage
                 if (RoyalAsylumRules.ShouldReturn(homeAlive, hasDefensiveWar) ||
                     !protectedIds.Contains(actorId))
                 {
-                    if (!TryReturn(actor, pHome)) retained.Add(actorId);
+                    if (!TryReturn(actor, pHome, pUpdateRoster: false))
+                        retained.Add(actorId);
                     continue;
                 }
-                if (HostNeedsRelocation(actor))
+                if (HostNeedsRelocation(actor, hostWarCache))
                 {
-                    if (TryRelocateOrReturn(actor, pHome)) retained.Add(actorId);
+                    if (hostCandidates == null)
+                        hostCandidates = BuildHostCandidates(pHome);
+                    if (TryRelocateOrReturn(actor, pHome, hostCandidates,
+                            pUpdateRoster: false))
+                        retained.Add(actorId);
                     continue;
                 }
                 EnsurePresentation(actor);
                 retained.Add(actorId);
             }
-            WriteRoster(pHome, retained);
 
-            if (!homeAlive || !monarchy || !hasDefensiveWar) return;
-            for (int i = 0; i < protectedFamily.Count; i++)
+            if (RoyalAsylumRules.NeedsProtectedFamilyScan(homeAlive,
+                    monarchy, hasDefensiveWar))
             {
-                Actor actor = protectedFamily[i];
-                if (IsActive(actor)) continue;
-                TryEvacuate(actor, pHome);
+                for (int i = 0; i < protectedFamily.Count; i++)
+                {
+                    Actor actor = protectedFamily[i];
+                    if (IsActive(actor)) continue;
+                    if (RoyalAsylumRules.ShouldBuildHostCandidates(
+                            hasPendingEvacuee: true,
+                            hostCandidatesBuilt: hostCandidates != null))
+                        hostCandidates = BuildHostCandidates(pHome);
+                    TryEvacuate(actor, pHome, retained, hostCandidates,
+                        hasDefensiveWar);
+                }
             }
+            WriteRoster(pHome, retained);
         }
 
         public static void NaturalizeBeforeExtinction(Kingdom pHome)
         {
             if (pHome?.data == null) return;
             List<long> retained = new List<long>();
+            List<HostCandidate> hostCandidates = null;
             foreach (long actorId in ReadRoster(pHome))
             {
                 Actor actor = ResolveActor(actorId);
@@ -144,8 +166,11 @@ namespace AncientWarfare3.core.lineage
                                          hostCity.kingdom == host && host != pHome;
                 if (!validRecordedHost)
                 {
+                    if (hostCandidates == null)
+                        hostCandidates = BuildHostCandidates(pHome);
                     WorldTile origin = actor.current_tile ?? HomeOriginTile(pHome);
-                    if (!TrySelectHost(pHome, origin, actorId, pExcludeHostId: -1L,
+                    if (!TrySelectHost(hostCandidates, origin, actorId,
+                            pExcludeHostId: -1L,
                             out host, out hostCity, out _))
                     {
                         CloseBeforeNomadFallback(actor, pHome);
@@ -178,7 +203,7 @@ namespace AncientWarfare3.core.lineage
                     continue;
                 }
                 RoyalAsylumHistoryService.RecordNaturalized(actor, homeName, host, hostCity);
-                ClearActorState(actor, pHome);
+                ClearActorState(actor, pHome, pUpdateRoster: false);
                 pHome.units.Remove(actor);
             }
             WriteRoster(pHome, retained);
@@ -187,7 +212,7 @@ namespace AncientWarfare3.core.lineage
         private static void CloseBeforeNomadFallback(Actor pActor, Kingdom pHome)
         {
             if (pActor?.data == null) return;
-            ClearActorState(pActor, pHome);
+            ClearActorState(pActor, pHome, pUpdateRoster: false);
             if (pActor.kingdom != pHome)
                 pHome.units.Remove(pActor);
         }
@@ -221,7 +246,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.ROYAL_ASYLUM_HOME_KINGDOM_ID,
                 out long homeKingdomId, -1L);
             if (homeKingdomId != pHome.id || pActor.kingdom != pHome) return false;
-            return TryReturn(pActor, pHome);
+            return TryReturn(pActor, pHome, pUpdateRoster: true);
         }
 
         private static List<Actor> CollectProtectedFamily(Kingdom pHome, Actor pKing,
@@ -265,21 +290,25 @@ namespace AncientWarfare3.core.lineage
             catch { }
         }
 
-        private static bool TryEvacuate(Actor pActor, Kingdom pHome)
+        private static bool TryEvacuate(Actor pActor, Kingdom pHome,
+            List<long> pRoster, IReadOnlyList<HostCandidate> pHostCandidates,
+            bool pHasDefensiveWar)
         {
             if (pActor?.data == null || pHome?.data == null || IsActive(pActor) ||
-                pActor.kingdom != pHome) return false;
-            List<long> roster = ReadRoster(pHome);
-            if (!roster.Contains(pActor.data.id) && roster.Count >= MaxRosterSize)
+                pActor.kingdom != pHome || pRoster == null) return false;
+            if (!RoyalGuardOfficeRules.CanReplaceLifetimeGuardIdentity(
+                    RoyalGuardService.IsRoyalGuard(pActor))) return false;
+            if (!pRoster.Contains(pActor.data.id) && pRoster.Count >= MaxRosterSize)
                 return false;
             WorldTile origin = pActor.current_tile ?? HomeOriginTile(pHome);
-            if (!TrySelectHost(pHome, origin, pActor.data.id, pExcludeHostId: -1L,
+            if (!TrySelectHost(pHostCandidates, origin, pActor.data.id,
+                    pExcludeHostId: -1L,
                     out Kingdom host, out City hostCity, out WorldTile hostTile))
                 return false;
             if (!RoyalAsylumRules.ShouldEvacuate(
                     homeAlive: IsLivingKingdom(pHome),
                     monarchy: !RepublicGovernmentService.IsRepublic(pHome),
-                    hasDefensiveWar: HasActiveDefensiveWar(pHome),
+                    hasDefensiveWar: pHasDefensiveWar,
                     hostAvailable: host?.data != null && hostCity?.data != null))
                 return false;
 
@@ -311,7 +340,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.ROYAL_ASYLUM_START_YEAR, year);
             pActor.data.set(LineageKeys.ROYAL_ASYLUM_LAST_RELOCATION_YEAR, year);
             HomeKingdomByActorId[pActor.data.id] = pHome.id;
-            AddToRoster(pHome, pActor.data.id);
+            if (!pRoster.Contains(pActor.data.id)) pRoster.Add(pActor.data.id);
             EnsurePresentation(pActor);
             RoyalAsylumHistoryService.RecordStarted(pActor, pHome, hostCity);
             return true;
@@ -331,16 +360,22 @@ namespace AncientWarfare3.core.lineage
             pActor.cancelAllBeh();
         }
 
-        private static bool TryRelocateOrReturn(Actor pActor, Kingdom pHome)
+        private static bool TryRelocateOrReturn(Actor pActor, Kingdom pHome,
+            IReadOnlyList<HostCandidate> pHostCandidates,
+            bool pUpdateRoster)
         {
             pActor.data.get(LineageKeys.ROYAL_ASYLUM_HOST_KINGDOM_ID,
                 out long oldHostId, -1L);
             WorldTile origin = pActor.current_tile ?? HomeOriginTile(pHome);
-            if (TrySelectHost(pHome, origin, pActor.data.id, oldHostId,
+            if (TrySelectHost(pHostCandidates, origin, pActor.data.id,
+                    oldHostId,
                     out Kingdom host, out City hostCity, out WorldTile hostTile))
             {
                 try { pActor.spawnOn(hostTile); }
-                catch { return TryReturn(pActor, pHome); }
+                catch
+                {
+                    return TryReturn(pActor, pHome, pUpdateRoster);
+                }
                 pActor.data.set(LineageKeys.ROYAL_ASYLUM_HOST_KINGDOM_ID, host.id);
                 pActor.data.set(LineageKeys.ROYAL_ASYLUM_HOST_CITY_ID, hostCity.data.id);
                 pActor.data.set(LineageKeys.ROYAL_ASYLUM_LAST_RELOCATION_YEAR,
@@ -349,12 +384,13 @@ namespace AncientWarfare3.core.lineage
                 RoyalAsylumHistoryService.RecordRelocated(pActor, pHome, hostCity);
                 return true;
             }
-            if (TryReturn(pActor, pHome)) return false;
+            if (TryReturn(pActor, pHome, pUpdateRoster)) return false;
             EnsurePresentation(pActor);
             return true;
         }
 
-        private static bool TryReturn(Actor pActor, Kingdom pHome)
+        private static bool TryReturn(Actor pActor, Kingdom pHome,
+            bool pUpdateRoster)
         {
             City destination = FindReturnCity(pActor, pHome);
             if (!IsLivingCity(destination) || destination.kingdom != pHome) return false;
@@ -366,11 +402,12 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
             if (pActor.city != destination || pActor.kingdom != pHome) return false;
             RoyalAsylumHistoryService.RecordReturned(pActor, pHome, destination);
-            ClearActorState(pActor, pHome);
+            ClearActorState(pActor, pHome, pUpdateRoster);
             return true;
         }
 
-        private static bool HostNeedsRelocation(Actor pActor)
+        private static bool HostNeedsRelocation(Actor pActor,
+            IDictionary<long, bool> pHostWarCache)
         {
             pActor.data.get(LineageKeys.ROYAL_ASYLUM_HOST_KINGDOM_ID,
                 out long hostKingdomId, -1L);
@@ -379,25 +416,62 @@ namespace AncientWarfare3.core.lineage
             bool hostAlive = IsLivingKingdom(host);
             bool cityAlive = IsLivingCity(city);
             bool cityOwned = cityAlive && city.kingdom == host;
-            bool hostAtWar = hostAlive && HasAnyWar(host);
+            bool hostAtWar = false;
+            if (hostAlive)
+            {
+                if (pHostWarCache == null ||
+                    !pHostWarCache.TryGetValue(hostKingdomId,
+                        out hostAtWar))
+                {
+                    hostAtWar = HasAnyWar(host);
+                    if (pHostWarCache != null)
+                        pHostWarCache[hostKingdomId] = hostAtWar;
+                }
+            }
             return RoyalAsylumRules.ShouldRelocate(IsActive(pActor), hostAlive,
                 cityAlive, cityOwned, hostAtWar);
         }
 
-        private static bool TrySelectHost(Kingdom pHome, WorldTile pOrigin,
+        private static bool TrySelectHost(
+            IReadOnlyList<HostCandidate> pCandidates, WorldTile pOrigin,
             long pActorId, long pExcludeHostId, out Kingdom pHost,
             out City pHostCity, out WorldTile pHostTile)
         {
             pHost = null;
             pHostCity = null;
             pHostTile = null;
-            KingdomManager kingdoms = World.world?.kingdoms;
-            if (kingdoms == null) return false;
+            if (pCandidates == null || pCandidates.Count == 0) return false;
             RoyalAsylumHostRank bestRank = default;
             bool found = false;
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                HostCandidate candidate = pCandidates[i];
+                if (candidate.Kingdom?.data == null ||
+                    candidate.Kingdom.id == pExcludeHostId) continue;
+                if (!RoyalAsylumVenueService.TryPick(candidate.City, pActorId,
+                        Date.getCurrentYear(), out WorldTile tile)) continue;
+                RoyalAsylumHostRank rank = new RoyalAsylumHostRank(
+                    SameIsland(pOrigin, candidate.CenterTile),
+                    DistanceSquared(pOrigin, candidate.CenterTile),
+                    candidate.Kingdom.id, candidate.City.data.id);
+                if (found && rank.CompareTo(bestRank) >= 0) continue;
+                found = true;
+                bestRank = rank;
+                pHost = candidate.Kingdom;
+                pHostCity = candidate.City;
+                pHostTile = tile;
+            }
+            return found;
+        }
+
+        private static List<HostCandidate> BuildHostCandidates(Kingdom pHome)
+        {
+            var result = new List<HostCandidate>();
+            KingdomManager kingdoms = World.world?.kingdoms;
+            if (kingdoms == null || pHome?.data == null) return result;
             foreach (Kingdom candidate in kingdoms)
             {
-                if (candidate?.data == null || candidate.id == pExcludeHostId) continue;
+                if (candidate?.data == null) continue;
                 City city = StableHostCity(candidate);
                 bool enemy;
                 try { enemy = candidate != pHome && candidate.isEnemy(pHome); }
@@ -411,19 +485,10 @@ namespace AncientWarfare3.core.lineage
                         hostHasLivingCity: IsLivingCity(city),
                         hostAtWar: HasAnyWar(candidate),
                         hostIsEnemy: enemy)) continue;
-                if (!RoyalAsylumVenueService.TryPick(city, pActorId,
-                        Date.getCurrentYear(), out WorldTile tile)) continue;
-                RoyalAsylumHostRank rank = new RoyalAsylumHostRank(
-                    SameIsland(pOrigin, city.getTile()),
-                    DistanceSquared(pOrigin, city.getTile()), candidate.id, city.data.id);
-                if (found && rank.CompareTo(bestRank) >= 0) continue;
-                found = true;
-                bestRank = rank;
-                pHost = candidate;
-                pHostCity = city;
-                pHostTile = tile;
+                result.Add(new HostCandidate(candidate, city,
+                    city.getTile()));
             }
-            return found;
+            return result;
         }
 
         private static City StableHostCity(Kingdom pKingdom)
@@ -476,6 +541,7 @@ namespace AncientWarfare3.core.lineage
             if (pParticipantIds == null || pParticipantIds.Count == 0 ||
                 HomeKingdomByActorId.Count == 0) return;
             var actorIds = new List<long>(HomeKingdomByActorId.Keys);
+            var candidatesByHome = new Dictionary<long, List<HostCandidate>>();
             for (int i = 0; i < actorIds.Count; i++)
             {
                 Actor actor = ResolveActor(actorIds[i]);
@@ -484,7 +550,15 @@ namespace AncientWarfare3.core.lineage
                     out long hostId, -1L);
                 if (!pParticipantIds.Contains(hostId)) continue;
                 Kingdom home = ResolveKingdom(HomeKingdomByActorId[actorIds[i]]);
-                if (home?.data != null) TryRelocateOrReturn(actor, home);
+                if (home?.data == null) continue;
+                if (!candidatesByHome.TryGetValue(home.id,
+                        out List<HostCandidate> candidates))
+                {
+                    candidates = BuildHostCandidates(home);
+                    candidatesByHome[home.id] = candidates;
+                }
+                TryRelocateOrReturn(actor, home, candidates,
+                    pUpdateRoster: true);
             }
         }
 
@@ -511,13 +585,23 @@ namespace AncientWarfare3.core.lineage
         private static void EnsurePresentation(Actor pActor)
         {
             if (!IsActive(pActor) || pActor.ai == null) return;
-            try { pActor.addStatusEffect(RoyalAsylumContent.StatusId, 1000000f, pColorEffect: false); }
+            try
+            {
+                if (!pActor.hasStatus(RoyalAsylumContent.StatusId))
+                    pActor.addStatusEffect(RoyalAsylumContent.StatusId,
+                        1000000f, pColorEffect: false);
+            }
             catch { }
-            try { pActor.ai.setJob(RoyalAsylumContent.ActorJobId); }
+            try
+            {
+                if (pActor.ai.job?.id != RoyalAsylumContent.ActorJobId)
+                    pActor.ai.setJob(RoyalAsylumContent.ActorJobId);
+            }
             catch { }
         }
 
-        private static void ClearActorState(Actor pActor, Kingdom pHome)
+        private static void ClearActorState(Actor pActor, Kingdom pHome,
+            bool pUpdateRoster = true)
         {
             if (pActor?.data == null) return;
             long actorId = pActor.data.id;
@@ -531,7 +615,7 @@ namespace AncientWarfare3.core.lineage
             pActor.data.set(LineageKeys.ROYAL_ASYLUM_START_YEAR, -1);
             pActor.data.set(LineageKeys.ROYAL_ASYLUM_LAST_RELOCATION_YEAR, -1);
             HomeKingdomByActorId.Remove(actorId);
-            RemoveFromRoster(pHome, actorId);
+            if (pUpdateRoster) RemoveFromRoster(pHome, actorId);
         }
 
         private static bool IsActiveForHome(Actor pActor, Kingdom pHome)
@@ -555,13 +639,6 @@ namespace AncientWarfare3.core.lineage
                 if (long.TryParse(parts[i], out long actorId) && actorId >= 0 && seen.Add(actorId))
                     result.Add(actorId);
             return result;
-        }
-
-        private static void AddToRoster(Kingdom pHome, long pActorId)
-        {
-            List<long> ids = ReadRoster(pHome);
-            if (!ids.Contains(pActorId) && ids.Count < MaxRosterSize) ids.Add(pActorId);
-            WriteRoster(pHome, ids);
         }
 
         private static void RemoveFromRoster(Kingdom pHome, long pActorId)
@@ -651,6 +728,21 @@ namespace AncientWarfare3.core.lineage
             long dx = pFirst.x - pSecond.x;
             long dy = pFirst.y - pSecond.y;
             return dx * dx + dy * dy;
+        }
+
+        private readonly struct HostCandidate
+        {
+            public HostCandidate(Kingdom pKingdom, City pCity,
+                WorldTile pCenterTile)
+            {
+                Kingdom = pKingdom;
+                City = pCity;
+                CenterTile = pCenterTile;
+            }
+
+            public Kingdom Kingdom { get; }
+            public City City { get; }
+            public WorldTile CenterTile { get; }
         }
     }
 }

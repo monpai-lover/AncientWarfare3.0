@@ -24,11 +24,13 @@ namespace AncientWarfare3.core.schools
                 !rows[0].ExactExceptUpdatedTime(pSeed.ExpectedAffiliation)) return null;
             GuestOfficeAffiliationRow original = rows[0];
             if (original.ServiceKingdomId >= 0 ||
-                original.ResidenceCityId != pSeed.DesiredCareer.CityId ||
                 (original.LifecycleState != "AtHome" &&
                  original.LifecycleState != "Resident")) return null;
 
             GuestOfficeAffiliationRow desired = original.Copy();
+            if (pSeed.DesiredCareer.CityId != original.ResidenceCityId)
+                desired.PreviousResidenceCityId = original.ResidenceCityId;
+            desired.ResidenceCityId = pSeed.DesiredCareer.CityId;
             desired.DestinationCityId = -1L;
             desired.ServiceKingdomId = pSeed.DesiredCareer.KingdomId;
             desired.LifecycleState = "Serving";
@@ -245,9 +247,11 @@ namespace AncientWarfare3.core.schools
             command.CommandText = "INSERT INTO " + CareerTable +
                 " (OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,LAYER,OFFICE_ID," +
                 "SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME,ENDED_YEAR,ENDED_TIME," +
-                "ACTIVE,END_REASON,UPDATED_TIME) VALUES (@id,@kingdom,@actor,@name,@city," +
+                "ACTIVE,END_REASON,UPDATED_TIME,INSTITUTION_AT_APPOINTMENT," +
+                "RANK_AT_APPOINTMENT,LOCAL_GRADE_AT_APPOINTMENT,IS_ACTING) " +
+                "VALUES (@id,@kingdom,@actor,@name,@city," +
                 "@layer,@office,@school,@influence,@year,@time,@endedYear,@endedTime," +
-                "@active,@reason,@updated)";
+                "@active,@reason,@updated,@institution,@rank,@localGrade,@acting)";
             command.Parameters.AddWithValue("@id", pCareer.OfficerId);
             command.Parameters.AddWithValue("@kingdom", pCareer.KingdomId);
             command.Parameters.AddWithValue("@actor", pCareer.ActorId);
@@ -264,6 +268,12 @@ namespace AncientWarfare3.core.schools
             command.Parameters.AddWithValue("@active", pCareer.Active);
             command.Parameters.AddWithValue("@reason", pCareer.EndReason);
             command.Parameters.AddWithValue("@updated", pCareer.UpdatedTime);
+            command.Parameters.AddWithValue("@institution",
+                pCareer.InstitutionAtAppointment ?? "");
+            command.Parameters.AddWithValue("@rank", pCareer.RankAtAppointment);
+            command.Parameters.AddWithValue("@localGrade",
+                pCareer.LocalGradeAtAppointment);
+            command.Parameters.AddWithValue("@acting", pCareer.IsActing ? 1 : 0);
             if (command.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("guest career insert failed");
         }
@@ -471,7 +481,9 @@ namespace AncientWarfare3.core.schools
         {
             return "SELECT OFFICER_ID,KINGDOM_ID,ACTOR_ID,ACTOR_NAME,CITY_ID,LAYER," +
                    "OFFICE_ID,SCHOOL_ID,INFLUENCE,APPOINTED_YEAR,APPOINTED_TIME," +
-                   "ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME FROM " +
+                   "ENDED_YEAR,ENDED_TIME,ACTIVE,END_REASON,UPDATED_TIME," +
+                   "INSTITUTION_AT_APPOINTMENT,RANK_AT_APPOINTMENT," +
+                   "LOCAL_GRADE_AT_APPOINTMENT,IFNULL(IS_ACTING,0) FROM " +
                    CareerTable;
         }
 
@@ -568,7 +580,11 @@ namespace AncientWarfare3.core.schools
                 EndedTime = Double(pReader, 12, -1d),
                 Active = Int(pReader, 13, 0),
                 EndReason = Text(pReader, 14),
-                UpdatedTime = Double(pReader, 15, -1d)
+                UpdatedTime = Double(pReader, 15, -1d),
+                InstitutionAtAppointment = Text(pReader, 16),
+                RankAtAppointment = Int(pReader, 17, 0),
+                LocalGradeAtAppointment = Int(pReader, 18, 0),
+                IsActing = Int(pReader, 19, 0) != 0
             };
         }
 

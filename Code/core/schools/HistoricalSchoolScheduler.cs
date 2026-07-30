@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.schools
 {
@@ -13,6 +14,7 @@ namespace AncientWarfare3.core.schools
         ServiceClose,
         ServiceAppointment,
         Promotion,
+        Recovery,
         LecturePlan,
         DebatePlan,
         Conversion,
@@ -68,7 +70,14 @@ namespace AncientWarfare3.core.schools
                     return false;
 
                 HistoricalSchoolSchedulerStage current = _stage;
-                bool advance = ExecuteStage(current);
+                long stageDiagnostic = RuntimePerformanceDiagnostic.BeginScope();
+                bool advance;
+                try { advance = ExecuteStage(current); }
+                finally
+                {
+                    RuntimePerformanceDiagnostic.EndAnnualStage(
+                        "school_" + StageId(current), stageDiagnostic);
+                }
                 if (advance && _stage == current) AdvanceStage();
                 return true;
             }
@@ -121,21 +130,21 @@ namespace AncientWarfare3.core.schools
                 switch (pStage)
                 {
                     case HistoricalSchoolSchedulerStage.Descent:
-                        ProcessDescent();
-                        break;
+                        return ProcessDescent();
                     case HistoricalSchoolSchedulerStage.ServiceClose:
-                        SchoolGuestOfficeService.ProcessYear(_activeYear);
-                        break;
+                        return SchoolGuestOfficeService.ProcessYearFrame(_activeYear);
                     case HistoricalSchoolSchedulerStage.ServiceAppointment:
-                        break;
+                        return HistoricalSchoolEliteEnrollmentService.ProcessYearFrame(
+                            _activeYear, _livingXiaCities);
                     case HistoricalSchoolSchedulerStage.Promotion:
                         return SchoolMembershipService.ProcessStandingFrame(_activeYear);
+                    case HistoricalSchoolSchedulerStage.Recovery:
+                        return HistoricalSchoolPopulationRecoveryService.ProcessYearFrame(
+                            _activeYear);
                     case HistoricalSchoolSchedulerStage.LecturePlan:
-                        ProcessLecturePlan();
-                        break;
+                        return HistoricalSchoolActionService.ProcessYearFrame(_activeYear);
                     case HistoricalSchoolSchedulerStage.DebatePlan:
-                        HistoricalSchoolDebateService.ProcessYear(_activeYear);
-                        break;
+                        return HistoricalSchoolDebateService.ProcessYearFrame(_activeYear);
                     case HistoricalSchoolSchedulerStage.Conversion:
                     case HistoricalSchoolSchedulerStage.Rediscovery:
                         break;
@@ -170,19 +179,17 @@ namespace AncientWarfare3.core.schools
             }
         }
 
-        private static void ProcessDescent()
+        private static bool ProcessDescent()
         {
-            _livingXiaCities = HistoricalSchoolRuntime.LivingXiaCities();
-            _nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(
-                _eligibleYear, _livingXiaCities.Count > 0);
-            if (_livingXiaCities.Count > 0)
-                HistoricalSchoolDescentService.ProcessDue(
-                    _nextEligibleYear, _livingXiaCities);
-        }
-
-        private static void ProcessLecturePlan()
-        {
-            HistoricalSchoolActionService.ProcessYear(_activeYear);
+            if (_livingXiaCities == null)
+            {
+                _livingXiaCities = HistoricalSchoolRuntime.LivingXiaCities();
+                _nextEligibleYear = HistoricalSchoolRules.AdvanceEligibleYear(
+                    _eligibleYear, _livingXiaCities.Count > 0);
+            }
+            return _livingXiaCities.Count == 0 ||
+                   HistoricalSchoolDescentService.ProcessDueFrame(
+                       _nextEligibleYear, _livingXiaCities);
         }
 
         private static bool ProcessRuntimeCommit()
@@ -219,6 +226,7 @@ namespace AncientWarfare3.core.schools
                 case HistoricalSchoolSchedulerStage.ServiceAppointment:
                     return "service_appointment";
                 case HistoricalSchoolSchedulerStage.Promotion: return "promotion";
+                case HistoricalSchoolSchedulerStage.Recovery: return "recovery";
                 case HistoricalSchoolSchedulerStage.LecturePlan: return "lecture_plan";
                 case HistoricalSchoolSchedulerStage.DebatePlan: return "debate_plan";
                 case HistoricalSchoolSchedulerStage.Conversion: return "conversion";

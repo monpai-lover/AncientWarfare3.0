@@ -34,8 +34,14 @@ namespace AncientWarfare3.core.schools
                         state?.LifecycleState != HistoricalSchoolLifecycleState.Voyage) continue;
                     Actor actor = FindActor(actorId);
                     if (actor?.data == null) continue;
-                    TryReserveItinerant(actor,
-                        SchoolMembershipService.GetSchool(actorId));
+                    string schoolId =
+                        SchoolMembershipService.GetSchool(actorId);
+                    if (HistoricalSchoolTravelReservationRestoreRules.ShouldUseExamTravelerReservation(
+                            activeTravel: true,
+                            qualifiedTeacher: IsQualifiedTeacher(actor)))
+                        TryReserveExamTraveler(actor, schoolId);
+                    else
+                        TryReserveItinerant(actor, schoolId);
                 }
             }
         }
@@ -58,6 +64,25 @@ namespace AncientWarfare3.core.schools
             if (membership == null || !string.Equals(membership.SchoolId, pSchoolId,
                     StringComparison.Ordinal)) return false;
             return ItinerantReservations.TryReserve(pSchoolId, pActor.data.id);
+        }
+
+        public static bool TryReserveExamTraveler(Actor pActor,
+            string pSchoolId)
+        {
+            if (pActor?.data == null || !pActor.isAlive() || pActor.isRekt() ||
+                string.IsNullOrWhiteSpace(pSchoolId) ||
+                CourtSchoolRegistry.Find(pSchoolId) == null)
+                return false;
+            if (HistoricalSchoolDescentService.IsCanonicalMaster(pActor))
+                return TryReserveItinerant(pActor, pSchoolId);
+            SchoolMembershipRecord membership =
+                SchoolMembershipService.GetActive(pActor.data.id);
+            if (membership == null || !membership.Active ||
+                !membership.IsValid ||
+                !string.Equals(membership.SchoolId, pSchoolId,
+                    StringComparison.Ordinal)) return false;
+            return ItinerantReservations.TryReserve(pSchoolId,
+                pActor.data.id);
         }
 
         public static void ReleaseItinerant(Actor pActor)
@@ -184,7 +209,8 @@ namespace AncientWarfare3.core.schools
         }
 
         private sealed class LineageSuccessorWriteOperation :
-            IHistoricalSchoolWriteOperation
+            IHistoricalSchoolWriteOperation,
+            IHistoricalSchoolAsyncWriteOperation
         {
             private readonly long _teacherId;
             private readonly long _successorId;
@@ -217,10 +243,14 @@ namespace AncientWarfare3.core.schools
                 System.Data.SQLite.SQLiteConnection pDb,
                 System.Data.SQLite.SQLiteTransaction pTransaction)
             {
-                return HistoricalSchoolStore.RecordSchoolEventInTransaction(pDb,
-                    pTransaction, OperationKey, "lineage_successor", _successorId,
-                    _teacherId, _schoolId, _cityId, _kingdomId, _year,
-                    _successorName, 3, _worldTime);
+                return DetachBackgroundWrite().Execute(pDb, pTransaction);
+            }
+
+            public IHistoricalSchoolBackgroundWrite DetachBackgroundWrite()
+            {
+                return new LineageSuccessorBackgroundWrite(OperationKey,
+                    _teacherId, _successorId, _schoolId, _cityId,
+                    _kingdomId, _year, _successorName, _worldTime);
             }
 
             public void AfterCommit(HistoricalSchoolTeachingPersistenceOutcome pOutcome)
@@ -240,6 +270,46 @@ namespace AncientWarfare3.core.schools
             public void OnCleanFailure()
             {
                 ProcessingTeacherDeaths.Complete(_teacherId);
+            }
+        }
+
+        private sealed class LineageSuccessorBackgroundWrite :
+            IHistoricalSchoolBackgroundWrite
+        {
+            private readonly string _operationKey;
+            private readonly long _teacherId;
+            private readonly long _successorId;
+            private readonly string _schoolId;
+            private readonly long _cityId;
+            private readonly long _kingdomId;
+            private readonly int _year;
+            private readonly string _successorName;
+            private readonly double _worldTime;
+
+            public LineageSuccessorBackgroundWrite(string pOperationKey,
+                long pTeacherId, long pSuccessorId, string pSchoolId,
+                long pCityId, long pKingdomId, int pYear,
+                string pSuccessorName, double pWorldTime)
+            {
+                _operationKey = pOperationKey ?? "";
+                _teacherId = pTeacherId;
+                _successorId = pSuccessorId;
+                _schoolId = pSchoolId ?? "";
+                _cityId = pCityId;
+                _kingdomId = pKingdomId;
+                _year = pYear;
+                _successorName = pSuccessorName ?? "";
+                _worldTime = pWorldTime;
+            }
+
+            public HistoricalSchoolTeachingPersistenceOutcome Execute(
+                System.Data.SQLite.SQLiteConnection pDb,
+                System.Data.SQLite.SQLiteTransaction pTransaction)
+            {
+                return HistoricalSchoolStore.RecordSchoolEventInTransaction(
+                    pDb, pTransaction, _operationKey, "lineage_successor",
+                    _successorId, _teacherId, _schoolId, _cityId, _kingdomId,
+                    _year, _successorName, 3, _worldTime);
             }
         }
 

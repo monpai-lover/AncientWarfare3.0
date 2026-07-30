@@ -1,0 +1,278 @@
+using AncientWarfare3.content;
+using AncientWarfare3.core.policy;
+using System.IO;
+
+internal static class XiaExpansionAndCivMonkeyNamingRulesTests
+{
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void SequenceEqual<T>(IReadOnlyList<T> expected,
+        IReadOnlyList<T> actual, string name)
+    {
+        Equal(expected.Count, actual.Count, name + " count");
+        for (int i = 0; i < expected.Count; i++)
+            Equal(expected[i], actual[i], name + $" item {i}");
+    }
+
+    public static void Run()
+    {
+        Equal(3f, XiaExpansionDecisionRules.ApplyWeight(3f, false),
+            "non-Xia kings retain the upstream decision weight");
+        Equal(12f, XiaExpansionDecisionRules.ApplyWeight(3f, true),
+            "Xia kings receive the bounded fourfold foundation weight");
+        Equal(0f, XiaExpansionDecisionRules.ApplyWeight(0f, true),
+            "an upstream zero weight remains a veto for Xia kings");
+        Equal(24f, XiaExpansionDecisionRules.ApplyWeight(
+                3f, true, kingdomCityCount: 1),
+            "a one-city Xia kingdom strongly prioritizes founding its second city");
+        Equal(18f, XiaExpansionDecisionRules.ApplyWeight(
+                3f, true, kingdomCityCount: 2),
+            "a two-city Xia kingdom retains elevated foundation pressure");
+        Equal(12f, XiaExpansionDecisionRules.ApplyWeight(
+                3f, true, kingdomCityCount: 3),
+            "established Xia kingdoms return to the bounded fourfold preference");
+        Equal(55, XiaExpansionDecisionRules.ZoneAllowance(0),
+            "a pre-technology Xia city retains only its initial zone allowance");
+        Equal(75, XiaExpansionDecisionRules.ZoneAllowance(1),
+            "the first adopted city technology unlocks the second zone tier");
+        Equal(95, XiaExpansionDecisionRules.ZoneAllowance(4),
+            "four adopted city technologies unlock the third zone tier");
+        Equal(125, XiaExpansionDecisionRules.ZoneAllowance(7),
+            "seven adopted city technologies unlock the fourth zone tier");
+        Equal(150, XiaExpansionDecisionRules.ZoneAllowance(10),
+            "ten adopted city technologies unlock the final finite zone tier");
+        Equal(int.MaxValue, XiaExpansionDecisionRules.ZoneAllowance(14),
+            "adopting every national technology removes the city zone cap");
+        Equal(true, XiaExpansionDecisionRules.CanClaimZone(
+                upstreamAllowed: true, isXia: true, adoptedTechCount: 4,
+                zoneCount: 94),
+            "a Xia city below its technology allowance may claim a zone");
+        Equal(false, XiaExpansionDecisionRules.CanClaimZone(
+                upstreamAllowed: true, isXia: true, adoptedTechCount: 4,
+                zoneCount: 95),
+            "a Xia city at its technology allowance pauses land claims");
+        Equal(false, XiaExpansionDecisionRules.CanClaimZone(
+                upstreamAllowed: false, isXia: true, adoptedTechCount: 14,
+                zoneCount: 9),
+            "the vanilla claim veto remains authoritative for Xia");
+        Equal(true, XiaExpansionDecisionRules.CanClaimZone(
+                upstreamAllowed: true, isXia: false, adoptedTechCount: 0,
+                zoneCount: 999),
+            "non-Xia city-zone behavior remains unchanged");
+        Equal(16f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
+                upstreamWeight: 2f, isXia: true, belowZoneAllowance: true,
+                civicLeader: true),
+            "a Xia civic leader actively expands an undersized home city");
+        Equal(4f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
+                upstreamWeight: 2f, isXia: true, belowZoneAllowance: true,
+                civicLeader: false),
+            "ordinary Xia residents retain a smaller land-claim boost");
+        Equal(2f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
+                upstreamWeight: 2f, isXia: true, belowZoneAllowance: false,
+                civicLeader: true),
+            "cities at their technology allowance retain the upstream weight");
+        Equal(2f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
+                upstreamWeight: 2f, isXia: false, belowZoneAllowance: true,
+                civicLeader: true),
+            "non-Xia land-claim weighting remains vanilla");
+        Equal(0f, XiaExpansionDecisionRules.ApplyClaimLandWeight(
+                upstreamWeight: 0f, isXia: true, belowZoneAllowance: true,
+                civicLeader: true),
+            "an upstream land-claim veto remains authoritative");
+        string expansionPatch = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "patch",
+            "AW_XiaExpansionPatch.cs"));
+        Equal(true, expansionPatch.Contains(
+                "[HarmonyPatch(typeof(City), nameof(City.canGrowZones))]"),
+            "Xia zone allowance guards the shared vanilla city growth gate");
+        Equal(true, expansionPatch.Contains(
+                "CityTechService.CanXiaCityGrowZones(__instance, __result)"),
+            "the shared Xia zone guard delegates to the CityTechService cache");
+        Equal(true, expansionPatch.Contains(
+                "nameof(BehClaimZoneForCityActorBorder.tryClaimZone)"),
+            "Xia claims intercept the vanilla multi-zone execution point");
+        Equal(true, expansionPatch.Contains(
+                "CityTechService.GetXiaCityZoneAllowance(city)"),
+            "the vanilla claim executor receives the cached technology allowance");
+        Equal(true, expansionPatch.Contains(
+                "pActor.hasCultureTrait(\"expansionists\")"),
+            "the Xia executor preserves vanilla human batch expansion semantics");
+        Equal(true, expansionPatch.Contains("int vanillaBatchCount = 1"),
+            "the Xia executor computes the complete vanilla batch before truncation");
+        Equal(true, expansionPatch.Contains(
+                "XiaExpansionDecisionRules.ClaimCountWithinZoneAllowance("),
+            "the Xia executor truncates only the amount beyond remaining capacity");
+        Equal(false, expansionPatch.Contains(
+                "ShouldLimitClaimToSingleZone"),
+            "the Xia executor is not forced to a single-zone claim");
+
+        string expansionDecisionContent = File.ReadAllText(Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "content",
+            "XiaExpansionDecisionContent.cs"));
+        Equal(true, expansionDecisionContent.Contains("ClaimLandDecisionId"),
+            "Xia city growth augments the vanilla claim-land decision");
+        Equal(true, expansionDecisionContent.Contains(
+                "ApplyClaimLandWeight("),
+            "the claim-land wrapper delegates to the bounded rules helper");
+        Equal(false, KingdomPolicyTechOrderRules.CanConsider(
+                "aw_tech_three_departments", true, true, false),
+            "AI cannot consider the three departments before nine-rank completion");
+        Equal(true, KingdomPolicyTechOrderRules.CanConsider(
+                "aw_tech_three_departments", true, false, true),
+            "nine-rank completion explicitly unlocks AI consideration of three departments");
+        Equal(false, KingdomPolicyTechOrderRules.CanConsider(
+                "aw_tech_rites_music", false, true, true),
+            "rites and music still requires the official court");
+
+        string[] expectedSurnames =
+        {
+            "蒙", "猴", "侯"
+        };
+        SequenceEqual(expectedSurnames, CivMonkeyNamingRules.Surnames,
+            "civilized monkey surnames stay in a dedicated editable pool");
+
+        string[] expectedNames =
+        {
+            "monpai", "蒙派", "Beruk", "豚尾猴", "食蟹猴", "莫娜", "猴妹",
+            "猴姐", "猴弟", "猴宝", "臭宝", "歹毒白毛", "短尾猴"
+        };
+        SequenceEqual(expectedNames, CivMonkeyNamingRules.GivenNames,
+            "the civ monkey given-name pool is exact and ordered");
+
+        string[] expectedCityNames =
+        {
+            "花果城", "水帘城", "灵台邑", "方寸城", "通臂寨", "长臂关",
+            "猕岭", "猿乡"
+        };
+        SequenceEqual(expectedCityNames, CivMonkeyNamingRules.CityNames,
+            "civilized monkey cities use their own Chinese settlement pool");
+
+        string[] expectedKingdomNames =
+        {
+            "猴国", "大猴国", "蒙派帝国", "猴汉帝国", "猴汉国"
+        };
+        SequenceEqual(expectedKingdomNames, CivMonkeyNamingRules.KingdomNames,
+            "civilized monkey kingdoms use their dedicated Chinese title pool");
+        Equal(true, CivMonkeyNamingRules.IsCivilizedMonkey("civ_monkey"),
+            "the civilized monkey actor enters the easter-egg route");
+        Equal(false, CivMonkeyNamingRules.IsCivilizedMonkey("monkey"),
+            "ordinary wild monkeys retain their vanilla naming route");
+        Equal(false, CivMonkeyNamingRules.IsCivilizedMonkey(null),
+            "a missing actor asset cannot enter the easter-egg route");
+        Equal("civ_monkey_clan", CivMonkeyNamingRules.ClanGeneratorId,
+            "civilized monkey clans use their own surname-only generator");
+
+        Equal("侯", CivMonkeyNamingRules.ResolveLineageSurname(
+                false, "孟", "侯", "猴"),
+            "a new monkey lineage preserves the surname written by ChineseName");
+        Equal("猴", CivMonkeyNamingRules.ResolveLineageSurname(
+                false, "孟", "", "猴"),
+            "a new monkey lineage falls back to the AW family field");
+        Equal("孟", CivMonkeyNamingRules.ResolveLineageSurname(
+                true, "孟", "侯", "猴"),
+            "an established monkey Shi remains authoritative");
+        Equal("侯", CivMonkeyNamingRules.ResolveLineageSurname(
+                false, "孟", "name", "侯"),
+            "a ChineseName placeholder cannot replace a real AW family name");
+
+        Equal(true, CivMonkeyPolicyRules.IsNativePolicySpecies(
+                "civ_monkey", "", ""),
+            "a civilized monkey original species opens the AW3 policy system");
+        Equal(true, CivMonkeyPolicyRules.IsNativePolicySpecies(
+                "", "civ_monkey", ""),
+            "a civilized monkey kingdom asset opens the AW3 policy system");
+        Equal(true, CivMonkeyPolicyRules.IsNativePolicySpecies(
+                "", "", "civ_monkey"),
+            "a resolved civilized monkey actor asset opens the AW3 policy system");
+        Equal(false, CivMonkeyPolicyRules.IsNativePolicySpecies(
+                "monkey", "monkey", "monkey"),
+            "wild monkey kingdoms remain outside the AW3 policy system");
+        Equal(false, CivMonkeyPolicyRules.IsNativePolicySpecies(
+                "Xia", "Xia", "Xia"),
+            "the monkey eligibility helper does not replace the existing Xia path");
+        Equal(true, CivMonkeyPolicyRules.IsNativeXiaCultureSpecies(
+                "civ_monkey"),
+            "civilized monkeys are a native Xia-culture species");
+        Equal(false, CivMonkeyPolicyRules.IsNativeXiaCultureSpecies(
+                "monkey"),
+            "wild monkeys are not automatically Xiaized");
+        Equal(false, CivMonkeyPolicyRules.IsNativeXiaCultureSpecies(
+                "human"),
+            "ordinary humans still require the Xiaization progression");
+
+        Equal("父姓", CivMonkeyNamingRules.ResolveSurname("父姓", 987654321L),
+            "an inherited paternal surname always wins");
+        Equal(true, expectedSurnames.Contains(
+                CivMonkeyNamingRules.ResolveSurname("", 987654321L)),
+            "a missing surname uses the stable dedicated surname pool");
+        Equal(CivMonkeyNamingRules.ResolveSurname("", 987654321L),
+            CivMonkeyNamingRules.ResolveSurname("", 987654321L),
+            "stable surname selection repeats for the same seed");
+
+        string[] editableShiPool = { "蒙", "猴", "侯" };
+        CivMonkeyLineageIdentity founderIdentity =
+            CivMonkeyNamingRules.ResolveLineageIdentity("", 987654321L,
+                editableShiPool);
+        Equal(true, editableShiPool.Contains(founderIdentity.ClanName),
+            "a monkey founder receives a Shi only from the editable monkey pool");
+        Equal(founderIdentity.ClanName, founderIdentity.FamilyName,
+            "monkey family_name matches the selected Shi");
+        Equal(founderIdentity.ClanName, founderIdentity.ChineseFamilyName,
+            "monkey chinese_family_name matches the selected Shi");
+
+        CivMonkeyLineageIdentity repeatedIdentity =
+            CivMonkeyNamingRules.ResolveLineageIdentity(founderIdentity.ClanName,
+                123L, editableShiPool);
+        Equal(founderIdentity.ClanName, repeatedIdentity.ClanName,
+            "repeated lineage initialization preserves an existing monkey Shi");
+
+        CivMonkeyLineageIdentity childIdentity =
+            CivMonkeyNamingRules.ResolveLineageIdentity(founderIdentity.ClanName,
+                456L, editableShiPool);
+        Equal(founderIdentity.FamilyName, childIdentity.FamilyName,
+            "a child inherits the paternal monkey family name");
+        Equal(founderIdentity.ChineseFamilyName, childIdentity.ChineseFamilyName,
+            "a child inherits the paternal Chinese family name");
+        Equal(founderIdentity.ClanName, childIdentity.ClanName,
+            "a child inherits the paternal monkey Shi instead of rerolling");
+        CivMonkeyLineageIdentity placeholderIdentity =
+            CivMonkeyNamingRules.ResolveLineageIdentity("name", 789L,
+                editableShiPool);
+        Equal(true, editableShiPool.Contains(placeholderIdentity.ClanName),
+            "a placeholder clan name is replaced by a real monkey Shi");
+        Equal(false, string.Equals("name", placeholderIdentity.FamilyName,
+                StringComparison.OrdinalIgnoreCase),
+            "monkey lineage fields never retain the name placeholder");
+
+        string first = CivMonkeyNamingRules.PickGivenName(987654321L, 4);
+        string repeated = CivMonkeyNamingRules.PickGivenName(987654321L, 4);
+        Equal(first, repeated,
+            "the same world seed and meta type select the same name");
+        Equal(true, expectedNames.Contains(first),
+            "deterministic selection returns only a configured easter-egg name");
+        string actorName = CivMonkeyNamingRules.BuildActorName("父姓", 987654321L, 4);
+        Equal(true, actorName.StartsWith("父姓", StringComparison.Ordinal),
+            "civilized monkey actor names are surname plus given name");
+        Equal(false, string.Equals("name", actorName,
+                StringComparison.OrdinalIgnoreCase),
+            "actor fallback never emits the name placeholder");
+        string city = CivMonkeyNamingRules.PickCity(987654321L, 1);
+        Equal(true, expectedCityNames.Contains(city),
+            "city selection returns only the dedicated settlement pool");
+        Equal(city, CivMonkeyNamingRules.PickCity(987654321L, 1),
+            "city selection is deterministic for the same seed");
+        string kingdom = CivMonkeyNamingRules.PickKingdom(987654321L, 0);
+        Equal(true, expectedKingdomNames.Contains(kingdom),
+            "kingdom selection returns only a dedicated Chinese title");
+        Equal(false, string.Equals("name", kingdom,
+                StringComparison.OrdinalIgnoreCase),
+            "the no-ChineseName fallback never emits the name placeholder");
+        Equal(CivMonkeyNamingRules.PickGivenName(long.MinValue, 0),
+            CivMonkeyNamingRules.PickGivenName(long.MinValue, 0),
+            "negative seeds remain deterministic");
+    }
+}

@@ -35,7 +35,9 @@ namespace AncientWarfare3.core.lineage
                         IsNearCapital(general, pKingdom),
                         IsBorderFief(general, pKingdom),
                         FindStrongNeighbor(general, pKingdom)?.data != null,
-                        RoyalClaimService.HasHostedClaim(pKingdom));
+                        RoyalClaimService.HasHostedClaim(pKingdom),
+                        MinisterialPowerService.CanResolvePalaceCoup(
+                            general, pKingdom));
                     if (branch != GeneralRebellionBranch.None) TryRebel(general, pKingdom, risk, branch);
                 }
             }
@@ -83,15 +85,19 @@ namespace AncientWarfare3.core.lineage
         private static int CalculateKingdomCrisis(Kingdom pKingdom)
         {
             Actor king = pKingdom?.king;
-            int weakKingScore = 20;
+            bool hasLivingRuler = king?.data != null && king.isAlive() &&
+                                  !king.isRekt();
+            int weakKingScore = GeneralRebellionRules.RulerWeaknessScore(
+                hasLivingRuler, hasLivingRuler
+                    ? SafeStat(king, "diplomacy") +
+                      SafeStat(king, "stewardship") +
+                      SafeStat(king, "warfare")
+                    : 0f);
             bool childOrOldRuler = false;
-            if (king?.data != null)
+            if (hasLivingRuler)
             {
                 int age = SafeAge(king);
                 childOrOldRuler = !king.isAdult() || age >= 75;
-                weakKingScore = Mathf.Clamp(55 - Mathf.RoundToInt(
-                    (SafeStat(king, "diplomacy") + SafeStat(king, "stewardship") + SafeStat(king, "warfare")) * 0.08f),
-                    0, 55);
             }
 
             bool successionPending = SuccessionTransitionRules.IsPending(pKingdom.data.timer_new_king);
@@ -172,8 +178,45 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        internal static CourtDispositionResistanceResult
+            TryStartDispositionRebellion(Actor pGeneral, Kingdom pKingdom,
+                int pIntensity)
+        {
+            if (pGeneral?.data == null || pKingdom?.data == null ||
+                pGeneral.isRekt() || !pGeneral.isAlive() ||
+                !GeneralService.IsGeneral(pGeneral) ||
+                pGeneral.kingdom != pKingdom)
+                return CourtDispositionResistanceResult.FailedToStart;
+            if (IsAtWar(pKingdom))
+                return CourtDispositionResistanceResult.Accepted;
+
+            int risk = Mathf.Clamp(CalculateRisk(pGeneral, pKingdom,
+                GeneralService.CountPersonalPower(pGeneral)) +
+                Math.Max(0, pIntensity), 0, 120);
+            bool hasFief = FiefService.GetFiefCityId(pGeneral) >= 0;
+            GeneralRebellionBranch selected =
+                GeneralRebellionRules.SelectBranch(
+                    CalculateKingdomCrisis(pKingdom), risk, hasFief,
+                    IsNearCapital(pGeneral, pKingdom),
+                    IsBorderFief(pGeneral, pKingdom),
+                    FindStrongNeighbor(pGeneral, pKingdom)?.data != null,
+                    RoyalClaimService.HasHostedClaim(pKingdom),
+                    canPalaceCoup: false);
+            if (selected == GeneralRebellionBranch.None)
+                return CourtDispositionResistanceResult.Accepted;
+
+            GeneralRebellionBranch branch = hasFief
+                ? GeneralRebellionBranch.FiefIndependence
+                : GeneralRebellionBranch.DirectMilitaryRebellion;
+            return TryRebel(pGeneral, pKingdom, risk, branch)
+                ? CourtDispositionResistanceResult.Rebelled
+                : CourtDispositionResistanceResult.FailedToStart;
+        }
+
         private static bool TryPalaceCoup(Actor pGeneral, Kingdom pKingdom, int pRisk)
         {
+            if (!MinisterialPowerService.CanResolvePalaceCoup(
+                    pGeneral, pKingdom)) return false;
             pGeneral.data.set("aw_general_rebelled_once", true);
             GeneralService.MarkRebelled(pGeneral);
             bool success = TryResolvePalaceCoup(pGeneral, pKingdom, pRisk);
@@ -186,22 +229,64 @@ namespace AncientWarfare3.core.lineage
         {
             if (pChallenger?.data == null || pKingdom?.data == null ||
                 pKingdom.isRekt()) return false;
-            bool success = pPressure >= 100 ||
-                           CalculateKingdomCrisis(pKingdom) >= 75 ||
-                           !RoyalGuardExists(pKingdom);
+            if (!MinisterialPowerService.CanResolvePalaceCoup(
+                    pChallenger, pKingdom)) return false;
+            int crisis = CalculateKingdomCrisis(pKingdom);
+            bool success = MinisterialPowerRules.ShouldCoupSucceed(
+                pPressure, crisis, RoyalGuardExists(pKingdom),
+                HasEligibleHeir(pKingdom), HasAdultDirectSon(pKingdom),
+                InheritanceCandidateService.CountAdultRoyalCandidates(
+                    pKingdom), IsStrongRuler(pKingdom.king));
             if (!success) return false;
+            Actor oldRuler = pKingdom.king;
+            CoupRestorationSeed restoration =
+                CoupRestorationService.Prepare(pKingdom, pChallenger);
             CourtService.ClearOfficeForReignTransition(pChallenger,
                 "palace_coup");
             if (!PrepareChallengerForAccession(pChallenger, pKingdom)) return false;
             try
             {
+                if (oldRuler?.data != null && pKingdom.king == oldRuler)
+                {
+                    HeirService.RememberPreSuccessionKing(pKingdom,
+                        oldRuler);
+                    pKingdom.kingLeftEvent();
+                }
                 pKingdom.setKing(pChallenger);
-                return pKingdom.king == pChallenger;
+                if (pKingdom.king != pChallenger)
+                {
+                    RestoreRulerAfterFailedCoup(pKingdom, oldRuler);
+                    return false;
+                }
+                CoupRestorationService.TryStart(restoration, pKingdom,
+                    pChallenger);
+                return true;
             }
             catch (Exception e)
             {
                 ModClass.LogWarning("Palace coup setKing failed: " + e.Message);
+                RestoreRulerAfterFailedCoup(pKingdom, oldRuler);
                 return false;
+            }
+        }
+
+        private static void RestoreRulerAfterFailedCoup(Kingdom pKingdom,
+            Actor pOldRuler)
+        {
+            if (pKingdom?.data == null || pOldRuler?.data == null ||
+                pOldRuler.isRekt() || !pOldRuler.isAlive() ||
+                pKingdom.king == pOldRuler) return;
+            try
+            {
+                if (pKingdom.king?.data != null) pKingdom.kingLeftEvent();
+                if (!AccessionIdentityService.Prepare(pKingdom, pOldRuler))
+                    return;
+                pKingdom.setKing(pOldRuler);
+            }
+            catch (Exception exception)
+            {
+                ModClass.LogWarning("Palace coup ruler rollback failed: " +
+                                    exception.Message);
             }
         }
 
@@ -392,6 +477,40 @@ namespace AncientWarfare3.core.lineage
             foreach (Actor unit in pKingdom.getUnits())
                 if (RoyalGuardService.IsRoyalGuard(unit)) return true;
             return false;
+        }
+
+        private static bool HasEligibleHeir(Kingdom pKingdom)
+        {
+            Actor heir = HeirService.FindHeirReadOnly(pKingdom);
+            return heir?.data != null && !heir.isRekt() && heir.isAlive();
+        }
+
+        private static bool HasAdultDirectSon(Kingdom pKingdom)
+        {
+            Actor king = pKingdom?.king;
+            if (king?.data == null) return false;
+            try
+            {
+                foreach (Actor child in king.getChildren(false))
+                {
+                    if (child?.data == null || child.isRekt() ||
+                        !child.isAlive() || !child.isAdult() ||
+                        !child.isSexMale()) continue;
+                    long kingId = king.data.id;
+                    if (child.data.parent_id_1 == kingId ||
+                        child.data.parent_id_2 == kingId) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool IsStrongRuler(Actor pKing)
+        {
+            if (pKing?.data == null || !pKing.isAdult()) return false;
+            return SafeStat(pKing, "stewardship") +
+                   SafeStat(pKing, "diplomacy") +
+                   SafeStat(pKing, "warfare") >= 42f;
         }
 
         private static int CountOwnedNonCoreCities(Kingdom pKingdom)

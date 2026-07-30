@@ -1,5 +1,6 @@
 using System;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.lineage;
 using UnityEngine;
 
 namespace AncientWarfare3.content
@@ -43,6 +44,35 @@ namespace AncientWarfare3.content
             royalMedicalCare.base_stats["multiplier_health"] = 0.5f;
             royalMedicalCare.base_stats["lifespan"] = 15f;
             AssetManager.status.add(royalMedicalCare);
+
+            RegisterMandateMilitaryStatus(MandateMilitaryPhaseRules.GoldenStatusId,
+                MandatePhase.Golden);
+            RegisterMandateMilitaryStatus(MandateMilitaryPhaseRules.DeclineStatusId,
+                MandatePhase.Decline);
+            RegisterMandateMilitaryStatus(MandateMilitaryPhaseRules.ChaosStatusId,
+                MandatePhase.Chaos);
+            RegisterMandateMilitaryStatus(MandateMilitaryPhaseRules.RenewalStatusId,
+                MandatePhase.Renewal);
+        }
+
+        private static void RegisterMandateMilitaryStatus(string pId,
+            MandatePhase pPhase)
+        {
+            MandateMilitaryQuality quality =
+                MandateMilitaryPhaseRules.Quality(pPhase);
+            var status = new StatusAsset
+            {
+                id = pId,
+                duration = 1000000f,
+                allow_timer_reset = true,
+                path_icon = "ui/Icons/traits/iconTianming",
+                locale_id = "status_title_" + pId,
+                locale_description = "status_description_" + pId
+            };
+            status.base_stats["health"] = quality.Health;
+            status.base_stats["damage"] = quality.Damage;
+            status.base_stats["warfare"] = quality.Warfare;
+            AssetManager.status.add(status);
         }
     }
 }

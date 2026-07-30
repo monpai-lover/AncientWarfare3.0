@@ -30,23 +30,7 @@ namespace AncientWarfare3.content
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             if (!IsXiaKingdom(pKingdom, pActor)) return false;
-
-            Actor ruler = pKingdom.king;
-            if (ruler?.data != null)
-            {
-                ruler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
-                if (shiId >= 0)
-                {
-                    ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
-                    StateNameCommitResult committed = StateNameService.EnsureBoundStateName(
-                        pKingdom, ruler, shiId,
-                        DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id),
-                        branch?.origin_kingdom_id ?? pKingdom.id);
-                    return committed.Success &&
-                           StateNameService.ProjectCommittedStateName(pKingdom, committed);
-                }
-            }
-            if (!pForce && !XiaNameRepairRules.IsInvalidGeneratedMetaName(pKingdom?.data?.name)) return false;
+            if (!pForce && XiaPreQinKingdomNameRules.IsKnown(pKingdom.data.name)) return false;
 
             string name = GenerateKingdomName(pKingdom);
             if (XiaNameRepairRules.IsInvalidGeneratedMetaName(name)) return false;
@@ -64,9 +48,46 @@ namespace AncientWarfare3.content
             if (!XiaizedKingdomNamingRules.ShouldApply(originalXia,
                     XiaizationService.GetLevel(pKingdom), XiaizationService.LevelXiaizedDynasty, applied))
                 return false;
-            if (!TryRenameKingdom(pKingdom, pKingdom.king, pForce: true)) return false;
+            string oldName = pKingdom.name ?? pKingdom.data.name ?? "";
+            string preferredName = GenerateKingdomName(pKingdom);
+            if (XiaNameRepairRules.IsInvalidGeneratedMetaName(preferredName))
+                return false;
+            if (!TryApplyFullyXiaizedStateName(pKingdom, preferredName))
+                return false;
             pKingdom.data.set(LineageKeys.XIA_FULL_NAME_APPLIED, true);
+            string newName = pKingdom.name ?? pKingdom.data.name ?? "";
+            if (!string.Equals(oldName, newName, StringComparison.Ordinal))
+                KingdomRenameSyncService.OnKingdomNameChanged(pKingdom,
+                    oldName, newName, pTrack: true);
+            RulerAppellationService.RefreshLivingProjection(pKingdom);
             return true;
+        }
+
+        private static bool TryApplyFullyXiaizedStateName(Kingdom pKingdom,
+            string pPreferredName)
+        {
+            Actor ruler = pKingdom.king;
+            if (ruler?.data != null)
+            {
+                ruler.data.get(LineageKeys.SHI_ID, out long shiId, -1L);
+                if (shiId >= 0)
+                {
+                    ShiBranchInfo branch = LineageQuery.GetShiBranchInfo(shiId);
+                    StateNameCommitResult committed =
+                        StateNameService.EnsureBoundStateName(
+                            pKingdom, ruler, shiId,
+                            DynastyRecordWriter.GetCurrentDynastyId(pKingdom.id),
+                            branch?.origin_kingdom_id ?? pKingdom.id,
+                            pPreferredName);
+                    return committed.Success &&
+                           StateNameService.ProjectCommittedStateName(
+                               pKingdom, committed);
+                }
+            }
+
+            pKingdom.setName(pPreferredName, pTrack: false);
+            return string.Equals(pKingdom.name, pPreferredName,
+                StringComparison.Ordinal);
         }
 
         internal static bool TryRenameReligion(Religion pReligion, Actor pActor, bool pForce)

@@ -1,4 +1,84 @@
 key,cz,en,ch
+aw_court_disposition Title,宫廷处置,Court Disposition,宮廷處置
+aw_inheritance_laws Title,继承法,Inheritance Law,繼承法
+aw_court_auxiliary_laws Title,官制辅助法,Court Auxiliary Laws,官制輔助法
+aw_court_disposition_window_title,宫廷处置,Court Disposition,宮廷處置
+aw_court_disposition_window_desc,处置官员与宗室并处理可能的抗命,Dispose officials and royal kin with possible resistance,處置官員與宗室並處理可能的抗命
+aw_court_disposition_points,政治点,Political points,政治點
+aw_court_disposition_section_office,官职与官阶,Office and Rank,官職與官階
+aw_court_disposition_section_title_fief,爵位与封地,Title and Fief,爵位與封地
+aw_court_disposition_section_lineage,宗籍,Lineage,宗籍
+aw_court_disposition_section_feudatory,藩国处置,Feudatory,藩國處置
+aw_court_disposition_select_rank,选择爵级,Select noble rank,選擇爵級
+aw_court_disposition_select_city,选择城市,Select city,選擇城市
+aw_court_disposition_back,返回,Back,返回
+aw_court_back_to_court,返回官场,Back to Court,返回官場
+aw_court_disposition_no_options,没有符合条件的选项,No eligible options are available,沒有符合條件的選項
+aw_court_disposition_action_promote_rank,升阶,Promote Rank,升階
+aw_court_disposition_action_demote_rank,降阶,Demote Rank,降階
+aw_court_disposition_action_dismiss_office,罢黜实职,Dismiss Office,罷黜實職
+aw_court_disposition_action_grant_noble_rank,授予虚爵,Grant Noble Rank,授予虛爵
+aw_court_disposition_action_grant_fief,授予实土,Grant Fief,授予實土
+aw_court_disposition_action_revoke_fief,收回实土,Revoke Fief,收回實土
+aw_court_disposition_action_grant_surname,赐姓入宗,Grant Royal Surname,賜姓入宗
+aw_court_disposition_action_expel_lineage,除籍别氏,Expel from Royal Lineage,除籍別氏
+aw_court_disposition_action_relocate_feudatory,移封藩国,Relocate Feudatory,移封藩國
+aw_court_disposition_action_reclaim_feudatory_city,收回藩城,Reclaim Feudatory City,收回藩城
+aw_court_disposition_reason_invalid_command,处置命令无效,Invalid disposition command,處置命令無效
+aw_court_disposition_reason_invalid_ruler,当前操作者不是本国在位君主,The acting ruler is not the current ruler,當前操作者不是本國在位君主
+aw_court_disposition_reason_invalid_target,目标不属于当前官场或身份无效,The target is not a valid member of this court,目標不屬於當前官場或身份無效
+aw_court_disposition_reason_invalid_parameter,爵级或城市参数无效,The selected rank or city is invalid,爵級或城市參數無效
+aw_court_disposition_reason_ineligible_action,当前身份不符合此项处置条件,The target is not eligible for this disposition,當前身份不符合此項處置條件
+aw_court_disposition_reason_insufficient_political_points,政治点不足,Insufficient political points,政治點不足
+aw_court_disposition_reason_persistence_failed,处置事务写入失败,Disposition persistence failed,處置事務寫入失敗
+aw_court_disposition_reason_political_spend_failed,处置已发生但政治点结算失败,Disposition occurred but point settlement failed,處置已發生但政治點結算失敗
+aw_court_disposition_reason_resistance_failed,抗命条件成立但战争或政变未能启动,Resistance was triggered but no war or coup could start,抗命條件成立但戰爭或政變未能啟動
+aw_court_disposition_outcome_rejected,处置被拒绝,Disposition rejected,處置被拒絕
+aw_court_disposition_outcome_committed,处置已执行,Disposition committed,處置已執行
+aw_court_disposition_outcome_rebelled,目标抗命并已起兵,Target resisted and rebelled,目標抗命並已起兵
+aw_court_disposition_outcome_clean_failure,处置未生效且未扣点,Disposition failed without cost,處置未生效且未扣點
+aw_court_disposition_outcome_unknown,处置结果无法确认且不会自动重试,Disposition outcome is unknown and will not retry,處置結果無法確認且不會自動重試
+aw_court_disposition_cost,政治点成本：{0},Political cost: {0},政治點成本：{0}
+aw_hist_event_court_surname_granted,赐姓入宗,Surname Granted,賜姓入宗
+aw_hist_event_court_lineage_expelled,除籍别氏,Expelled from Royal Lineage,除籍別氏
+aw_hist_court_surname_edict,制曰：,Edict: ,制曰：
+aw_hist_court_surname_from,有劳于国特赐从, is granted a royal surname and moved from ,有勞於國特賜從
+aw_hist_court_surname_to,入, into ,入
+aw_hist_court_surname_by,命出, by command of ,命出
+aw_hist_court_surname_suffix,附宗籍以示优宠, and enters the royal register,附宗籍以示優寵
+aw_hist_court_expulsion_edict,制曰：,Edict: ,制曰：
+aw_hist_court_expulsion_from,罪失宗义今从, is expelled from ,罪失宗義今從
+aw_hist_court_expulsion_to,除籍另立同姓独立氏支, and establishes the independent same-surname branch ,除籍另立同姓獨立氏支
+aw_hist_court_expulsion_by,命出, by command of ,命出
+aw_hist_court_expulsion_suffix,父子谱系如故不得再与王统, while descent remains but royal succession rights cease,父子譜系如故不得再與王統
+aw_hist_shi_suffix,氏, Shi,氏
+aw_hist_unknown_shi,氏未详,unknown Shi,氏未詳
+opinion_aw_court_openness,异文化开放,Cross-cultural openness,異文化開放
+aw_court_institution_effects,制度修正,Institution Effects,制度修正
+aw_court_institution_effect_zhou,附庸软上限 8 · 藩国维护忠诚 +1,Vassal soft cap 8 · feudatory maintenance loyalty +1,附庸軟上限 8 · 藩國維護忠誠 +1
+aw_court_institution_effect_han,城市动乱 -4 · 人力 +15% · 兵额 +10% · 直属附庸自治上限 -10,Unrest -4 · manpower +15% · slots +10% · direct autonomy cap -10,城市動亂 -4 · 人力 +15% · 兵額 +10% · 直屬附庸自治上限 -10
+aw_court_institution_effect_tang,异文化好感 +10 · 兵额 +12% · 国内科技传播 +10%,Cross-culture opinion +10 · slots +12% · domestic spread +10%,異文化好感 +10 · 兵額 +12% · 國內科技傳播 +10%
+aw_court_institution_effect_song,政策 +15% · 科技产出/国内传播 +20% · 税收 +10% · 直属附庸贡赋 +10 · 兵额 -10%,Policy +15% · tech/spread +20% · tax +10% · direct tribute +10 · slots -10%,政策 +15% · 科技產出/國內傳播 +20% · 稅收 +10% · 直屬附庸貢賦 +10 · 兵額 -10%
+aw_hist_event_nine_bestowments,加九锡,Nine Bestowments,加九錫
+aw_hist_nine_bestowments_prefix,制曰：,Edict: ,制曰：
+aw_hist_nine_bestowments_mid,总百揆而功高社稷，今于, holds the chief offices and has rendered eminent service. The court of ,總百揆而功高社稷，今於
+aw_hist_nine_bestowments_suffix,加九锡殊礼，以彰勋望；位极人臣，禅代之势由此而生。, grants the Nine Bestowments in recognition; the minister now stands one step below the throne.,加九錫殊禮，以彰勳望；位極人臣，禪代之勢由此而生。
+aw_hist_event_official_appointment_edict,颁授告身,Appointment Edict,頒授告身
+aw_hist_official_edict_prefix,制曰：,Edict: ,制曰：
+aw_hist_official_edict_mid,考绩有闻，宜进, has earned distinction in office and shall advance to ,考績有聞，宜進
+aw_hist_official_rank_grant_mid,始授, is first granted ,始授
+aw_hist_official_edict_office_mid,，仍任, while retaining the office of ,，仍任
+aw_hist_official_edict_suffix,，勉修乃职，以副朝廷铨叙。,. Fulfil the charge with diligence and justify the court's selection.,，勉修乃職，以副朝廷銓敘。
+aw_hist_official_rank_grant_suffix,，著入仕籍。, and is entered upon the official register.,，著入仕籍。
+aw_court_joint_title,结衔,Full style,結銜
+aw_court_joint_rank_format,{0}·{1},{0} · {1},{0}·{1}
+aw_court_joint_merit,功勋 {0},Merit {0},功勳 {0}
+aw_court_official_track_civil_title,文散官,Civil scattered rank,文散官
+aw_court_official_track_military_title,武勋官,Military merit rank,武勳官
+aw_court_office_feudatory_changshi,监察长史,Inspecting Chief Clerk,監察長史
+aw_court_office_feudatory_prince,藩王,Feudatory Prince,藩王
+aw_court_layer_feudatory,藩国衙署,Feudatory Yamen,藩國衙署
+aw_court_appointment Title,任命官员,Appoint Officer,任命官員
 aw_government_republic,共和国,Republic,共和國
 aw_government_monarchy,君主制,Monarchy,君主制
 aw_court_roles,官职,Roles,官職
@@ -16,15 +96,104 @@ aw_court_stat_warfare,军事,Warfare,軍事
 aw_court_stat_intelligence,学识,Intelligence,學識
 aw_court Title,百家官场,Court of the Hundred Schools,百家官場
 aw_tech_official_court,官场制度,Official Court,官場制度
-aw_tech_official_court_desc,将原始朝会升级为百家官场，允许贤人入仕并影响国家路线,Upgrade primitive council into a court of schools that steers state policy,將原始朝會升級為百家官場，允許賢人入仕並影響國家路線
-aw_court_button_primitive,原始朝会,Primitive Council,原始朝會
+aw_tech_official_court_desc,将东周六卿改制为三公九卿，允许百家贤人入仕并影响国家路线,Reform the Eastern Zhou Six Ministers into the Three Excellencies and Nine Ministers while admitting scholars of the Hundred Schools,將東周六卿改制為三公九卿，允許百家賢人入仕並影響國家路線
+aw_tech_nine_rank_system,九品中正,Nine-rank System,九品中正
+aw_tech_nine_rank_system_desc,每六年复评乡品；门第明显加分，但寒门可凭能力、学派资历、考课和功绩进入上品,Review local grades every six years; lineage matters; capable commoners can still reach the upper grades through learning and merit,每六年復評鄉品；門第明顯加分，但寒門可憑能力、學派資歷、考課和功績進入上品
+aw_tech_civil_service_examination,贡举制度,Civil Service Examinations,貢舉制度
+aw_tech_civil_service_examination_desc,通过贡举考试选拔受教育的士人，使贵族、寒门与平民都能凭才学入仕,Select educated candidates through examinations so nobles declined houses and commoners can enter office by learning,通過貢舉考試選拔受教育的士人，使貴族、寒門與平民都能憑才學入仕
+aw_civil_service_mode_imperial,科举,Imperial Examination,科舉
+aw_civil_service_mode_tribute,贡举,Tribute Examination,貢舉
+aw_civil_service_qualification_none,无资格,Unqualified,無資格
+aw_civil_service_qualification_juren,举人,Juren,舉人
+aw_civil_service_qualification_gongshi,贡士,Gongshi,貢士
+aw_civil_service_qualification_jinshi,进士,Jinshi,進士
+aw_civil_service_rank_zhuangyuan,状元,Principal Graduate,狀元
+aw_civil_service_rank_bangyan,榜眼,Second Graduate,榜眼
+aw_civil_service_rank_tanhua,探花,Third Graduate,探花
+aw_civil_service_exam,科举与贡举,Civil Service Examinations,科舉與貢舉
+aw_civil_service_exam Title,科举与贡举,Civil Service Examinations,科舉與貢舉
+aw_civil_service_exam_title,科举与贡举,Civil Service Examinations,科舉與貢舉
+aw_civil_service_exam_entry,科举/贡举,Examinations,科舉/貢舉
+aw_civil_service_exam_entry_desc,查看本届考试进程与历届榜单,Open current progress and completed examination rolls,查看本屆考試進程與歷屆榜單
+aw_civil_service_exam_locked_nine_rank,需先研发九品中正制,Requires the Nine-Rank System,需先研發九品中正制
+aw_civil_service_exam_locked_policy,需先研发贡举制度,Requires Civil Service Examinations research,需先研發貢舉制度
+aw_civil_service_exam_back_to_court,返回官场,Back to Court,返回官場
+aw_civil_service_exam_history,历届榜单,Past Rolls,歷屆榜單
+aw_civil_service_exam_tab_all,本届总览,Current Roll,本屆總覽
+aw_civil_service_exam_no_session,尚未开科,No examination session has opened yet,尚未開科
+aw_civil_service_exam_completed,已定榜,Completed,已定榜
+aw_civil_service_exam_session_summary,世界第{0}年  |  {1}  |  下一节点：{2}  |  考生：{3},World year {0}  |  {1}  |  Next: {2}  |  Candidates: {3},世界第{0}年  |  {1}  |  下一節點：{2}  |  考生：{3}
+aw_civil_service_vacancies,官缺,Vacancies,官缺
+aw_civil_service_reserve,候补,Waiting reserve,候補
+aw_civil_service_admission,本科录取,Admitted this sitting,本科錄取
+aw_civil_service_exam_world_date,世界第{0}年第{1}日,World year {0} day {1},世界第{0}年第{1}日
+aw_civil_service_exam_no_candidates,当前分页暂无考生,No candidates in this view,當前分頁暫無考生
+aw_civil_service_exam_previous_session,上一届,Previous Sitting,上一屆
+aw_civil_service_exam_next_session,下一届,Next Sitting,下一屆
+aw_civil_service_exam_history_navigation_desc,切换已完成的历届榜单,Browse completed examination rolls,切換已完成的歷屆榜單
+aw_civil_service_exam_current_top_three,当前一甲三名,Current Top Three,當前一甲三名
+aw_civil_service_exam_confirm_ranking,确认定榜,Confirm Roll,確認定榜
+aw_civil_service_exam_submit_success,已奉旨定榜,Roll confirmed,已奉旨定榜
+aw_civil_service_exam_submit_failed,定榜失败,Ranking failed,定榜失敗
+aw_civil_service_exam_read_only,联机客户端只能查看,Replica clients are read only,聯機客戶端只能查看
+aw_civil_service_exam_ranking_stale,本届已定榜或定榜状态已改变,This ranking request is stale,本屆已定榜或定榜狀態已改變
+aw_civil_service_exam_ranking_not_imperial,非天命国或帝国不设殿试,Only mandate or imperial realms hold palace examinations,非天命國或帝國不設殿試
+aw_civil_service_exam_ranking_invalid,定榜候选人不完整或有重复,The selected finalists are invalid,定榜候選人不完整或有重複
+aw_civil_service_rank_move_up,上移名次,Move Up,上移名次
+aw_civil_service_rank_move_down,下移名次,Move Down,下移名次
+aw_civil_service_rank_move_desc,调整殿试定榜顺序,Adjust the palace examination order,調整殿試定榜順序
+aw_civil_service_stage_scheduled,待开科,Scheduled,待開科
+aw_civil_service_stage_local,乡试,Local Examination,鄉試
+aw_civil_service_stage_prefectural,州郡试,Prefectural Examination,州郡試
+aw_civil_service_stage_metropolitan,会试,Metropolitan Examination,會試
+aw_civil_service_stage_palace,殿试,Palace Examination,殿試
+aw_civil_service_stage_national,国试,National Examination,國試
+aw_civil_service_stage_ranking,定榜,Ranking,定榜
+aw_civil_service_stage_completed,已定榜,Completed,已定榜
+aw_civil_service_stage_cancelled,已罢科,Cancelled,已罷科
+aw_civil_service_origin_noble,贵族,Noble,貴族
+aw_civil_service_origin_declined,寒门,Declined House,寒門
+aw_civil_service_origin_commoner,平民,Commoner,平民
+aw_civil_service_school_none,无学派,No School,無學派
+aw_civil_service_local_grade,乡品,Local Grade,鄉品
+aw_civil_service_score_local,乡试,Local,鄉試
+aw_civil_service_score_metropolitan,会试,Metropolitan,會試
+aw_civil_service_score_palace,殿试,Palace,殿試
+aw_civil_service_score_national,国试,National,國試
+aw_civil_service_result_pending,待考,Pending,待考
+aw_civil_service_result_scored,已阅卷,Scored,已閱卷
+aw_civil_service_result_passed,录取,Passed,錄取
+aw_civil_service_result_failed,落第,Failed,落第
+aw_civil_service_result_absent,缺考,Absent,缺考
+aw_civil_service_result_advanced,免试晋级,Advanced,免試晉級
+aw_civil_service_result_cancelled,已取消,Cancelled,已取消
+aw_hist_civil_service_exam_opened_mid,开科举行, opened the ,開科舉行
+aw_hist_civil_service_exam_opened_year_mid,，本届为世界第, for world year ,，本屆為世界第
+aw_hist_civil_service_exam_opened_candidates_mid,年，应试者, with ,年，應試者
+aw_hist_civil_service_exam_opened_suffix,人。, candidates.,人。
+aw_hist_civil_service_exam_completed_mid,完成本届, completed the ,完成本屆
+aw_hist_civil_service_exam_completed_year_mid,定榜，本届为世界第, roll for world year ,定榜，本屆為世界第
+aw_hist_civil_service_exam_completed_suffix,年。,.,年。
+aw_hist_civil_service_qualified_mid,于本届考试取得, qualified as ,於本屆考試取得
+aw_hist_civil_service_qualified_year_mid,资格，本届为世界第, in world year ,資格，本屆為世界第
+aw_hist_civil_service_qualified_suffix,年。,.,年。
+aw_hist_civil_service_top_ranked_mid,获定为, was ranked as ,獲定為
+aw_hist_civil_service_top_ranked_year_mid,，本届为世界第, in world year ,，本屆為世界第
+aw_hist_civil_service_top_ranked_suffix,年。,.,年。
+aw_hist_civil_service_first_appointment_mid,凭, entered office as a ,憑
+aw_hist_civil_service_first_appointment_office_mid,资格初授, and received a first appointment as ,資格初授
+aw_hist_civil_service_first_appointment_suffix,，正式入仕。,.,，正式入仕。
+aw_court_button_primitive,东周六卿,Eastern Zhou Six Ministers,東周六卿
 aw_court_button_official,百家官场,Hundred Schools Court,百家官場
 aw_court_button_locked,官场未启用,Court Locked,官場未啟用
 aw_court_title,百家官场,Court of the Hundred Schools,百家官場
-aw_court_primitive_title,原始朝会,Primitive Council,原始朝會
+aw_court_primitive_title,东周六卿,Eastern Zhou Six Ministers,東周六卿
 aw_court_efficiency,官场效率,Court Efficiency,官場效率
 aw_court_dominant_school,主流学派,Dominant School,主流學派
 aw_court_faction_composition,学派构成,Faction Composition,學派構成
+aw_court_aristocratic_groups,卿族,Ministerial Clans,卿族
+aw_court_aristocratic_groups_none,暂无成势卿族,No established ministerial clan,暫無成勢卿族
+aw_court_aristocratic_group_item,{0}氏 势{1}·{2}人,{0} clan P{1}·{2},{0}氏 勢{1}·{2}人
 aw_court_tooltip_cached,官场数据按低频缓存刷新，打开窗口不会实时扫描全国人物,Court data uses cached refresh and does not scan every actor when opened,官場資料按低頻快取刷新，打開窗口不會即時掃描全國人物
 aw_court_no_officer,空缺,Vacant,空缺
 aw_court_action_appoint,任命,Appoint,任命
@@ -45,6 +214,12 @@ aw_court_school_syncretist,杂家,Syncretist School,雜家
 aw_court_school_merchant,商家,Merchant School,商家
 aw_court_school_craftsman,工家,Craftsman School,工家
 aw_court_school_historian,史家,Historian School,史家
+aw_court_office_taizai,太宰（相）,Grand Steward (Chancellor),太宰（相）
+aw_court_office_situ,司徒,Minister of the People,司徒
+aw_court_office_zongbo,宗伯,Minister of Rites,宗伯
+aw_court_office_sima,司马,Minister of War,司馬
+aw_court_office_sikou,司寇,Minister of Justice,司寇
+aw_court_office_sikong,司空,Minister of Works,司空
 aw_court_office_chancellor,丞相,Chancellor,丞相
 aw_court_office_censor,御史,Censor,御史
 aw_court_office_marshal,司马,Marshal,司馬
@@ -67,10 +242,49 @@ aw_court_office_xingbu,刑部,Ministry of Justice,刑部
 aw_court_office_gongbu,工部,Ministry of Works,工部
 aw_court_office_imperial_physician,太医令,Imperial Physician,太醫令
 aw_court_office_imperial_astrologer,太史令,Imperial Astrologer,太史令
+aw_court_tier_easternzhou,东周六卿,Eastern Zhou Six Ministers,東周六卿
 aw_court_tier_sangongjiuqing,三公九卿,Three Excellencies & Nine Ministers,三公九卿
 aw_court_tier_sanshengliubu,三省六部,Three Departments & Six Ministries,三省六部
+aw_court_institution_zhou,周制,Zhou institutions,周制
+aw_court_institution_han,汉制,Han institutions,漢制
+aw_court_institution_tang,唐制,Tang institutions,唐制
+aw_court_institution_song,宋制,Song institutions,宋制
+aw_court_office_han_chancellor,丞相,Chancellor,丞相
+aw_court_office_han_censor,御史大夫,Imperial Censor,御史大夫
+aw_court_office_han_marshal,太尉,Grand Commandant,太尉
+aw_court_office_han_justice,廷尉,Commandant of Justice,廷尉
+aw_court_office_han_steward,大司农,Grand Minister of Agriculture,大司農
+aw_court_office_han_erudite,太常,Minister of Ceremonies,太常
+aw_court_office_han_imperial_physician,太医令,Imperial Physician,太醫令
+aw_court_office_han_imperial_astrologer,太史令,Grand Astrologer,太史令
+aw_court_office_tang_zhongshu,中书令,Director of the Secretariat,中書令
+aw_court_office_tang_menxia,侍中,Director of the Chancellery,侍中
+aw_court_office_tang_shangshu,尚书令,Director of State Affairs,尚書令
+aw_court_office_tang_libu,吏部尚书,Minister of Personnel,吏部尚書
+aw_court_office_tang_hubu,户部尚书,Minister of Revenue,戶部尚書
+aw_court_office_tang_ribu,礼部尚书,Minister of Rites,禮部尚書
+aw_court_office_tang_bingbu,兵部尚书,Minister of War,兵部尚書
+aw_court_office_tang_xingbu,刑部尚书,Minister of Justice,刑部尚書
+aw_court_office_tang_gongbu,工部尚书,Minister of Works,工部尚書
+aw_court_office_tang_imperial_physician,太医令,Imperial Physician,太醫令
+aw_court_office_tang_imperial_astrologer,太史令,Grand Astrologer,太史令
+aw_court_office_song_zhongshu,同中书门下平章事,Chief Councillor,同中書門下平章事
+aw_court_office_song_menxia,参知政事,Assistant Councillor,參知政事
+aw_court_office_song_shangshu,尚书左仆射,Left Vice Director of State Affairs,尚書左僕射
+aw_court_office_song_libu,吏部尚书,Minister of Personnel,吏部尚書
+aw_court_office_song_hubu,三司使,Commissioner of the Three Fiscal Bureaus,三司使
+aw_court_office_song_ribu,礼部尚书,Minister of Rites,禮部尚書
+aw_court_office_song_bingbu,枢密使,Military Affairs Commissioner,樞密使
+aw_court_office_song_xingbu,刑部尚书,Minister of Justice,刑部尚書
+aw_court_office_song_gongbu,工部尚书,Minister of Works,工部尚書
+aw_court_office_song_imperial_physician,翰林医官使,Hanlin Medical Commissioner,翰林醫官使
+aw_court_office_song_imperial_astrologer,司天监,Director of Astronomy,司天監
 aw_tech_three_departments,三省六部制,Three Departments,三省六部制
 aw_tech_three_departments_desc,将三公九卿升级为三省六部，中枢分职集权，官场更高效,Upgrade the Three Excellencies into Three Departments and Six Ministries for a more efficient centralized court,將三公九卿升級為三省六部，中樞分職集權，官場更高效
+aw_tech_song_court,宋制官政,Song Court Reform,宋制官政
+aw_tech_song_court_desc,在三省六部基础上以中书门下和枢密财政诸司分掌文武财计,Build on the department system with separate civil military and fiscal administrations,在三省六部基礎上以中書門下和樞密財政諸司分掌文武財計
+aw_hist_edict_court_institution_mid,诏因时改制，参酌古今；今定官政为, decreed an institutional reform and established the ,詔因時改制，參酌古今；今定官政為
+aw_hist_edict_court_institution_suffix,，厘正文武财计，百司各循新章。,; civil military and fiscal offices were ordered under the new code.,，釐正文武財計，百司各循新章。
 aw_court_central_officers,中央官员,Central Officers,中央官員
 aw_court_local_bureaus,地方官署,Local Bureaus,地方官署
 aw_court_office_slots,官职数,Slots,官職數
@@ -109,10 +323,10 @@ aw_court_layer_city,地方官署,City Bureau,地方官署
 aw_court_layer_military,军府,Military Bureau,軍府
 aw_court_layer_censor,监察,Inspection,監察
 aw_court_event_founded,建立官场,Founded the court,建立官場
-aw_court_event_primitive,形成原始朝会,Formed a primitive council,形成原始朝會
+aw_court_event_primitive,设立东周六卿,Established the Eastern Zhou Six Ministers,設立東周六卿
 aw_court_event_dominant,学派主导官场,A school dominates the court,學派主導官場
 aw_court_school_none,无学派,No school,無學派
-aw_court_school_primitive,原始朝臣,Primitive Courtier,原始朝臣
+aw_court_school_primitive,东周朝臣,Eastern Zhou Courtier,東周朝臣
 aw_court_school_ru_description,以仁礼教化维系社会秩序,Orders society through benevolence ritual and education,以仁禮教化維繫社會秩序
 aw_court_school_mo_description,兼爱非攻并以尚贤和实用技艺济世,Impartial care defensive peace merit and useful craft,兼愛非攻並以尚賢和實用技藝濟世
 aw_court_school_dao_description,顺应自然并以克制的治理休养生息,Follows nature and favors restrained restorative rule,順應自然並以克制的治理休養生息
@@ -157,7 +371,68 @@ aw_court_appointment_page,第 {0}/{1} 页 · 共 {2} 名合格者,Page {0}/{1} -
 aw_court_appointment_previous,上一页,Previous page,上一頁
 aw_court_appointment_next,下一页,Next page,下一頁
 aw_court_official_rank,官阶,Official rank,官階
-aw_court_official_rank_short,{0}·{1}阶,{0} rank {1},{0}·{1}階
+aw_court_rank_unranked,无品,Unranked,無品
+aw_court_official_rank_short,{0}·{1},{0} · {1},{0}·{1}
+aw_court_rank_1,从九品,Secondary Ninth Rank,從九品
+aw_court_rank_2,正九品,Principal Ninth Rank,正九品
+aw_court_rank_3,从八品,Secondary Eighth Rank,從八品
+aw_court_rank_4,正八品,Principal Eighth Rank,正八品
+aw_court_rank_5,从七品,Secondary Seventh Rank,從七品
+aw_court_rank_6,正七品,Principal Seventh Rank,正七品
+aw_court_rank_7,从六品,Secondary Sixth Rank,從六品
+aw_court_rank_8,正六品,Principal Sixth Rank,正六品
+aw_court_rank_9,从五品,Secondary Fifth Rank,從五品
+aw_court_rank_10,正五品,Principal Fifth Rank,正五品
+aw_court_rank_11,从四品,Secondary Fourth Rank,從四品
+aw_court_rank_12,正四品,Principal Fourth Rank,正四品
+aw_court_rank_13,从三品,Secondary Third Rank,從三品
+aw_court_rank_14,正三品,Principal Third Rank,正三品
+aw_court_rank_15,从二品,Secondary Second Rank,從二品
+aw_court_rank_16,正二品,Principal Second Rank,正二品
+aw_court_rank_17,从一品,Secondary First Rank,從一品
+aw_court_rank_18,正一品,Principal First Rank,正一品
+aw_court_official_rank_civil_1,文林郎,Wenlin Gentleman,文林郎
+aw_court_official_rank_civil_2,儒林郎,Rulin Gentleman,儒林郎
+aw_court_official_rank_civil_3,承奉郎,Chengfeng Gentleman,承奉郎
+aw_court_official_rank_civil_4,给事郎,Attendant Gentleman,給事郎
+aw_court_official_rank_civil_5,朝散郎,Court Gentleman for Dispersed Service,朝散郎
+aw_court_official_rank_civil_6,朝请郎,Court Audience Gentleman,朝請郎
+aw_court_official_rank_civil_7,奉议郎,Consultation Gentleman,奉議郎
+aw_court_official_rank_civil_8,朝议郎,Court Consultation Gentleman,朝議郎
+aw_court_official_rank_civil_9,朝散大夫,Grand Master for Dispersed Service,朝散大夫
+aw_court_official_rank_civil_10,中散大夫,Palace Grand Master,中散大夫
+aw_court_official_rank_civil_11,太中大夫,Grand Master of the Palace Center,太中大夫
+aw_court_official_rank_civil_12,正议大夫,Grand Master of Upright Counsel,正議大夫
+aw_court_official_rank_civil_13,银青光禄大夫,Grand Master of Silver Seal and Blue Ribbon,銀青光祿大夫
+aw_court_official_rank_civil_14,金紫光禄大夫,Grand Master of Golden Seal and Purple Ribbon,金紫光祿大夫
+aw_court_official_rank_civil_15,光禄大夫,Grand Master of Splendid Happiness,光祿大夫
+aw_court_official_rank_civil_16,特进,Specially Advanced,特進
+aw_court_official_rank_civil_17,开府仪同三司,Grand Commander Equal to the Three Excellencies,開府儀同三司
+aw_court_official_rank_civil_18,开府仪同三司,Grand Commander Equal to the Three Excellencies,開府儀同三司
+aw_court_official_rank_military_turn_1,武骑尉,Martial Cavalry Commandant,武騎尉
+aw_court_official_rank_military_turn_2,云骑尉,Cloud Cavalry Commandant,雲騎尉
+aw_court_official_rank_military_turn_3,飞骑尉,Flying Cavalry Commandant,飛騎尉
+aw_court_official_rank_military_turn_4,骁骑尉,Valiant Cavalry Commandant,驍騎尉
+aw_court_official_rank_military_turn_5,骑都尉,Cavalry Commandant,騎都尉
+aw_court_official_rank_military_turn_6,上骑都尉,Upper Cavalry Commandant,上騎都尉
+aw_court_official_rank_military_turn_7,轻车都尉,Light Chariot Commandant,輕車都尉
+aw_court_official_rank_military_turn_8,上轻车都尉,Upper Light Chariot Commandant,上輕車都尉
+aw_court_official_rank_military_turn_9,护军,Protector-General,護軍
+aw_court_official_rank_military_turn_10,上护军,Upper Protector-General,上護軍
+aw_court_official_rank_military_turn_11,柱国,Pillar of State,柱國
+aw_court_official_rank_military_turn_12,上柱国,Upper Pillar of State,上柱國
+aw_court_local_grade,乡品,Local grade,鄉品
+aw_court_local_grade_unranked,未定品,Unranked,未定品
+aw_court_local_grade_1,上上,Upper-upper,上上
+aw_court_local_grade_2,上中,Upper-middle,上中
+aw_court_local_grade_3,上下,Upper-lower,上下
+aw_court_local_grade_4,中上,Middle-upper,中上
+aw_court_local_grade_5,中中,Middle-middle,中中
+aw_court_local_grade_6,中下,Middle-lower,中下
+aw_court_local_grade_7,下上,Lower-upper,下上
+aw_court_local_grade_8,下中,Lower-middle,下中
+aw_court_local_grade_9,下下,Lower-lower,下下
+aw_hist_court_rank_mid,，授官品, at official rank ,，授官品
 aw_court_official_track,文武轨,Career track,文武軌
 aw_court_official_track_civil,文,Civil,文
 aw_court_official_track_military,武,Military,武
@@ -170,6 +445,10 @@ aw_court_official_kaoke_2,中中,Middle,中中
 aw_court_official_kaoke_3,中下,Middle-lower,中下
 aw_court_official_kaoke_4,下考,Lower,下考
 aw_court_official_term_end,下次考课年,Term review year,下次考課年
+aw_court_petition_favor,朝廷恩眷,Court favor,朝廷恩眷
+aw_court_petition_until,恩眷截止年,Favor expires,恩眷截止年
+aw_hist_court_petition_mid,进献钱财干请于朝，耗资, petitioned the court with a gift costing ,進獻錢財干請於朝，耗資
+aw_hist_court_petition_favor_mid,，所得恩眷升至,; court favor rose to ,，所得恩眷升至
 aw_court_ministerial_power,权柄,Ministerial power,權柄
 aw_court_ministerial_stage,当前阶段,Authority stage,當前階段
 aw_court_ministerial_stage_0,执政未固,Limited authority,執政未固
@@ -178,3 +457,140 @@ aw_court_ministerial_stage_40,专权朝政,Dominant minister,專權朝政
 aw_court_ministerial_stage_60,擅政府朝,Controls the court,擅政府朝
 aw_court_ministerial_stage_80,威权震主,Overshadows the ruler,威權震主
 aw_court_ministerial_stage_90,逼宫之势,Poised for a coup,逼宮之勢
+aw_kingdom_reserved_slot,预留,Reserved,預留
+aw_kingdom_reserved_slot_desc,为后续王国功能预留的位置,Reserved for a future kingdom feature,為後續王國功能預留的位置
+aw_hist_edict_court_tier_mid,诏整官制，因时立法；今升为, decreed a reform of institutions and raised the court to ,詔整官制，因時立法；今升為
+aw_hist_edict_court_tier_suffix,，分职厘务，百官各守其序。,; offices were divided and ordered according to their charge.,，分職釐務，百官各守其序。
+aw_hist_edict_court_reform_mid,诏令更张官政，因治制宜；今命, decreed a reform of government and appointed ,詔令更張官政，因治制宜；今命
+aw_hist_edict_court_reform_suffix,主导变法，修典章，正百职，以经邦国。, to lead it; institutions and offices were set in order.,主導變法，修典章，正百職，以經邦國。
+aw_court_auxiliary_laws_title,官制辅助法,Court Auxiliary Laws,官制輔助法
+aw_court_auxiliary_laws_entry,辅助法,Auxiliary Laws,輔助法
+aw_court_auxiliary_laws_entry_desc,调整任期法、边防之制与用官文化,Adjust terms border command and appointment culture,調整任期法、邊防之制與用官文化
+aw_court_aux_apply,施行,Apply,施行
+aw_court_aux_points,政治点,Political points,政治點
+aw_court_aux_cost,改法开支,Change cost,改法開支
+aw_court_aux_current,当前,Current,當前
+aw_court_aux_ready,可更定,Ready,可更定
+aw_court_aux_cooldown,冷却,Cooldown,冷卻
+aw_court_aux_years,年,years,年
+aw_court_aux_hint,点选一项预览后施行；每项法律独立冷却,Select one option to preview then apply it; each law has its own cooldown,點選一項預覽後施行；每項法律獨立冷卻
+aw_court_aux_law_term,任期法,Term Law,任期法
+aw_court_aux_law_border,边防之制,Border Command Law,邊防之制
+aw_court_aux_law_appointment,用官文化,Appointment Culture,用官文化
+aw_court_term_lifetime,终身任期,Lifetime Tenure,終身任期
+aw_court_term_lifetime_desc,官员终身任职直至卸任、失格或死亡,Officials serve for life unless dismissed disqualified or dead,官員終身任職直至卸任、失格或死亡
+aw_court_term_three,固定三年,Fixed Three Years,固定三年
+aw_court_term_three_desc,官员每三年任期届满并接受续任或考课,Officials complete a term every three years before renewal or review,官員每三年任期屆滿並接受續任或考課
+aw_court_term_dynamic,动态三至六年,Dynamic Three to Six Years,動態三至六年
+aw_court_term_dynamic_desc,依年龄与上次考课确定三至六年任期,Set a three to six year term from age and prior review,依年齡與上次考課確定三至六年任期
+aw_court_term_nine,固定九年,Fixed Nine Years,固定九年
+aw_court_term_nine_desc,官员每九年任期届满并接受续任或考课,Officials complete a term every nine years before renewal or review,官員每九年任期屆滿並接受續任或考課
+aw_court_border_discretionary,便宜行事,Discretionary Action,便宜行事
+aw_court_border_discretionary_desc,边臣请战的批准门槛降低但仍须进入正常战书流程,Border petitions have a lower threshold but still use the normal war notice flow,邊臣請戰的批准門檻降低但仍須進入正常戰書流程
+aw_court_border_petition,上书请战,Petition for War,上書請戰
+aw_court_border_petition_desc,边臣上书并由朝廷批准后发出战书,Border officers petition the court before a war notice is issued,邊臣上書並由朝廷批准後發出戰書
+aw_court_border_centralized,兵权归中,Centralized Command,兵權歸中
+aw_court_border_centralized_desc,禁止边臣自行请战并将对外兵权收归中央,Border petitions are blocked and foreign war authority belongs to the center,禁止邊臣自行請戰並將對外兵權收歸中央
+aw_court_appointment_merit,唯才是举,Merit Only,唯才是舉
+aw_court_appointment_merit_desc,任官评分不因 Xia 文化身份获得加减分,Appointment scores receive no Xia culture modifier,任官評分不因 Xia 文化身份獲得加減分
+aw_court_appointment_preference,Xia 优先,Xia Preference,Xia 優先
+aw_court_appointment_preference_desc,Xia 候选人任官评分增加 8 分且不排除其他候选人,Xia candidates gain 8 points without excluding other candidates,Xia 候選人任官評分增加 8 分且不排除其他候選人
+aw_court_appointment_centered,Xia 中心,Xia-Centered,Xia 中心
+aw_court_appointment_centered_desc,Xia 候选人增加 16 分而非 Xia 候选人减少 8 分但均可任官,Xia candidates gain 16 and non-Xia candidates lose 8 while all remain eligible,Xia 候選人增加 16 分而非 Xia 候選人減少 8 分但均可任官
+aw_court_aux_result_success,改法已施行,Law change applied,改法已施行
+aw_court_aux_result_invalid_kingdom,国家已不存在或不可用,The kingdom no longer exists or is unavailable,國家已不存在或不可用
+aw_court_aux_result_invalid_choice,该法项无效,This law option is invalid,該法項無效
+aw_court_aux_result_unchanged,当前已经施行该法,This law is already active,當前已經施行該法
+aw_court_aux_result_insufficient_points,政治点不足,Insufficient political points,政治點不足
+aw_court_aux_result_cooldown,该法仍在独立冷却期内,This law is still on its own cooldown,該法仍在獨立冷卻期內
+aw_court_aux_result_persistence_failed,改法事务写入失败且政治点已返还,The law change failed to persist and political points were restored,改法事務寫入失敗且政治點已返還
+aw_hist_event_court_auxiliary_law_changed,更定辅助法,Auxiliary Law Changed,更定輔助法
+aw_hist_event_border_petition_approved,准边臣请战,Border War Petition Approved,准邊臣請戰
+aw_hist_court_auxiliary_law_changed_mid,诏更定, decreed a change to ,詔更定
+aw_hist_court_auxiliary_law_from,，由, from ,，由
+aw_hist_court_auxiliary_law_to,改为, to ,改為
+aw_hist_event_inheritance_law_changed,更定继承法,Inheritance Law Changed,更定繼承法
+aw_hist_inheritance_law_changed_mid,诏更定继承法，由, decreed that succession change from ,詔更定繼承法，由
+aw_hist_inheritance_law_changed_to,改为, to ,改為
+aw_hist_event_succession_dispute_started,宗室争位,Dynastic Dispute,宗室爭位
+aw_hist_event_succession_dispute_resolved,争位平定,Dynastic Dispute Resolved,爭位平定
+aw_hist_event_succession_permanent_split,宗统分裂,Permanent Dynastic Split,宗統分裂
+aw_hist_event_succession_reunified,宗统复合,Dynastic Reunification,宗統復合
+aw_hist_event_heir_designated,册立继承人,Heir Designated,冊立繼承人
+aw_hist_goal_reunify_succession,统一宗统,Reunify the Dynasty,統一宗統
+aw_hist_succession_dispute_claimed_mid,不服新君，举兵争夺, rejected the new ruler and rose to contest ,不服新君，舉兵爭奪
+aw_hist_succession_dispute_founded_mid,，另立, establishing ,，另立
+aw_hist_succession_dispute_defeated_mid,平定与, ended the contest with ,平定與
+aw_hist_succession_claimant_won_suffix,之争，争位者入承原统。,the claimant inherited the original realm.,之爭，爭位者入承原統。
+aw_hist_succession_successor_won_suffix,之争，新君守住宗统。,the installed ruler preserved the succession.,之爭，新君守住宗統。
+aw_hist_succession_split_with_mid,与, and ,與
+aw_hist_succession_split_suffix,相持十二年，宗统遂分；双方三代内保有无费统一宣称。,remained divided for twelve years; both lines retain a free reunification claim for three generations.,相持十二年，宗統遂分；雙方三代內保有無費統一宣稱。
+aw_hist_succession_reunified_mid,统一, reunified ,統一
+aw_hist_succession_reunified_and_mid,与, and ,與
+aw_hist_succession_reunified_suffix,，仍承原国统与原 Kingdom ID。,preserving the original realm and Kingdom ID.,，仍承原國統與原 Kingdom ID。
+aw_hist_heir_designated_mid,册立, designated ,冊立
+aw_hist_heir_designated_as,为, as ,為
+aw_inheritance_control_automatic,因时议定,Automatic evaluation,因時議定
+aw_inheritance_law_primogeniture,嫡长继承,Primogeniture,嫡長繼承
+aw_inheritance_law_military,军中拥立,Military acclaim,軍中擁立
+aw_inheritance_law_civil,文官拥立,Civil acclaim,文官擁立
+aw_inheritance_faction_imperial,皇权派,Imperial faction,皇權派
+aw_inheritance_faction_military,武将派,Military faction,武將派
+aw_inheritance_faction_civil,文官派,Civil faction,文官派
+aw_hist_border_petition_source_mid,准, approved the war petition of ,准
+aw_hist_border_petition_target_mid,所请，对, against ,所請，對
+aw_hist_border_petition_reason_mid,以, on the grounds of ,以
+aw_hist_border_petition_suffix,发出战书, and issued a declaration of war,發出戰書
+aw3_year_auxiliary_laws,官制辅助法年度维护,Court auxiliary law annual update,官制輔助法年度維護
+aw_inheritance_window_title,继承法,Inheritance Law,繼承法
+aw_inheritance_effective,现行,Effective,現行
+aw_inheritance_locked,锁定,Locked,鎖定
+aw_inheritance_no_candidate,暂无候选,No candidate,暫無候選
+aw_inheritance_scores,拥立评分,Scores,擁立評分
+aw_inheritance_candidate_backing,拥立,Backs,擁立
+aw_inheritance_candidate_score,候选评分,Candidate score,候選評分
+aw_inheritance_supporters,支持人数,Supporters,支持人數
+aw_inheritance_support_ritual,宗法次序,Ritual order,宗法次序
+aw_inheritance_hint,可锁定一种继承法，或交由朝局每六年自动议定,Lock one law or return succession to automatic evaluation,可鎖定一種繼承法，或交由朝局每六年自動議定
+aw_inheritance_current_lock,当前锁定,Current lock,當前鎖定
+aw_inheritance_unavailable,条件不足,Unavailable,條件不足
+aw_inheritance_cooldown_years,尚需等待{0}年,Cooldown: {0} years,尚需等待{0}年
+aw_inheritance_insufficient_points,政治点不足,Insufficient political points,政治點不足
+aw_inheritance_cost_points,耗费政治点{0},Cost: {0},耗費政治點{0}
+aw_inheritance_free,无耗费,Free,無耗費
+aw_inheritance_auto_desc,每六年按朝局、战争和官军实力自动评估三法,Evaluate the three laws every six years,每六年按朝局、戰爭和官軍實力自動評估三法
+aw_inheritance_primogeniture_desc,亲生嫡长子优先，其后按合法父系旁支承继,The eldest legitimate son and then lawful collateral inherit,親生嫡長子優先，其後按合法父系旁支承繼
+aw_inheritance_military_desc,将领拥戴一名成年男性宗室为留后,Generals support an adult male royal dynast as Liuhou,將領擁戴一名成年男性宗室為留後
+aw_inheritance_military_locked_desc,需要成年男性宗室、在任将领与现役军队,Needs an adult male royal dynast an active general and an army,需要成年男性宗室、在任將領與現役軍隊
+aw_inheritance_civil_desc,在任官员推举一名成年男性宗室为嗣君,Officials support an adult male royal dynast as Sijun,在任官員推舉一名成年男性宗室為嗣君
+aw_inheritance_civil_locked_desc,需要官场制度、三省制度、有限任期法与至少三名官员,Needs the official court three departments finite terms and three officials,需要官場制度、三省制度、有限任期法與至少三名官員
+aw_inheritance_result_success,继承法已更定,Inheritance law changed,繼承法已更定
+aw_inheritance_result_no_change,所选继承法未改变,Inheritance law unchanged,所選繼承法未改變
+aw_inheritance_result_cooldown,继承法尚在更定冷却期,Inheritance law is on cooldown,繼承法尚在更定冷卻期
+aw_inheritance_result_points,政治点不足，未能更定继承法,Insufficient political points,政治點不足，未能更定繼承法
+aw_inheritance_result_unavailable,当前不满足该继承法的条件,The requested inheritance law is unavailable,當前不滿足該繼承法的條件
+aw_inheritance_result_invalid_kingdom,当前国家不能使用君主继承法,This realm cannot use monarchical inheritance law,當前國家不能使用君主繼承法
+aw_inheritance_result_failed,继承法写入失败，原状态已恢复,Inheritance law write failed and prior state was restored,繼承法寫入失敗，原狀態已恢復
+aw_inheritance_dispute_none,当前没有继承争议,No active succession dispute,目前沒有繼承爭議
+aw_inheritance_dispute_current,当前继承争议：{0}：{1}；{2}：{3}；{4}：{5},Current succession controversy: {0}: {1}; {2}: {3}; {4}: {5},目前繼承爭議：{0}：{1}；{2}：{3}；{4}：{5}
+aw_inheritance_ruler_court_influence,君主朝堂影响,Ruler court influence,君主朝堂影響
+aw_inheritance_support_ranking,第一名 {0} {1}；第二名 {2} {3}；世子 {4} {5},Leader {0} {1}; runner-up {2} {3}; designated heir {4} {5},第一名 {0} {1}；第二名 {2} {3}；世子 {4} {5}
+aw_inheritance_dispute_pending,领先达到20，世子即位后将发动继承战争,Lead reached 20; the leader will rise after the heir accedes,領先達到20，世子即位後將發動繼承戰爭
+aw_inheritance_dispute_not_decisive,尚无人领先第二名20点,No candidate leads second place by 20,尚無人領先第二名20點
+aw_inheritance_dispute_stable,世子领先第二名至少20点，继承稳定,The designated heir leads by at least 20; succession is stable,世子領先第二名至少20點，繼承穩定
+aw_inheritance_political_points,政治点,Political points,政治點
+aw_inheritance_dispute_active,继承争议：{0} / {1}；第{2}年转为永久分裂,Succession dispute: {0} / {1}; permanent split in year {2},繼承爭議：{0} / {1}；第{2}年轉為永久分裂
+aw_inheritance_dispute_permanent,宗统分裂：{0} / {1}；距开宗者{2}代；{3},Permanent split: {0} / {1}; {2} generations from founder; {3},宗統分裂：{0} / {1}；距開宗者{2}代；{3}
+aw_inheritance_reunification_valid,保有无费统一宣称,Free reunification claim active,保有無費統一宣稱
+aw_inheritance_reunification_expired,三代统一宣称已失效,Three-generation reunification claim expired,三代統一宣稱已失效
+aw_hist_event_coup_loyalist_rebellion_started,勤王复统,Loyalist Restoration Rising,勤王復統
+aw_hist_event_coup_loyalist_restoration_victory,旧统复位,Old Dynasty Restored,舊統復位
+aw_hist_event_coup_loyalist_rebellion_suppressed,勤王兵败,Loyalist Rising Suppressed,勤王兵敗
+aw_hist_event_coup_loyalist_rebellion_stalemate,两统并立,Rival Dynasties Endured,兩統並立
+aw_hist_coup_loyalist_supports,不承认新君，拥立, rejected the usurper and acclaimed ,不承認新君，擁立
+aw_hist_coup_loyalist_rose_at,起兵于, and raised loyalist forces at ,起兵於
+aw_hist_coup_loyalist_score,；拥立声势：,; loyalist strength: ,；擁立聲勢：
+aw_hist_coup_loyalist_restored,平定权臣，复位于, defeated the usurper and returned to the throne of ,平定權臣，復位於
+aw_hist_coup_loyalist_restored_suffix,，旧宗统得续,; the old royal succession continued,，舊宗統得續
+aw_hist_coup_loyalist_suppressed,勤王兵败，旧宗室未能复位：, was defeated; the old dynasty was not restored: ,勤王兵敗，舊宗室未能復位：
+aw_hist_coup_loyalist_stalemate,复统未决，仍据地自立为, failed to decide the succession and retained the rival realm of ,復統未決，仍據地自立為

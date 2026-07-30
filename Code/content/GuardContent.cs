@@ -66,7 +66,7 @@ namespace AncientWarfare3.content
                     cancellable_by_socialize = false,
                     in_combat = true,
                     speed_multiplier = 1.15f,
-                    locale_key = "task_unit_move"
+                    locale_key = "aw_guard_protect_king"
                 });
                 protect.setIcon("ui/Icons/iconArmor");
                 protect.addBeh(new BehFindRoyalGuardThreat());
@@ -82,7 +82,7 @@ namespace AncientWarfare3.content
                     cancellable_by_reproduction = false,
                     cancellable_by_socialize = false,
                     speed_multiplier = 1.1f,
-                    locale_key = "task_unit_move"
+                    locale_key = "aw_guard_protect_king"
                 });
                 follow.setIcon("ui/Icons/iconLoyalty");
                 follow.addBeh(new BehRoyalGuardFollowKing());

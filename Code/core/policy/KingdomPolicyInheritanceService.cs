@@ -15,14 +15,23 @@ namespace AncientWarfare3.core.policy
         private static readonly Dictionary<long, long> PendingSourceByActor = new Dictionary<long, long>();
         private static readonly HashSet<long> InheritedKingdoms = new HashSet<long>();
 
-        public static void RememberSplitSource(Actor pFounder, Kingdom pSource)
+        public static void ClearRuntime()
         {
-            if (KingdomIdentityContinuityService.IsCreatingRestoration)
-            {
-                if (pFounder?.data != null) PendingSourceByActor.Remove(pFounder.data.id);
-                return;
-            }
-            if (pFounder?.data == null || pSource?.data == null || pSource.isRekt()) return;
+            PendingSourceByActor.Clear();
+            InheritedKingdoms.Clear();
+        }
+
+        public static void RememberSplitSource(Actor pFounder,
+            Kingdom pSource, bool pRebellion, bool pFellApart)
+        {
+            if (pFounder?.data == null) return;
+            PendingSourceByActor.Remove(pFounder.data.id);
+            if (!KingdomPolicySplitInheritanceRules.ShouldCaptureSplitSource(
+                    pRebellion, pFellApart,
+                    KingdomIdentityContinuityService.IsCreatingRestoration,
+                    pFounderValid: true,
+                    pSourceValid: pSource?.data != null,
+                    pSourceAlive: IsLivingSource(pSource))) return;
             PendingSourceByActor[pFounder.data.id] = pSource.id;
         }
 
@@ -35,13 +44,25 @@ namespace AncientWarfare3.core.policy
             }
             if (pNewKingdom?.data == null || pNewKingdom.isRekt()) return;
             if (InheritedKingdoms.Contains(pNewKingdom.id)) return;
-            if (!KingdomPolicyService.CanUsePolicySystem(pNewKingdom)) return;
-
-            KingdomPolicyService.EnsureInitialized(pNewKingdom);
 
             Kingdom source = ResolveSource(pNewKingdom, pFounder);
-            if (source == null || source == pNewKingdom || source.data == null || source.isRekt()) return;
+            bool integratedCulture = XiaCultureIntegrationService.IsIntegrated(
+                pNewKingdom.culture);
+            if (!KingdomPolicySplitInheritanceRules.ShouldInheritFromSplit(
+                    pHasCapturedSource: source != null,
+                    pNewKingdomValid: pNewKingdom != source,
+                    pSourceValid: source?.data != null,
+                    pSourceAlive: IsLivingSource(source),
+                    pCultureIntegrated: integratedCulture)) return;
+
+            if (!XiaizationService.InheritForSplit(pNewKingdom, source))
+                return;
+            InheritedKingdoms.Add(pNewKingdom.id);
+
+            if (!KingdomPolicyService.CanUsePolicySystem(pNewKingdom)) return;
             if (!KingdomPolicyService.CanUsePolicySystem(source)) return;
+
+            KingdomPolicyService.EnsureInitialized(pNewKingdom);
 
             KingdomPolicySnapshot src = KingdomPolicyService.ReadSnapshot(source);
             var dst = new KingdomPolicySnapshot
@@ -61,7 +82,8 @@ namespace AncientWarfare3.core.policy
                 completed_techs = src.completed_techs,
                 current_decision = "",
                 decision_progress = 0f,
-                completed_decisions = ""
+                completed_decisions = "",
+                locked_nodes = ""
             };
 
             CityTechService.AdjustInheritedSnapshotFromCities(pNewKingdom, dst);
@@ -69,7 +91,6 @@ namespace AncientWarfare3.core.policy
             ClampProgressToDefinition(dst, PolicyNodeKind.Tech);
             KingdomPolicyService.ApplySnapshot(pNewKingdom, dst, pIncludeDecision: false);
             SynchronizeInheritedNameIntegration(pNewKingdom, dst);
-            InheritedKingdoms.Add(pNewKingdom.id);
             ModClass.LogInfo("[policy inheritance] " + pNewKingdom.name + " inherited policy state from " + source.name);
         }
 
@@ -82,7 +103,8 @@ namespace AncientWarfare3.core.policy
         private static void SynchronizeInheritedNameIntegration(Kingdom pNewKingdom, KingdomPolicySnapshot pSnapshot)
         {
             if (pNewKingdom?.data == null || pSnapshot == null) return;
-            if (!LineageService.IsXiaKingdom(pNewKingdom)) return;
+            if (!XiaizationService.UsesXiaizedInstitutionSystem(
+                    pNewKingdom)) return;
             if (LineageService.IsKingdomIntegrated(pNewKingdom)) return;
 
             bool inheritedCompletedIntegration =
@@ -102,55 +124,23 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
-        private static Kingdom ResolveSource(Kingdom pNewKingdom, Actor pFounder)
+        private static Kingdom ResolveSource(Kingdom pNewKingdom,
+            Actor pFounder)
         {
             if (pFounder?.data != null && PendingSourceByActor.TryGetValue(pFounder.data.id, out long sourceId))
             {
                 PendingSourceByActor.Remove(pFounder.data.id);
                 Kingdom source = World.world?.kingdoms?.get(sourceId);
-                if (source?.data != null && !source.isRekt()) return source;
+                if (source?.data != null && source != pNewKingdom)
+                    return source;
             }
-
-            Kingdom citySource = pFounder?.city?.kingdom;
-            if (citySource?.data != null && citySource != pNewKingdom && !citySource.isRekt()) return citySource;
-            return FindRegionalSource(pNewKingdom, pFounder);
+            return null;
         }
 
-        private static Kingdom FindRegionalSource(Kingdom pNewKingdom, Actor pFounder)
+        private static bool IsLivingSource(Kingdom pKingdom)
         {
-            string species = SafeSpecies(pNewKingdom);
-            Culture culture = pFounder?.culture ?? pNewKingdom.culture;
-            Kingdom best = null;
-            float bestScore = -1f;
-
-            foreach (Kingdom kingdom in World.world.kingdoms)
-            {
-                if (kingdom?.data == null || kingdom == pNewKingdom || kingdom.isRekt()) continue;
-                if (!KingdomPolicyService.CanUsePolicySystem(kingdom)) continue;
-
-                float score = 0f;
-                if (!string.IsNullOrEmpty(species) && SafeSpecies(kingdom) == species) score += 100f;
-                if (culture != null && kingdom.culture == culture) score += 60f;
-                score += Mathf.Min(40f, kingdom.countZones() * 0.01f);
-                if (score <= bestScore) continue;
-
-                bestScore = score;
-                best = kingdom;
-            }
-
-            return bestScore >= 60f ? best : null;
-        }
-
-        private static string SafeSpecies(Kingdom pKingdom)
-        {
-            try
-            {
-                return pKingdom?.getActorAsset()?.id ?? "";
-            }
-            catch
-            {
-                return "";
-            }
+            return pKingdom?.data != null && !pKingdom.isRekt() &&
+                   pKingdom.countCities() > 0;
         }
 
         private static void ClampProgressToDefinition(KingdomPolicySnapshot pSnapshot, PolicyNodeKind pKind)
