@@ -181,6 +181,20 @@ namespace AncientWarfare3.core.lineage
             "aw_army_rts_player_order";
         public const string AW_ARMY_RTS_ISSUED_TIME =
             "aw_army_rts_issued_time";
+        public const string ARMY_REPLENISHMENT_OPERATION_VERSION =
+            "aw_army_replenishment_operation_version";
+        public const string ARMY_REPLENISHMENT_OPERATION_KINGDOM_ID =
+            "aw_army_replenishment_operation_kingdom_id";
+        public const string ARMY_REPLENISHMENT_OPERATION_SOURCE_CITY_ID =
+            "aw_army_replenishment_operation_source_city_id";
+        public const string ARMY_REPLENISHMENT_OPERATION_APPROVED_SHORTAGE =
+            "aw_army_replenishment_operation_approved_shortage";
+        public const string ARMY_REPLENISHMENT_OPERATION_ENLISTED =
+            "aw_army_replenishment_operation_enlisted";
+        public const string ARMY_REPLENISHMENT_OPERATION_START_TIME =
+            "aw_army_replenishment_operation_start_time";
+        public const string ARMY_REPLENISHMENT_OPERATION_DEADLINE_TIME =
+            "aw_army_replenishment_operation_deadline_time";
         public const string MANDATE_DECISION_CURRENT = "aw_mandate_decision_current";
         public const string MANDATE_DECISION_PROGRESS = "aw_mandate_decision_progress";
         public const string MANDATE_DECISION_LAST_YEAR = "aw_mandate_decision_last_year";

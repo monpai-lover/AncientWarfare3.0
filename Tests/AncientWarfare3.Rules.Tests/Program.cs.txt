@@ -115,6 +115,13 @@ if (args.Length == 1 && args[0] == "--conscription-law-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--three-month-replenishment-slice")
+{
+    ArmyReplenishmentOperationRulesTests.Run();
+    Console.WriteLine("AW3 three-month replenishment rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-command-slice")
 {
     RunArmyRtsCommandContinuityRulesTests();
