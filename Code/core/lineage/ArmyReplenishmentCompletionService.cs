@@ -8,17 +8,6 @@ namespace AncientWarfare3.core.lineage
         internal static void Complete(Army pArmy)
         {
             if (!IsOrdinaryArmy(pArmy, out Kingdom kingdom)) return;
-            int living = SafeUnitCount(pArmy);
-            int minimum = ArmyLogisticsRules.MinimumOperationalForce;
-            if (!ArmyReplenishmentOperationRules.ShouldResumeAttack(
-                    living, minimum) &&
-                TryPrepareOffensivePrimary(kingdom, out Army primary) &&
-                primary != pArmy &&
-                ArmyReplenishmentOperationRules.ShouldMergeSecondary(
-                    living, minimum, ordinary: true,
-                    primaryExists: true))
-                AWArmyService.TryMergeOrdinaryArmyInto(pArmy, primary);
-
             KingdomWarDirectorService.QueueArmyChanged(kingdom);
             KingdomWarDirectorService.EnsureOffensiveContinuity(kingdom);
         }
@@ -36,6 +25,20 @@ namespace AncientWarfare3.core.lineage
 
         internal static bool TryPrepareOffensivePrimary(Kingdom pKingdom,
             out Army pPrimary)
+        {
+            return TryResolveOffensivePrimary(pKingdom,
+                pAllowConsolidation: true, out pPrimary);
+        }
+
+        internal static bool TrySelectOffensivePrimary(Kingdom pKingdom,
+            out Army pPrimary)
+        {
+            return TryResolveOffensivePrimary(pKingdom,
+                pAllowConsolidation: false, out pPrimary);
+        }
+
+        private static bool TryResolveOffensivePrimary(Kingdom pKingdom,
+            bool pAllowConsolidation, out Army pPrimary)
         {
             pPrimary = null;
             IReadOnlyList<Army> armies = CollectOrdinaryArmies(pKingdom);
@@ -96,6 +99,7 @@ namespace AncientWarfare3.core.lineage
 
             pPrimary = bestAvailable ?? bestAny;
             if (pPrimary?.data == null) return false;
+            if (!pAllowConsolidation) return true;
             for (int i = 0; i < armies.Count &&
                             SafeUnitCount(pPrimary) < minimum; i++)
             {

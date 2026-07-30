@@ -463,10 +463,13 @@ namespace AncientWarfare3.core.lineage
                 ArmyReplenishmentCompletionService.HasViableAttack(
                     pKingdom) ||
                 !ArmyReplenishmentCompletionService.
+                    TrySelectOffensivePrimary(pKingdom,
+                        out Army candidate) ||
+                !TryFindOffensiveContinuityTarget(pKingdom, candidate,
+                    out War war, out City target, out long frontId) ||
+                !ArmyReplenishmentCompletionService.
                     TryPrepareOffensivePrimary(pKingdom,
-                        out Army primary) ||
-                !TryFindOffensiveContinuityTarget(pKingdom, primary,
-                    out War war, out City target, out long frontId)) return;
+                        out Army primary)) return;
 
             int living;
             try { living = Math.Max(0, primary.countUnits()); }

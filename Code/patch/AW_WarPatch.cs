@@ -221,6 +221,7 @@ namespace AncientWarfare3.patch
                     LineageService.CurTime());
             CloseParticipantSources(pWar.data.id,
                 __state?.ParticipantIds);
+            ArmyReplenishmentOperationService.OnWarEnded(pWar);
             KingdomWarDirectorService.OnWarEnded(pWar);
             CoalitionWarTaskService.OnWarEnded(pWar);
             WarMilitaryFactsService.OnWarEnded(pWar);
@@ -231,7 +232,6 @@ namespace AncientWarfare3.patch
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
             CityReservePoolService.OnWarEnded(pWar);
-            ArmyReplenishmentOperationService.OnWarEnded(pWar);
             TemporaryLevyService.OnWarEnded(pWar);
             WartimeGarrisonService.OnWarEnded(pWar);
             TemporarySlaveVanguardService.OnWarEnded(pWar);

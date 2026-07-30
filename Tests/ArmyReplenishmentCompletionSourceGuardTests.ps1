@@ -19,6 +19,22 @@ function Require([string]$source, [string]$needle, [string]$message) {
     }
 }
 
+function Reject([string]$source, [string]$needle, [string]$message) {
+    if ($source.Contains($needle)) {
+        $failures.Add("${message}: found forbidden '$needle'")
+    }
+}
+
+function Method-Region([string]$source, [string]$start,
+    [string]$next) {
+    $begin = $source.IndexOf($start, [System.StringComparison]::Ordinal)
+    if ($begin -lt 0) { return '' }
+    $end = $source.IndexOf($next, $begin + $start.Length,
+        [System.StringComparison]::Ordinal)
+    if ($end -lt 0) { $end = $source.Length }
+    return $source.Substring($begin, $end - $begin)
+}
+
 $completion = Read-Source `
     'Code/core/lineage/ArmyReplenishmentCompletionService.cs'
 $armyService = Read-Source 'Code/core/lineage/AWArmyService.cs'
@@ -26,6 +42,12 @@ $director = Read-Source `
     'Code/core/lineage/KingdomWarDirectorService.cs'
 $operation = Read-Source `
     'Code/core/lineage/ArmyReplenishmentOperationService.cs'
+$completeRegion = Method-Region $completion `
+    'internal static void Complete' `
+    'internal static bool HasViableAttack'
+$continuityRegion = Method-Region $director `
+    'internal static void EnsureOffensiveContinuity' `
+    'public static void ProcessFrame'
 
 Require $completion 'AWArmyService.IsSpecialArmy(' `
     'special role armies must be excluded from ordinary consolidation'
@@ -45,6 +67,8 @@ Require $completion 'if (bestAny != pPrimary &&' `
     'an insufficient unreserved force must fall back to a viable protected army'
 Require $completion 'KingdomWarDirectorService.QueueArmyChanged(' `
     'completion and merge must queue a fresh strategic plan'
+Reject $completeRegion 'TryPrepareOffensivePrimary(' `
+    'operation completion cannot merge armies before validating a target'
 Require $armyService `
     'internal static bool TryMergeOrdinaryArmyInto(' `
     'ordinary consolidation must use one actor-safe merge entry point'
@@ -56,6 +80,15 @@ Require $director 'internal static void EnsureOffensiveContinuity(' `
     'the director must expose the national attack guarantee'
 Require $director 'private static double CurrentWorldTime()' `
     'fallback attack missions need a valid world-time stamp'
+$selectIndex = $continuityRegion.IndexOf('TrySelectOffensivePrimary(')
+$targetIndex = $continuityRegion.IndexOf(
+    'TryFindOffensiveContinuityTarget(')
+$prepareIndex = $continuityRegion.IndexOf('TryPrepareOffensivePrimary(')
+if ($selectIndex -lt 0 -or $targetIndex -lt 0 -or $prepareIndex -lt 0 -or
+    $selectIndex -gt $targetIndex -or $targetIndex -gt $prepareIndex) {
+    $failures.Add(
+        'the director must select a candidate, validate an open target, then permit consolidation')
+}
 Require $operation 'ArmyReplenishmentCompletionService.Complete(' `
     'early and deadline completion must run consolidation logic'
 

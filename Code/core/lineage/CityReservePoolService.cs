@@ -387,7 +387,10 @@ namespace AncientWarfare3.core.lineage
                 if (!state.Cities.TryGetValue(cityId, out CityPool pool))
                     continue;
                 City city = ResolveCity(cityId);
-                if (!IsControlledCity(city, kingdom)) continue;
+                if (!CityReservePoolRules.CanConsumeDuringPreparation(
+                        WarNoticeService.HasActiveNotice(kingdom),
+                        IsControlledCity(city, kingdom),
+                        SafePopulation(city))) continue;
 
                 while (added < requested &&
                        CityReservePoolRules.TryTakeNextActorId(

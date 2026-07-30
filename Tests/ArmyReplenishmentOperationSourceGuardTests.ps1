@@ -49,6 +49,12 @@ $warPatch = Read-Source 'Code/patch/AW_WarPatch.cs'
 $updateRegion = Method-Region $controller `
     'private static void UpdateReplenishmentRequest' `
     'private static void TryApplyReserveExhaustion'
+$readRegion = Method-Region $operation `
+    'internal static bool TryRead' `
+    'internal static ArmyReplenishmentOperationState Ensure'
+$warEndRegion = Method-Region $operation `
+    'internal static void OnWarEnded' `
+    'internal static void Clear'
 
 Require $updateRegion 'ArmyReplenishmentOperationService.Ensure(' `
     'RTS replenishment opens one durable operation'
@@ -73,6 +79,14 @@ Require $operation 'ActiveArmyIds.Remove(pArmyId);' `
     'unresolvable army IDs must leave the runtime operation index'
 Require $operation 'if (!deadlineReached)' `
     'ordinary months must consume only one bounded indexed batch'
+Require $readRegion 'TryGetActiveMissionWar(pArmy, kingdom,' `
+    'restored operations must validate their referenced mission war'
+Reject $readRegion '!IsControlledCity(sourceCity, kingdom)' `
+    'losing a preferred source city must not cancel access to other donor cities'
+Require $warEndRegion 'TryGetMissionWar(army, kingdom,' `
+    'war-end cleanup must resolve each operation mission war'
+Require $warEndRegion 'missionWar.data.id != pWar.data.id' `
+    'ending one war must preserve operations assigned to another war'
 Require $strategicIndex `
     'ArmyReplenishmentOperationService.OnArmyDisposed(' `
     'army disposal must close its operation'
@@ -81,6 +95,15 @@ Require $strategicIndex `
     'ownership changes must invalidate foreign approval'
 Require $warPatch 'ArmyReplenishmentOperationService.OnWarEnded(' `
     'war end must close participant operations'
+$operationWarEnd = $warPatch.IndexOf(
+    'ArmyReplenishmentOperationService.OnWarEnded(pWar);')
+$directorWarEnd = $warPatch.IndexOf(
+    'KingdomWarDirectorService.OnWarEnded(pWar);')
+if ($operationWarEnd -lt 0 -or $directorWarEnd -lt 0 -or
+    $operationWarEnd -gt $directorWarEnd) {
+    $failures.Add(
+        'replenishment cleanup must read mission WarId before the director invalidates missions')
+}
 Reject $operation 'foreach (Actor actor in city.units)' `
     'wartime replenishment cannot scan live residents'
 

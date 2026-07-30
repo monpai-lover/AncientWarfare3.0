@@ -109,6 +109,14 @@ namespace AncientWarfare3.core.lineage
                        population, 1) > 0;
         }
 
+        public static bool CanConsumeDuringPreparation(bool activeNotice,
+            bool realmControlled, int population)
+        {
+            return activeNotice && realmControlled &&
+                   WartimeRecruitmentPopulationRules.RecruitmentCapacity(
+                       population, 1) > 0;
+        }
+
         public static bool CanConfirmExhausted(bool kingdomFrozen,
             bool allIndexedCitiesChecked, int remainingIndexedActors)
         {

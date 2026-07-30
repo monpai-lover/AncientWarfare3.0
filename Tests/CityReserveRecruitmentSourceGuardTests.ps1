@@ -42,6 +42,7 @@ $controller = Read-Source `
     'Code/core/lineage/ArmyRtsControllerService.cs'
 $operation = Read-Source `
     'Code/core/lineage/ArmyReplenishmentOperationService.cs'
+$pool = Read-Source 'Code/core/lineage/CityReservePoolService.cs'
 $warPatch = Read-Source 'Code/patch/AW_WarPatch.cs'
 $preparationRegion = Method-Region $levy `
     'private static void ProcessPreparationRecruitment' `
@@ -55,6 +56,9 @@ $captainRegion = Method-Region $levy `
 $enlistReserveRegion = Method-Region $levy `
     'internal static int EnlistReserveActors' `
     'private static int DirectedDemand'
+$preparationConsumeRegion = Method-Region $pool `
+    'internal static int TryConsumePreparationBatch' `
+    'internal static void CompletePreWarReconciliation'
 
 Require $levy 'CityReservePoolService.TryConsumeBatch(' `
     'wartime levy recruitment must consume pre-war actor IDs'
@@ -65,6 +69,9 @@ Require $preparationRegion 'ApprovedTargetShortage(' `
     'preparation cannot exceed an approved establishment shortage'
 Reject $preparationRegion 'ScanCity(' `
     'preparation cannot rescan arbitrary residents for soldiers'
+Require $preparationConsumeRegion `
+    'CityReservePoolRules.CanConsumeDuringPreparation(' `
+    'preparation recruitment must preserve the donor-city population floor'
 Reject $casualtyRegion 'ScanCity(' `
     'wartime casualty replacement must not scan live residents'
 Reject $captainRegion 'foreach (Actor actor in pCity.units)' `

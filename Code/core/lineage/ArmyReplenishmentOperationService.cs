@@ -60,11 +60,9 @@ namespace AncientWarfare3.core.lineage
             }
 
             Kingdom kingdom = SafeKingdom(pArmy);
-            City sourceCity = FindCity(sourceCityId);
             if (!IsLiveOrdinaryArmy(pArmy) ||
                 !IsLiveKingdom(kingdom) || kingdom.id != kingdomId ||
-                !IsControlledCity(sourceCity, kingdom) ||
-                !HasActiveFormalWar(kingdom))
+                !TryGetActiveMissionWar(pArmy, kingdom, out _))
             {
                 Clear(pArmy);
                 return false;
@@ -100,7 +98,8 @@ namespace AncientWarfare3.core.lineage
             if (!IsLiveOrdinaryArmy(pArmy) ||
                 !IsLiveKingdom(pKingdom) || SafeKingdom(pArmy) != pKingdom ||
                 !IsControlledCity(pSourceCity, pKingdom) ||
-                !HasActiveFormalWar(pKingdom) || pRequestedShortage <= 0 ||
+                !TryGetActiveMissionWar(pArmy, pKingdom, out _) ||
+                pRequestedShortage <= 0 ||
                 !IsFinite(pStartTime)) return null;
 
             int approved =
@@ -178,14 +177,14 @@ namespace AncientWarfare3.core.lineage
             {
                 Army army = FindArmy(snapshot[i]);
                 Kingdom kingdom = SafeKingdom(army);
-                bool participant = false;
-                try
+                if (!TryGetMissionWar(army, kingdom,
+                        out War missionWar))
                 {
-                    participant = kingdom?.data != null &&
-                                  pWar.hasKingdom(kingdom);
+                    Clear(army);
+                    continue;
                 }
-                catch { }
-                if (participant) Clear(army);
+                if (missionWar.data.id != pWar.data.id) continue;
+                Clear(army);
             }
         }
 
@@ -434,20 +433,29 @@ namespace AncientWarfare3.core.lineage
             catch { return false; }
         }
 
-        private static bool HasActiveFormalWar(Kingdom pKingdom)
+        private static bool TryGetActiveMissionWar(Army pArmy,
+            Kingdom pKingdom, out War pWar)
         {
-            if (!IsLiveKingdom(pKingdom) || World.world?.wars == null)
-                return false;
+            if (!TryGetMissionWar(pArmy, pKingdom, out pWar)) return false;
             try
             {
-                foreach (War war in World.world.wars.getWars(pKingdom))
-                {
-                    if (war?.data != null && !war.hasEnded() &&
-                        war.hasKingdom(pKingdom)) return true;
-                }
+                return !pWar.hasEnded() && pWar.hasKingdom(pKingdom);
             }
-            catch { }
-            return false;
+            catch { return false; }
+        }
+
+        private static bool TryGetMissionWar(Army pArmy,
+            Kingdom pKingdom, out War pWar)
+        {
+            pWar = null;
+            if (!IsLiveKingdom(pKingdom) || pArmy?.data == null ||
+                !ArmyRtsControllerService.TryGetMission(pArmy,
+                    out ArmyRtsMission mission) || mission == null ||
+                mission.KingdomId != pKingdom.id || mission.WarId < 0L)
+                return false;
+            try { pWar = World.world?.wars?.get(mission.WarId); }
+            catch { pWar = null; }
+            return pWar?.data != null;
         }
 
         private static Kingdom SafeKingdom(Army pArmy)

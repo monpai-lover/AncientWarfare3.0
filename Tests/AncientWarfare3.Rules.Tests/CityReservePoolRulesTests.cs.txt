@@ -154,6 +154,15 @@ internal static class CityReservePoolRulesTests
         Equal(true, CityReservePoolRules.CanConsumeFromCity(
             kingdomFrozen: true, realmControlled: true, population: 21),
             "a frozen controlled city above the floor can donate");
+        Equal(false, CityReservePoolRules.CanConsumeDuringPreparation(
+            activeNotice: true, realmControlled: true, population: 20),
+            "preparation preserves the twenty-person city floor");
+        Equal(false, CityReservePoolRules.CanConsumeDuringPreparation(
+            activeNotice: false, realmControlled: true, population: 200),
+            "preparation cannot consume after its notice ends");
+        Equal(true, CityReservePoolRules.CanConsumeDuringPreparation(
+            activeNotice: true, realmControlled: true, population: 21),
+            "a prepared controlled city above the floor can donate");
 
         Equal(true, CityReservePoolRules.CanConfirmExhausted(
             kingdomFrozen: true, allIndexedCitiesChecked: true,
