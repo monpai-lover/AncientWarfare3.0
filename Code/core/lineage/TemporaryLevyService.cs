@@ -1383,22 +1383,30 @@ namespace AncientWarfare3.core.lineage
 
             Army targetArmy = TryResolveTargetArmy(kingdom, plan,
                 out int targetDemand);
+            if (targetArmy?.data != null)
+            {
+                targetDemand = ApprovedTargetShortage(kingdom, targetArmy);
+                if (targetDemand > 0)
+                    plan.TargetDemandsByArmy[targetArmy.id] = targetDemand;
+                else
+                    plan.TargetDemandsByArmy.Remove(targetArmy.id);
+            }
             int demand = targetArmy?.data != null
                 ? targetDemand
                 : plan.PendingDemand;
             if (demand <= 0)
             {
-                CasualtyReinforcementPlans.Remove(pKingdomId);
+                if (PendingDemand(plan) <= 0)
+                    CasualtyReinforcementPlans.Remove(pKingdomId);
+                else if (pScheduleContinuation)
+                    ScheduleCasualtyReinforcement(plan);
                 return;
             }
             City city = ResolveCity(plan.CurrentCityId);
             if (!IsCasualtyCandidateCity(kingdom, plan, city))
             {
                 plan.CurrentCityId = -1L;
-                city = targetArmy?.data != null &&
-                       TemporaryLevyRules.
-                           ShouldUseDirectedReplenishmentAnchor(
-                               plan.CompletedWorkItems)
+                city = targetArmy?.data != null
                     ? AWArmyService.FindAnchorCity(targetArmy)
                     : plan.CompletedWorkItems == 0
                         ? ResolveCity(plan.PreferredCityId)
@@ -1466,6 +1474,17 @@ namespace AncientWarfare3.core.lineage
                 return;
             }
             CasualtyReinforcementPlans.Remove(pKingdomId);
+        }
+
+        private static int ApprovedTargetShortage(Kingdom pKingdom,
+            Army pTargetArmy)
+        {
+            int living = 0;
+            try { living = Math.Max(0, pTargetArmy?.countUnits() ?? 0); }
+            catch { }
+            int approved = CityArmyReinforcementService.ApprovedTarget(
+                pTargetArmy, pKingdom);
+            return CityArmyReinforcementRules.Shortage(living, approved);
         }
 
         private static int DirectedDemand(CasualtyReinforcementPlan pPlan)

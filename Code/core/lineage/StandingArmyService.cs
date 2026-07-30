@@ -454,6 +454,9 @@ namespace AncientWarfare3.core.lineage
 
         internal static int TargetStrength(Army pArmy, Kingdom pKingdom)
         {
+            if (pArmy?.data != null && !AWArmyService.IsSpecialArmy(pArmy))
+                return CityArmyReinforcementService.ApprovedTarget(pArmy,
+                    pKingdom);
             City anchor = AWArmyService.FindAnchorCity(pArmy);
             int slots = 0;
             try
