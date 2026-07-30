@@ -108,6 +108,13 @@ if (args.Length == 1 && args[0] == "--rts-command-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--army-map-information-slice")
+{
+    ArmyMapInformationRulesTests.Run();
+    Console.WriteLine("AW3 army map information rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-attack-bubble-slice")
 {
     ArmyRtsAttackSpeechBubbleRulesTests.Run();
@@ -7117,6 +7124,7 @@ ConsistencyRegressionRulesTests.Run();
 CityArmyReinforcementRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
+ArmyMapInformationRulesTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();
 AW3RuntimeRestorePipelineTests.Run();

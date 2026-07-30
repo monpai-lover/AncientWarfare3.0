@@ -94,6 +94,7 @@
     <Compile Include="HistoryLocalizationRulesTests.cs.txt" />
     <Compile Include="ConsistencyRegressionRulesTests.cs.txt" />
     <Compile Include="Regression20260721Tests.cs.txt" />
+    <Compile Include="ArmyMapInformationRulesTests.cs.txt" />
     <Compile Include="AW3MultiplayerWorldLoadRulesTests.cs.txt" />
     <Compile Include="AW3RuntimeRestorePipelineTests.cs.txt" />
     <Compile Include="HistoricalFigureSpawnRulesTests.cs.txt" />

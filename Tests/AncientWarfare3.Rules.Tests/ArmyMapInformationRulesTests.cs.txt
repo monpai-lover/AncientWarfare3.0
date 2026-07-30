@@ -1,0 +1,44 @@
+using AncientWarfare3.core.lineage;
+
+internal static class ArmyMapInformationRulesTests
+{
+    public static void Run()
+    {
+        Equal(ArmyRtsState.March,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: true,
+                projectionState: ArmyRtsState.March,
+                memberCount: 1,
+                minimumOperationalForce: 2),
+            "a live projection remains authoritative while mission publication catches up");
+        Equal(ArmyRtsState.Replenish,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: false,
+                projectionState: ArmyRtsState.Idle,
+                memberCount: 1,
+                minimumOperationalForce: 2),
+            "a missionless under-strength army remains visible as replenishing");
+        Equal(ArmyRtsState.Idle,
+            ArmyMapInformationRules.ResolvePendingState(
+                hasProjection: false,
+                projectionState: ArmyRtsState.Replenish,
+                memberCount: 2,
+                minimumOperationalForce: 2),
+            "a missionless operational army remains visible while awaiting orders");
+        Equal("aw_army_rts_state_replenish",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Replenish),
+            "an under-strength army uses the replenishment label");
+        Equal("aw_army_rts_state_awaiting_orders",
+            ArmyMapInformationRules.PendingOperationLocalizationKey(
+                ArmyRtsState.Idle),
+            "an operational missionless army explicitly awaits orders");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}
