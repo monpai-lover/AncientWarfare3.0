@@ -19,7 +19,7 @@ namespace AncientWarfare3.ui.windows
 
         private static long _kingdomId = -1L;
         private static bool _resetSelections = true;
-        private readonly List<LawSection> _sections = new List<LawSection>(3);
+        private readonly List<LawSection> _sections = new List<LawSection>(4);
         private Vector2 _windowSize = DefaultSize;
         private RectTransform _root;
         private RectTransform _viewport;
@@ -130,6 +130,7 @@ namespace AncientWarfare3.ui.windows
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.Term, 4));
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.BorderCommand, 3));
             _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.AppointmentCulture, 3));
+            _sections.Add(CreateLawSection(CourtAuxiliaryLawKind.Conscription, 4));
         }
 
         private LawSection CreateLawSection(CourtAuxiliaryLawKind pKind,
@@ -387,7 +388,7 @@ namespace AncientWarfare3.ui.windows
                 Mathf.Max(1f, contentHeight - 12f));
 
             float innerWidth = Mathf.Max(1f, _viewport.sizeDelta.x - 8f);
-            const float fixedHeight = 390f;
+            float fixedHeight = 66f + _sections.Count * 108f;
             _content.sizeDelta = new Vector2(innerWidth,
                 Mathf.Max(_viewport.sizeDelta.y, fixedHeight));
             Layout(_summary.rectTransform, 8f, 6f,
@@ -543,8 +544,10 @@ namespace AncientWarfare3.ui.windows
                     (int)CourtAuxiliaryLawService.GetTermLaw(pKingdom),
                 CourtAuxiliaryLawKind.BorderCommand =>
                     (int)CourtAuxiliaryLawService.GetBorderCommandLaw(pKingdom),
-                _ => (int)CourtAuxiliaryLawService
-                    .GetAppointmentCultureLaw(pKingdom)
+                CourtAuxiliaryLawKind.AppointmentCulture =>
+                    (int)CourtAuxiliaryLawService
+                        .GetAppointmentCultureLaw(pKingdom),
+                _ => (int)CourtAuxiliaryLawService.GetConscriptionLaw(pKingdom)
             };
         }
 
@@ -555,7 +558,9 @@ namespace AncientWarfare3.ui.windows
                 CourtAuxiliaryLawKind.Term => "aw_court_aux_law_term",
                 CourtAuxiliaryLawKind.BorderCommand =>
                     "aw_court_aux_law_border",
-                _ => "aw_court_aux_law_appointment"
+                CourtAuxiliaryLawKind.AppointmentCulture =>
+                    "aw_court_aux_law_appointment",
+                _ => "aw_court_aux_law_conscription"
             }, pKind.ToString());
         }
 
@@ -577,11 +582,18 @@ namespace AncientWarfare3.ui.windows
                     2 => "aw_court_border_centralized",
                     _ => "aw_court_border_petition"
                 },
-                _ => pValue switch
+                CourtAuxiliaryLawKind.AppointmentCulture => pValue switch
                 {
                     0 => "aw_court_appointment_merit",
                     2 => "aw_court_appointment_centered",
                     _ => "aw_court_appointment_preference"
+                },
+                _ => pValue switch
+                {
+                    0 => "aw_court_conscription_limited",
+                    2 => "aw_court_conscription_expanded",
+                    3 => "aw_court_conscription_full",
+                    _ => "aw_court_conscription_standard"
                 }
             };
             return AW_L10n.Text(key, key);
@@ -605,11 +617,18 @@ namespace AncientWarfare3.ui.windows
                     2 => "aw_court_border_centralized_desc",
                     _ => "aw_court_border_petition_desc"
                 },
-                _ => pValue switch
+                CourtAuxiliaryLawKind.AppointmentCulture => pValue switch
                 {
                     0 => "aw_court_appointment_merit_desc",
                     2 => "aw_court_appointment_centered_desc",
                     _ => "aw_court_appointment_preference_desc"
+                },
+                _ => pValue switch
+                {
+                    0 => "aw_court_conscription_limited_desc",
+                    2 => "aw_court_conscription_expanded_desc",
+                    3 => "aw_court_conscription_full_desc",
+                    _ => "aw_court_conscription_standard_desc"
                 }
             };
             return AW_L10n.Text(key, key);

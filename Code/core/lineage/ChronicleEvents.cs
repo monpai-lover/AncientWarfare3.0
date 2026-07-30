@@ -870,7 +870,11 @@ namespace AncientWarfare3.core.lineage
                 CourtAuxiliaryLawKind.Term => "aw_court_aux_law_term",
                 CourtAuxiliaryLawKind.BorderCommand =>
                     "aw_court_aux_law_border",
-                _ => "aw_court_aux_law_appointment"
+                CourtAuxiliaryLawKind.AppointmentCulture =>
+                    "aw_court_aux_law_appointment",
+                CourtAuxiliaryLawKind.Conscription =>
+                    "aw_court_aux_law_conscription",
+                _ => ""
             });
         }
 
@@ -911,13 +915,23 @@ namespace AncientWarfare3.core.lineage
                         "aw_court_border_centralized",
                     _ => "aw_court_border_petition"
                 },
-                _ => pValue switch
+                CourtAuxiliaryLawKind.AppointmentCulture => pValue switch
                 {
                     (int)CourtAppointmentCultureLaw.MeritOnly =>
                         "aw_court_appointment_merit",
                     (int)CourtAppointmentCultureLaw.XiaCentered =>
                         "aw_court_appointment_centered",
                     _ => "aw_court_appointment_preference"
+                },
+                _ => pValue switch
+                {
+                    (int)CourtConscriptionLaw.Limited =>
+                        "aw_court_conscription_limited",
+                    (int)CourtConscriptionLaw.Expanded =>
+                        "aw_court_conscription_expanded",
+                    (int)CourtConscriptionLaw.FullMobilization =>
+                        "aw_court_conscription_full",
+                    _ => "aw_court_conscription_standard"
                 }
             };
             return T(key);

@@ -465,7 +465,7 @@ aw_hist_edict_court_reform_mid,诏令更张官政，因治制宜；今命, decre
 aw_hist_edict_court_reform_suffix,主导变法，修典章，正百职，以经邦国。, to lead it; institutions and offices were set in order.,主導變法，修典章，正百職，以經邦國。
 aw_court_auxiliary_laws_title,官制辅助法,Court Auxiliary Laws,官制輔助法
 aw_court_auxiliary_laws_entry,辅助法,Auxiliary Laws,輔助法
-aw_court_auxiliary_laws_entry_desc,调整任期法、边防之制与用官文化,Adjust terms border command and appointment culture,調整任期法、邊防之制與用官文化
+aw_court_auxiliary_laws_entry_desc,调整任期法、边防之制、用官文化与征兵法,Adjust terms border command appointment culture and conscription,調整任期法、邊防之制、用官文化與徵兵法
 aw_court_aux_apply,施行,Apply,施行
 aw_court_aux_points,政治点,Political points,政治點
 aw_court_aux_cost,改法开支,Change cost,改法開支
@@ -477,6 +477,7 @@ aw_court_aux_hint,点选一项预览后施行；每项法律独立冷却,Select 
 aw_court_aux_law_term,任期法,Term Law,任期法
 aw_court_aux_law_border,边防之制,Border Command Law,邊防之制
 aw_court_aux_law_appointment,用官文化,Appointment Culture,用官文化
+aw_court_aux_law_conscription,征兵法,Conscription Law,徵兵法
 aw_court_term_lifetime,终身任期,Lifetime Tenure,終身任期
 aw_court_term_lifetime_desc,官员终身任职直至卸任、失格或死亡,Officials serve for life unless dismissed disqualified or dead,官員終身任職直至卸任、失格或死亡
 aw_court_term_three,固定三年,Fixed Three Years,固定三年
@@ -497,6 +498,14 @@ aw_court_appointment_preference,Xia 优先,Xia Preference,Xia 優先
 aw_court_appointment_preference_desc,Xia 候选人任官评分增加 8 分且不排除其他候选人,Xia candidates gain 8 points without excluding other candidates,Xia 候選人任官評分增加 8 分且不排除其他候選人
 aw_court_appointment_centered,Xia 中心,Xia-Centered,Xia 中心
 aw_court_appointment_centered_desc,Xia 候选人增加 16 分而非 Xia 候选人减少 8 分但均可任官,Xia candidates gain 16 and non-Xia candidates lose 8 while all remain eligible,Xia 候選人增加 16 分而非 Xia 候選人減少 8 分但均可任官
+aw_court_conscription_limited,有限征发,Limited Levy,有限徵發
+aw_court_conscription_limited_desc,将合格成年平民的三成登记为预备兵,Registers 30 percent of eligible adult civilians as reserves,將合格成年平民的三成登記為預備兵
+aw_court_conscription_standard,常制征兵,Standard Conscription,常制徵兵
+aw_court_conscription_standard_desc,将合格成年平民的五成登记为预备兵,Registers 50 percent of eligible adult civilians as reserves,將合格成年平民的五成登記為預備兵
+aw_court_conscription_expanded,扩大征发,Expanded Levy,擴大徵發
+aw_court_conscription_expanded_desc,将合格成年平民的七成登记为预备兵,Registers 70 percent of eligible adult civilians as reserves,將合格成年平民的七成登記為預備兵
+aw_court_conscription_full,全面动员,Full Mobilization,全面動員
+aw_court_conscription_full_desc,登记全部合格平民为预备兵但不会立即让所有人成为士兵,Registers all eligible civilians as reserves but does not immediately turn them all into soldiers,登記全部合格平民為預備兵但不會立即讓所有人成為士兵
 aw_court_aux_result_success,改法已施行,Law change applied,改法已施行
 aw_court_aux_result_invalid_kingdom,国家已不存在或不可用,The kingdom no longer exists or is unavailable,國家已不存在或不可用
 aw_court_aux_result_invalid_choice,该法项无效,This law option is invalid,該法項無效

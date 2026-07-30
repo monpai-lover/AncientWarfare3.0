@@ -389,6 +389,8 @@ namespace AncientWarfare3.core.lineage
         public const string COURT_BORDER_COMMAND_LAW_LAST_CHANGE_YEAR = "aw_court_border_command_law_last_change_year";
         public const string COURT_APPOINTMENT_CULTURE_LAW = "aw_court_appointment_culture_law";
         public const string COURT_APPOINTMENT_CULTURE_LAW_LAST_CHANGE_YEAR = "aw_court_appointment_culture_law_last_change_year";
+        public const string COURT_CONSCRIPTION_LAW = "aw_court_conscription_law";
+        public const string COURT_CONSCRIPTION_LAW_LAST_CHANGE_YEAR = "aw_court_conscription_law_last_change_year";
         public const string COURT_AUXILIARY_LAW_AI_LAST_EVALUATION_YEAR = "aw_court_auxiliary_law_ai_last_evaluation_year";
         public const string COURT_BORDER_PETITION_LAST_YEAR = "aw_court_border_petition_last_year";
         public const string COURT_BORDER_VASSAL_CURSOR = "aw_court_border_vassal_cursor";

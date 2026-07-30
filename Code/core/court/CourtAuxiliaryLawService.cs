@@ -53,6 +53,24 @@ namespace AncientWarfare3.core.court
             };
         }
 
+        public static CourtConscriptionLaw GetConscriptionLaw(
+            Kingdom pKingdom)
+        {
+            int value = ReadValue(pKingdom,
+                LineageKeys.COURT_CONSCRIPTION_LAW,
+                (int)CourtConscriptionLawRules.DefaultLaw);
+            return value switch
+            {
+                (int)CourtConscriptionLaw.Limited =>
+                    CourtConscriptionLaw.Limited,
+                (int)CourtConscriptionLaw.Expanded =>
+                    CourtConscriptionLaw.Expanded,
+                (int)CourtConscriptionLaw.FullMobilization =>
+                    CourtConscriptionLaw.FullMobilization,
+                _ => CourtConscriptionLawRules.DefaultLaw
+            };
+        }
+
         public static int GetLastChangeYear(Kingdom pKingdom,
             CourtAuxiliaryLawKind pKind)
         {
@@ -120,6 +138,11 @@ namespace AncientWarfare3.core.court
                                     error.Message);
                 return CourtAuxiliaryLawChangeResult.PersistenceFailed;
             }
+
+            if (pKind == CourtAuxiliaryLawKind.Conscription)
+                CityReservePoolService.OnConscriptionLawChanged(
+                    pKingdom, (CourtConscriptionLaw)previousValue,
+                    (CourtConscriptionLaw)pDesiredValue);
 
             try
             {
@@ -277,6 +300,32 @@ namespace AncientWarfare3.core.court
                 }
             }
 
+            if (GetCooldownRemaining(pKingdom,
+                    CourtAuxiliaryLawKind.Conscription) == 0)
+            {
+                CourtConscriptionLaw current = GetConscriptionLaw(pKingdom);
+                ResolveConscriptionThreats(pKingdom,
+                    out bool existentialDefense, out bool capitalThreat,
+                    out bool severeDisadvantage);
+                int currentScore = CourtConscriptionLawRules.Score(current,
+                    court.dominant_school, court.livelihood, court.peace,
+                    court.war, court.aggression, existentialDefense,
+                    capitalThreat, severeDisadvantage);
+                for (int value = 0; value <=
+                     (int)CourtConscriptionLaw.FullMobilization; value++)
+                {
+                    if (value == (int)current) continue;
+                    int candidateScore = CourtConscriptionLawRules.Score(
+                        (CourtConscriptionLaw)value, court.dominant_school,
+                        court.livelihood, court.peace, court.war,
+                        court.aggression, existentialDefense, capitalThreat,
+                        severeDisadvantage);
+                    Consider(CourtAuxiliaryLawKind.Conscription, value,
+                        currentScore, candidateScore, ref found,
+                        ref bestKind, ref bestValue, ref bestImprovement);
+                }
+            }
+
             CourtAuxiliaryLawChangeResult result = found
                 ? TryChangeLaw(pKingdom, bestKind, bestValue,
                     pAiInitiated: true)
@@ -329,6 +378,8 @@ namespace AncientWarfare3.core.court
                     pValue <= (int)CourtBorderCommandLaw.Centralized,
                 CourtAuxiliaryLawKind.AppointmentCulture => pValue >= 0 &&
                     pValue <= (int)CourtAppointmentCultureLaw.XiaCentered,
+                CourtAuxiliaryLawKind.Conscription => pValue >= 0 &&
+                    pValue <= (int)CourtConscriptionLaw.FullMobilization,
                 _ => false
             };
         }
@@ -343,6 +394,8 @@ namespace AncientWarfare3.core.court
                     (int)GetBorderCommandLaw(pKingdom),
                 CourtAuxiliaryLawKind.AppointmentCulture =>
                     (int)GetAppointmentCultureLaw(pKingdom),
+                CourtAuxiliaryLawKind.Conscription =>
+                    (int)GetConscriptionLaw(pKingdom),
                 _ => -1
             };
         }
@@ -356,6 +409,8 @@ namespace AncientWarfare3.core.court
                     LineageKeys.COURT_BORDER_COMMAND_LAW,
                 CourtAuxiliaryLawKind.AppointmentCulture =>
                     LineageKeys.COURT_APPOINTMENT_CULTURE_LAW,
+                CourtAuxiliaryLawKind.Conscription =>
+                    LineageKeys.COURT_CONSCRIPTION_LAW,
                 _ => ""
             };
         }
@@ -370,8 +425,50 @@ namespace AncientWarfare3.core.court
                     LineageKeys.COURT_BORDER_COMMAND_LAW_LAST_CHANGE_YEAR,
                 CourtAuxiliaryLawKind.AppointmentCulture =>
                     LineageKeys.COURT_APPOINTMENT_CULTURE_LAW_LAST_CHANGE_YEAR,
+                CourtAuxiliaryLawKind.Conscription =>
+                    LineageKeys.COURT_CONSCRIPTION_LAW_LAST_CHANGE_YEAR,
                 _ => ""
             };
+        }
+
+        private static void ResolveConscriptionThreats(Kingdom pKingdom,
+            out bool pExistentialDefense, out bool pCapitalThreat,
+            out bool pSevereDisadvantage)
+        {
+            pExistentialDefense = MilitaryEmergencyService.HasAny(pKingdom);
+            pCapitalThreat = false;
+            long enemyPotential = 0L;
+            try
+            {
+                if (World.world?.wars != null)
+                    foreach (War war in World.world.wars)
+                    {
+                        if (war?.data == null || war.hasEnded() ||
+                            !war.hasKingdom(pKingdom)) continue;
+                        if (WarMilitaryFactsService.Build(pKingdom, war, 0)
+                            .CapitalThreatened)
+                            pCapitalThreat = true;
+                    }
+
+                using ListPool<Kingdom> enemies =
+                    pKingdom.getEnemiesKingdoms();
+                foreach (Kingdom enemy in enemies)
+                {
+                    if (enemy?.data == null || enemy.isRekt()) continue;
+                    enemyPotential += WartimeMilitaryPotentialService
+                        .CountPotentialWarriors(enemy);
+                    if (enemyPotential >= int.MaxValue)
+                    {
+                        enemyPotential = int.MaxValue;
+                        break;
+                    }
+                }
+            }
+            catch { }
+            long ownPotential = WartimeMilitaryPotentialService
+                .CountPotentialWarriors(pKingdom);
+            pSevereDisadvantage = enemyPotential > 0L &&
+                                   ownPotential * 2L < enemyPotential;
         }
 
         private static int ReadValue(Kingdom pKingdom, string pKey,

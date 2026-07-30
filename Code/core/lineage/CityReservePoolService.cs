@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.court;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -138,6 +139,18 @@ namespace AncientWarfare3.core.lineage
         internal static void OnActorEnlisted(Actor actor)
         {
             RemoveRecordedMembership(actor);
+        }
+
+        internal static void OnConscriptionLawChanged(Kingdom kingdom,
+            CourtConscriptionLaw previousLaw, CourtConscriptionLaw nextLaw)
+        {
+            if (kingdom?.data == null || previousLaw == nextLaw ||
+                !States.TryGetValue(kingdom.id,
+                    out KingdomPoolState state)) return;
+            state.CityCursor = 0;
+            state.ActorCursors.Clear();
+            state.ValidationAfterActorIds.Clear();
+            LastMaintenanceWorldDay = -1L;
         }
 
         internal static void OnCityKingdomChanged(City city,
