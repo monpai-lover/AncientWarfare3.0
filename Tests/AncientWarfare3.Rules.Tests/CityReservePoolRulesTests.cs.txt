@@ -6,12 +6,23 @@ internal static class CityReservePoolRulesTests
 {
     internal static void Run()
     {
-        Equal(35, CityReservePoolRules.Capacity(100, 80),
-            "population caps reserve capacity at 35 percent");
-        Equal(20, CityReservePoolRules.Capacity(100, 20),
-            "effective warrior slots can be the tighter cap");
-        Equal(0, CityReservePoolRules.Capacity(-1, 20),
-            "negative population cannot create reserves");
+        Equal(15, CityReservePoolRules.Capacity(50, 30),
+            "limited law registers thirty percent of eligible civilians");
+        Equal(25, CityReservePoolRules.Capacity(50, 50),
+            "standard law registers half of eligible civilians");
+        Equal(35, CityReservePoolRules.Capacity(50, 70),
+            "expanded law registers seventy percent of eligible civilians");
+        Equal(50, CityReservePoolRules.Capacity(50, 100),
+            "full law registers every eligible civilian");
+        Equal(true, CityReservePoolRules.ShouldAddForLawChange(
+            frozen: true, oldPercent: 50, newPercent: 70),
+            "raising the law is the only frozen-pool addition path");
+        Equal(false, CityReservePoolRules.ShouldAddForLawChange(
+            frozen: true, oldPercent: 70, newPercent: 30),
+            "lowering a wartime law cannot add candidates");
+        Equal(20, CityReservePoolRules.RequiredRemovalCount(
+            memberCount: 35, capacity: 15),
+            "lowering removes only excess registrations");
 
         Equal(true, CityReservePoolRules.CanEnroll(
             alive: true, adult: true, localResident: true,
@@ -156,6 +167,10 @@ internal static class CityReservePoolRulesTests
             kingdomFrozen: true, allIndexedCitiesChecked: true,
             remainingIndexedActors: 1),
             "an indexed reserve actor prevents exhaustion");
+        Equal(false, CityReservePoolRules.HasRemainingUsableActors(0),
+            "eligible civilians without registrations do not block exhaustion");
+        Equal(true, CityReservePoolRules.HasRemainingUsableActors(1),
+            "one registered reserve actor keeps the pool available");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

@@ -84,6 +84,7 @@ namespace AncientWarfare3.patch
             if (!__runOriginal) return;
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.data == null) return;
+            CityReservePoolService.OnActorProfessionChanged(__instance);
             bool warrior = __instance.isWarrior();
             bool becomingKing = pType == UnitProfession.King;
             bool becomingLeader = pType == UnitProfession.Leader;
@@ -99,6 +100,7 @@ namespace AncientWarfare3.patch
             }
             if (!__state.WasWarrior && warrior)
             {
+                CityReservePoolService.OnActorEnlisted(__instance);
                 if (!__state.TrackPermanentHistory) return;
                 __instance.data.get(LineageKeys.MILITARY_BIOGRAPHY_ACTIVE,
                     out bool active, false);

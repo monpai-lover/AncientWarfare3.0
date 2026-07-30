@@ -33,6 +33,7 @@ namespace AncientWarfare3.core.lineage
                 try { pActor.removeFromArmy(); }
                 catch { pActor.setArmy(null); }
             }
+            CityReservePoolService.OnActorReturnedToCivilian(pActor);
 
             if (pActor.ai == null) return;
             pActor.ai.clearJob();

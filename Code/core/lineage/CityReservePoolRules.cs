@@ -26,10 +26,24 @@ namespace AncientWarfare3.core.lineage
         public const int PreparationActorBudget = 32;
         public const int ReserveExhaustionContribution = 20;
 
-        public static int Capacity(int population, int effectiveWarriorSlots)
+        public static int Capacity(int eligibleCivilians, int percent)
         {
-            return CityArmyReinforcementRules.CityCapacity(population,
-                effectiveWarriorSlots);
+            long eligible = Math.Max(0, eligibleCivilians);
+            long share = Math.Max(0, Math.Min(100, percent));
+            return (int)Math.Min(int.MaxValue, eligible * share / 100L);
+        }
+
+        public static bool ShouldAddForLawChange(bool frozen,
+            int oldPercent, int newPercent)
+        {
+            return frozen && Math.Max(0, newPercent) >
+                   Math.Max(0, oldPercent);
+        }
+
+        public static int RequiredRemovalCount(int memberCount, int capacity)
+        {
+            return Math.Max(0, Math.Max(0, memberCount) -
+                               Math.Max(0, capacity));
         }
 
         public static bool CanEnroll(bool alive, bool adult,
@@ -100,6 +114,11 @@ namespace AncientWarfare3.core.lineage
         {
             return kingdomFrozen && allIndexedCitiesChecked &&
                    Math.Max(0, remainingIndexedActors) == 0;
+        }
+
+        public static bool HasRemainingUsableActors(int registeredActors)
+        {
+            return registeredActors > 0;
         }
 
         public static bool ShouldApplyReserveExhaustion(

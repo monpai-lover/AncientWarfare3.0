@@ -19,6 +19,12 @@ function Require([string]$source, [string]$needle, [string]$message) {
     }
 }
 
+function Reject([string]$source, [string]$needle, [string]$message) {
+    if ($source.Contains($needle)) {
+        $failures.Add("${message}: found forbidden '$needle'")
+    }
+}
+
 $reservePatch = Read-Source 'Code/patch/AW_CityReservePoolPatch.cs'
 $reserveService = Read-Source 'Code/core/lineage/CityReservePoolService.cs'
 $death = Read-Source 'Code/patch/AW_ActorDeathPatch.cs'
@@ -28,6 +34,8 @@ $authority = Read-Source 'Code/core/performance/AWAuthorityCycleService.cs'
 $deferred = Read-Source 'Code/patch/AW_DeferredRuntimeWorkPatch.cs'
 $warPatch = Read-Source 'Code/patch/AW_WarPatch.cs'
 $restore = Read-Source 'Code/core/multiplayer/AW3RuntimeRestorePipeline.cs'
+$demobilization = Read-Source `
+    'Code/core/lineage/TemporaryMilitaryDemobilizationService.cs'
 $reset = $authority
 
 Require $reservePatch '[HarmonyPatch(typeof(Actor), "eventBecomeAdult")]' `
@@ -42,10 +50,25 @@ Require $reservePatch 'CityReservePoolService.OnActorCityChanged(' `
     'city migration must invalidate old city membership'
 Require $enlist 'CityReservePoolService.OnActorEnlisted(' `
     'non-reserve enlistment must consume reserve membership'
+Require $enlist 'CityReservePoolService.OnActorProfessionChanged(' `
+    'profession changes must immediately reconcile both reserve indexes'
 Require $reserveService 'LineageKeys.CITY_RESERVE_MEMBER' `
     'actor membership must be persisted'
 Require $reserveService 'SortedSet<long>' `
     'runtime city membership must be deterministic'
+Require $reserveService 'internal readonly SortedSet<long> EligibleActorIds' `
+    'each city must maintain a deterministic eligible-civilian index'
+Require $reserveService 'CourtAuxiliaryLawService.GetConscriptionLaw' `
+    'reserve capacity must read the active conscription law'
+Require $reserveService 'OnActorReturnedToCivilian' `
+    'demobilized actors need a shared return-to-reserve entry point'
+Require $demobilization `
+    'CityReservePoolService.OnActorReturnedToCivilian(pActor)' `
+    'shared demobilization must restore eligible civilians to the index'
+Require $reserveService 'pool.ActorIds.Max' `
+    'law decreases must remove the highest actor ids deterministically'
+Reject $reserveService 'EffectiveWarriorSlots(city, kingdom)' `
+    'law-driven reserve capacity cannot use the old warrior-slot limit'
 Require $authority 'CityReservePoolService.ProcessAuthorityCycle' `
     'reserve repair must run from authority cycles'
 if ($deferred.Contains('CityReservePoolService.ProcessAuthorityCycle')) {
