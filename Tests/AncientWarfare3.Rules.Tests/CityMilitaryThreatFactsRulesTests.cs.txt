@@ -1,0 +1,28 @@
+using AncientWarfare3.core.lineage;
+
+internal static class CityMilitaryThreatFactsRulesTests
+{
+    public static void Run()
+    {
+        var key = new CityMilitaryThreatKey(17L, 9L, 3L);
+        Assert(CityMilitaryThreatFactsRules.CanCache(true, 17L, 9L, 3L),
+            "a valid query inside an authority cycle is cacheable");
+        Assert(!CityMilitaryThreatFactsRules.CanCache(false, 17L, 9L, 3L),
+            "a query outside an authority cycle cannot retain a live fact");
+        Assert(CityMilitaryThreatFactsRules.KeyMatches(key,
+                new CityMilitaryThreatKey(17L, 9L, 3L)),
+            "identical war/city/kingdom facts share one entry");
+        Assert(!CityMilitaryThreatFactsRules.KeyMatches(key,
+                new CityMilitaryThreatKey(18L, 9L, 3L)),
+            "a changed war never reuses a city fact");
+        Assert(CityMilitaryThreatFactsRules.ShouldInvalidate(9L, 9L),
+            "city-control changes invalidate that city");
+        Assert(!CityMilitaryThreatFactsRules.ShouldInvalidate(9L, 10L),
+            "an unrelated city remains cacheable in the current cycle");
+    }
+
+    private static void Assert(bool pCondition, string pMessage)
+    {
+        if (!pCondition) throw new InvalidOperationException(pMessage);
+    }
+}
