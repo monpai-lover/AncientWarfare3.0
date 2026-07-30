@@ -19,19 +19,103 @@ War start registration already enumerates both attackers and defenders. The miss
 5. The director continues to exclude invalid, destroyed, captainless, royal-guard-only, and dedicated-garrison armies from field missions. A depleted army remains visible as assembling or replenishing until it becomes operational.
 6. A wartime field army that is below its required strength requests forced reinforcement instead of remaining indefinitely in the replenishment state.
 7. Every operational field army in an active war is allocated to one of that kingdom's active wars. If no attack objective is currently open, it receives a reserve or defensive order anchored to a valid friendly city instead of being omitted.
-8. A periodic reconciliation remains as recovery for missed lifecycle notifications: a missionless operational wartime army causes a bounded kingdom replan.
+8. The army-information role `Defend` is a current RTS assignment, not a
+   permanent army class. When its defended objective is stable and an
+   offensive objective needs strength, the director may replace that mission
+   with `Attack`. Active capital threats, nearby enemy pressure, and unmet
+   defensive strength keep priority. Dedicated city garrisons, royal guards,
+   and other special armies remain excluded from this conversion.
+9. A periodic reconciliation remains as recovery for missed lifecycle notifications: a missionless operational wartime army causes a bounded kingdom replan.
+
+## City Reserve Pool
+
+Pre-war manpower is represented by persistent real-actor membership, not by a
+numeric counter and not by a wartime population scan. A dedicated city reserve
+pool service owns this state; `TemporaryLevyService` continues to own actors
+only after they enter military service.
+
+1. Each live city maintains an ordered set of eligible actor IDs. Reserve
+   members remain civilians during peace and continue normal work, movement,
+   relationships, and reproduction.
+2. The target size is the existing city military capacity:
+   `min(effective warrior_slots, floor(city population * 35%))`.
+3. The primary enrollment path is event-driven. A patch on the original actor
+   adulthood transition attempts to register a newly adult eligible resident
+   in the current city's pool. If the pool is already at capacity, the actor
+   remains an ordinary civilian and may be picked up by later maintenance.
+4. Death, migration, kingdom change, enlistment, and eligibility changes remove
+   membership through their existing lifecycle hooks. Removal is immediate and
+   does not wait for a maintenance scan.
+5. Peace-time maintenance is distributed across authority cycles as a repair
+   path. A bounded round-robin cursor visits only a small number of cities and
+   actor candidates per cycle. It validates persisted membership, fills missed
+   event gaps, and trims a pool whose capacity has fallen. It never runs from a
+   render-frame postfix.
+6. During an active war notice or other established preparation state, the
+   same bounded maintenance receives a larger work budget and prioritizes
+   cities below target. This prepares manpower but does not enlist or teleport
+   actors.
+7. At formal war start, every participating kingdom freezes its current city
+   pools. A surprise war freezes the partial pools that exist at that instant.
+8. While a kingdom participates in one or more wars, all of its city pools are
+   read-only except for removals. Death, migration, city or kingdom transfer,
+   loss of eligibility, and enlistment remove an actor. No replacement may be
+   added until all of that kingdom's wars have ended. Actors who become adults
+   during the freeze are not enrolled retroactively until peace-time
+   maintenance runs after unfreezing.
+9. Concurrent wars share the same frozen pools. Consuming an actor for one
+   army or war makes that actor unavailable to every other army and war.
+10. After the kingdom leaves its last war, the pools unfreeze and return to
+   gradual peace-time maintenance. Ending one of several concurrent wars does
+   not unfreeze them.
+
+## Persistence And Restore
+
+Reserve membership survives save/load without regenerating manpower.
+
+- Each member persists its reserve flag, source city ID, source kingdom ID,
+  and reserve generation token in actor data.
+- Each kingdom persists the current reserve generation and frozen state. The
+  active-war index may confirm a frozen state after restore, but it must never
+  clear a persisted freeze before war restoration completes.
+- Runtime city sets are rebuilt only from persisted actor membership. Restore
+  may discard invalid records, but it must not search for or add replacement
+  actors.
+- Maintenance cursors are operational state and may restart safely after load;
+  they do not affect membership while the kingdom remains frozen.
+- A permanently transferred city cannot supply its former owner. Its old
+  membership is removed during validation; the new owner may build a new pool
+  only when that owner is not frozen.
 
 ## Forced Reinforcement
 
-Forced reinforcement operates on real actors rather than changing an army count:
+Forced reinforcement consumes the frozen city reserve and operates on real
+actors rather than changing an army count:
 
-1. Select eligible adult actors from cities owned and currently controlled by the army's kingdom, starting with the anchor city and then nearby cities.
-2. Preserve the existing population floor in every donor city. Enemy-occupied cities cannot provide recruits, resources, or soldiers.
-3. Convert the selected actors to the appropriate wartime military role, attach them to the target `Army`, and ensure both `Actor.army` and `Army.units` agree.
-4. Teleport the completed reinforcement batch to the army captain or its valid rally tile so the army does not wait for individual recruits to cross the map.
-5. Complete the batch in one deferred reinforcement operation. Do not wait for vanilla one-at-a-time warrior creation.
-6. Once the target has reached operational strength, clear the replenishment gate and enqueue a new war-director generation immediately.
-7. Apply the same process to attackers and defenders. If the kingdom has genuinely exhausted all recruitable population above the protected floor, keep the army in an explicit manpower-shortage state instead of silently recreating empty armies.
+1. Determine the army's approved target through
+   `CityArmyReinforcementService`, preserving the shared city-capacity
+   allocation and army priority rules.
+2. Consume eligible actor IDs from the anchor city's pool first and then from
+   deterministic nearby friendly-city pools. Never scan the live city
+   population for replacements during war.
+3. Revalidate every selected actor immediately. Invalid, dead, migrated,
+   already recruited, protected, or enemy-controlled-city members are removed
+   without replacement.
+4. Preserve the existing donor-city population floor. Enemy-occupied cities
+   cannot provide recruits, resources, or soldiers even if their frozen pool
+   still contains records.
+5. Convert selected actors to the appropriate wartime military role, attach
+   them to the target `Army`, and ensure both `Actor.army` and `Army.units`
+   agree.
+6. Teleport the completed reinforcement batch to the army captain or valid
+   rally tile, including before the army receives its first RTS mission.
+7. Complete the batch in one deferred operation. Once the army reaches
+   operational strength, clear the replenishment gate and enqueue a coalesced
+   war-director generation immediately.
+8. Apply the same process to attackers and defenders. If the frozen pools are
+   exhausted, keep the army in an explicit manpower-shortage state. It cannot
+   replenish again during that war merely because the city later gains
+   population.
 
 ## Presentation
 
@@ -45,6 +129,11 @@ The fallback is diagnostic protection only. It does not replace command assignme
 
 ## Performance Boundaries
 
+- Peace-time reserve work uses bounded city and actor cursors and a single
+  coalesced authority-cycle work item. Preparation increases those explicit
+  budgets but remains bounded.
+- War-time reinforcement reads indexed reserve IDs and never performs a full
+  city-population or world-actor scan.
 - Coalesce roster notifications by kingdom.
 - Coalesce forced reinforcement by army so repeated director observations cannot create duplicate soldiers or duplicate teleports.
 - Do not scan every actor or every army per render frame.
@@ -53,6 +142,13 @@ The fallback is diagnostic protection only. It does not replace command assignme
 
 ## Failure Handling
 
+- If persisted membership is missing or corrupt, discard only the invalid
+  records. Do not refill a frozen pool as a repair action.
+- If a pool member becomes invalid between selection and enlistment, consume
+  the record and continue within the current bounded batch. Do not substitute
+  an unregistered resident.
+- If war state restoration is incomplete, retain the persisted frozen state
+  and defer maintenance rather than risk regenerating manpower.
 - If an army is mutated again before planning completes, invalidate the stale generation and retain only the latest coalesced refresh.
 - If the army changes kingdom, refresh both the previous and current kingdom where available so stale missions are removed and the new owner receives a plan.
 - If no valid friendly anchor exists, keep the army visible as awaiting orders and retry on the next bounded director cycle.
@@ -65,13 +161,48 @@ Automated regression coverage will prove:
 2. Registering a new wartime army schedules a deferred kingdom refresh.
 3. Expanding a captain-only army to operational strength schedules another refresh.
 4. Repeated roster changes coalesce to one kingdom refresh.
-5. Forced reinforcement selects real eligible actors without crossing the donor-city population floor.
-6. Reinforced actors are assigned to the intended army and teleported to its captain or rally tile.
-7. Repeated reinforcement requests cannot attach or teleport the same actor twice.
-8. An operational army with no open attack target receives a reserve or defense mission when a friendly anchor exists.
-9. A missionless but valid army still renders basic map information with an awaiting-order status.
-10. Existing RTS lifecycle and performance rule suites remain green.
+5. The adulthood transition enrolls an eligible resident only when its kingdom
+   is unfrozen and its city pool has capacity.
+6. Death, migration, kingdom change, enlistment, and eligibility loss remove
+   the actor immediately.
+7. An actor becoming adult during war is not enrolled.
+8. Peace-time maintenance adds missed eligible actor IDs only up to the
+   existing city military capacity and distributes repair work through bounded
+   cursors.
+9. Preparation maintenance accelerates bounded completion without converting
+   reserve members into warriors.
+10. War start freezes both attackers' and defenders' partial pools.
+11. No actor can be added while a kingdom remains in any active war.
+12. Concurrent wars cannot consume the same reserve actor twice and ending one
+   war does not unfreeze a kingdom still participating in another.
+13. Save/load restores exactly the persisted pool and never fills missing
+    places in a frozen pool.
+14. Death, migration, transfer, ineligibility, and prior enlistment remove a
+    reserve record without wartime replacement.
+15. Pool exhaustion prevents further reinforcement during the war.
+16. Forced reinforcement selects real indexed actors without crossing the
+    donor-city population floor.
+17. Reinforced actors are assigned to the intended army and teleported to its
+    captain or rally tile before or after its first mission.
+18. Repeated reinforcement requests cannot attach or teleport the same actor
+    twice.
+19. Reinforcing a newly operational army queues a coalesced director refresh
+    and leads to a real attack, defense, or reserve mission.
+20. A normal field army currently shown as `Defend` can be reassigned to
+    `Attack` after its defensive demand is satisfied and an offensive demand
+    exists.
+21. A threatened capital or under-strength defense prevents that reassignment,
+    and dedicated garrisons or special armies never enter the conversion path.
+22. An operational army with no open attack target receives a reserve or
+    defense mission when a friendly anchor exists.
+23. A missionless but valid army still renders basic map information with an
+    awaiting-order status.
+24. Existing RTS lifecycle and performance rule suites remain green.
 
 ## Out Of Scope
 
-This change does not redesign RTS routing, combat tactics, recruitment targets, or the global RTS scheduler switch. Actor sprite exceptions and Actor benchmark sampling are separate performance fixes.
+This change does not redesign RTS routing, combat tactics, city military
+capacity, or the global RTS scheduler switch. It does not reserve actors by
+removing them from normal civilian life, and it does not create a separate
+numeric manpower currency. Actor sprite exceptions and Actor benchmark
+sampling are separate performance fixes.
