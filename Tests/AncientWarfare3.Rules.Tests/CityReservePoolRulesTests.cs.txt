@@ -1,0 +1,69 @@
+using AncientWarfare3.core.lineage;
+using System;
+
+internal static class CityReservePoolRulesTests
+{
+    internal static void Run()
+    {
+        Equal(35, CityReservePoolRules.Capacity(100, 80),
+            "population caps reserve capacity at 35 percent");
+        Equal(20, CityReservePoolRules.Capacity(100, 20),
+            "effective warrior slots can be the tighter cap");
+        Equal(0, CityReservePoolRules.Capacity(-1, 20),
+            "negative population cannot create reserves");
+
+        Equal(true, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: false, memberCount: 4,
+            capacity: 5), "eligible adult enters a non-full peace pool");
+        Equal(false, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: false, memberCount: 5,
+            capacity: 5), "a full pool rejects without a waiting list");
+        Equal(false, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: true, memberCount: 0,
+            capacity: 5), "an adult event cannot add during war");
+
+        Equal(1, CityReservePoolRules.CityBudget(preparation: false),
+            "peace maintenance visits one city per world day");
+        Equal(4, CityReservePoolRules.CityBudget(preparation: true),
+            "preparation accelerates city maintenance");
+        Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
+            "peace candidate validation is bounded");
+        Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
+            "preparation candidate validation remains bounded");
+
+        Equal(true, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 1,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: false),
+            "an attacking army with no reserve receives the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: false, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: false),
+            "defense-only shortage does not receive the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: false,
+            alreadyApplied: false),
+            "an incomplete reserve check defers the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: true),
+            "the same side and war cannot receive the penalty twice");
+        Equal(20, CityReservePoolRules.ReserveExhaustionContribution,
+            "reserve exhaustion adds exactly twenty points");
+        Equal(100, CityReservePoolRules.ComposeExhaustion(90, 20),
+            "total exhaustion remains clamped to one hundred");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

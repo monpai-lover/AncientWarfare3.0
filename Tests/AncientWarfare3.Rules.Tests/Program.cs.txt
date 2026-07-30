@@ -101,6 +101,13 @@ if (args.Length == 1 && args[0] == "--war-ai-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--city-reserve-pool-slice")
+{
+    CityReservePoolRulesTests.Run();
+    Console.WriteLine("AW3 city reserve pool rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-command-slice")
 {
     RunArmyRtsCommandContinuityRulesTests();
