@@ -181,6 +181,10 @@ namespace AncientWarfare3.core.lineage
             "aw_army_rts_player_order";
         public const string AW_ARMY_RTS_ISSUED_TIME =
             "aw_army_rts_issued_time";
+        public const string AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE =
+            "aw_army_projected_replenishment_shortage";
+        public const string AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE =
+            "aw_army_projected_kingdom_reserve_available";
         public const string ARMY_REPLENISHMENT_OPERATION_VERSION =
             "aw_army_replenishment_operation_version";
         public const string ARMY_REPLENISHMENT_OPERATION_KINGDOM_ID =

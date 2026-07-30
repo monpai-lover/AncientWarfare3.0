@@ -42,15 +42,35 @@ namespace AncientWarfare3.core.lineage
 
         public static string ComposeText(string nativeArmyName, int memberCount,
             string captainName, string operationText,
-            int replenishmentShortage = 0)
+            int replenishmentShortage = 0, string manpowerText = "")
         {
             string shortage = replenishmentShortage > 0
                 ? "（待补" + replenishmentShortage + "）"
                 : string.Empty;
-            return (nativeArmyName ?? string.Empty).Trim() + " #" +
-                   Math.Max(0, memberCount) + shortage + "\n统帅: " +
-                   (captainName ?? string.Empty).Trim() + "\n任务: " +
-                   (operationText ?? string.Empty).Trim();
+            string result = (nativeArmyName ?? string.Empty).Trim() + " #" +
+                            Math.Max(0, memberCount) + shortage +
+                            "\n统帅: " +
+                            (captainName ?? string.Empty).Trim() +
+                            "\n任务: " +
+                            (operationText ?? string.Empty).Trim();
+            string manpower = (manpowerText ?? string.Empty).Trim();
+            return manpower.Length == 0 ? result : result + "\n" + manpower;
+        }
+
+        public static string ComposeManpowerText(int shortage,
+            int reserveSupply)
+        {
+            return Math.Max(0, shortage) + " / " +
+                   Math.Max(0, reserveSupply);
+        }
+
+        public static string ComposeManpowerText(string shortageLabel,
+            string reserveSupplyLabel, int shortage, int reserveSupply)
+        {
+            return (shortageLabel ?? string.Empty).Trim() + ": " +
+                   Math.Max(0, shortage) + " / " +
+                   (reserveSupplyLabel ?? string.Empty).Trim() + ": " +
+                   Math.Max(0, reserveSupply);
         }
 
         public static int ResolveReplenishmentShortage(bool replenishing,

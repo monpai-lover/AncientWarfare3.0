@@ -47,7 +47,8 @@ namespace AncientWarfare3.api.multiplayer
             string operationalStateId = "", string postureId = "",
             long warId = -1L, long frontId = -1L, int supply = 100,
             int organization = 100, bool playerOrder = false,
-            string rtsRoleId = "reserve")
+            string rtsRoleId = "reserve", int replenishmentShortage = 0,
+            int kingdomReserveAvailable = 0)
         {
             AW3MultiplayerStrategicValidation.RequiredId(armyId,
                 nameof(armyId));
@@ -70,6 +71,10 @@ namespace AncientWarfare3.api.multiplayer
                 nameof(supply));
             AW3MultiplayerStrategicValidation.Percent(organization,
                 nameof(organization));
+            AW3MultiplayerStrategicValidation.NonNegative(
+                replenishmentShortage, nameof(replenishmentShortage));
+            AW3MultiplayerStrategicValidation.NonNegative(
+                kingdomReserveAvailable, nameof(kingdomReserveAvailable));
 
             ArmyId = armyId;
             RoleId = AW3MultiplayerStrategicValidation.Text(roleId,
@@ -92,6 +97,8 @@ namespace AncientWarfare3.api.multiplayer
             PlayerOrder = playerOrder;
             RtsRoleId = AW3MultiplayerStrategicValidation.Text(rtsRoleId,
                 nameof(rtsRoleId));
+            ReplenishmentShortage = replenishmentShortage;
+            KingdomReserveAvailable = kingdomReserveAvailable;
         }
 
         public long ArmyId { get; }
@@ -110,6 +117,8 @@ namespace AncientWarfare3.api.multiplayer
         public int Organization { get; }
         public bool PlayerOrder { get; }
         public string RtsRoleId { get; }
+        public int ReplenishmentShortage { get; }
+        public int KingdomReserveAvailable { get; }
     }
 
     public sealed class AW3MultiplayerActorProjection
@@ -221,6 +230,12 @@ namespace AncientWarfare3.api.multiplayer
         internal static void Percent(int pValue, string pParameter)
         {
             if (pValue < 0 || pValue > 100)
+                throw new ArgumentOutOfRangeException(pParameter);
+        }
+
+        internal static void NonNegative(int pValue, string pParameter)
+        {
+            if (pValue < 0)
                 throw new ArgumentOutOfRangeException(pParameter);
         }
 

@@ -55,6 +55,10 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "supply retained");
         Equal(71, snapshot.Armies[1].Organization,
             "organization retained");
+        Equal(12, snapshot.Armies[1].ReplenishmentShortage,
+            "replenishment shortage retained");
+        Equal(27, snapshot.Armies[1].KingdomReserveAvailable,
+            "kingdom reserve supply retained");
         Equal(true, snapshot.Armies[1].PlayerOrder,
             "player-order ownership retained");
         Equal(31L, snapshot.Actors[1].ActorId,
@@ -91,6 +95,16 @@ internal static class AW3MultiplayerStrategicStateRulesTests
                     "order", AW3MultiplayerStrategicTargetKind.None,
                     -1, -1, -1, supply: 101),
             "supply above one hundred rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerArmyProjection(1, "role", -1,
+                    "order", AW3MultiplayerStrategicTargetKind.None,
+                    -1, -1, -1, replenishmentShortage: -1),
+            "negative replenishment shortage rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+                new AW3MultiplayerArmyProjection(1, "role", -1,
+                    "order", AW3MultiplayerStrategicTargetKind.None,
+                    -1, -1, -1, kingdomReserveAvailable: -1),
+            "negative kingdom reserve supply rejected");
     }
 
     private static void CaptureRequiresMainThread()
@@ -110,6 +124,10 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             AW3MultiplayerStrategicStateCoordinator.Capture(12, store);
         Equal(12L, snapshot.AuthoritativeTick, "capture tick");
         Equal(8L, snapshot.Armies[0].ArmyId, "typed army captured");
+        Equal(12, snapshot.Armies[0].ReplenishmentShortage,
+            "capture retains replenishment shortage");
+        Equal(27, snapshot.Armies[0].KingdomReserveAvailable,
+            "capture retains kingdom reserve supply");
         Equal(9L, snapshot.Actors[0].ActorId, "typed actor captured");
     }
 
@@ -161,6 +179,10 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             "successful apply has no error");
         Equal(1, result.AppliedArmyCount, "army apply count");
         Equal(1, result.AppliedActorCount, "actor apply count");
+        Equal(12, store.AppliedArmies[0].ReplenishmentShortage,
+            "apply retains replenishment shortage");
+        Equal(27, store.AppliedArmies[0].KingdomReserveAvailable,
+            "apply retains kingdom reserve supply");
         SequenceEqual(new[]
             { "army:4", "actor:11", "complete-armies:4", "rebuild" },
             store.Calls, "cache rebuild occurs after typed writes");
@@ -279,7 +301,9 @@ internal static class AW3MultiplayerStrategicStateRulesTests
     }
 
     private static AW3MultiplayerArmyProjection Army(long id, string role,
-        string rtsRole = "assault", string posture = "attack")
+        string rtsRole = "assault", string posture = "attack",
+        int replenishmentShortage = 12,
+        int kingdomReserveAvailable = 27)
     {
         return new AW3MultiplayerArmyProjection(id, role,
             anchorCityId: 3, currentOrderId: "defend",
@@ -287,7 +311,9 @@ internal static class AW3MultiplayerStrategicStateRulesTests
             targetId: 7, targetTileX: -1, targetTileY: -1,
             operationalStateId: "march", postureId: posture,
             warId: 21, frontId: 22, supply: 64, organization: 71,
-            playerOrder: true, rtsRoleId: rtsRole);
+            playerOrder: true, rtsRoleId: rtsRole,
+            replenishmentShortage: replenishmentShortage,
+            kingdomReserveAvailable: kingdomReserveAvailable);
     }
 
     private static AW3MultiplayerActorProjection Actor(long id,

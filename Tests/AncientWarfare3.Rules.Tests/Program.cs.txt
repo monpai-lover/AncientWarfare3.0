@@ -136,6 +136,13 @@ if (args.Length == 1 && args[0] == "--army-map-information-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--multiplayer-strategic-state-slice")
+{
+    AW3MultiplayerStrategicStateRulesTests.Run();
+    Console.WriteLine("AW3 multiplayer strategic state rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--rts-attack-bubble-slice")
 {
     ArmyRtsAttackSpeechBubbleRulesTests.Run();

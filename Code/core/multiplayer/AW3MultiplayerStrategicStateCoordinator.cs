@@ -139,6 +139,8 @@ namespace AncientWarfare3.core.multiplayer
                 long targetId = -1L;
                 int supply = 100;
                 int organization = 100;
+                int replenishmentShortage = 0;
+                int kingdomReserveAvailable = 0;
                 bool playerOrder = false;
                 if (ArmyRtsControllerService.TryGetProjection(army,
                         out ArmyRtsStrategicProjection projection))
@@ -156,6 +158,18 @@ namespace AncientWarfare3.core.multiplayer
                         targetKind =
                             AW3MultiplayerStrategicTargetKind.City;
                 }
+                int living = 0;
+                try { living = Math.Max(0, army.countUnits()); }
+                catch { }
+                if (ArmyRtsControllerService.TryGetMission(army,
+                        out ArmyRtsMission mission) && mission != null)
+                    replenishmentShortage = Math.Max(0,
+                        Math.Max(0, mission.TargetStrength) - living);
+                Kingdom kingdom = null;
+                try { kingdom = army.getKingdom(); }
+                catch { }
+                kingdomReserveAvailable =
+                    CityReservePoolService.CountAvailable(kingdom);
                 result.Add(new AW3MultiplayerArmyProjection(army.id,
                     AWArmyService.GetRole(army),
                     AWArmyService.GetAnchorCityId(army), orderId,
@@ -164,7 +178,8 @@ namespace AncientWarfare3.core.multiplayer
                     operationalState.ToString().ToLowerInvariant(),
                     posture.ToString().ToLowerInvariant(), warId, frontId,
                     supply, organization, playerOrder,
-                    rtsRole.ToString().ToLowerInvariant()));
+                    rtsRole.ToString().ToLowerInvariant(),
+                    replenishmentShortage, kingdomReserveAvailable));
             }
             return result;
         }
@@ -211,6 +226,12 @@ namespace AncientWarfare3.core.multiplayer
             army.data.set(LineageKeys.AW_ARMY_ROLE, pArmy.RoleId);
             army.data.set(LineageKeys.AW_ARMY_CITY_ID,
                 pArmy.AnchorCityId);
+            army.data.set(
+                LineageKeys.AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE,
+                pArmy.ReplenishmentShortage);
+            army.data.set(
+                LineageKeys.AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE,
+                pArmy.KingdomReserveAvailable);
             ArmyRtsControllerService.InstallReplicaProjection(army,
                 pArmy.OperationalStateId, pArmy.RtsRoleId,
                 pArmy.PostureId, pArmy.WarId, pArmy.FrontId,

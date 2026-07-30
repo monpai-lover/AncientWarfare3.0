@@ -13,6 +13,8 @@ aw_army_rts_state_pursue,追击,Pursuing,追击
 aw_army_rts_state_retreat,撤退,Retreating,撤退
 aw_army_rts_state_regroup,重整,Regrouping,重整
 aw_army_rts_state_replenish,补员,Replenishing,补员
+aw_army_replenishment_shortage,补员缺口,Replenishment shortage,補員缺口
+aw_army_reserve_supply,可用预备兵,Reserve supply,可用預備兵
 aw_army_rts_role_assault,攻击军,Assault,攻击军
 aw_army_rts_role_defense,防御军,Defense,防御军
 aw_army_rts_role_reserve,预备军,Reserve,预备军

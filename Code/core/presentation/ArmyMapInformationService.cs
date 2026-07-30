@@ -313,6 +313,15 @@ namespace AncientWarfare3.core.presentation
                         out ArmyRtsStrategicProjection projection);
                 bool hasMission = ArmyRtsControllerService.TryGetMission(
                     pArmy, out ArmyRtsMission mission);
+                ResolveManpowerValues(pArmy, memberCount, hasProjection,
+                    hasMission, mission, out int replenishmentShortage,
+                    out int reserveSupply);
+                string manpowerText = ArmyMapInformationRules.
+                    ComposeManpowerText(
+                        Localize("aw_army_replenishment_shortage",
+                            "Replenishment shortage"),
+                        Localize("aw_army_reserve_supply", "Reserve supply"),
+                        replenishmentShortage, reserveSupply);
                 if (!hasProjection || projection == null || !hasMission ||
                     mission == null)
                 {
@@ -323,11 +332,6 @@ namespace AncientWarfare3.core.presentation
                                 : ArmyRtsState.Idle,
                             memberCount,
                             ArmyLogisticsRules.MinimumOperationalForce);
-                    int pendingShortage = ArmyMapInformationRules.
-                        ResolveReplenishmentShortage(
-                            pendingState == ArmyRtsState.Replenish,
-                            memberCount,
-                            ArmyLogisticsRules.MinimumOperationalForce);
                     string pendingOperation = Localize(
                         ArmyMapInformationRules.
                             PendingOperationLocalizationKey(pendingState),
@@ -336,16 +340,12 @@ namespace AncientWarfare3.core.presentation
                             : "Awaiting orders");
                     pText = ArmyMapInformationRules.ComposeText(nativeName,
                         memberCount, SafeName(pCaptain), pendingOperation,
-                        pendingShortage);
+                        manpowerText: manpowerText);
                     return true;
                 }
-                int replenishmentShortage = ArmyMapInformationRules.
-                    ResolveReplenishmentShortage(
-                        projection.State == ArmyRtsState.Replenish,
-                        memberCount, mission.TargetStrength);
                 pText = ArmyMapInformationRules.ComposeText(nativeName,
                     memberCount, SafeName(pCaptain), ResolveOperation(projection,
-                        mission, pArmy), replenishmentShortage);
+                        mission, pArmy), manpowerText: manpowerText);
                 return true;
             }
             catch
@@ -353,6 +353,42 @@ namespace AncientWarfare3.core.presentation
                 pText = string.Empty;
                 return false;
             }
+        }
+
+        private static void ResolveManpowerValues(Army pArmy,
+            int pMemberCount, bool pHasProjection, bool pHasMission,
+            ArmyRtsMission pMission, out int pShortage,
+            out int pReserveSupply)
+        {
+            pShortage = 0;
+            pReserveSupply = 0;
+            if (AW3MultiplayerReplicaScope.IsReplicaSession)
+            {
+                if (!pHasProjection || pArmy?.data == null) return;
+                pArmy.data.get(
+                    LineageKeys.AW_ARMY_PROJECTED_REPLENISHMENT_SHORTAGE,
+                    out pShortage, 0);
+                pArmy.data.get(
+                    LineageKeys.AW_ARMY_PROJECTED_KINGDOM_RESERVE_AVAILABLE,
+                    out pReserveSupply, 0);
+                pShortage = Math.Max(0, pShortage);
+                pReserveSupply = Math.Max(0, pReserveSupply);
+                return;
+            }
+
+            if (pHasMission && pMission != null)
+                pShortage = Math.Max(0,
+                    Math.Max(0, pMission.TargetStrength) -
+                    Math.Max(0, pMemberCount));
+            else
+                pShortage = Math.Max(0,
+                    ArmyLogisticsRules.MinimumOperationalForce -
+                    Math.Max(0, pMemberCount));
+
+            Kingdom kingdom = null;
+            try { kingdom = pArmy?.getKingdom(); }
+            catch { }
+            pReserveSupply = CityReservePoolService.CountAvailable(kingdom);
         }
 
         private static bool TryResolveLiveCaptain(long pArmyId,

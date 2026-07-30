@@ -4,6 +4,12 @@ internal static class ArmyMapInformationRulesTests
 {
     public static void Run()
     {
+        Equal("12 / 27", ArmyMapInformationRules.ComposeManpowerText(
+                shortage: 12, reserveSupply: 27),
+            "shortage and supply remain distinct");
+        Equal("0 / 5", ArmyMapInformationRules.ComposeManpowerText(
+                shortage: -3, reserveSupply: 5),
+            "display clamps invalid counts");
         Equal(ArmyRtsState.March,
             ArmyMapInformationRules.ResolvePendingState(
                 hasProjection: true,
