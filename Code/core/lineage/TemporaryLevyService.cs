@@ -787,11 +787,66 @@ namespace AncientWarfare3.core.lineage
                 CancelPreparationRecruitment(kingdom);
                 return;
             }
+            if (!WarNoticeService.HasActiveNotice(kingdom))
+            {
+                CancelPreparationRecruitment(kingdom);
+                return;
+            }
 
-            // The reserve authority cycle observes the active notice and
-            // raises its bounded maintenance budget. Preparation never
-            // changes professions or creates armies.
-            CompletePreparationRecruitment(kingdom);
+            if (!TrySelectPreparationCity(kingdom, plan, out City city,
+                    out bool waitingForFrontier))
+            {
+                if (waitingForFrontier)
+                    SchedulePreparationRecruitment(plan);
+                else
+                    CompletePreparationRecruitment(kingdom);
+                return;
+            }
+            if (!StandingArmyService.RequestEstablishment(kingdom, city,
+                    out ArmyRecruitmentDisposition disposition,
+                    out Army targetArmy))
+            {
+                PersistPreparationRecruitmentPlan(kingdom, plan);
+                SchedulePreparationRecruitment(plan);
+                return;
+            }
+
+            int approvedShortage = disposition ==
+                                    ArmyRecruitmentDisposition.Replenish
+                ? ApprovedTargetShortage(kingdom, targetArmy)
+                : 0;
+            var candidates = new List<Actor>(Math.Min(
+                TemporaryLevyRules.MaxRecruitsPerWorkItem,
+                Math.Max(0, approvedShortage)));
+            bool confirmedExhausted = false;
+            if (approvedShortage > 0)
+                CityReservePoolService.TryConsumePreparationBatch(
+                    kingdom, city, Math.Min(approvedShortage,
+                        TemporaryLevyRules.MaxRecruitsPerWorkItem),
+                    targetArmy, candidates, out confirmedExhausted);
+            int recruited = EnlistReserveActors(kingdom, city, targetArmy,
+                candidates, preparationRecruitment: true);
+            int remainingShortage = ApprovedTargetShortage(kingdom,
+                targetArmy);
+            bool cityWorkComplete = confirmedExhausted ||
+                                    remainingShortage <= 0 ||
+                                    candidates.Count == 0;
+            bool keepCity = TemporaryLevyRules.
+                ShouldKeepPreparationRecruitmentCity(cityWorkComplete,
+                    recruited);
+            if (!keepCity)
+            {
+                plan.VisitedCityIds.Add(city.id);
+                plan.CurrentCityId = -1L;
+            }
+            PersistPreparationRecruitmentPlan(kingdom, plan);
+            if (TemporaryLevyRules.ShouldContinuePreparationMonth(
+                    emergencyActive: true, activeNotice: true,
+                    plan.VisitedCityIds.Count,
+                    kingdom.cities?.Count ?? 0))
+                SchedulePreparationRecruitment(plan);
+            else
+                CompletePreparationRecruitment(kingdom);
         }
 
         private static bool TrySelectPreparationCity(Kingdom pKingdom,
@@ -1466,19 +1521,22 @@ namespace AncientWarfare3.core.lineage
             int recruited = 0;
             var scanSummary = default(RecruitmentScanSummary);
             scanSummary.Viable = candidates.Count;
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                Actor actor = candidates[i];
-                City donorCity = actor?.city;
-                if (donorCity?.data == null ||
-                    !Enlist(kingdom, donorCity, actor, disposition,
-                        ref establishmentArmy))
+            if (establishmentReady && targetArmy?.data != null)
+                recruited = EnlistReserveActors(kingdom, city,
+                    targetArmy, candidates,
+                    preparationRecruitment: false);
+            else
+                for (int i = 0; i < candidates.Count; i++)
                 {
-                    scanSummary.EnlistFailures++;
-                    continue;
+                    Actor actor = candidates[i];
+                    City donorCity = actor?.city;
+                    if (donorCity?.data == null ||
+                        !Enlist(kingdom, donorCity, actor, disposition,
+                            ref establishmentArmy)) continue;
+                    recruited++;
                 }
-                recruited++;
-            }
+            scanSummary.EnlistFailures = Math.Max(0,
+                candidates.Count - recruited);
             LogRecoveryBatch(kingdom, plan, targetArmy, city, demand,
                 scanned, recruited, establishmentReady, scanSummary);
             if (!establishmentReady)
@@ -1527,6 +1585,33 @@ namespace AncientWarfare3.core.lineage
             int approved = CityArmyReinforcementService.ApprovedTarget(
                 pTargetArmy, pKingdom);
             return CityArmyReinforcementRules.Shortage(living, approved);
+        }
+
+        internal static int EnlistReserveActors(Kingdom kingdom, City source,
+            Army targetArmy, IReadOnlyList<Actor> candidates,
+            bool preparationRecruitment)
+        {
+            if (kingdom?.data == null || targetArmy?.data == null ||
+                candidates == null || AWArmyService.IsSpecialArmy(targetArmy) ||
+                AWArmyService.GetIntendedKingdom(targetArmy) != kingdom ||
+                preparationRecruitment &&
+                !WarNoticeService.HasActiveNotice(kingdom)) return 0;
+            int recruited = 0;
+            Army target = targetArmy;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Actor actor = candidates[i];
+                City donorCity = actor?.city ?? source;
+                if (donorCity?.data == null ||
+                    !Enlist(kingdom, donorCity, actor,
+                        ArmyRecruitmentDisposition.Replenish, ref target))
+                {
+                    CityReservePoolService.OnActorReturnedToCivilian(actor);
+                    continue;
+                }
+                recruited++;
+            }
+            return recruited;
         }
 
         private static int DirectedDemand(CasualtyReinforcementPlan pPlan)

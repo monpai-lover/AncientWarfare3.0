@@ -88,6 +88,7 @@ namespace AncientWarfare3.patch
             RecordMainBelligerents(__result);
             WarRecordWriter.OnWarStart(__result);
             WarScoreService.StartWar(__result);
+            CityReservePoolService.CompletePreWarReconciliation(__result);
             CityReservePoolService.OnWarStarted(__result);
             KingdomWarDirectorService.OnWarStarted(__result);
             ArmyLogisticsService.OnWarStarted(__result);

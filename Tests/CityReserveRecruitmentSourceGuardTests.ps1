@@ -40,6 +40,7 @@ $potential = Read-Source `
     'Code/core/lineage/WartimeMilitaryPotentialService.cs'
 $controller = Read-Source `
     'Code/core/lineage/ArmyRtsControllerService.cs'
+$warPatch = Read-Source 'Code/patch/AW_WarPatch.cs'
 $preparationRegion = Method-Region $levy `
     'private static void ProcessPreparationRecruitment' `
     'private static bool TrySelectPreparationCity'
@@ -49,21 +50,50 @@ $casualtyRegion = Method-Region $levy `
 $captainRegion = Method-Region $levy `
     'private static void ScanCityForCaptainRecovery' `
     'private static void RemoveCaptainRecoveryPlansForKingdom'
+$enlistReserveRegion = Method-Region $levy `
+    'internal static int EnlistReserveActors' `
+    'private static int DirectedDemand'
 
 Require $levy 'CityReservePoolService.TryConsumeBatch(' `
     'wartime levy recruitment must consume pre-war actor IDs'
+Require $preparationRegion `
+    'CityReservePoolService.TryConsumePreparationBatch(' `
+    'preparation must consume registered actor IDs'
+Require $preparationRegion 'ApprovedTargetShortage(' `
+    'preparation cannot exceed an approved establishment shortage'
 Reject $preparationRegion 'ScanCity(' `
-    'war preparation must not convert civilians into warriors'
+    'preparation cannot rescan arbitrary residents for soldiers'
 Reject $casualtyRegion 'ScanCity(' `
     'wartime casualty replacement must not scan live residents'
 Reject $captainRegion 'foreach (Actor actor in pCity.units)' `
     'wartime captain replacement must not scan live residents'
+Require $enlistReserveRegion `
+    'CityReservePoolService.OnActorReturnedToCivilian(actor)' `
+    'failed reserve conversion must return a still-eligible civilian'
 Require $potential 'CityReservePoolService.CountAvailable(' `
     'military potential must reflect remaining reserve membership'
 Require $controller 'TryTeleportReinforcementMember' `
     'recruits must teleport before the first mission'
 Require $controller 'KingdomWarDirectorService.QueueArmyChanged' `
     'successful arrival must replan the newly operational army'
+Require $warPatch `
+    'CityReservePoolService.CompletePreWarReconciliation(__result)' `
+    'formal war creation performs the final indexed refill'
+
+$reconcileStart = $warPatch.IndexOf(
+    'CityReservePoolService.CompletePreWarReconciliation(__result)',
+    [System.StringComparison]::Ordinal)
+$freezeStart = $warPatch.IndexOf(
+    'CityReservePoolService.OnWarStarted(__result)',
+    [System.StringComparison]::Ordinal)
+$levyStart = $warPatch.IndexOf(
+    'TemporaryLevyService.OnWarStarted(__result',
+    [System.StringComparison]::Ordinal)
+if ($reconcileStart -lt 0 -or $freezeStart -lt 0 -or $levyStart -lt 0 -or
+    $reconcileStart -ge $freezeStart -or $freezeStart -ge $levyStart) {
+    $failures.Add(
+        'final indexed refill must run before freeze and levy conversion')
+}
 
 if ($failures.Count -gt 0) {
     Write-Host "City reserve recruitment source guard failures: $($failures.Count)"
