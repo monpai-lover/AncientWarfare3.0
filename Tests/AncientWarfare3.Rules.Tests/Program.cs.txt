@@ -7114,6 +7114,7 @@ InheritanceLawRulesTests.Run();
 SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
+CityArmyReinforcementRulesTests.Run();
 Regression20260721Tests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();
