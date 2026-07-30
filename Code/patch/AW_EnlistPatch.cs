@@ -172,6 +172,8 @@ namespace AncientWarfare3.patch
         public static void MakeWarrior_Postfix(City __instance, Actor pActor)
         {
             if (pActor?.data == null || !pActor.isWarrior()) return;
+            if (!AW3MultiplayerReplicaScope.IsApplying)
+                CityReservePoolService.OnActorEnlisted(pActor);
             KingdomMilitaryReadinessService.ObserveCity(__instance);
             WarNoticeService.QueueArmyChanged(__instance?.kingdom ?? pActor.kingdom,
                 pActor.army, pRosterExpanded: true);

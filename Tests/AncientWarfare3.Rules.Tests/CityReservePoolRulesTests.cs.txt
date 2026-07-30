@@ -58,6 +58,16 @@ internal static class CityReservePoolRulesTests
             "reserve exhaustion adds exactly twenty points");
         Equal(100, CityReservePoolRules.ComposeExhaustion(90, 20),
             "total exhaustion remains clamped to one hundred");
+
+        Equal(true, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: false, age: 18f),
+            "a newly adult eligible civilian can enter the reserve");
+        Equal(false, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: false, age: 65f),
+            "a person at the enlistment age ceiling cannot enter");
+        Equal(false, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: true, age: 20f),
+            "protected identities cannot enter the reserve");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

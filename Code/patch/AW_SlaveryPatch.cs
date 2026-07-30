@@ -41,6 +41,7 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (__instance?.kingdom == __state) return;
+            CityReservePoolService.OnActorKingdomChanged(__instance, __state);
             WarNoticeService.QueueArmyChanged(__state, __instance.army);
             ArmyDeploymentService.ReleaseActor(__instance, restoreJob: true);
             TemporarySlaveVanguardService.OnActorKingdomChanged(__instance, __state);

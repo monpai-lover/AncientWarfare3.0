@@ -55,6 +55,7 @@ namespace AncientWarfare3.patch
                 WarNoticeService.QueueArmyChanged(__instance.kingdom, __instance.army);
                 TemporaryLevyService.OnMilitaryCasualty(__instance);
                 TemporaryLevyService.OnActorInvalidated(__instance);
+                CityReservePoolService.OnActorInvalidated(__instance);
                 WartimeGarrisonService.OnActorInvalidated(__instance);
                 TemporarySlaveVanguardService.OnMemberInvalidated(__instance);
                 SlavePopulationIndexService.Deactivate(__instance);

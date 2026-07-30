@@ -311,6 +311,13 @@ namespace AncientWarfare3.core.lineage
                    warriorSlots > 0 && currentWarriors < warriorSlots;
         }
 
+        public static bool CanRegisterReserve(bool originalEligible,
+            bool protectedIdentity, float age)
+        {
+            return originalEligible && !protectedIdentity && age >= 18f &&
+                   age < MaximumEnlistmentAge;
+        }
+
         public static bool ShouldRemainMobilized(int pActiveNotices, int pActiveWars)
         {
             return pActiveNotices > 0 || pActiveWars > 0;

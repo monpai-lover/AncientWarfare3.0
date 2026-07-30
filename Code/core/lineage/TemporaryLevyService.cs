@@ -169,6 +169,26 @@ namespace AncientWarfare3.core.lineage
             return pActor?.data != null && ActiveActorIds.Contains(pActor.data.id);
         }
 
+        internal static bool CanRegisterReserve(Kingdom pKingdom, City pCity,
+            Actor pActor)
+        {
+            if (pActor?.data == null || pCity?.data == null ||
+                pKingdom?.data == null || pActor.city != pCity ||
+                pActor.kingdom != pKingdom || pActor.isRekt() ||
+                !pActor.isAlive() || !pActor.isAdult() ||
+                pActor.asset?.is_boat == true ||
+                !pActor.isProfession(UnitProfession.Unit) ||
+                SlaveService.IsRetiredSoldier(pActor) ||
+                SlaveService.IsSlave(pActor)) return false;
+
+            bool protectedIdentity = IsProtectedIdentity(pKingdom, pActor,
+                pAllowSlave: false);
+            bool originalEligible = PassesOriginalEligibilityWithoutCapacity(
+                pCity, pActor);
+            return TemporaryLevyRules.CanRegisterReserve(originalEligible,
+                protectedIdentity, pActor.getAge());
+        }
+
         public static bool TryPromoteExistingLevyCaptain(Army pArmy)
         {
             if (pArmy?.data == null || AWArmyService.IsSpecialArmy(pArmy) ||
@@ -1942,6 +1962,19 @@ namespace AncientWarfare3.core.lineage
             pActor.data.get(LineageKeys.COURT_OFFICE_ID, out string office, "");
             pActor.data.get(LineageKeys.COURT_LAYER, out string layer, "");
             return !string.IsNullOrEmpty(office) && layer != CourtOfficeLayer.Military;
+        }
+
+        private static bool PassesOriginalEligibilityWithoutCapacity(
+            City pCity, Actor pActor)
+        {
+            if (pCity?.data == null || pActor?.data == null ||
+                pActor.isBaby()) return false;
+            if (!pCity.hasCulture()) return true;
+            if (pActor.isSexFemale() &&
+                pCity.culture.hasTrait("conscription_male_only"))
+                return false;
+            return !pActor.isSexMale() ||
+                   !pCity.culture.hasTrait("conscription_female_only");
         }
 
         private static bool Enlist(Kingdom pKingdom, City pCity,
