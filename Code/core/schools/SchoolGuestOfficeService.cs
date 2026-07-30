@@ -651,7 +651,8 @@ namespace AncientWarfare3.core.schools
             {
                 pPending.EndRequest = GuestOfficeEndPersistence.PrepareEnd(
                     pPending.EndExpectedAffiliation, pPending.EndReason,
-                    pPending.EndedYear, pPending.EndedTime);
+                    pPending.EndedYear, pPending.EndedTime, pPending.OfficeId,
+                    pPending.SchoolId);
                 if (pPending.EndRequest == null) return false;
                 pPending.OfficeId = pPending.EndRequest.OfficeId;
                 pPending.SchoolId = pPending.EndRequest.SchoolId;
@@ -1260,6 +1261,16 @@ namespace AncientWarfare3.core.schools
                     pState.ServiceKingdomId < 0 ||
                     pState.LifecycleState != HistoricalSchoolLifecycleState.Serving)
                     return null;
+                string runtimeOffice = "";
+                string runtimeSchool = "";
+                try
+                {
+                    pActor?.data?.get(LineageKeys.COURT_OFFICE_ID,
+                        out runtimeOffice, "");
+                    pActor?.data?.get(LineageKeys.COURT_SCHOOL,
+                        out runtimeSchool, "");
+                }
+                catch { }
                 return new PendingGuestOffice
                 {
                     ActorId = pState.ActorId,
@@ -1267,6 +1278,8 @@ namespace AncientWarfare3.core.schools
                     CityId = pState.ResidenceCityId,
                     EndActor = pActor,
                     EndExpectedAffiliation = pState,
+                    OfficeId = runtimeOffice,
+                    SchoolId = runtimeSchool,
                     EndReason = pReason ?? "guest_term",
                     EndedYear = pEndedYear,
                     EndedTime = pEndedTime

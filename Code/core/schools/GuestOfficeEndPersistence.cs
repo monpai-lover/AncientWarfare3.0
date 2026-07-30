@@ -12,25 +12,50 @@ namespace AncientWarfare3.core.schools
             GuestOfficeAffiliationRow pDesiredAffiliation,
             OfficialCareerCloseToken pCareerToken, int pEndedYear,
             double pEndedTime, string pEndReason)
+            : this(pOriginalAffiliation, pDesiredAffiliation, pCareerToken,
+                pCareerToken?.Original?.OfficeId, pCareerToken?.Original?.SchoolId,
+                pEndedYear, pEndedTime, pEndReason)
+        {
+        }
+
+        private GuestOfficeEndRequest(GuestOfficeAffiliationRow pOriginalAffiliation,
+            GuestOfficeAffiliationRow pDesiredAffiliation,
+            OfficialCareerCloseToken pCareerToken, string pOfficeId, string pSchoolId,
+            int pEndedYear, double pEndedTime, string pEndReason)
         {
             OriginalAffiliation = pOriginalAffiliation ??
                 throw new ArgumentNullException(nameof(pOriginalAffiliation));
             DesiredAffiliation = pDesiredAffiliation ??
                 throw new ArgumentNullException(nameof(pDesiredAffiliation));
-            CareerToken = pCareerToken ?? throw new ArgumentNullException(nameof(pCareerToken));
+            CareerToken = pCareerToken;
+            CareerAlreadyClosed = pCareerToken == null;
+            OfficeId = pOfficeId ?? "";
+            SchoolId = pSchoolId ?? "";
             EndedYear = pEndedYear;
             EndedTime = pEndedTime;
             EndReason = pEndReason ?? "";
         }
 
+        internal static GuestOfficeEndRequest ForClosedCareer(
+            GuestOfficeAffiliationRow pOriginalAffiliation,
+            GuestOfficeAffiliationRow pDesiredAffiliation,
+            string pOfficeId, string pSchoolId, int pEndedYear,
+            double pEndedTime, string pEndReason)
+        {
+            return new GuestOfficeEndRequest(pOriginalAffiliation,
+                pDesiredAffiliation, null, pOfficeId, pSchoolId, pEndedYear,
+                pEndedTime, pEndReason);
+        }
+
         public GuestOfficeAffiliationRow OriginalAffiliation { get; }
         public GuestOfficeAffiliationRow DesiredAffiliation { get; }
         public OfficialCareerCloseToken CareerToken { get; }
+        public bool CareerAlreadyClosed { get; }
         public long ActorId => OriginalAffiliation.ActorId;
         public long HostKingdomId => OriginalAffiliation.ServiceKingdomId;
         public long CityId => OriginalAffiliation.ResidenceCityId;
-        public string OfficeId => CareerToken.Original.OfficeId;
-        public string SchoolId => CareerToken.Original.SchoolId;
+        public string OfficeId { get; }
+        public string SchoolId { get; }
         public int EndedYear { get; }
         public double EndedTime { get; }
         public string EndReason { get; }
@@ -81,14 +106,17 @@ namespace AncientWarfare3.core.schools
 
         internal static GuestOfficeEndRequest PrepareEnd(
             HistoricalSchoolAffiliationSnapshot pExpectedAffiliation, string pEndReason,
-            int pEndedYear, double pEndedTime)
+            int pEndedYear, double pEndedTime, string pOfficeId = null,
+            string pSchoolId = null)
         {
-            return PrepareEnd(DB, pExpectedAffiliation, pEndReason, pEndedYear, pEndedTime);
+            return PrepareEnd(DB, pExpectedAffiliation, pEndReason, pEndedYear,
+                pEndedTime, pOfficeId, pSchoolId);
         }
 
         internal static GuestOfficeEndRequest PrepareEnd(SQLiteConnection pDb,
             HistoricalSchoolAffiliationSnapshot pExpectedAffiliation, string pEndReason,
-            int pEndedYear, double pEndedTime)
+            int pEndedYear, double pEndedTime, string pOfficeId = null,
+            string pSchoolId = null)
         {
             if (pDb == null || !ValidExpected(pExpectedAffiliation, pEndedYear,
                     pEndedTime)) return null;
@@ -114,6 +142,19 @@ namespace AncientWarfare3.core.schools
                 }
                 GuestOfficeAffiliationRow desired = ClosedAffiliation(original,
                     pEndedYear, pEndedTime);
+                List<OfficialCareerRecord> active = ReadActiveCentralCareers(
+                    pDb, transaction, original.ActorId);
+                if (GuestOfficeEndRecoveryRules.CanCloseMissingCareer(active.Count))
+                {
+                    transaction.Commit();
+                    return GuestOfficeEndRequest.ForClosedCareer(original, desired,
+                        pOfficeId, pSchoolId, pEndedYear, pEndedTime, pEndReason);
+                }
+                if (active.Count != 1)
+                {
+                    transaction.Rollback();
+                    return null;
+                }
                 var close = new OfficialCareerCloseRequest(original.ActorId,
                     original.ServiceKingdomId, CourtOfficeLayer.Central, null,
                     pEndedYear, pEndedTime, pEndReason ?? "");
@@ -196,6 +237,12 @@ namespace AncientWarfare3.core.schools
             if (before != GuestOfficePersistenceOutcome.CleanFailure)
                 return Project(current, before, pRecoveredExisting: false);
 
+            if (current.CareerAlreadyClosed)
+            {
+                StageAffiliation(pDb, pTransaction, current);
+                return Project(current, GuestOfficePersistenceOutcome.Committed,
+                    pRecoveredExisting: false);
+            }
             OfficialCareerPersistence.StageClose(pDb, pTransaction,
                 current.CareerToken);
             StageAffiliation(pDb, pTransaction, current);
@@ -218,6 +265,19 @@ namespace AncientWarfare3.core.schools
                 currentAffiliation.ResidenceCityId != frozen.ResidenceCityId ||
                 currentAffiliation.ServiceStartYear != frozen.ServiceStartYear)
                 return null;
+
+            List<OfficialCareerRecord> active = ReadActiveCentralCareers(
+                pDb, pTransaction, currentAffiliation.ActorId);
+            if (pRequest.CareerAlreadyClosed)
+            {
+                if (!GuestOfficeEndRecoveryRules.CanCloseMissingCareer(active.Count))
+                    return null;
+                return GuestOfficeEndRequest.ForClosedCareer(currentAffiliation,
+                    ClosedAffiliation(currentAffiliation, pRequest.EndedYear,
+                        pRequest.EndedTime), pRequest.OfficeId, pRequest.SchoolId,
+                    pRequest.EndedYear, pRequest.EndedTime, pRequest.EndReason);
+            }
+            if (active.Count != 1) return null;
 
             var close = new OfficialCareerCloseRequest(
                 currentAffiliation.ActorId,
@@ -408,6 +468,19 @@ namespace AncientWarfare3.core.schools
         {
             GuestOfficeProjectionState affiliation = AffiliationState(pDb, pTransaction,
                 pRequest);
+            if (pRequest.CareerAlreadyClosed)
+            {
+                List<OfficialCareerRecord> active = ReadActiveCentralCareers(
+                    pDb, pTransaction, pRequest.ActorId);
+                if (!GuestOfficeEndRecoveryRules.CanCloseMissingCareer(active.Count))
+                    return GuestOfficePersistenceOutcome.Unknown;
+                return affiliation == GuestOfficeProjectionState.Desired ||
+                       affiliation == GuestOfficeProjectionState.Both
+                    ? GuestOfficePersistenceOutcome.Committed
+                    : affiliation == GuestOfficeProjectionState.Original
+                        ? GuestOfficePersistenceOutcome.CleanFailure
+                        : GuestOfficePersistenceOutcome.Unknown;
+            }
             OfficialCareerPersistenceOutcome career =
                 OfficialCareerPersistence.ReadbackClose(pDb, pTransaction,
                     pRequest.CareerToken);
@@ -561,7 +634,8 @@ namespace AncientWarfare3.core.schools
         private static bool Valid(GuestOfficeEndRequest pRequest)
         {
             if (pRequest?.OriginalAffiliation == null ||
-                pRequest.DesiredAffiliation == null || pRequest.CareerToken == null ||
+                pRequest.DesiredAffiliation == null ||
+                (!pRequest.CareerAlreadyClosed && pRequest.CareerToken == null) ||
                 pRequest.ActorId < 0 || pRequest.HostKingdomId < 0 ||
                 pRequest.EndedYear < 0 || !FiniteNonNegative(pRequest.EndedTime))
                 return false;
@@ -572,12 +646,20 @@ namespace AncientWarfare3.core.schools
                    original.ServiceStartYear >= 0 &&
                    pRequest.EndedYear >= original.ServiceStartYear &&
                    pRequest.DesiredAffiliation.Exact(expectedDesired) &&
+                   (pRequest.CareerAlreadyClosed ||
                    GuestCareerMatches(original, pRequest.CareerToken.Original) &&
                    pRequest.CareerToken.Desired.Active == 0 &&
                    pRequest.CareerToken.Desired.EndedYear == pRequest.EndedYear &&
                    pRequest.CareerToken.Desired.EndedTime.Equals(pRequest.EndedTime) &&
                    pRequest.CareerToken.Desired.EndReason == pRequest.EndReason &&
-                   pRequest.CareerToken.Desired.UpdatedTime.Equals(pRequest.EndedTime);
+                   pRequest.CareerToken.Desired.UpdatedTime.Equals(pRequest.EndedTime));
+        }
+
+        private static List<OfficialCareerRecord> ReadActiveCentralCareers(
+            SQLiteConnection pDb, SQLiteTransaction pTransaction, long pActorId)
+        {
+            return OfficialCareerPersistence.ReadActiveRecords(pDb, pTransaction,
+                pActorId, CourtOfficeLayer.Central);
         }
 
         private static List<GuestOfficeAffiliationRow> ReadAffiliations(
