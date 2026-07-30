@@ -34,6 +34,21 @@ internal static class ArmyReplenishmentOperationRulesTests
         Equal(115d, ArmyReplenishmentOperationRules.ResolveDeadline(
             start: 100d, persistedDeadline: 120d),
             "restore cannot extend the three-month deadline");
+        Equal(true, ArmyReplenishmentOperationRules.ShouldResumeAttack(
+            living: 2, minimum: 2),
+            "a viable army leaves at the deadline");
+        Equal(true, ArmyReplenishmentOperationRules.ShouldMergeSecondary(
+            living: 1, minimum: 2, ordinary: true, primaryExists: true),
+            "a weak ordinary secondary merges");
+        Equal(false, ArmyReplenishmentOperationRules.ShouldMergeSecondary(
+            living: 1, minimum: 2, ordinary: false, primaryExists: true),
+            "special forces never merge");
+        Equal(true, ArmyReplenishmentOperationRules.MustMaintainAttack(
+            totalOrdinary: 2, minimum: 2, validEnemyTarget: true),
+            "viable national strength preserves one attack");
+        Equal(false, ArmyReplenishmentOperationRules.MustMaintainAttack(
+            totalOrdinary: 1, minimum: 2, validEnemyTarget: true),
+            "one actor is not sent alone");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

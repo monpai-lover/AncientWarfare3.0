@@ -228,8 +228,7 @@ namespace AncientWarfare3.core.lineage
                     liveShortage))
             {
                 Clear(army);
-                KingdomWarDirectorService.QueueArmyChanged(
-                    SafeKingdom(army));
+                ArmyReplenishmentCompletionService.Complete(army);
                 return;
             }
 
@@ -285,8 +284,14 @@ namespace AncientWarfare3.core.lineage
                 }
             }
 
-            if (!TryGetLiveShortage(army, out liveShortage) ||
-                ArmyReplenishmentOperationRules.ShouldFinishEarly(
+            bool shortageReadable = TryGetLiveShortage(army,
+                out liveShortage);
+            if (!shortageReadable)
+            {
+                Clear(army);
+                return;
+            }
+            if (ArmyReplenishmentOperationRules.ShouldFinishEarly(
                     liveShortage) || deadlineReached)
             {
                 if (deadlineReached && liveShortage > 0 &&
@@ -294,8 +299,7 @@ namespace AncientWarfare3.core.lineage
                     TemporaryLevyService.RecordConfirmedReserveExhaustion(
                         SafeKingdom(army), army, liveShortage);
                 Clear(army);
-                KingdomWarDirectorService.QueueArmyChanged(
-                    SafeKingdom(army));
+                ArmyReplenishmentCompletionService.Complete(army);
             }
         }
 

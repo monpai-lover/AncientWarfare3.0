@@ -22,6 +22,8 @@ $failures = [System.Collections.Generic.List[string]]::new()
     'ArmyReplenishmentOperationPersistenceSourceGuardTests.ps1')
 & (Join-Path $PSScriptRoot `
     'ArmyReplenishmentOperationSourceGuardTests.ps1')
+& (Join-Path $PSScriptRoot `
+    'ArmyReplenishmentCompletionSourceGuardTests.ps1')
 
 $enclosedZoneRulesProject = Join-Path $PSScriptRoot `
     'EnclosedUnownedZoneRulesTests.csproj'

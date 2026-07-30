@@ -847,6 +847,85 @@ namespace AncientWarfare3.core.lineage
                 MergeDuplicateIntoKeeper(duplicate, pKeeper);
         }
 
+        internal static bool TryMergeOrdinaryArmyInto(Army pSource,
+            Army pTarget)
+        {
+            if (!IsOrdinaryMergeArmy(pSource, out Kingdom sourceKingdom) ||
+                !IsOrdinaryMergeArmy(pTarget, out Kingdom targetKingdom) ||
+                sourceKingdom != targetKingdom || pSource == pTarget)
+                return false;
+
+            var units = new List<Actor>();
+            try
+            {
+                foreach (Actor unit in pSource.getUnits())
+                    if (unit?.data != null && !unit.isRekt() &&
+                        unit.isAlive() && unit.army == pSource)
+                        units.Add(unit);
+            }
+            catch { }
+            if (units.Count == 0) return false;
+
+            Actor targetCaptain = null;
+            Actor sourceCaptain = null;
+            try { targetCaptain = pTarget.getCaptain(); }
+            catch { }
+            try { sourceCaptain = pSource.getCaptain(); }
+            catch { }
+            bool preserveTargetCaptain = IsCaptainLeaseEligible(pTarget,
+                targetCaptain, requireMembership: true);
+
+            ArmyReplenishmentOperationService.Clear(pSource);
+            ArmyRtsControllerService.Invalidate(pSource.id);
+            using (ArmyCaptainDisposalScope.Open(pSource))
+            {
+                for (int i = 0; i < units.Count; i++)
+                    AddToArmy(units[i], pTarget);
+            }
+            if (SafeUnitCount(pSource) > 0) return false;
+
+            if (preserveTargetCaptain && targetCaptain?.army == pTarget)
+                SetCaptainIfChanged(pTarget, targetCaptain);
+            else if (sourceCaptain?.army == pTarget)
+                SetCaptainIfChanged(pTarget, sourceCaptain);
+
+            bool removed = RemoveArmyObject(pSource,
+                pClearCityReference: true, pRequestReplacement: false);
+            ArmyStrategicIndexService.OnArmyRosterChanged(pTarget);
+            KingdomWarDirectorService.QueueArmyChanged(targetKingdom);
+            return removed;
+        }
+
+        private static bool IsOrdinaryMergeArmy(Army pArmy,
+            out Kingdom pKingdom)
+        {
+            pKingdom = null;
+            if (pArmy?.data == null || IsSpecialArmy(pArmy) ||
+                IsNonReplacingShell(pArmy) ||
+                GarrisonSortieService.IsSortieArmy(pArmy)) return false;
+            pArmy.data.get(LineageKeys.RESTORATION_UPRISING_ARMY,
+                out bool restorationArmy, false);
+            if (restorationArmy) return false;
+            Actor captain = null;
+            try
+            {
+                if (!pArmy.isAlive()) return false;
+                pKingdom = pArmy.getKingdom();
+                captain = pArmy.getCaptain();
+            }
+            catch { return false; }
+            return pKingdom?.data != null && !pKingdom.isRekt() &&
+                   !RoyalGuardService.IsRoyalGuard(captain) &&
+                   !TemporarySlaveVanguardService.IsMember(captain) &&
+                   !WartimeGarrisonService.IsActive(captain);
+        }
+
+        private static int SafeUnitCount(Army pArmy)
+        {
+            try { return Math.Max(0, pArmy?.countUnits() ?? 0); }
+            catch { return 0; }
+        }
+
         private static void MergeDuplicateIntoKeeper(Army pDuplicate, Army pKeeper)
         {
             if (pDuplicate?.data == null || pKeeper?.data == null) return;

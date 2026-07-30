@@ -455,6 +455,45 @@ namespace AncientWarfare3.core.lineage
                 });
         }
 
+        internal static void EnsureOffensiveContinuity(Kingdom pKingdom)
+        {
+            if (!ArmyRtsRuntimeModeRules.ShouldCommit(
+                    ArmyRtsRuntimeMode.Current) ||
+                !IsLiveKingdom(pKingdom) ||
+                ArmyReplenishmentCompletionService.HasViableAttack(
+                    pKingdom) ||
+                !ArmyReplenishmentCompletionService.
+                    TryPrepareOffensivePrimary(pKingdom,
+                        out Army primary) ||
+                !TryFindOffensiveContinuityTarget(pKingdom, primary,
+                    out War war, out City target, out long frontId)) return;
+
+            int living;
+            try { living = Math.Max(0, primary.countUnits()); }
+            catch { return; }
+            if (!ArmyReplenishmentOperationRules.MustMaintainAttack(
+                    living, ArmyLogisticsRules.MinimumOperationalForce,
+                    validEnemyTarget: true)) return;
+
+            ArmyRtsControllerService.AssignMission(primary,
+                new ArmyRtsMission
+                {
+                    ArmyId = primary.id,
+                    KingdomId = pKingdom.id,
+                    WarId = war.data.id,
+                    FrontId = frontId,
+                    TargetCityId = target.id,
+                    TargetStrength = StandingArmyService.TargetStrength(
+                        primary, pKingdom),
+                    ProposalKind = ArmyRtsProposalKind.Attack,
+                    Role = ArmyRtsRole.Assault,
+                    Posture = ArmyRtsPosture.Attack,
+                    PlayerOrder = false,
+                    IssuedTime = CurrentWorldTime()
+                });
+            QueueArmyChanged(pKingdom);
+        }
+
         public static void ProcessFrame()
         {
             ArmyRtsMode mode = ArmyRtsRuntimeMode.Current;
@@ -725,6 +764,83 @@ namespace AncientWarfare3.core.lineage
             ShadowByKingdom[pKingdom.id] = snapshot;
             ArmyRtsControllerService.ApplyDirectorSnapshot(pKingdom,
                 snapshot);
+            EnsureOffensiveContinuity(pKingdom);
+        }
+
+        private static bool TryFindOffensiveContinuityTarget(
+            Kingdom pKingdom, Army pArmy, out War pWar, out City pTarget,
+            out long pFrontId)
+        {
+            pWar = null;
+            pTarget = null;
+            pFrontId = -1L;
+            if (pKingdom?.data == null || pArmy?.data == null ||
+                !WarIdsByKingdom.TryGetValue(pKingdom.id,
+                    out SortedSet<long> warIds)) return false;
+            foreach (long warId in warIds)
+            {
+                War war = FindWar(warId);
+                if (!IsActiveWar(war)) continue;
+                if (CoalitionWarTaskService.TryResolveTarget(war,
+                        pKingdom, pArmy, pCommit: true,
+                        out City coalitionTarget, out long coalitionTaskId) &&
+                    ArmyRtsObjectiveService.Classify(war, pKingdom,
+                        coalitionTarget) == ArmyRtsObjectiveState.OpenAttack)
+                {
+                    pWar = war;
+                    pTarget = coalitionTarget;
+                    pFrontId = coalitionTaskId >= 0L
+                        ? coalitionTaskId
+                        : coalitionTarget.id;
+                    return true;
+                }
+                City nearest = FindNearestOpenEnemyCity(war, pKingdom,
+                    pArmy);
+                if (nearest?.data == null) continue;
+                pWar = war;
+                pTarget = nearest;
+                pFrontId = nearest.id;
+                return true;
+            }
+            return false;
+        }
+
+        private static City FindNearestOpenEnemyCity(War pWar,
+            Kingdom pKingdom, Army pArmy)
+        {
+            City anchor = AWArmyService.FindAnchorCity(pArmy) ??
+                          pKingdom?.capital;
+            City best = null;
+            int bestDistance = int.MaxValue;
+            long bestId = long.MaxValue;
+            IEnumerable<Kingdom> opponents;
+            try
+            {
+                opponents = pWar.isAttacker(pKingdom)
+                    ? pWar.getDefenders()
+                    : pWar.getAttackers();
+            }
+            catch { return null; }
+            foreach (Kingdom opponent in opponents)
+            {
+                if (!IsLiveKingdom(opponent) || opponent.cities == null)
+                    continue;
+                foreach (City city in opponent.cities)
+                {
+                    if (ArmyRtsObjectiveService.Classify(pWar, pKingdom,
+                            city) != ArmyRtsObjectiveState.OpenAttack)
+                        continue;
+                    int distance = DistanceSquared(anchor, city);
+                    if (best != null &&
+                        (distance > bestDistance ||
+                         distance == bestDistance && city.id >= bestId))
+                        continue;
+                    best = city;
+                    bestDistance = distance;
+                    bestId = city.id;
+                }
+            }
+            return best;
         }
 
         private static void ScheduleFrontPrefetches(Kingdom pKingdom,
@@ -1642,6 +1758,12 @@ namespace AncientWarfare3.core.lineage
                 return days >= long.MaxValue ? long.MaxValue : (long)days;
             }
             catch { return 0L; }
+        }
+
+        private static double CurrentWorldTime()
+        {
+            try { return World.world?.getCurWorldTime() ?? 0d; }
+            catch { return 0d; }
         }
 
         private static int SaturatingAdd(int pLeft, int pRight)

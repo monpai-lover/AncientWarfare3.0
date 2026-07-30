@@ -51,5 +51,25 @@ namespace AncientWarfare3.core.lineage
             return System.Math.Max(0, System.Math.Min(
                 System.Math.Max(0, approved), persistedEnlisted));
         }
+
+        public static bool ShouldResumeAttack(int living, int minimum)
+        {
+            return System.Math.Max(0, living) >=
+                   System.Math.Max(1, minimum);
+        }
+
+        public static bool ShouldMergeSecondary(int living, int minimum,
+            bool ordinary, bool primaryExists)
+        {
+            return ordinary && primaryExists && living > 0 &&
+                   !ShouldResumeAttack(living, minimum);
+        }
+
+        public static bool MustMaintainAttack(int totalOrdinary, int minimum,
+            bool validEnemyTarget)
+        {
+            return validEnemyTarget &&
+                   ShouldResumeAttack(totalOrdinary, minimum);
+        }
     }
 }
