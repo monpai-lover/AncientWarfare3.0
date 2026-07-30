@@ -17,8 +17,21 @@ War start registration already enumerates both attackers and defenders. The miss
 3. The refresh is deferred until the current army mutation stack has completed, so the director captures the assembled roster rather than the captain-only intermediate state.
 4. Multiple soldiers joining the same kingdom in one simulation slice produce one director refresh rather than one planning pass per soldier.
 5. The director continues to exclude invalid, destroyed, captainless, royal-guard-only, and dedicated-garrison armies from field missions. A depleted army remains visible as assembling or replenishing until it becomes operational.
-6. Every operational field army in an active war is allocated to one of that kingdom's active wars. If no attack objective is currently open, it receives a reserve or defensive order anchored to a valid friendly city instead of being omitted.
-7. A periodic reconciliation remains as recovery for missed lifecycle notifications: a missionless operational wartime army causes a bounded kingdom replan.
+6. A wartime field army that is below its required strength requests forced reinforcement instead of remaining indefinitely in the replenishment state.
+7. Every operational field army in an active war is allocated to one of that kingdom's active wars. If no attack objective is currently open, it receives a reserve or defensive order anchored to a valid friendly city instead of being omitted.
+8. A periodic reconciliation remains as recovery for missed lifecycle notifications: a missionless operational wartime army causes a bounded kingdom replan.
+
+## Forced Reinforcement
+
+Forced reinforcement operates on real actors rather than changing an army count:
+
+1. Select eligible adult actors from cities owned and currently controlled by the army's kingdom, starting with the anchor city and then nearby cities.
+2. Preserve the existing population floor in every donor city. Enemy-occupied cities cannot provide recruits, resources, or soldiers.
+3. Convert the selected actors to the appropriate wartime military role, attach them to the target `Army`, and ensure both `Actor.army` and `Army.units` agree.
+4. Teleport the completed reinforcement batch to the army captain or its valid rally tile so the army does not wait for individual recruits to cross the map.
+5. Complete the batch in one deferred reinforcement operation. Do not wait for vanilla one-at-a-time warrior creation.
+6. Once the target has reached operational strength, clear the replenishment gate and enqueue a new war-director generation immediately.
+7. Apply the same process to attackers and defenders. If the kingdom has genuinely exhausted all recruitable population above the protected floor, keep the army in an explicit manpower-shortage state instead of silently recreating empty armies.
 
 ## Presentation
 
@@ -33,6 +46,7 @@ The fallback is diagnostic protection only. It does not replace command assignme
 ## Performance Boundaries
 
 - Coalesce roster notifications by kingdom.
+- Coalesce forced reinforcement by army so repeated director observations cannot create duplicate soldiers or duplicate teleports.
 - Do not scan every actor or every army per render frame.
 - Reuse `ArmyStrategicIndexService` cursors and the existing bounded war-director work queue.
 - Run reconciliation on simulation/director cycles, never `MapBox.Update` presentation frames.
@@ -51,9 +65,12 @@ Automated regression coverage will prove:
 2. Registering a new wartime army schedules a deferred kingdom refresh.
 3. Expanding a captain-only army to operational strength schedules another refresh.
 4. Repeated roster changes coalesce to one kingdom refresh.
-5. An operational army with no open attack target receives a reserve or defense mission when a friendly anchor exists.
-6. A missionless but valid army still renders basic map information with an awaiting-order status.
-7. Existing RTS lifecycle and performance rule suites remain green.
+5. Forced reinforcement selects real eligible actors without crossing the donor-city population floor.
+6. Reinforced actors are assigned to the intended army and teleported to its captain or rally tile.
+7. Repeated reinforcement requests cannot attach or teleport the same actor twice.
+8. An operational army with no open attack target receives a reserve or defense mission when a friendly anchor exists.
+9. A missionless but valid army still renders basic map information with an awaiting-order status.
+10. Existing RTS lifecycle and performance rule suites remain green.
 
 ## Out Of Scope
 
