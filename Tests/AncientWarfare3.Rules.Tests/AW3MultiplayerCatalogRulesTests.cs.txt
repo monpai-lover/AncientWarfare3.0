@@ -581,7 +581,8 @@ internal static class AW3MultiplayerCatalogRulesTests
         }
 
         string dispositionWindow = File.ReadAllText(Path.Combine(root,
-            "Code", "ui", "windows", "CourtDispositionWindow.cs"));
+            "Code", "ui", "windows", "CourtDispositionWindow.cs"))
+            .Replace("\r\n", "\n");
         Contains(dispositionWindow,
             "_commandPending = false;\n                _feedback.text = \"\";",
             "court disposition clears its pending message after host echo");

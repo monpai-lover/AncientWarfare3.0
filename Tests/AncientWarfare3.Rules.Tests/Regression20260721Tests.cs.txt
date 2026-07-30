@@ -712,10 +712,12 @@ internal static class Regression20260721Tests
         string rosterNode = File.ReadAllText(Path.Combine(
             Directory.GetCurrentDirectory(), "Code", "ui", "items",
             "SchoolRosterNodeView.cs"));
-        Equal(true, rosterNode.Contains(
+        string normalizedRosterNode = rosterNode.Replace("\r\n", "\n");
+        Equal(true, normalizedRosterNode.Contains(
                 "if (prefab == null)\n            {\n                _portraitAttemptedForBind = false;"),
             "school portraits retry when the shared live-avatar prefab is not ready");
-        Equal(true, rosterNode.Contains("return EnsurePortrait(actor);"),
+        Equal(true, normalizedRosterNode.Contains(
+                "return EnsurePortrait(actor);"),
             "the roster refresh notices a failed portrait bind");
 
         string nameProtect = File.ReadAllText(Path.Combine(
