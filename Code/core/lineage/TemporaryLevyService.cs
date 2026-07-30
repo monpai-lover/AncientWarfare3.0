@@ -401,6 +401,21 @@ namespace AncientWarfare3.core.lineage
                        out int demand) && demand > 0;
         }
 
+        internal static void RecordConfirmedReserveExhaustion(
+            Kingdom pKingdom, Army pTargetArmy, int pRemainingDemand)
+        {
+            if (pKingdom?.data == null || pTargetArmy?.data == null ||
+                pRemainingDemand <= 0) return;
+            if (!CasualtyReinforcementPlans.TryGetValue(pKingdom.id,
+                    out CasualtyReinforcementPlan plan))
+            {
+                plan = new CasualtyReinforcementPlan(pKingdom.id);
+                CasualtyReinforcementPlans[pKingdom.id] = plan;
+            }
+            plan.TargetDemandsByArmy[pTargetArmy.id] = pRemainingDemand;
+            plan.ReserveExhausted = true;
+        }
+
         public static void RequestCaptainRecovery(Kingdom pKingdom,
             Army pArmy)
         {
@@ -1589,7 +1604,8 @@ namespace AncientWarfare3.core.lineage
 
         internal static int EnlistReserveActors(Kingdom kingdom, City source,
             Army targetArmy, IReadOnlyList<Actor> candidates,
-            bool preparationRecruitment)
+            bool preparationRecruitment,
+            bool pTrackReplenishmentArrival = true)
         {
             if (kingdom?.data == null || targetArmy?.data == null ||
                 candidates == null || AWArmyService.IsSpecialArmy(targetArmy) ||
@@ -1604,7 +1620,8 @@ namespace AncientWarfare3.core.lineage
                 City donorCity = actor?.city ?? source;
                 if (donorCity?.data == null ||
                     !Enlist(kingdom, donorCity, actor,
-                        ArmyRecruitmentDisposition.Replenish, ref target))
+                        ArmyRecruitmentDisposition.Replenish, ref target,
+                        pTrackReplenishmentArrival))
                 {
                     CityReservePoolService.OnActorReturnedToCivilian(actor);
                     continue;
@@ -2035,7 +2052,8 @@ namespace AncientWarfare3.core.lineage
 
         private static bool Enlist(Kingdom pKingdom, City pCity,
             Actor pActor, ArmyRecruitmentDisposition pDisposition,
-            ref Army pEstablishmentArmy)
+            ref Army pEstablishmentArmy,
+            bool pTrackReplenishmentArrival = true)
         {
             using (MilitaryRecruitmentScope.Open(MilitaryRecruitmentKind.TemporaryLevy))
             {
@@ -2051,7 +2069,8 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
 
-            if (pDisposition == ArmyRecruitmentDisposition.Replenish)
+            if (pDisposition == ArmyRecruitmentDisposition.Replenish &&
+                pTrackReplenishmentArrival)
                 ArmyRtsControllerService.TrackReplenishmentArrival(pActor,
                     pEstablishmentArmy);
 

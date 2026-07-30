@@ -2056,7 +2056,7 @@ namespace AncientWarfare3.core.lineage
                        pAllowCaptainCombat);
         }
 
-        private static bool TryTeleportReinforcementMember(long pArmyId,
+        internal static bool TryTeleportReinforcementMember(long pArmyId,
             long pActorId, bool pAllowCaptainCombat)
         {
             Army army = FindArmy(pArmyId);
@@ -2472,11 +2472,15 @@ namespace AncientWarfare3.core.lineage
                          needsReplenishment,
                     rosterLiving, readinessTime,
                     ArmyRtsRules.ReadinessStallTimeoutSeconds);
+            bool replenishmentOperationReleased =
+                ArmyReplenishmentOperationService.IsDepartureReleased(
+                    pArmy);
             bool replenishmentBypass = ArmyRtsRules.
                 ShouldBypassStalledReadiness(pCommit,
                     minimumForceReady,
                     readinessComplete: !needsReplenishment,
-                    progressStalled: replenishmentStalled);
+                    progressStalled: replenishmentStalled &&
+                        replenishmentOperationReleased);
             bool replenishmentBypassActive = pRuntime.
                 ReplenishmentBypass.Update(replenishWindow,
                     needsReplenishment, minimumForceReady,
@@ -2484,11 +2488,7 @@ namespace AncientWarfare3.core.lineage
             bool departureStrengthReady = ArmyRtsRules.
                 HasDepartureStrength(rosterLiving, targetStrength,
                     minimumForceReady, replenishmentBypassActive);
-            pRuntime.ReplenishmentRetryDue = ArmyRtsRules.
-                ShouldRetryStalledReplenishment(pCommit,
-                    minimumForceReady, departureStrengthReady,
-                    pRuntime.ReplenishmentRequested,
-                    replenishmentStalled);
+            pRuntime.ReplenishmentRetryDue = false;
             bool forcePreDeparture = ArmyRtsRules.
                 ShouldForcePreDeparture(pCommit, pRecord.State,
                     departureStrengthReady, captainPresent, escortQuorum,
@@ -2612,12 +2612,13 @@ namespace AncientWarfare3.core.lineage
             if (!ArmyRtsRules.ShouldRequestReplenishment(
                     pCommit, pNext, pRuntime.ReplenishmentRequested,
                     missingStrength)) return;
-            pRuntime.ReplenishmentRequested = true;
             Kingdom kingdom = SafeKingdom(pArmy);
             City preferredCity = AWArmyService.FindAnchorCity(pArmy) ??
                                  SafeCaptain(pArmy)?.city;
-            TemporaryLevyService.RequestOffensiveRecovery(kingdom,
-                preferredCity, missingStrength, pTargetArmy: pArmy);
+            ArmyReplenishmentOperationState operation =
+                ArmyReplenishmentOperationService.Ensure(pArmy, kingdom,
+                    preferredCity, missingStrength, CurrentWorldTime());
+            pRuntime.ReplenishmentRequested = operation != null;
         }
 
         private static void TryApplyReserveExhaustion(Army pArmy,

@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.lineage
         public static void OnArmyKingdomChanged(Army pArmy)
         {
             Kingdom previousKingdom = IndexedKingdom(pArmy);
+            ArmyReplenishmentOperationService.OnArmyKingdomChanged(pArmy);
             RefreshArmy(pArmy);
             Kingdom currentKingdom = SafeKingdom(pArmy);
             KingdomWarDirectorService.QueueArmyChanged(previousKingdom);
@@ -33,6 +34,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (pArmy == null) return;
             Kingdom kingdom = SafeKingdom(pArmy);
+            ArmyReplenishmentOperationService.OnArmyDisposed(pArmy);
             CoalitionWarTaskService.OnArmyInvalidated(pArmy.id);
             Index.Remove(pArmy.id);
             ArmyFieldIndexService.OnArmyDisposed(pArmy);

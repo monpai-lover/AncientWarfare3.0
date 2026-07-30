@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace AncientWarfare3.core.lineage
@@ -16,6 +17,10 @@ namespace AncientWarfare3.core.lineage
 
     internal static class ArmyReplenishmentOperationService
     {
+        private static readonly SortedSet<long> ActiveArmyIds =
+            new SortedSet<long>();
+        private static long _cursorAfterArmyId = -1L;
+
         internal static bool TryRead(Army pArmy,
             out ArmyReplenishmentOperationState pState)
         {
@@ -82,6 +87,7 @@ namespace AncientWarfare3.core.lineage
 
             if (enlisted != persistedEnlisted || deadline != persistedDeadline)
                 Persist(pArmy, pState);
+            ActiveArmyIds.Add(pArmy.id);
             return true;
         }
 
@@ -113,12 +119,81 @@ namespace AncientWarfare3.core.lineage
                     ArmyReplenishmentOperationRules.DurationWorldSeconds
             };
             Persist(pArmy, state);
+            ActiveArmyIds.Add(pArmy.id);
             return state;
+        }
+
+        internal static bool IsDepartureReleased(Army pArmy)
+        {
+            if (!TryRead(pArmy, out ArmyReplenishmentOperationState state))
+                return true;
+            if (!TryGetLiveShortage(pArmy, out int liveShortage))
+                return false;
+            return ArmyReplenishmentOperationRules.ShouldFinishEarly(
+                       liveShortage) ||
+                   CurrentWorldTime() >= state.DeadlineTime;
+        }
+
+        internal static void ProcessAuthorityCycle()
+        {
+            IReadOnlyList<long> batch = TakeActiveBatch(
+                ArmyReplenishmentOperationRules.MaximumOperationsPerCycle);
+            double now = CurrentWorldTime();
+            for (int i = 0; i < batch.Count; i++)
+                ProcessOne(batch[i], now);
+        }
+
+        internal static void RebuildRuntime()
+        {
+            ClearRuntime();
+            if (World.world?.armies == null) return;
+            foreach (Army army in World.world.armies)
+                TryRead(army, out _);
+        }
+
+        internal static void ClearRuntime()
+        {
+            ActiveArmyIds.Clear();
+            _cursorAfterArmyId = -1L;
+        }
+
+        internal static void OnArmyDisposed(Army pArmy)
+        {
+            Clear(pArmy);
+        }
+
+        internal static void OnArmyKingdomChanged(Army pArmy)
+        {
+            if (pArmy?.data == null) return;
+            if (TryRead(pArmy, out ArmyReplenishmentOperationState state) &&
+                SafeKingdom(pArmy)?.id == state.KingdomId) return;
+            Clear(pArmy);
+        }
+
+        internal static void OnWarEnded(War pWar)
+        {
+            if (pWar?.data == null || ActiveArmyIds.Count == 0) return;
+            var snapshot = new List<long>(ActiveArmyIds);
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                Army army = FindArmy(snapshot[i]);
+                Kingdom kingdom = SafeKingdom(army);
+                bool participant = false;
+                try
+                {
+                    participant = kingdom?.data != null &&
+                                  pWar.hasKingdom(kingdom);
+                }
+                catch { }
+                if (participant) Clear(army);
+            }
         }
 
         internal static void Clear(Army pArmy)
         {
-            if (pArmy?.data == null) return;
+            if (pArmy == null) return;
+            ActiveArmyIds.Remove(pArmy.id);
+            if (pArmy.data == null) return;
             pArmy.data.removeInt(
                 LineageKeys.ARMY_REPLENISHMENT_OPERATION_VERSION);
             pArmy.data.removeLong(
@@ -133,6 +208,157 @@ namespace AncientWarfare3.core.lineage
                 LineageKeys.ARMY_REPLENISHMENT_OPERATION_START_TIME);
             pArmy.data.removeString(
                 LineageKeys.ARMY_REPLENISHMENT_OPERATION_DEADLINE_TIME);
+        }
+
+        private static void ProcessOne(long pArmyId, double pNow)
+        {
+            Army army = FindArmy(pArmyId);
+            if (army?.data == null)
+            {
+                ActiveArmyIds.Remove(pArmyId);
+                return;
+            }
+            if (!TryRead(army, out ArmyReplenishmentOperationState state) ||
+                !TryGetLiveShortage(army, out int liveShortage))
+            {
+                Clear(army);
+                return;
+            }
+            if (ArmyReplenishmentOperationRules.ShouldFinishEarly(
+                    liveShortage))
+            {
+                Clear(army);
+                KingdomWarDirectorService.QueueArmyChanged(
+                    SafeKingdom(army));
+                return;
+            }
+
+            int requested = ArmyReplenishmentOperationRules.BatchRequest(
+                state.ApprovedShortage, state.EnlistedCount, liveShortage,
+                state.StartTime, pNow);
+            bool deadlineReached = pNow >= state.DeadlineTime;
+            bool confirmedExhausted = false;
+            if (requested > 0)
+            {
+                Kingdom kingdom = SafeKingdom(army);
+                City preferredCity = FindCity(state.SourceCityId);
+                var candidates = new List<Actor>(requested);
+                if (!deadlineReached)
+                {
+                    CityReservePoolService.TryConsumeBatch(kingdom,
+                        preferredCity, requested, army, candidates,
+                        out confirmedExhausted);
+                }
+                else
+                {
+                    int previousAvailable = CityReservePoolService.
+                        CountAvailable(kingdom);
+                    while (candidates.Count < requested)
+                    {
+                        int added = CityReservePoolService.TryConsumeBatch(
+                            kingdom, preferredCity,
+                            requested - candidates.Count, army, candidates,
+                            out confirmedExhausted);
+                        if (candidates.Count >= requested ||
+                            confirmedExhausted) break;
+                        int available = CityReservePoolService.CountAvailable(
+                            kingdom);
+                        if (added <= 0 && available >= previousAvailable)
+                            break;
+                        previousAvailable = available;
+                    }
+                }
+
+                int enlisted = TemporaryLevyService.EnlistReserveActors(
+                    kingdom, preferredCity, army, candidates,
+                    preparationRecruitment: false,
+                    pTrackReplenishmentArrival: false);
+                if (enlisted > 0)
+                {
+                    state.EnlistedCount =
+                        ArmyReplenishmentOperationRules.ClampEnlisted(
+                            state.ApprovedShortage,
+                            state.EnlistedCount + enlisted);
+                    Persist(army, state);
+                    TeleportSuccessfulRecruits(army, candidates);
+                    KingdomWarDirectorService.QueueArmyChanged(kingdom);
+                }
+            }
+
+            if (!TryGetLiveShortage(army, out liveShortage) ||
+                ArmyReplenishmentOperationRules.ShouldFinishEarly(
+                    liveShortage) || deadlineReached)
+            {
+                if (deadlineReached && liveShortage > 0 &&
+                    confirmedExhausted)
+                    TemporaryLevyService.RecordConfirmedReserveExhaustion(
+                        SafeKingdom(army), army, liveShortage);
+                Clear(army);
+                KingdomWarDirectorService.QueueArmyChanged(
+                    SafeKingdom(army));
+            }
+        }
+
+        private static void TeleportSuccessfulRecruits(Army pArmy,
+            IReadOnlyList<Actor> pCandidates)
+        {
+            if (pArmy?.data == null || pCandidates == null) return;
+            for (int i = 0; i < pCandidates.Count; i++)
+            {
+                Actor actor = pCandidates[i];
+                bool enlisted;
+                try
+                {
+                    enlisted = actor?.data != null && actor.isWarrior() &&
+                               actor.army == pArmy;
+                }
+                catch { enlisted = false; }
+                if (!enlisted) continue;
+                if (!ArmyRtsControllerService.TryTeleportReinforcementMember(
+                        pArmy.id, actor.data.id,
+                        pAllowCaptainCombat: true))
+                    ArmyRtsControllerService.TrackReplenishmentArrival(
+                        actor, pArmy);
+            }
+        }
+
+        private static bool TryGetLiveShortage(Army pArmy,
+            out int pShortage)
+        {
+            pShortage = 0;
+            if (pArmy?.data == null ||
+                !ArmyRtsControllerService.TryGetMission(pArmy,
+                    out ArmyRtsMission mission) || mission == null ||
+                mission.TargetStrength <= 0) return false;
+            int living;
+            try { living = Math.Max(0, pArmy.countUnits()); }
+            catch { return false; }
+            pShortage = Math.Max(0, mission.TargetStrength - living);
+            return true;
+        }
+
+        private static IReadOnlyList<long> TakeActiveBatch(int pLimit)
+        {
+            var result = new List<long>(Math.Max(0, pLimit));
+            if (pLimit <= 0 || ActiveArmyIds.Count == 0) return result;
+            foreach (long armyId in ActiveArmyIds)
+            {
+                if (armyId <= _cursorAfterArmyId) continue;
+                result.Add(armyId);
+                if (result.Count >= pLimit) break;
+            }
+            if (result.Count < pLimit)
+            {
+                foreach (long armyId in ActiveArmyIds)
+                {
+                    if (armyId > _cursorAfterArmyId) break;
+                    result.Add(armyId);
+                    if (result.Count >= pLimit) break;
+                }
+            }
+            if (result.Count > 0)
+                _cursorAfterArmyId = result[result.Count - 1];
+            return result;
         }
 
         private static void Persist(Army pArmy,
@@ -230,6 +456,18 @@ namespace AncientWarfare3.core.lineage
         {
             try { return World.world?.cities?.get(pCityId); }
             catch { return null; }
+        }
+
+        private static Army FindArmy(long pArmyId)
+        {
+            try { return World.world?.armies?.get(pArmyId); }
+            catch { return null; }
+        }
+
+        private static double CurrentWorldTime()
+        {
+            try { return World.world?.getCurWorldTime() ?? 0d; }
+            catch { return 0d; }
         }
     }
 }

@@ -231,6 +231,7 @@ namespace AncientWarfare3.patch
             RoyalAsylumService.OnWarEnded(pWar);
             MilitaryEmergencyService.OnWarEnded(pWar);
             CityReservePoolService.OnWarEnded(pWar);
+            ArmyReplenishmentOperationService.OnWarEnded(pWar);
             TemporaryLevyService.OnWarEnded(pWar);
             WartimeGarrisonService.OnWarEnded(pWar);
             TemporarySlaveVanguardService.OnWarEnded(pWar);

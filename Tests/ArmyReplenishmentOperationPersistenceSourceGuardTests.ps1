@@ -56,9 +56,6 @@ Require $service 'ArmyReplenishmentOperationRules.ResolveDeadline(' `
     'restore cannot move a persisted deadline later'
 Require $service 'internal static void Clear(' `
     'invalid or completed operations must clear every army key'
-Reject $service 'CityReservePoolService.TryConsume' `
-    'persistence task cannot consume actors before orchestration is tested'
-
 if ($failures.Count -gt 0) {
     Write-Host "Army replenishment persistence guard failures: $($failures.Count)"
     foreach ($failure in $failures) { Write-Host " - $failure" }

@@ -40,6 +40,8 @@ $potential = Read-Source `
     'Code/core/lineage/WartimeMilitaryPotentialService.cs'
 $controller = Read-Source `
     'Code/core/lineage/ArmyRtsControllerService.cs'
+$operation = Read-Source `
+    'Code/core/lineage/ArmyReplenishmentOperationService.cs'
 $warPatch = Read-Source 'Code/patch/AW_WarPatch.cs'
 $preparationRegion = Method-Region $levy `
     'private static void ProcessPreparationRecruitment' `
@@ -76,6 +78,8 @@ Require $controller 'TryTeleportReinforcementMember' `
     'recruits must teleport before the first mission'
 Require $controller 'KingdomWarDirectorService.QueueArmyChanged' `
     'successful arrival must replan the newly operational army'
+Require $operation 'TemporaryLevyService.EnlistReserveActors(' `
+    'progressive operations must reuse the actor-safe enlistment path'
 Require $warPatch `
     'CityReservePoolService.CompletePreWarReconciliation(__result)' `
     'formal war creation performs the final indexed refill'

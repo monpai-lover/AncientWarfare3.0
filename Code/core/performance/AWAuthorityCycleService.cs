@@ -46,6 +46,7 @@ namespace AncientWarfare3.core.performance
             CivilServiceExamService.ClearRuntime();
             TemporaryMilitaryReturnService.ClearRuntime();
             CityReservePoolService.ClearRuntime();
+            ArmyReplenishmentOperationService.ClearRuntime();
             WarParticipantEntrySourceService.Instance.ClearRuntime();
         }
 
@@ -77,6 +78,8 @@ namespace AncientWarfare3.core.performance
                 TemporaryLevyService.ProcessPreparationMonth);
             Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
+            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+                ArmyReplenishmentOperationService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
                 DrainAuthorityCompletions);
             Measure(RecentFeatureBenchmarkRules.AsyncCommitIndex,
