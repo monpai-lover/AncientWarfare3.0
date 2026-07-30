@@ -68,6 +68,19 @@ internal static class CityReservePoolRulesTests
         Equal(false, TemporaryLevyRules.CanRegisterReserve(
             originalEligible: true, protectedIdentity: true, age: 20f),
             "protected identities cannot enter the reserve");
+
+        Equal(true, CityReservePoolRules.CanMaintain(
+            frozen: false, worldDayChanged: true),
+            "peace maintenance runs once on a new world day");
+        Equal(false, CityReservePoolRules.CanMaintain(
+            frozen: true, worldDayChanged: true),
+            "war freeze blocks all additions");
+        Equal(false, CityReservePoolRules.ShouldUnfreeze(
+            activeWarCount: 1),
+            "ending one concurrent war does not unfreeze the pool");
+        Equal(true, CityReservePoolRules.ShouldUnfreeze(
+            activeWarCount: 0),
+            "leaving the final war reopens peace maintenance");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

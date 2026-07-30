@@ -35,6 +35,16 @@ namespace AncientWarfare3.core.lineage
             return preparation ? PreparationActorBudget : PeaceActorBudget;
         }
 
+        public static bool CanMaintain(bool frozen, bool worldDayChanged)
+        {
+            return !frozen && worldDayChanged;
+        }
+
+        public static bool ShouldUnfreeze(int activeWarCount)
+        {
+            return activeWarCount <= 0;
+        }
+
         public static bool ShouldApplyReserveExhaustion(
             bool attackAssignment, int reinforcementShortage,
             bool kingdomFrozen, bool exhaustionConfirmed,
