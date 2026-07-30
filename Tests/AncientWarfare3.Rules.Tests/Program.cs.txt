@@ -7122,6 +7122,7 @@ SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
 Regression20260721Tests.Run();
+ArmyMapInformationRulesTests.Run();
 AW3MultiplayerWorldLoadRulesTests.Run();
 LineageRuntimePathRulesTests.Run();
 AW3RuntimeRestorePipelineTests.Run();
