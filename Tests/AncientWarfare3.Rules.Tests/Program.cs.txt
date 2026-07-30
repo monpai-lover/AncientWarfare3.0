@@ -210,6 +210,13 @@ if (args.Length == 1 && args[0] == "--civil-service-exam-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--guest-office-end-slice")
+{
+    SchoolGuestOfficeRulesTests.Run();
+    Console.WriteLine("AW3 guest-office end recovery rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--name-system-slice")
 {
     NameSystemRulesTests.Run();

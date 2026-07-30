@@ -244,6 +244,7 @@
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
     <Compile Include="..\..\Code\core\schools\SchoolGuestOfficeRules.cs" Link="Production\SchoolGuestOfficeRules.cs" />
+    <Compile Include="..\..\Code\core\schools\GuestOfficePersistenceRules.cs" Link="Production\GuestOfficePersistenceRules.cs" />
     <Compile Include="..\..\Code\core\court\NineRankRules.cs" Link="Production\NineRankRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtPetitionRules.cs" Link="Production\CourtPetitionRules.cs" />
     <Compile Include="..\..\Code\core\court\MinisterialPowerRules.cs" Link="Production\MinisterialPowerRules.cs" />
