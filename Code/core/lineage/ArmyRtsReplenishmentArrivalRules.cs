@@ -13,6 +13,14 @@ namespace AncientWarfare3.core.lineage
         internal const double TeleportAfterSeconds = 0d;
         internal const int MaximumArrivalChecksPerFrame = 4;
 
+        internal static bool ShouldTrackArrival(bool runtimeCommit,
+            bool actorLive, bool memberAttached, bool isCaptain,
+            bool missionActive, bool wartimeEmergency)
+        {
+            return runtimeCommit && actorLive && memberAttached &&
+                   !isCaptain && (missionActive || wartimeEmergency);
+        }
+
         internal static bool ShouldReleaseReplenishmentAfterArrival(
             bool arrivalTeleported, bool departureStrengthReady)
         {

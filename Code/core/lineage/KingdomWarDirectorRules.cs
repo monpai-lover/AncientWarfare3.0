@@ -447,10 +447,12 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldAllocateFieldArmy(int unitCount,
-            bool captainAlive, bool royalGuard, bool dedicatedGarrison)
+            bool captainAlive, bool royalGuard, bool dedicatedGarrison,
+            bool specialArmy)
         {
             return ArmyLogisticsRules.HasMinimumOperationalForce(unitCount) &&
-                   captainAlive && !royalGuard && !dedicatedGarrison;
+                   captainAlive && !royalGuard && !dedicatedGarrison &&
+                   !specialArmy;
         }
 
         public static int SelectBestTargetIndex(

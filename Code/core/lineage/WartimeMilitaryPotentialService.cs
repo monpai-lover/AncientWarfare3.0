@@ -1,115 +1,52 @@
 using System;
-using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
     internal static class WartimeMilitaryPotentialService
     {
-        private static readonly Dictionary<long, int>
-            NextBoundedSampleStartByKingdom = new Dictionary<long, int>();
-
         public static int CountPotentialWarriors(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
-            var cities = new List<WartimeCityMobilizationFacts>(
-                pKingdom.cities?.Count ?? 0);
-            if (pKingdom.cities != null)
-                for (int i = 0; i < pKingdom.cities.Count; i++)
-                {
-                    City city = pKingdom.cities[i];
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pKingdom) continue;
-                    cities.Add(CityFacts(pKingdom, city));
-                }
-            return WartimeRecruitmentPopulationRules.
-                TotalMilitaryPotential(SafeWarriorCount(pKingdom), cities);
+            return AddClamped(CountLivingOrdinaryMilitary(pKingdom),
+                CityReservePoolService.CountAvailable(pKingdom));
         }
 
         public static int CountPotentialWarriorsBounded(Kingdom pKingdom,
             int pMaximumCityScans)
         {
-            if (pKingdom?.data == null || pKingdom.isRekt()) return 0;
-            int maximumScans = Math.Max(0, pMaximumCityScans);
-            int totalCityCount = pKingdom.cities?.Count ?? 0;
-            var cities = new List<WartimeCityMobilizationFacts>(
-                Math.Min(totalCityCount, maximumScans));
-            int sampledCurrentMilitary = 0;
-            NextBoundedSampleStartByKingdom.TryGetValue(pKingdom.id,
-                out int startIndex);
-            startIndex = WartimeRecruitmentPopulationRules.
-                RotatingSampleIndex(startIndex, 0, totalCityCount);
-            int inspected = Math.Min(totalCityCount, maximumScans);
-            if (pKingdom.cities != null)
-                for (int offset = 0; offset < inspected; offset++)
-                {
-                    int i = WartimeRecruitmentPopulationRules.
-                        RotatingSampleIndex(startIndex, offset,
-                            totalCityCount);
-                    City city = pKingdom.cities[i];
-                    if (city?.data == null || city.isRekt() ||
-                        city.kingdom != pKingdom) continue;
-                    WartimeCityMobilizationFacts facts = CityFacts(pKingdom,
-                        city);
-                    sampledCurrentMilitary += facts.CurrentMilitary;
-                    cities.Add(facts);
-                }
-            if (inspected > 0)
-                NextBoundedSampleStartByKingdom[pKingdom.id] =
-                    WartimeRecruitmentPopulationRules.
-                        NextRotatingSampleStart(startIndex, inspected,
-                            totalCityCount);
-            int sampled = WartimeRecruitmentPopulationRules.
-                TotalMilitaryPotential(sampledCurrentMilitary, cities);
-            return WartimeRecruitmentPopulationRules.
-                ScaleSampledMilitaryPotential(sampled, cities.Count,
-                    totalCityCount);
+            return CountPotentialWarriors(pKingdom);
         }
 
-        public static void ClearRuntime()
-        {
-            NextBoundedSampleStartByKingdom.Clear();
-        }
+        public static void ClearRuntime() { }
 
-        public static void RemoveKingdom(long pKingdomId)
-        {
-            if (pKingdomId < 0L) return;
-            NextBoundedSampleStartByKingdom.Remove(pKingdomId);
-        }
+        public static void RemoveKingdom(long pKingdomId) { }
 
-        private static WartimeCityMobilizationFacts CityFacts(
-            Kingdom pKingdom, City pCity)
+        private static int CountLivingOrdinaryMilitary(Kingdom pKingdom)
         {
-            int population = SafePopulation(pCity);
-            int currentMilitary = StandingArmyService.
-                CountOrdinaryMilitary(pCity);
-            int slots = SafeEffectiveWarriorSlots(pKingdom, pCity);
-            return new WartimeCityMobilizationFacts(population,
-                currentMilitary, slots);
-        }
-
-        private static int SafePopulation(City pCity)
-        {
-            try { return Math.Max(0, pCity?.getPopulationPeople() ?? 0); }
-            catch { return 0; }
-        }
-
-        private static int SafeEffectiveWarriorSlots(Kingdom pKingdom,
-            City pCity)
-        {
-            try
+            long total = 0L;
+            ArmyStrategicIdCursor cursor = ArmyFieldIndexService.
+                CreateSnapshotCursor(pKingdom);
+            while (!cursor.IsComplete)
             {
-                return Math.Max(0, MandateMilitaryPhaseService.
-                    EffectiveWarriorSlots(pKingdom,
-                        pCity?.status?.warrior_slots ?? 0));
+                var armyIds = cursor.Take(
+                    ArmyEstablishmentRules.MaximumFieldArmies);
+                for (int i = 0; i < armyIds.Count; i++)
+                {
+                    Army army = ArmyFieldIndexService.ResolveIndexedArmy(
+                        armyIds[i], pKingdom.id);
+                    try { total += Math.Max(0, army?.countUnits() ?? 0); }
+                    catch { }
+                    if (total >= int.MaxValue) return int.MaxValue;
+                }
+                if (armyIds.Count == 0) break;
             }
-            catch { return 0; }
+            return (int)total;
         }
 
-        private static int SafeWarriorCount(Kingdom pKingdom)
+        private static int AddClamped(int first, int second)
         {
-            try { return Math.Max(0, pKingdom?.countTotalWarriors() ?? 0); }
-            catch { return 0; }
+            long total = (long)Math.Max(0, first) + Math.Max(0, second);
+            return total >= int.MaxValue ? int.MaxValue : (int)total;
         }
-
     }
 }

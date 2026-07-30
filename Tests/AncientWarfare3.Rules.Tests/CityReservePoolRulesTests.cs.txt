@@ -1,0 +1,167 @@
+using AncientWarfare3.core.lineage;
+using System;
+using System.Collections.Generic;
+
+internal static class CityReservePoolRulesTests
+{
+    internal static void Run()
+    {
+        Equal(35, CityReservePoolRules.Capacity(100, 80),
+            "population caps reserve capacity at 35 percent");
+        Equal(20, CityReservePoolRules.Capacity(100, 20),
+            "effective warrior slots can be the tighter cap");
+        Equal(0, CityReservePoolRules.Capacity(-1, 20),
+            "negative population cannot create reserves");
+
+        Equal(true, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: false, memberCount: 4,
+            capacity: 5), "eligible adult enters a non-full peace pool");
+        Equal(false, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: false, memberCount: 5,
+            capacity: 5), "a full pool rejects without a waiting list");
+        Equal(false, CityReservePoolRules.CanEnroll(
+            alive: true, adult: true, localResident: true,
+            baseEligible: true, frozen: true, memberCount: 0,
+            capacity: 5), "an adult event cannot add during war");
+
+        Equal(1, CityReservePoolRules.CityBudget(preparation: false),
+            "peace maintenance visits one city per world day");
+        Equal(4, CityReservePoolRules.CityBudget(preparation: true),
+            "preparation accelerates city maintenance");
+        Equal(8, CityReservePoolRules.ActorBudget(preparation: false),
+            "peace candidate validation is bounded");
+        Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
+            "preparation candidate validation remains bounded");
+
+        Equal(true, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 1,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: false),
+            "an attacking army with no reserve receives the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: false, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: false),
+            "defense-only shortage does not receive the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: false,
+            alreadyApplied: false),
+            "an incomplete reserve check defers the penalty");
+        Equal(false, CityReservePoolRules.ShouldApplyReserveExhaustion(
+            attackAssignment: true, reinforcementShortage: 10,
+            kingdomFrozen: true, exhaustionConfirmed: true,
+            alreadyApplied: true),
+            "the same side and war cannot receive the penalty twice");
+        Equal(20, CityReservePoolRules.ReserveExhaustionContribution,
+            "reserve exhaustion adds exactly twenty points");
+        Equal(100, CityReservePoolRules.ComposeExhaustion(90, 20),
+            "total exhaustion remains clamped to one hundred");
+        Equal(55, CityReservePoolRules.ComposeExhaustion(35, 20),
+            "reserve exhaustion composes with casualty and duration exhaustion");
+        int attackerReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(0);
+        attackerReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(attackerReserve);
+        Equal(20, attackerReserve,
+            "repeated reserve exhaustion checks remain idempotent");
+        int defenderReserve = 0;
+        defenderReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(defenderReserve);
+        Equal(20, attackerReserve,
+            "applying defender exhaustion does not alter attackers");
+        Equal(20, defenderReserve,
+            "defenders maintain an independent reserve contribution");
+
+        Equal(true, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: false, age: 18f),
+            "a newly adult eligible civilian can enter the reserve");
+        Equal(false, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: false, age: 65f),
+            "a person at the enlistment age ceiling cannot enter");
+        Equal(false, TemporaryLevyRules.CanRegisterReserve(
+            originalEligible: true, protectedIdentity: true, age: 20f),
+            "protected identities cannot enter the reserve");
+
+        Equal(true, CityReservePoolRules.CanMaintain(
+            frozen: false, worldDayChanged: true),
+            "peace maintenance runs once on a new world day");
+        Equal(false, CityReservePoolRules.CanMaintain(
+            frozen: true, worldDayChanged: true),
+            "war freeze blocks all additions");
+        Equal(false, CityReservePoolRules.ShouldUnfreeze(
+            activeWarCount: 1),
+            "ending one concurrent war does not unfreeze the pool");
+        Equal(true, CityReservePoolRules.ShouldUnfreeze(
+            activeWarCount: 0),
+            "leaving the final war reopens peace maintenance");
+
+        var donors = new List<CityReserveDonorFacts>
+        {
+            new CityReserveDonorFacts(30L, preferred: false,
+                distanceSquared: 9L),
+            new CityReserveDonorFacts(20L, preferred: false,
+                distanceSquared: 4L),
+            new CityReserveDonorFacts(40L, preferred: true,
+                distanceSquared: 100L),
+            new CityReserveDonorFacts(10L, preferred: false,
+                distanceSquared: 4L)
+        };
+        IReadOnlyList<long> donorOrder =
+            CityReservePoolRules.OrderDonorCityIds(donors);
+        Equal(40L, donorOrder[0],
+            "the army anchor city is consumed before nearby donors");
+        Equal(10L, donorOrder[1],
+            "equal-distance donors use ascending city id");
+        Equal(20L, donorOrder[2],
+            "the second equal-distance donor remains deterministic");
+        Equal(30L, donorOrder[3],
+            "more distant donors are consumed last");
+
+        var actorIds = new SortedSet<long> { 9L, 3L, 7L };
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(actorIds,
+            out long firstActorId),
+            "a populated city reserve yields an actor");
+        Equal(3L, firstActorId,
+            "city reserve consumption uses ascending actor id");
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(actorIds,
+            out long secondActorId),
+            "a second request consumes the next actor");
+        Equal(7L, secondActorId,
+            "two requests cannot return the same actor id");
+        Equal(false, actorIds.Contains(firstActorId),
+            "consumed actor ids are removed atomically");
+
+        Equal(false, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: true, population: 20),
+            "a city at the twenty-person floor cannot donate");
+        Equal(false, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: false, population: 200),
+            "an enemy-controlled city cannot donate");
+        Equal(true, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: true, population: 21),
+            "a frozen controlled city above the floor can donate");
+
+        Equal(true, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: true,
+            remainingIndexedActors: 0),
+            "a fully validated empty frozen pool confirms exhaustion");
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: false,
+            remainingIndexedActors: 0),
+            "an incomplete validation pass cannot confirm exhaustion");
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: true,
+            remainingIndexedActors: 1),
+            "an indexed reserve actor prevents exhaustion");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(name + ": expected " +
+                expected + ", got " + actual);
+    }
+}

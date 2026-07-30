@@ -64,6 +64,7 @@ namespace AncientWarfare3.core.lineage
             bool dedicatedGarrison =
                 WartimeGarrisonService.IsActive(captain) ||
                 GarrisonSortieService.IsSortieArmy(pArmy);
+            bool specialArmy = AWArmyService.IsSpecialArmy(pArmy);
             ArmyOperationalStateView operational =
                 ArmyLogisticsService.GetOperationalState(pArmy);
             int captainX = int.MinValue;
@@ -92,7 +93,8 @@ namespace AncientWarfare3.core.lineage
                 operational.Supply,
                 operational.Organization,
                 captainX,
-                captainY);
+                captainY,
+                specialArmy);
         }
 
         private static long ResolveCurrentTargetCityId(Army pArmy,

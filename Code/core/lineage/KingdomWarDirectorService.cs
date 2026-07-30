@@ -640,7 +640,8 @@ namespace AncientWarfare3.core.lineage
                     }
                     continue;
                 }
-                if (KingdomWarDirectorRules.
+                if (!(army?.SpecialArmy ?? false) &&
+                    KingdomWarDirectorRules.
                         ShouldRequestDepletedArmyRecovery(
                             army?.UnitCount ?? 0,
                             army?.CaptainAlive ?? false,
@@ -1474,7 +1475,8 @@ namespace AncientWarfare3.core.lineage
             return pArmy != null && pArmy.ArmyId >= 0L &&
                    KingdomWarDirectorRules.ShouldAllocateFieldArmy(
                        pArmy.UnitCount, pArmy.CaptainAlive,
-                       pArmy.RoyalGuard, pArmy.DedicatedGarrison);
+                       pArmy.RoyalGuard, pArmy.DedicatedGarrison,
+                       pArmy.SpecialArmy);
         }
 
         private static void RequestDepletedArmyRecovery(Kingdom pKingdom,

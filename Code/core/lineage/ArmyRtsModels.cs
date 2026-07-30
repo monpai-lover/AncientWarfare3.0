@@ -85,7 +85,7 @@ namespace AncientWarfare3.core.lineage
             int pUnitCount, string pLegacyRole, bool pCaptainAlive,
             bool pRoyalGuard, bool pDedicatedGarrison, int pSupply = 100,
             int pOrganization = 100, int pCaptainX = int.MinValue,
-            int pCaptainY = int.MinValue)
+            int pCaptainY = int.MinValue, bool pSpecialArmy = false)
         {
             ArmyId = pArmyId;
             KingdomId = pKingdomId;
@@ -97,6 +97,7 @@ namespace AncientWarfare3.core.lineage
             CaptainAlive = pCaptainAlive;
             RoyalGuard = pRoyalGuard;
             DedicatedGarrison = pDedicatedGarrison;
+            SpecialArmy = pSpecialArmy;
             Supply = Math.Max(0, Math.Min(100, pSupply));
             Organization = Math.Max(0, Math.Min(100, pOrganization));
             CaptainX = pCaptainX;
@@ -113,6 +114,7 @@ namespace AncientWarfare3.core.lineage
         public bool CaptainAlive { get; }
         public bool RoyalGuard { get; }
         public bool DedicatedGarrison { get; }
+        public bool SpecialArmy { get; }
         public int Supply { get; }
         public int Organization { get; }
         public int CaptainX { get; }

@@ -21,6 +21,8 @@ namespace AncientWarfare3.core.db
         public int last_calibrated_year = int.MinValue;
         public int attacker_exhaustion_relief;
         public int defender_exhaustion_relief;
+        public int attacker_reserve_exhaustion;
+        public int defender_reserve_exhaustion;
         public int attacker_exhaustion;
         public int defender_exhaustion;
         public int active = 1;

@@ -29,6 +29,30 @@ internal static class ArmyRtsReplenishmentArrivalRulesTests
                ArmyRtsReplenishmentArrivalAction.Teleport,
             "a new reinforcement must join its target formation immediately");
 
+        bool missionlessWartimeArrival = ArmyRtsReplenishmentArrivalRules.
+            ShouldTrackArrival(runtimeCommit: true, actorLive: true,
+                memberAttached: true, isCaptain: false,
+                missionActive: false, wartimeEmergency: true);
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: missionlessWartimeArrival,
+                targetArmyActive: true, memberStillEligible: true,
+                atFormation: false, combatActive: false,
+                transportActive: false, elapsedRealtime: 0d) ==
+               ArmyRtsReplenishmentArrivalAction.Teleport,
+            "a missionless wartime reinforcement joins its captain immediately");
+
+        bool missionlessPeacetimeArrival = ArmyRtsReplenishmentArrivalRules.
+            ShouldTrackArrival(runtimeCommit: true, actorLive: true,
+                memberAttached: true, isCaptain: false,
+                missionActive: false, wartimeEmergency: false);
+        Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
+                tracked: missionlessPeacetimeArrival,
+                targetArmyActive: true, memberStillEligible: true,
+                atFormation: false, combatActive: false,
+                transportActive: false, elapsedRealtime: 0d) ==
+               ArmyRtsReplenishmentArrivalAction.Discard,
+            "a missionless peacetime member is not owned by the wartime arrival queue");
+
         Assert(ArmyRtsReplenishmentArrivalRules.ResolveAction(
                 tracked: true, targetArmyActive: true,
                 memberStillEligible: true, atFormation: false,

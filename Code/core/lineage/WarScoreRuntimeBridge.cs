@@ -996,6 +996,18 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        public static bool ApplyReserveExhaustion(long pWarId,
+            WarScoreSide pSide, double pWorldTime)
+        {
+            try
+            {
+                WarScoreService runtime = GetRuntime();
+                return runtime != null && runtime.TryApplyReserveExhaustion(
+                    pWarId, pSide, pWorldTime);
+            }
+            catch { return false; }
+        }
+
         private static WarScoreService GetRuntime()
         {
             try

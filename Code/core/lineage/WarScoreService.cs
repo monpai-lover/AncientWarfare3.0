@@ -53,6 +53,8 @@ namespace AncientWarfare3.core.lineage
         public int LastCalibratedYear { get; internal set; } = int.MinValue;
         public int AttackerExhaustionRelief { get; internal set; }
         public int DefenderExhaustionRelief { get; internal set; }
+        public int AttackerReserveExhaustion { get; internal set; }
+        public int DefenderReserveExhaustion { get; internal set; }
         public int AttackerExhaustion { get; internal set; }
         public int DefenderExhaustion { get; internal set; }
         public bool Active { get; internal set; }
@@ -514,6 +516,35 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        internal bool TryApplyReserveExhaustion(long pWarId,
+            WarScoreSide pSide, double pWorldTime)
+        {
+            if (!WarScoreRules.IsParticipantSide(pSide)) return false;
+            lock (_gate)
+            {
+                if (!_active.TryGetValue(pWarId,
+                        out WarScoreSnapshot current) || !current.Active)
+                    return false;
+                int existing = pSide == WarScoreSide.Attackers
+                    ? current.AttackerReserveExhaustion
+                    : current.DefenderReserveExhaustion;
+                int contribution = CityReservePoolRules.
+                    ApplyReserveExhaustionContribution(existing);
+                if (contribution == existing) return false;
+                WarScoreSnapshot next = current.CloneCanonical();
+                if (pSide == WarScoreSide.Attackers)
+                    next.AttackerReserveExhaustion = contribution;
+                else
+                    next.DefenderReserveExhaustion = contribution;
+                RecalculateLossesAndExhaustion(next);
+                RecalculateTotal(next);
+                Touch(next, pWorldTime);
+                _persistence.Save(next);
+                _active[pWarId] = next;
+                return true;
+            }
+        }
+
         public bool SynchronizeDeaths(long pWarId, int pAttackerLosses,
             int pDefenderLosses, double pWorldTime)
         {
@@ -878,14 +909,20 @@ namespace AncientWarfare3.core.lineage
             pSnapshot.LossScore = WarScoreRules.LossScore(
                 pSnapshot.AttackerLosses, pSnapshot.DefenderLosses);
             pSnapshot.AttackerExhaustion = WarVictoryExhaustionRules.
-                ApplyRelief(WarScoreRules.WarExhaustion(
-                        pSnapshot.DurationYears, pSnapshot.AttackerLosses,
-                        pSnapshot.AttackerMobilizationBaseline),
+                ApplyRelief(CityReservePoolRules.ComposeExhaustion(
+                        WarScoreRules.WarExhaustion(
+                            pSnapshot.DurationYears,
+                            pSnapshot.AttackerLosses,
+                            pSnapshot.AttackerMobilizationBaseline),
+                        pSnapshot.AttackerReserveExhaustion),
                     pSnapshot.AttackerExhaustionRelief);
             pSnapshot.DefenderExhaustion = WarVictoryExhaustionRules.
-                ApplyRelief(WarScoreRules.WarExhaustion(
-                        pSnapshot.DurationYears, pSnapshot.DefenderLosses,
-                        pSnapshot.DefenderMobilizationBaseline),
+                ApplyRelief(CityReservePoolRules.ComposeExhaustion(
+                        WarScoreRules.WarExhaustion(
+                            pSnapshot.DurationYears,
+                            pSnapshot.DefenderLosses,
+                            pSnapshot.DefenderMobilizationBaseline),
+                        pSnapshot.DefenderReserveExhaustion),
                     pSnapshot.DefenderExhaustionRelief);
             if (pSnapshot.DecisiveScore > 0)
                 pSnapshot.DefenderExhaustion = 100;

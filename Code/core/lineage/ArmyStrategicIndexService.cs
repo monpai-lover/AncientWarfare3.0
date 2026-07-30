@@ -10,27 +10,33 @@ namespace AncientWarfare3.core.lineage
         public static void OnArmyRegistered(Army pArmy)
         {
             RefreshArmy(pArmy);
-            KingdomWarDirectorService.OnArmyChanged(SafeKingdom(pArmy));
+            KingdomWarDirectorService.QueueArmyChanged(SafeKingdom(pArmy));
         }
 
         public static void OnArmyKingdomChanged(Army pArmy)
         {
+            Kingdom previousKingdom = IndexedKingdom(pArmy);
             RefreshArmy(pArmy);
-            KingdomWarDirectorService.OnArmyChanged(SafeKingdom(pArmy));
+            Kingdom currentKingdom = SafeKingdom(pArmy);
+            KingdomWarDirectorService.QueueArmyChanged(previousKingdom);
+            if (currentKingdom != previousKingdom)
+                KingdomWarDirectorService.QueueArmyChanged(currentKingdom);
         }
 
         public static void OnArmyRosterChanged(Army pArmy)
         {
             RefreshArmy(pArmy);
+            KingdomWarDirectorService.QueueArmyChanged(SafeKingdom(pArmy));
         }
 
         public static void OnArmyDisposed(Army pArmy)
         {
             if (pArmy == null) return;
             Kingdom kingdom = SafeKingdom(pArmy);
+            CoalitionWarTaskService.OnArmyInvalidated(pArmy.id);
             Index.Remove(pArmy.id);
             ArmyFieldIndexService.OnArmyDisposed(pArmy);
-            KingdomWarDirectorService.OnArmyChanged(kingdom);
+            KingdomWarDirectorService.QueueArmyChanged(kingdom);
         }
 
         public static ArmyStrategicIdCursor CreateSnapshotCursor(
@@ -112,6 +118,15 @@ namespace AncientWarfare3.core.lineage
         private static Kingdom SafeKingdom(Army pArmy)
         {
             try { return pArmy?.getKingdom(); }
+            catch { return null; }
+        }
+
+        private static Kingdom IndexedKingdom(Army pArmy)
+        {
+            if (pArmy == null ||
+                !Index.TryGetKingdomId(pArmy.id, out long kingdomId))
+                return null;
+            try { return World.world?.kingdoms?.get(kingdomId); }
             catch { return null; }
         }
     }

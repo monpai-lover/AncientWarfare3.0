@@ -232,6 +232,16 @@ namespace AncientWarfare3.core.lineage
         public const string STANDING_ARMY_SCAN_CURSOR = "aw_standing_army_scan_cursor";
         public const string STANDING_ARMY_ROSTER_SCAN_CURSOR = "aw_standing_army_roster_scan_cursor";
         public const string TEMPORARY_LEVY = "aw_temporary_levy";
+        public const string CITY_RESERVE_MEMBER = "aw_city_reserve_member";
+        public const string CITY_RESERVE_CITY_ID = "aw_city_reserve_city_id";
+        public const string CITY_RESERVE_KINGDOM_ID =
+            "aw_city_reserve_kingdom_id";
+        public const string CITY_RESERVE_GENERATION =
+            "aw_city_reserve_generation";
+        public const string CITY_RESERVE_KINGDOM_GENERATION =
+            "aw_city_reserve_kingdom_generation";
+        public const string CITY_RESERVE_KINGDOM_FROZEN =
+            "aw_city_reserve_kingdom_frozen";
         public const string TEMPORARY_LEVY_KINGDOM_ID = "aw_temporary_levy_kingdom_id";
         public const string TEMPORARY_LEVY_NOTICE_SIGNATURE = "aw_temporary_levy_notice_signature";
         public const string TEMPORARY_LEVY_ORIGINAL_CITY_ID = "aw_temporary_levy_original_city_id";

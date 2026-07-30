@@ -367,6 +367,8 @@ namespace AncientWarfare3.core.lineage
                  "LAST_CALIBRATED_YEAR INTEGER NOT NULL," +
                  "ATTACKER_EXHAUSTION_RELIEF INTEGER NOT NULL," +
                  "DEFENDER_EXHAUSTION_RELIEF INTEGER NOT NULL," +
+                 "ATTACKER_RESERVE_EXHAUSTION INTEGER NOT NULL," +
+                 "DEFENDER_RESERVE_EXHAUSTION INTEGER NOT NULL," +
                  "ATTACKER_EXHAUSTION INTEGER NOT NULL," +
                 "DEFENDER_EXHAUSTION INTEGER NOT NULL," +
                 "ACTIVE INTEGER NOT NULL," +
@@ -412,6 +414,10 @@ namespace AncientWarfare3.core.lineage
             EnsureColumn(SnapshotTable, "ATTACKER_EXHAUSTION_RELIEF",
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(SnapshotTable, "DEFENDER_EXHAUSTION_RELIEF",
+                "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(SnapshotTable, "ATTACKER_RESERVE_EXHAUSTION",
+                "INTEGER NOT NULL DEFAULT 0");
+            EnsureColumn(SnapshotTable, "DEFENDER_RESERVE_EXHAUSTION",
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(SnapshotTable, "ATTACKER_MOBILIZATION_BASELINE",
                 "INTEGER NOT NULL DEFAULT 0");
@@ -490,6 +496,8 @@ namespace AncientWarfare3.core.lineage
                  "@attackerMobilization,@defenderMobilization,@duration," +
                  "@lastCalibratedYear," +
                  "@attackerRelief,@defenderRelief," +
+                 "@attackerReserveExhaustion," +
+                 "@defenderReserveExhaustion," +
                  "@attackerExhaustion,@defenderExhaustion,@active,@winner," +
                 "@started,@updated,@ended,@revision)", _db, pTransaction);
             command.Parameters.AddWithValue("@war", pValue.WarId);
@@ -514,6 +522,10 @@ namespace AncientWarfare3.core.lineage
                 pValue.AttackerExhaustionRelief);
             command.Parameters.AddWithValue("@defenderRelief",
                 pValue.DefenderExhaustionRelief);
+            command.Parameters.AddWithValue("@attackerReserveExhaustion",
+                pValue.AttackerReserveExhaustion);
+            command.Parameters.AddWithValue("@defenderReserveExhaustion",
+                pValue.DefenderReserveExhaustion);
             command.Parameters.AddWithValue("@attackerExhaustion", pValue.AttackerExhaustion);
             command.Parameters.AddWithValue("@defenderExhaustion", pValue.DefenderExhaustion);
             command.Parameters.AddWithValue("@active", pValue.Active ? 1 : 0);
@@ -606,6 +618,10 @@ namespace AncientWarfare3.core.lineage
                     pReader["ATTACKER_EXHAUSTION_RELIEF"]),
                 DefenderExhaustionRelief = Convert.ToInt32(
                     pReader["DEFENDER_EXHAUSTION_RELIEF"]),
+                AttackerReserveExhaustion = Convert.ToInt32(
+                    pReader["ATTACKER_RESERVE_EXHAUSTION"]),
+                DefenderReserveExhaustion = Convert.ToInt32(
+                    pReader["DEFENDER_RESERVE_EXHAUSTION"]),
                 AttackerExhaustion = Convert.ToInt32(pReader["ATTACKER_EXHAUSTION"]),
                 DefenderExhaustion = Convert.ToInt32(pReader["DEFENDER_EXHAUSTION"]),
                 Active = Convert.ToInt32(pReader["ACTIVE"]) != 0,
@@ -651,6 +667,8 @@ namespace AncientWarfare3.core.lineage
             "DEFENDER_MOBILIZATION_BASELINE," +
             "DURATION_YEARS,LAST_CALIBRATED_YEAR," +
             "ATTACKER_EXHAUSTION_RELIEF,DEFENDER_EXHAUSTION_RELIEF," +
+            "ATTACKER_RESERVE_EXHAUSTION," +
+            "DEFENDER_RESERVE_EXHAUSTION," +
             "ATTACKER_EXHAUSTION,DEFENDER_EXHAUSTION,ACTIVE,WINNER," +
             "STARTED_TIME,UPDATED_TIME,ENDED_TIME,REVISION";
     }
