@@ -1047,14 +1047,19 @@ namespace AncientWarfare3.core.lineage
         internal static void TrackReplenishmentArrival(Actor pActor,
             Army pArmy)
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit || pActor?.data == null ||
-                pArmy?.data == null || pActor.army != pArmy ||
-                !HasActiveMission(pArmy.id) || IsCaptain(pActor, pArmy) ||
-                !IsLiveWarriorActor(pActor)) return;
+            bool missionActive = pArmy?.data != null &&
+                                 HasActiveMission(pArmy.id);
+            bool wartimeEmergency = pArmy?.data != null &&
+                MilitaryEmergencyService.HasAny(SafeKingdom(pArmy));
+            if (!ArmyRtsReplenishmentArrivalRules.ShouldTrackArrival(
+                    ArmyRtsRuntimeMode.ShouldCommit,
+                    IsLiveWarriorActor(pActor),
+                    pActor?.army == pArmy, IsCaptain(pActor, pArmy),
+                    missionActive, wartimeEmergency)) return;
             long actorId = pActor.data.id;
             if (actorId < 0L) return;
-            RecoverFormationMember(pArmy.id, actorId);
-            if (TryTeleportFormationMember(pArmy.id, actorId,
+            if (missionActive) RecoverFormationMember(pArmy.id, actorId);
+            if (TryTeleportReinforcementMember(pArmy.id, actorId,
                     pAllowCaptainCombat: true))
             {
                 ReleaseReplenishmentForDeparture(pArmy.id);
@@ -1087,7 +1092,8 @@ namespace AncientWarfare3.core.lineage
                 ArmyRtsReplenishmentArrivalAction action =
                     ResolveReplenishmentArrivalAction(actorId, pending, now);
                 if (action == ArmyRtsReplenishmentArrivalAction.Teleport &&
-                    TryTeleportFormationMember(pending.ArmyId, actorId))
+                    TryTeleportReinforcementMember(pending.ArmyId, actorId,
+                        pAllowCaptainCombat: false))
                 {
                     ReleaseReplenishmentForDeparture(pending.ArmyId);
                     action = ArmyRtsReplenishmentArrivalAction.Complete;
@@ -1109,14 +1115,23 @@ namespace AncientWarfare3.core.lineage
             Army army = FindArmy(pPending?.ArmyId ?? -1L);
             Actor actor = FindActor(pActorId);
             Actor captain = SafeCaptain(army);
+            bool missionActive = army?.data != null &&
+                                 HasActiveMission(army.id);
+            bool wartimeEmergency = army?.data != null &&
+                MilitaryEmergencyService.HasAny(SafeKingdom(army));
             bool targetArmyActive = army?.data != null &&
-                                    HasActiveMission(army.id);
-            bool memberStillEligible = targetArmyActive &&
-                actor?.army == army && !IsCaptain(actor, army) &&
-                IsLiveWarriorActor(actor) &&
-                ArmyFormationService.HasFollower(actor);
+                (missionActive || wartimeEmergency);
+            bool memberStillEligible =
+                ArmyRtsReplenishmentArrivalRules.ShouldTrackArrival(
+                    ArmyRtsRuntimeMode.ShouldCommit,
+                    IsLiveWarriorActor(actor), actor?.army == army,
+                    IsCaptain(actor, army), missionActive,
+                    wartimeEmergency) &&
+                (!missionActive || ArmyFormationService.HasFollower(actor));
             bool atFormation = memberStillEligible &&
-                               ArmyFormationService.IsInsideLooseEscort(actor);
+                (missionActive
+                    ? ArmyFormationService.IsInsideLooseEscort(actor)
+                    : actor?.current_tile == captain?.current_tile);
             bool combatActive = memberStillEligible &&
                 (HasImmediateCombatPriority(actor) ||
                  HasImmediateCombatPriority(captain));
@@ -2028,38 +2043,61 @@ namespace AncientWarfare3.core.lineage
         public static bool TryTeleportFormationMember(long pArmyId,
             long pActorId)
         {
-            return TryTeleportFormationMember(pArmyId, pActorId,
+            return HasActiveMission(pArmyId) &&
+                   TryTeleportReinforcementMember(pArmyId, pActorId,
                 pAllowCaptainCombat: false);
         }
 
         private static bool TryTeleportFormationMember(long pArmyId,
             long pActorId, bool pAllowCaptainCombat)
         {
-            if (!ArmyRtsRuntimeMode.ShouldCommit ||
-                !HasActiveMission(pArmyId)) return false;
+            return HasActiveMission(pArmyId) &&
+                   TryTeleportReinforcementMember(pArmyId, pActorId,
+                       pAllowCaptainCombat);
+        }
+
+        private static bool TryTeleportReinforcementMember(long pArmyId,
+            long pActorId, bool pAllowCaptainCombat)
+        {
             Army army = FindArmy(pArmyId);
             Actor actor = FindActor(pActorId);
             Actor captain = SafeCaptain(army);
-            if (actor?.army != army || IsCaptain(actor, army) ||
-                !ArmyFormationService.HasFollower(actor) ||
-                 !ShouldOwnMilitaryActor(actor, pMissionActive: true) ||
+            bool missionActive = army?.data != null &&
+                                 HasActiveMission(pArmyId);
+            bool wartimeEmergency = army?.data != null &&
+                MilitaryEmergencyService.HasAny(SafeKingdom(army));
+            if (!ArmyRtsReplenishmentArrivalRules.ShouldTrackArrival(
+                    ArmyRtsRuntimeMode.ShouldCommit,
+                    IsLiveWarriorActor(actor), actor?.army == army,
+                    IsCaptain(actor, army), missionActive,
+                    wartimeEmergency) ||
+                 missionActive &&
+                 (!ArmyFormationService.HasFollower(actor) ||
+                  !ShouldOwnMilitaryActor(actor, pMissionActive: true)) ||
                  captain?.current_tile?.data == null ||
                  HasImmediateCombatPriority(actor) ||
                  !pAllowCaptainCombat && HasImmediateCombatPriority(captain) ||
                  ArmyRtsTransportService.HasActiveVoyage(army)) return false;
             try
             {
-                if (actor.data.transportID >= 0L ||
+                if (actor.data.transportID >= 0L) return false;
+                WorldTile target = captain.current_tile;
+                if (missionActive &&
                     !ArmyFormationService.TryGetFollowerRecoveryTarget(
-                        actor, out WorldTile target)) return false;
+                        actor, out target)) return false;
                 AWArmyMarchService.ResetActorSharedRoute(actor);
                 actor.cancelAllBeh();
                 actor.stopMovement();
                 actor.spawnOn(target);
-                ArmyFormationService.TryGetFollowerTarget(actor, out _);
-                SetJob(actor, ArmyRtsContent.FollowerJobId,
-                    pForceReassert: true);
-                Controllers.Requeue(pArmyId);
+                if (missionActive)
+                {
+                    ArmyFormationService.TryGetFollowerTarget(actor, out _);
+                    SetJob(actor, ArmyRtsContent.FollowerJobId,
+                        pForceReassert: true);
+                    Controllers.Requeue(pArmyId);
+                }
+                KingdomWarDirectorService.QueueArmyChanged(
+                    SafeKingdom(army));
                 return true;
             }
             catch { return false; }

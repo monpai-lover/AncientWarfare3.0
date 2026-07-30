@@ -1,5 +1,6 @@
 using AncientWarfare3.core.lineage;
 using System;
+using System.Collections.Generic;
 
 internal static class CityReservePoolRulesTests
 {
@@ -81,6 +82,65 @@ internal static class CityReservePoolRulesTests
         Equal(true, CityReservePoolRules.ShouldUnfreeze(
             activeWarCount: 0),
             "leaving the final war reopens peace maintenance");
+
+        var donors = new List<CityReserveDonorFacts>
+        {
+            new CityReserveDonorFacts(30L, preferred: false,
+                distanceSquared: 9L),
+            new CityReserveDonorFacts(20L, preferred: false,
+                distanceSquared: 4L),
+            new CityReserveDonorFacts(40L, preferred: true,
+                distanceSquared: 100L),
+            new CityReserveDonorFacts(10L, preferred: false,
+                distanceSquared: 4L)
+        };
+        IReadOnlyList<long> donorOrder =
+            CityReservePoolRules.OrderDonorCityIds(donors);
+        Equal(40L, donorOrder[0],
+            "the army anchor city is consumed before nearby donors");
+        Equal(10L, donorOrder[1],
+            "equal-distance donors use ascending city id");
+        Equal(20L, donorOrder[2],
+            "the second equal-distance donor remains deterministic");
+        Equal(30L, donorOrder[3],
+            "more distant donors are consumed last");
+
+        var actorIds = new SortedSet<long> { 9L, 3L, 7L };
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(actorIds,
+            out long firstActorId),
+            "a populated city reserve yields an actor");
+        Equal(3L, firstActorId,
+            "city reserve consumption uses ascending actor id");
+        Equal(true, CityReservePoolRules.TryTakeNextActorId(actorIds,
+            out long secondActorId),
+            "a second request consumes the next actor");
+        Equal(7L, secondActorId,
+            "two requests cannot return the same actor id");
+        Equal(false, actorIds.Contains(firstActorId),
+            "consumed actor ids are removed atomically");
+
+        Equal(false, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: true, population: 20),
+            "a city at the twenty-person floor cannot donate");
+        Equal(false, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: false, population: 200),
+            "an enemy-controlled city cannot donate");
+        Equal(true, CityReservePoolRules.CanConsumeFromCity(
+            kingdomFrozen: true, realmControlled: true, population: 21),
+            "a frozen controlled city above the floor can donate");
+
+        Equal(true, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: true,
+            remainingIndexedActors: 0),
+            "a fully validated empty frozen pool confirms exhaustion");
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: false,
+            remainingIndexedActors: 0),
+            "an incomplete validation pass cannot confirm exhaustion");
+        Equal(false, CityReservePoolRules.CanConfirmExhausted(
+            kingdomFrozen: true, allIndexedCitiesChecked: true,
+            remainingIndexedActors: 1),
+            "an indexed reserve actor prevents exhaustion");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

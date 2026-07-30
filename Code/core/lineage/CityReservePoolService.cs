@@ -186,6 +186,93 @@ namespace AncientWarfare3.core.lineage
             return pool.ActorIds.Count;
         }
 
+        internal static int TryConsumeBatch(Kingdom kingdom,
+            City preferredCity, int requested, Army targetArmy,
+            List<Actor> destination, out bool confirmedExhausted)
+        {
+            confirmedExhausted = false;
+            int requestedCount = Math.Max(0, requested);
+            if (requestedCount <= 0 || destination == null ||
+                !IsLivingKingdom(kingdom) ||
+                !States.TryGetValue(kingdom.id,
+                    out KingdomPoolState state) || !state.Frozen)
+                return 0;
+            if (targetArmy?.data != null &&
+                AWArmyService.GetIntendedKingdom(targetArmy) != kingdom)
+                return 0;
+
+            WorldTile preferredTile = SafeCityTile(preferredCity);
+            var donors = new List<CityReserveDonorFacts>(
+                state.Cities.Count);
+            foreach (long cityId in state.Cities.Keys)
+            {
+                City city = ResolveCity(cityId);
+                donors.Add(new CityReserveDonorFacts(cityId,
+                    preferredCity?.data != null &&
+                    cityId == preferredCity.id,
+                    DistanceSquared(SafeCityTile(city), preferredTile)));
+            }
+            IReadOnlyList<long> orderedCityIds =
+                CityReservePoolRules.OrderDonorCityIds(donors);
+            int inspectionBudget = requestedCount;
+            int inspected = 0;
+            int added = 0;
+            bool allIndexedCitiesChecked = true;
+            int remainingUsableActors = 0;
+
+            for (int cityIndex = 0;
+                 cityIndex < orderedCityIds.Count; cityIndex++)
+            {
+                long cityId = orderedCityIds[cityIndex];
+                if (!state.Cities.TryGetValue(cityId, out CityPool pool))
+                    continue;
+                City city = ResolveCity(cityId);
+                bool realmControlled = city?.data != null &&
+                    !city.isRekt() && city.kingdom == kingdom &&
+                    OccupiedCitySupplyService.CanProvideToRealm(
+                        city, kingdom);
+                bool canConsume = CityReservePoolRules.CanConsumeFromCity(
+                    state.Frozen, realmControlled, SafePopulation(city));
+                if (!canConsume) continue;
+
+                while (added < requestedCount &&
+                       inspected < inspectionBudget &&
+                       CityReservePoolRules.TryTakeNextActorId(
+                           pool.ActorIds, out long actorId))
+                {
+                    inspected++;
+                    Actor actor = ResolveActor(actorId);
+                    if (!IsValidMember(actor, kingdom, city,
+                            state.Generation))
+                    {
+                        if (actor?.data != null) ClearFields(actor);
+                        continue;
+                    }
+                    ClearFields(actor);
+                    destination.Add(actor);
+                    added++;
+                }
+
+                if (pool.ActorIds.Count == 0)
+                {
+                    state.Cities.Remove(cityId);
+                    state.ActorCursors.Remove(cityId);
+                    state.ValidationAfterActorIds.Remove(cityId);
+                    continue;
+                }
+                remainingUsableActors = remainingUsableActors >=
+                    int.MaxValue - pool.ActorIds.Count
+                    ? int.MaxValue
+                    : remainingUsableActors + pool.ActorIds.Count;
+                allIndexedCitiesChecked = false;
+            }
+
+            confirmedExhausted = CityReservePoolRules.CanConfirmExhausted(
+                state.Frozen, allIndexedCitiesChecked,
+                remainingUsableActors);
+            return added;
+        }
+
         internal static void RebuildRuntime()
         {
             ClearRuntime();
@@ -451,6 +538,25 @@ namespace AncientWarfare3.core.lineage
         {
             try { return Math.Max(0, city.getPopulationPeople()); }
             catch { return 0; }
+        }
+
+        private static WorldTile SafeCityTile(City city)
+        {
+            try { return city?.getTile(); }
+            catch { return null; }
+        }
+
+        private static long DistanceSquared(WorldTile first,
+            WorldTile second)
+        {
+            if (first?.data == null || second?.data == null)
+                return long.MaxValue;
+            long x = (long)first.x - second.x;
+            long y = (long)first.y - second.y;
+            long distance;
+            try { distance = checked(x * x + y * y); }
+            catch { return long.MaxValue; }
+            return Math.Max(0L, distance);
         }
 
         private static int EffectiveWarriorSlots(City city, Kingdom kingdom)
