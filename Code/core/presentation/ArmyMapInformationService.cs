@@ -160,15 +160,30 @@ namespace AncientWarfare3.core.presentation
             {
                 Army army = ArmyStrategicIndexService.ResolveIndexedArmy(
                     ArmyIdScratch[index], pKingdom.id);
-                if (army?.data == null ||
-                    !ArmyRtsControllerService.TryGetProjection(army,
-                        out ArmyRtsStrategicProjection projection) ||
-                    !ArmyRtsControllerService.TryGetMission(army,
-                        out ArmyRtsMission mission)) continue;
+                if (army?.data == null) continue;
+                bool hasProjection = ArmyRtsControllerService.
+                    TryGetProjection(army,
+                        out ArmyRtsStrategicProjection projection);
+                bool hasMission = ArmyRtsControllerService.TryGetMission(
+                    army, out ArmyRtsMission mission);
+                int memberCount = 0;
+                try { memberCount = army.countUnits(); }
+                catch { }
+                ArmyRtsState state = ArmyMapInformationRules.
+                    ResolvePendingState(hasProjection,
+                        hasProjection && projection != null
+                            ? projection.State
+                            : ArmyRtsState.Idle,
+                        memberCount,
+                        ArmyLogisticsRules.MinimumOperationalForce);
                 ArmyRtsVisualizationRules.TryAddVisibleCandidate(
                     CandidateScratch,
                     new ArmyRtsVisualizationCandidate(army.id,
-                        pKingdom.id, projection.State, mission.Role,
+                        pKingdom.id, state,
+                        hasMission && mission != null
+                            ? mission.Role
+                            : ArmyRtsRole.Reserve,
+                        hasProjection && projection != null &&
                         projection.PlayerOrder), pKingdom.id);
             }
             if (ArmyIdScratch.Count > 0)
@@ -283,11 +298,7 @@ namespace AncientWarfare3.core.presentation
             try
             {
                 if (pArmy?.data == null || pCaptain?.data == null ||
-                    !pCaptain.isAlive() || pCaptain.isRekt() ||
-                    !ArmyRtsControllerService.TryGetProjection(pArmy,
-                        out ArmyRtsStrategicProjection projection) ||
-                    !ArmyRtsControllerService.TryGetMission(pArmy,
-                        out ArmyRtsMission mission)) return false;
+                    !pCaptain.isAlive() || pCaptain.isRekt()) return false;
 
                 string nativeName = pArmy.data.name;
                 if (!ArmyMapInformationRules.ShouldDisplayEntry(
@@ -297,6 +308,37 @@ namespace AncientWarfare3.core.presentation
                 int memberCount = 0;
                 try { memberCount = pArmy.countUnits(); }
                 catch { }
+                bool hasProjection = ArmyRtsControllerService.
+                    TryGetProjection(pArmy,
+                        out ArmyRtsStrategicProjection projection);
+                bool hasMission = ArmyRtsControllerService.TryGetMission(
+                    pArmy, out ArmyRtsMission mission);
+                if (!hasProjection || projection == null || !hasMission ||
+                    mission == null)
+                {
+                    ArmyRtsState pendingState = ArmyMapInformationRules.
+                        ResolvePendingState(hasProjection,
+                            hasProjection && projection != null
+                                ? projection.State
+                                : ArmyRtsState.Idle,
+                            memberCount,
+                            ArmyLogisticsRules.MinimumOperationalForce);
+                    int pendingShortage = ArmyMapInformationRules.
+                        ResolveReplenishmentShortage(
+                            pendingState == ArmyRtsState.Replenish,
+                            memberCount,
+                            ArmyLogisticsRules.MinimumOperationalForce);
+                    string pendingOperation = Localize(
+                        ArmyMapInformationRules.
+                            PendingOperationLocalizationKey(pendingState),
+                        pendingState == ArmyRtsState.Replenish
+                            ? "Replenishing"
+                            : "Awaiting orders");
+                    pText = ArmyMapInformationRules.ComposeText(nativeName,
+                        memberCount, SafeName(pCaptain), pendingOperation,
+                        pendingShortage);
+                    return true;
+                }
                 int replenishmentShortage = ArmyMapInformationRules.
                     ResolveReplenishmentShortage(
                         projection.State == ArmyRtsState.Replenish,

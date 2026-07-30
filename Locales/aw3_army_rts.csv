@@ -3,6 +3,7 @@ aw_army_rts_operation,军事行动,Military operation,军事行动
 aw_army_rts_player_order,玩家命令,Player order,玩家命令
 aw_army_rts_target_unknown,未知目标,Unknown target,未知目标
 aw_army_rts_state_idle,待命,Idle,待命
+aw_army_rts_state_awaiting_orders,等待军令,Awaiting orders,等待軍令
 aw_army_rts_state_rally,集结,Rallying,集结
 aw_army_rts_state_march,行军,Marching,行军
 aw_army_rts_state_deploy,展开,Deploying,展开

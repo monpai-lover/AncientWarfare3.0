@@ -61,5 +61,24 @@ namespace AncientWarfare3.core.lineage
                               Math.Max(0, memberCount))
                 : 0;
         }
+
+        public static ArmyRtsState ResolvePendingState(bool hasProjection,
+            ArmyRtsState projectionState, int memberCount,
+            int minimumOperationalForce)
+        {
+            if (hasProjection) return projectionState;
+            return Math.Max(0, memberCount) <
+                   Math.Max(1, minimumOperationalForce)
+                ? ArmyRtsState.Replenish
+                : ArmyRtsState.Idle;
+        }
+
+        public static string PendingOperationLocalizationKey(
+            ArmyRtsState pState)
+        {
+            return pState == ArmyRtsState.Replenish
+                ? "aw_army_rts_state_replenish"
+                : "aw_army_rts_state_awaiting_orders";
+        }
     }
 }
