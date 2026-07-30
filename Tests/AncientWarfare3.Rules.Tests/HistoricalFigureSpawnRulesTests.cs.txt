@@ -19,6 +19,45 @@ internal static class HistoricalFigureSpawnRulesTests
                 reservationCommitted: true),
             "committed unique reservation permits actor mutation");
 
+        Equal(0, HistoricalFigureSpawnRules.SelectCandidate(
+                jiFaCommitted: false,
+                registryIndices: new[] { 0, 1, 2 },
+                spawnStates: new[]
+                {
+                    HistoricalFigureSpawnRules.Available,
+                    HistoricalFigureSpawnRules.Available,
+                    HistoricalFigureSpawnRules.Available
+                },
+                eligible: new[] { true, true, true },
+                randomOrdinal: 2),
+            "Ji Fa remains the only first historical figure");
+        Equal(2, HistoricalFigureSpawnRules.SelectCandidate(
+                jiFaCommitted: true,
+                registryIndices: new[] { 0, 1, 2, 3 },
+                spawnStates: new[]
+                {
+                    HistoricalFigureSpawnRules.Committed,
+                    HistoricalFigureSpawnRules.Available,
+                    HistoricalFigureSpawnRules.Available,
+                    HistoricalFigureSpawnRules.Available
+                },
+                eligible: new[] { true, false, true, true },
+                randomOrdinal: 0),
+            "later historical figures use a random eligible candidate ordinal");
+        Equal(-1, HistoricalFigureSpawnRules.SelectCandidate(
+                jiFaCommitted: true,
+                registryIndices: new[] { 0, 1 },
+                spawnStates: new[]
+                {
+                    HistoricalFigureSpawnRules.Committed,
+                    HistoricalFigureSpawnRules.Pending
+                },
+                eligible: new[] { true, true }, randomOrdinal: 0),
+            "a pending reservation prevents a competing random selection");
+        Equal("Han", HistoricalFigureSpawnRules.ProjectStateName(
+                "Western Han", "Han"),
+            "directional historical labels project to the pure state name");
+
         string root = Directory.GetCurrentDirectory();
         string service = File.ReadAllText(Path.Combine(root, "Code",
             "content", "figures", "HistoricalFigureService.cs"));
@@ -36,6 +75,13 @@ internal static class HistoricalFigureSpawnRulesTests
         Contains(service,
             "HistoricalFigureSpawnRules.CanEvaluate(FigureStateStore.IsReady)",
             "spawn hook rejects archive-unavailable attempts before probability work");
+        Contains(service,
+            "HistoricalFigureSpawnRules.SelectCandidate(",
+            "spawn hook selects post-Ji-Fa figures through random candidate rules");
+        Contains(service, "FigureStateStore.SpawnStateSnapshot()",
+            "spawn hook evaluates every durable figure state before selection");
+        Contains(store, "public static int[] SpawnStateSnapshot()",
+            "figure state exposes a durable spawn-state snapshot");
         Contains(store, "public static bool IsReady",
             "figure state exposes durable readiness");
         Contains(store, "public static bool TryReserveSpawn(",

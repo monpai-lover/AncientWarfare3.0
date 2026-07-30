@@ -75,6 +75,48 @@ namespace AncientWarfare3.content.figures
                    (!requiresIntegration || integrationReady);
         }
 
+        public static int SelectCandidate(bool jiFaCommitted,
+            int[] registryIndices, int[] spawnStates, bool[] eligible,
+            int randomOrdinal)
+        {
+            if (registryIndices == null || spawnStates == null ||
+                eligible == null || spawnStates.Length != eligible.Length)
+                return -1;
+
+            var candidates = new System.Collections.Generic.List<int>();
+            bool jiFaAvailable = false;
+            for (int i = 0; i < registryIndices.Length; i++)
+            {
+                int registryIndex = registryIndices[i];
+                if (registryIndex < 0 || registryIndex >= spawnStates.Length)
+                    return -1;
+                int state = spawnStates[registryIndex];
+                if (state == Pending) return -1;
+                if (registryIndex == 0)
+                {
+                    jiFaAvailable = state == Available &&
+                                    eligible[registryIndex];
+                    continue;
+                }
+                if (jiFaCommitted && state == Available &&
+                    eligible[registryIndex])
+                    candidates.Add(registryIndex);
+            }
+
+            if (!jiFaCommitted) return jiFaAvailable ? 0 : -1;
+            if (candidates.Count == 0) return -1;
+            int index = (int)((uint)randomOrdinal % (uint)candidates.Count);
+            return candidates[index];
+        }
+
+        public static string ProjectStateName(string dynastyName,
+            string kingdomName)
+        {
+            return string.IsNullOrWhiteSpace(kingdomName)
+                ? dynastyName ?? ""
+                : kingdomName;
+        }
+
         public static int NextSpawnableRegistryIndex(int[] registryOrder,
             bool[] spawned, bool[] dead)
         {

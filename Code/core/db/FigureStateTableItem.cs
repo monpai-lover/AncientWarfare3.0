@@ -150,6 +150,14 @@ namespace AncientWarfare3.core.db
                     _spawnState, _dead);
         }
 
+        public static int[] SpawnStateSnapshot()
+        {
+            if (!EnsureLoaded()) return new int[0];
+            var snapshot = new int[_spawnState.Length];
+            System.Array.Copy(_spawnState, snapshot, _spawnState.Length);
+            return snapshot;
+        }
+
         /// <summary>
         ///     校正:DB 标"已生成未死"但单位实际已不存在/已死(被非 die 路径移除,如编辑器删/被抹除)→ 补 dead,
         ///     防止严格顺序因死亡钩漏触发而永久卡死。

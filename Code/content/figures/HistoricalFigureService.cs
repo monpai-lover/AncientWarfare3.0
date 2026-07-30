@@ -145,9 +145,8 @@ namespace AncientWarfare3.content.figures
             if (FigureStateStore.AnyAliveFigure()) { Diag(pSource, "已有 figure 存活(互斥)"); return; }
             if (HasMandateKingdom()) { Diag(pSource, "天命国阻断"); return; }
 
-            // —— 严格顺序:取当前应生成的那个人 ——
-            int idx = FigureStateStore.NextSpawnableIndex();
-            if (idx < 0) { Diag(pSource, "NextSpawnableIndex=-1(前一个还活着/全生成完)"); return; }
+            int idx = SelectSpawnCandidate(pActor);
+            if (idx < 0) { Diag(pSource, "no eligible historical figure candidate"); return; }
             var def = HistoricalFigureDef.Get(idx);
             if (def == null) return;
 
@@ -173,6 +172,36 @@ namespace AncientWarfare3.content.figures
 
             ModClass.LogInfo($"历史人物命中:source={pSource} idx={idx} key={def.Key}");
             ApplyFigure(pActor, def, idx, integrationReady);
+        }
+
+        private static int SelectSpawnCandidate(Actor pActor)
+        {
+            int[] spawnStates = FigureStateStore.SpawnStateSnapshot();
+            if (spawnStates.Length != HistoricalFigureDef.Count) return -1;
+            int[] registryIndices = new int[HistoricalFigureDef.Count];
+            bool[] eligible = new bool[HistoricalFigureDef.Count];
+            bool integrationReady = IsSpawnKingdomIntegrated(pActor);
+            for (int i = 0; i < HistoricalFigureDef.Count; i++)
+            {
+                HistoricalFigureDef definition = HistoricalFigureDef.Get(i);
+                if (definition == null) return -1;
+                int registryIndex = definition.RegistryIndex;
+                if (registryIndex < 0 || registryIndex >= spawnStates.Length)
+                    return -1;
+                registryIndices[i] = registryIndex;
+                eligible[registryIndex] = HistoricalFigureSpawnRules.
+                    IsDefinitionSpawnable(definition.Id,
+                        definition.RegistryIndex, definition.SpawnOrder,
+                        definition.Chance) &&
+                    HistoricalFigureSpawnRules.CanAttemptDefinition(
+                        definition.RequiresIntegration, integrationReady,
+                        definition.Chance);
+            }
+
+            bool jiFaCommitted = spawnStates.Length > 0 &&
+                spawnStates[0] == HistoricalFigureSpawnRules.Committed;
+            return HistoricalFigureSpawnRules.SelectCandidate(jiFaCommitted,
+                registryIndices, spawnStates, eligible, Rng.Next());
         }
 
         private static void Diag(string pSource, string pReason)
@@ -500,8 +529,8 @@ namespace AncientWarfare3.content.figures
                 if (string.IsNullOrEmpty(colorHex)) colorHex = "#FFFFFF";
                 string localizedName = AncientWarfare3.ui.AW_L10n.Text(
                     pDef.NameLocaleKey, pDef.Key);
-                string localizedDynasty = AncientWarfare3.ui.AW_L10n.Text(
-                    pDef.DynastyLocaleKey, pDef.DynastyName);
+                string localizedDynasty = HistoricalFigureSpawnRules.
+                    ProjectStateName(pDef.DynastyName, pDef.KingdomName);
                 string localizedLabel =
                     HistoricalFigureSpawnRules.FormatLocalizedLabel(
                         localizedName, localizedDynasty);

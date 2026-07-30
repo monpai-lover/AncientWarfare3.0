@@ -3295,10 +3295,21 @@ namespace AncientWarfare3.core.lineage
         private static int ResolveMissionTargetStrength(Army pArmy,
             Kingdom pKingdom, ArmyRtsMission pMission)
         {
-            int resolved = ArmyRtsRules.ResolveMissionTargetStrength(
-                pMission?.TargetStrength ?? 0,
-                StandingArmyService.TargetStrength(pArmy, pKingdom),
-                SafeUnitCount(pArmy));
+            int living = SafeUnitCount(pArmy);
+            int resolved;
+            if (pArmy?.data != null && !AWArmyService.IsSpecialArmy(pArmy))
+            {
+                int approved = CityArmyReinforcementService.ApprovedTarget(
+                    pArmy, pKingdom);
+                resolved = Math.Max(living, approved);
+            }
+            else
+            {
+                resolved = ArmyRtsRules.ResolveMissionTargetStrength(
+                    pMission?.TargetStrength ?? 0,
+                    StandingArmyService.TargetStrength(pArmy, pKingdom),
+                    living);
+            }
             if (pMission != null) pMission.TargetStrength = resolved;
             return resolved;
         }

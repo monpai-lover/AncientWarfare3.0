@@ -1,0 +1,50 @@
+using System;
+using AncientWarfare3.core.lineage;
+
+internal static class CityArmyReinforcementRulesTests
+{
+    public static void Run()
+    {
+        Equal(35, CityArmyReinforcementRules.CityCapacity(100, 80),
+            "city capacity uses the thirty-five percent population cap");
+        Equal(20, CityArmyReinforcementRules.CityCapacity(100, 20),
+            "warrior slots remain a city capacity ceiling");
+
+        CityArmyReinforcementAllocation[] allocations =
+            CityArmyReinforcementRules.Allocate(60, new[]
+            {
+                new CityArmyReinforcementRequest(9L, 10, 40,
+                    CityArmyPriority.Reserve),
+                new CityArmyReinforcementRequest(2L, 10, 40,
+                    CityArmyPriority.Frontline),
+                new CityArmyReinforcementRequest(1L, 10, 40,
+                    CityArmyPriority.Frontline)
+            });
+
+        Equal(40, TargetFor(allocations, 1L),
+            "stable army identity resolves equal priority allocation");
+        Equal(10, TargetFor(allocations, 2L),
+            "higher priority capacity is allocated before later peers");
+        Equal(10, TargetFor(allocations, 9L),
+            "lower priority keeps its existing soldiers without new capacity");
+        Equal(12, CityArmyReinforcementRules.Shortage(28, 40),
+            "approved target alone defines displayed reinforcement shortage");
+        Equal(0, CityArmyReinforcementRules.Shortage(40, 35),
+            "a population decline never creates a negative shortage");
+    }
+
+    private static int TargetFor(CityArmyReinforcementAllocation[] pAllocations,
+        long pArmyId)
+    {
+        foreach (CityArmyReinforcementAllocation allocation in pAllocations)
+            if (allocation.ArmyId == pArmyId) return allocation.ApprovedTarget;
+        throw new InvalidOperationException("missing allocation for army " + pArmyId);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}
