@@ -215,6 +215,7 @@
     <Compile Include="..\..\Code\core\lineage\ArmyLogisticsService.cs" Link="Production\ArmyLogisticsService.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsObjectiveRules.cs" Link="Production\ArmyRtsObjectiveRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsModels.cs" Link="Production\ArmyRtsModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\KingdomWarDirectorRules.cs" Link="Production\KingdomWarDirectorRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsRouteChoiceRules.cs" Link="Production\ArmyRtsRouteChoiceRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyRtsAttackSpeechBubbleRules.cs" Link="Production\ArmyRtsAttackSpeechBubbleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\GarrisonSortieRules.cs" Link="Production\GarrisonSortieRules.cs" />

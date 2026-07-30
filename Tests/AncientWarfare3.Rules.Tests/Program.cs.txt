@@ -141,6 +141,7 @@ if (args.Length == 1 && args[0] == "--rts-wartime-lifecycle-slice")
     ActiveMilitaryLifecycleRulesTests.Run();
     TemporaryLevyRulesTests.Run();
     TemporaryLevyRecoveryRulesTests.Run();
+    WarParticipantRosterRulesTests.Run();
     Console.WriteLine("AW3 RTS wartime lifecycle rules passed.");
     return;
 }
@@ -237,6 +238,55 @@ static void True(bool value, string name)
 
 static void RunArmyRtsCommandContinuityRulesTests()
 {
+    IReadOnlyList<WarArmyAssignment> normalReplacements =
+        KingdomWarDirectorRules.AllocateWars(
+            new[]
+            {
+                new WarAllocationFacts(1L, capitalThreat: false,
+                    warGoalThreat: true, signedWarScore: 0,
+                    requiredArmies: 2)
+            },
+            new[]
+            {
+                new ArmyAllocationFacts(10L, 20),
+                new ArmyAllocationFacts(11L, 20)
+            });
+    Equal(ArmyRtsRole.Assault, normalReplacements[0].Role,
+        "a replacement army does not default to defense");
+    Equal(ArmyRtsRole.Assault, normalReplacements[1].Role,
+        "every operational replacement remains attack-capable without a homeland threat");
+
+    IReadOnlyList<WarArmyAssignment> threatenedReplacements =
+        KingdomWarDirectorRules.AllocateWars(
+            new[]
+            {
+                new WarAllocationFacts(2L, capitalThreat: true,
+                    warGoalThreat: true, signedWarScore: 0,
+                    requiredArmies: 2, localTerritoryThreat: true)
+            },
+            new[]
+            {
+                new ArmyAllocationFacts(20L, 20),
+                new ArmyAllocationFacts(21L, 20)
+            });
+    Equal(ArmyRtsRole.Defense, threatenedReplacements[0].Role,
+        "a real capital threat reserves one defense slot");
+    Equal(ArmyRtsRole.Assault, threatenedReplacements[1].Role,
+        "additional replacements remain available to attack");
+    Equal(ArmyRtsRole.Reserve,
+        KingdomWarDirectorRules.ResolveMissionRole(
+            ArmyRtsRole.Assault, hasStrategicTarget: false,
+            forceReady: true),
+        "an operational field army without an open target waits in reserve");
+    Equal(true, KingdomWarDirectorRules.ShouldAllocateFieldArmy(
+            unitCount: 20, captainAlive: true, royalGuard: false,
+            dedicatedGarrison: false, specialArmy: false),
+        "an ordinary former defense army can return to field allocation");
+    Equal(false, KingdomWarDirectorRules.ShouldAllocateFieldArmy(
+            unitCount: 20, captainAlive: true, royalGuard: false,
+            dedicatedGarrison: false, specialArmy: true),
+        "a special army never enters ordinary defense-to-attack conversion");
+
     True(ArmyRtsTaskOwnershipRules.HasImmediateCombatPriority(
             hasAttackTarget: true, targetAlive: true,
             targetHostile: true, targetCombatant: true,
