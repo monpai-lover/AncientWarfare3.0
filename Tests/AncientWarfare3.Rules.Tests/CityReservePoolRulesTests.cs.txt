@@ -59,6 +59,21 @@ internal static class CityReservePoolRulesTests
             "reserve exhaustion adds exactly twenty points");
         Equal(100, CityReservePoolRules.ComposeExhaustion(90, 20),
             "total exhaustion remains clamped to one hundred");
+        Equal(55, CityReservePoolRules.ComposeExhaustion(35, 20),
+            "reserve exhaustion composes with casualty and duration exhaustion");
+        int attackerReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(0);
+        attackerReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(attackerReserve);
+        Equal(20, attackerReserve,
+            "repeated reserve exhaustion checks remain idempotent");
+        int defenderReserve = 0;
+        defenderReserve = CityReservePoolRules.
+            ApplyReserveExhaustionContribution(defenderReserve);
+        Equal(20, attackerReserve,
+            "applying defender exhaustion does not alter attackers");
+        Equal(20, defenderReserve,
+            "defenders maintain an independent reserve contribution");
 
         Equal(true, TemporaryLevyRules.CanRegisterReserve(
             originalEligible: true, protectedIdentity: false, age: 18f),

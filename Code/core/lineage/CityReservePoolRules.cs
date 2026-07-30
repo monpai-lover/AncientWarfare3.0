@@ -119,6 +119,13 @@ namespace AncientWarfare3.core.lineage
                 Math.Max(0, reserveContribution)));
         }
 
+        public static int ApplyReserveExhaustionContribution(
+            int existingContribution)
+        {
+            return Math.Max(Math.Max(0, existingContribution),
+                ReserveExhaustionContribution);
+        }
+
         private static int CompareDonors(CityReserveDonorFacts left,
             CityReserveDonorFacts right)
         {

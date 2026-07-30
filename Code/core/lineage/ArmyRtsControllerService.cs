@@ -2607,6 +2607,8 @@ namespace AncientWarfare3.core.lineage
             }
             int missingStrength = Math.Max(0,
                 pRuntime.TargetStrength - pRuntime.ObservedLiving);
+            TryApplyReserveExhaustion(pArmy, pRuntime, missingStrength,
+                pCommit);
             if (!ArmyRtsRules.ShouldRequestReplenishment(
                     pCommit, pNext, pRuntime.ReplenishmentRequested,
                     missingStrength)) return;
@@ -2616,6 +2618,44 @@ namespace AncientWarfare3.core.lineage
                                  SafeCaptain(pArmy)?.city;
             TemporaryLevyService.RequestOffensiveRecovery(kingdom,
                 preferredCity, missingStrength, pTargetArmy: pArmy);
+        }
+
+        private static void TryApplyReserveExhaustion(Army pArmy,
+            RuntimeState pRuntime, int pReinforcementShortage,
+            bool pCommit)
+        {
+            if (!pCommit || pArmy?.data == null || pRuntime == null ||
+                pReinforcementShortage <= 0 ||
+                !Controllers.TryGet(pArmy.id,
+                    out ArmyRtsControllerRecord record) ||
+                record?.Mission == null ||
+                record.Mission.ProposalKind !=
+                    ArmyRtsProposalKind.Attack) return;
+            Kingdom kingdom = SafeKingdom(pArmy);
+            bool kingdomFrozen = CityReservePoolService.IsFrozen(kingdom);
+            bool exhaustionConfirmed = TemporaryLevyService.
+                HasConfirmedReserveExhaustion(kingdom, pArmy);
+            if (!kingdomFrozen || !exhaustionConfirmed) return;
+            War war = FindWar(record.Mission.WarId);
+            if (war?.data == null || war.hasEnded() ||
+                !WarScoreService.TryGetSnapshot(war, kingdom,
+                    out WarScoreSnapshot snapshot)) return;
+            WarScoreSide side = snapshot.Perspective;
+            int existing = side == WarScoreSide.Attackers
+                ? snapshot.AttackerReserveExhaustion
+                : snapshot.DefenderReserveExhaustion;
+            bool shouldApply = CityReservePoolRules.
+                ShouldApplyReserveExhaustion(
+                    attackAssignment: true,
+                    reinforcementShortage: pReinforcementShortage,
+                    kingdomFrozen: kingdomFrozen,
+                    exhaustionConfirmed: exhaustionConfirmed,
+                    alreadyApplied: existing >=
+                        CityReservePoolRules.
+                            ReserveExhaustionContribution);
+            if (shouldApply)
+                WarScoreService.ApplyReserveExhaustion(
+                    record.Mission.WarId, side, CurrentWorldTime());
         }
 
         private static void AdvanceRoute(Army pArmy,

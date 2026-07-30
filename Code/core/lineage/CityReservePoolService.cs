@@ -186,6 +186,13 @@ namespace AncientWarfare3.core.lineage
             return pool.ActorIds.Count;
         }
 
+        internal static bool IsFrozen(Kingdom kingdom)
+        {
+            return kingdom?.data != null &&
+                   States.TryGetValue(kingdom.id,
+                       out KingdomPoolState state) && state.Frozen;
+        }
+
         internal static int TryConsumeBatch(Kingdom kingdom,
             City preferredCity, int requested, Army targetArmy,
             List<Actor> destination, out bool confirmedExhausted)

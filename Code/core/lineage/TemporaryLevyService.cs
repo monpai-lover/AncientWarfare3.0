@@ -390,6 +390,17 @@ namespace AncientWarfare3.core.lineage
                    PendingDemand(plan) > 0;
         }
 
+        internal static bool HasConfirmedReserveExhaustion(
+            Kingdom pKingdom, Army pTargetArmy)
+        {
+            if (pKingdom?.data == null || pTargetArmy?.data == null ||
+                !CasualtyReinforcementPlans.TryGetValue(pKingdom.id,
+                    out CasualtyReinforcementPlan plan) ||
+                !plan.ReserveExhausted) return false;
+            return plan.TargetDemandsByArmy.TryGetValue(pTargetArmy.id,
+                       out int demand) && demand > 0;
+        }
+
         public static void RequestCaptainRecovery(Kingdom pKingdom,
             Army pArmy)
         {
