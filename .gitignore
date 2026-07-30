@@ -30,6 +30,7 @@
 !/Tests/CivilServiceCentralAppointmentSourceGuard.ps1
 !/Tests/CivilServiceCandidateSupplySourceGuard.ps1
 !/Tests/CivilServiceGuestActingSourceGuard.ps1
+!/Tests/GuestOfficeReformLifecycleSourceGuard.ps1
 !/Tests/CivilServiceReservePoolSourceGuard.ps1
 !/Tests/CivilServiceFocused.Tests/
 /Tests/CivilServiceFocused.Tests/*

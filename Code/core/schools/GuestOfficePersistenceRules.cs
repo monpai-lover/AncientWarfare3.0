@@ -93,6 +93,14 @@ namespace AncientWarfare3.core.schools
         }
     }
 
+    public static class GuestOfficeEndRecoveryRules
+    {
+        public static bool CanCloseMissingCareer(int pActiveCentralCareerCount)
+        {
+            return pActiveCentralCareerCount == 0;
+        }
+    }
+
     public static class GuestOfficeAdoptionRules
     {
         public static bool ShouldAdopt(GuestOfficePersistenceOutcome pOutcome)

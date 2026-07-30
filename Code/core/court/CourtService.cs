@@ -487,6 +487,16 @@ namespace AncientWarfare3.core.court
                 if (layer == CourtOfficeLayer.Central && tierOffices.Count > 0 &&
                     !string.IsNullOrEmpty(office) && !tierOffices.Contains(office))
                 {
+                    HistoricalSchoolAffiliationSnapshot affiliation =
+                        HistoricalAffiliationService.Get(actor.data.id);
+                    if (affiliation?.LifecycleState ==
+                            HistoricalSchoolLifecycleState.Serving &&
+                        affiliation.ServiceKingdomId == pKingdom.id)
+                    {
+                        SchoolGuestOfficeService.EndGuestOfficer(actor, pKingdom,
+                            "reform", Date.getCurrentYear());
+                        continue;
+                    }
                     ClearOfficer(actor, "reform");
                     continue;
                 }

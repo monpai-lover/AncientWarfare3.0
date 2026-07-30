@@ -10,6 +10,7 @@ internal static class SchoolGuestOfficeRulesTests
         FormalAppointmentsOutrankActingFallbacks();
         ActingFallbackWinsWhenNoFormalCandidateExists();
         QueuedAppointmentsReserveTheirOfficeImmediately();
+        MissingCareerRecoveryOnlyClosesZeroActiveRows();
     }
 
     private static void EducatedResidentCanEnterGuestServiceRegardlessOfHomeRealm()
@@ -89,6 +90,16 @@ internal static class SchoolGuestOfficeRulesTests
         False(SchoolGuestOfficeRules.ReservesOffice(
                 GuestOfficeSubmissionOutcome.Rejected),
             "a rejected appointment leaves the office open");
+    }
+
+    private static void MissingCareerRecoveryOnlyClosesZeroActiveRows()
+    {
+        True(GuestOfficeEndRecoveryRules.CanCloseMissingCareer(0),
+            "a serving guest with no active central career can close its stale affiliation");
+        False(GuestOfficeEndRecoveryRules.CanCloseMissingCareer(1),
+            "one active central career must use the ordinary atomic guest close");
+        False(GuestOfficeEndRecoveryRules.CanCloseMissingCareer(2),
+            "multiple active central careers are a conflict, not a recoverable orphan");
     }
 
     private static void Equal<T>(T expected, T actual, string name)
