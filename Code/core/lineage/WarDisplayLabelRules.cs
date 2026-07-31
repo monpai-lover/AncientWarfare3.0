@@ -27,6 +27,11 @@ namespace AncientWarfare3.core.lineage
             "coup_restoration_war"
         };
 
+        private static readonly string[] RoyalMarriageLanguages =
+        {
+            "en", "ch", "cz"
+        };
+
         public static string Label(string pKey)
         {
             return Label(pKey, HistoryLocalizationRules.CurrentLanguage());
@@ -62,11 +67,41 @@ namespace AncientWarfare3.core.lineage
             string text = pText ?? "";
             if (pEventType != "royal_marriage" || text.Length == 0)
                 return text;
-            string suffix = T("aw_hist_royal_marriage_suffix", pLanguage);
-            if (string.IsNullOrEmpty(suffix) ||
-                text.EndsWith(suffix, System.StringComparison.Ordinal))
-                return text;
-            return text + suffix;
+            if (HasKnownRoyalMarriageSuffix(text)) return text;
+
+            string sourceLanguage = DetectRoyalMarriageLanguage(text);
+            if (sourceLanguage.Length == 0) return text;
+
+            string suffix = T("aw_hist_royal_marriage_suffix",
+                sourceLanguage);
+            return string.IsNullOrEmpty(suffix) ? text : text + suffix;
+        }
+
+        private static bool HasKnownRoyalMarriageSuffix(string pText)
+        {
+            foreach (string language in RoyalMarriageLanguages)
+            {
+                string suffix = T("aw_hist_royal_marriage_suffix",
+                    language);
+                if (!string.IsNullOrEmpty(suffix) &&
+                    pText.EndsWith(suffix,
+                        System.StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
+        private static string DetectRoyalMarriageLanguage(string pText)
+        {
+            foreach (string language in RoyalMarriageLanguages)
+            {
+                string middle = T("aw_hist_royal_marriage_mid", language);
+                if (!string.IsNullOrEmpty(middle) &&
+                    pText.IndexOf(middle,
+                        System.StringComparison.Ordinal) >= 0)
+                    return language;
+            }
+            return "";
         }
 
         public static string EventLabel(string pKey)
