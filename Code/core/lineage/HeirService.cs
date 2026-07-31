@@ -720,9 +720,15 @@ namespace AncientWarfare3.core.lineage
                 return new HeirSelection(directSon,
                     directSon.isAdult() ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT);
 
-            Actor best = null;
-            int bestTier = HeirGenerationRules.TierIneligible, bestDelta = 0;
-            double bestBirth = 0; bool bestAdult = false;
+            Actor directDescendant = null;
+            int directDescendantDelta = 0;
+            double directDescendantBirth = 0;
+            bool directDescendantAdult = false;
+            Actor collateral = null;
+            int collateralTier = HeirGenerationRules.TierIneligible;
+            int collateralDelta = 0;
+            double collateralBirth = 0;
+            bool collateralAdult = false;
 
             foreach (Actor cand in CollectSuccessionCandidatePool(pKingdom,
                          king, kingId))
@@ -743,20 +749,130 @@ namespace AncientWarfare3.core.lineage
 
                 double birth = SafeCreatedTime(cand);
                 bool adult = SafeIsAdult(cand);
-                if (best == null || HeirGenerationRules.Compare(
-                        tier, delta, birth, adult, bestTier, bestDelta, bestBirth, bestAdult) < 0)
+                if (isDesc)
                 {
-                    best = cand; bestTier = tier; bestDelta = delta; bestBirth = birth; bestAdult = adult;
+                    if (directDescendant == null ||
+                        HeirGenerationRules.Compare(tier, delta, birth, adult,
+                            HeirGenerationRules.TierDirectDescendant,
+                            directDescendantDelta, directDescendantBirth,
+                            directDescendantAdult) < 0)
+                    {
+                        directDescendant = cand;
+                        directDescendantDelta = delta;
+                        directDescendantBirth = birth;
+                        directDescendantAdult = adult;
+                    }
+                    continue;
+                }
+
+                if (collateral == null || HeirGenerationRules.Compare(
+                        tier, delta, birth, adult, collateralTier,
+                        collateralDelta, collateralBirth, collateralAdult) < 0)
+                {
+                    collateral = cand;
+                    collateralTier = tier;
+                    collateralDelta = delta;
+                    collateralBirth = birth;
+                    collateralAdult = adult;
                 }
             }
 
-            if (best == null)
+            if (directDescendant != null)
+                return new HeirSelection(directDescendant,
+                    directDescendantAdult ? SuccessionMode.DIRECT :
+                    SuccessionMode.UNDERAGE_DIRECT);
+
+            Actor fullBrother = PickEldestEligibleFullBrother(pKingdom, king,
+                kingId);
+            if (fullBrother != null)
+                return new HeirSelection(fullBrother,
+                    SuccessionMode.COLLATERAL_RESTORE);
+
+            if (collateral == null)
                 return new HeirSelection(null, SuccessionMode.NONE); // 真·绝嗣/亡国
 
-            string mode = bestTier == HeirGenerationRules.TierDirectDescendant
-                ? (bestAdult ? SuccessionMode.DIRECT : SuccessionMode.UNDERAGE_DIRECT)
-                : SuccessionMode.COLLATERAL_RESTORE;
-            return new HeirSelection(best, mode);
+            return new HeirSelection(collateral,
+                SuccessionMode.COLLATERAL_RESTORE);
+        }
+
+        private static Actor PickEldestEligibleFullBrother(Kingdom pKingdom,
+            Actor pKing, long pKingId)
+        {
+            if (pKingdom?.data == null || pKingId < 0L ||
+                !TryGetParentPair(pKingId, out long parentA,
+                    out long parentB)) return null;
+
+            var actors = new Dictionary<long, Actor>();
+            var candidates = new List<HeirFullBrotherCandidate>();
+            foreach (long siblingId in CollectFullSiblingIds(parentA, parentB))
+            {
+                if (siblingId < 0L || siblingId == pKingId) continue;
+                Actor sibling = World.world?.units?.get(siblingId);
+                if (sibling?.data == null ||
+                    actors.ContainsKey(sibling.data.id)) continue;
+                bool sharesBothParents = HasSameParentPair(sibling.data.id,
+                    parentA, parentB);
+                bool eligible = sharesBothParents &&
+                    sibling.kingdom == pKingdom && SafeIsAdult(sibling) &&
+                    IsHeirBaseEligible(sibling, pKingdom, pKing);
+                actors[sibling.data.id] = sibling;
+                candidates.Add(new HeirFullBrotherCandidate(sibling.data.id,
+                    eligible, sharesBothParents, SafeCreatedTime(sibling)));
+            }
+
+            long selectedId = HeirFullBrotherRules.SelectEldestEligibleId(
+                candidates);
+            return selectedId >= 0L && actors.TryGetValue(selectedId,
+                out Actor selected) ? selected : null;
+        }
+
+        private static List<long> CollectFullSiblingIds(long pParentA,
+            long pParentB)
+        {
+            var siblingIds = new HashSet<long>();
+            try
+            {
+                foreach (long childId in LineageQuery.GetChildIds(pParentA))
+                    if (childId >= 0L) siblingIds.Add(childId);
+                foreach (long childId in LineageQuery.GetChildIds(pParentB))
+                    if (childId >= 0L) siblingIds.Add(childId);
+            }
+            catch { }
+            return new List<long>(siblingIds);
+        }
+
+        private static bool HasSameParentPair(long pActorId, long pParentA,
+            long pParentB)
+        {
+            return TryGetParentPair(pActorId, out long candidateParentA,
+                out long candidateParentB) &&
+                   ((candidateParentA == pParentA &&
+                     candidateParentB == pParentB) ||
+                    (candidateParentA == pParentB &&
+                     candidateParentB == pParentA));
+        }
+
+        private static bool TryGetParentPair(long pActorId, out long pParentA,
+            out long pParentB)
+        {
+            pParentA = -1L;
+            pParentB = -1L;
+            try
+            {
+                foreach (long parentId in LineageQuery.GetParentIds(pActorId))
+                {
+                    if (parentId < 0L || parentId == pParentA ||
+                        parentId == pParentB) continue;
+                    if (pParentA < 0L)
+                        pParentA = parentId;
+                    else if (pParentB < 0L)
+                        pParentB = parentId;
+                    else
+                        return false;
+                }
+            }
+            catch { return false; }
+            return pParentA >= 0L && pParentB >= 0L;
         }
 
         /// <summary>取国王在世男嗣中的嫡长(出生最早),排除疯癫/奴隶/已为国王者。</summary>

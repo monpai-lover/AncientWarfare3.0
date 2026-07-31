@@ -1,0 +1,40 @@
+using System;
+using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
+
+internal static class HeirFullBrotherRulesTests
+{
+    public static void Run()
+    {
+        Equal(11L, HeirFullBrotherRules.SelectEldestEligibleId(new[]
+        {
+            new HeirFullBrotherCandidate(10L, eligible: true,
+                sharesBothParents: false, birthTime: 1d),
+            new HeirFullBrotherCandidate(12L, eligible: false,
+                sharesBothParents: true, birthTime: 2d),
+            new HeirFullBrotherCandidate(11L, eligible: true,
+                sharesBothParents: true, birthTime: 5d),
+            new HeirFullBrotherCandidate(13L, eligible: true,
+                sharesBothParents: true, birthTime: 6d)
+        }), "the eldest eligible full brother wins over half brothers");
+        Equal(20L, HeirFullBrotherRules.SelectEldestEligibleId(new[]
+        {
+            new HeirFullBrotherCandidate(21L, eligible: true,
+                sharesBothParents: true, birthTime: 8d),
+            new HeirFullBrotherCandidate(20L, eligible: true,
+                sharesBothParents: true, birthTime: 8d)
+        }), "equal birth times resolve by actor ID");
+        Equal(-1L, HeirFullBrotherRules.SelectEldestEligibleId(new[]
+        {
+            new HeirFullBrotherCandidate(30L, eligible: true,
+                sharesBothParents: false, birthTime: 1d)
+        }), "a half brother is never a full-brother fallback");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(pName + ": expected " +
+                pExpected + ", got " + pActual);
+    }
+}

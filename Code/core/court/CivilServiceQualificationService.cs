@@ -86,9 +86,12 @@ namespace AncientWarfare3.core.court
                     pKingdom, pLayer, pOfficeId)) return false;
             CivilServiceQualificationRecord qualification =
                 LoadOrRepair(pActor, pKingdom);
-            if (qualification == null ||
-                !CivilServiceExamRules.IsFormalAppointmentQualification(
-                    ParseQualification(qualification.Qualification)))
+            bool hasFormalQualification = qualification != null &&
+                CivilServiceExamRules.IsFormalAppointmentQualification(
+                    ParseQualification(qualification.Qualification));
+            bool hasLegacyCredential = CivilServiceLegacyTransitionService.
+                HasUsableCredential(pActor, pKingdom, pLayer, pOfficeId);
+            if (!hasFormalQualification && !hasLegacyCredential)
                 return false;
 
             int officeGrade = OfficialCareerStateService.OfficeGradeForOffice(
@@ -98,7 +101,7 @@ namespace AncientWarfare3.core.court
                 currentRank = OfficialCareerRankRules.ResolveInitialAppointmentRank(
                     OfficialCareerRankRules.Unranked, officeGrade,
                     hasNineRankSystem: true, hasFormalQualification: true,
-                    qualification.EntryBonus);
+                    qualification?.EntryBonus ?? 0);
             bool hasLowerService = HasRequiredServiceHistory(pActor,
                 pKingdom, requiredOfficeGrade: 30);
             bool hasMiddleService = HasRequiredServiceHistory(pActor,
@@ -112,6 +115,16 @@ namespace AncientWarfare3.core.court
             return strictEligible || CivilServiceExamRules.ShouldUseVacancyPromotion(
                 officeVacant: pAllowVacancyPromotion, strictEligible,
                 hasFormalQualification: true);
+        }
+
+        internal static bool HasFormalQualification(Actor pActor,
+            Kingdom pKingdom)
+        {
+            CivilServiceQualificationRecord qualification = LoadOrRepair(
+                pActor, pKingdom);
+            return qualification != null &&
+                   CivilServiceExamRules.IsFormalAppointmentQualification(
+                       ParseQualification(qualification.Qualification));
         }
 
         public static CivilServiceQualificationRecord LoadOrRepair(

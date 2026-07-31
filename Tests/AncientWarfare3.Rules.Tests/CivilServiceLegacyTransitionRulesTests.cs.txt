@@ -1,0 +1,57 @@
+using System;
+using AncientWarfare3.core.court;
+
+internal static class CivilServiceLegacyTransitionRulesTests
+{
+    public static void Run()
+    {
+        True(CivilServiceLegacyTransitionRules.ShouldIssueCredential(
+                transitionAlreadyApplied: false,
+                candidateEligibleBeforeExam: true,
+                hasFormalQualification: false,
+                alreadyHoldingFormalOffice: false),
+            "an eligible pre-examination candidate receives a credential");
+        False(CivilServiceLegacyTransitionRules.ShouldIssueCredential(
+                transitionAlreadyApplied: false,
+                candidateEligibleBeforeExam: false,
+                hasFormalQualification: false,
+                alreadyHoldingFormalOffice: false),
+            "an ineligible actor is not grandfathered");
+        False(CivilServiceLegacyTransitionRules.ShouldIssueCredential(
+                transitionAlreadyApplied: false,
+                candidateEligibleBeforeExam: true,
+                hasFormalQualification: true,
+                alreadyHoldingFormalOffice: false),
+            "a qualified candidate needs no legacy credential");
+        True(CivilServiceLegacyTransitionRules.CanUseCredential(
+                issuerKingdomId: 7L,
+                appointmentKingdomId: 7L,
+                credentialRemaining: true,
+                isFormalAppointment: true),
+            "a remaining domestic credential permits one formal appointment");
+        False(CivilServiceLegacyTransitionRules.CanUseCredential(
+                issuerKingdomId: 7L,
+                appointmentKingdomId: 8L,
+                credentialRemaining: true,
+                isFormalAppointment: true),
+            "a credential cannot transfer to another kingdom");
+        False(CivilServiceLegacyTransitionRules.CanUseCredential(
+                issuerKingdomId: 7L,
+                appointmentKingdomId: 7L,
+                credentialRemaining: true,
+                isFormalAppointment: false),
+            "an acting appointment does not spend or use the credential");
+    }
+
+    private static void True(bool pValue, string pName)
+    {
+        if (!pValue)
+            throw new InvalidOperationException(pName + ": expected true");
+    }
+
+    private static void False(bool pValue, string pName)
+    {
+        if (pValue)
+            throw new InvalidOperationException(pName + ": expected false");
+    }
+}

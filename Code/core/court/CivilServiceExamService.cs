@@ -253,6 +253,7 @@ namespace AncientWarfare3.core.court
         public static void ProcessAuthorityCycle()
         {
             if (DB == null) return;
+            CivilServiceLegacyTransitionService.ProcessVersionedBackfill();
             CivilServiceQualificationService.ProcessRuntimeRebuild();
             long day = CurrentWorldDay();
             CivilServiceExamSessionRecord session = TakeDueSession(day);
@@ -284,6 +285,7 @@ namespace AncientWarfare3.core.court
         {
             DueSessions.Clear();
             CivilServiceQualificationService.ClearRuntime();
+            CivilServiceLegacyTransitionService.ClearRuntime();
         }
 
         public static void RebuildRuntime()

@@ -1191,6 +1191,9 @@ namespace AncientWarfare3.core.policy
                 effectApplied = true;
 
             AddCompleted(pKingdom, pDef.Kind, pDef.Id);
+            if (pDef.Kind == PolicyNodeKind.Tech)
+                CivilServiceLegacyTransitionService.OnTechnologyCompleted(
+                    pKingdom, pDef.Id);
             pKingdom.data.set(CurrentKey(pDef.Kind), "");
             pKingdom.data.set(ProgressKey(pDef.Kind), 0f);
             if (!string.IsNullOrEmpty(pDef.ClassAfter))

@@ -490,6 +490,12 @@ namespace AncientWarfare3.core.lineage
             "aw_civil_service_exam_anchor_year";
         public const string CIVIL_SERVICE_FIRST_APPOINTMENT_RECORDED =
             "aw_civil_service_first_appointment_recorded";
+        public const string CIVIL_SERVICE_LEGACY_TRANSITION_VERSION =
+            "aw_civil_service_legacy_transition_version";
+        public const string CIVIL_SERVICE_LEGACY_CREDENTIAL_KINGDOM_ID =
+            "aw_civil_service_legacy_credential_kingdom_id";
+        public const string CIVIL_SERVICE_LEGACY_CREDENTIAL_REMAINING =
+            "aw_civil_service_legacy_credential_remaining";
         public const string OFFICIAL_CAREER_LAST_YEAR = "aw_official_career_last_year";
         public const string COURT_PETITION_FAVOR = "aw_court_petition_favor";
         public const string COURT_PETITION_UNTIL_YEAR = "aw_court_petition_until_year";

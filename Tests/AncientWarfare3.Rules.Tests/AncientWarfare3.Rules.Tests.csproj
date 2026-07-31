@@ -24,6 +24,7 @@
     <Compile Include="OfficialCareerActingAtomicPersistenceSqlTests.cs.txt" />
     <Compile Include="OfficialCareerCrossLayerPersistenceSqlTests.cs.txt" />
     <Compile Include="CivilServiceExamRulesTests.cs.txt" />
+    <Compile Include="CivilServiceLegacyTransitionRulesTests.cs.txt" />
     <Compile Include="SchoolGuestOfficeRulesTests.cs.txt" />
     <Compile Include="CivilServiceForeignResidentSqlTests.cs.txt" />
     <Compile Include="CivilServiceFormalCandidateSqlTests.cs.txt" />
@@ -60,6 +61,7 @@
     <Compile Include="DiplomacyExtinctionPersistenceTests.cs.txt" />
     <Compile Include="DiplomaticRelationModifierCacheTests.cs.txt" />
     <Compile Include="InheritanceLawRulesTests.cs.txt" />
+    <Compile Include="HeirFullBrotherRulesTests.cs.txt" />
     <Compile Include="SuccessionDisputeRulesTests.cs.txt" />
     <Compile Include="SuccessionDisputeSqlTests.cs.txt" />
     <Compile Include="GanzhiChronologyRulesTests.cs.txt" />
@@ -200,6 +202,7 @@
     <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs" Link="Production\HistoryLocalizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\InheritanceCandidateRules.cs" Link="Production\InheritanceCandidateRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirDirectSonRules.cs" Link="Production\HeirDirectSonRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\HeirFullBrotherRules.cs" Link="Production\HeirFullBrotherRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionDisputeRules.cs" Link="Production\SuccessionDisputeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\SuccessionDisputeDisplayRules.cs" Link="Production\SuccessionDisputeDisplayRules.cs" />
     <Compile Include="..\..\Code\core\db\SuccessionDisputeIndexRules.cs" Link="Production\SuccessionDisputeIndexRules.cs" />
@@ -250,6 +253,7 @@
     <Compile Include="..\..\Code\core\court\OfficialCirculationRules.cs" Link="Production\OfficialCirculationRules.cs" />
     <Compile Include="..\..\Code\core\court\GovernorRotationRuntimeScope.cs" Link="Production\GovernorRotationRuntimeScope.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceExamRules.cs" Link="Production\CivilServiceExamRules.cs" />
+    <Compile Include="..\..\Code\core\court\CivilServiceLegacyTransitionRules.cs" Link="Production\CivilServiceLegacyTransitionRules.cs" />
     <Compile Include="..\..\Code\core\schools\SchoolGuestOfficeRules.cs" Link="Production\SchoolGuestOfficeRules.cs" />
     <Compile Include="..\..\Code\core\schools\GuestOfficePersistenceRules.cs" Link="Production\GuestOfficePersistenceRules.cs" />
     <Compile Include="..\..\Code\core\court\NineRankRules.cs" Link="Production\NineRankRules.cs" />

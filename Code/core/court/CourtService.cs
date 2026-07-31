@@ -626,6 +626,8 @@ namespace AncientWarfare3.core.court
                                     exception.Message);
                 result.Clear();
             }
+            CivilServiceLegacyTransitionService.AppendEligibleCandidates(
+                pKingdom, result);
             return result;
         }
 
@@ -1403,6 +1405,8 @@ namespace AncientWarfare3.core.court
         {
             if (pActor?.data == null || pKingdom?.data == null ||
                 !careerResult.IsCommitted) return false;
+            CivilServiceLegacyTransitionService.ConsumeAfterCommittedAppointment(
+                pActor, pKingdom, pLayer, pOfficeId, pActing);
             OfficialCareerPrior cleanupPrior =
                 OfficialCareerProjectionRecoveryRules.SelectCleanupPrior(careerResult,
                     pRuntimePrior, pKingdom.id, pOfficeId);

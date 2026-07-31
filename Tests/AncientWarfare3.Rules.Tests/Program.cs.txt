@@ -45,6 +45,7 @@ if (args.Length == 1 && args[0] == "--multiplayer-catalog")
 if (args.Length == 1 && args[0] == "--inheritance-slice")
 {
     InheritanceLawRulesTests.Run();
+    HeirFullBrotherRulesTests.Run();
     SuccessionDisputeRulesTests.Run();
     SuccessionDisputeSqlTests.Run();
     Console.WriteLine("AW3 inheritance and succession rules passed.");
@@ -228,6 +229,7 @@ if (args.Length == 1 && args[0] == "--war-civilian-protection-slice")
 if (args.Length == 1 && args[0] == "--civil-service-exam-slice")
 {
     CivilServiceExamRulesTests.Run();
+    CivilServiceLegacyTransitionRulesTests.Run();
     CivilServiceFormalCandidateSqlTests.Run();
     CivilServiceCandidatePoolSqlTests.Run();
     CivilServiceCenturySimulationSqlTests.Run();
