@@ -4,6 +4,10 @@ namespace AncientWarfare3.core.performance
 {
     internal static class AWSimulationStepContext
     {
+        [ThreadStatic] private static int _depth;
+
+        internal static bool IsActive => _depth > 0;
+
         public static void Run(MapBox pMap, bool pPaused,
             float pSimulationElapsed, bool pNormalizeTimeScale,
             WorldTimeScaleAsset pSimulationTimeScale, Action pAction)
@@ -43,12 +47,14 @@ namespace AncientWarfare3.core.performance
                 timeScale.sonic = false;
             }
 
+            _depth++;
             try
             {
                 pAction();
             }
             finally
             {
+                _depth--;
                 timeScale.multiplier = previousMultiplier;
                 timeScale.ticks = previousTicks;
                 timeScale.conway_ticks = previousConwayTicks;

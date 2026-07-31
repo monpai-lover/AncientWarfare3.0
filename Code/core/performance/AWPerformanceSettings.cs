@@ -14,8 +14,8 @@ namespace AncientWarfare3.core.performance
         internal static event Action ArmyMapInformationDisabled;
 
         public static float TargetRenderFps { get; private set; } = 60f;
-        public static float MaxSimulationMillisecondsPerFrame { get; private set; } = 16f;
-        public static bool EnablePresentationSmoothing { get; private set; }
+        public static float MaxSimulationMillisecondsPerFrame { get; private set; } = 8f;
+        public static bool EnablePresentationSmoothing { get; private set; } = true;
         public static bool EnableSchedulerDiagnostics { get; private set; }
         public static bool EnablePerformanceDiagnostics { get; private set; }
         public static bool EnableAsyncDatabaseWrites { get; private set; }
@@ -34,9 +34,10 @@ namespace AncientWarfare3.core.performance
 
         public const float RenderReserveMilliseconds = 2f;
         public const float MinimumSliceMilliseconds = 0.15f;
-        public const float StarvationSliceMilliseconds = 0.5f;
-        public const int StarvationFrameInterval = 8;
-        public const int SimulationBatchSize = 64;
+        public const float BackgroundJoinMilliseconds = 0.2f;
+        public const float StarvationSliceMilliseconds = 2f;
+        public const int StarvationFrameInterval = 1;
+        public const int SimulationBatchSize = 256;
 
         public static AWSimulationMode Mode =>
             AWFrameSchedulerRules.ResolveMode(_configSchedulerEnabled);

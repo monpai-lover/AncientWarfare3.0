@@ -22,7 +22,7 @@ namespace AncientWarfare3.core.performance
 
         public bool IsParallelOwned => _parallelOwnership.IsOwned;
 
-        public void Acquire(TWorld pWorld, int schedulerParallelism)
+        public void Acquire(TWorld pWorld, int pSchedulerParallelism)
         {
             if (pWorld == null)
                 throw new ArgumentNullException(nameof(pWorld));
@@ -33,7 +33,7 @@ namespace AncientWarfare3.core.performance
             if (!_parallelOwnership.IsOwned)
                 _parallelOwnership.Acquire(pWorld,
                     _readParallelism(pWorld));
-            _writeParallelism(pWorld, schedulerParallelism);
+            _writeParallelism(pWorld, pSchedulerParallelism);
         }
 
         public void Release()

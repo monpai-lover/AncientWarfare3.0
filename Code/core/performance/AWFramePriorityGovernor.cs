@@ -6,6 +6,12 @@ using UnityEngine;
 
 namespace AncientWarfare3.core.performance
 {
+    internal enum AWSimulationDomain
+    {
+        Vanilla,
+        Aw3Authority
+    }
+
     internal static class AWFramePriorityGovernor
     {
         private const int BaselineWindowSize = 120;
@@ -25,11 +31,18 @@ namespace AncientWarfare3.core.performance
         private static double _baselineP90 = BootstrapBaselineMilliseconds;
         private static double _hostCpuMilliseconds;
         private static double _simulationCpuMilliseconds;
+        private static double _vanillaCpuMilliseconds;
+        private static double _aw3CpuMilliseconds;
         private static double _lastFrameDeltaMilliseconds;
+        private static double _lastFrameSimulationMilliseconds;
         private static double _frameBudgetMilliseconds;
-        private static int _lastSimulationRunFrame =
+        private static int _lastVanillaRunFrame =
+            -AWPerformanceSettings.StarvationFrameInterval;
+        private static int _lastAw3RunFrame =
             -AWPerformanceSettings.StarvationFrameInterval;
         private static string _currentPhase = "idle";
+        private static string _currentVanillaPhase = "idle";
+        private static string _currentAw3Phase = "idle";
         private static string _longestPhase = string.Empty;
         private static double _longestPhaseMilliseconds;
         private static bool _faulted;
@@ -51,6 +64,7 @@ namespace AncientWarfare3.core.performance
 
         public static void Initialize()
         {
+            JobConst.MAX_ELEMENTS = AWPerformanceSettings.SimulationBatchSize;
             BeginFrame();
         }
 
@@ -65,6 +79,8 @@ namespace AncientWarfare3.core.performance
             _frameStartedAt = Stopwatch.GetTimestamp();
             _hostCpuMilliseconds = 0d;
             _simulationCpuMilliseconds = 0d;
+            _vanillaCpuMilliseconds = 0d;
+            _aw3CpuMilliseconds = 0d;
             RecalculateBudget();
         }
 
@@ -81,6 +97,12 @@ namespace AncientWarfare3.core.performance
 
         public static bool CanRun(string pPhase)
         {
+            return CanRun(AWSimulationDomain.Vanilla, pPhase);
+        }
+
+        public static bool CanRun(AWSimulationDomain pDomain,
+            string pPhase)
+        {
             BeginFrame();
             if (_faulted) return false;
 
@@ -94,7 +116,7 @@ namespace AncientWarfare3.core.performance
                 1000d / AWPerformanceSettings.TargetRenderFps;
             if (currentFrameElapsed >= targetMilliseconds -
                 AWPerformanceSettings.RenderReserveMilliseconds)
-                return CanUseStarvationSlice();
+                return CanUseStarvationSlice(pDomain);
 
             double remaining = _frameBudgetMilliseconds -
                                _simulationCpuMilliseconds;
@@ -102,15 +124,36 @@ namespace AncientWarfare3.core.performance
                     AWPerformanceSettings.MinimumSliceMilliseconds,
                     estimate))
                 return true;
-            return CanUseStarvationSlice();
+            return CanUseStarvationSlice(pDomain);
+        }
+
+        public static double GetRemainingSimulationBudgetMilliseconds()
+        {
+            BeginFrame();
+            double targetMilliseconds =
+                1000d / AWPerformanceSettings.TargetRenderFps;
+            double deadlineRemaining = targetMilliseconds -
+                AWPerformanceSettings.RenderReserveMilliseconds -
+                ElapsedMilliseconds(_frameStartedAt);
+            double budgetRemaining = _frameBudgetMilliseconds -
+                                     _simulationCpuMilliseconds;
+            return Math.Max(0d,
+                Math.Min(deadlineRemaining, budgetRemaining));
         }
 
         public static void RunPhase(string pPhase, Action pAction)
+        {
+            RunPhase(AWSimulationDomain.Vanilla, pPhase, pAction);
+        }
+
+        public static void RunPhase(AWSimulationDomain pDomain,
+            string pPhase, Action pAction)
         {
             AWSimulationTickBenchmark.TickCapture benchmarkTick =
                 AWSimulationTickBenchmark.CapturePhaseTarget();
             long startedAt = Stopwatch.GetTimestamp();
             _simulationPhaseDepth++;
+            double elapsed;
             try
             {
                 pAction();
@@ -118,34 +161,56 @@ namespace AncientWarfare3.core.performance
             finally
             {
                 _simulationPhaseDepth--;
-                double elapsed = ElapsedMilliseconds(startedAt);
-                _simulationCpuMilliseconds += elapsed;
-                _lastSimulationRunFrame = _frameId;
-                _currentPhase = pPhase;
-                if (elapsed > _longestPhaseMilliseconds)
-                {
-                    _longestPhaseMilliseconds = elapsed;
-                    _longestPhase = pPhase;
-                }
-
-                if (PhaseEstimates.TryGetValue(pPhase,
-                        out double previous))
-                    PhaseEstimates[pPhase] =
-                        previous * 0.8d + elapsed * 0.2d;
-                else
-                    PhaseEstimates[pPhase] = Math.Max(
-                        AWPerformanceSettings.MinimumSliceMilliseconds,
-                        elapsed);
-
-                AWSimulationTickBenchmark.RecordPhase(benchmarkTick,
-                    pPhase, elapsed);
-                AWSimulationTickBenchmark.FlushCompleted();
+                elapsed = ElapsedMilliseconds(startedAt);
             }
+
+            _simulationCpuMilliseconds += elapsed;
+            if (pDomain == AWSimulationDomain.Vanilla)
+            {
+                _vanillaCpuMilliseconds += elapsed;
+                _lastVanillaRunFrame = _frameId;
+                _currentVanillaPhase = pPhase;
+            }
+            else
+            {
+                _aw3CpuMilliseconds += elapsed;
+                _lastAw3RunFrame = _frameId;
+                _currentAw3Phase = pPhase;
+            }
+
+            _currentPhase = pPhase;
+            if (elapsed > _longestPhaseMilliseconds)
+            {
+                _longestPhaseMilliseconds = elapsed;
+                _longestPhase = pPhase;
+            }
+
+            if (PhaseEstimates.TryGetValue(pPhase, out double previous))
+                PhaseEstimates[pPhase] = previous * 0.8d + elapsed * 0.2d;
+            else
+                PhaseEstimates[pPhase] = Math.Max(
+                    AWPerformanceSettings.MinimumSliceMilliseconds,
+                    elapsed);
+
+            AWSimulationTickBenchmark.RecordPhase(benchmarkTick,
+                pPhase, elapsed);
+            AWSimulationTickBenchmark.FlushCompleted();
         }
 
         public static void SetPhase(string pPhase)
         {
-            _currentPhase = pPhase ?? "idle";
+            SetPhase(AWSimulationDomain.Vanilla, pPhase);
+        }
+
+        public static void SetPhase(AWSimulationDomain pDomain,
+            string pPhase)
+        {
+            string phase = pPhase ?? "idle";
+            _currentPhase = phase;
+            if (pDomain == AWSimulationDomain.Vanilla)
+                _currentVanillaPhase = phase;
+            else
+                _currentAw3Phase = phase;
         }
 
         public static void MarkFault(Exception pException)
@@ -179,17 +244,22 @@ namespace AncientWarfare3.core.performance
                 AWCooperativeSimulationRunner.Instance;
             return string.Format(CultureInfo.InvariantCulture,
                 "mode={0} target={1:0.#}fps budget={2:0.00}ms " +
-                "baselineP90={3:0.00}ms sim={4:0.00}ms phase={5} " +
-                "cycles={6}/{7} speed={8:0.#}x/{9:0.00}x " +
-                "credits={10:0.0} ticks={11}/{12} longest={13}:{14:0.00}ms",
+                "baselineP90={3:0.00}ms sim={4:0.00}ms" +
+                "(vanilla={5:0.00},aw3={6:0.00}) phase={7}/{8} " +
+                "cycles={9}/{10} speed={11:0.#}x/{12:0.00}x " +
+                "credits={13:0.0} ticks={14}/{15} " +
+                "longest={16}:{17:0.00}ms world={18}:{19}@{20:0.00}",
                 AWPerformanceSettings.Mode.ToString().ToLowerInvariant(),
                 AWPerformanceSettings.TargetRenderFps,
                 _frameBudgetMilliseconds, _baselineP90,
-                _simulationCpuMilliseconds, _currentPhase,
-                CyclesStarted, CyclesCompleted, runner.RequestedSpeed,
-                runner.ActualSpeed, runner.AdmissionCredits,
-                runner.LogicalTicksAdmitted, runner.LogicalTicksCompleted,
-                _longestPhase, _longestPhaseMilliseconds);
+                _simulationCpuMilliseconds, _vanillaCpuMilliseconds,
+                _aw3CpuMilliseconds, _currentVanillaPhase,
+                _currentAw3Phase, CyclesStarted, CyclesCompleted,
+                runner.RequestedSpeed, runner.ActualSpeed,
+                runner.AdmissionCredits, runner.LogicalTicksAdmitted,
+                runner.LogicalTicksCompleted, _longestPhase,
+                _longestPhaseMilliseconds, AWSimulationTime.BoundWorldSeedId,
+                AWSimulationTime.Generation, AWSimulationTime.DiagnosticTime);
         }
 
         private static void FinalizePreviousFrame()
@@ -207,6 +277,7 @@ namespace AncientWarfare3.core.performance
             }
 
             _lastFrameDeltaMilliseconds = Time.unscaledDeltaTime * 1000d;
+            _lastFrameSimulationMilliseconds = _simulationCpuMilliseconds;
         }
 
         private static void RecalculateBudget()
@@ -216,22 +287,36 @@ namespace AncientWarfare3.core.performance
             double rawBudget = targetMilliseconds -
                                AWPerformanceSettings.RenderReserveMilliseconds -
                                _baselineP90;
-            double previousFrameOverrun = Math.Max(0d,
-                _lastFrameDeltaMilliseconds - targetMilliseconds - 1d);
+            double previousFrameOverrun = Math.Min(
+                _lastFrameSimulationMilliseconds,
+                Math.Max(0d,
+                    _lastFrameDeltaMilliseconds - targetMilliseconds - 1d));
             rawBudget -= previousFrameOverrun;
             _frameBudgetMilliseconds = Math.Max(0d,
                 Math.Min(AWPerformanceSettings
                     .MaxSimulationMillisecondsPerFrame, rawBudget));
         }
 
-        private static bool CanUseStarvationSlice()
+        private static bool CanUseStarvationSlice(
+            AWSimulationDomain pDomain)
         {
-            if (_frameId - _lastSimulationRunFrame <
-                AWPerformanceSettings.StarvationFrameInterval)
+            int lastRunFrame = pDomain == AWSimulationDomain.Vanilla
+                ? _lastVanillaRunFrame
+                : _lastAw3RunFrame;
+            if (lastRunFrame != _frameId &&
+                _frameId - lastRunFrame <
+                    AWPerformanceSettings.StarvationFrameInterval)
                 return false;
-            return _simulationCpuMilliseconds <
-                   _frameBudgetMilliseconds +
-                   AWPerformanceSettings.StarvationSliceMilliseconds;
+
+            double starvationBudget = Math.Min(
+                AWPerformanceSettings.StarvationSliceMilliseconds,
+                AWPerformanceSettings.MaxSimulationMillisecondsPerFrame);
+            double domainSpent = pDomain == AWSimulationDomain.Vanilla
+                ? _vanillaCpuMilliseconds
+                : _aw3CpuMilliseconds;
+            return domainSpent < starvationBudget &&
+                   _simulationCpuMilliseconds <
+                   _frameBudgetMilliseconds + starvationBudget;
         }
 
         private static double CalculatePercentile90()

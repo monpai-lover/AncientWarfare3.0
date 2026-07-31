@@ -1,182 +1,287 @@
 using System;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+
 using UnityEngine;
 
-namespace AncientWarfare3.core.performance
-{
-    internal static class AWPresentationInterpolator
-    {
-        private static ConditionalWeakTable<Actor, ActorPresentationState>
-            _states = new ConditionalWeakTable<Actor, ActorPresentationState>();
-        private static int _preparedFrame = -1;
-        private static float _presentationDelta = 1f / 60f;
-        private static float _presentationTimeScale = 1f;
-        private static float _presentationClock;
+namespace AncientWarfare3.core.performance;
 
-        public static void PrepareFrame()
+internal static class AWPresentationInterpolator
+{
+    private static Dictionary<AWActorPresentationHandle, AWActorPresentationState> states = new();
+    private static readonly List<AWActorPresentationHandle> staleHandles = new();
+    private static int preparedFrame = -1;
+    private static float presentationDelta = 1f / 60f;
+    private static float presentationTimeScale = 1f;
+    private static float presentationClock;
+
+    public static void PrepareFrame()
+    {
+        preparedFrame = Time.frameCount;
+        presentationDelta = Mathf.Clamp(Time.unscaledDeltaTime, 0f, 0.1f);
+        presentationTimeScale = World.world?.isPaused() == true
+            ? 0f
+            : AWWorldTimeRateTracker.HasActualSpeed
+                ? Mathf.Max(0f, AWWorldTimeRateTracker.ActualSpeed)
+                : AWWorldTimeRateTracker.GetRequestedSpeed();
+        presentationClock = Time.unscaledTime;
+
+        if (preparedFrame > 0 && preparedFrame % 600 == 0)
         {
-            _preparedFrame = Time.frameCount;
-            _presentationDelta = Mathf.Clamp(Time.unscaledDeltaTime, 0f, 0.1f);
-            WorldTimeScaleAsset timeScale = Config.time_scale_asset;
-            _presentationTimeScale =
-                Mathf.Max(0f, timeScale?.multiplier ?? 1f) *
-                Mathf.Max(1, timeScale?.ticks ?? 1);
-            _presentationClock = Time.unscaledTime;
+            staleHandles.Clear();
+            foreach (var pair in states)
+            {
+                if (preparedFrame - pair.Value.LastSeenFrame > 600)
+                {
+                    staleHandles.Add(pair.Key);
+                }
+            }
+
+            for (int i = 0; i < staleHandles.Count; i++)
+            {
+                states.Remove(staleHandles[i]);
+            }
+        }
+    }
+
+    public static bool TryApply(Actor actor, out Vector3 result)
+    {
+        result = default;
+        if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
+            actor == null ||
+            !AWActorPresentationRenderer.TryGetPreparedSample(
+                actor,
+                out AWActorPresentationSample sample))
+        {
+            return false;
         }
 
-        public static void Apply(Actor pActor, ref Vector3 pResult)
+        long actorId = sample.Handle.ActorId;
+        bool controlled = AWActorPresentationRenderer.IsControlled(actorId);
+        bool selected = AWActorPresentationRenderer.IsSelected(actorId);
+        if (!TryResolve(
+                in sample,
+                selected,
+                controlled,
+                out result,
+                out _))
         {
-            if (!AWPerformanceSettings.EnableFramePriorityScheduler ||
-                !AWPerformanceSettings.EnablePresentationSmoothing ||
-                pActor == null ||
-                (!pActor.is_visible && !SelectedUnit.isSelected(pActor) &&
-                 !ReferenceEquals(pActor,
-                     ControllableUnit.getControllableUnit())))
-                return;
+            result = default;
+            return false;
+        }
 
-            Vector2 target = pActor.current_position;
-            if (!IsFinite(target)) return;
+        return true;
+    }
 
-            ActorPresentationState state = _states.GetValue(pActor,
-                _ => new ActorPresentationState());
-            Vector2 presented;
-            lock (state)
+    internal static bool TryResolve(
+        in AWActorPresentationSample sample,
+        bool selected,
+        bool controlled,
+        out Vector3 transformPosition,
+        out Vector2 shadowPosition)
+    {
+        return TryResolve(
+            in sample,
+            selected,
+            controlled,
+            out transformPosition,
+            out shadowPosition,
+            out _);
+    }
+
+    internal static bool TryResolve(
+        in AWActorPresentationSample sample,
+        bool selected,
+        bool controlled,
+        out Vector3 transformPosition,
+        out Vector2 shadowPosition,
+        out bool requiresContinuousUpdate)
+    {
+        Vector2 target = sample.Position;
+        if (!IsFinite(target))
+        {
+            transformPosition = default;
+            shadowPosition = default;
+            requiresContinuousUpdate = false;
+            return false;
+        }
+
+        Vector2 presented = target;
+        requiresContinuousUpdate = false;
+        if (AWPerformanceSettings.EnablePresentationSmoothing)
+        {
+            presented = ResolveSmoothedPosition(
+                in sample,
+                target,
+                selected,
+                controlled,
+                out requiresContinuousUpdate);
+        }
+
+        Vector2 shake = sample.ShakeOffset;
+        Vector2 jump = sample.JumpOffset;
+        shadowPosition = default;
+        shadowPosition.Set(presented.x + shake.x, presented.y + shake.y);
+        transformPosition = default;
+        transformPosition.Set(
+            presented.x + jump.x + shake.x,
+            presented.y + jump.y + shake.y + sample.PositionHeight,
+            sample.PositionHeight);
+        return true;
+    }
+
+    private static Vector2 ResolveSmoothedPosition(
+        in AWActorPresentationSample sample,
+        Vector2 target,
+        bool selected,
+        bool controlled,
+        out bool requiresContinuousUpdate)
+    {
+        if (!states.TryGetValue(
+                sample.Handle,
+                out AWActorPresentationState state))
+        {
+            state = new AWActorPresentationState();
+            states.Add(sample.Handle, state);
+        }
+
+        if (IsWorldPaused())
+        {
+            state.Initialized = true;
+            state.Presented = target;
+            state.Authoritative = target;
+            state.AuthoritySampleCount = 0;
+            state.EstimatedAuthorityInterval = 0.25f;
+            state.AuthoritativeChangedAt = presentationClock;
+            state.LastFrame = preparedFrame;
+            state.LastSeenFrame = preparedFrame;
+            requiresContinuousUpdate = false;
+            return target;
+        }
+
+        Vector2 presented;
+        state.LastSeenFrame = preparedFrame;
+        if (!state.Initialized)
+        {
+            state.Initialized = true;
+            state.Presented = target;
+            state.Authoritative = target;
+            state.AuthoritativeChangedAt = presentationClock;
+            state.LastFrame = preparedFrame;
+        }
+        else
+        {
+            Vector2 authoritativeDelta = target - state.Authoritative;
+            if (authoritativeDelta.sqrMagnitude > 64f)
             {
-                if (!state.Initialized)
+                state.Presented = target;
+                state.AuthoritySampleCount = 0;
+                state.EstimatedAuthorityInterval = 0.25f;
+                state.AuthoritativeChangedAt = presentationClock;
+            }
+            else if (authoritativeDelta.sqrMagnitude > 0.000001f)
+            {
+                float interval = presentationClock - state.AuthoritativeChangedAt;
+                if (interval is >= 0.005f and <= 2f)
                 {
-                    state.Initialized = true;
-                    state.Presented = target;
-                    state.Authoritative = target;
-                    state.AuthoritativeChangedAt = _presentationClock;
-                    state.LastFrame = _preparedFrame;
+                    state.EstimatedAuthorityInterval = state.AuthoritySampleCount == 0
+                        ? interval
+                        : Mathf.Lerp(state.EstimatedAuthorityInterval, interval, 0.25f);
+                    state.AuthoritySampleCount++;
+                }
+
+                state.AuthoritativeChangedAt = presentationClock;
+            }
+
+            state.Authoritative = target;
+            if (state.LastFrame != preparedFrame)
+            {
+                state.LastFrame = preparedFrame;
+                Vector2 movementTarget = sample.NextStepPosition;
+                bool canPredictMovement =
+                    sample.HasFlag(AWActorPresentationFlags.Moving) &&
+                    IsFinite(movementTarget) &&
+                    (movementTarget - target).sqrMagnitude > 0.0001f;
+
+                if (canPredictMovement)
+                {
+                    float emphasis = controlled ? 1.25f : selected ? 1.1f : 1f;
+                    float baseSpeed = Mathf.Max(0.4f, sample.MovementSpeed) * emphasis;
+                    float speed = baseSpeed * presentationTimeScale;
+                    if (state.AuthoritySampleCount > 0)
+                    {
+                        float elapsedSinceAuthority = presentationClock - state.AuthoritativeChangedAt;
+                        float remainingInterval = Mathf.Max(
+                            presentationDelta,
+                            state.EstimatedAuthorityInterval - elapsedSinceAuthority);
+                        float cadenceSpeed = Vector2.Distance(state.Presented, movementTarget) /
+                                             remainingInterval;
+                        speed = Mathf.Min(speed, Mathf.Max(baseSpeed, cadenceSpeed));
+                    }
+
+                    state.Presented = Vector2.MoveTowards(
+                        state.Presented,
+                        movementTarget,
+                        speed * presentationDelta);
                 }
                 else
                 {
-                    Vector2 authoritativeDelta =
-                        target - state.Authoritative;
-                    if (authoritativeDelta.sqrMagnitude > 64f)
+                    float responsiveness = controlled ? 45f : selected ? 30f : 18f;
+                    float alpha = 1f - Mathf.Exp(-responsiveness * presentationDelta);
+                    state.Presented = Vector2.LerpUnclamped(state.Presented, target, alpha);
+                    if ((state.Presented - target).sqrMagnitude < 0.0001f)
                     {
                         state.Presented = target;
-                        state.AuthoritySampleCount = 0;
-                        state.EstimatedAuthorityInterval = 0.25f;
-                        state.AuthoritativeChangedAt = _presentationClock;
-                    }
-                    else if (authoritativeDelta.sqrMagnitude > 0.000001f)
-                    {
-                        float interval = _presentationClock -
-                                         state.AuthoritativeChangedAt;
-                        if (interval >= 0.005f && interval <= 2f)
-                        {
-                            state.EstimatedAuthorityInterval =
-                                state.AuthoritySampleCount == 0
-                                    ? interval
-                                    : Mathf.Lerp(
-                                        state.EstimatedAuthorityInterval,
-                                        interval, 0.25f);
-                            state.AuthoritySampleCount++;
-                        }
-                        state.AuthoritativeChangedAt = _presentationClock;
-                    }
-
-                    state.Authoritative = target;
-                    if (state.LastFrame != _preparedFrame)
-                    {
-                        state.LastFrame = _preparedFrame;
-                        bool controlled = ReferenceEquals(pActor,
-                            ControllableUnit.getControllableUnit());
-                        bool selected = SelectedUnit.isSelected(pActor);
-                        Vector2 movementTarget = pActor.next_step_position;
-                        bool canPredictMovement = pActor.is_moving &&
-                            IsFinite(movementTarget) &&
-                            (movementTarget - target).sqrMagnitude > 0.0001f;
-
-                        if (canPredictMovement)
-                        {
-                            float emphasis = controlled
-                                ? 1.25f
-                                : selected ? 1.1f : 1f;
-                            float baseSpeed = Mathf.Max(0.4f,
-                                pActor._current_combined_movement_speed) *
-                                              emphasis;
-                            float speed = baseSpeed *
-                                          _presentationTimeScale;
-                            if (state.AuthoritySampleCount > 0)
-                            {
-                                float elapsedSinceAuthority =
-                                    _presentationClock -
-                                    state.AuthoritativeChangedAt;
-                                float remainingInterval = Mathf.Max(
-                                    _presentationDelta,
-                                    state.EstimatedAuthorityInterval -
-                                    elapsedSinceAuthority);
-                                float cadenceSpeed = Vector2.Distance(
-                                    state.Presented, movementTarget) /
-                                                     remainingInterval;
-                                speed = Mathf.Min(speed,
-                                    Mathf.Max(baseSpeed, cadenceSpeed));
-                            }
-
-                            state.Presented = Vector2.MoveTowards(
-                                state.Presented, movementTarget,
-                                speed * _presentationDelta);
-                        }
-                        else
-                        {
-                            float responsiveness = controlled
-                                ? 45f
-                                : selected ? 30f : 18f;
-                            float alpha = 1f - Mathf.Exp(
-                                -responsiveness * _presentationDelta);
-                            state.Presented = Vector2.LerpUnclamped(
-                                state.Presented, target, alpha);
-                            if ((state.Presented - target).sqrMagnitude <
-                                0.0001f)
-                                state.Presented = target;
-                        }
                     }
                 }
-
-                presented = state.Presented;
             }
-
-            Vector2 shake = pActor.shake_offset;
-            Vector2 jump = pActor.move_jump_offset;
-            pActor.current_shadow_position.Set(presented.x + shake.x,
-                presented.y + shake.y);
-            pActor.cur_transform_position.Set(
-                presented.x + jump.x + shake.x,
-                presented.y + jump.y + shake.y + pActor.position_height,
-                pActor.position_height);
-            pResult = pActor.cur_transform_position;
         }
 
-        public static void Reset()
-        {
-            _states =
-                new ConditionalWeakTable<Actor, ActorPresentationState>();
-            _preparedFrame = -1;
-            _presentationDelta = 1f / 60f;
-            _presentationTimeScale = 1f;
-            _presentationClock = 0f;
-        }
+        presented = state.Presented;
+        Vector2 nextStep = sample.NextStepPosition;
+        bool predictingMovement =
+            sample.HasFlag(AWActorPresentationFlags.Moving) &&
+            IsFinite(nextStep) &&
+            (nextStep - target).sqrMagnitude > 0.0001f;
+        Vector2 settledTarget =
+            predictingMovement ? nextStep : target;
+        requiresContinuousUpdate =
+            (presented - settledTarget).sqrMagnitude > 0.0001f;
+        return presented;
+    }
 
-        private static bool IsFinite(Vector2 pValue)
-        {
-            return !float.IsNaN(pValue.x) &&
-                   !float.IsInfinity(pValue.x) &&
-                   !float.IsNaN(pValue.y) &&
-                   !float.IsInfinity(pValue.y);
-        }
+    public static void Reset()
+    {
+        states = new Dictionary<AWActorPresentationHandle, AWActorPresentationState>();
+        staleHandles.Clear();
+        preparedFrame = -1;
+        presentationDelta = 1f / 60f;
+        presentationTimeScale = 1f;
+        presentationClock = 0f;
+    }
 
-        private sealed class ActorPresentationState
-        {
-            public bool Initialized;
-            public Vector2 Presented;
-            public Vector2 Authoritative;
-            public float AuthoritativeChangedAt;
-            public float EstimatedAuthorityInterval = 0.25f;
-            public int AuthoritySampleCount;
-            public int LastFrame;
-        }
+    private static bool IsFinite(Vector2 value)
+    {
+        return !float.IsNaN(value.x) &&
+               !float.IsInfinity(value.x) &&
+               !float.IsNaN(value.y) &&
+               !float.IsInfinity(value.y);
+    }
+
+    private static bool IsWorldPaused()
+    {
+        return Config.paused ||
+               (MapBox.instance != null && MapBox.instance.isPaused());
+    }
+
+    private sealed class AWActorPresentationState
+    {
+        public bool Initialized;
+        public Vector2 Presented;
+        public Vector2 Authoritative;
+        public float AuthoritativeChangedAt;
+        public float EstimatedAuthorityInterval = 0.25f;
+        public int AuthoritySampleCount;
+        public int LastFrame;
+        public int LastSeenFrame;
     }
 }

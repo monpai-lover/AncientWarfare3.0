@@ -47,7 +47,7 @@
     {
       "Id": "AW3_MAX_SIMULATION_MS_PER_FRAME",
       "Type": "SLIDER",
-      "FloatVal": 16,
+      "FloatVal": 8,
       "MinFloatVal": 0.5,
       "MaxFloatVal": 1000,
       "Callback": "AWPerformanceSettings:SetMaxSimulationMillisecondsPerFrame"
@@ -55,7 +55,7 @@
     {
       "Id": "AW3_ENABLE_PRESENTATION_SMOOTHING",
       "Type": "SWITCH",
-      "BoolVal": false,
+      "BoolVal": true,
       "Callback": "AWPerformanceSettings:SwitchPresentationSmoothing"
     },
     {

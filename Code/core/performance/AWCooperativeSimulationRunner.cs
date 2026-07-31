@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Threading;
 using AncientWarfare3.api.multiplayer;
 using life.taxi;
 
@@ -8,6 +10,14 @@ namespace AncientWarfare3.core.performance
 {
     internal sealed class AWCooperativeSimulationRunner
     {
+        private const int MaximumStagesPerBurst = 256;
+        private const double MinimumBurstMilliseconds = 0.25d;
+        private const double MaximumBurstMilliseconds = 2d;
+        private const double TargetFrameBurstRatio = 0.01d;
+        private const double InitialActorParallelStageMilliseconds = 2d;
+        private const double InitialBuildingParallelStageMilliseconds = 0.5d;
+        private const double SynchronousStageHeadroomRatio = 1.25d;
+
         private enum SimulationStage
         {
             Idle,
@@ -19,6 +29,7 @@ namespace AncientWarfare3.core.performance
             WorldTime,
             Taxi,
             MetaHistory,
+            AnimationTime,
             EnemyCache,
             ControllableUnit,
             Heat,
@@ -49,9 +60,19 @@ namespace AncientWarfare3.core.performance
             Projectiles,
             Statuses,
             Era,
-            Aw3Authority,
             DelayedActions,
+            Aw3Authority,
             Complete
+        }
+
+        private enum StageBurstStopReason
+        {
+            None,
+            Completed,
+            AsyncBoundary,
+            DomainBoundary,
+            Deadline,
+            StageLimit
         }
 
         private static readonly string[] StagePhaseNames =
@@ -65,6 +86,7 @@ namespace AncientWarfare3.core.performance
             "vanilla.world_time",
             "vanilla.taxi",
             "vanilla.meta_history",
+            "vanilla.animation_time",
             "vanilla.enemy_cache",
             "vanilla.controllable_unit",
             "vanilla.heat",
@@ -95,8 +117,8 @@ namespace AncientWarfare3.core.performance
             "vanilla.projectiles",
             "vanilla.statuses",
             "vanilla.era",
-            "aw3.authority",
             "vanilla.delayed_actions",
+            "aw3.authority",
             "vanilla.complete"
         };
 
@@ -105,11 +127,13 @@ namespace AncientWarfare3.core.performance
 
         private readonly AWCooperativeBatchRunner<BatchActors, Actor>
             _actorRunner = new AWCooperativeBatchRunner<BatchActors, Actor>(
-                "vanilla.actors", pAllowWorkerParallelism: true);
+                "vanilla.actors", pAllowWorkerParallelism: true,
+                pDeferParallelToPresentation: true);
         private readonly AWCooperativeBatchRunner<BatchBuildings, Building>
             _buildingRunner =
                 new AWCooperativeBatchRunner<BatchBuildings, Building>(
-                    "vanilla.buildings", pAllowWorkerParallelism: false);
+                    "vanilla.buildings", pAllowWorkerParallelism: true,
+                    pDeferParallelToPresentation: true);
         private readonly AWCooperativeWorldMaintenanceRunner
             _maintenanceRunner = new AWCooperativeWorldMaintenanceRunner();
         private readonly List<MapLayer> _mapLayers = new List<MapLayer>();
@@ -121,8 +145,9 @@ namespace AncientWarfare3.core.performance
         private readonly List<WorldBehaviourAsset> _worldBehaviours =
             new List<WorldBehaviourAsset>();
         private readonly Action _startAdmissionCycleAction;
-        private readonly Action _executeCurrentStageAction;
+        private readonly Action _executeCurrentStageBurstAction;
         private readonly Action _executeCurrentStageCoreAction;
+        private readonly Action _executeVanillaStageBurstCoreAction;
 
         private MapBox _world;
         private MapBox _pendingAdmissionMap;
@@ -146,6 +171,43 @@ namespace AncientWarfare3.core.performance
         private float _rateWindowStartedAt = -1f;
         private float _requestedSpeed;
         private float _actualSpeed;
+        private long _actorPresentationOverlapLaunches;
+        private long _actorPresentationOverlapEagerLaunches;
+        private long _actorPresentationSynchronousRuns;
+        private long _actorPresentationOverlapCompletions;
+        private long _actorPresentationOverlapFallbacks;
+        private long _actorPresentationOverlapForcedJoins;
+        private long _actorPresentationOverlapWallTicks;
+        private long _actorPresentationOverlapWaitTicks;
+        private long _lastActorPresentationOverlapWallTicks;
+        private long _lastActorPresentationOverlapWaitTicks;
+        private string _lastActorPresentationBoundaryReason = "none";
+        private long _buildingPresentationOverlapLaunches;
+        private long _buildingPresentationOverlapEagerLaunches;
+        private long _buildingPresentationSynchronousRuns;
+        private long _buildingPresentationOverlapCompletions;
+        private long _buildingPresentationOverlapFallbacks;
+        private long _buildingPresentationOverlapForcedJoins;
+        private long _buildingPresentationOverlapWallTicks;
+        private long _buildingPresentationOverlapWaitTicks;
+        private long _lastBuildingPresentationOverlapWallTicks;
+        private long _lastBuildingPresentationOverlapWaitTicks;
+        private string _lastBuildingPresentationBoundaryReason = "none";
+        private long _vanillaStageBursts;
+        private long _vanillaStageBurstSteps;
+        private int _maximumVanillaStageBurstSteps;
+        private long _vanillaStageBurstCompletedStops;
+        private long _vanillaStageBurstAsyncStops;
+        private long _vanillaStageBurstDomainStops;
+        private long _vanillaStageBurstDeadlineStops;
+        private long _vanillaStageBurstLimitStops;
+        private long _activeStageBurstDeadline;
+        private int _activeStageBurstSteps;
+        private StageBurstStopReason _activeStageBurstStopReason;
+        private double _actorParallelStageEstimateMilliseconds =
+            InitialActorParallelStageMilliseconds;
+        private double _buildingParallelStageEstimateMilliseconds =
+            InitialBuildingParallelStageMilliseconds;
 
         private AWCooperativeSimulationRunner()
         {
@@ -153,8 +215,10 @@ namespace AncientWarfare3.core.performance
                 new AWSchedulerResourceOwnership<MapBox>(
                     ReadParallelism, WriteParallelism);
             _startAdmissionCycleAction = StartPendingAdmissionCycle;
-            _executeCurrentStageAction = ExecuteCurrentStage;
+            _executeCurrentStageBurstAction = ExecuteCurrentStageBurst;
             _executeCurrentStageCoreAction = ExecuteCurrentStageCore;
+            _executeVanillaStageBurstCoreAction =
+                ExecuteVanillaStageBurstCore;
         }
 
         public bool Active => _stage != SimulationStage.Idle;
@@ -173,6 +237,9 @@ namespace AncientWarfare3.core.performance
         public AWSimulationMode ActiveMode => Active
             ? _cycleMode
             : AWPerformanceSettings.Mode;
+        internal bool HasMutatingPresentationWorkInFlight =>
+            _actorRunner.HasParallelPresentationWorkInFlight ||
+            _buildingRunner.HasParallelPresentationWorkInFlight;
 
         public void RunFrame(MapBox pMap, bool pAllowNewCycles = true)
         {
@@ -222,6 +289,98 @@ namespace AncientWarfare3.core.performance
 
                 while (true)
                 {
+                    if ((_stage == SimulationStage.Actors &&
+                         _actorRunner.WaitingForPresentationDispatch) ||
+                        (_stage == SimulationStage.Buildings &&
+                         _buildingRunner.WaitingForPresentationDispatch))
+                    {
+                        string dispatchPhase = GetNextPhaseName();
+                        if (!AWFramePriorityGovernor.CanRun(
+                                AWSimulationDomain.Vanilla,
+                                dispatchPhase))
+                        {
+                            AWFramePriorityGovernor.SetPhase(
+                                AWSimulationDomain.Vanilla,
+                                dispatchPhase);
+                            break;
+                        }
+
+                        bool dispatched = false;
+                        AWFramePriorityGovernor.RunPhase(
+                            AWSimulationDomain.Vanilla,
+                            dispatchPhase,
+                            () => dispatched =
+                                TryBeginDeferredParallelWorkEagerly());
+                        if (!dispatched) break;
+                        continue;
+                    }
+
+                    if (_actorRunner.HasParallelPresentationWorkInFlight &&
+                        _actorRunner.IsBackgroundWorkCompleted)
+                    {
+                        CompleteActorPresentationWork(true,
+                            "run_frame.completed");
+                        continue;
+                    }
+
+                    if (_buildingRunner.HasParallelPresentationWorkInFlight &&
+                        _buildingRunner.IsBackgroundWorkCompleted)
+                    {
+                        CompleteBuildingPresentationWork(true,
+                            "run_frame.completed");
+                        continue;
+                    }
+
+                    bool actorBackgroundPending =
+                        _actorRunner.WaitingForBackgroundWork;
+                    bool buildingBackgroundPending =
+                        _buildingRunner.WaitingForBackgroundWork;
+                    if (actorBackgroundPending || buildingBackgroundPending)
+                    {
+                        string awaitPhase = actorBackgroundPending
+                            ? _actorRunner.GetNextPhaseName()
+                            : _buildingRunner.GetNextPhaseName();
+                        double remainingMilliseconds =
+                            AWFramePriorityGovernor
+                                .GetRemainingSimulationBudgetMilliseconds();
+                        if (!AWFramePriorityGovernor.CanRun(
+                                AWSimulationDomain.Vanilla, awaitPhase))
+                        {
+                            AWFramePriorityGovernor.SetPhase(
+                                AWSimulationDomain.Vanilla, awaitPhase);
+                            break;
+                        }
+
+                        bool joined = false;
+                        double joinMilliseconds = Math.Max(
+                            AWPerformanceSettings.BackgroundJoinMilliseconds,
+                            remainingMilliseconds);
+                        AWFramePriorityGovernor.RunPhase(
+                            AWSimulationDomain.Vanilla,
+                            awaitPhase,
+                            () => joined = actorBackgroundPending
+                                ? _actorRunner.TryJoinBackgroundWork(
+                                    joinMilliseconds)
+                                : _buildingRunner.TryJoinBackgroundWork(
+                                    joinMilliseconds));
+                        if (!joined)
+                        {
+                            AWFramePriorityGovernor.SetPhase(
+                                AWSimulationDomain.Vanilla, awaitPhase);
+                            break;
+                        }
+
+                        if (_actorRunner
+                            .HasParallelPresentationWorkInFlight)
+                            CompleteActorPresentationWork(false,
+                                "run_frame.join");
+                        else if (_buildingRunner
+                            .HasParallelPresentationWorkInFlight)
+                            CompleteBuildingPresentationWork(false,
+                                "run_frame.join");
+                        continue;
+                    }
+
                     if (!Active)
                     {
                         if (!CanAdmitCycle(pMap, pAllowNewCycles,
@@ -250,14 +409,15 @@ namespace AncientWarfare3.core.performance
                     }
 
                     string phase = GetNextPhaseName();
-                    if (!AWFramePriorityGovernor.CanRun(phase))
+                    AWSimulationDomain domain = GetCurrentDomain();
+                    if (!AWFramePriorityGovernor.CanRun(domain, phase))
                     {
-                        AWFramePriorityGovernor.SetPhase(phase);
+                        AWFramePriorityGovernor.SetPhase(domain, phase);
                         break;
                     }
 
-                    AWFramePriorityGovernor.RunPhase(phase,
-                        _executeCurrentStageAction);
+                    AWFramePriorityGovernor.RunPhase(domain, phase,
+                        _executeCurrentStageBurstAction);
                 }
 
                 if (!Active) RestoreNativeParallelism();
@@ -267,6 +427,292 @@ namespace AncientWarfare3.core.performance
                 Abort();
                 throw;
             }
+        }
+
+        public bool TryBeginActorPresentationOverlap()
+        {
+            if (!RequiresControl ||
+                !AWActorPresentationSnapshots.HasPublishedSnapshot ||
+                _stage != SimulationStage.Actors ||
+                !_actorRunner.BeginParallelPresentationWork())
+                return false;
+
+            Interlocked.Increment(
+                ref _actorPresentationOverlapLaunches);
+            return true;
+        }
+
+        public bool TryBeginBuildingPresentationOverlap()
+        {
+            if (!RequiresControl ||
+                !AWActorPresentationSnapshots.HasPublishedSnapshot ||
+                _stage != SimulationStage.Buildings ||
+                !_buildingRunner.BeginParallelPresentationWork())
+                return false;
+
+            Interlocked.Increment(
+                ref _buildingPresentationOverlapLaunches);
+            return true;
+        }
+
+        private bool TryBeginDeferredParallelWorkEagerly()
+        {
+            if (_stage == SimulationStage.Actors)
+            {
+                if (!AWActorPresentationSnapshots.HasPublishedSnapshot ||
+                    CanRunDeferredParallelWorkSynchronously(
+                        _actorParallelStageEstimateMilliseconds))
+                {
+                    long startedAt = Stopwatch.GetTimestamp();
+                    if (_actorRunner
+                        .RunDeferredParallelWorkSynchronously())
+                    {
+                        UpdateParallelStageEstimate(
+                            ref _actorParallelStageEstimateMilliseconds,
+                            startedAt);
+                        Interlocked.Increment(
+                            ref _actorPresentationSynchronousRuns);
+                        return true;
+                    }
+                }
+
+                if (!TryBeginActorPresentationOverlap()) return false;
+                Interlocked.Increment(
+                    ref _actorPresentationOverlapEagerLaunches);
+                return true;
+            }
+
+            if (_stage != SimulationStage.Buildings) return false;
+            if (!AWActorPresentationSnapshots.HasPublishedSnapshot ||
+                CanRunDeferredParallelWorkSynchronously(
+                    _buildingParallelStageEstimateMilliseconds))
+            {
+                long startedAt = Stopwatch.GetTimestamp();
+                if (_buildingRunner
+                    .RunDeferredParallelWorkSynchronously())
+                {
+                    UpdateParallelStageEstimate(
+                        ref _buildingParallelStageEstimateMilliseconds,
+                        startedAt);
+                    Interlocked.Increment(
+                        ref _buildingPresentationSynchronousRuns);
+                    return true;
+                }
+            }
+
+            if (!TryBeginBuildingPresentationOverlap()) return false;
+            Interlocked.Increment(
+                ref _buildingPresentationOverlapEagerLaunches);
+            return true;
+        }
+
+        private static bool CanRunDeferredParallelWorkSynchronously(
+            double pEstimatedMilliseconds)
+        {
+            double requiredMilliseconds = Math.Max(
+                AWPerformanceSettings.BackgroundJoinMilliseconds,
+                Math.Max(AWPerformanceSettings.MinimumSliceMilliseconds,
+                    pEstimatedMilliseconds *
+                    SynchronousStageHeadroomRatio));
+            return AWFramePriorityGovernor
+                       .GetRemainingSimulationBudgetMilliseconds() >=
+                   requiredMilliseconds;
+        }
+
+        private static void UpdateParallelStageEstimate(
+            ref double pEstimateMilliseconds, long pStartedAt)
+        {
+            double elapsedMilliseconds = TicksToMilliseconds(
+                Stopwatch.GetTimestamp() - pStartedAt);
+            if (elapsedMilliseconds >= pEstimateMilliseconds)
+            {
+                pEstimateMilliseconds = elapsedMilliseconds;
+                return;
+            }
+
+            pEstimateMilliseconds = Math.Max(
+                AWPerformanceSettings.MinimumSliceMilliseconds,
+                pEstimateMilliseconds * 0.9d +
+                elapsedMilliseconds * 0.1d);
+        }
+
+        public bool EnsureActorReadBoundary(string pReason)
+        {
+            if (!_actorRunner.HasParallelPresentationWorkInFlight)
+                return false;
+
+            bool completedBeforeWait =
+                _actorRunner.IsBackgroundWorkCompleted;
+            CompleteActorPresentationWork(completedBeforeWait, pReason);
+            return true;
+        }
+
+        public bool EnsureBuildingReadBoundary(string pReason)
+        {
+            if (!_buildingRunner.HasParallelPresentationWorkInFlight)
+                return false;
+
+            bool completedBeforeWait =
+                _buildingRunner.IsBackgroundWorkCompleted;
+            CompleteBuildingPresentationWork(completedBeforeWait, pReason);
+            return true;
+        }
+
+        private void CompleteActorPresentationWork(
+            bool pCompletedBeforeWait, string pReason)
+        {
+            AWSimulationCoordinatorThread.WorkResult result =
+                _actorRunner.CompleteParallelPresentationWork();
+            Interlocked.Increment(
+                ref _actorPresentationOverlapCompletions);
+            if (!pCompletedBeforeWait)
+                Interlocked.Increment(
+                    ref _actorPresentationOverlapForcedJoins);
+            Interlocked.Add(ref _actorPresentationOverlapWallTicks,
+                result.WallTicks);
+            Interlocked.Add(ref _actorPresentationOverlapWaitTicks,
+                result.WaitTicks);
+            Interlocked.Exchange(
+                ref _lastActorPresentationOverlapWallTicks,
+                result.WallTicks);
+            Interlocked.Exchange(
+                ref _lastActorPresentationOverlapWaitTicks,
+                result.WaitTicks);
+            _lastActorPresentationBoundaryReason =
+                string.IsNullOrEmpty(pReason) ? "unknown" : pReason;
+        }
+
+        private void CompleteBuildingPresentationWork(
+            bool pCompletedBeforeWait, string pReason)
+        {
+            AWSimulationCoordinatorThread.WorkResult result =
+                _buildingRunner.CompleteParallelPresentationWork();
+            Interlocked.Increment(
+                ref _buildingPresentationOverlapCompletions);
+            if (!pCompletedBeforeWait)
+                Interlocked.Increment(
+                    ref _buildingPresentationOverlapForcedJoins);
+            Interlocked.Add(ref _buildingPresentationOverlapWallTicks,
+                result.WallTicks);
+            Interlocked.Add(ref _buildingPresentationOverlapWaitTicks,
+                result.WaitTicks);
+            Interlocked.Exchange(
+                ref _lastBuildingPresentationOverlapWallTicks,
+                result.WallTicks);
+            Interlocked.Exchange(
+                ref _lastBuildingPresentationOverlapWaitTicks,
+                result.WaitTicks);
+            _lastBuildingPresentationBoundaryReason =
+                string.IsNullOrEmpty(pReason) ? "unknown" : pReason;
+        }
+
+        public void FinishPresentationFrame()
+        {
+            if (_stage == SimulationStage.Actors &&
+                _actorRunner.WaitingForPresentationDispatch &&
+                _actorRunner.BeginParallelPresentationWork())
+            {
+                Interlocked.Increment(
+                    ref _actorPresentationOverlapLaunches);
+                Interlocked.Increment(
+                    ref _actorPresentationOverlapFallbacks);
+            }
+
+            if (_stage == SimulationStage.Buildings &&
+                _buildingRunner.WaitingForPresentationDispatch &&
+                _buildingRunner.BeginParallelPresentationWork())
+            {
+                Interlocked.Increment(
+                    ref _buildingPresentationOverlapLaunches);
+                Interlocked.Increment(
+                    ref _buildingPresentationOverlapFallbacks);
+            }
+        }
+
+        public string GetPresentationOverlapDiagnostics()
+        {
+            return string.Format(CultureInfo.InvariantCulture,
+                "launch={0}(eager={1},sync={2}) complete={3} " +
+                "fallback={4} forced_join={5} wall={6:0.0}ms " +
+                "wait={7:0.0}ms last={8:0.00}/{9:0.00}ms " +
+                "estimate={10:0.00}ms boundary={11} dispatch_wait={12} " +
+                "inflight={13}",
+                Interlocked.Read(ref _actorPresentationOverlapLaunches),
+                Interlocked.Read(
+                    ref _actorPresentationOverlapEagerLaunches),
+                Interlocked.Read(
+                    ref _actorPresentationSynchronousRuns),
+                Interlocked.Read(
+                    ref _actorPresentationOverlapCompletions),
+                Interlocked.Read(
+                    ref _actorPresentationOverlapFallbacks),
+                Interlocked.Read(
+                    ref _actorPresentationOverlapForcedJoins),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _actorPresentationOverlapWallTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _actorPresentationOverlapWaitTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _lastActorPresentationOverlapWallTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _lastActorPresentationOverlapWaitTicks)),
+                _actorParallelStageEstimateMilliseconds,
+                _lastActorPresentationBoundaryReason,
+                _actorRunner.WaitingForPresentationDispatch,
+                _actorRunner.HasParallelPresentationWorkInFlight);
+        }
+
+        public string GetBuildingPresentationOverlapDiagnostics()
+        {
+            return string.Format(CultureInfo.InvariantCulture,
+                "launch={0}(eager={1},sync={2}) complete={3} " +
+                "fallback={4} forced_join={5} wall={6:0.0}ms " +
+                "wait={7:0.0}ms last={8:0.00}/{9:0.00}ms " +
+                "estimate={10:0.00}ms boundary={11} dispatch_wait={12} " +
+                "inflight={13}",
+                Interlocked.Read(
+                    ref _buildingPresentationOverlapLaunches),
+                Interlocked.Read(
+                    ref _buildingPresentationOverlapEagerLaunches),
+                Interlocked.Read(
+                    ref _buildingPresentationSynchronousRuns),
+                Interlocked.Read(
+                    ref _buildingPresentationOverlapCompletions),
+                Interlocked.Read(
+                    ref _buildingPresentationOverlapFallbacks),
+                Interlocked.Read(
+                    ref _buildingPresentationOverlapForcedJoins),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _buildingPresentationOverlapWallTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _buildingPresentationOverlapWaitTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _lastBuildingPresentationOverlapWallTicks)),
+                TicksToMilliseconds(Interlocked.Read(
+                    ref _lastBuildingPresentationOverlapWaitTicks)),
+                _buildingParallelStageEstimateMilliseconds,
+                _lastBuildingPresentationBoundaryReason,
+                _buildingRunner.WaitingForPresentationDispatch,
+                _buildingRunner.HasParallelPresentationWorkInFlight);
+        }
+
+        public string GetStageBurstDiagnostics()
+        {
+            long bursts = _vanillaStageBursts;
+            return string.Format(CultureInfo.InvariantCulture,
+                "bursts={0} steps={1} avg={2:0.00} max={3} " +
+                "stops={4}/{5}/{6}/{7}/{8}" +
+                "(completed/async/domain/deadline/limit)",
+                bursts, _vanillaStageBurstSteps,
+                bursts == 0L
+                    ? 0d
+                    : _vanillaStageBurstSteps / (double)bursts,
+                _maximumVanillaStageBurstSteps,
+                _vanillaStageBurstCompletedStops,
+                _vanillaStageBurstAsyncStops,
+                _vanillaStageBurstDomainStops,
+                _vanillaStageBurstDeadlineStops,
+                _vanillaStageBurstLimitStops);
         }
 
         public void Abort()
@@ -279,12 +725,12 @@ namespace AncientWarfare3.core.performance
             {
                 try
                 {
-                    ReleaseControl();
+                    ResetAfterAbort();
                 }
                 finally
                 {
                     _presentationRefresh.Clear();
-                    ResetAfterAbort();
+                    ReleaseControl();
                 }
             }
         }
@@ -304,6 +750,9 @@ namespace AncientWarfare3.core.performance
             _actorRunner.Abort();
             _buildingRunner.Abort();
             _maintenanceRunner.Abort();
+            AWSimulationTime.CancelTick();
+            AWActorPresentationSnapshots.Reset();
+            AWPresentationCommandQueue.Clear();
             _mapLayers.Clear();
             _mapModules.Clear();
             _worldBehaviours.Clear();
@@ -316,7 +765,10 @@ namespace AncientWarfare3.core.performance
             _simulationPassesRemaining = 0;
             _cycleMode = AWSimulationMode.Native;
             _advancingGameDelayedActions = false;
-            AWFramePriorityGovernor.SetPhase("idle");
+            AWFramePriorityGovernor.SetPhase(
+                AWSimulationDomain.Vanilla, "idle");
+            AWFramePriorityGovernor.SetPhase(
+                AWSimulationDomain.Aw3Authority, "idle");
         }
 
         public void ReleaseControl()
@@ -393,7 +845,23 @@ namespace AncientWarfare3.core.performance
 
         private void CompleteActiveCycleAtBoundary()
         {
-            while (Active) ExecuteCurrentStage();
+            while (Active)
+            {
+                if (_stage == SimulationStage.Actors &&
+                    _actorRunner.WaitingForPresentationDispatch &&
+                    _actorRunner.BeginParallelPresentationWork())
+                    Interlocked.Increment(
+                        ref _actorPresentationOverlapLaunches);
+                if (_stage == SimulationStage.Buildings &&
+                    _buildingRunner.WaitingForPresentationDispatch &&
+                    _buildingRunner.BeginParallelPresentationWork())
+                    Interlocked.Increment(
+                        ref _buildingPresentationOverlapLaunches);
+
+                EnsureActorReadBoundary("cycle_boundary");
+                EnsureBuildingReadBoundary("cycle_boundary");
+                ExecuteCurrentStage();
+            }
         }
 
         private void StartPendingAdmissionCycle()
@@ -417,6 +885,7 @@ namespace AncientWarfare3.core.performance
 
         private void StartSimulationPass()
         {
+            AWSimulationTime.BeginTick(_world, _cycleElapsed);
             AWSimulationTickBenchmark.BeginTick(_cycleElapsed, _cycleMode);
             _mapLayers.Clear();
             _mapLayers.AddRange(_world._map_layers);
@@ -440,9 +909,35 @@ namespace AncientWarfare3.core.performance
                     return _buildingRunner.GetNextPhaseName();
                 case SimulationStage.Maintenance:
                     return _maintenanceRunner.GetNextPhaseName();
-                default:
-                    return StagePhaseNames[(int)_stage];
+                case SimulationStage.MapLayersUpdate:
+                    if (_listIndex < _mapLayers.Count)
+                        return "vanilla.map_layer.update." +
+                               _mapLayers[_listIndex].GetType().Name;
+                    break;
+                case SimulationStage.MapLayersDraw:
+                    if (_listIndex < _mapLayers.Count)
+                        return "vanilla.map_layer.draw." +
+                               _mapLayers[_listIndex].GetType().Name;
+                    break;
+                case SimulationStage.MapModules:
+                    if (_listIndex < _mapModules.Count)
+                        return "vanilla.map_module." +
+                               _mapModules[_listIndex].GetType().Name;
+                    break;
+                case SimulationStage.WorldBehaviours:
+                    if (_listIndex < _worldBehaviours.Count)
+                        return "vanilla.world_behaviour." +
+                               _worldBehaviours[_listIndex].id;
+                    break;
             }
+            return StagePhaseNames[(int)_stage];
+        }
+
+        private AWSimulationDomain GetCurrentDomain()
+        {
+            return _stage == SimulationStage.Aw3Authority
+                ? AWSimulationDomain.Aw3Authority
+                : AWSimulationDomain.Vanilla;
         }
 
         private void ExecuteCurrentStage()
@@ -451,6 +946,109 @@ namespace AncientWarfare3.core.performance
                 _cycleElapsed,
                 _cycleMode == AWSimulationMode.Fixed,
                 _cycleTimeScale, _executeCurrentStageCoreAction);
+        }
+
+        private void ExecuteCurrentStageBurst()
+        {
+            if (AWSimulationTickBenchmark.IsCapturing ||
+                GetCurrentDomain() != AWSimulationDomain.Vanilla)
+            {
+                ExecuteCurrentStage();
+                return;
+            }
+
+            double targetFrameMilliseconds =
+                1000d / AWPerformanceSettings.TargetRenderFps;
+            double desiredBurstMilliseconds = Math.Max(
+                MinimumBurstMilliseconds,
+                Math.Min(MaximumBurstMilliseconds,
+                    targetFrameMilliseconds * TargetFrameBurstRatio));
+            double remainingMilliseconds = AWFramePriorityGovernor
+                .GetRemainingSimulationBudgetMilliseconds();
+            double burstMilliseconds = remainingMilliseconds > 0d
+                ? Math.Min(desiredBurstMilliseconds,
+                    Math.Max(MinimumBurstMilliseconds,
+                        remainingMilliseconds))
+                : MinimumBurstMilliseconds;
+            long burstStartedAt = Stopwatch.GetTimestamp();
+            _activeStageBurstDeadline = burstStartedAt + Math.Max(1L,
+                (long)(burstMilliseconds * Stopwatch.Frequency / 1000d));
+            _activeStageBurstSteps = 0;
+            _activeStageBurstStopReason = StageBurstStopReason.None;
+
+            AWSimulationStepContext.Run(_world, _cyclePaused,
+                _cycleElapsed,
+                _cycleMode == AWSimulationMode.Fixed,
+                _cycleTimeScale, _executeVanillaStageBurstCoreAction);
+
+            _vanillaStageBursts++;
+            _vanillaStageBurstSteps += _activeStageBurstSteps;
+            if (_activeStageBurstSteps > _maximumVanillaStageBurstSteps)
+                _maximumVanillaStageBurstSteps = _activeStageBurstSteps;
+            switch (_activeStageBurstStopReason)
+            {
+                case StageBurstStopReason.Completed:
+                    _vanillaStageBurstCompletedStops++;
+                    break;
+                case StageBurstStopReason.AsyncBoundary:
+                    _vanillaStageBurstAsyncStops++;
+                    break;
+                case StageBurstStopReason.DomainBoundary:
+                    _vanillaStageBurstDomainStops++;
+                    break;
+                case StageBurstStopReason.Deadline:
+                    _vanillaStageBurstDeadlineStops++;
+                    break;
+                case StageBurstStopReason.StageLimit:
+                    _vanillaStageBurstLimitStops++;
+                    break;
+            }
+        }
+
+        private void ExecuteVanillaStageBurstCore()
+        {
+            while (true)
+            {
+                ExecuteCurrentStageCore();
+                _activeStageBurstSteps++;
+
+                if (!Active)
+                {
+                    _activeStageBurstStopReason =
+                        StageBurstStopReason.Completed;
+                    return;
+                }
+                if (GetCurrentDomain() != AWSimulationDomain.Vanilla)
+                {
+                    _activeStageBurstStopReason =
+                        StageBurstStopReason.DomainBoundary;
+                    return;
+                }
+                if ((_stage == SimulationStage.Actors &&
+                     (_actorRunner.WaitingForPresentationDispatch ||
+                      _actorRunner.WaitingForBackgroundWork)) ||
+                    (_stage == SimulationStage.Buildings &&
+                     (_buildingRunner.WaitingForPresentationDispatch ||
+                      _buildingRunner.WaitingForBackgroundWork)))
+                {
+                    _activeStageBurstStopReason =
+                        StageBurstStopReason.AsyncBoundary;
+                    return;
+                }
+                if (_activeStageBurstSteps >= MaximumStagesPerBurst)
+                {
+                    _activeStageBurstStopReason =
+                        StageBurstStopReason.StageLimit;
+                    return;
+                }
+                if ((_activeStageBurstSteps & 3) == 0 &&
+                    Stopwatch.GetTimestamp() >= _activeStageBurstDeadline)
+                {
+                    _activeStageBurstStopReason =
+                        StageBurstStopReason.Deadline;
+                    return;
+                }
+            }
         }
 
         private void ExecuteCurrentStageCore()
@@ -489,6 +1087,9 @@ namespace AncientWarfare3.core.performance
                     break;
                 case SimulationStage.MetaHistory:
                     if (!_cyclePaused) _world.updateMetaHistory();
+                    Advance(SimulationStage.AnimationTime);
+                    break;
+                case SimulationStage.AnimationTime:
                     Advance(SimulationStage.EnemyCache);
                     break;
                 case SimulationStage.EnemyCache:
@@ -591,7 +1192,9 @@ namespace AncientWarfare3.core.performance
                     Advance(SimulationStage.StackEffects);
                     break;
                 case SimulationStage.StackEffects:
-                    _world.stack_effects.update(_cycleElapsed);
+                    AWActiveStackEffectsUpdater.Update(
+                        _world.stack_effects,
+                        _cycleElapsed);
                     Advance(SimulationStage.ResourceThrows);
                     break;
                 case SimulationStage.ResourceThrows:
@@ -685,12 +1288,7 @@ namespace AncientWarfare3.core.performance
                     Advance(_cycleMode == AWSimulationMode.Large &&
                             _simulationPassesRemaining > 1
                         ? SimulationStage.Complete
-                        : SimulationStage.Aw3Authority);
-                    break;
-                case SimulationStage.Aw3Authority:
-                    AWAuthorityCycleService.ProcessCooperativeCycle(
-                        _logicalTicksAdmitted, _cyclePaused);
-                    Advance(SimulationStage.DelayedActions);
+                        : SimulationStage.DelayedActions);
                     break;
                 case SimulationStage.DelayedActions:
                     _advancingGameDelayedActions = true;
@@ -703,6 +1301,11 @@ namespace AncientWarfare3.core.performance
                     {
                         _advancingGameDelayedActions = false;
                     }
+                    Advance(SimulationStage.Aw3Authority);
+                    break;
+                case SimulationStage.Aw3Authority:
+                    AWAuthorityCycleService.ProcessCooperativeCycle(
+                        _logicalTicksAdmitted, _cyclePaused);
                     Advance(SimulationStage.Complete);
                     break;
                 case SimulationStage.Complete:
@@ -717,6 +1320,14 @@ namespace AncientWarfare3.core.performance
 
         private void CompleteCycle()
         {
+            if (_cycleMode == AWSimulationMode.Fixed &&
+                _world.timer_nutrition_decay <= 0f)
+                _world.timer_nutrition_decay =
+                    SimGlobals.m.interval_nutrition_decay;
+
+            AWSimulationTime.CompleteTick(_world);
+            AWActorPresentationSnapshots.CaptureIfRequested(
+                _world, _logicalTicksCompleted + 1);
             AWSimulationTickBenchmark.MarkTickCompleted();
             _simulatedSecondsCompleted += _cycleElapsed;
             _mapLayers.Clear();
@@ -737,7 +1348,10 @@ namespace AncientWarfare3.core.performance
             _cycleTimeScale = null;
             _stage = SimulationStage.Idle;
             _cycleMode = AWSimulationMode.Native;
-            AWFramePriorityGovernor.SetPhase("idle");
+            AWFramePriorityGovernor.SetPhase(
+                AWSimulationDomain.Vanilla, "idle");
+            AWFramePriorityGovernor.SetPhase(
+                AWSimulationDomain.Aw3Authority, "idle");
         }
 
         private void Advance(SimulationStage pNextStage)
@@ -815,6 +1429,11 @@ namespace AncientWarfare3.core.performance
             _rateWindowStartedAt = now;
             _simulatedSecondsAtRateWindowStart =
                 _simulatedSecondsCompleted;
+        }
+
+        private static double TicksToMilliseconds(long pTicks)
+        {
+            return pTicks * 1000d / Stopwatch.Frequency;
         }
     }
 }
