@@ -5865,6 +5865,7 @@ Equal(false, DiplomacyProposalRules.ShouldBreakNonAggression(
 DiplomacyTreatyPersistenceTests.Run();
 DiplomacyActionExpansionRulesTests.Run();
 DiplomacyProposalOpportunityRulesTests.Run();
+AsyncDiplomacyProposalIdentityTests.Run();
 RulerHouseholdRulesTests.Run();
 WarPeaceSettlementScopeRulesTests.Run();
 SeparatePeaceRuntimeFactsRulesTests.Run();

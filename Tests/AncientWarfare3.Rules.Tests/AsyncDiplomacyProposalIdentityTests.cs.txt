@@ -1,0 +1,58 @@
+using AncientWarfare3.core.lineage;
+
+internal static class AsyncDiplomacyProposalIdentityTests
+{
+    public static void Run()
+    {
+        Equal(9, (int)AsyncDiplomacyProposalKind.HouseholdOffering,
+            "existing proposal kinds keep their numeric identity");
+        Equal(10, (int)AsyncDiplomacyProposalKind.JoinWar,
+            "join-war appends after existing proposal kinds");
+        Equal(11, (int)AsyncDiplomacyProposalKind.Vassalize,
+            "vassalization appends after join-war");
+        Equal(12, (int)AsyncDiplomacyProposalKind.EndVassal,
+            "end-vassal appends after vassalization");
+
+        var first = new AsyncDiplomacySelectionIdentity(2, 4,
+            AsyncDiplomacyProposalKind.JoinWar, 91, -1, -1, -1, -1, "");
+        var otherWar = new AsyncDiplomacySelectionIdentity(2, 4,
+            AsyncDiplomacyProposalKind.JoinWar, 92, -1, -1, -1, -1, "");
+        False(first.Matches(otherWar),
+            "the selected war is part of async proposal identity");
+
+        var source = new KingdomStrategyFacts(1, 10f, .5f, .5f, .5f, 1);
+        var fingerprint = AsyncStrategyFactFingerprint.CaptureDiplomacy(
+            source, Array.Empty<AsyncDiplomacyProposalFacts>(),
+            Array.Empty<AsyncDiplomacySelectionTargetFacts>(),
+            new[] { first, otherWar });
+        True(fingerprint.MatchesDiplomacy(source,
+                Array.Empty<AsyncDiplomacyProposalFacts>(),
+                Array.Empty<AsyncDiplomacySelectionTargetFacts>(),
+                new[] { otherWar, first }),
+            "selection fingerprint ordering includes stable war identity");
+        False(fingerprint.MatchesDiplomacy(source,
+                Array.Empty<AsyncDiplomacyProposalFacts>(),
+                Array.Empty<AsyncDiplomacySelectionTargetFacts>(),
+                new[] { first }),
+            "selection fingerprints retain each selected war");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value)
+            throw new InvalidOperationException($"{name}: expected false");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value)
+            throw new InvalidOperationException($"{name}: expected true");
+    }
+}

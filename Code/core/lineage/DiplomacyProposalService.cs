@@ -78,21 +78,24 @@ namespace AncientWarfare3.core.lineage
         public AsyncDiplomacyCommitCandidate(long pResponderKingdomId,
             DiplomacyProposalType pType,
             AsyncDiplomacyProposalKind pKind,
+            long pWarId,
             DiplomacyProposalSelection pSelection)
         {
             ResponderKingdomId = pResponderKingdomId;
             Type = pType;
             Kind = pKind;
+            WarId = pWarId;
             Selection = pSelection;
         }
 
         public long ResponderKingdomId { get; }
         public DiplomacyProposalType Type { get; }
         public AsyncDiplomacyProposalKind Kind { get; }
+        public long WarId { get; }
         public DiplomacyProposalSelection Selection { get; }
         public AsyncDiplomacySelectionIdentity Identity =>
             new AsyncDiplomacySelectionIdentity(ResponderKingdomId,
-                (int)Type, Kind, Selection.TargetKingdomId,
+                (int)Type, Kind, WarId, Selection.TargetKingdomId,
                 Selection.RequesterActorId, Selection.ResponderActorId,
                 Selection.TargetCityId, Selection.DetailId);
     }
@@ -3054,7 +3057,7 @@ namespace AncientWarfare3.core.lineage
                     activeBlocker && !DiplomacyProposalRules.IsUnilateral(
                         item.Candidate.Type), cooldown));
                 commits.Add(new AsyncDiplomacyCommitCandidate(pContact.id,
-                    item.Candidate.Type, kind, item.Selection));
+                    item.Candidate.Type, kind, -1L, item.Selection));
             }
             pFacts = facts.ToArray();
             pCommitCandidates = commits.ToArray();
@@ -3187,6 +3190,12 @@ namespace AncientWarfare3.core.lineage
                     AsyncDiplomacyProposalKind.Coalition,
                 DiplomacyProposalType.HouseholdOffering =>
                     AsyncDiplomacyProposalKind.HouseholdOffering,
+                DiplomacyProposalType.JoinWar =>
+                    AsyncDiplomacyProposalKind.JoinWar,
+                DiplomacyProposalType.Vassalize =>
+                    AsyncDiplomacyProposalKind.Vassalize,
+                DiplomacyProposalType.EndVassal =>
+                    AsyncDiplomacyProposalKind.EndVassal,
                 _ => AsyncDiplomacyProposalKind.None
             };
         }
