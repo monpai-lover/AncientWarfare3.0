@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs"
+             Link="Production\HistoryLocalizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarDisplayLabelRules.cs"
+             Link="Production\WarDisplayLabelRules.cs" />
+  </ItemGroup>
+</Project>
