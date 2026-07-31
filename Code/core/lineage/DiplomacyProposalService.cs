@@ -364,8 +364,10 @@ namespace AncientWarfare3.core.lineage
 
             if (!pPlayerInitiated)
             {
-                bool receiverExpectedAccepted;
-                if (DiplomacyProposalRules.IsPeaceProposal(pType))
+                bool receiverExpectedAccepted =
+                    DiplomacyProposalRules.IsUnilateral(pType);
+                if (!receiverExpectedAccepted &&
+                    DiplomacyProposalRules.IsPeaceProposal(pType))
                 {
                     WarPeaceAcceptanceResult settlementAcceptance =
                         WarPeaceSettlementService.Instance.EvaluateAi(
@@ -374,7 +376,7 @@ namespace AncientWarfare3.core.lineage
                             pType == DiplomacyProposalType.Surrender);
                     receiverExpectedAccepted = settlementAcceptance.Accept;
                 }
-                else
+                else if (!receiverExpectedAccepted)
                 {
                     DiplomacyProposalAssessment acceptance =
                         directionalVassalization?.Acceptance ??
@@ -2232,7 +2234,9 @@ namespace AncientWarfare3.core.lineage
                 return Respond(proposal.ProposalId, pAccept: false,
                     pPlayerResponse: false, out _);
             }
-            bool accept = assessment.Acceptance.ExpectedAccepted;
+            bool accept = DiplomacyProposalRules.IsUnilateral(
+                              proposal.Type) ||
+                          assessment.Acceptance.ExpectedAccepted;
             if (DiplomacyProposalRules.IsPeaceProposal(proposal.Type))
             {
                 WarPeaceAcceptanceResult settlementAcceptance =
@@ -2510,20 +2514,65 @@ namespace AncientWarfare3.core.lineage
                         break;
                     case DiplomacyProposalType.EndAlliance:
                         Alliance alliance = requester.getAlliance();
-                        if (alliance == null || !alliance.hasKingdom(responder))
+                        if (alliance != null && alliance.hasKingdom(responder))
                         {
-                            pReason = "not_allied";
+                            alliance.leave(requester);
+                            if (SafeAllied(requester, responder))
+                            {
+                                pReason = "alliance_execution_failed";
+                                return false;
+                            }
+                        }
+                        if (!EnsureAllianceWithdrawalTruce(pProposal,
+                                requester, responder, out pTreatyUntil))
+                        {
+                            pReason = "alliance_truce_write_failed";
                             return false;
                         }
-                        alliance.leave(requester);
                         break;
                     case DiplomacyProposalType.EndVassal:
-                        Kingdom subject = VassalService.GetSuzerain(requester) ==
-                                          responder ||
-                                          VassalService.GetTributarySuzerain(
-                                              requester) == responder
-                            ? requester
-                            : responder;
+                        Kingdom subject;
+                        if (pProposal.DetailId ==
+                            DiplomacyProposalOpportunityRules
+                                .EndVassalReleaseDetail)
+                        {
+                            if (GetAnySuzerain(responder) != requester)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                            subject = responder;
+                        }
+                        else if (pProposal.DetailId ==
+                                 DiplomacyProposalOpportunityRules
+                                     .EndVassalRequestDetail)
+                        {
+                            if (GetAnySuzerain(requester) != responder)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                            subject = requester;
+                        }
+                        else if (string.IsNullOrWhiteSpace(
+                                     pProposal.DetailId))
+                        {
+                            subject = GetAnySuzerain(requester) == responder
+                                ? requester
+                                : GetAnySuzerain(responder) == requester
+                                    ? responder
+                                    : null;
+                            if (subject?.data == null)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            pReason = "invalid_end_vassal_direction";
+                            return false;
+                        }
                         if (!VassalService.EndVassal(subject,
                                 "diplomatic_release"))
                         {
@@ -2898,7 +2947,13 @@ namespace AncientWarfare3.core.lineage
                     return VassalService.GetTributarySuzerain(responder) ==
                            requester;
                 case DiplomacyProposalType.EndAlliance:
-                    return !SafeAllied(requester, responder);
+                    if (SafeAllied(requester, responder)) return false;
+                    return DiplomacyTreatyPersistence.HasProposalTruce(DB,
+                        DiplomacyProposalTableItem.GetTableName(),
+                        pProposal.ProposalId, requester.id, responder.id,
+                        SafeYear(),
+                        DiplomacyProposalRules.BrokenPactTruceYears,
+                        out pTreatyUntil);
                 case DiplomacyProposalType.EndVassal:
                     return !HasDirectSubjectRelation(requester, responder);
                 default:
@@ -3600,8 +3655,8 @@ namespace AncientWarfare3.core.lineage
                 currentSelected.WarId,
                 currentSelected.Selection);
             if (assessment?.Allowed != true ||
-                currentSelected.Type !=
-                DiplomacyProposalType.BreakNonAggression &&
+                !DiplomacyProposalRules.IsUnilateral(
+                    currentSelected.Type) &&
                 !ExpectedAccepted(assessment)) return false;
             if (pShadowOnly) return false;
             bool created = TryCreateSelected(requester, responder,
@@ -6102,6 +6157,31 @@ namespace AncientWarfare3.core.lineage
             NotifyPair(pRequester.id, pResponder.id);
             pReason = "";
             return true;
+        }
+
+        private static bool EnsureAllianceWithdrawalTruce(
+            DiplomacyProposal pProposal, Kingdom pRequester,
+            Kingdom pResponder, out int pTruceUntilYear)
+        {
+            int year = SafeYear();
+            pTruceUntilYear = year +
+                               DiplomacyProposalRules
+                                   .BrokenPactTruceYears;
+            double now = LineageService.CurTime();
+            var request = new DiplomacyTreatyBreakRequest(
+                pRequester.id, pRequester.name ?? "", pResponder.id,
+                pResponder.name ?? "", year, pTruceUntilYear, now,
+                DiplomaticSenderTitle(pRequester),
+                HistoryWriter.BuildYearPrefix(now, pRequester),
+                DiplomacyConversationRules.LetterStyleId(
+                    ResolveLetterStyle(pRequester, pResponder)),
+                DiplomacyConversationRules.LetterToneId(
+                    ResolveLetterTone(pRequester, pResponder)),
+                pProposal?.PlayerInitiated == true);
+            return pProposal != null &&
+                   DiplomacyTreatyPersistence.EnsureProposalTruce(DB,
+                       DiplomacyProposalTableItem.GetTableName(),
+                       pProposal.ProposalId, request, out _);
         }
 
         private static string TypeId(DiplomacyProposalType pType)

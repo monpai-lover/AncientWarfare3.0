@@ -119,6 +119,10 @@ internal static class DiplomacyProposalOpportunityRulesTests
                 DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
                     1.8f, true, true, .8f));
         True(exceptionalProtection.ExpectedAccepted);
+        True(DiplomacyProposalRules.IsUnilateral(
+            DiplomacyProposalType.EndAlliance));
+        False(DiplomacyProposalRules.IsUnilateral(
+            DiplomacyProposalType.EndVassal));
     }
 
     private static DiplomacyProposalAiCandidate Candidate(

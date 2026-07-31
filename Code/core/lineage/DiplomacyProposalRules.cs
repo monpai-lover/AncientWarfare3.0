@@ -599,7 +599,8 @@ namespace AncientWarfare3.core.lineage
 
         public static bool IsUnilateral(DiplomacyProposalType pType)
         {
-            return pType == DiplomacyProposalType.BreakNonAggression;
+            return pType == DiplomacyProposalType.BreakNonAggression ||
+                   pType == DiplomacyProposalType.EndAlliance;
         }
 
         public static bool ShouldBreakNonAggression(int opinion,

@@ -7,6 +7,28 @@ internal static class DiplomacyTreatyPersistenceTests
     {
         CommitsBreakAndFiveYearTruceTogether();
         RollsBackPactClosureWhenTruceInsertFails();
+        EnsuresOneProposalKeyedAllianceWithdrawalTruce();
+    }
+
+    private static void EnsuresOneProposalKeyedAllianceWithdrawalTruce()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        DiplomacyTreatyBreakRequest request = Request();
+        True(DiplomacyTreatyPersistence.EnsureProposalTruce(db,
+                "Proposal", 72L, request, out long firstTruceId),
+            "the first alliance withdrawal creates its truce");
+        True(DiplomacyTreatyPersistence.EnsureProposalTruce(db,
+                "Proposal", 72L, request, out long replayTruceId),
+            "replaying the same withdrawal finds its truce");
+        Equal(firstTruceId, replayTruceId,
+            "replay returns the existing truce identity");
+        Equal(1L, Scalar(db, "SELECT COUNT(*) FROM Proposal WHERE " +
+            "PROPOSAL_TYPE='truce' AND STATUS='accepted' AND " +
+            "DETAIL_ID='alliance_withdrawal:72'"),
+            "one withdrawal proposal creates exactly one truce");
+        Equal(43L, Scalar(db, "SELECT TREATY_UNTIL_YEAR FROM Proposal " +
+            "WHERE DETAIL_ID='alliance_withdrawal:72'"),
+            "withdrawal truce lasts the configured five years");
     }
 
     private static void CommitsBreakAndFiveYearTruceTogether()
@@ -87,7 +109,7 @@ internal static class DiplomacyTreatyPersistenceTests
             "REQUESTER_TITLE TEXT,RESPONDER_TITLE TEXT,REQUEST_YEAR_PREFIX TEXT," +
             "RESPONSE_YEAR_PREFIX TEXT,REQUEST_STYLE TEXT DEFAULT 'peer'," +
             "REQUEST_TONE TEXT DEFAULT 'neutral',RESPONSE_STYLE TEXT DEFAULT 'peer'," +
-            "RESPONSE_TONE TEXT DEFAULT 'neutral');", db);
+            "RESPONSE_TONE TEXT DEFAULT 'neutral',DETAIL_ID TEXT DEFAULT '');", db);
         schema.ExecuteNonQuery();
         return db;
     }
