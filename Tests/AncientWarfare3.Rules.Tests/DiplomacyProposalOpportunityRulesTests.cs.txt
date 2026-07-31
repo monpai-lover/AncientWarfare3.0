@@ -77,6 +77,31 @@ internal static class DiplomacyProposalOpportunityRulesTests
         True(
             DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
                 1.8f, true, true, .8f) < 0);
+
+        var joinWar = Candidate(DiplomacyProposalType.JoinWar,
+            opinion: 20, requesterPowerRatio: 1f, urgency: 30);
+        var calmJoinWar = Candidate(DiplomacyProposalType.JoinWar,
+            opinion: 20, requesterPowerRatio: 1f, urgency: 0);
+        Equal(30,
+            DiplomacyProposalAiRules.Score(joinWar) -
+            DiplomacyProposalAiRules.Score(calmJoinWar));
+        Equal(105, DiplomacyProposalAiRules.Score(Candidate(
+            DiplomacyProposalType.Vassalize, opinion: 0,
+            requesterPowerRatio: 2f, urgency: 20)));
+        Equal(65, DiplomacyProposalAiRules.Score(Candidate(
+            DiplomacyProposalType.EndVassal, opinion: 0,
+            requesterPowerRatio: 1f, urgency: 15)));
+        Equal(70, DiplomacyProposalAiRules.Score(Candidate(
+            DiplomacyProposalType.EndAlliance, opinion: -10,
+            requesterPowerRatio: 1f, urgency: 20)));
+    }
+
+    private static DiplomacyProposalAiCandidate Candidate(
+        DiplomacyProposalType type, int opinion,
+        float requesterPowerRatio, int urgency)
+    {
+        return new DiplomacyProposalAiCandidate(type, true, opinion,
+            requesterPowerRatio, false, 0f, false, urgency: urgency);
     }
 
     private static void Equal<T>(T expected, T actual)
