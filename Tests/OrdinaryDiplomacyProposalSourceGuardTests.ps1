@@ -37,4 +37,10 @@ if ($upperSubjectBranches -lt 2) {
     throw 'sync and readonly builders must both detect a direct upper realm household offer.'
 }
 
+$withdrawalRetryReferences = [regex]::Matches($service,
+    'ShouldRetryAllianceWithdrawal').Count
+if ($withdrawalRetryReferences -lt 3) {
+    throw 'alliance withdrawal retry must cover initial and recovery execution.'
+}
+
 Write-Output 'Ordinary diplomacy proposal source guards passed.'

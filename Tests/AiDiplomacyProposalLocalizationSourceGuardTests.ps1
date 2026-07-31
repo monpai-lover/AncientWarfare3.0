@@ -65,6 +65,8 @@ foreach ($reason in @(
     'protection_threat_stale',
     'protection_war_entry_failed',
     'internalization_target',
+    'source_relation_missing',
+    'source_relation_ambiguous',
     'conversion_database_unavailable',
     'conversion_table_invalid',
     'conversion_target_invalid',

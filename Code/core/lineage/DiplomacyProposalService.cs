@@ -1479,6 +1479,12 @@ namespace AncientWarfare3.core.lineage
                                     ", responder=" +
                                      proposal.ResponderKingdomId +
                                      ", reason=" + pReason);
+                if (ShouldRetryAllianceWithdrawal(proposal, pReason))
+                {
+                    _nextProcessingPollTime =
+                        LineageService.CurTime() + WorldTimePerDay;
+                    return false;
+                }
                 if (DiplomacyProposalRules.IsPeaceProposal(
                         proposal.Type))
                 {
@@ -2861,6 +2867,12 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (string.IsNullOrEmpty(reason)) reason = "execution_failed";
+            if (ShouldRetryAllianceWithdrawal(proposal, reason))
+            {
+                _nextProcessingPollTime =
+                    LineageService.CurTime() + WorldTimePerDay;
+                return false;
+            }
             if (DiplomacyProposalRules.IsPeaceProposal(proposal.Type))
             {
                 WarPeaceDecisionResult cancelled =
@@ -2959,6 +2971,17 @@ namespace AncientWarfare3.core.lineage
                 default:
                     return false;
             }
+        }
+
+        private static bool ShouldRetryAllianceWithdrawal(
+            DiplomacyProposal pProposal, string pReason)
+        {
+            if (pProposal?.Type != DiplomacyProposalType.EndAlliance ||
+                pReason != "alliance_truce_write_failed") return false;
+            Kingdom requester = FindKingdom(pProposal.RequesterKingdomId);
+            Kingdom responder = FindKingdom(pProposal.ResponderKingdomId);
+            return requester?.data != null && responder?.data != null &&
+                   !SafeAllied(requester, responder);
         }
 
         private static bool HasDirectSubjectRelation(Kingdom pFirst,

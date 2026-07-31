@@ -1272,7 +1272,9 @@ namespace AncientWarfare3.ui.windows
                 "protection_war_entry_failed" => AW_L10n.Text(
                     "aw_diplomacy_failure_protection_war_entry",
                     "The protector could not enter the defensive war"),
-                "internalization_target" => AW_L10n.Text(
+                "internalization_target" or
+                    "source_relation_missing" or
+                    "source_relation_ambiguous" => AW_L10n.Text(
                     "aw_diplomacy_failure_internalization_target",
                     "This tributary can no longer enter the formal subject system"),
                 "conversion_database_unavailable" or
