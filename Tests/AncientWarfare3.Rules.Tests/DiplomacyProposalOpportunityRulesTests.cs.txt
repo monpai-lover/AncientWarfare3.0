@@ -94,6 +94,31 @@ internal static class DiplomacyProposalOpportunityRulesTests
         Equal(70, DiplomacyProposalAiRules.Score(Candidate(
             DiplomacyProposalType.EndAlliance, opinion: -10,
             requesterPowerRatio: 1f, urgency: 20)));
+
+        DiplomacyProposalAssessment safeProtection =
+            DiplomacyProposalRules.AssessProtectionRequest(
+                opinion: 40, requesterDiplomacy: 12f,
+                responderDiplomacy: 12f,
+                protectionRiskPenalty:
+                DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                    .7f, false, false, .5f));
+        True(safeProtection.ExpectedAccepted);
+        DiplomacyProposalAssessment overmatchedProtection =
+            DiplomacyProposalRules.AssessProtectionRequest(
+                opinion: 100, requesterDiplomacy: 24f,
+                responderDiplomacy: 0f,
+                protectionRiskPenalty:
+                DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                    1.8f, false, false, .5f));
+        False(overmatchedProtection.ExpectedAccepted);
+        DiplomacyProposalAssessment exceptionalProtection =
+            DiplomacyProposalRules.AssessProtectionRequest(
+                opinion: 100, requesterDiplomacy: 24f,
+                responderDiplomacy: 0f,
+                protectionRiskPenalty:
+                DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                    1.8f, true, true, .8f));
+        True(exceptionalProtection.ExpectedAccepted);
     }
 
     private static DiplomacyProposalAiCandidate Candidate(
