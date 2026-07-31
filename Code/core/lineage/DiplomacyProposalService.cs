@@ -3286,14 +3286,24 @@ namespace AncientWarfare3.core.lineage
                     });
             }
 
+            bool upperSubject = GetAnySuzerain(contact) == pRequester;
+            PreparedAiProposal upperHousehold = null;
+            bool upperHouseholdOfferAdded = upperSubject &&
+                TryPrepareUpperRealmHouseholdCandidate(pRequester, contact,
+                    opinion, requesterPowerRatio,
+                    requesterSuzerainOfResponder: upperSubject,
+                    out upperHousehold);
+            if (upperHouseholdOfferAdded)
+                pCandidates.Add(upperHousehold);
+
             PreparedAiProposal consortRequest = null;
-            bool consortRequestAdded = opinion >=
+            bool consortRequestAdded = !upperSubject && opinion >=
                 RulerHouseholdRules.MinimumConsortRequestOpinion &&
                 TryPrepareConsortRequestCandidate(pRequester, contact,
                     opinion, requesterPowerRatio, out consortRequest);
             if (consortRequestAdded) pCandidates.Add(consortRequest);
 
-            if (!consortRequestAdded && opinion >= 20 &&
+            if (!upperSubject && !consortRequestAdded && opinion >= 20 &&
                 TryPrepareHouseholdCandidate(pRequester, contact, opinion,
                     requesterPowerRatio, out PreparedAiProposal household))
                 pCandidates.Add(household);
@@ -3389,15 +3399,25 @@ namespace AncientWarfare3.core.lineage
             }
 
 
+            bool upperSubject = GetAnySuzerain(contact) == pRequester;
+            PreparedAiProposal upperHousehold = null;
+            bool upperHouseholdOfferAdded = upperSubject &&
+                TryPrepareUpperRealmHouseholdCandidateReadOnly(pRequester,
+                    contact, opinion, requesterPowerRatio, pMandateReport,
+                    requesterSuzerainOfResponder: upperSubject,
+                    out upperHousehold);
+            if (upperHouseholdOfferAdded)
+                pCandidates.Add(upperHousehold);
+
             PreparedAiProposal consortRequest = null;
-            bool consortRequestAdded = opinion >=
+            bool consortRequestAdded = !upperSubject && opinion >=
                 RulerHouseholdRules.MinimumConsortRequestOpinion &&
                 TryPrepareConsortRequestCandidateReadOnly(pRequester,
                     contact, opinion, requesterPowerRatio, pMandateReport,
                     out consortRequest);
             if (consortRequestAdded) pCandidates.Add(consortRequest);
 
-            if (!consortRequestAdded && opinion >= 20 &&
+            if (!upperSubject && !consortRequestAdded && opinion >= 20 &&
                 TryPrepareHouseholdCandidateReadOnly(pRequester, contact,
                     opinion, requesterPowerRatio, pMandateReport,
                     out PreparedAiProposal household))
@@ -4654,6 +4674,43 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        private static bool TryPrepareUpperRealmHouseholdCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            bool requesterSuzerainOfResponder,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            bool candidateAvailable =
+                RulerHouseholdService.TryPrepareAiOffer(pRequester,
+                    pResponder, out RulerHouseholdOfferPreview preview);
+            bool recipientRulerEligible = pResponder?.king?.data != null &&
+                preview != null && preview.RulerActorId ==
+                pResponder.king.data.id;
+            if (!RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                    requesterSuzerainOfResponder, candidateAvailable,
+                    recipientRulerEligible)) return false;
+
+            var selection = new DiplomacyProposalSelection(-1L,
+                preview.CandidateActorId, preview.RulerActorId, -1L,
+                RulerHouseholdRules.DetailId(preview.Kind));
+            DiplomacyActionAssessment assessment = AssessWithSelection(
+                pRequester, pResponder,
+                DiplomacyProposalType.HouseholdOffering, -1L, selection);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.HouseholdOffering, true,
+                    pOpinion, pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id,
+                    principalHouseholdOffer: preview.Kind ==
+                        RulerHouseholdKind.PrincipalWife),
+                Selection = selection
+            };
+            return true;
+        }
+
         private static bool TryPrepareConsortRequestCandidate(
             Kingdom pVacancyRealm, Kingdom pSupplierRealm, int pOpinion,
             float pRequesterPowerRatio,
@@ -4696,6 +4753,44 @@ namespace AncientWarfare3.core.lineage
             if (!RulerHouseholdService.TryPrepareAiOffer(pRequester,
                     pResponder, out RulerHouseholdOfferPreview preview))
                 return false;
+            var selection = new DiplomacyProposalSelection(-1L,
+                preview.CandidateActorId, preview.RulerActorId, -1L,
+                RulerHouseholdRules.DetailId(preview.Kind));
+            DiplomacyActionAssessment assessment =
+                AssessWithSelectionReadOnly(pRequester, pResponder,
+                    DiplomacyProposalType.HouseholdOffering, -1L,
+                    selection, pMandateReport);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.HouseholdOffering, true,
+                    pOpinion, pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id,
+                    principalHouseholdOffer: preview.Kind ==
+                        RulerHouseholdKind.PrincipalWife),
+                Selection = selection
+            };
+            return true;
+        }
+
+        private static bool TryPrepareUpperRealmHouseholdCandidateReadOnly(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            bool requesterSuzerainOfResponder,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            bool candidateAvailable =
+                RulerHouseholdService.TryPrepareAiOffer(pRequester,
+                    pResponder, out RulerHouseholdOfferPreview preview);
+            bool recipientRulerEligible = pResponder?.king?.data != null &&
+                preview != null && preview.RulerActorId ==
+                pResponder.king.data.id;
+            if (!RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                    requesterSuzerainOfResponder, candidateAvailable,
+                    recipientRulerEligible)) return false;
+
             var selection = new DiplomacyProposalSelection(-1L,
                 preview.CandidateActorId, preview.RulerActorId, -1L,
                 RulerHouseholdRules.DetailId(preview.Kind));

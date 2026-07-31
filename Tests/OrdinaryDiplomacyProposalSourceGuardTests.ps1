@@ -27,5 +27,14 @@ Require 'prepared creation uses selected war' @(
 Require 'async commit uses selected war' @(
     'TryCommitAsyncProposal',
     'currentSelected.WarId')
+Require 'upper realm household candidate preserves actor identity' @(
+    'TryPrepareUpperRealmHouseholdCandidate',
+    'preview.CandidateActorId, preview.RulerActorId')
+
+$upperSubjectBranches = [regex]::Matches($service,
+    'GetAnySuzerain\(contact\) == pRequester').Count
+if ($upperSubjectBranches -lt 2) {
+    throw 'sync and readonly builders must both detect a direct upper realm household offer.'
+}
 
 Write-Output 'Ordinary diplomacy proposal source guards passed.'

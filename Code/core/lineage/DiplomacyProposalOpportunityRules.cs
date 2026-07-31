@@ -89,8 +89,9 @@ namespace AncientWarfare3.core.lineage
             bool requesterSuzerainOfResponder, bool candidateAvailable,
             bool recipientRulerEligible)
         {
-            return requesterSuzerainOfResponder && candidateAvailable &&
-                   recipientRulerEligible;
+            return RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                requesterSuzerainOfResponder, candidateAvailable,
+                recipientRulerEligible);
         }
 
         public static int ProtectionRiskPenalty(float enemyToProtectorPower,
