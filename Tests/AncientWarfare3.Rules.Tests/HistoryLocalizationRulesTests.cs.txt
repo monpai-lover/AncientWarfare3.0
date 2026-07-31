@@ -37,6 +37,21 @@ internal static class HistoryLocalizationRulesTests
         Equal(" and is entered upon the official register.",
             HistoryLocalizationRules.Text("aw_hist_official_rank_grant_suffix", "en"),
             "first official rank grant history resolves its suffix");
+        Equal("\u5b97\u5ba4\u5a5a\u76df",
+            WarDisplayLabelRules.EventLabel("royal_marriage", "cz"),
+            "royal marriage history resolves a localized event label");
+        Equal("\u7532\u4e0e\u4e59\u7f14\u7ed3\u5a5a\u76df",
+            WarDisplayLabelRules.NormalizeHistoryContent(
+                "royal_marriage", "\u7532\u4e0e\u4e59", "cz"),
+            "legacy royal marriage history gains its missing suffix");
+        Equal("\u7532\u4e0e\u4e59\u7f14\u7ed3\u5a5a\u76df",
+            WarDisplayLabelRules.NormalizeHistoryContent(
+                "royal_marriage", "\u7532\u4e0e\u4e59\u7f14\u7ed3\u5a5a\u76df", "cz"),
+            "complete royal marriage history is not suffixed twice");
+        Equal("A married B",
+            WarDisplayLabelRules.NormalizeHistoryContent(
+                "royal_marriage", "A married B", "en"),
+            "English royal marriage history remains a complete sentence");
 
         foreach ((string key, string expected) in new[]
                  {

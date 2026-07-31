@@ -200,6 +200,7 @@
     <Compile Include="..\..\Code\core\lineage\InheritanceLawRules.cs" Link="Production\InheritanceLawRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryListLayoutRules.cs" Link="Production\HistoryListLayoutRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs" Link="Production\HistoryLocalizationRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarDisplayLabelRules.cs" Link="Production\WarDisplayLabelRules.cs" />
     <Compile Include="..\..\Code\core\lineage\InheritanceCandidateRules.cs" Link="Production\InheritanceCandidateRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirDirectSonRules.cs" Link="Production\HeirDirectSonRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirFullBrotherRules.cs" Link="Production\HeirFullBrotherRules.cs" />

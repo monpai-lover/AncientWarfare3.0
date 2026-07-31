@@ -93,6 +93,53 @@ internal static class WarScoreBudgetServiceTests
             "the attacker baseline survives SQLite reload");
         Equal(80, persisted.DefenderMobilizationBaseline,
             "the defender baseline survives SQLite reload");
+
+        using var legacyNullDatabase = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        legacyNullDatabase.Open();
+        CreateLegacyNullableSnapshot(legacyNullDatabase);
+        var legacyNullService = new WarScoreService(legacyNullDatabase);
+        True(legacyNullService.TryGetSnapshot(404,
+                WarScoreSide.Attackers, out WarScoreSnapshot legacyNull),
+            "a legacy active snapshot with nullable reserve exhaustion loads");
+        Equal(0, legacyNull.AttackerReserveExhaustion,
+            "legacy null attacker reserve exhaustion migrates to zero");
+        Equal(0, legacyNull.DefenderReserveExhaustion,
+            "legacy null defender reserve exhaustion migrates to zero");
+    }
+
+    private static void CreateLegacyNullableSnapshot(SQLiteConnection pDatabase)
+    {
+        using var create = new SQLiteCommand(
+            "CREATE TABLE WarScoreSnapshot(" +
+            "WAR_ID INTEGER PRIMARY KEY," +
+            "ATTACKER_KINGDOM_ID INTEGER NOT NULL," +
+            "DEFENDER_KINGDOM_ID INTEGER NOT NULL," +
+            "SCORE INTEGER NOT NULL,CITY_SCORE INTEGER NOT NULL," +
+            "BATTLE_SCORE INTEGER NOT NULL,GOAL_SCORE INTEGER NOT NULL," +
+            "LOSS_SCORE INTEGER NOT NULL,DECISIVE_SCORE INTEGER NOT NULL," +
+            "ATTACKER_LOSSES INTEGER NOT NULL," +
+            "DEFENDER_LOSSES INTEGER NOT NULL," +
+            "ATTACKER_MOBILIZATION_BASELINE INTEGER NOT NULL," +
+            "DEFENDER_MOBILIZATION_BASELINE INTEGER NOT NULL," +
+            "DURATION_YEARS INTEGER NOT NULL," +
+            "LAST_CALIBRATED_YEAR INTEGER NOT NULL," +
+            "ATTACKER_EXHAUSTION_RELIEF INTEGER NOT NULL," +
+            "DEFENDER_EXHAUSTION_RELIEF INTEGER NOT NULL," +
+            "ATTACKER_RESERVE_EXHAUSTION INTEGER NULL," +
+            "DEFENDER_RESERVE_EXHAUSTION INTEGER NULL," +
+            "ATTACKER_EXHAUSTION INTEGER NOT NULL," +
+            "DEFENDER_EXHAUSTION INTEGER NOT NULL," +
+            "ACTIVE INTEGER NOT NULL,WINNER TEXT NOT NULL," +
+            "STARTED_TIME REAL NOT NULL,UPDATED_TIME REAL NOT NULL," +
+            "ENDED_TIME REAL NOT NULL,REVISION INTEGER NOT NULL)", pDatabase);
+        create.ExecuteNonQuery();
+
+        using var insert = new SQLiteCommand(
+            "INSERT INTO WarScoreSnapshot VALUES(" +
+            "404,7,8,0,0,0,0,0,0,0,0,100,100,0,-2147483648," +
+            "0,0,NULL,NULL,0,0,1,'',1,1,-1,1)", pDatabase);
+        insert.ExecuteNonQuery();
     }
 
     private static WarScoreCityFacts City(long pCityId)

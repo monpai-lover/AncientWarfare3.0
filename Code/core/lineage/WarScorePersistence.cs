@@ -419,6 +419,12 @@ namespace AncientWarfare3.core.lineage
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(SnapshotTable, "DEFENDER_RESERVE_EXHAUSTION",
                 "INTEGER NOT NULL DEFAULT 0");
+            Execute("UPDATE " + SnapshotTable +
+                    " SET ATTACKER_RESERVE_EXHAUSTION=0" +
+                    " WHERE ATTACKER_RESERVE_EXHAUSTION IS NULL");
+            Execute("UPDATE " + SnapshotTable +
+                    " SET DEFENDER_RESERVE_EXHAUSTION=0" +
+                    " WHERE DEFENDER_RESERVE_EXHAUSTION IS NULL");
             EnsureColumn(SnapshotTable, "ATTACKER_MOBILIZATION_BASELINE",
                 "INTEGER NOT NULL DEFAULT 0");
             EnsureColumn(SnapshotTable, "DEFENDER_MOBILIZATION_BASELINE",
@@ -604,24 +610,24 @@ namespace AncientWarfare3.core.lineage
                 BattleScore = Convert.ToInt32(pReader["BATTLE_SCORE"]),
                 GoalScore = Convert.ToInt32(pReader["GOAL_SCORE"]),
                 LossScore = Convert.ToInt32(pReader["LOSS_SCORE"]),
-                DecisiveScore = Convert.ToInt32(pReader["DECISIVE_SCORE"]),
+                DecisiveScore = ReadInt32(pReader, "DECISIVE_SCORE"),
                 AttackerLosses = Convert.ToInt32(pReader["ATTACKER_LOSSES"]),
                 DefenderLosses = Convert.ToInt32(pReader["DEFENDER_LOSSES"]),
-                AttackerMobilizationBaseline = Convert.ToInt32(
-                    pReader["ATTACKER_MOBILIZATION_BASELINE"]),
-                DefenderMobilizationBaseline = Convert.ToInt32(
-                    pReader["DEFENDER_MOBILIZATION_BASELINE"]),
+                AttackerMobilizationBaseline = ReadInt32(pReader,
+                    "ATTACKER_MOBILIZATION_BASELINE"),
+                DefenderMobilizationBaseline = ReadInt32(pReader,
+                    "DEFENDER_MOBILIZATION_BASELINE"),
                 DurationYears = Convert.ToInt32(pReader["DURATION_YEARS"]),
-                LastCalibratedYear = Convert.ToInt32(
-                    pReader["LAST_CALIBRATED_YEAR"]),
-                AttackerExhaustionRelief = Convert.ToInt32(
-                    pReader["ATTACKER_EXHAUSTION_RELIEF"]),
-                DefenderExhaustionRelief = Convert.ToInt32(
-                    pReader["DEFENDER_EXHAUSTION_RELIEF"]),
-                AttackerReserveExhaustion = Convert.ToInt32(
-                    pReader["ATTACKER_RESERVE_EXHAUSTION"]),
-                DefenderReserveExhaustion = Convert.ToInt32(
-                    pReader["DEFENDER_RESERVE_EXHAUSTION"]),
+                LastCalibratedYear = ReadInt32(pReader,
+                    "LAST_CALIBRATED_YEAR", int.MinValue),
+                AttackerExhaustionRelief = ReadInt32(pReader,
+                    "ATTACKER_EXHAUSTION_RELIEF"),
+                DefenderExhaustionRelief = ReadInt32(pReader,
+                    "DEFENDER_EXHAUSTION_RELIEF"),
+                AttackerReserveExhaustion = ReadInt32(pReader,
+                    "ATTACKER_RESERVE_EXHAUSTION"),
+                DefenderReserveExhaustion = ReadInt32(pReader,
+                    "DEFENDER_RESERVE_EXHAUSTION"),
                 AttackerExhaustion = Convert.ToInt32(pReader["ATTACKER_EXHAUSTION"]),
                 DefenderExhaustion = Convert.ToInt32(pReader["DEFENDER_EXHAUSTION"]),
                 Active = Convert.ToInt32(pReader["ACTIVE"]) != 0,
@@ -632,6 +638,15 @@ namespace AncientWarfare3.core.lineage
                 Revision = Convert.ToInt64(pReader["REVISION"]),
                 Perspective = WarScoreSide.Attackers
             };
+        }
+
+        private static int ReadInt32(SQLiteDataReader pReader,
+            string pColumn, int pFallback = 0)
+        {
+            object value = pReader[pColumn];
+            return value == null || value == DBNull.Value
+                ? pFallback
+                : Convert.ToInt32(value);
         }
 
         private static WarScoreControlState ReadControl(SQLiteDataReader pReader)

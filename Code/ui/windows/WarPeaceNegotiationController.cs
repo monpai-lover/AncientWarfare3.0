@@ -334,7 +334,10 @@ namespace AncientWarfare3.ui.windows
             pParticipants = context.BuildParticipantSnapshots();
             if (!WarScoreService.TryGetSnapshot(pWar, pRequester,
                     out pScore))
+            {
+                pReason = "war_score_unavailable";
                 return false;
+            }
             pReason = string.Empty;
             return true;
         }

@@ -255,6 +255,13 @@ if (args.Length == 1 && args[0] == "--name-system-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--history-marriage-slice")
+{
+    HistoryLocalizationRulesTests.Run();
+    Console.WriteLine("AW3 royal-marriage history rules passed.");
+    return;
+}
+
 static void Equal<T>(T expected, T actual, string name)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
