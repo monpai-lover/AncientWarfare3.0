@@ -1,0 +1,98 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyProposalOpportunityRulesTests
+{
+    public static void Run()
+    {
+        Equal(OrdinaryDiplomacyDirection.JoinWar,
+            DiplomacyProposalOpportunityRules.JoinWarDirection(
+                allied: true, requesterInWar: true, responderInWar: false,
+                subjectConflict: false));
+        Equal(OrdinaryDiplomacyDirection.None,
+            DiplomacyProposalOpportunityRules.JoinWarDirection(
+                allied: true, requesterInWar: true, responderInWar: true,
+                subjectConflict: false));
+
+        Equal(OrdinaryDiplomacyDirection.VassalizeDemand,
+            DiplomacyProposalOpportunityRules.VassalizeDirection(
+                atWar: false, allied: false, requesterIsSubject: false,
+                responderIsSubject: false, canSetVassal: true,
+                requesterToResponderPower: 2.1f, threatened: false,
+                defensiveEmergency: false,
+                requesterTributaryOfResponder: false,
+                responderImperial: false));
+        Equal(OrdinaryDiplomacyDirection.VassalizeSeek,
+            DiplomacyProposalOpportunityRules.VassalizeDirection(
+                atWar: true, allied: false, requesterIsSubject: false,
+                responderIsSubject: false, canSetVassal: true,
+                requesterToResponderPower: .4f, threatened: true,
+                defensiveEmergency: true,
+                requesterTributaryOfResponder: false,
+                responderImperial: false));
+        Equal(OrdinaryDiplomacyDirection.VassalizeInternalize,
+            DiplomacyProposalOpportunityRules.VassalizeDirection(
+                atWar: false, allied: false, requesterIsSubject: true,
+                responderIsSubject: false, canSetVassal: true,
+                requesterToResponderPower: .4f, threatened: false,
+                defensiveEmergency: false,
+                requesterTributaryOfResponder: true,
+                responderImperial: true));
+        Equal(VassalContractTierRules.Inner,
+            DiplomacyProposalOpportunityRules.InternalizationTier(
+                requesterTributaryOfResponder: true,
+                responderImperial: true,
+                responderHasMandate: true));
+        Equal(VassalContractTierRules.Outer,
+            DiplomacyProposalOpportunityRules.InternalizationTier(
+                requesterTributaryOfResponder: true,
+                responderImperial: true,
+                responderHasMandate: false));
+
+        Equal(OrdinaryDiplomacyDirection.EndVassalRelease,
+            DiplomacyProposalOpportunityRules.EndVassalDirection(
+                requesterSuzerainOfResponder: true,
+                requesterSubjectOfResponder: false));
+        Equal(OrdinaryDiplomacyDirection.EndVassalRequest,
+            DiplomacyProposalOpportunityRules.EndVassalDirection(
+                requesterSuzerainOfResponder: false,
+                requesterSubjectOfResponder: true));
+
+        True(DiplomacyProposalOpportunityRules.ShouldEndAlliance(
+            allied: true, opinion: -55, liabilityScore: 20));
+        False(DiplomacyProposalOpportunityRules.ShouldEndAlliance(
+            allied: true, opinion: 70, liabilityScore: 0));
+
+        True(
+            DiplomacyProposalOpportunityRules.CanUpperRealmOfferHousehold(
+                requesterSuzerainOfResponder: true,
+                candidateAvailable: true,
+                recipientRulerEligible: true));
+
+        True(
+            DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                .7f, false, false, .5f) > 0);
+        True(
+            DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                1.4f, false, false, .5f) <= -35);
+        True(
+            DiplomacyProposalOpportunityRules.ProtectionRiskPenalty(
+                1.8f, true, true, .8f) < 0);
+    }
+
+    private static void Equal<T>(T expected, T actual)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value)
+    {
+        if (!value) throw new InvalidOperationException("expected true");
+    }
+
+    private static void False(bool value)
+    {
+        if (value) throw new InvalidOperationException("expected false");
+    }
+}

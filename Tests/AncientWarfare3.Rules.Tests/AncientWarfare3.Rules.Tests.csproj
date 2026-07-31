@@ -53,6 +53,7 @@
     <Compile Include="ConferredPosthumousTitleRulesTests.cs.txt" />
     <Compile Include="ConferredPosthumousTitleSqlTests.cs.txt" />
     <Compile Include="DiplomacyActionExpansionRulesTests.cs.txt" />
+    <Compile Include="DiplomacyProposalOpportunityRulesTests.cs.txt" />
     <Compile Include="RulerHouseholdRulesTests.cs.txt" />
     <Compile Include="WarPeaceSettlementScopeRulesTests.cs.txt" />
     <Compile Include="SeparatePeaceRuntimeFactsRulesTests.cs.txt" />
@@ -181,6 +182,7 @@
     <Compile Include="..\..\Code\core\lineage\MandateWarDefenseRules.cs" Link="Production\MandateWarDefenseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalFiscalRules.cs" Link="Production\VassalFiscalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RitualDiplomacyOpinionRules.cs" Link="Production\RitualDiplomacyOpinionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarDecisionQueueRules.cs" Link="Production\WarDecisionQueueRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalObligationDecisionCodec.cs" Link="Production\VassalObligationDecisionCodec.cs" />
