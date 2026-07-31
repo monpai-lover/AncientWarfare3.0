@@ -290,6 +290,7 @@ namespace AncientWarfare3.core.lineage
             new Entry("aw_hist_school_outcome_decisive_second", "后者大胜", "the latter won decisively", "後者大勝"),
             new Entry("aw_hist_event_border_petition_approved", "准边臣请战", "Border War Petition Approved", "准邊臣請戰"),
             new Entry("aw_hist_event_royal_marriage", "宗室婚盟", "Royal Marriage", "宗室婚盟"),
+            new Entry("aw_hist_royal_marriage_suffix", "缔结婚盟", "", "締結婚盟"),
             new Entry("aw_hist_event_unknown", "未记录", "Unrecorded", "未記錄"),
 
             new Entry("aw_hist_centralization_reformed_text", "整饬中央，名义集权升至", "Central administration reformed; nominal centralization rose to ", "整飭中央，名義集權升至"),

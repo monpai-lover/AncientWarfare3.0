@@ -550,10 +550,14 @@ namespace AncientWarfare3.core.lineage
         {
             string firstName = pRequesterActor.getName() ?? "";
             string secondName = pResponderActor.getName() ?? "";
+            string suffix = AW_L10n.Text(
+                "aw_hist_royal_marriage_suffix", "");
             string firstText = firstName + AW_L10n.Text(
-                "aw_hist_royal_marriage_mid", " married ") + secondName;
+                "aw_hist_royal_marriage_mid", " married ") + secondName +
+                suffix;
             string secondText = secondName + AW_L10n.Text(
-                "aw_hist_royal_marriage_mid", " married ") + firstName;
+                "aw_hist_royal_marriage_mid", " married ") + firstName +
+                suffix;
             HistoryWriter.RecordPerson(pRequesterActor.data.id,
                 pRequester, firstName, PersonEvent.ROYAL_MARRIAGE,
                 firstText, ChronicleCategory.BOND,

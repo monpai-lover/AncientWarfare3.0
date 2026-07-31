@@ -222,6 +222,7 @@ aw_diplomacy_action_royal_marriage,宗室婚盟,Royal marriage,宗室婚盟
 aw_diplomacy_royal_marriage_pair,{0}：{1}与{2},{0}: {1} and {2},{0}：{1}與{2}
 aw_diplomacy_marriage_unknown_candidate,宗室成员,royal member,宗室成員
 aw_hist_royal_marriage_mid,与, married ,與
+aw_hist_royal_marriage_suffix,缔结婚盟,,締結婚盟
 aw_diplomacy_action_coalition,合纵抗强,Coalition against a threat,合縱抗強
 aw_diplomacy_coalition_target,{0}：共同防备{1},{0}: jointly contain {1},{0}：共同防備{1}
 aw_diplomacy_action_spy_network,布置间作,Establish spy network,布置間作

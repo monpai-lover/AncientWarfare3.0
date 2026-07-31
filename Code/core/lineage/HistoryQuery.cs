@@ -98,6 +98,7 @@ namespace AncientWarfare3.core.lineage
                 result.Add(entry);
             }
             NormalizeLegacyCityEconomyRoles(result);
+            NormalizeLegacyHistoryContent(result);
             return result;
         }
 
@@ -231,6 +232,7 @@ namespace AncientWarfare3.core.lineage
             ClearNonXiaEventYearPrefixes(result);
             SortHistoryEntries(result);
             NormalizeLegacyCityEconomyRoles(result);
+            NormalizeLegacyHistoryContent(result);
             return result;
         }
 
@@ -1012,7 +1014,24 @@ namespace AncientWarfare3.core.lineage
             }
             SortHistoryEntries(result);
             NormalizeLegacyCityEconomyRoles(result);
+            NormalizeLegacyHistoryContent(result);
             return result;
+        }
+
+        private static void NormalizeLegacyHistoryContent(
+            List<HistoryEntry> pEntries)
+        {
+            if (_backgroundRead) return;
+            if (pEntries == null || pEntries.Count == 0) return;
+            string language = HistoryLocalizationRules.CurrentLanguage();
+            foreach (HistoryEntry entry in pEntries)
+            {
+                if (entry == null) continue;
+                entry.content = WarDisplayLabelRules.NormalizeHistoryContent(
+                    entry.event_type, entry.content, language);
+                entry.content_rich = WarDisplayLabelRules.NormalizeHistoryContent(
+                    entry.event_type, entry.content_rich, language);
+            }
         }
 
         private static void NormalizeLegacyCityEconomyRoles(List<HistoryEntry> pEntries)
@@ -1224,13 +1243,17 @@ namespace AncientWarfare3.core.lineage
             List<HistoryEntry> pEntries)
         {
             NormalizeLegacyCityEconomyRoles(pEntries);
+            NormalizeLegacyHistoryContent(pEntries);
         }
 
         public static void FinalizeCityPeriods(List<ReignPeriod> pPeriods)
         {
             if (pPeriods == null) return;
             foreach (ReignPeriod period in pPeriods)
+            {
                 NormalizeLegacyCityEconomyRoles(period?.events);
+                NormalizeLegacyHistoryContent(period?.events);
+            }
         }
 
         public static void FinalizeKingdomDynasties(long pKingdomId,
@@ -1245,6 +1268,7 @@ namespace AncientWarfare3.core.lineage
                     if (reign == null) continue;
                     NormalizeFigureFoundEvent(pKingdomId, reign.events);
                     NormalizeLegacyCityEconomyRoles(reign.events);
+                    NormalizeLegacyHistoryContent(reign.events);
                     FillMissingReignIdentity(pKingdomId, reign);
                 }
             }
