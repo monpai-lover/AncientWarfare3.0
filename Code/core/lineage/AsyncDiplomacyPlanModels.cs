@@ -26,7 +26,10 @@ namespace AncientWarfare3.core.lineage
         EndAlliance = 6,
         BreakNonAggression = 7,
         Coalition = 8,
-        HouseholdOffering = 9
+        HouseholdOffering = 9,
+        JoinWar = 10,
+        Vassalize = 11,
+        EndVassal = 12
     }
 
     internal enum WarStrategyCandidateKind
@@ -259,12 +262,13 @@ namespace AncientWarfare3.core.lineage
     {
         public AsyncDiplomacySelectionIdentity(long responderKingdomId,
             int proposalType, AsyncDiplomacyProposalKind proposalKind,
-            long targetKingdomId, long requesterActorId,
+            long warId, long targetKingdomId, long requesterActorId,
             long responderActorId, long targetCityId, string detailId)
         {
             ResponderKingdomId = responderKingdomId;
             ProposalType = proposalType;
             ProposalKind = proposalKind;
+            WarId = warId;
             TargetKingdomId = targetKingdomId;
             RequesterActorId = requesterActorId;
             ResponderActorId = responderActorId;
@@ -275,6 +279,7 @@ namespace AncientWarfare3.core.lineage
         public long ResponderKingdomId { get; }
         public int ProposalType { get; }
         public AsyncDiplomacyProposalKind ProposalKind { get; }
+        public long WarId { get; }
         public long TargetKingdomId { get; }
         public long RequesterActorId { get; }
         public long ResponderActorId { get; }
@@ -286,6 +291,7 @@ namespace AncientWarfare3.core.lineage
             return ResponderKingdomId == pOther.ResponderKingdomId &&
                    ProposalType == pOther.ProposalType &&
                    ProposalKind == pOther.ProposalKind &&
+                   WarId == pOther.WarId &&
                    TargetKingdomId == pOther.TargetKingdomId &&
                    RequesterActorId == pOther.RequesterActorId &&
                    ResponderActorId == pOther.ResponderActorId &&
@@ -752,6 +758,7 @@ namespace AncientWarfare3.core.lineage
             pValues.Add(pSelection.ResponderKingdomId);
             pValues.Add(pSelection.ProposalType);
             pValues.Add((long)pSelection.ProposalKind);
+            pValues.Add(pSelection.WarId);
             pValues.Add(pSelection.TargetKingdomId);
             pValues.Add(pSelection.RequesterActorId);
             pValues.Add(pSelection.ResponderActorId);
@@ -783,6 +790,8 @@ namespace AncientWarfare3.core.lineage
             result = pLeft.ProposalType.CompareTo(pRight.ProposalType);
             if (result != 0) return result;
             result = pLeft.ProposalKind.CompareTo(pRight.ProposalKind);
+            if (result != 0) return result;
+            result = pLeft.WarId.CompareTo(pRight.WarId);
             if (result != 0) return result;
             result = pLeft.TargetKingdomId.CompareTo(
                 pRight.TargetKingdomId);

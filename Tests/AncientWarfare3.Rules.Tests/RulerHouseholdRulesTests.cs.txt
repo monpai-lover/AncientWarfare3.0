@@ -189,6 +189,27 @@ internal static class RulerHouseholdRulesTests
                 consortCapacity: 4, out _),
             "AI does not propose to a full ruler household");
 
+        True(RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                requesterSuzerainOfResponder: true,
+                candidateAvailable: true,
+                recipientRulerEligible: true),
+            "a direct upper realm may offer a spouse to its subject ruler");
+        Equal(false, RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                requesterSuzerainOfResponder: false,
+                candidateAvailable: true,
+                recipientRulerEligible: true),
+            "an unrelated realm cannot use the upper-to-lower offer branch");
+        Equal(false, RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                requesterSuzerainOfResponder: true,
+                candidateAvailable: false,
+                recipientRulerEligible: true),
+            "an upper realm without an eligible woman cannot make the offer");
+        Equal(false, RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                requesterSuzerainOfResponder: true,
+                candidateAvailable: true,
+                recipientRulerEligible: false),
+            "an upper realm cannot offer to an ineligible subject ruler");
+
         Equal("consort_request", RulerHouseholdRules.ConsortRequestDetailId,
             "reverse consort requests keep a stable proposal detail");
         True(RulerHouseholdRules.IsConsortRequestDetail("consort_request"),

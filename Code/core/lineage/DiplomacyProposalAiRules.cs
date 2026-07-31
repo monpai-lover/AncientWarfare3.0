@@ -291,7 +291,7 @@ namespace AncientWarfare3.core.lineage
             bool allowed, int opinion, float requesterPowerRatio,
             bool directRoyalMarriage, float targetPowerRatio,
             bool targetHasMandate, long targetKingdomId = -1L,
-            bool principalHouseholdOffer = false)
+            bool principalHouseholdOffer = false, int urgency = 0)
         {
             Type = pType;
             Allowed = allowed;
@@ -302,6 +302,7 @@ namespace AncientWarfare3.core.lineage
             TargetHasMandate = targetHasMandate;
             TargetKingdomId = targetKingdomId;
             PrincipalHouseholdOffer = principalHouseholdOffer;
+            Urgency = urgency;
         }
 
         public DiplomacyProposalType Type { get; }
@@ -313,6 +314,7 @@ namespace AncientWarfare3.core.lineage
         public bool TargetHasMandate { get; }
         public long TargetKingdomId { get; }
         public bool PrincipalHouseholdOffer { get; }
+        public int Urgency { get; }
     }
 
     internal readonly struct WarSettlementSelectionCandidate
@@ -389,6 +391,7 @@ namespace AncientWarfare3.core.lineage
     internal static class DiplomacyProposalAiRules
     {
         public const int MaximumWarSettlementAssessments = 4;
+        public const int MaximumJoinWarAssessments = 4;
         public const int MaximumWarSettlementScanBudget = 8;
         public const int MaximumCoalitionCities = 2;
         public const int MaximumCoalitionTargets = 12;
@@ -834,6 +837,15 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyProposalType.Alliance => 65 + opinion,
                 DiplomacyProposalType.NonAggression => 40 + opinion,
                 DiplomacyProposalType.BreakNonAggression => 130 - opinion,
+                DiplomacyProposalType.JoinWar => 70 +
+                    pCandidate.Urgency + opinion / 4,
+                DiplomacyProposalType.Vassalize => 65 +
+                    pCandidate.Urgency + Math.Min(50, (int)(Math.Max(0f,
+                        pCandidate.RequesterPowerRatio - 1f) * 20f)),
+                DiplomacyProposalType.EndVassal => 50 +
+                    pCandidate.Urgency,
+                DiplomacyProposalType.EndAlliance => 45 +
+                    pCandidate.Urgency - opinion / 2,
                 DiplomacyProposalType.Surrender => BaseWillingness(
                     WarSettlementAiDecision.Surrender),
                 DiplomacyProposalType.EnforceDemands => BaseWillingness(
@@ -886,9 +898,12 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyProposalType.HouseholdOffering => 4,
                 DiplomacyProposalType.Tributary => 5,
                 DiplomacyProposalType.Truce => 6,
-                DiplomacyProposalType.EndAlliance => 7,
-                DiplomacyProposalType.BreakNonAggression => 8,
-                DiplomacyProposalType.Coalition => 9,
+                DiplomacyProposalType.JoinWar => 7,
+                DiplomacyProposalType.Vassalize => 8,
+                DiplomacyProposalType.EndVassal => 9,
+                DiplomacyProposalType.EndAlliance => 10,
+                DiplomacyProposalType.BreakNonAggression => 11,
+                DiplomacyProposalType.Coalition => 12,
                 _ => 100 + (int)pType
             };
         }

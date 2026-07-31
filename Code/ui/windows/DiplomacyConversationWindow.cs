@@ -1233,7 +1233,7 @@ namespace AncientWarfare3.ui.windows
                 "not_adjacent" => AW_L10n.Text(
                     "aw_diplomacy_failure_not_adjacent",
                     "A subject request requires a shared border"),
-                "cycle" => AW_L10n.Text(
+                "cycle" or "vassal_cycle" => AW_L10n.Text(
                     "aw_diplomacy_failure_vassal_cycle",
                     "This agreement would create a circular subject relationship"),
                 "rebel_no_vassal" => AW_L10n.Text(
@@ -1254,6 +1254,50 @@ namespace AncientWarfare3.ui.windows
                 "join_war_execution_failed" => AW_L10n.Text(
                     "aw_diplomacy_failure_join_war_execution",
                     "The realm could not be added to the requested war"),
+                "join_war_stale" => AW_L10n.Text(
+                    "aw_diplomacy_failure_join_war_stale",
+                    "The selected war is no longer available"),
+                "protector_war_conflict" => AW_L10n.Text(
+                    "aw_diplomacy_failure_protector_war_conflict",
+                    "The proposed protector is already involved in a conflicting war"),
+                "protector_too_weak" => AW_L10n.Text(
+                    "aw_diplomacy_failure_protector_too_weak",
+                    "The proposed protector is not strong enough"),
+                "protector_relations_low" => AW_L10n.Text(
+                    "aw_diplomacy_failure_protector_relations_low",
+                    "Relations are too poor to request protection"),
+                "protection_threat_stale" => AW_L10n.Text(
+                    "aw_diplomacy_failure_protection_threat_stale",
+                    "The threat used to justify protection is no longer valid"),
+                "protection_war_entry_failed" => AW_L10n.Text(
+                    "aw_diplomacy_failure_protection_war_entry",
+                    "The protector could not enter the defensive war"),
+                "internalization_target" or
+                    "source_relation_missing" or
+                    "source_relation_ambiguous" => AW_L10n.Text(
+                    "aw_diplomacy_failure_internalization_target",
+                    "This tributary can no longer enter the formal subject system"),
+                "conversion_database_unavailable" or
+                    "conversion_table_invalid" or
+                    "conversion_target_invalid" or
+                    "conversion_write_failed" => AW_L10n.Text(
+                        "aw_diplomacy_failure_internalization_write",
+                        "The tributary conversion could not be recorded"),
+                "target_title_too_high" => AW_L10n.Text(
+                    "aw_diplomacy_failure_internalization_title",
+                    "The tributary's title is too high for internalization"),
+                "rebel_blocked" => AW_L10n.Text(
+                    "aw_diplomacy_failure_internalization_rebel",
+                    "A rebel realm cannot be internalized"),
+                "alliance_truce_write_failed" => AW_L10n.Text(
+                    "aw_diplomacy_failure_alliance_truce_write",
+                    "The alliance ended but its truce could not be recorded"),
+                "invalid_vassalize_direction" => AW_L10n.Text(
+                    "aw_diplomacy_failure_invalid_vassalize_direction",
+                    "The requested subject relationship direction is invalid"),
+                "invalid_end_vassal_direction" => AW_L10n.Text(
+                    "aw_diplomacy_failure_invalid_end_vassal_direction",
+                    "The requested release direction is invalid"),
                 "subject_write_failed" => AW_L10n.Text(
                     "aw_diplomacy_failure_subject_write",
                     "The subject agreement could not be recorded"),

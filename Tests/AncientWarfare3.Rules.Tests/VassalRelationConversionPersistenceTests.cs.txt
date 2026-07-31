@@ -1,0 +1,114 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class VassalRelationConversionPersistenceTests
+{
+    public static void Run()
+    {
+        ConvertsOneTributaryIntoOneActiveVassal();
+        RollsBackWhenReplacementInsertFails();
+    }
+
+    private static void ConvertsOneTributaryIntoOneActiveVassal()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedTributary(db);
+
+        bool converted = VassalRelationConversionPersistence.TryConvert(
+            db, "VassalRelation", 10, 20,
+            VassalContractTierRules.Inner, 120d, -1L,
+            out long sourceRelationId, out long replacementRelationId,
+            out string reason);
+
+        True(converted, $"conversion should commit: {reason}");
+        Equal(1L, sourceRelationId, "the active tributary is the source");
+        True(replacementRelationId > sourceRelationId,
+            "replacement receives a new relation id");
+        Equal(1, ScalarInt(db,
+            "SELECT COUNT(*) FROM VassalRelation WHERE ACTIVE=1"),
+            "exactly one relation remains active");
+        Equal(VassalContractTierRules.Inner, ScalarInt(db,
+            "SELECT CONTRACT_TIER FROM VassalRelation WHERE ACTIVE=1"),
+            "the replacement uses the requested internal tier");
+        Equal(0, ScalarInt(db,
+            "SELECT ACTIVE FROM VassalRelation WHERE RELATION_ID=1"),
+            "the original tributary row is closed");
+    }
+
+    private static void RollsBackWhenReplacementInsertFails()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedTributary(db);
+        using (var unique = new SQLiteCommand(
+            "CREATE UNIQUE INDEX reject_replacement ON VassalRelation(" +
+            "VASSAL_ID,SUZERAIN_ID);", db))
+            unique.ExecuteNonQuery();
+
+        bool converted = VassalRelationConversionPersistence.TryConvert(
+            db, "VassalRelation", 10, 20,
+            VassalContractTierRules.Outer, 120d, -1L,
+            out _, out _, out string reason);
+
+        False(converted, "a failed replacement insert rejects conversion");
+        Equal("conversion_write_failed", reason,
+            "write failure has a stable reason");
+        Equal(1, ScalarInt(db,
+            "SELECT ACTIVE FROM VassalRelation WHERE RELATION_ID=1"),
+            "rollback restores the original active tributary");
+        Equal(1, ScalarInt(db,
+            "SELECT COUNT(*) FROM VassalRelation"),
+            "rollback leaves no replacement row");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        using var schema = new SQLiteCommand(
+            "CREATE TABLE VassalRelation(" +
+            "RELATION_ID INTEGER PRIMARY KEY,VASSAL_ID INTEGER," +
+            "VASSAL_NAME TEXT,VASSAL_COLOR TEXT,SUZERAIN_ID INTEGER," +
+            "SUZERAIN_NAME TEXT,SUZERAIN_COLOR TEXT,RELATION_TYPE TEXT," +
+            "AUTONOMY INTEGER,TRIBUTE_RATE INTEGER," +
+            "MILITARY_OBLIGATION INTEGER,CONTRACT_TIER INTEGER," +
+            "CREATED_BY_WAR_ID INTEGER,START_TIME REAL,END_TIME REAL," +
+            "ACTIVE INTEGER,ABSORBED INTEGER,END_REASON TEXT);", db);
+        schema.ExecuteNonQuery();
+        return db;
+    }
+
+    private static void SeedTributary(SQLiteConnection db)
+    {
+        using var insert = new SQLiteCommand(
+            "INSERT INTO VassalRelation VALUES(" +
+            "1,10,'South','red',20,'Upper','blue','tributary'," +
+            "100,10,0,@tier,-1,80,-1,1,0,'');", db);
+        insert.Parameters.AddWithValue("@tier",
+            VassalContractTierRules.Tributary);
+        insert.ExecuteNonQuery();
+    }
+
+    private static int ScalarInt(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (!value) throw new InvalidOperationException(name);
+    }
+
+    private static void False(bool value, string name)
+    {
+        if (value) throw new InvalidOperationException(name);
+    }
+}

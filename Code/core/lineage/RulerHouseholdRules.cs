@@ -174,6 +174,14 @@ namespace AncientWarfare3.core.lineage
             return false;
         }
 
+        public static bool CanUpperRealmOfferToSubject(
+            bool requesterSuzerainOfResponder, bool candidateAvailable,
+            bool recipientRulerEligible)
+        {
+            return requesterSuzerainOfResponder && candidateAvailable &&
+                   recipientRulerEligible;
+        }
+
         public static bool CanRequestConsort(
             RulerHouseholdConsortRequestFacts pFacts)
         {

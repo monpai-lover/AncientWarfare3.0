@@ -53,8 +53,8 @@ namespace AncientWarfare3.core.lineage
             if (!Chance(0.45f * CourtDirectionRules.VoluntaryDiplomacyMultiplier(
                     pCourt?.peace ?? 0.5f))) return false;
 
-            return KingdomPolicyService.StartDecisionWithTarget(
-                pKingdom, "aw_decision_seek_suzerain", suzerain);
+            return DiplomacyProposalService.TryCreateAiProtectionProposal(
+                pKingdom, suzerain, threat);
         }
 
         private static bool TryVassalWar(Kingdom pKingdom, CourtSnapshot pCourt)

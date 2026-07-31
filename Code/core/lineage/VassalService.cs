@@ -620,6 +620,82 @@ namespace AncientWarfare3.core.lineage
             return true;
         }
 
+        public static bool CanInternalizeTributary(Kingdom pTributary,
+            Kingdom pSuzerain, int pContractTier, out string pReason)
+        {
+            pReason = "internalization_target";
+            if (!Ready || !HasValidVassalParticipants(pTributary,
+                    pSuzerain) ||
+                GetTributarySuzerain(pTributary) != pSuzerain ||
+                GetSuzerainId(pTributary) >= 0 ||
+                !KingdomTitleService.IsEmperor(pSuzerain) ||
+                pContractTier != VassalContractTierRules.Inner &&
+                pContractTier != VassalContractTierRules.Outer)
+                return false;
+            if (KingdomTitleService.GetTitle(pSuzerain) <=
+                KingdomTitleService.GetTitle(pTributary))
+            {
+                pReason = "target_title_too_high";
+                return false;
+            }
+            if (!KingdomAdjacency.AreDirectNeighbors(pTributary, pSuzerain))
+            {
+                pReason = "not_adjacent";
+                return false;
+            }
+            if (WouldCreateCycle(pTributary, pSuzerain))
+            {
+                pReason = "vassal_cycle";
+                return false;
+            }
+            if (MandateRebelService.IsRebelKingdom(pTributary) ||
+                MandateRebelService.IsRebelKingdom(pSuzerain))
+            {
+                pReason = "rebel_blocked";
+                return false;
+            }
+            pReason = "";
+            return true;
+        }
+
+        public static bool TryInternalizeTributary(Kingdom pTributary,
+            Kingdom pSuzerain, int pContractTier, long pWarId,
+            out string pReason)
+        {
+            if (!CanInternalizeTributary(pTributary, pSuzerain,
+                    pContractTier, out pReason)) return false;
+
+            if (!VassalRelationConversionPersistence.TryConvert(DB,
+                    VassalRelationTableItem.GetTableName(), pTributary.id,
+                    pSuzerain.id, pContractTier,
+                    LineageService.CurTime(), pWarId,
+                    out _, out long replacementRelationId,
+                    out pReason)) return false;
+
+            AdjustDirectTributaryCount(pSuzerain, -1);
+            AdjustDirectVassalCount(pSuzerain, 1);
+            pTributary.data.set(LineageKeys.VASSAL_CONTRACT_TIER,
+                pContractTier);
+            pTributary.data.set(LineageKeys.VASSAL_SUZERAIN_ID,
+                pSuzerain.id);
+            pTributary.data.set(LineageKeys.VASSAL_RELATION_ID,
+                replacementRelationId);
+            pTributary.data.set(LineageKeys.TRIBUTARY_SUZERAIN_ID, -1L);
+            pTributary.data.set(LineageKeys.TRIBUTARY_RELATION_ID, -1L);
+            RecordVassalSet(pTributary, pSuzerain,
+                pContractTier == VassalContractTierRules.Inner
+                    ? "internalized_inner"
+                    : "internalized_outer");
+            DiplomacyConversationService.RecordVassalSet(pTributary,
+                pSuzerain, pTributary: false);
+            DirtyVassalMap();
+            PullVassalIntoSuzerainWars(pTributary, pSuzerain);
+            KingdomStrategyRevisionService.MarkChanged(pTributary.id,
+                pSuzerain.id);
+            pReason = "";
+            return true;
+        }
+
         private static void LeaveAllianceAfterSubmission(Kingdom pVassal)
         {
             try

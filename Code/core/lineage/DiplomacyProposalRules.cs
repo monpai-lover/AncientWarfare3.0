@@ -508,6 +508,29 @@ namespace AncientWarfare3.core.lineage
                 AcceptanceThreshold, parts);
         }
 
+        public static DiplomacyProposalAssessment AssessProtectionRequest(
+            int opinion, float requesterDiplomacy,
+            float responderDiplomacy, int protectionRiskPenalty)
+        {
+            int normalizedOpinion = Clamp(opinion, -100, 100);
+            int diplomacy = Clamp((int)Math.Round(
+                (requesterDiplomacy - responderDiplomacy) / 3f), -8, 8);
+            var parts = new List<DiplomacyProposalScorePart>(4)
+            {
+                new DiplomacyProposalScorePart("base", 30),
+                new DiplomacyProposalScorePart("opinion",
+                    normalizedOpinion / 2),
+                new DiplomacyProposalScorePart("diplomacy", diplomacy),
+                new DiplomacyProposalScorePart("protection_risk",
+                    protectionRiskPenalty)
+            };
+            int score = 0;
+            for (int index = 0; index < parts.Count; index++)
+                score += parts[index].Value;
+            return new DiplomacyProposalAssessment(Clamp(score, 0, 100),
+                AcceptanceThreshold, parts);
+        }
+
         public static bool ShouldAccept(int pScore)
         {
             return pScore >= AcceptanceThreshold;
@@ -576,7 +599,8 @@ namespace AncientWarfare3.core.lineage
 
         public static bool IsUnilateral(DiplomacyProposalType pType)
         {
-            return pType == DiplomacyProposalType.BreakNonAggression;
+            return pType == DiplomacyProposalType.BreakNonAggression ||
+                   pType == DiplomacyProposalType.EndAlliance;
         }
 
         public static bool ShouldBreakNonAggression(int opinion,

@@ -78,21 +78,24 @@ namespace AncientWarfare3.core.lineage
         public AsyncDiplomacyCommitCandidate(long pResponderKingdomId,
             DiplomacyProposalType pType,
             AsyncDiplomacyProposalKind pKind,
+            long pWarId,
             DiplomacyProposalSelection pSelection)
         {
             ResponderKingdomId = pResponderKingdomId;
             Type = pType;
             Kind = pKind;
+            WarId = pWarId;
             Selection = pSelection;
         }
 
         public long ResponderKingdomId { get; }
         public DiplomacyProposalType Type { get; }
         public AsyncDiplomacyProposalKind Kind { get; }
+        public long WarId { get; }
         public DiplomacyProposalSelection Selection { get; }
         public AsyncDiplomacySelectionIdentity Identity =>
             new AsyncDiplomacySelectionIdentity(ResponderKingdomId,
-                (int)Type, Kind, Selection.TargetKingdomId,
+                (int)Type, Kind, WarId, Selection.TargetKingdomId,
                 Selection.RequesterActorId, Selection.ResponderActorId,
                 Selection.TargetCityId, Selection.DetailId);
     }
@@ -176,6 +179,25 @@ namespace AncientWarfare3.core.lineage
             return TryCreateSelected(pRequester, pResponder, pType,
                 pPlayerInitiated, pWarId, selection,
                 out pProposal, out pReason);
+        }
+
+        internal static bool TryCreateAiProtectionProposal(
+            Kingdom pRequester, Kingdom pProtector, Kingdom pThreat)
+        {
+            if (pRequester?.data == null || pProtector?.data == null ||
+                pThreat?.data == null) return false;
+            War defensiveWar = FindWarBetween(pRequester, pThreat, -1L);
+            long warId = defensiveWar?.data != null &&
+                         !defensiveWar.hasEnded() &&
+                         defensiveWar.isDefender(pRequester)
+                ? defensiveWar.data.id
+                : -1L;
+            var selection = new DiplomacyProposalSelection(pThreat.id,
+                -1L, -1L, -1L,
+                DiplomacyProposalOpportunityRules.VassalizeSeekDetail);
+            return TryCreateSelected(pRequester, pProtector,
+                DiplomacyProposalType.Vassalize,
+                pPlayerInitiated: false, warId, selection, out _, out _);
         }
 
         internal static bool TryCreateWithSelection(Kingdom pRequester,
@@ -281,9 +303,31 @@ namespace AncientWarfare3.core.lineage
                         RulerHouseholdRules.DetailId(kind));
                 }
             }
+            DiplomacyActionAssessment directionalVassalization = null;
+            if (pType == DiplomacyProposalType.Vassalize)
+            {
+                pSelection = new DiplomacyProposalSelection(
+                    pSelection.TargetKingdomId,
+                    pSelection.RequesterActorId,
+                    pSelection.ResponderActorId,
+                    pSelection.TargetCityId,
+                    NormalizeVassalizationDetail(pSelection.DetailId));
+                directionalVassalization =
+                    AssessVassalizationWithSelection(pRequester,
+                        pResponder, pWarId, pSelection,
+                        pIgnorePending: true);
+                if (!directionalVassalization.Allowed)
+                {
+                    pReason = directionalVassalization.UnavailableReason;
+                    return false;
+                }
+            }
             ProposalContext context = ReadContext(pRequester, pResponder,
                 pType, pWarId);
-            string unavailable = DiplomacyProposalRules.UnavailableReason(pType, context.Availability);
+            string unavailable = directionalVassalization == null
+                ? DiplomacyProposalRules.UnavailableReason(pType,
+                    context.Availability)
+                : "";
             if (!string.IsNullOrEmpty(unavailable))
             {
                 pReason = unavailable;
@@ -320,8 +364,10 @@ namespace AncientWarfare3.core.lineage
 
             if (!pPlayerInitiated)
             {
-                bool receiverExpectedAccepted;
-                if (DiplomacyProposalRules.IsPeaceProposal(pType))
+                bool receiverExpectedAccepted =
+                    DiplomacyProposalRules.IsUnilateral(pType);
+                if (!receiverExpectedAccepted &&
+                    DiplomacyProposalRules.IsPeaceProposal(pType))
                 {
                     WarPeaceAcceptanceResult settlementAcceptance =
                         WarPeaceSettlementService.Instance.EvaluateAi(
@@ -330,9 +376,10 @@ namespace AncientWarfare3.core.lineage
                             pType == DiplomacyProposalType.Surrender);
                     receiverExpectedAccepted = settlementAcceptance.Accept;
                 }
-                else
+                else if (!receiverExpectedAccepted)
                 {
                     DiplomacyProposalAssessment acceptance =
+                        directionalVassalization?.Acceptance ??
                         DiplomacyProposalRules.Assess(pType,
                             BuildScoreFacts(pRequester, pResponder,
                                 pSelection.DetailId == "direct",
@@ -628,6 +675,253 @@ namespace AncientWarfare3.core.lineage
             return result;
         }
 
+        private static DiplomacyActionAssessment
+            AssessVassalizationWithSelection(Kingdom pRequester,
+                Kingdom pResponder, long pWarId,
+                DiplomacyProposalSelection pSelection,
+                bool pIgnorePending = false)
+        {
+            return AssessVassalizationWithSelectionCore(pRequester,
+                pResponder, pWarId, pSelection, null, pReadOnly: false,
+                pIgnorePending);
+        }
+
+        private static DiplomacyActionAssessment
+            AssessVassalizationWithSelectionReadOnly(Kingdom pRequester,
+                Kingdom pResponder, long pWarId,
+                DiplomacyProposalSelection pSelection,
+                MandateReport pMandateReport,
+                bool pIgnorePending = false)
+        {
+            return AssessVassalizationWithSelectionCore(pRequester,
+                pResponder, pWarId, pSelection, pMandateReport,
+                pReadOnly: true, pIgnorePending);
+        }
+
+        private static DiplomacyActionAssessment
+            AssessVassalizationWithSelectionCore(Kingdom pRequester,
+                Kingdom pResponder, long pWarId,
+                DiplomacyProposalSelection pSelection,
+                MandateReport pMandateReport, bool pReadOnly,
+                bool pIgnorePending)
+        {
+            var result = new DiplomacyActionAssessment
+            {
+                Allowed = false,
+                UnavailableReason = "invalid"
+            };
+            if (!Ready || pRequester?.data == null ||
+                pResponder?.data == null || pRequester == pResponder ||
+                pRequester.isRekt() || pResponder.isRekt()) return result;
+            if (!pIgnorePending &&
+                HasPendingPair(pRequester.id, pResponder.id))
+            {
+                result.UnavailableReason = "pending_exists";
+                return result;
+            }
+
+            string detailId = NormalizeVassalizationDetail(
+                pSelection.DetailId);
+            if (detailId == DiplomacyProposalOpportunityRules
+                    .VassalizeInternalizeDetail)
+            {
+                bool responderImperial = KingdomTitleService.IsEmperor(
+                    pResponder);
+                bool responderHasMandate = pReadOnly
+                    ? MandateService.IsMandateKingdomReadOnly(pResponder,
+                        pMandateReport)
+                    : MandateService.IsMandateKingdom(pResponder);
+                int tier = DiplomacyProposalOpportunityRules
+                    .InternalizationTier(
+                        VassalService.GetTributarySuzerain(pRequester) ==
+                        pResponder, responderImperial,
+                        responderHasMandate);
+                if (!VassalService.CanInternalizeTributary(pRequester,
+                        pResponder, tier, out result.UnavailableReason))
+                    return result;
+                result.Allowed = true;
+                result.UnavailableReason = "";
+                result.Acceptance = DiplomacyProposalRules.Assess(
+                    DiplomacyProposalType.Vassalize,
+                    pReadOnly
+                        ? BuildScoreFactsReadOnly(pResponder, pRequester,
+                            pMandateReport)
+                        : BuildScoreFacts(pResponder, pRequester));
+                return result;
+            }
+
+            if (detailId ==
+                DiplomacyProposalOpportunityRules.VassalizeSeekDetail)
+            {
+                result.UnavailableReason = ValidateProtectionRequest(
+                    pRequester, pResponder, pWarId,
+                    pSelection.TargetKingdomId, out Kingdom threat,
+                    out float enemyToProtectorPower);
+                result.Allowed = string.IsNullOrEmpty(
+                    result.UnavailableReason);
+                if (!result.Allowed) return result;
+                int opinion = DiplomacyOpinionService.Read(pResponder,
+                    pRequester);
+                CourtSnapshot court = CourtService.GetSnapshot(pResponder);
+                int riskPenalty = DiplomacyProposalOpportunityRules
+                    .ProtectionRiskPenalty(enemyToProtectorPower,
+                        excellentRelations: opinion >= 70,
+                        sharedEnemy: SafeEnemy(pResponder, threat),
+                        warCourt: court?.war ?? .5f);
+                result.Acceptance = DiplomacyProposalRules
+                    .AssessProtectionRequest(opinion,
+                        SafeStat(pRequester.king, "diplomacy"),
+                        SafeStat(pResponder.king, "diplomacy"),
+                        riskPenalty);
+                return result;
+            }
+
+            if (detailId !=
+                DiplomacyProposalOpportunityRules.VassalizeDemandDetail)
+            {
+                result.UnavailableReason = "invalid_vassalize_direction";
+                return result;
+            }
+            if (FindWarBetween(pRequester, pResponder, -1L) != null)
+            {
+                result.UnavailableReason = "at_war";
+                return result;
+            }
+            if (SafeAllied(pRequester, pResponder))
+            {
+                result.UnavailableReason = "already_allied";
+                return result;
+            }
+            if (IsSubject(pRequester))
+            {
+                result.UnavailableReason = "requester_subject";
+                return result;
+            }
+            if (IsSubject(pResponder))
+            {
+                result.UnavailableReason = "responder_subject";
+                return result;
+            }
+            if (Math.Max(1f, pRequester.power) <
+                Math.Max(1f, pResponder.power) * 2f)
+            {
+                result.UnavailableReason = "insufficient_power";
+                return result;
+            }
+            if (!VassalService.CanSetVassal(pResponder, pRequester,
+                    out string subjectFailure))
+            {
+                result.UnavailableReason = subjectFailure;
+                return result;
+            }
+            result.Allowed = true;
+            result.UnavailableReason = "";
+            result.Acceptance = DiplomacyProposalRules.Assess(
+                DiplomacyProposalType.Vassalize,
+                pReadOnly
+                    ? BuildScoreFactsReadOnly(pRequester, pResponder,
+                        pMandateReport)
+                    : BuildScoreFacts(pRequester, pResponder));
+            return result;
+        }
+
+        private static string NormalizeVassalizationDetail(
+            string pDetailId)
+        {
+            return string.IsNullOrWhiteSpace(pDetailId)
+                ? DiplomacyProposalOpportunityRules.VassalizeDemandDetail
+                : pDetailId;
+        }
+
+        private static string ValidateProtectionRequest(Kingdom pRequester,
+            Kingdom pProtector, long pWarId, long pThreatKingdomId,
+            out Kingdom pThreat, out float pEnemyToProtectorPower)
+        {
+            pThreat = FindKingdom(pThreatKingdomId);
+            pEnemyToProtectorPower = float.MaxValue;
+            if (FindWarBetween(pRequester, pProtector, -1L) != null)
+                return "protector_war_conflict";
+            if (SafeAllied(pRequester, pProtector))
+                return "already_allied";
+            if (IsSubject(pRequester)) return "requester_subject";
+            if (IsSubject(pProtector)) return "responder_subject";
+            if (!KingdomAdjacency.AreDirectNeighbors(pRequester,
+                    pProtector)) return "not_adjacent";
+            if (!VassalService.CanSetVassal(pRequester, pProtector,
+                    out string subjectFailure)) return subjectFailure;
+
+            float requesterPower = Math.Max(1f,
+                VassalService.GetPowerScore(pRequester,
+                    pIncludeVassals: false));
+            float protectorPower = Math.Max(1f,
+                VassalService.GetWarPowerScore(pProtector,
+                    pIncludeVassals: true));
+            if (protectorPower < requesterPower * 1.9f)
+                return "protector_too_weak";
+            if (DiplomacyOpinionService.Read(pRequester, pProtector) < -25)
+                return "protector_relations_low";
+
+            float enemyPower;
+            if (pWarId >= 0L)
+            {
+                War defensiveWar = FindWar(pWarId);
+                if (defensiveWar?.data == null || defensiveWar.hasEnded() ||
+                    !defensiveWar.isDefender(pRequester))
+                    return "join_war_stale";
+                if (defensiveWar.isAttacker(pProtector) ||
+                    defensiveWar.isDefender(pProtector) ||
+                    HasProtectorEnemySubjectConflict(defensiveWar,
+                        pProtector))
+                    return "protector_war_conflict";
+                Kingdom activeThreat = FindOpponent(defensiveWar,
+                    pRequester);
+                if (activeThreat?.data == null ||
+                    pThreat?.data != null && pThreat != activeThreat)
+                    return "join_war_stale";
+                pThreat = activeThreat;
+                enemyPower = EnemyCoalitionPower(defensiveWar, pRequester);
+            }
+            else
+            {
+                if (pThreat?.data == null || pThreat == pRequester ||
+                    pThreat == pProtector || pThreat.isRekt())
+                    return "protection_threat_stale";
+                enemyPower = VassalService.GetWarPowerScore(pThreat,
+                    pIncludeVassals: true);
+            }
+            if (enemyPower < requesterPower * 1.6f)
+                return "protection_threat_stale";
+            pEnemyToProtectorPower = enemyPower / protectorPower;
+            return "";
+        }
+
+        private static bool HasProtectorEnemySubjectConflict(War pWar,
+            Kingdom pProtector)
+        {
+            Kingdom protectorRoot = VassalService.GetRootSuzerain(
+                pProtector) ?? pProtector;
+            try
+            {
+                foreach (Kingdom attacker in pWar.getAttackers())
+                    if ((VassalService.GetRootSuzerain(attacker) ??
+                         attacker) == protectorRoot)
+                        return true;
+            }
+            catch { return true; }
+            return false;
+        }
+
+        private static bool SafeEnemy(Kingdom pFirst, Kingdom pSecond)
+        {
+            try
+            {
+                return pFirst?.data != null && pSecond?.data != null &&
+                       (pFirst.isEnemy(pSecond) ||
+                        pSecond.isEnemy(pFirst));
+            }
+            catch { return false; }
+        }
+
         internal static DiplomacyActionAssessment
             AssessRoyalMarriageWithPreview(Kingdom pRequester,
                 Kingdom pResponder, out DiplomaticMarriagePreview pPreview,
@@ -698,6 +992,9 @@ namespace AncientWarfare3.core.lineage
             DiplomacyProposalSelection pSelection,
             bool pIgnorePending = false)
         {
+            if (pType == DiplomacyProposalType.Vassalize)
+                return AssessVassalizationWithSelection(pRequester,
+                    pResponder, pWarId, pSelection, pIgnorePending);
             if (pType == DiplomacyProposalType.HouseholdOffering)
             {
                 var householdResult = new DiplomacyActionAssessment
@@ -826,6 +1123,10 @@ namespace AncientWarfare3.core.lineage
             DiplomacyProposalSelection pSelection,
             MandateReport pMandateReport, bool pIgnorePending = false)
         {
+            if (pType == DiplomacyProposalType.Vassalize)
+                return AssessVassalizationWithSelectionReadOnly(pRequester,
+                    pResponder, pWarId, pSelection, pMandateReport,
+                    pIgnorePending);
             if (pType == DiplomacyProposalType.HouseholdOffering)
             {
                 var householdResult = new DiplomacyActionAssessment
@@ -1178,6 +1479,12 @@ namespace AncientWarfare3.core.lineage
                                     ", responder=" +
                                      proposal.ResponderKingdomId +
                                      ", reason=" + pReason);
+                if (ShouldRetryAllianceWithdrawal(proposal, pReason))
+                {
+                    _nextProcessingPollTime =
+                        LineageService.CurTime() + WorldTimePerDay;
+                    return false;
+                }
                 if (DiplomacyProposalRules.IsPeaceProposal(
                         proposal.Type))
                 {
@@ -1914,7 +2221,8 @@ namespace AncientWarfare3.core.lineage
             DiplomacyActionAssessment assessment = proposal.Type is
                 DiplomacyProposalType.Coalition or
                 DiplomacyProposalType.RoyalMarriage or
-                DiplomacyProposalType.HouseholdOffering
+                DiplomacyProposalType.HouseholdOffering or
+                DiplomacyProposalType.Vassalize
                 ? AssessWithSelection(requester, responder, proposal.Type,
                     proposal.WarId, selection, pIgnorePending: true)
                 : Assess(requester, responder, proposal.Type, proposal.WarId,
@@ -1932,7 +2240,9 @@ namespace AncientWarfare3.core.lineage
                 return Respond(proposal.ProposalId, pAccept: false,
                     pPlayerResponse: false, out _);
             }
-            bool accept = assessment.Acceptance.ExpectedAccepted;
+            bool accept = DiplomacyProposalRules.IsUnilateral(
+                              proposal.Type) ||
+                          assessment.Acceptance.ExpectedAccepted;
             if (DiplomacyProposalRules.IsPeaceProposal(proposal.Type))
             {
                 WarPeaceAcceptanceResult settlementAcceptance =
@@ -2116,6 +2426,69 @@ namespace AncientWarfare3.core.lineage
                         }
                         break;
                     case DiplomacyProposalType.Vassalize:
+                        string vassalDirection =
+                            NormalizeVassalizationDetail(pProposal.DetailId);
+                        if (vassalDirection ==
+                            DiplomacyProposalOpportunityRules
+                                .VassalizeInternalizeDetail)
+                        {
+                            int internalTier =
+                                DiplomacyProposalOpportunityRules
+                                    .InternalizationTier(
+                                        VassalService
+                                            .GetTributarySuzerain(
+                                                requester) == responder,
+                                        KingdomTitleService.IsEmperor(
+                                            responder),
+                                        MandateService.IsMandateKingdom(
+                                            responder));
+                            if (!VassalService.TryInternalizeTributary(
+                                    requester, responder, internalTier,
+                                    pProposal.WarId, out pReason))
+                                return false;
+                            break;
+                        }
+                        if (vassalDirection ==
+                            DiplomacyProposalOpportunityRules
+                                .VassalizeSeekDetail)
+                        {
+                            string protectionFailure =
+                                ValidateProtectionRequest(requester,
+                                    responder, pProposal.WarId,
+                                    pProposal.TargetKingdomId, out _,
+                                    out _);
+                            if (!string.IsNullOrEmpty(protectionFailure))
+                            {
+                                pReason = protectionFailure;
+                                return false;
+                            }
+                            if (!VassalService.SetVassal(requester,
+                                    responder, "diplomatic_protection",
+                                    pProposal.WarId,
+                                    pContractTier:
+                                    VassalContractTierRules.Outer))
+                            {
+                                pReason = "subject_write_failed";
+                                return false;
+                            }
+                            if (pProposal.WarId >= 0L &&
+                                !TryJoinProtectorToDefensiveWar(responder,
+                                    requester, pProposal.WarId))
+                            {
+                                VassalService.EndVassal(requester,
+                                    "protection_war_entry_failed");
+                                pReason = "protection_war_entry_failed";
+                                return false;
+                            }
+                            break;
+                        }
+                        if (vassalDirection !=
+                            DiplomacyProposalOpportunityRules
+                                .VassalizeDemandDetail)
+                        {
+                            pReason = "invalid_vassalize_direction";
+                            return false;
+                        }
                         if (!VassalService.CanSetVassal(responder, requester,
                                 out string vassalFailure))
                         {
@@ -2123,7 +2496,9 @@ namespace AncientWarfare3.core.lineage
                             return false;
                         }
                         if (!VassalService.SetVassal(responder, requester,
-                                "diplomatic_request"))
+                                "diplomatic_request", pProposal.WarId,
+                                pContractTier:
+                                VassalContractTierRules.Outer))
                         {
                             pReason = "subject_write_failed";
                             return false;
@@ -2145,20 +2520,65 @@ namespace AncientWarfare3.core.lineage
                         break;
                     case DiplomacyProposalType.EndAlliance:
                         Alliance alliance = requester.getAlliance();
-                        if (alliance == null || !alliance.hasKingdom(responder))
+                        if (alliance != null && alliance.hasKingdom(responder))
                         {
-                            pReason = "not_allied";
+                            alliance.leave(requester);
+                            if (SafeAllied(requester, responder))
+                            {
+                                pReason = "alliance_execution_failed";
+                                return false;
+                            }
+                        }
+                        if (!EnsureAllianceWithdrawalTruce(pProposal,
+                                requester, responder, out pTreatyUntil))
+                        {
+                            pReason = "alliance_truce_write_failed";
                             return false;
                         }
-                        alliance.leave(requester);
                         break;
                     case DiplomacyProposalType.EndVassal:
-                        Kingdom subject = VassalService.GetSuzerain(requester) ==
-                                          responder ||
-                                          VassalService.GetTributarySuzerain(
-                                              requester) == responder
-                            ? requester
-                            : responder;
+                        Kingdom subject;
+                        if (pProposal.DetailId ==
+                            DiplomacyProposalOpportunityRules
+                                .EndVassalReleaseDetail)
+                        {
+                            if (GetAnySuzerain(responder) != requester)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                            subject = responder;
+                        }
+                        else if (pProposal.DetailId ==
+                                 DiplomacyProposalOpportunityRules
+                                     .EndVassalRequestDetail)
+                        {
+                            if (GetAnySuzerain(requester) != responder)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                            subject = requester;
+                        }
+                        else if (string.IsNullOrWhiteSpace(
+                                     pProposal.DetailId))
+                        {
+                            subject = GetAnySuzerain(requester) == responder
+                                ? requester
+                                : GetAnySuzerain(responder) == requester
+                                    ? responder
+                                    : null;
+                            if (subject?.data == null)
+                            {
+                                pReason = "no_vassal_relation";
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            pReason = "invalid_end_vassal_direction";
+                            return false;
+                        }
                         if (!VassalService.EndVassal(subject,
                                 "diplomatic_release"))
                         {
@@ -2312,6 +2732,28 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
+        private static bool TryJoinProtectorToDefensiveWar(
+            Kingdom pProtector, Kingdom pProtectedRealm, long pWarId)
+        {
+            War war = FindWar(pWarId);
+            if (war?.data == null || war.hasEnded() ||
+                pProtector?.data == null || pProtectedRealm?.data == null ||
+                !war.isDefender(pProtectedRealm) ||
+                war.isAttacker(pProtector) || war.isDefender(pProtector) ||
+                HasProtectorEnemySubjectConflict(war, pProtector))
+                return false;
+            try
+            {
+                using (WarParticipantEntrySourceScope.Open(war, pProtector,
+                           WarParticipantEntrySourceKind.AllianceCall,
+                           pProtectedRealm))
+                    war.joinDefenders(pProtector);
+                return war.isDefender(pProtector) &&
+                       !war.isAttacker(pProtector);
+            }
+            catch { return false; }
+        }
+
         private static bool ReserveForExecution(DiplomacyProposal pProposal)
         {
             if (!Ready || pProposal == null || pProposal.ProposalId < 0)
@@ -2425,6 +2867,12 @@ namespace AncientWarfare3.core.lineage
             }
 
             if (string.IsNullOrEmpty(reason)) reason = "execution_failed";
+            if (ShouldRetryAllianceWithdrawal(proposal, reason))
+            {
+                _nextProcessingPollTime =
+                    LineageService.CurTime() + WorldTimePerDay;
+                return false;
+            }
             if (DiplomacyProposalRules.IsPeaceProposal(proposal.Type))
             {
                 WarPeaceDecisionResult cancelled =
@@ -2471,17 +2919,69 @@ namespace AncientWarfare3.core.lineage
                            war.isDefender(requester) &&
                            war.isDefender(responder);
                 case DiplomacyProposalType.Vassalize:
-                    return VassalService.GetSuzerain(responder) == requester;
+                    string direction = NormalizeVassalizationDetail(
+                        pProposal.DetailId);
+                    if (direction == DiplomacyProposalOpportunityRules
+                            .VassalizeSeekDetail)
+                    {
+                        if (VassalService.GetSuzerain(requester) != responder)
+                            return false;
+                        War protectionWar = FindWar(pProposal.WarId);
+                        return pProposal.WarId < 0L ||
+                               protectionWar?.data == null ||
+                               protectionWar.hasEnded() ||
+                               protectionWar.isDefender(responder);
+                    }
+                    if (direction == DiplomacyProposalOpportunityRules
+                            .VassalizeInternalizeDetail)
+                    {
+                        if (VassalService.GetSuzerain(requester) != responder)
+                            return false;
+                        requester.data.get(
+                            LineageKeys.VASSAL_CONTRACT_TIER,
+                            out int actualTier,
+                            VassalContractTierRules.Outer);
+                        int expectedTier =
+                            DiplomacyProposalOpportunityRules
+                                .InternalizationTier(
+                                    requesterTributaryOfResponder: true,
+                                    responderImperial:
+                                    KingdomTitleService.IsEmperor(responder),
+                                    responderHasMandate:
+                                    MandateService.IsMandateKingdom(
+                                        responder));
+                        return actualTier == expectedTier;
+                    }
+                    return direction == DiplomacyProposalOpportunityRules
+                               .VassalizeDemandDetail &&
+                           VassalService.GetSuzerain(responder) == requester;
                 case DiplomacyProposalType.Tributary:
                     return VassalService.GetTributarySuzerain(responder) ==
                            requester;
                 case DiplomacyProposalType.EndAlliance:
-                    return !SafeAllied(requester, responder);
+                    if (SafeAllied(requester, responder)) return false;
+                    return DiplomacyTreatyPersistence.HasProposalTruce(DB,
+                        DiplomacyProposalTableItem.GetTableName(),
+                        pProposal.ProposalId, requester.id, responder.id,
+                        SafeYear(),
+                        DiplomacyProposalRules.BrokenPactTruceYears,
+                        out pTreatyUntil);
                 case DiplomacyProposalType.EndVassal:
                     return !HasDirectSubjectRelation(requester, responder);
                 default:
                     return false;
             }
+        }
+
+        private static bool ShouldRetryAllianceWithdrawal(
+            DiplomacyProposal pProposal, string pReason)
+        {
+            if (pProposal?.Type != DiplomacyProposalType.EndAlliance ||
+                pReason != "alliance_truce_write_failed") return false;
+            Kingdom requester = FindKingdom(pProposal.RequesterKingdomId);
+            Kingdom responder = FindKingdom(pProposal.ResponderKingdomId);
+            return requester?.data != null && responder?.data != null &&
+                   !SafeAllied(requester, responder);
         }
 
         private static bool HasDirectSubjectRelation(Kingdom pFirst,
@@ -2587,6 +3087,15 @@ namespace AncientWarfare3.core.lineage
         {
             public DiplomacyProposalAiCandidate Candidate;
             public DiplomacyProposalSelection Selection;
+            public long WarId = -1L;
+        }
+
+        private sealed class JoinWarCandidateFacts
+        {
+            public War War;
+            public bool CapitalThreatened;
+            public bool Losing;
+            public float EnemyPower;
         }
 
         private sealed class PreparedWarSettlement
@@ -2728,7 +3237,7 @@ namespace AncientWarfare3.core.lineage
             out List<PreparedAiProposal> pCandidates)
         {
             pResolvedContact = pContact;
-            pCandidates = new List<PreparedAiProposal>(6);
+            pCandidates = new List<PreparedAiProposal>(12);
             Kingdom contact = pResolvedContact;
             if (contact?.data == null) return false;
             int opinion = DiplomacyOpinionService.Read(contact, pRequester);
@@ -2749,6 +3258,21 @@ namespace AncientWarfare3.core.lineage
 
             float requesterPowerRatio = Math.Max(1, pRequester.power) /
                                         (float)Math.Max(1, contact.power);
+            if (TryPrepareJoinWarCandidate(pRequester, contact, opinion,
+                    requesterPowerRatio, out PreparedAiProposal joinWar))
+                pCandidates.Add(joinWar);
+            if (TryPrepareVassalizationCandidate(pRequester, contact,
+                    opinion, requesterPowerRatio,
+                    out PreparedAiProposal vassalization))
+                pCandidates.Add(vassalization);
+            if (TryPrepareEndVassalCandidate(pRequester, contact, opinion,
+                    requesterPowerRatio,
+                    out PreparedAiProposal endVassal))
+                pCandidates.Add(endVassal);
+            if (TryPrepareEndAllianceCandidate(pRequester, contact, opinion,
+                    requesterPowerRatio,
+                    out PreparedAiProposal endAlliance))
+                pCandidates.Add(endAlliance);
             if (pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
                 opinion >= 0)
                 AddOrdinaryAiCandidate(pCandidates, pRequester, contact,
@@ -2785,14 +3309,24 @@ namespace AncientWarfare3.core.lineage
                     });
             }
 
+            bool upperSubject = GetAnySuzerain(contact) == pRequester;
+            PreparedAiProposal upperHousehold = null;
+            bool upperHouseholdOfferAdded = upperSubject &&
+                TryPrepareUpperRealmHouseholdCandidate(pRequester, contact,
+                    opinion, requesterPowerRatio,
+                    requesterSuzerainOfResponder: upperSubject,
+                    out upperHousehold);
+            if (upperHouseholdOfferAdded)
+                pCandidates.Add(upperHousehold);
+
             PreparedAiProposal consortRequest = null;
-            bool consortRequestAdded = opinion >=
+            bool consortRequestAdded = !upperSubject && opinion >=
                 RulerHouseholdRules.MinimumConsortRequestOpinion &&
                 TryPrepareConsortRequestCandidate(pRequester, contact,
                     opinion, requesterPowerRatio, out consortRequest);
             if (consortRequestAdded) pCandidates.Add(consortRequest);
 
-            if (!consortRequestAdded && opinion >= 20 &&
+            if (!upperSubject && !consortRequestAdded && opinion >= 20 &&
                 TryPrepareHouseholdCandidate(pRequester, contact, opinion,
                     requesterPowerRatio, out PreparedAiProposal household))
                 pCandidates.Add(household);
@@ -2811,7 +3345,7 @@ namespace AncientWarfare3.core.lineage
             out AsyncDiplomacySelectionTargetFacts[] pSelectionTargets)
         {
             pResolvedContact = pContact;
-            pCandidates = new List<PreparedAiProposal>(6);
+            pCandidates = new List<PreparedAiProposal>(12);
             pSelectionTargets =
                 Array.Empty<AsyncDiplomacySelectionTargetFacts>();
             Kingdom contact = pResolvedContact;
@@ -2834,6 +3368,22 @@ namespace AncientWarfare3.core.lineage
 
             float requesterPowerRatio = Math.Max(1, pRequester.power) /
                                         (float)Math.Max(1, contact.power);
+            if (TryPrepareJoinWarCandidateReadOnly(pRequester, contact,
+                    opinion, requesterPowerRatio, pMandateReport,
+                    out PreparedAiProposal joinWar))
+                pCandidates.Add(joinWar);
+            if (TryPrepareVassalizationCandidateReadOnly(pRequester,
+                    contact, opinion, requesterPowerRatio, pMandateReport,
+                    out PreparedAiProposal vassalization))
+                pCandidates.Add(vassalization);
+            if (TryPrepareEndVassalCandidateReadOnly(pRequester, contact,
+                    opinion, requesterPowerRatio, pMandateReport,
+                    out PreparedAiProposal endVassal))
+                pCandidates.Add(endVassal);
+            if (TryPrepareEndAllianceCandidate(pRequester, contact, opinion,
+                    requesterPowerRatio,
+                    out PreparedAiProposal endAlliance))
+                pCandidates.Add(endAlliance);
             if (pRequester.power >= Math.Max(1, contact.power) * 2.4f &&
                 opinion >= 0)
                 AddOrdinaryAiCandidateReadOnly(pCandidates, pRequester,
@@ -2872,15 +3422,25 @@ namespace AncientWarfare3.core.lineage
             }
 
 
+            bool upperSubject = GetAnySuzerain(contact) == pRequester;
+            PreparedAiProposal upperHousehold = null;
+            bool upperHouseholdOfferAdded = upperSubject &&
+                TryPrepareUpperRealmHouseholdCandidateReadOnly(pRequester,
+                    contact, opinion, requesterPowerRatio, pMandateReport,
+                    requesterSuzerainOfResponder: upperSubject,
+                    out upperHousehold);
+            if (upperHouseholdOfferAdded)
+                pCandidates.Add(upperHousehold);
+
             PreparedAiProposal consortRequest = null;
-            bool consortRequestAdded = opinion >=
+            bool consortRequestAdded = !upperSubject && opinion >=
                 RulerHouseholdRules.MinimumConsortRequestOpinion &&
                 TryPrepareConsortRequestCandidateReadOnly(pRequester,
                     contact, opinion, requesterPowerRatio, pMandateReport,
                     out consortRequest);
             if (consortRequestAdded) pCandidates.Add(consortRequest);
 
-            if (!consortRequestAdded && opinion >= 20 &&
+            if (!upperSubject && !consortRequestAdded && opinion >= 20 &&
                 TryPrepareHouseholdCandidateReadOnly(pRequester, contact,
                     opinion, requesterPowerRatio, pMandateReport,
                     out PreparedAiProposal household))
@@ -2944,16 +3504,9 @@ namespace AncientWarfare3.core.lineage
                 if (index < 0) return false;
                 PreparedAiProposal prepared = candidates[index];
                 candidates.RemoveAt(index);
-                bool created = prepared.Candidate.Type is
-                    DiplomacyProposalType.Coalition or
-                    DiplomacyProposalType.RoyalMarriage or
-                    DiplomacyProposalType.HouseholdOffering
-                    ? TryCreateWithSelection(pRequester, contact,
-                        prepared.Candidate.Type, pPlayerInitiated: false,
-                        -1L, prepared.Selection, out _, out _)
-                    : TryCreate(pRequester, contact,
-                        prepared.Candidate.Type, pPlayerInitiated: false,
-                        -1L, out _, out _);
+                bool created = TryCreateSelected(pRequester, contact,
+                    prepared.Candidate.Type, pPlayerInitiated: false,
+                    prepared.WarId, prepared.Selection, out _, out _);
                 if (created) return true;
             }
             return false;
@@ -3054,7 +3607,8 @@ namespace AncientWarfare3.core.lineage
                     activeBlocker && !DiplomacyProposalRules.IsUnilateral(
                         item.Candidate.Type), cooldown));
                 commits.Add(new AsyncDiplomacyCommitCandidate(pContact.id,
-                    item.Candidate.Type, kind, item.Selection));
+                    item.Candidate.Type, kind, item.WarId,
+                    item.Selection));
             }
             pFacts = facts.ToArray();
             pCommitCandidates = commits.ToArray();
@@ -3140,22 +3694,18 @@ namespace AncientWarfare3.core.lineage
                     responder.id, currentSelected.Type,
                     currentSelected.Selection.DetailId, year)) return false;
             DiplomacyActionAssessment assessment = AssessWithSelection(
-                requester, responder, currentSelected.Type, -1L,
+                requester, responder, currentSelected.Type,
+                currentSelected.WarId,
                 currentSelected.Selection);
             if (assessment?.Allowed != true ||
-                currentSelected.Type !=
-                DiplomacyProposalType.BreakNonAggression &&
+                !DiplomacyProposalRules.IsUnilateral(
+                    currentSelected.Type) &&
                 !ExpectedAccepted(assessment)) return false;
             if (pShadowOnly) return false;
-            bool created = currentSelected.Type is
-                DiplomacyProposalType.Coalition or
-                DiplomacyProposalType.RoyalMarriage or
-                DiplomacyProposalType.HouseholdOffering
-                ? TryCreateWithSelection(requester, responder,
-                    currentSelected.Type, pPlayerInitiated: false, -1L,
-                    currentSelected.Selection, out _, out _)
-                : TryCreate(requester, responder, currentSelected.Type,
-                    pPlayerInitiated: false, -1L, out _, out _);
+            bool created = TryCreateSelected(requester, responder,
+                currentSelected.Type, pPlayerInitiated: false,
+                currentSelected.WarId, currentSelected.Selection,
+                out _, out _);
             if (!created) return false;
             requester.data.set(
                 LineageKeys.DIPLOMACY_AI_LAST_PROPOSAL_YEAR, year);
@@ -3187,6 +3737,12 @@ namespace AncientWarfare3.core.lineage
                     AsyncDiplomacyProposalKind.Coalition,
                 DiplomacyProposalType.HouseholdOffering =>
                     AsyncDiplomacyProposalKind.HouseholdOffering,
+                DiplomacyProposalType.JoinWar =>
+                    AsyncDiplomacyProposalKind.JoinWar,
+                DiplomacyProposalType.Vassalize =>
+                    AsyncDiplomacyProposalKind.Vassalize,
+                DiplomacyProposalType.EndVassal =>
+                    AsyncDiplomacyProposalKind.EndVassal,
                 _ => AsyncDiplomacyProposalKind.None
             };
         }
@@ -3684,6 +4240,416 @@ namespace AncientWarfare3.core.lineage
             });
         }
 
+        private static bool TryPrepareJoinWarCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            if (!TrySelectJoinWarCandidate(pRequester, pResponder,
+                    out JoinWarCandidateFacts selected)) return false;
+            DiplomacyActionAssessment assessment = AssessWithSelection(
+                pRequester, pResponder, DiplomacyProposalType.JoinWar,
+                selected.War.data.id, DiplomacyProposalSelection.Empty);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = BuildJoinWarProposal(pResponder, pOpinion,
+                pRequesterPowerRatio, selected);
+            return true;
+        }
+
+        private static bool TryPrepareJoinWarCandidateReadOnly(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            if (!TrySelectJoinWarCandidate(pRequester, pResponder,
+                    out JoinWarCandidateFacts selected)) return false;
+            DiplomacyActionAssessment assessment =
+                AssessWithSelectionReadOnly(pRequester, pResponder,
+                    DiplomacyProposalType.JoinWar, selected.War.data.id,
+                    DiplomacyProposalSelection.Empty, pMandateReport);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = BuildJoinWarProposal(pResponder, pOpinion,
+                pRequesterPowerRatio, selected);
+            return true;
+        }
+
+        private static PreparedAiProposal BuildJoinWarProposal(
+            Kingdom pResponder, int pOpinion, float pRequesterPowerRatio,
+            JoinWarCandidateFacts pSelected)
+        {
+            int urgency = (pSelected.CapitalThreatened ? 50 : 0) +
+                          (pSelected.Losing ? 30 : 0) +
+                          Math.Min(30, (int)Math.Round(
+                              Math.Max(0f, pSelected.EnemyPower) / 100f));
+            return new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.JoinWar, true, pOpinion,
+                    pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id, urgency: urgency),
+                Selection = DiplomacyProposalSelection.Empty,
+                WarId = pSelected.War.data.id
+            };
+        }
+
+        private static bool TrySelectJoinWarCandidate(Kingdom pRequester,
+            Kingdom pResponder, out JoinWarCandidateFacts pSelected)
+        {
+            pSelected = null;
+            if (!SafeAllied(pRequester, pResponder)) return false;
+            var candidates = new List<JoinWarCandidateFacts>(
+                DiplomacyProposalAiRules.MaximumJoinWarAssessments);
+            try
+            {
+                foreach (War war in pRequester.getWars())
+                {
+                    if (candidates.Count >=
+                        DiplomacyProposalAiRules.MaximumJoinWarAssessments)
+                        break;
+                    if (war?.data == null || war.hasEnded() ||
+                        !war.isAttacker(pRequester) &&
+                        !war.isDefender(pRequester) ||
+                        war.isAttacker(pResponder) ||
+                        war.isDefender(pResponder)) continue;
+                    bool subjectConflict = HasJoinWarSubjectConflict(
+                        war, pResponder);
+                    if (DiplomacyProposalOpportunityRules.JoinWarDirection(
+                            allied: true, requesterInWar: true,
+                            responderInWar: false, subjectConflict) !=
+                        OrdinaryDiplomacyDirection.JoinWar) continue;
+                    bool losing = WarScoreService.TryGetSnapshot(war,
+                                      pRequester,
+                                      out WarScoreSnapshot snapshot) &&
+                                  snapshot.Score < 0;
+                    candidates.Add(new JoinWarCandidateFacts
+                    {
+                        War = war,
+                        CapitalThreatened = IsCapitalThreatened(war,
+                            pRequester),
+                        Losing = losing,
+                        EnemyPower = EnemyCoalitionPower(war, pRequester)
+                    });
+                }
+            }
+            catch { return false; }
+            if (candidates.Count == 0) return false;
+            candidates.Sort(CompareJoinWarCandidates);
+            pSelected = candidates[0];
+            return true;
+        }
+
+        private static int CompareJoinWarCandidates(
+            JoinWarCandidateFacts pLeft, JoinWarCandidateFacts pRight)
+        {
+            int result = pRight.CapitalThreatened.CompareTo(
+                pLeft.CapitalThreatened);
+            if (result != 0) return result;
+            result = pRight.Losing.CompareTo(pLeft.Losing);
+            if (result != 0) return result;
+            result = pRight.EnemyPower.CompareTo(pLeft.EnemyPower);
+            return result != 0
+                ? result
+                : pLeft.War.data.id.CompareTo(pRight.War.data.id);
+        }
+
+        private static bool HasJoinWarSubjectConflict(War pWar,
+            Kingdom pResponder)
+        {
+            Kingdom responderRoot = VassalService.GetRootSuzerain(
+                pResponder) ?? pResponder;
+            try
+            {
+                foreach (Kingdom participant in pWar.getAttackers())
+                    if (participant != pResponder &&
+                        (VassalService.GetRootSuzerain(participant) ??
+                         participant) == responderRoot)
+                        return true;
+                foreach (Kingdom participant in pWar.getDefenders())
+                    if (participant != pResponder &&
+                        (VassalService.GetRootSuzerain(participant) ??
+                         participant) == responderRoot)
+                        return true;
+            }
+            catch { return true; }
+            return false;
+        }
+
+        private static float EnemyCoalitionPower(War pWar,
+            Kingdom pRequester)
+        {
+            float power = 0f;
+            try
+            {
+                IEnumerable<Kingdom> enemies = pWar.isAttacker(pRequester)
+                    ? pWar.getDefenders()
+                    : pWar.getAttackers();
+                foreach (Kingdom enemy in enemies)
+                    power += Math.Max(0f, enemy?.power ?? 0f);
+            }
+            catch { }
+            return power;
+        }
+
+        private static bool TryPrepareVassalizationCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            out PreparedAiProposal pCandidate)
+        {
+            return TryPrepareVassalizationCandidateCore(pRequester,
+                pResponder, pOpinion, pRequesterPowerRatio, null,
+                pReadOnly: false,
+                out pCandidate);
+        }
+
+        private static bool TryPrepareVassalizationCandidateReadOnly(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            out PreparedAiProposal pCandidate)
+        {
+            return TryPrepareVassalizationCandidateCore(pRequester,
+                pResponder, pOpinion, pRequesterPowerRatio, pMandateReport,
+                pReadOnly: true,
+                out pCandidate);
+        }
+
+        private static bool TryPrepareVassalizationCandidateCore(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            bool pReadOnly,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            bool requesterTributaryOfResponder =
+                VassalService.GetTributarySuzerain(pRequester) ==
+                pResponder;
+            bool responderImperial = KingdomTitleService.IsEmperor(
+                pResponder);
+            War emergencyWar = FindDefensiveProtectionWar(pRequester,
+                pResponder);
+            bool defensiveEmergency = emergencyWar?.data != null;
+            bool canSetVassal = requesterTributaryOfResponder ||
+                (pRequesterPowerRatio < 1f
+                    ? VassalService.CanSetVassal(pRequester, pResponder)
+                    : VassalService.CanSetVassal(pResponder, pRequester));
+            OrdinaryDiplomacyDirection direction =
+                DiplomacyProposalOpportunityRules.VassalizeDirection(
+                    atWar: FindWarBetween(pRequester, pResponder, -1L) !=
+                           null,
+                    allied: SafeAllied(pRequester, pResponder),
+                    requesterIsSubject: GetAnySuzerain(pRequester) != null,
+                    responderIsSubject: GetAnySuzerain(pResponder) != null,
+                    canSetVassal: canSetVassal,
+                    requesterToResponderPower: pRequesterPowerRatio,
+                    threatened: false,
+                    defensiveEmergency: defensiveEmergency,
+                    requesterTributaryOfResponder:
+                    requesterTributaryOfResponder,
+                    responderImperial: responderImperial);
+            string detailId = VassalizationDetail(direction);
+            if (string.IsNullOrEmpty(detailId)) return false;
+            long warId = direction ==
+                         OrdinaryDiplomacyDirection.VassalizeSeek
+                ? emergencyWar?.data?.id ?? -1L
+                : -1L;
+            long threatId = direction ==
+                            OrdinaryDiplomacyDirection.VassalizeSeek
+                ? FindOpponent(emergencyWar, pRequester)?.id ?? -1L
+                : -1L;
+            var selection = new DiplomacyProposalSelection(threatId, -1L,
+                -1L, -1L, detailId);
+            DiplomacyActionAssessment assessment = pReadOnly
+                ? AssessWithSelectionReadOnly(pRequester, pResponder,
+                    DiplomacyProposalType.Vassalize, warId, selection,
+                    pMandateReport)
+                : AssessWithSelection(pRequester, pResponder,
+                    DiplomacyProposalType.Vassalize, warId, selection);
+            if (!ExpectedAccepted(assessment)) return false;
+            int urgency = direction switch
+            {
+                OrdinaryDiplomacyDirection.VassalizeSeek => 70,
+                OrdinaryDiplomacyDirection.VassalizeInternalize => 25,
+                _ => Math.Min(50, (int)Math.Round(Math.Max(0f,
+                    pRequesterPowerRatio - 1f) * 20f))
+            };
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.Vassalize, true, pOpinion,
+                    pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id, urgency: urgency),
+                Selection = selection,
+                WarId = warId
+            };
+            return true;
+        }
+
+        private static string VassalizationDetail(
+            OrdinaryDiplomacyDirection pDirection)
+        {
+            return pDirection switch
+            {
+                OrdinaryDiplomacyDirection.VassalizeDemand =>
+                    DiplomacyProposalOpportunityRules.VassalizeDemandDetail,
+                OrdinaryDiplomacyDirection.VassalizeSeek =>
+                    DiplomacyProposalOpportunityRules.VassalizeSeekDetail,
+                OrdinaryDiplomacyDirection.VassalizeInternalize =>
+                    DiplomacyProposalOpportunityRules
+                        .VassalizeInternalizeDetail,
+                _ => ""
+            };
+        }
+
+        private static War FindDefensiveProtectionWar(Kingdom pRequester,
+            Kingdom pProtector)
+        {
+            War selected = null;
+            int selectedScore = int.MaxValue;
+            try
+            {
+                foreach (War war in pRequester.getWars())
+                {
+                    if (war?.data == null || war.hasEnded() ||
+                        !war.isDefender(pRequester) ||
+                        war.isAttacker(pProtector) ||
+                        war.isDefender(pProtector)) continue;
+                    bool capitalThreatened = IsCapitalThreatened(war,
+                        pRequester);
+                    int score = 0;
+                    bool hasScore = WarScoreService.TryGetSnapshot(war,
+                        pRequester, out WarScoreSnapshot snapshot);
+                    if (hasScore) score = snapshot.Score;
+                    if (!capitalThreatened && (!hasScore || score > -35))
+                        continue;
+                    if (selected != null && score > selectedScore ||
+                        selected != null && score == selectedScore &&
+                        war.data.id >= selected.data.id) continue;
+                    selected = war;
+                    selectedScore = score;
+                }
+            }
+            catch { return null; }
+            return selected;
+        }
+
+        private static bool TryPrepareEndVassalCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            out PreparedAiProposal pCandidate)
+        {
+            return TryPrepareEndVassalCandidateCore(pRequester, pResponder,
+                pOpinion, pRequesterPowerRatio, null, pReadOnly: false,
+                out pCandidate);
+        }
+
+        private static bool TryPrepareEndVassalCandidateReadOnly(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            out PreparedAiProposal pCandidate)
+        {
+            return TryPrepareEndVassalCandidateCore(pRequester, pResponder,
+                pOpinion, pRequesterPowerRatio, pMandateReport,
+                pReadOnly: true,
+                out pCandidate);
+        }
+
+        private static bool TryPrepareEndVassalCandidateCore(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            bool pReadOnly,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            OrdinaryDiplomacyDirection direction =
+                DiplomacyProposalOpportunityRules.EndVassalDirection(
+                    requesterSuzerainOfResponder:
+                    GetAnySuzerain(pResponder) == pRequester,
+                    requesterSubjectOfResponder:
+                    GetAnySuzerain(pRequester) == pResponder);
+            if (direction == OrdinaryDiplomacyDirection.None) return false;
+            string detailId = direction ==
+                              OrdinaryDiplomacyDirection.EndVassalRelease
+                ? DiplomacyProposalOpportunityRules.EndVassalReleaseDetail
+                : DiplomacyProposalOpportunityRules.EndVassalRequestDetail;
+            var selection = new DiplomacyProposalSelection(-1L, -1L,
+                -1L, -1L, detailId);
+            DiplomacyActionAssessment assessment = pReadOnly
+                ? AssessWithSelectionReadOnly(pRequester, pResponder,
+                    DiplomacyProposalType.EndVassal, -1L, selection,
+                    pMandateReport)
+                : AssessWithSelection(pRequester, pResponder,
+                    DiplomacyProposalType.EndVassal, -1L, selection);
+            if (!ExpectedAccepted(assessment)) return false;
+            Kingdom subject = direction ==
+                              OrdinaryDiplomacyDirection.EndVassalRelease
+                ? pResponder
+                : pRequester;
+            int autonomy = VassalService.GetEffectiveRelationTerms(subject)
+                .Autonomy;
+            int years = VassalService.GetYearsSinceRelationStarted(subject);
+            int urgency = Math.Max(0, autonomy - 40) +
+                          Math.Min(20, Math.Max(0, years)) +
+                          Math.Max(0, -pOpinion) / 2;
+            if (direction ==
+                OrdinaryDiplomacyDirection.EndVassalRelease)
+                urgency += Math.Max(0,
+                    VassalService.GetDirectVassalCount(pRequester) - 4) * 8;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.EndVassal, true, pOpinion,
+                    pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id, urgency: urgency),
+                Selection = selection
+            };
+            return true;
+        }
+
+        private static bool TryPrepareEndAllianceCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            int liability = Math.Max(0, -pOpinion);
+            if (pResponder.power < Math.Max(1, pRequester.power) * .35f)
+                liability += 20;
+            liability += Math.Min(30,
+                CountUnsharedWars(pResponder, pRequester) * 10);
+            if (!DiplomacyProposalOpportunityRules.ShouldEndAlliance(
+                    SafeAllied(pRequester, pResponder), pOpinion,
+                    liability)) return false;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.EndAlliance, true, pOpinion,
+                    pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id, urgency: liability),
+                Selection = DiplomacyProposalSelection.Empty
+            };
+            return true;
+        }
+
+        private static int CountUnsharedWars(Kingdom pKingdom,
+            Kingdom pAlly)
+        {
+            int count = 0;
+            try
+            {
+                foreach (War war in pKingdom.getWars())
+                {
+                    if (war?.data == null || war.hasEnded() ||
+                        war.isAttacker(pAlly) || war.isDefender(pAlly))
+                        continue;
+                    count++;
+                    if (count >= 3) break;
+                }
+            }
+            catch { }
+            return count;
+        }
+
         private static void AddOrdinaryAiCandidateReadOnly(
             ICollection<PreparedAiProposal> pCandidates,
             Kingdom pRequester, Kingdom pResponder,
@@ -3711,6 +4677,43 @@ namespace AncientWarfare3.core.lineage
             if (!RulerHouseholdService.TryPrepareAiOffer(pRequester,
                     pResponder, out RulerHouseholdOfferPreview preview))
                 return false;
+            var selection = new DiplomacyProposalSelection(-1L,
+                preview.CandidateActorId, preview.RulerActorId, -1L,
+                RulerHouseholdRules.DetailId(preview.Kind));
+            DiplomacyActionAssessment assessment = AssessWithSelection(
+                pRequester, pResponder,
+                DiplomacyProposalType.HouseholdOffering, -1L, selection);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.HouseholdOffering, true,
+                    pOpinion, pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id,
+                    principalHouseholdOffer: preview.Kind ==
+                        RulerHouseholdKind.PrincipalWife),
+                Selection = selection
+            };
+            return true;
+        }
+
+        private static bool TryPrepareUpperRealmHouseholdCandidate(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio,
+            bool requesterSuzerainOfResponder,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            bool candidateAvailable =
+                RulerHouseholdService.TryPrepareAiOffer(pRequester,
+                    pResponder, out RulerHouseholdOfferPreview preview);
+            bool recipientRulerEligible = pResponder?.king?.data != null &&
+                preview != null && preview.RulerActorId ==
+                pResponder.king.data.id;
+            if (!RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                    requesterSuzerainOfResponder, candidateAvailable,
+                    recipientRulerEligible)) return false;
+
             var selection = new DiplomacyProposalSelection(-1L,
                 preview.CandidateActorId, preview.RulerActorId, -1L,
                 RulerHouseholdRules.DetailId(preview.Kind));
@@ -3773,6 +4776,44 @@ namespace AncientWarfare3.core.lineage
             if (!RulerHouseholdService.TryPrepareAiOffer(pRequester,
                     pResponder, out RulerHouseholdOfferPreview preview))
                 return false;
+            var selection = new DiplomacyProposalSelection(-1L,
+                preview.CandidateActorId, preview.RulerActorId, -1L,
+                RulerHouseholdRules.DetailId(preview.Kind));
+            DiplomacyActionAssessment assessment =
+                AssessWithSelectionReadOnly(pRequester, pResponder,
+                    DiplomacyProposalType.HouseholdOffering, -1L,
+                    selection, pMandateReport);
+            if (!ExpectedAccepted(assessment)) return false;
+            pCandidate = new PreparedAiProposal
+            {
+                Candidate = new DiplomacyProposalAiCandidate(
+                    DiplomacyProposalType.HouseholdOffering, true,
+                    pOpinion, pRequesterPowerRatio, false, 0f, false,
+                    targetKingdomId: pResponder.id,
+                    principalHouseholdOffer: preview.Kind ==
+                        RulerHouseholdKind.PrincipalWife),
+                Selection = selection
+            };
+            return true;
+        }
+
+        private static bool TryPrepareUpperRealmHouseholdCandidateReadOnly(
+            Kingdom pRequester, Kingdom pResponder, int pOpinion,
+            float pRequesterPowerRatio, MandateReport pMandateReport,
+            bool requesterSuzerainOfResponder,
+            out PreparedAiProposal pCandidate)
+        {
+            pCandidate = null;
+            bool candidateAvailable =
+                RulerHouseholdService.TryPrepareAiOffer(pRequester,
+                    pResponder, out RulerHouseholdOfferPreview preview);
+            bool recipientRulerEligible = pResponder?.king?.data != null &&
+                preview != null && preview.RulerActorId ==
+                pResponder.king.data.id;
+            if (!RulerHouseholdRules.CanUpperRealmOfferToSubject(
+                    requesterSuzerainOfResponder, candidateAvailable,
+                    recipientRulerEligible)) return false;
+
             var selection = new DiplomacyProposalSelection(-1L,
                 preview.CandidateActorId, preview.RulerActorId, -1L,
                 RulerHouseholdRules.DetailId(preview.Kind));
@@ -5234,6 +6275,31 @@ namespace AncientWarfare3.core.lineage
             NotifyPair(pRequester.id, pResponder.id);
             pReason = "";
             return true;
+        }
+
+        private static bool EnsureAllianceWithdrawalTruce(
+            DiplomacyProposal pProposal, Kingdom pRequester,
+            Kingdom pResponder, out int pTruceUntilYear)
+        {
+            int year = SafeYear();
+            pTruceUntilYear = year +
+                               DiplomacyProposalRules
+                                   .BrokenPactTruceYears;
+            double now = LineageService.CurTime();
+            var request = new DiplomacyTreatyBreakRequest(
+                pRequester.id, pRequester.name ?? "", pResponder.id,
+                pResponder.name ?? "", year, pTruceUntilYear, now,
+                DiplomaticSenderTitle(pRequester),
+                HistoryWriter.BuildYearPrefix(now, pRequester),
+                DiplomacyConversationRules.LetterStyleId(
+                    ResolveLetterStyle(pRequester, pResponder)),
+                DiplomacyConversationRules.LetterToneId(
+                    ResolveLetterTone(pRequester, pResponder)),
+                pProposal?.PlayerInitiated == true);
+            return pProposal != null &&
+                   DiplomacyTreatyPersistence.EnsureProposalTruce(DB,
+                       DiplomacyProposalTableItem.GetTableName(),
+                       pProposal.ProposalId, request, out _);
         }
 
         private static string TypeId(DiplomacyProposalType pType)

@@ -514,9 +514,7 @@ namespace AncientWarfare3.core.lineage
                     _ => "This is our court's considered answer."
                 });
             reply += "\n" + tone;
-            return pProposal.Type == DiplomacyProposalType.RoyalMarriage ||
-                   pProposal.Type ==
-                   DiplomacyProposalType.HouseholdOffering
+            return ShouldAppendProposalSubject(pProposal)
                 ? reply + "\n" + ProposalSubject(pProposal)
                 : reply;
         }
@@ -579,6 +577,8 @@ namespace AncientWarfare3.core.lineage
         private static string ProposalSubject(DiplomacyProposal pProposal)
         {
             string typeName = ProposalTypeName(pProposal.Type);
+            string directional = DirectionalProposalSubject(pProposal);
+            if (!string.IsNullOrEmpty(directional)) return directional;
             if (pProposal.Type == DiplomacyProposalType.Coalition)
             {
                 Kingdom target = FindKingdom(pProposal.TargetKingdomId);
@@ -634,6 +634,66 @@ namespace AncientWarfare3.core.lineage
             return string.Format(AW_L10n.Text(
                     "aw_diplomacy_royal_marriage_pair", "{0}: {1} and {2}"),
                 typeName, requester, responder);
+        }
+
+        private static bool ShouldAppendProposalSubject(
+            DiplomacyProposal pProposal)
+        {
+            return pProposal?.Type == DiplomacyProposalType.RoyalMarriage ||
+                   pProposal?.Type ==
+                   DiplomacyProposalType.HouseholdOffering ||
+                   pProposal?.Type == DiplomacyProposalType.Vassalize ||
+                   pProposal?.Type == DiplomacyProposalType.EndVassal;
+        }
+
+        private static string DirectionalProposalSubject(
+            DiplomacyProposal pProposal)
+        {
+            if (pProposal == null) return "";
+            string key = "";
+            string fallback = "";
+            if (pProposal.Type == DiplomacyProposalType.Vassalize)
+            {
+                if (pProposal.DetailId == DiplomacyProposalOpportunityRules
+                        .VassalizeDemandDetail)
+                {
+                    key = "aw_diplomacy_detail_vassalize_demand";
+                    fallback = "Demand that the other realm become our vassal";
+                }
+                else if (pProposal.DetailId ==
+                         DiplomacyProposalOpportunityRules
+                             .VassalizeSeekDetail)
+                {
+                    key = "aw_diplomacy_detail_vassalize_seek";
+                    fallback = "Seek protection as the other realm's vassal";
+                }
+                else if (pProposal.DetailId ==
+                         DiplomacyProposalOpportunityRules
+                             .VassalizeInternalizeDetail)
+                {
+                    key = "aw_diplomacy_detail_vassalize_internalize";
+                    fallback = "Enter the suzerain's formal subject system";
+                }
+            }
+            else if (pProposal.Type == DiplomacyProposalType.EndVassal)
+            {
+                if (pProposal.DetailId == DiplomacyProposalOpportunityRules
+                        .EndVassalReleaseDetail)
+                {
+                    key = "aw_diplomacy_detail_end_vassal_release";
+                    fallback = "Release the subject from vassalage";
+                }
+                else if (pProposal.DetailId ==
+                         DiplomacyProposalOpportunityRules
+                             .EndVassalRequestDetail)
+                {
+                    key = "aw_diplomacy_detail_end_vassal_request";
+                    fallback = "Request release from the suzerain";
+                }
+            }
+            return string.IsNullOrEmpty(key)
+                ? ""
+                : AW_L10n.Text(key, fallback);
         }
 
         private static string BuildAutomaticWarSettlementTruce(
