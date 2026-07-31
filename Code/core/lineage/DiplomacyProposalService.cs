@@ -723,7 +723,28 @@ namespace AncientWarfare3.core.lineage
             if (detailId == DiplomacyProposalOpportunityRules
                     .VassalizeInternalizeDetail)
             {
-                result.UnavailableReason = "internalization_target";
+                bool responderImperial = KingdomTitleService.IsEmperor(
+                    pResponder);
+                bool responderHasMandate = pReadOnly
+                    ? MandateService.IsMandateKingdomReadOnly(pResponder,
+                        pMandateReport)
+                    : MandateService.IsMandateKingdom(pResponder);
+                int tier = DiplomacyProposalOpportunityRules
+                    .InternalizationTier(
+                        VassalService.GetTributarySuzerain(pRequester) ==
+                        pResponder, responderImperial,
+                        responderHasMandate);
+                if (!VassalService.CanInternalizeTributary(pRequester,
+                        pResponder, tier, out result.UnavailableReason))
+                    return result;
+                result.Allowed = true;
+                result.UnavailableReason = "";
+                result.Acceptance = DiplomacyProposalRules.Assess(
+                    DiplomacyProposalType.Vassalize,
+                    pReadOnly
+                        ? BuildScoreFactsReadOnly(pResponder, pRequester,
+                            pMandateReport)
+                        : BuildScoreFacts(pResponder, pRequester));
                 return result;
             }
 
@@ -2401,8 +2422,21 @@ namespace AncientWarfare3.core.lineage
                             DiplomacyProposalOpportunityRules
                                 .VassalizeInternalizeDetail)
                         {
-                            pReason = "internalization_target";
-                            return false;
+                            int internalTier =
+                                DiplomacyProposalOpportunityRules
+                                    .InternalizationTier(
+                                        VassalService
+                                            .GetTributarySuzerain(
+                                                requester) == responder,
+                                        KingdomTitleService.IsEmperor(
+                                            responder),
+                                        MandateService.IsMandateKingdom(
+                                            responder));
+                            if (!VassalService.TryInternalizeTributary(
+                                    requester, responder, internalTier,
+                                    pProposal.WarId, out pReason))
+                                return false;
+                            break;
                         }
                         if (vassalDirection ==
                             DiplomacyProposalOpportunityRules
@@ -2836,6 +2870,26 @@ namespace AncientWarfare3.core.lineage
                                protectionWar?.data == null ||
                                protectionWar.hasEnded() ||
                                protectionWar.isDefender(responder);
+                    }
+                    if (direction == DiplomacyProposalOpportunityRules
+                            .VassalizeInternalizeDetail)
+                    {
+                        if (VassalService.GetSuzerain(requester) != responder)
+                            return false;
+                        requester.data.get(
+                            LineageKeys.VASSAL_CONTRACT_TIER,
+                            out int actualTier,
+                            VassalContractTierRules.Outer);
+                        int expectedTier =
+                            DiplomacyProposalOpportunityRules
+                                .InternalizationTier(
+                                    requesterTributaryOfResponder: true,
+                                    responderImperial:
+                                    KingdomTitleService.IsEmperor(responder),
+                                    responderHasMandate:
+                                    MandateService.IsMandateKingdom(
+                                        responder));
+                        return actualTier == expectedTier;
                     }
                     return direction == DiplomacyProposalOpportunityRules
                                .VassalizeDemandDetail &&

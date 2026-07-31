@@ -55,6 +55,7 @@
     <Compile Include="DiplomacyActionExpansionRulesTests.cs.txt" />
     <Compile Include="DiplomacyProposalOpportunityRulesTests.cs.txt" />
     <Compile Include="AsyncDiplomacyProposalIdentityTests.cs.txt" />
+    <Compile Include="VassalRelationConversionPersistenceTests.cs.txt" />
     <Compile Include="RulerHouseholdRulesTests.cs.txt" />
     <Compile Include="WarPeaceSettlementScopeRulesTests.cs.txt" />
     <Compile Include="SeparatePeaceRuntimeFactsRulesTests.cs.txt" />
@@ -185,6 +186,7 @@
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AsyncDiplomacyPlanModels.cs" Link="Production\AsyncDiplomacyPlanModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalRelationConversionPersistence.cs" Link="Production\VassalRelationConversionPersistence.cs" />
     <Compile Include="..\..\Code\core\asyncwork\AWAsyncWorkRules.cs" Link="Production\AWAsyncWorkRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateConquestRules.cs" Link="Production\MandateConquestRules.cs" />
     <Compile Include="..\..\Code\core\lineage\MandateWarAiRules.cs" Link="Production\MandateWarAiRules.cs" />

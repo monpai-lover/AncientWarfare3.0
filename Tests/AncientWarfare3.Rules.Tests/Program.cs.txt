@@ -5866,6 +5866,7 @@ DiplomacyTreatyPersistenceTests.Run();
 DiplomacyActionExpansionRulesTests.Run();
 DiplomacyProposalOpportunityRulesTests.Run();
 AsyncDiplomacyProposalIdentityTests.Run();
+VassalRelationConversionPersistenceTests.Run();
 RulerHouseholdRulesTests.Run();
 WarPeaceSettlementScopeRulesTests.Run();
 SeparatePeaceRuntimeFactsRulesTests.Run();
