@@ -93,6 +93,11 @@ aw_diplomacy_action_vassalize,要求称臣,Demand vassalage,要求稱臣
 aw_diplomacy_action_tributary,要求纳贡,Demand tribute,要求納貢
 aw_diplomacy_action_end_alliance,解除盟约,End alliance,解除盟約
 aw_diplomacy_action_end_vassal,解除宗藩,End vassalage,解除宗藩
+aw_diplomacy_detail_vassalize_demand,要求对方成为本国附庸,Demand that the other realm become our vassal,要求對方成為本國附庸
+aw_diplomacy_detail_vassalize_seek,请求对方收本国为附庸并提供保护,Seek protection as the other realm's vassal,請求對方收本國為附庸並提供保護
+aw_diplomacy_detail_vassalize_internalize,请求宗主将本国由朝贡国转为正式宗藩,Enter the suzerain's formal subject system,請求宗主將本國由朝貢國轉為正式宗藩
+aw_diplomacy_detail_end_vassal_release,主动解除对下国的宗藩关系,Release the subject from vassalage,主動解除對下國的宗藩關係
+aw_diplomacy_detail_end_vassal_request,请求宗主解除本国的宗藩关系,Request release from the suzerain,請求宗主解除本國的宗藩關係
 aw_diplomacy_action_declare_war,宣战,Declare war,宣戰
 aw_diplomacy_action_truce,停战协议,Truce,停戰協議
 aw_diplomacy_action_unknown,外交要求,Diplomatic request,外交要求
@@ -151,6 +156,19 @@ aw_diplomacy_failure_alliance_conflict,双方已经分属不同盟约,Both realm
 aw_diplomacy_failure_alliance_members_refuse,现有盟约的成员拒绝该国加入,The existing alliance will not admit this realm,現有盟約的成員拒絕該國加入
 aw_diplomacy_failure_alliance_unavailable,当前无法建立或加入该盟约,The alliance cannot currently be formed,當前無法建立或加入該盟約
 aw_diplomacy_failure_join_war_execution,该国未能加入指定战争,The realm could not be added to the requested war,該國未能加入指定戰爭
+aw_diplomacy_failure_join_war_stale,指定战争已经结束或参战关系已经变化,The selected war is no longer available,指定戰爭已經結束或參戰關係已經變化
+aw_diplomacy_failure_protector_war_conflict,拟议保护国已在该战争中或与交战方存在宗藩冲突,The proposed protector is already involved in a conflicting war,擬議保護國已在該戰爭中或與交戰方存在宗藩衝突
+aw_diplomacy_failure_protector_too_weak,拟议保护国实力不足以提供有效保护,The proposed protector is not strong enough,擬議保護國實力不足以提供有效保護
+aw_diplomacy_failure_protector_relations_low,双方关系不足以请求紧急保护,Relations are too poor to request protection,雙方關係不足以請求緊急保護
+aw_diplomacy_failure_protection_threat_stale,用于请求保护的威胁已经失效,The threat used to justify protection is no longer valid,用於請求保護的威脅已經失效
+aw_diplomacy_failure_protection_war_entry,保护国未能加入指定防御战争,The protector could not enter the defensive war,保護國未能加入指定防禦戰爭
+aw_diplomacy_failure_internalization_target,该朝贡国当前不符合转为正式宗藩的条件,This tributary can no longer enter the formal subject system,該朝貢國當前不符合轉為正式宗藩的條件
+aw_diplomacy_failure_internalization_write,朝贡国转为正式宗藩的档案写入失败,The tributary conversion could not be recorded,朝貢國轉為正式宗藩的檔案寫入失敗
+aw_diplomacy_failure_internalization_title,该朝贡国爵位过高无法转为正式宗藩,The tributary's title is too high for internalization,該朝貢國爵位過高無法轉為正式宗藩
+aw_diplomacy_failure_internalization_rebel,叛乱政权不能转为正式宗藩,A rebel realm cannot be internalized,叛亂政權不能轉為正式宗藩
+aw_diplomacy_failure_alliance_truce_write,盟约已解除但停战协议写入失败,The alliance ended but its truce could not be recorded,盟約已解除但停戰協議寫入失敗
+aw_diplomacy_failure_invalid_vassalize_direction,称臣或收附庸的请求方向无效,The requested subject relationship direction is invalid,稱臣或收附庸的請求方向無效
+aw_diplomacy_failure_invalid_end_vassal_direction,解除宗藩关系的请求方向无效,The requested release direction is invalid,解除宗藩關係的請求方向無效
 aw_diplomacy_failure_subject_write,宗藩协议未能写入档案,The subject agreement could not be recorded,宗藩協議未能寫入檔案
 aw_diplomacy_expected_accept,预计会接受,Expected to accept,預計會接受
 aw_diplomacy_expected_reject,预计会拒绝,Expected to reject,預計會拒絕
