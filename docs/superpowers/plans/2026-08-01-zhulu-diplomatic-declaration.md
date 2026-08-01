@@ -15,6 +15,7 @@
 - Modify `Code/core/lineage/ZhuluWarRules.cs`: fixed 70 percent intent rule.
 - Modify `Code/core/lineage/WarDecisionQueueRules.cs`: admit `zhulu_annexation` when its intrinsic casus belli is valid.
 - Modify `Code/core/lineage/DiplomaticWarDeclarationService.cs`: queue and execute Zhulu declarations through the normal notice ledger.
+- Modify `Code/core/lineage/WarDecisionService.cs`: resolve the Zhulu declaration reason through the built-in localized label.
 - Modify `Code/core/lineage/WarDecisionAI.cs`: use 70 percent for Zhulu and call the diplomatic helper in synchronous and asynchronous paths.
 - Modify `Code/core/lineage/ZhuluAgeDirectorService.cs`: remove target selection and direct war creation; retain scoring and Mandate work.
 - Modify `Tests/AncientWarfare3.Rules.Tests/ZhuluWarRulesTests.cs.txt`: pure boundary and integration source assertions.
@@ -319,7 +320,7 @@ Expected: no `TryDeclare` call in `ZhuluAgeDirectorService.cs` or `WarDecisionAI
 
 - [ ] **Step 4: Deploy source without DLL output**
 
-Copy the five changed production `.cs` files into their matching paths under the game mod directory. Do not run the AW3 DLL build and do not copy `AncientWarfare3.dll`.
+Copy the six changed production `.cs` files into their matching paths under the game mod directory. Do not run the AW3 DLL build and do not copy `AncientWarfare3.dll`.
 
 - [ ] **Step 5: Verify deployed source equality**
 
@@ -330,6 +331,7 @@ $files = @(
   'Code\core\lineage\ZhuluWarRules.cs',
   'Code\core\lineage\WarDecisionQueueRules.cs',
   'Code\core\lineage\DiplomaticWarDeclarationService.cs',
+  'Code\core\lineage\WarDecisionService.cs',
   'Code\core\lineage\WarDecisionAI.cs',
   'Code\core\lineage\ZhuluAgeDirectorService.cs'
 )
