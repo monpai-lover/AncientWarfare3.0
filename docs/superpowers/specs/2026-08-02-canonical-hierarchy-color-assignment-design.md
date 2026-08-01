@@ -25,7 +25,7 @@ valid empty-world assignment is distinct from a failed build.
 
 ## Assignment Rule
 
-`BuildCanonicalColorAssignment(identities, edges)` performs these steps:
+`BuildCanonicalAssignment(identities, edges)` performs these steps:
 
 1. Copy and sort identities by their complete stable comparison key.
 2. Deterministically collapse exact duplicates. Conflicting duplicate records

@@ -9,14 +9,53 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         FillColorsAvoidActualAdjacentOwnerCollisions();
         FillColorsAreChunkContextIndependentAndSeamStable();
         AuthoritativeFillUsesOneAssignmentAcrossIndependentContexts();
+        FillApiRequiresExplicitAuthority();
         RibbonsCarryTwoSidedPrimitiveAttributesAndTierWidths();
         FullFootprintNarrowsAndRiverWaterIsTransparent();
+        ExactTriangleFootprintCatchesSliversAndAllowsBoundaryContact();
         CoastFlagsAndTransparencyAreSideSpecific();
         CanonicalSeamsAreBitIdentical();
         CanonicalSeamWidthsIgnoreOneSidedSegmentHazards();
         UnsafeAcceptedRibbonRebuildsFromRawContour();
+        RawFallbackUsesRawTangentsEndToEnd();
         UnsafeRawRibbonReturnsBoundedFailure();
+        InvalidRibbonInputsAreBoundedPerItem();
         HierarchyColorsAreStableAndDistinguishable();
+    }
+
+    private static void FillApiRequiresExplicitAuthority()
+    {
+        Type rules = typeof(HierarchicalVassalBoundaryMeshDraftRules);
+        System.Reflection.MethodInfo[] publicFillMethods = rules.GetMethods(
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static)
+            .Where(method => method.Name.StartsWith("BuildFill",
+                StringComparison.Ordinal)).ToArray();
+        Equal(1, publicFillMethods.Length,
+            "exactly one public fill entry point exists");
+        Equal(true, publicFillMethods.Any(method =>
+                method.Name == "BuildFillAuthoritative" &&
+                method.GetParameters().Length == 4 &&
+                method.GetParameters()[3].ParameterType ==
+                    typeof(HierarchyColorAssignment)),
+            "runtime fill API is explicitly authoritative");
+        Equal(true, rules.GetMethods(
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Static)
+            .Any(method => method.Name ==
+                "BuildFillNonAuthoritativeForTests"),
+            "compatibility fill API is internal and test-only");
+
+        string workerPath = Path.Combine(
+            Directory.GetCurrentDirectory(), "Code", "core", "policy",
+            "HierarchicalVassalBoundaryTopologyWorker.cs");
+        if (File.Exists(workerPath))
+        {
+            string worker = File.ReadAllText(workerPath);
+            Equal(false,
+                worker.Contains("BuildFillNonAuthoritativeForTests"),
+                "runtime topology worker cannot use non-authoritative fill");
+        }
     }
 
     private static void CoherentFillIsConsolidated()
@@ -24,7 +63,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         BoundaryCellRaster grid = Raster(32, 32,
             (x, y) => Land(x, y, 7, 70, 700, 0x336699FF));
         BoundaryMeshDraft fill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillNonAuthoritativeForTests(
                 grid, BoundaryDisplayLayer.Countries, Interior(grid));
         Equal(true, fill.VertexCount < 128,
             "a coherent 32x32 owner uses fewer than 128 vertices");
@@ -96,7 +135,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         Equal(base234, base249,
             "owners 234 and 249 exercise a real candidate-zero collision");
         BoundaryMeshDraft fill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 grid, BoundaryDisplayLayer.Cities, Interior(grid),
                 GlobalAssignment());
         Equal(0, fill.FailureCount,
@@ -108,7 +147,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         Equal(true, color234 != color249,
             "known colliding owners 234 and 249 receive distinct stable candidates");
         BoundaryMeshDraft rebuilt =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 grid, BoundaryDisplayLayer.Cities, Interior(grid),
                 GlobalAssignment());
         Equal(color234, rebuilt.LeftRgba[
@@ -126,11 +165,11 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             Land(x, y, 1, x == 0 ? 234 : 249,
                 x == 0 ? 234 : 249, 0x336699FF));
         BoundaryMeshDraft leftContext =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 contextGrid, BoundaryDisplayLayer.Cities,
                 Bounds(0, 0, 32, 2, contextGrid), assignment);
         BoundaryMeshDraft rightContext =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 contextGrid, BoundaryDisplayLayer.Cities,
                 Bounds(32, 0, 64, 2, contextGrid), assignment);
         uint leftColor249 = leftContext.LeftRgba[
@@ -144,11 +183,11 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             Land(x, y, 1, x < 32 ? 234 : 249,
                 x < 32 ? 234 : 249, 0x336699FF));
         BoundaryMeshDraft seamLeft =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 seamGrid, BoundaryDisplayLayer.Cities,
                 Bounds(0, 0, 32, 2, seamGrid), assignment);
         BoundaryMeshDraft seamRight =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 seamGrid, BoundaryDisplayLayer.Cities,
                 Bounds(32, 0, 64, 2, seamGrid), assignment);
         uint seamColor234 = seamLeft.LeftRgba[0];
@@ -166,7 +205,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         BoundaryCellRaster grid = Raster(4, 2, (x, y) =>
             Land(x, y, 1, 10, x < 2 ? 100 : 101, 0x336699FF));
         BoundaryMeshDraft fill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillNonAuthoritativeForTests(
                 grid, BoundaryDisplayLayer.Cities, Interior(grid));
         Equal(true, fill.LeftOwnerIds.Contains(100L) &&
                     fill.LeftOwnerIds.Contains(101L),
@@ -188,11 +227,11 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             Land(x, y, 1, 10, 249, 0x336699FF));
 
         BoundaryMeshDraft farFirst =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 farSide, BoundaryDisplayLayer.Cities,
                 Interior(farSide), assignment);
         BoundaryMeshDraft adjacentSecond =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 adjacent, BoundaryDisplayLayer.Cities,
                 Interior(adjacent), assignment);
         uint far249 = farFirst.LeftRgba[
@@ -203,17 +242,17 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "global assignment keeps owner 249 bit-identical across independent rasters");
 
         BoundaryMeshDraft bounded =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 adjacent, BoundaryDisplayLayer.Cities,
                 Bounds(2, 0, 4, 2, adjacent), assignment);
         Equal(far249, bounded.LeftRgba[0],
             "chunk bounds do not alter the authoritative color");
         BoundaryMeshDraft adjacentFirst =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 adjacent, BoundaryDisplayLayer.Cities,
                 Interior(adjacent), assignment);
         BoundaryMeshDraft farSecond =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 farSide, BoundaryDisplayLayer.Cities,
                 Interior(farSide), assignment);
         Equal(adjacent249, adjacentFirst.LeftRgba[
@@ -231,7 +270,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
                 ? Land(x, y, 1, 10, 10, 0x336699FF)
                 : Land(x, y, 2, 20, 500, 0x993333FF));
         BoundaryMeshDraft countryFill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 countries, BoundaryDisplayLayer.Countries,
                 Interior(countries), assignment);
         Equal(true, assignment.TryGetColor(
@@ -250,7 +289,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         BoundaryCellRaster citySameNumericId = Raster(2, 2, (x, y) =>
             Land(x, y, 1, 10, 10, 0x336699FF));
         BoundaryMeshDraft cityFill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 citySameNumericId, BoundaryDisplayLayer.Cities,
                 Interior(citySameNumericId), assignment);
         Equal(true, assignment.TryGetColor(
@@ -264,7 +303,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
                 new[] { CityIdentity(234, 1, 10, 0x336699FF) },
                 Array.Empty<HierarchyColorEdge>());
         BoundaryMeshDraft missingOwner =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 farSide, BoundaryDisplayLayer.Cities,
                 Interior(farSide), missing);
         Equal(1, missingOwner.FailureCount,
@@ -280,7 +319,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
                     CityIdentity(249, 2, 20, 0x993333FF)
                 }, Array.Empty<HierarchyColorEdge>());
         BoundaryMeshDraft invalidFill =
-            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFillAuthoritative(
                 farSide, BoundaryDisplayLayer.Cities,
                 Interior(farSide), invalid);
         Equal(1, invalidFill.FailureCount,
@@ -390,6 +429,66 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         Equal(true, riverDraft.Flags.All(flags =>
                 (flags & (byte)BoundaryRibbonFlags.River) != 0),
             "river flag is carried per vertex");
+    }
+
+    private static void ExactTriangleFootprintCatchesSliversAndAllowsBoundaryContact()
+    {
+        BoundaryCellRaster grid = Raster(10, 10, (x, y) =>
+            Land(x, y, x == 1 && y == 1 ? 3 : 1,
+                x == 1 && y == 1 ? 30 : 10,
+                x == 1 && y == 1 ? 300 : 100, 0xFFFFFFFF));
+        var curve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(0, 0),
+            new BoundaryFloatPoint(8, 8)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(1, 1),
+            new BoundaryFloatPoint(1, 1));
+        var input = new BoundaryRibbonInput(
+            curve,
+            new[] { new BoundaryGridPoint(0, 0),
+                new BoundaryGridPoint(8, 8) },
+            BoundaryTier.SuzerainSystem, 1, 2,
+            0xFFFFFFFF, 0x888888FF, true,
+            BoundaryRibbonCoastSide.None);
+
+        bool sliverSafe =
+            HierarchicalVassalBoundaryMeshDraftRules
+                .TriangleFootprintIsSafeForTests(
+                    new BoundaryFloatPoint(0.98f, 1.01f),
+                    new BoundaryFloatPoint(1.01f, 0.98f),
+                    new BoundaryFloatPoint(8, 8), grid, input);
+        Equal(false, sliverSafe,
+            "positive corner sliver in a third-owner cell is rejected");
+
+        bool microscopicSliverSafe =
+            HierarchicalVassalBoundaryMeshDraftRules
+                .TriangleFootprintIsSafeForTests(
+                    new BoundaryFloatPoint(1.00001f, 1.00001f),
+                    new BoundaryFloatPoint(1.00002f, 1.00001f),
+                    new BoundaryFloatPoint(1.00001f, 1.00002f),
+                    grid, input);
+        Equal(false, microscopicSliverSafe,
+            "every positive-area forbidden-cell sliver is rejected");
+
+        bool boundaryTouchSafe =
+            HierarchicalVassalBoundaryMeshDraftRules
+                .TriangleFootprintIsSafeForTests(
+                    new BoundaryFloatPoint(0.99f, 1.01f),
+                    new BoundaryFloatPoint(1.01f, 0.99f),
+                    new BoundaryFloatPoint(0, 0), grid, input);
+        Equal(true, boundaryTouchSafe,
+            "zero-area contact at a forbidden cell corner is allowed");
+
+        bool shortEdgeBoundaryTouchSafe =
+            HierarchicalVassalBoundaryMeshDraftRules
+                .TriangleFootprintIsSafeForTests(
+                    new BoundaryFloatPoint(1f, 1.1f),
+                    new BoundaryFloatPoint(1f, 1.3f),
+                    new BoundaryFloatPoint(0.99995f, 1.2f),
+                    grid, input);
+        Equal(true, shortEdgeBoundaryTouchSafe,
+            "short nonzero edges preserve boundary-only contact");
     }
 
     private static void CanonicalSeamsAreBitIdentical()
@@ -571,6 +670,40 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "raw fallback emits the widest safe non-degenerate ribbon");
     }
 
+    private static void RawFallbackUsesRawTangentsEndToEnd()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 1 : 2, x < 2 ? 10 : 20,
+                x < 2 ? 100 : 200, 0xFFFFFFFF));
+        var accepted = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(2.60f, 0.2f),
+            new BoundaryFloatPoint(2.60f, 3.8f)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(1, 0),
+            new BoundaryFloatPoint(1, 0));
+        var input = new BoundaryRibbonInput(
+            accepted,
+            new[] { new BoundaryGridPoint(2, 0),
+                new BoundaryGridPoint(2, 4) },
+            BoundaryTier.SuzerainSystem, 1, 2,
+            0x336699FF, 0x993333FF, false,
+            BoundaryRibbonCoastSide.None);
+
+        BoundaryMeshDraft draft =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(
+                new[] { input }, grid);
+
+        Equal(true, draft.VertexCount > 0,
+            "raw fallback remains renderable");
+        Equal(true, draft.SegmentFallbacks.All(value => value != 0),
+            "accepted curve is rejected to raw fallback");
+        BitEqual(-1f, draft.NormalX[0],
+            "raw vertical direction supplies endpoint normal x");
+        BitEqual(0f, draft.NormalY[0],
+            "accepted horizontal tangent does not leak into fallback normal y");
+    }
+
     private static void UnsafeRawRibbonReturnsBoundedFailure()
     {
         BoundaryCellRaster water = Raster(3, 3, (x, y) => Water(x, y));
@@ -596,6 +729,89 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "bounded failure never emits zero-width ribbon vertices");
         Equal(0, draft.SuzerainSystemIndices.Length,
             "bounded failure never emits degenerate triangles");
+    }
+
+    private static void InvalidRibbonInputsAreBoundedPerItem()
+    {
+        BoundaryCellRaster grid = Raster(8, 4, (x, y) =>
+            Land(x, y, x < 4 ? 1 : 2, x < 4 ? 10 : 20,
+                x < 4 ? 100 : 200, 0xFFFFFFFF));
+        BoundaryRibbonInput valid = Input(
+            BoundaryTier.SuzerainSystem, 1, 2,
+            0xFFFFFFFF, 0x888888FF, 1);
+        var goodRaw = new[]
+        {
+            new BoundaryGridPoint(4, 0), new BoundaryGridPoint(4, 3)
+        };
+        var goodCurve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(4, 0.2f),
+            new BoundaryFloatPoint(4, 2.8f)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(0, 1), new BoundaryFloatPoint(0, 1));
+        BoundaryRibbonInput Invalid(
+            BoundaryCurveDraft curve, IReadOnlyList<BoundaryGridPoint> raw,
+            BoundaryTier tier = BoundaryTier.SuzerainSystem)
+        {
+            return new BoundaryRibbonInput(
+                curve, raw, tier, 1, 2,
+                0xFFFFFFFF, 0x888888FF, false,
+                BoundaryRibbonCoastSide.None);
+        }
+        var nonFiniteCurve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(4, 0.2f),
+            new BoundaryFloatPoint(float.NaN, 1f),
+            new BoundaryFloatPoint(4, 2.8f)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(0, 1), new BoundaryFloatPoint(0, 1));
+        var closedCurve = new BoundaryCurveDraft(goodCurve.Points,
+            true, false, 1f,
+            new BoundaryFloatPoint(0, 1), new BoundaryFloatPoint(0, 1));
+        var closedRaw = new[]
+        {
+            new BoundaryGridPoint(4, 0), new BoundaryGridPoint(4, 3),
+            new BoundaryGridPoint(4, 0)
+        };
+        var excessiveResampleCurve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(4, 0),
+            new BoundaryFloatPoint(4, 14000)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(0, 1), new BoundaryFloatPoint(0, 1));
+        var excessiveResampleRaw = new[]
+        {
+            new BoundaryGridPoint(4, 0),
+            new BoundaryGridPoint(4, 14000)
+        };
+        BoundaryRibbonInput[] inputs =
+        {
+            valid,
+            null,
+            Invalid(null, goodRaw),
+            Invalid(goodCurve, null),
+            Invalid(goodCurve, Array.Empty<BoundaryGridPoint>()),
+            Invalid(new BoundaryCurveDraft(null, false, false, 1f), goodRaw),
+            Invalid(new BoundaryCurveDraft(
+                Array.Empty<BoundaryFloatPoint>(), false, false, 1f), goodRaw),
+            Invalid(nonFiniteCurve, goodRaw),
+            Invalid(closedCurve, goodRaw),
+            Invalid(goodCurve, closedRaw),
+            Invalid(goodCurve, goodRaw, BoundaryTier.None),
+            Invalid(goodCurve, goodRaw, (BoundaryTier)99),
+            Invalid(excessiveResampleCurve, goodRaw),
+            Invalid(goodCurve, excessiveResampleRaw)
+        };
+
+        BoundaryMeshDraft draft =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(inputs, grid);
+
+        Equal(13, draft.FailureCount,
+            "each invalid ribbon input reports one bounded failure");
+        Equal(true, draft.VertexCount > 0,
+            "a valid sibling input still emits geometry");
+        Equal(true, draft.SuzerainSystemIndices.Length > 0,
+            "invalid siblings do not discard the valid ribbon");
     }
 
     private static BoundaryRibbonInput Input(

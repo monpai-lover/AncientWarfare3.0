@@ -33,8 +33,8 @@ namespace AncientWarfare3.core.policy
             bool isRiver,
             BoundaryRibbonCoastSide coastSide)
         {
-            Curve = curve ?? throw new ArgumentNullException(nameof(curve));
-            RawPoints = rawPoints ?? throw new ArgumentNullException(nameof(rawPoints));
+            Curve = curve;
+            RawPoints = rawPoints;
             Tier = tier;
             LeftOwnerId = leftOwnerId;
             RightOwnerId = rightOwnerId;
@@ -125,6 +125,8 @@ namespace AncientWarfare3.core.policy
     {
         private const float Epsilon = 0.0001f;
         private const float MaximumCorridor = 0.45f;
+        private const int MaximumRibbonPointCount = 65536;
+        private const int MaximumTriangleFootprintCells = 262144;
 
         public static float TargetWidth(BoundaryTier pTier)
         {
@@ -141,7 +143,7 @@ namespace AncientWarfare3.core.policy
             }
         }
 
-        public static BoundaryMeshDraft BuildFill(
+        internal static BoundaryMeshDraft BuildFillNonAuthoritativeForTests(
             BoundaryCellRaster pRaster)
         {
             if (pRaster == null)
@@ -151,10 +153,11 @@ namespace AncientWarfare3.core.policy
                 pRaster.MaxXExclusive, pRaster.MaxYExclusive,
                 pRaster.OriginX, pRaster.OriginY,
                 pRaster.MaxXExclusive, pRaster.MaxYExclusive);
-            return BuildFill(pRaster, BoundaryDisplayLayer.Countries, bounds);
+            return BuildFillNonAuthoritativeForTests(
+                pRaster, BoundaryDisplayLayer.Countries, bounds);
         }
 
-        public static BoundaryMeshDraft BuildFill(
+        internal static BoundaryMeshDraft BuildFillNonAuthoritativeForTests(
             BoundaryCellRaster pRaster,
             BoundaryDisplayLayer pLayer,
             BoundaryChunkBounds pBounds)
@@ -163,7 +166,7 @@ namespace AncientWarfare3.core.policy
             return BuildFillCore(pRaster, pLayer, pBounds, null);
         }
 
-        public static BoundaryMeshDraft BuildFill(
+        public static BoundaryMeshDraft BuildFillAuthoritative(
             BoundaryCellRaster pRaster,
             BoundaryDisplayLayer pLayer,
             BoundaryChunkBounds pBounds,
@@ -300,11 +303,14 @@ namespace AncientWarfare3.core.policy
             for (int inputIndex = 0; inputIndex < pInputs.Count; inputIndex++)
             {
                 BoundaryRibbonInput input = pInputs[inputIndex];
-                if (!input.Curve.IsValid || input.Curve.Points.Count < 2 ||
-                    input.Tier == BoundaryTier.None)
+                if (!RibbonInputIsValid(input))
+                {
+                    failureCount++;
                     continue;
+                }
                 IReadOnlyList<BoundaryFloatPoint> samples =
                     Resample(input.Curve.Points, 0.20f);
+                BoundaryCurveDraft effectiveCurve = input.Curve;
                 bool rawFallback = false;
                 float targetHalfWidth = TargetWidth(input.Tier) * 0.5f;
                 float[] widths = SafeWidths(
@@ -313,11 +319,12 @@ namespace AncientWarfare3.core.policy
                     samples, input.Curve, widths, pRaster, input);
                 if (HasZeroWidth(widths))
                 {
-                    samples = Resample(ToFloatPoints(input.RawPoints), 0.20f);
+                    effectiveCurve = BuildRawCurve(input.RawPoints);
+                    samples = Resample(effectiveCurve.Points, 0.20f);
                     widths = SafeWidths(
-                        samples, input.Curve, targetHalfWidth, pRaster, input);
+                        samples, effectiveCurve, targetHalfWidth, pRaster, input);
                     ConstrainSegmentFootprints(
-                        samples, input.Curve, widths, pRaster, input);
+                        samples, effectiveCurve, widths, pRaster, input);
                     rawFallback = true;
                 }
                 if (HasZeroWidth(widths))
@@ -331,7 +338,7 @@ namespace AncientWarfare3.core.policy
                 {
                     BoundaryFloatPoint center = samples[pointIndex];
                     BoundaryFloatPoint tangent = TangentAt(
-                        input.Curve, samples, pointIndex);
+                        effectiveCurve, samples, pointIndex);
                     Normalize(tangent, out float tangentX, out float tangentY);
                     float nx = -tangentY;
                     float ny = tangentX;
@@ -377,6 +384,47 @@ namespace AncientWarfare3.core.policy
                 halfWidths.ToArray(), flags.ToArray(), alpha.ToArray(),
                 fallbacks.ToArray(), city.ToArray(), vassal.ToArray(),
                 system.ToArray(), centerLine.ToArray(), failureCount);
+        }
+
+        private static bool RibbonInputIsValid(BoundaryRibbonInput pInput)
+        {
+            if (pInput == null || pInput.Curve == null ||
+                pInput.RawPoints == null ||
+                pInput.Tier < BoundaryTier.City ||
+                pInput.Tier > BoundaryTier.SuzerainSystem)
+                return false;
+            BoundaryCurveDraft curve = pInput.Curve;
+            if (!curve.IsValid || curve.Closed || curve.Points == null ||
+                curve.Points.Count < 2 ||
+                curve.Points.Count > MaximumRibbonPointCount ||
+                !ResampleCountWithinBudget(curve.Points) ||
+                !IsFinite(curve.StartTangent) || !IsFinite(curve.EndTangent))
+                return false;
+            for (int i = 0; i < curve.Points.Count; i++)
+                if (!IsFinite(curve.Points[i])) return false;
+            if (pInput.RawPoints.Count < 2 ||
+                pInput.RawPoints.Count > MaximumRibbonPointCount ||
+                !ResampleCountWithinBudget(pInput.RawPoints) ||
+                pInput.RawPoints[0].Equals(
+                    pInput.RawPoints[pInput.RawPoints.Count - 1]))
+                return false;
+            bool hasDistinctRawPoint = false;
+            BoundaryGridPoint first = pInput.RawPoints[0];
+            for (int i = 1; i < pInput.RawPoints.Count; i++)
+            {
+                if (!pInput.RawPoints[i].Equals(first))
+                {
+                    hasDistinctRawPoint = true;
+                    break;
+                }
+            }
+            return hasDistinctRawPoint;
+        }
+
+        private static bool IsFinite(BoundaryFloatPoint pPoint)
+        {
+            return !float.IsNaN(pPoint.X) && !float.IsInfinity(pPoint.X) &&
+                   !float.IsNaN(pPoint.Y) && !float.IsInfinity(pPoint.Y);
         }
 
         public static float ComputeSafeHalfWidth(
@@ -539,6 +587,7 @@ namespace AncientWarfare3.core.policy
             BoundaryCellRaster pRaster,
             BoundaryRibbonInput pInput)
         {
+            var scratch = new TriangleClipScratch();
             BoundaryFloatPoint previousTangent =
                 TangentAt(pCurve, pSamples, pPrevious);
             BoundaryFloatPoint currentTangent =
@@ -557,16 +606,32 @@ namespace AncientWarfare3.core.policy
                 pSamples[pCurrent], currentNormal, -pCurrentWidth);
             return TriangleFootprintIsSafe(
                        previousLeft, currentLeft, pSamples[pCurrent],
-                       pPreviousWidth, pCurrentWidth, 0f, pRaster, pInput) &&
+                       pPreviousWidth, pCurrentWidth, 0f,
+                       pRaster, pInput, scratch) &&
                    TriangleFootprintIsSafe(
                        previousLeft, pSamples[pCurrent], pSamples[pPrevious],
-                       pPreviousWidth, 0f, 0f, pRaster, pInput) &&
+                       pPreviousWidth, 0f, 0f,
+                       pRaster, pInput, scratch) &&
                    TriangleFootprintIsSafe(
                        pSamples[pPrevious], pSamples[pCurrent], currentRight,
-                       0f, 0f, -pCurrentWidth, pRaster, pInput) &&
+                       0f, 0f, -pCurrentWidth,
+                       pRaster, pInput, scratch) &&
                    TriangleFootprintIsSafe(
                        pSamples[pPrevious], currentRight, previousRight,
-                       0f, -pCurrentWidth, -pPreviousWidth, pRaster, pInput);
+                       0f, -pCurrentWidth, -pPreviousWidth,
+                       pRaster, pInput, scratch);
+        }
+
+        internal static bool TriangleFootprintIsSafeForTests(
+            BoundaryFloatPoint pA,
+            BoundaryFloatPoint pB,
+            BoundaryFloatPoint pC,
+            BoundaryCellRaster pRaster,
+            BoundaryRibbonInput pInput)
+        {
+            return TriangleFootprintIsSafe(
+                pA, pB, pC, 0f, 0f, 0f,
+                pRaster, pInput, new TriangleClipScratch());
         }
 
         private static bool TriangleFootprintIsSafe(
@@ -577,29 +642,241 @@ namespace AncientWarfare3.core.policy
             float pDistanceB,
             float pDistanceC,
             BoundaryCellRaster pRaster,
-            BoundaryRibbonInput pInput)
+            BoundaryRibbonInput pInput,
+            TriangleClipScratch pScratch)
         {
-            const int divisions = 4;
-            for (int row = 0; row <= divisions; row++)
-            for (int column = 0; column <= divisions - row; column++)
+            if (!pInput.IsRiver &&
+                (DistanceToRaw(pA, pInput.RawPoints) > MaximumCorridor + Epsilon ||
+                 DistanceToRaw(pB, pInput.RawPoints) > MaximumCorridor + Epsilon ||
+                 DistanceToRaw(pC, pInput.RawPoints) > MaximumCorridor + Epsilon))
+                return false;
+            float minimumX = Math.Min(pA.X, Math.Min(pB.X, pC.X));
+            float maximumX = Math.Max(pA.X, Math.Max(pB.X, pC.X));
+            float minimumY = Math.Min(pA.Y, Math.Min(pB.Y, pC.Y));
+            float maximumY = Math.Max(pA.Y, Math.Max(pB.Y, pC.Y));
+            double firstX = Math.Floor(minimumX);
+            double lastX = Math.Floor(maximumX);
+            double firstY = Math.Floor(minimumY);
+            double lastY = Math.Floor(maximumY);
+            if (firstX < int.MinValue || lastX > int.MaxValue ||
+                firstY < int.MinValue || lastY > int.MaxValue)
+                return false;
+            long cellWidth = (long)(lastX - firstX) + 1L;
+            long cellHeight = (long)(lastY - firstY) + 1L;
+            if (cellWidth <= 0L || cellHeight <= 0L ||
+                cellWidth > MaximumTriangleFootprintCells ||
+                cellHeight > MaximumTriangleFootprintCells ||
+                cellWidth * cellHeight > MaximumTriangleFootprintCells)
+                return false;
+            for (long y = (long)firstY; y <= (long)lastY; y++)
+            for (long x = (long)firstX; x <= (long)lastX; x++)
             {
-                float wa = (float)row / divisions;
-                float wb = (float)column / divisions;
-                float wc = 1f - wa - wb;
-                var point = new BoundaryFloatPoint(
-                    pA.X * wa + pB.X * wb + pC.X * wc,
-                    pA.Y * wa + pB.Y * wb + pC.Y * wc);
-                float distance = pDistanceA * wa +
-                                 pDistanceB * wb + pDistanceC * wc;
-                if (!pInput.IsRiver &&
-                    DistanceToRaw(point, pInput.RawPoints) >
-                    MaximumCorridor + Epsilon)
-                    return false;
-                if (!IsFootprintPointAllowed(
-                        point, distance, pRaster, pInput))
+                if (!CellIsForbidden(
+                        (int)x, (int)y,
+                        pDistanceA, pDistanceB, pDistanceC,
+                        pRaster, pInput))
+                    continue;
+                double area = TriangleCellIntersectionArea(
+                    pA, pB, pC, (int)x, (int)y, pScratch);
+                if (area > 0f ||
+                    SegmentCrossesCellInterior(pA, pB, (int)x, (int)y) ||
+                    SegmentCrossesCellInterior(pB, pC, (int)x, (int)y) ||
+                    SegmentCrossesCellInterior(pC, pA, (int)x, (int)y))
                     return false;
             }
             return true;
+        }
+
+        private static bool CellIsForbidden(
+            int pX,
+            int pY,
+            float pDistanceA,
+            float pDistanceB,
+            float pDistanceC,
+            BoundaryCellRaster pRaster,
+            BoundaryRibbonInput pInput)
+        {
+            BoundaryCellFacts cell = pRaster.GetOrInvalid(pX, pY);
+            if (!cell.IsValid)
+            {
+                bool outside = pX < pRaster.OriginX || pY < pRaster.OriginY ||
+                    pX >= pRaster.MaxXExclusive ||
+                    pY >= pRaster.MaxYExclusive;
+                return !outside || !CoastSideAllows(
+                    pDistanceA, pDistanceB, pDistanceC, pInput.CoastSide);
+            }
+            if (!cell.IsLand)
+            {
+                if (pInput.IsRiver &&
+                    cell.Water == BoundaryWaterKind.InlandWater)
+                    return false;
+                return !CoastSideAllows(
+                    pDistanceA, pDistanceB, pDistanceC, pInput.CoastSide);
+            }
+            long owner = OwnerId(cell, pInput.Tier);
+            return owner != pInput.LeftOwnerId &&
+                   owner != pInput.RightOwnerId;
+        }
+
+        private static bool CoastSideAllows(
+            float pDistanceA,
+            float pDistanceB,
+            float pDistanceC,
+            BoundaryRibbonCoastSide pCoastSide)
+        {
+            return pCoastSide == BoundaryRibbonCoastSide.Left &&
+                   pDistanceA >= -Epsilon && pDistanceB >= -Epsilon &&
+                   pDistanceC >= -Epsilon ||
+                   pCoastSide == BoundaryRibbonCoastSide.Right &&
+                   pDistanceA <= Epsilon && pDistanceB <= Epsilon &&
+                   pDistanceC <= Epsilon;
+        }
+
+        private static double TriangleCellIntersectionArea(
+            BoundaryFloatPoint pA,
+            BoundaryFloatPoint pB,
+            BoundaryFloatPoint pC,
+            int pCellX,
+            int pCellY,
+            TriangleClipScratch pScratch)
+        {
+            BoundaryFloatPoint[] input = pScratch.First;
+            BoundaryFloatPoint[] output = pScratch.Second;
+            input[0] = pA; input[1] = pB; input[2] = pC;
+            int count = 3;
+            count = ClipCellAxis(input, count, output, 0, pCellX, true);
+            Swap(ref input, ref output);
+            count = ClipCellAxis(input, count, output, 0, pCellX + 1, false);
+            Swap(ref input, ref output);
+            count = ClipCellAxis(input, count, output, 1, pCellY, true);
+            Swap(ref input, ref output);
+            count = ClipCellAxis(input, count, output, 1, pCellY + 1, false);
+            if (count < 3) return 0d;
+            double twiceArea = 0d;
+            for (int i = 0; i < count; i++)
+            {
+                BoundaryFloatPoint next = output[(i + 1) % count];
+                twiceArea += (double)output[i].X * next.Y -
+                             (double)output[i].Y * next.X;
+            }
+            return Math.Abs(twiceArea) * 0.5d;
+        }
+
+        private static int ClipCellAxis(
+            BoundaryFloatPoint[] pInput,
+            int pCount,
+            BoundaryFloatPoint[] pOutput,
+            int pAxis,
+            float pBoundary,
+            bool pKeepGreater)
+        {
+            if (pCount == 0) return 0;
+            int outputCount = 0;
+            BoundaryFloatPoint previous = pInput[pCount - 1];
+            bool previousInside = CellClipInside(
+                previous, pAxis, pBoundary, pKeepGreater);
+            for (int i = 0; i < pCount; i++)
+            {
+                BoundaryFloatPoint current = pInput[i];
+                bool currentInside = CellClipInside(
+                    current, pAxis, pBoundary, pKeepGreater);
+                if (currentInside != previousInside)
+                    pOutput[outputCount++] = CellClipIntersection(
+                        previous, current, pAxis, pBoundary);
+                if (currentInside)
+                    pOutput[outputCount++] = current;
+                previous = current;
+                previousInside = currentInside;
+            }
+            return outputCount;
+        }
+
+        private static bool CellClipInside(
+            BoundaryFloatPoint pPoint,
+            int pAxis,
+            float pBoundary,
+            bool pKeepGreater)
+        {
+            float value = pAxis == 0 ? pPoint.X : pPoint.Y;
+            return pKeepGreater ? value >= pBoundary : value <= pBoundary;
+        }
+
+        private static BoundaryFloatPoint CellClipIntersection(
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            int pAxis,
+            float pBoundary)
+        {
+            double start = pAxis == 0 ? pStart.X : pStart.Y;
+            double end = pAxis == 0 ? pEnd.X : pEnd.Y;
+            double denominator = end - start;
+            double ratio = denominator == 0d
+                ? 0d : (pBoundary - start) / denominator;
+            return new BoundaryFloatPoint(
+                (float)(pStart.X + (pEnd.X - pStart.X) * ratio),
+                (float)(pStart.Y + (pEnd.Y - pStart.Y) * ratio));
+        }
+
+        private static bool SegmentCrossesCellInterior(
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            int pCellX,
+            int pCellY)
+        {
+            float minimum = 0f;
+            float maximum = 1f;
+            float dx = pEnd.X - pStart.X;
+            float dy = pEnd.Y - pStart.Y;
+            if (!ClipSegmentRange(-dx, pStart.X - pCellX, ref minimum, ref maximum) ||
+                !ClipSegmentRange(dx, pCellX + 1 - pStart.X, ref minimum, ref maximum) ||
+                !ClipSegmentRange(-dy, pStart.Y - pCellY, ref minimum, ref maximum) ||
+                !ClipSegmentRange(dy, pCellY + 1 - pStart.Y, ref minimum, ref maximum) ||
+                maximum - minimum <= Epsilon)
+                return false;
+            float ratio = (minimum + maximum) * 0.5f;
+            float x = pStart.X + dx * ratio;
+            float y = pStart.Y + dy * ratio;
+            return x > pCellX && x < pCellX + 1 &&
+                   y > pCellY && y < pCellY + 1;
+        }
+
+        private static bool ClipSegmentRange(
+            float pDirection,
+            float pDistance,
+            ref float pMinimum,
+            ref float pMaximum)
+        {
+            if (Math.Abs(pDirection) <= Epsilon)
+                return pDistance >= 0f;
+            float ratio = pDistance / pDirection;
+            if (pDirection < 0f)
+            {
+                if (ratio > pMaximum) return false;
+                if (ratio > pMinimum) pMinimum = ratio;
+            }
+            else
+            {
+                if (ratio < pMinimum) return false;
+                if (ratio < pMaximum) pMaximum = ratio;
+            }
+            return true;
+        }
+
+        private static void Swap(
+            ref BoundaryFloatPoint[] pFirst,
+            ref BoundaryFloatPoint[] pSecond)
+        {
+            BoundaryFloatPoint[] temporary = pFirst;
+            pFirst = pSecond;
+            pSecond = temporary;
+        }
+
+        private sealed class TriangleClipScratch
+        {
+            public readonly BoundaryFloatPoint[] First =
+                new BoundaryFloatPoint[12];
+            public readonly BoundaryFloatPoint[] Second =
+                new BoundaryFloatPoint[12];
         }
 
         private static BoundaryFloatPoint Offset(
@@ -628,6 +905,38 @@ namespace AncientWarfare3.core.policy
             for (int i = 0; i < pPoints.Count; i++)
                 result[i] = new BoundaryFloatPoint(pPoints[i].X, pPoints[i].Y);
             return result;
+        }
+
+        private static BoundaryCurveDraft BuildRawCurve(
+            IReadOnlyList<BoundaryGridPoint> pRawPoints)
+        {
+            IReadOnlyList<BoundaryFloatPoint> points = ToFloatPoints(pRawPoints);
+            BoundaryFloatPoint startTangent = RawTangent(points, fromStart: true);
+            BoundaryFloatPoint endTangent = RawTangent(points, fromStart: false);
+            return new BoundaryCurveDraft(
+                points, false, true, 0f, startTangent, endTangent);
+        }
+
+        private static BoundaryFloatPoint RawTangent(
+            IReadOnlyList<BoundaryFloatPoint> pPoints, bool fromStart)
+        {
+            int first = fromStart ? 0 : pPoints.Count - 1;
+            int step = fromStart ? 1 : -1;
+            for (int index = first + step;
+                 index >= 0 && index < pPoints.Count; index += step)
+            {
+                BoundaryFloatPoint tangent = fromStart
+                    ? new BoundaryFloatPoint(
+                        pPoints[index].X - pPoints[first].X,
+                        pPoints[index].Y - pPoints[first].Y)
+                    : new BoundaryFloatPoint(
+                        pPoints[first].X - pPoints[index].X,
+                        pPoints[first].Y - pPoints[index].Y);
+                if (Math.Abs(tangent.X) > Epsilon ||
+                    Math.Abs(tangent.Y) > Epsilon)
+                    return tangent;
+            }
+            return default(BoundaryFloatPoint);
         }
 
         private static bool IsFootprintPointAllowed(
@@ -754,6 +1063,42 @@ namespace AncientWarfare3.core.policy
                 }
             }
             return result;
+        }
+
+        private static bool ResampleCountWithinBudget(
+            IReadOnlyList<BoundaryFloatPoint> pPoints)
+        {
+            long count = 1L;
+            for (int i = 1; i < pPoints.Count; i++)
+            {
+                double dx = (double)pPoints[i].X - pPoints[i - 1].X;
+                double dy = (double)pPoints[i].Y - pPoints[i - 1].Y;
+                double steps = Math.Max(1d,
+                    Math.Ceiling(Math.Sqrt(dx * dx + dy * dy) / 0.20d));
+                if (steps > MaximumRibbonPointCount ||
+                    count + steps > MaximumRibbonPointCount)
+                    return false;
+                count += (long)steps;
+            }
+            return true;
+        }
+
+        private static bool ResampleCountWithinBudget(
+            IReadOnlyList<BoundaryGridPoint> pPoints)
+        {
+            long count = 1L;
+            for (int i = 1; i < pPoints.Count; i++)
+            {
+                double dx = (double)pPoints[i].X - pPoints[i - 1].X;
+                double dy = (double)pPoints[i].Y - pPoints[i - 1].Y;
+                double steps = Math.Max(1d,
+                    Math.Ceiling(Math.Sqrt(dx * dx + dy * dy) / 0.20d));
+                if (steps > MaximumRibbonPointCount ||
+                    count + steps > MaximumRibbonPointCount)
+                    return false;
+                count += (long)steps;
+            }
+            return true;
         }
 
         private static bool IsZero(BoundaryFloatPoint pPoint)

@@ -38,7 +38,7 @@ dotnet run --project Tests\AncientWarfare3.Rules.Tests\AncientWarfare3.Rules.Tes
 
 Expected: compile failure because `HierarchyColorIdentity`,
 `HierarchyColorEdge`, `HierarchyColorAssignment`, and
-`BuildCanonicalColorAssignment` do not exist.
+`BuildCanonicalAssignment` do not exist.
 
 - [ ] **Step 3: Implement immutable models and deterministic assignment**
 

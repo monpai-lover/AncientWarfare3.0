@@ -10,6 +10,8 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
         AcceptedContourRetainsMultipleHoles();
         SharedVisualContourConservesPairArea();
         MalformedSharedContoursFallBackWithoutOverlapOrGap();
+        NonFinitePairContoursAreBounded();
+        PolygonWorkBudgetsFailDeterministically();
     }
 
     private static void RectangleConcavityIslandsAndHolesTriangulate()
@@ -185,6 +187,135 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
             "gapped accepted contour is rejected to raw fallback");
         AssertPairCoverage(overlapPair, 16f, "overlap contour fallback");
         AssertPairCoverage(gapPair, 16f, "gap contour fallback");
+    }
+
+    private static void NonFinitePairContoursAreBounded()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 7 : 8));
+        var finiteRaw = new[]
+        {
+            new BoundaryFloatPoint(2, 0), new BoundaryFloatPoint(2, 4)
+        };
+        var nonFinite = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(float.NaN, 2),
+            new BoundaryFloatPoint(2, 4)
+        };
+
+        BoundaryVisualPairDraft invalidRaw =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                nonFinite, finiteRaw, Interior(grid));
+        Equal(false, invalidRaw.IsValid,
+            "non-finite raw contour returns an explicit invalid pair");
+        Equal("non_finite_raw_contour", invalidRaw.FailureReason,
+            "non-finite raw contour has a stable failure reason");
+        Equal(true, invalidRaw.SharedContour.All(IsFinite),
+            "invalid pair never carries non-finite shared points");
+
+        BoundaryVisualPairDraft acceptedFallback =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                finiteRaw, nonFinite, Interior(grid));
+        Equal(true, acceptedFallback.IsValid,
+            "non-finite accepted contour may use finite raw fallback");
+        Equal(true, acceptedFallback.Left.UsedRawFallback &&
+                    acceptedFallback.Right.UsedRawFallback,
+            "non-finite accepted contour is marked raw fallback");
+        SequenceEqual(finiteRaw, acceptedFallback.SharedContour,
+            "fallback pair carries only finite raw points");
+    }
+
+    private static void PolygonWorkBudgetsFailDeterministically()
+    {
+        BoundaryCellRaster oversized = Raster(513, 512,
+            (x, y) => Land(x, y, 7));
+        BoundaryPolygonDraft traceFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                oversized, 7, BoundaryTier.SuzerainSystem,
+                Interior(oversized));
+        Equal(false, traceFailure.IsValid,
+            "trace cell budget returns deterministic invalid polygon");
+
+        BoundaryCellRaster smallPair = Raster(2, 2, (x, y) =>
+            Land(x, y, x == 0 ? 7 : 8));
+        var oversizedBounds = new BoundaryChunkBounds(
+            0, 0, 513, 512, 0, 0, 513, 512);
+        BoundaryVisualPairDraft pairTraceFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                oversizedBounds);
+        Equal("trace_budget", pairTraceFailure.FailureReason,
+            "pair trace budget fails before mask construction");
+
+        var degenerateHugeBounds = new BoundaryChunkBounds(
+            0, int.MinValue, 0, int.MaxValue,
+            0, int.MinValue, 0, int.MaxValue);
+        BoundaryVisualPairDraft degenerateBoundsFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                smallPair, 7, 8, BoundaryTier.SuzerainSystem,
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                new[] { new BoundaryFloatPoint(1, 0),
+                    new BoundaryFloatPoint(1, 2) },
+                degenerateHugeBounds);
+        Equal("trace_budget", degenerateBoundsFailure.FailureReason,
+            "degenerate huge bounds fail before mask construction");
+
+        BoundaryCellRaster manyRings = Raster(512, 512, (x, y) =>
+            (x + y) % 2 == 0 ? Land(x, y, 7) : Land(x, y, 8));
+        BoundaryPolygonDraft traceWorkFailure =
+            HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(
+                manyRings, 7, BoundaryTier.SuzerainSystem,
+                Interior(manyRings));
+        Equal(false, traceWorkFailure.IsValid,
+            "multi-ring trace work budget returns deterministic failure");
+
+        var excessiveRing = new BoundaryFloatPoint[8193];
+        for (int i = 0; i < excessiveRing.Length; i++)
+        {
+            float angle = i * MathF.PI * 2f / excessiveRing.Length;
+            excessiveRing[i] = new BoundaryFloatPoint(
+                MathF.Cos(angle), MathF.Sin(angle));
+        }
+        Equal(false,
+            HierarchicalVassalBoundaryPolygonRules
+                .EarClipWithinBudgetForTests(excessiveRing),
+            "ear clipping vertex budget returns deterministic failure");
+
+        var positions = new[]
+        {
+            new BoundaryFloatPoint(0, 0),
+            new BoundaryFloatPoint(1, 0),
+            new BoundaryFloatPoint(0, 1)
+        };
+        var indices = new int[1001 * 3];
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            indices[i] = 0; indices[i + 1] = 1; indices[i + 2] = 2;
+        }
+        var repeated = new BoundaryPolygonDraft(
+            7, BoundaryTier.SuzerainSystem,
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+            positions, indices,
+            Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(), false);
+        Equal(false,
+            HierarchicalVassalBoundaryPolygonRules
+                .PairGeometryWithinBudgetForTests(repeated, repeated, 0f),
+            "pair comparison budget returns deterministic failure");
+    }
+
+    private static bool IsFinite(BoundaryFloatPoint point)
+    {
+        return !float.IsNaN(point.X) && !float.IsInfinity(point.X) &&
+               !float.IsNaN(point.Y) && !float.IsInfinity(point.Y);
     }
 
     private static void AcceptedContourActuallyDefinesTheFill()

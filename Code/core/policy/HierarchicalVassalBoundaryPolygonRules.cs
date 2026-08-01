@@ -111,13 +111,17 @@ namespace AncientWarfare3.core.policy
             BoundaryPolygonDraft pRight,
             IReadOnlyList<BoundaryFloatPoint> pSharedContour,
             float pMaximumDeviation,
-            bool pHasOverlapOrGap)
+            bool pHasOverlapOrGap,
+            bool pIsValid = true,
+            string pFailureReason = "")
         {
             Left = pLeft;
             Right = pRight;
             SharedContour = pSharedContour;
             MaximumDeviation = pMaximumDeviation;
             HasOverlapOrGap = pHasOverlapOrGap;
+            IsValid = pIsValid;
+            FailureReason = pFailureReason ?? string.Empty;
         }
 
         public BoundaryPolygonDraft Left { get; }
@@ -125,12 +129,20 @@ namespace AncientWarfare3.core.policy
         public IReadOnlyList<BoundaryFloatPoint> SharedContour { get; }
         public float MaximumDeviation { get; }
         public bool HasOverlapOrGap { get; }
+        public bool IsValid { get; }
+        public string FailureReason { get; }
     }
 
     public static class HierarchicalVassalBoundaryPolygonRules
     {
         private const float MaximumVisualDeviation = 0.45f;
         private const float Epsilon = 0.0001f;
+        private const int MaximumTraceCells = 262144;
+        private const int MaximumTraceEdges = 1048576;
+        private const int MaximumTraceWork = 4194304;
+        private const int MaximumEarClipVertices = 8192;
+        private const int MaximumEarClipWork = 4194304;
+        private const long MaximumPairTriangleComparisons = 1000000L;
 
         public static BoundaryPolygonDraft BuildOwnerPolygon(
             BoundaryCellRaster pRaster,
@@ -162,6 +174,8 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
+            if (!BoundsWithinTraceBudget(pBounds))
+                return EmptyPolygonDraft(pOwnerId, pTier);
             bool[,] owned = BuildOwnedMask(pRaster, pOwnerId, pTier, pBounds);
             IReadOnlyList<IReadOnlyList<BoundaryFloatPoint>> rings =
                 TraceRings(owned, pBounds.InteriorMinX, pBounds.InteriorMinY);
@@ -224,15 +238,21 @@ namespace AncientWarfare3.core.policy
         {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
-            if (pRawContour == null || pAcceptedContour == null ||
-                pRawContour.Count < 2 || pAcceptedContour.Count < 2)
-            {
-                throw new ArgumentException("A shared contour needs two points.");
-            }
+            if (!ContourIsFinite(pRawContour))
+                return InvalidVisualPair(
+                    pLeftOwnerId, pRightOwnerId, pTier,
+                    "non_finite_raw_contour");
+            if (!BoundsWithinTraceBudget(pBounds))
+                return InvalidVisualPair(
+                    pLeftOwnerId, pRightOwnerId, pTier,
+                    "trace_budget");
 
-            float maximumDeviation = SymmetricPolylineDistance(
-                pAcceptedContour, pRawContour);
+            bool acceptedIsFinite = ContourIsFinite(pAcceptedContour);
+            float maximumDeviation = acceptedIsFinite
+                ? SymmetricPolylineDistance(pAcceptedContour, pRawContour)
+                : 0f;
             bool useAccepted =
+                acceptedIsFinite &&
                 maximumDeviation <= MaximumVisualDeviation + Epsilon &&
                 !PolylineSelfIntersects(pAcceptedContour) &&
                 SharedContourIsSafe(
@@ -248,7 +268,8 @@ namespace AncientWarfare3.core.policy
                     pRaster, pLeftOwnerId, pRightOwnerId, pTier,
                     pBounds, accepted,
                     out BoundaryPolygonDraft left,
-                    out BoundaryPolygonDraft right))
+                    out BoundaryPolygonDraft right,
+                    out PairGeometryResult pairGeometry))
             {
                 left = BuildOwnerPolygon(pRaster, pLeftOwnerId, pTier, pBounds);
                 right = BuildOwnerPolygon(pRaster, pRightOwnerId, pTier, pBounds);
@@ -257,10 +278,15 @@ namespace AncientWarfare3.core.policy
                 right = WithSharedContour(right, raw, pUsedRawFallback: true);
                 float pairArea = CountMask(BuildPairMask(
                     pRaster, pLeftOwnerId, pRightOwnerId, pTier, pBounds));
+                PairGeometryResult fallbackGeometry = EvaluatePairGeometry(
+                    left, right, pairArea);
                 return new BoundaryVisualPairDraft(
                     left, right, raw, 0f,
-                    pHasOverlapOrGap: PairGeometryHasOverlapOrGap(
-                        left, right, pairArea));
+                    pHasOverlapOrGap: fallbackGeometry.HasOverlapOrGap,
+                    pIsValid: left.IsValid && right.IsValid &&
+                        fallbackGeometry.WithinBudget,
+                    pFailureReason: fallbackGeometry.WithinBudget
+                        ? string.Empty : "pair_geometry_budget");
             }
             if (!useAccepted)
             {
@@ -269,12 +295,12 @@ namespace AncientWarfare3.core.policy
                 right = WithSharedContour(
                     right, accepted, pUsedRawFallback: true);
             }
-            float acceptedPairArea = CountMask(BuildPairMask(
-                pRaster, pLeftOwnerId, pRightOwnerId, pTier, pBounds));
             return new BoundaryVisualPairDraft(
                 left, right, accepted, maximumDeviation,
-                pHasOverlapOrGap: PairGeometryHasOverlapOrGap(
-                    left, right, acceptedPairArea));
+                pHasOverlapOrGap: pairGeometry.HasOverlapOrGap,
+                pIsValid: pairGeometry.WithinBudget,
+                pFailureReason: pairGeometry.WithinBudget
+                    ? string.Empty : "pair_geometry_budget");
         }
 
         private static bool TrySplitPair(
@@ -285,10 +311,12 @@ namespace AncientWarfare3.core.policy
             BoundaryChunkBounds pBounds,
             IReadOnlyList<BoundaryFloatPoint> pContour,
             out BoundaryPolygonDraft pLeft,
-            out BoundaryPolygonDraft pRight)
+            out BoundaryPolygonDraft pRight,
+            out PairGeometryResult pGeometry)
         {
             pLeft = null;
             pRight = null;
+            pGeometry = PairGeometryResult.Invalid;
             bool[,] pairMask = BuildPairMask(
                 pRaster, pLeftOwnerId, pRightOwnerId, pTier, pBounds);
             IReadOnlyList<IReadOnlyList<BoundaryFloatPoint>> rings =
@@ -349,8 +377,9 @@ namespace AncientWarfare3.core.policy
                 pLeft = WithOwner(secondDraft, pLeftOwnerId);
                 pRight = WithOwner(firstDraft, pRightOwnerId);
             }
-            return !PairGeometryHasOverlapOrGap(
-                       pLeft, pRight, CountMask(pairMask)) &&
+            pGeometry = EvaluatePairGeometry(
+                pLeft, pRight, CountMask(pairMask));
+            return pGeometry.WithinBudget && !pGeometry.HasOverlapOrGap &&
                    TrianglesStayOnPair(
                        pLeft.Positions, pLeft.Indices, pRaster,
                        pLeftOwnerId, pRightOwnerId, pTier) &&
@@ -538,15 +567,26 @@ namespace AncientWarfare3.core.policy
             IReadOnlyList<BoundaryFloatPoint> pRing,
             out IReadOnlyList<int> pIndices)
         {
+            if (pRing == null || pRing.Count < 3 ||
+                pRing.Count > MaximumEarClipVertices)
+            {
+                pIndices = Array.Empty<int>();
+                return false;
+            }
             var vertices = new List<int>(pRing.Count);
             for (int i = 0; i < pRing.Count; i++) vertices.Add(i);
             var indices = new List<int>((pRing.Count - 2) * 3);
-            int guard = pRing.Count * pRing.Count * 2;
-            while (vertices.Count > 3 && guard-- > 0)
+            int work = MaximumEarClipWork;
+            while (vertices.Count > 3)
             {
                 bool clipped = false;
                 for (int cursor = 0; cursor < vertices.Count; cursor++)
                 {
+                    if (work-- <= 0)
+                    {
+                        pIndices = Array.Empty<int>();
+                        return false;
+                    }
                     int previous = vertices[(cursor + vertices.Count - 1) % vertices.Count];
                     int current = vertices[cursor];
                     int next = vertices[(cursor + 1) % vertices.Count];
@@ -555,6 +595,11 @@ namespace AncientWarfare3.core.policy
                     bool contains = false;
                     for (int candidate = 0; candidate < vertices.Count; candidate++)
                     {
+                        if (work-- <= 0)
+                        {
+                            pIndices = Array.Empty<int>();
+                            return false;
+                        }
                         int pointIndex = vertices[candidate];
                         if (pointIndex == previous || pointIndex == current ||
                             pointIndex == next ||
@@ -590,6 +635,12 @@ namespace AncientWarfare3.core.policy
             }
             pIndices = indices;
             return vertices.Count == 3 && indices.Count >= 3;
+        }
+
+        internal static bool EarClipWithinBudgetForTests(
+            IReadOnlyList<BoundaryFloatPoint> pRing)
+        {
+            return EarClip(pRing, out _);
         }
 
         private static bool PointInTriangleInclusive(
@@ -900,68 +951,142 @@ namespace AncientWarfare3.core.policy
             return Math.Abs(SignedAreaClosed(polygon));
         }
 
-        private static bool PairGeometryHasOverlapOrGap(
+        private static PairGeometryResult EvaluatePairGeometry(
             BoundaryPolygonDraft pLeft,
             BoundaryPolygonDraft pRight,
             float pExpectedArea)
         {
+            long comparisons = (long)pLeft.Triangles.Count *
+                               pRight.Triangles.Count;
+            if (comparisons > MaximumPairTriangleComparisons)
+                return PairGeometryResult.Invalid;
+
             float intersection = 0f;
+            var firstScratch = new BoundaryFloatPoint[12];
+            var secondScratch = new BoundaryFloatPoint[12];
             for (int left = 0; left < pLeft.Triangles.Count; left++)
             for (int right = 0; right < pRight.Triangles.Count; right++)
             {
+                BoundaryTriangle leftTriangle = pLeft.Triangles[left];
+                BoundaryTriangle rightTriangle = pRight.Triangles[right];
+                if (!TriangleBoundsOverlap(leftTriangle, rightTriangle))
+                    continue;
                 intersection += TriangleIntersectionArea(
-                    pLeft.Triangles[left], pRight.Triangles[right]);
+                    leftTriangle, rightTriangle, firstScratch, secondScratch);
             }
             float union = pLeft.Area + pRight.Area - intersection;
-            return intersection > 0.001f ||
-                   Math.Abs(union - pExpectedArea) > 0.001f;
+            return new PairGeometryResult(
+                pWithinBudget: true,
+                pHasOverlapOrGap: intersection > 0.001f ||
+                    Math.Abs(union - pExpectedArea) > 0.001f);
+        }
+
+        internal static bool PairGeometryWithinBudgetForTests(
+            BoundaryPolygonDraft pLeft,
+            BoundaryPolygonDraft pRight,
+            float pExpectedArea)
+        {
+            return pLeft != null && pRight != null &&
+                   EvaluatePairGeometry(
+                       pLeft, pRight, pExpectedArea).WithinBudget;
+        }
+
+        private static bool TriangleBoundsOverlap(
+            BoundaryTriangle pFirst,
+            BoundaryTriangle pSecond)
+        {
+            float firstMinimumX = Math.Min(pFirst.A.X,
+                Math.Min(pFirst.B.X, pFirst.C.X));
+            float firstMaximumX = Math.Max(pFirst.A.X,
+                Math.Max(pFirst.B.X, pFirst.C.X));
+            float firstMinimumY = Math.Min(pFirst.A.Y,
+                Math.Min(pFirst.B.Y, pFirst.C.Y));
+            float firstMaximumY = Math.Max(pFirst.A.Y,
+                Math.Max(pFirst.B.Y, pFirst.C.Y));
+            float secondMinimumX = Math.Min(pSecond.A.X,
+                Math.Min(pSecond.B.X, pSecond.C.X));
+            float secondMaximumX = Math.Max(pSecond.A.X,
+                Math.Max(pSecond.B.X, pSecond.C.X));
+            float secondMinimumY = Math.Min(pSecond.A.Y,
+                Math.Min(pSecond.B.Y, pSecond.C.Y));
+            float secondMaximumY = Math.Max(pSecond.A.Y,
+                Math.Max(pSecond.B.Y, pSecond.C.Y));
+            return firstMaximumX >= secondMinimumX - Epsilon &&
+                   secondMaximumX >= firstMinimumX - Epsilon &&
+                   firstMaximumY >= secondMinimumY - Epsilon &&
+                   secondMaximumY >= firstMinimumY - Epsilon;
         }
 
         private static float TriangleIntersectionArea(
             BoundaryTriangle pSubject,
-            BoundaryTriangle pClip)
+            BoundaryTriangle pClip,
+            BoundaryFloatPoint[] pFirstScratch,
+            BoundaryFloatPoint[] pSecondScratch)
         {
-            IReadOnlyList<BoundaryFloatPoint> polygon = new[]
+            pFirstScratch[0] = pSubject.A;
+            pFirstScratch[1] = pSubject.B;
+            pFirstScratch[2] = pSubject.C;
+            int count = 3;
+            BoundaryFloatPoint[] input = pFirstScratch;
+            BoundaryFloatPoint[] output = pSecondScratch;
+            float winding = Cross(pClip.A, pClip.B, pClip.C);
+            for (int edge = 0; edge < 3 && count > 0; edge++)
             {
-                pSubject.A, pSubject.B, pSubject.C
-            };
-            BoundaryFloatPoint[] clip = { pClip.A, pClip.B, pClip.C };
-            float winding = Cross(clip[0], clip[1], clip[2]);
-            for (int edge = 0; edge < clip.Length && polygon.Count > 0; edge++)
-            {
-                polygon = ClipConvexPolygon(
-                    polygon, clip[edge], clip[(edge + 1) % clip.Length],
-                    winding);
+                BoundaryFloatPoint start = edge == 0 ? pClip.A :
+                    edge == 1 ? pClip.B : pClip.C;
+                BoundaryFloatPoint end = edge == 0 ? pClip.B :
+                    edge == 1 ? pClip.C : pClip.A;
+                count = ClipConvexPolygon(
+                    input, count, output, start, end, winding);
+                BoundaryFloatPoint[] swap = input;
+                input = output;
+                output = swap;
             }
-            return Math.Abs(SignedAreaClosed(polygon));
+            return Math.Abs(SignedAreaClosed(input, count));
         }
 
-        private static IReadOnlyList<BoundaryFloatPoint> ClipConvexPolygon(
-            IReadOnlyList<BoundaryFloatPoint> pPolygon,
+        private static int ClipConvexPolygon(
+            BoundaryFloatPoint[] pInput,
+            int pInputCount,
+            BoundaryFloatPoint[] pOutput,
             BoundaryFloatPoint pStart,
             BoundaryFloatPoint pEnd,
             float pWinding)
         {
-            if (pPolygon.Count == 0)
-                return pPolygon;
-            var result = new List<BoundaryFloatPoint>();
-            BoundaryFloatPoint previous = pPolygon[pPolygon.Count - 1];
+            if (pInputCount == 0)
+                return 0;
+            int outputCount = 0;
+            BoundaryFloatPoint previous = pInput[pInputCount - 1];
             bool previousInside = InsideDirectedEdge(
                 previous, pStart, pEnd, pWinding);
-            for (int i = 0; i < pPolygon.Count; i++)
+            for (int i = 0; i < pInputCount; i++)
             {
-                BoundaryFloatPoint current = pPolygon[i];
+                BoundaryFloatPoint current = pInput[i];
                 bool currentInside = InsideDirectedEdge(
                     current, pStart, pEnd, pWinding);
                 if (currentInside != previousInside)
-                    result.Add(LineIntersection(
-                        previous, current, pStart, pEnd));
+                    pOutput[outputCount++] = LineIntersection(
+                        previous, current, pStart, pEnd);
                 if (currentInside)
-                    result.Add(current);
+                    pOutput[outputCount++] = current;
                 previous = current;
                 previousInside = currentInside;
             }
-            return result;
+            return outputCount;
+        }
+
+        private static float SignedAreaClosed(
+            BoundaryFloatPoint[] pPolygon,
+            int pCount)
+        {
+            double area = 0d;
+            for (int i = 0; i < pCount; i++)
+            {
+                BoundaryFloatPoint next = pPolygon[(i + 1) % pCount];
+                area += (double)pPolygon[i].X * next.Y -
+                        (double)next.X * pPolygon[i].Y;
+            }
+            return (float)(area * 0.5d);
         }
 
         private static bool InsideDirectedEdge(
@@ -1058,67 +1183,142 @@ namespace AncientWarfare3.core.policy
             int pOriginX,
             int pOriginY)
         {
-            var edges = new Dictionary<UndirectedEdge, DirectedEdge>();
             int width = pOwned.GetLength(0);
             int height = pOwned.GetLength(1);
+            if ((long)width * height > MaximumTraceCells)
+                return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+
+            int work = MaximumTraceWork;
+            var edges = new Dictionary<UndirectedEdge, DirectedEdge>();
             for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
+                if (work-- <= 0)
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
                 if (!pOwned[x, y])
                     continue;
                 var a = new BoundaryGridPoint(pOriginX + x, pOriginY + y);
                 var b = new BoundaryGridPoint(pOriginX + x + 1, pOriginY + y);
                 var c = new BoundaryGridPoint(pOriginX + x + 1, pOriginY + y + 1);
                 var d = new BoundaryGridPoint(pOriginX + x, pOriginY + y + 1);
+                if (work < 4)
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+                work -= 4;
                 ToggleEdge(edges, a, b);
                 ToggleEdge(edges, b, c);
                 ToggleEdge(edges, c, d);
                 ToggleEdge(edges, d, a);
+                if (edges.Count > MaximumTraceEdges)
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
             }
 
-            var remaining = new List<DirectedEdge>(edges.Values);
-            remaining.Sort((first, second) =>
+            var adjacency = new Dictionary<BoundaryGridPoint,
+                List<BoundaryGridPoint>>();
+            var starts = new List<BoundaryGridPoint>();
+            foreach (DirectedEdge edge in edges.Values)
             {
-                int start = first.Start.CompareTo(second.Start);
-                return start != 0 ? start : first.End.CompareTo(second.End);
-            });
+                if (work-- <= 0)
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+                if (!adjacency.TryGetValue(
+                        edge.Start, out List<BoundaryGridPoint> endpoints))
+                {
+                    endpoints = new List<BoundaryGridPoint>();
+                    adjacency.Add(edge.Start, endpoints);
+                    starts.Add(edge.Start);
+                }
+                endpoints.Add(edge.End);
+            }
+            if (!ConsumeSortBudget(starts.Count, ref work))
+                return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+            starts.Sort();
+            for (int i = 0; i < starts.Count; i++)
+            {
+                List<BoundaryGridPoint> endpoints = adjacency[starts[i]];
+                if (!ConsumeSortBudget(endpoints.Count, ref work))
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+                endpoints.Sort((first, second) => second.CompareTo(first));
+            }
+
             var rings = new List<IReadOnlyList<BoundaryFloatPoint>>();
-            while (remaining.Count > 0)
+            int startCursor = 0;
+            int remainingEdges = edges.Count;
+            while (remainingEdges > 0)
             {
-                DirectedEdge first = remaining[0];
-                remaining.RemoveAt(0);
+                while (startCursor < starts.Count &&
+                       adjacency[starts[startCursor]].Count == 0)
+                {
+                    if (work-- <= 0)
+                        return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+                    startCursor++;
+                }
+                if (startCursor >= starts.Count ||
+                    !TakeNextEdge(
+                        adjacency, starts[startCursor],
+                        out BoundaryGridPoint firstEnd, ref work))
+                    return Array.Empty<IReadOnlyList<BoundaryFloatPoint>>();
+                remainingEdges--;
+                BoundaryGridPoint firstStart = starts[startCursor];
                 var points = new List<BoundaryFloatPoint>
                 {
-                    ToFloat(first.Start), ToFloat(first.End)
+                    ToFloat(firstStart), ToFloat(firstEnd)
                 };
-                BoundaryGridPoint current = first.End;
+                BoundaryGridPoint current = firstEnd;
                 int guard = edges.Count + 1;
-                while (!current.Equals(first.Start) && guard-- > 0)
+                while (!current.Equals(firstStart) && guard-- > 0)
                 {
-                    int nextIndex = FindNextEdge(remaining, current);
-                    if (nextIndex < 0)
+                    if (!TakeNextEdge(
+                            adjacency, current,
+                            out BoundaryGridPoint next, ref work))
                         break;
-                    DirectedEdge next = remaining[nextIndex];
-                    remaining.RemoveAt(nextIndex);
-                    current = next.End;
+                    remainingEdges--;
+                    current = next;
                     points.Add(ToFloat(current));
                 }
-                if (points.Count >= 4 && current.Equals(first.Start))
+                if (points.Count >= 4 && current.Equals(firstStart))
                     rings.Add(points);
             }
             return rings;
         }
 
-        private static int FindNextEdge(
-            IReadOnlyList<DirectedEdge> pEdges,
-            BoundaryGridPoint pStart)
+        private static bool TakeNextEdge(
+            IReadOnlyDictionary<BoundaryGridPoint, List<BoundaryGridPoint>> pEdges,
+            BoundaryGridPoint pStart,
+            out BoundaryGridPoint pEnd,
+            ref int pWork)
         {
-            for (int i = 0; i < pEdges.Count; i++)
+            pEnd = default(BoundaryGridPoint);
+            if (pWork-- <= 0 ||
+                !pEdges.TryGetValue(
+                    pStart, out List<BoundaryGridPoint> endpoints) ||
+                endpoints.Count == 0)
             {
-                if (pEdges[i].Start.Equals(pStart))
-                    return i;
+                return false;
             }
-            return -1;
+            int last = endpoints.Count - 1;
+            pEnd = endpoints[last];
+            endpoints.RemoveAt(last);
+            return true;
+        }
+
+        private static bool ConsumeSortBudget(int pCount, ref int pWork)
+        {
+            if (pCount < 2)
+                return true;
+            int levels = 0;
+            int remaining = pCount - 1;
+            while (remaining > 0)
+            {
+                levels++;
+                remaining >>= 1;
+            }
+            long cost = (long)pCount * levels;
+            if (cost > pWork)
+            {
+                pWork = -1;
+                return false;
+            }
+            pWork -= (int)cost;
+            return true;
         }
 
         private static void ToggleEdge(
@@ -1311,6 +1511,73 @@ namespace AncientWarfare3.core.policy
             return result;
         }
 
+        private static bool ContourIsFinite(
+            IReadOnlyList<BoundaryFloatPoint> pContour)
+        {
+            if (pContour == null || pContour.Count < 2)
+                return false;
+            for (int i = 0; i < pContour.Count; i++)
+            {
+                if (float.IsNaN(pContour[i].X) ||
+                    float.IsInfinity(pContour[i].X) ||
+                    float.IsNaN(pContour[i].Y) ||
+                    float.IsInfinity(pContour[i].Y))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool BoundsWithinTraceBudget(
+            BoundaryChunkBounds pBounds)
+        {
+            try
+            {
+                long width = Math.Max(0L, checked(
+                    (long)pBounds.InteriorMaxXExclusive -
+                    pBounds.InteriorMinX));
+                long height = Math.Max(0L, checked(
+                    (long)pBounds.InteriorMaxYExclusive -
+                    pBounds.InteriorMinY));
+                return width <= MaximumTraceCells &&
+                       height <= MaximumTraceCells &&
+                       checked(width * height) <= MaximumTraceCells;
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+        }
+
+        private static BoundaryVisualPairDraft InvalidVisualPair(
+            long pLeftOwnerId,
+            long pRightOwnerId,
+            BoundaryTier pTier,
+            string pFailureReason)
+        {
+            return new BoundaryVisualPairDraft(
+                EmptyPolygonDraft(pLeftOwnerId, pTier),
+                EmptyPolygonDraft(pRightOwnerId, pTier),
+                Array.Empty<BoundaryFloatPoint>(),
+                0f,
+                pHasOverlapOrGap: true,
+                pIsValid: false,
+                pFailureReason: pFailureReason);
+        }
+
+        private static BoundaryPolygonDraft EmptyPolygonDraft(
+            long pOwnerId,
+            BoundaryTier pTier)
+        {
+            return new BoundaryPolygonDraft(
+                pOwnerId, pTier,
+                Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+                Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+                Array.Empty<BoundaryFloatPoint>(),
+                Array.Empty<int>(),
+                Array.Empty<IReadOnlyList<BoundaryFloatPoint>>(),
+                pUsedRawFallback: false);
+        }
+
         private static BoundaryFloatPoint ToFloat(BoundaryGridPoint pPoint)
         {
             return new BoundaryFloatPoint(pPoint.X, pPoint.Y);
@@ -1360,6 +1627,25 @@ namespace AncientWarfare3.core.policy
 
             public BoundaryGridPoint Start { get; }
             public BoundaryGridPoint End { get; }
+        }
+
+        private readonly struct PairGeometryResult
+        {
+            public PairGeometryResult(
+                bool pWithinBudget,
+                bool pHasOverlapOrGap)
+            {
+                WithinBudget = pWithinBudget;
+                HasOverlapOrGap = pHasOverlapOrGap;
+            }
+
+            public bool WithinBudget { get; }
+            public bool HasOverlapOrGap { get; }
+
+            public static PairGeometryResult Invalid =>
+                new PairGeometryResult(
+                    pWithinBudget: false,
+                    pHasOverlapOrGap: true);
         }
 
         private readonly struct UndirectedEdge : IEquatable<UndirectedEdge>
