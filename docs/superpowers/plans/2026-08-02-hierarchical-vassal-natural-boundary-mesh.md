@@ -260,13 +260,15 @@ Equal(true, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
 
 Include narrow-isthmus and third-owner tests where the output must fall back to the raw chain.
 
+Add table-driven cases for one/two-cell land bridges, straits, fjords, hooked bays, acute peninsulas, one-cell islands, small island chains, enclaves, diagonal-only contacts, T junctions, four-owner point contacts, zero-length/repeated points, two-edge chains, sharp turns, near reversals, minimal closed loops, map corners, and high world coordinates. Add seam cases crossing a chunk edge/corner and loops spanning two/four chunks; neighboring drafts must produce bit-identical seam position, tangent, and accepted smoothing strength regardless of rebuild order.
+
 - [ ] **Step 2: Run RED**
 
 Expected: missing curve rule type.
 
 - [ ] **Step 3: Implement simplify, fit, validate, and fallback**
 
-Use tolerance `0.45f` tile units for ordinary boundaries and `0.25f` near protected anchors. Never remove first/last, graph degree other than two, tier transition, river endpoint/fork, or chunk seam anchors. Generate centripetal Catmull-Rom samples with maximum spacing `0.35f` tiles. Validate each segment with a supercover grid walk plus midpoint samples. Reduce tangent scale through `1.0`, `0.5`, `0.25`, then return the raw chain when no safe candidate remains. Preserve loop winding and reject self-intersections.
+Use tolerance `0.45f` tile units for ordinary boundaries and `0.25f` near protected anchors. Never remove first/last, graph degree other than two, tier transition, river endpoint/fork, narrow-passage anchor, small-island anchor, or chunk seam anchor. Generate centripetal Catmull-Rom samples with maximum spacing `0.35f` tiles. Validate each segment with a supercover grid walk plus midpoint samples. Reject non-finite coordinates, duplicate-only chains, self-intersections, loop winding changes, and any candidate that changes diagonal point-contact topology. Reduce tangent scale through `1.0`, `0.5`, `0.25`, then return the raw chain when no safe candidate remains. Derive seam tangents only from the canonical halo chain so independently rebuilt neighbors produce identical derivatives.
 
 - [ ] **Step 4: Run GREEN and commit**
 
@@ -304,7 +306,7 @@ Equal(leftOwnerColor, borders.LeftColorAt(0));
 Equal(rightOwnerColor, borders.RightColorAt(0));
 ```
 
-Assert identical seam endpoint coordinates and tangent constraints for two neighboring chunk drafts. Assert realm/city colors are deterministic variations of their root suzerain system color, remain stable across rebuilds, and distinguish adjacent displayed owners without changing the root hierarchy identity.
+Assert identical seam endpoint coordinates, tangent constraints, and local half-widths for two neighboring chunk drafts. Add footprint tests where the curve centerline is valid but a fixed-width ribbon would enter water, the wrong side owner, or a third owner. Require local half-width reduction or raw-contour fallback. Add river tests proving the center line may follow river water while both political-color halves remain transparent over water. Assert realm/city colors are deterministic variations of their root suzerain system color, remain stable across rebuilds, and distinguish adjacent displayed owners without changing the root hierarchy identity.
 
 - [ ] **Step 2: Run RED**
 
@@ -314,7 +316,7 @@ Expected: missing polygon and mesh-draft rule types.
 
 Group accepted closed contours by displayed owner, classify winding into outer rings and holes, clip rings to the chunk interior, and triangulate each consolidated polygon deterministically. Validate output triangles against valid owner-land facts; retry with reduced smoothing and finally the raw contour. If all attempts fail, return a bounded failure so the runtime retains the previous chunk mesh; never emit one quad per tile. Derive vassal-realm and city colors from the stable suzerain-system color plus a deterministic displayed-owner hash, with bounded value/saturation offsets and an adjacency fallback that selects the first distinguishable variant.
 
-Boundary ribbons emit left/right vertices carrying centerline normal, signed edge distance, tier, left/right owner IDs, and left/right RGBA in primitive arrays. Preserve canonical seam endpoint tangents so adjacent chunks sample the same curve derivative. Use tier widths `0.12f`, `0.20f`, and `0.32f` world units as fallback geometry widths; shaders may apply camera-scale refinement without rebuilding topology. Coastline ribbons mark the water-facing side transparent and retain the exact land clip.
+Boundary ribbons emit left/right vertices carrying centerline normal, signed edge distance, tier, left/right owner IDs, left/right RGBA, local half-width, and river/coast flags in primitive arrays. `ComputeSafeHalfWidth` samples the full cross-section against the immutable raster: the left half may cover only the left owner and the right half only the right owner. Reduce width near water, narrow passages, junctions, and third-owner corners; use the raw contour if the tier width still cannot fit. Preserve canonical seam endpoint tangents and widths so adjacent chunks produce the same ribbon. Use target tier widths `0.12f`, `0.20f`, and `0.32f` world units; shaders may apply camera-scale refinement only within the prevalidated width. Coastline ribbons mark the water-facing side transparent and retain the exact land clip. River-center ribbons keep both political-color halves transparent while over liquid and render only their central political line until reaching the banks.
 
 - [ ] **Step 4: Run GREEN, full rules, and commit**
 
@@ -539,7 +541,7 @@ Expected: all tests pass and source guard confirms one authoritative renderer.
 
 - [ ] **Step 1: Add deterministic performance tests**
 
-Generate a 512x512 synthetic world, build all chunk draft sets, then mutate one zone-sized 8x8 area and one height sample. Assert dirty expansion is at most nine chunks, unchanged chunk revisions remain accepted, worker queue count stays bounded by world chunk count, each draft set contains one height draft shared by its country/city geometry, height texture count stays bounded by world chunk count, and mesh vertex/index counts stay within calculated chunk maxima. Add failure-injection cases proving an invalid curve falls back to raw topology, a worker exception affects only one chunk, an upload retry preserves the last valid revision, and a height upload failure retains political geometry with neutral relief.
+Generate a 512x512 synthetic world, build all chunk draft sets, then mutate one zone-sized 8x8 area and one height sample. Assert dirty expansion is at most nine chunks, unchanged chunk revisions remain accepted, worker queue count stays bounded by world chunk count, each draft set contains one height draft shared by its country/city geometry, height texture count stays bounded by world chunk count, and mesh vertex/index counts stay within calculated chunk maxima. Run the complete adversarial curve matrix from Tasks 4-5 under both country/city layers and all three tier widths. Randomize adjacent-chunk completion order and assert deterministic seam positions, tangents, widths, indices, and colors. Add failure-injection cases proving an invalid curve falls back to raw topology, a worker exception affects only one chunk, an upload retry preserves the last valid revision, and a height upload failure retains political geometry with neutral relief.
 
 - [ ] **Step 2: Add source-level hot-path guards**
 

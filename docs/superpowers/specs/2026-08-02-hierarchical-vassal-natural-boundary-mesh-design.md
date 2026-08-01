@@ -71,6 +71,16 @@ smoothing strength reduced. If no safe curve exists, that local chain falls
 back to its original topology. Correct ownership always takes priority over
 smoothness.
 
+Safety validation covers the complete rendered footprint, not only the curve
+centerline. Each sampled ribbon cross-section verifies that its left half stays
+inside the left displayed owner and its right half stays inside the right
+displayed owner. Half-width reduces locally near narrow passages, third-owner
+corners, coastlines, and junctions. If the required tier cannot fit safely, the
+segment uses the raw contour and the widest safe local ribbon rather than
+covering unrelated territory. River-center boundaries render the political
+center line over water but keep both political-color halves transparent until
+their respective banks.
+
 Closed owner contours are grouped into outer rings and holes, clipped to the
 chunk interior, and triangulated into consolidated fill geometry. The fill
 uses the same accepted contour anchors as the boundary transition geometry;
@@ -313,14 +323,36 @@ Pure geometry tests use synthetic ownership and terrain rasters covering:
 - stale worker generations;
 - smoothing that attempts to cross water or a third owner.
 
+The adversarial curve matrix additionally covers:
+
+- one-cell and two-cell land bridges, straits, fjords, hooked bays, and acute
+  peninsulas;
+- one-cell islands, small island chains, enclaves, exclaves, and nested holes;
+- T junctions, four-region point contacts, diagonal-only contacts, and a
+  third owner within one ribbon width;
+- zero-length/repeated points, two-edge chains, sharp 90-degree turns,
+  near-180-degree reversals, and closed loops with minimal vertex counts;
+- chains crossing a chunk edge, chains crossing a chunk corner, and loops
+  spanning two or four chunks;
+- map corners and clipped invalid halo cells;
+- river forks, deltas, same-owner banks, different-owner banks, and river
+  chains meeting a lake or ocean;
+- high world coordinates and deterministic rebuilds after adjacent chunks
+  receive revisions in opposite orders;
+- full ribbon footprints that would cross water, a third owner, or the wrong
+  side owner even though their centerline remains valid.
+
 Assertions include:
 
 - no fill triangle covers a forbidden cell;
 - no smoothed boundary enters a third region;
+- no left/right ribbon half enters water, the wrong side owner, or a third
+  owner; river-water portions carry no political fill color;
 - protected junctions and loop winding remain stable;
 - river borders are single, continuous chains;
 - same-owner rivers do not emit political borders;
 - adjacent chunk drafts share identical seam endpoints;
+- adjacent chunk drafts share identical seam tangents and ribbon widths;
 - a flat height field produces a neutral normal and equal light factor;
 - an increasing height ramp produces a stable, correctly oriented gradient;
 - fallback output remains renderable after smoothing or triangulation failure.
