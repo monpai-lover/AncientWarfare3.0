@@ -20,7 +20,8 @@ tier. Construction normalizes its endpoints to
 `HierarchyColorAssignment` owns copied, sorted arrays of
 `(tier, displayedOwnerId)` keys and RGBA values. It exposes lookup without
 returning mutable collections. The builder does not retain identity or edge
-input references.
+input references. It also exposes `IsValid` and a stable `FailureReason`, so a
+valid empty-world assignment is distinct from a failed build.
 
 ## Assignment Rule
 
