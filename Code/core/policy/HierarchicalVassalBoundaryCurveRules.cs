@@ -44,11 +44,12 @@ namespace AncientWarfare3.core.policy
                 keep[anchors[i]] = true;
             float toleranceSquared = Math.Max(0f, tolerance) *
                                      Math.Max(0f, tolerance);
+            int simplifyWork = 0;
             for (int i = 1; i < anchors.Count; i++)
             {
                 if (!SimplifyRange(
                     points, anchors[i - 1], anchors[i],
-                    toleranceSquared, keep))
+                    toleranceSquared, keep, ref simplifyWork))
                 {
                     return points;
                 }
@@ -290,11 +291,15 @@ namespace AncientWarfare3.core.policy
             {
                 return false;
             }
+            IReadOnlyList<BoundaryGridPoint> normalizedRaw =
+                NormalizeRawChain(pRawChain, pOptions.Closed);
+            if (normalizedRaw.Count < 2)
+                return false;
             if (pCurve.Closed &&
                 !pCurve.Points[0].Equals(pCurve.Points[pCurve.Points.Count - 1]))
                 return false;
             bool rawMatch = pCurve.UsedRawFallback &&
-                            MatchesRawChain(pCurve.Points, pRawChain);
+                            MatchesRawChain(pCurve.Points, normalizedRaw);
             if (pCurve.UsedRawFallback && !rawMatch)
                 return false;
             for (int i = 0; i < pCurve.Points.Count; i++)
@@ -312,11 +317,11 @@ namespace AncientWarfare3.core.policy
                 bool segmentSafe = rawMatch
                     ? IsRawSegmentSafe(
                         pCurve.Points[i - 1], pCurve.Points[i], pRaster,
-                        pOptions, pRawChain)
+                        pOptions, normalizedRaw)
                     : IsSafeSegment(
                         pCurve.Points[i - 1], pCurve.Points[i], pRaster,
                         pOptions.Tier, pOptions.LeftOwnerId,
-                        pOptions.RightOwnerId, pRawChain,
+                        pOptions.RightOwnerId, normalizedRaw,
                         Math.Min(pOptions.MaximumDeviation, 0.45f),
                         pOptions.AllowRiverWater);
                 if (!segmentSafe)
@@ -325,12 +330,12 @@ namespace AncientWarfare3.core.policy
                 }
             }
             if (rawMatch
-                    ? HasProperSelfIntersection(pCurve.Points, pCurve.Closed)
+                    ? HasRawInvalidIntersection(pCurve.Points, pCurve.Closed)
                     : HasSelfIntersection(pCurve.Points, pCurve.Closed))
                 return false;
             if (pCurve.Closed)
             {
-                int rawSign = Math.Sign(SignedArea(pRawChain));
+                int rawSign = Math.Sign(SignedArea(normalizedRaw));
                 int curveSign = Math.Sign(SignedArea(pCurve.Points));
                 if (rawSign != 0 && curveSign != rawSign)
                     return false;
@@ -507,6 +512,8 @@ namespace AncientWarfare3.core.policy
             float pT)
         {
             ValidateSampleInputs(p0, p1, p2, p3, 1f);
+            if (float.IsNaN(pT) || float.IsInfinity(pT))
+                throw new ArgumentOutOfRangeException(nameof(pT));
             return CatmullRom(p0, p1, p2, p3,
                 Math.Max(0f, Math.Min(1f, pT)));
         }
@@ -1022,6 +1029,11 @@ namespace AncientWarfare3.core.policy
             bool pClosed)
         {
             int segmentCount = pPoints.Count - 1;
+            for (int i = 1; i < pPoints.Count - 1; i++)
+            {
+                if (pPoints[i - 1].Equals(pPoints[i + 1]))
+                    return true;
+            }
             for (int i = 0; i < segmentCount; i++)
             {
                 for (int j = i + 2; j < segmentCount; j++)
@@ -1082,11 +1094,11 @@ namespace AncientWarfare3.core.policy
             int pStart,
             int pEnd,
             float pToleranceSquared,
-            bool[] pKeep)
+            bool[] pKeep,
+            ref int pWork)
         {
             var pending = new Stack<Tuple<int, int>>();
             pending.Push(Tuple.Create(pStart, pEnd));
-            int work = 0;
             while (pending.Count > 0)
             {
                 Tuple<int, int> range = pending.Pop();
@@ -1100,7 +1112,7 @@ namespace AncientWarfare3.core.policy
                 BoundaryFloatPoint end = ToFloat(pPoints[endIndex]);
                 for (int i = startIndex + 1; i < endIndex; i++)
                 {
-                    if (++work > MaximumSimplifyWork)
+                    if (++pWork > MaximumSimplifyWork)
                         return false;
                     float distance = DistanceToSegment(
                         ToFloat(pPoints[i]), start, end);
@@ -1147,6 +1159,19 @@ namespace AncientWarfare3.core.policy
             return true;
         }
 
+        private static IReadOnlyList<BoundaryGridPoint> NormalizeRawChain(
+            IReadOnlyList<BoundaryGridPoint> pRaw,
+            bool pClosed)
+        {
+            List<BoundaryGridPoint> result = CopyDistinct(pRaw);
+            if (pClosed && result.Count > 0 &&
+                !result[0].Equals(result[result.Count - 1]))
+            {
+                result.Add(result[0]);
+            }
+            return result;
+        }
+
         private static bool IsRawSegmentSafe(
             BoundaryFloatPoint pStart,
             BoundaryFloatPoint pEnd,
@@ -1178,6 +1203,52 @@ namespace AncientWarfare3.core.policy
                     return true;
             }
             return false;
+        }
+
+        private static bool HasRawInvalidIntersection(
+            IReadOnlyList<BoundaryFloatPoint> pPoints,
+            bool pClosed)
+        {
+            int segmentCount = pPoints.Count - 1;
+            for (int i = 1; i < pPoints.Count - 1; i++)
+            {
+                if (pPoints[i - 1].Equals(pPoints[i + 1]))
+                    return true;
+            }
+            for (int i = 0; i < segmentCount; i++)
+            for (int j = i + 1; j < segmentCount; j++)
+            {
+                if (j == i + 1 || pClosed && i == 0 && j == segmentCount - 1)
+                    continue;
+                BoundaryFloatPoint a = pPoints[i];
+                BoundaryFloatPoint b = pPoints[i + 1];
+                BoundaryFloatPoint c = pPoints[j];
+                BoundaryFloatPoint d = pPoints[j + 1];
+                float abC = Cross(a, b, c);
+                float abD = Cross(a, b, d);
+                float cdA = Cross(c, d, a);
+                float cdB = Cross(c, d, b);
+                if (abC * abD < -GridEpsilon && cdA * cdB < -GridEpsilon)
+                    return true;
+                if (Math.Abs(abC) <= GridEpsilon &&
+                    Math.Abs(abD) <= GridEpsilon &&
+                    CollinearOverlapLength(a, b, c, d) > GridEpsilon)
+                    return true;
+            }
+            return false;
+        }
+
+        private static float CollinearOverlapLength(
+            BoundaryFloatPoint pA, BoundaryFloatPoint pB,
+            BoundaryFloatPoint pC, BoundaryFloatPoint pD)
+        {
+            bool useX = Math.Abs(pB.X - pA.X) >= Math.Abs(pB.Y - pA.Y);
+            float a0 = useX ? pA.X : pA.Y;
+            float a1 = useX ? pB.X : pB.Y;
+            float c0 = useX ? pC.X : pC.Y;
+            float c1 = useX ? pD.X : pD.Y;
+            return Math.Min(Math.Max(a0, a1), Math.Max(c0, c1)) -
+                   Math.Max(Math.Min(a0, a1), Math.Min(c0, c1));
         }
 
         private static BoundaryCurveDraft RawFallback(
