@@ -472,4 +472,58 @@ namespace AncientWarfare3.core.policy
 
         public HashSet<BoundaryGridEdgeKey> ShoreEdgesToSuppress { get; }
     }
+
+    public readonly struct BoundaryCurveOptions
+    {
+        public BoundaryCurveOptions(
+            BoundaryTier pTier,
+            long leftOwnerId,
+            long rightOwnerId,
+            float maximumDeviation,
+            bool closed,
+            bool allowRiverWater)
+        {
+            Tier = pTier;
+            LeftOwnerId = leftOwnerId;
+            RightOwnerId = rightOwnerId;
+            MaximumDeviation = maximumDeviation;
+            Closed = closed;
+            AllowRiverWater = allowRiverWater;
+        }
+
+        public BoundaryTier Tier { get; }
+
+        public long LeftOwnerId { get; }
+
+        public long RightOwnerId { get; }
+
+        public float MaximumDeviation { get; }
+
+        public bool Closed { get; }
+
+        public bool AllowRiverWater { get; }
+    }
+
+    public sealed class BoundaryCurveDraft
+    {
+        public BoundaryCurveDraft(
+            IReadOnlyList<BoundaryFloatPoint> pPoints,
+            bool pClosed,
+            bool pUsedRawFallback,
+            float pTangentScale)
+        {
+            Points = pPoints;
+            Closed = pClosed;
+            UsedRawFallback = pUsedRawFallback;
+            TangentScale = pTangentScale;
+        }
+
+        public IReadOnlyList<BoundaryFloatPoint> Points { get; }
+
+        public bool Closed { get; }
+
+        public bool UsedRawFallback { get; }
+
+        public float TangentScale { get; }
+    }
 }

@@ -12,6 +12,7 @@ if (args.Length == 1 && args[0] == "--hierarchical-boundary-mesh-slice")
     HierarchicalVassalBoundaryChunkRulesTests.Run();
     HierarchicalVassalBoundaryTopologyRulesTests.Run();
     HierarchicalVassalBoundaryRiverRulesTests.Run();
+    HierarchicalVassalBoundaryCurveRulesTests.Run();
     Console.WriteLine("Hierarchical vassal boundary mesh rules passed.");
     return;
 }
