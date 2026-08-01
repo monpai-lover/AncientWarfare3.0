@@ -483,6 +483,11 @@ namespace AncientWarfare3.core.policy
             bool closed,
             bool allowRiverWater)
         {
+            if (float.IsNaN(maximumDeviation) ||
+                float.IsInfinity(maximumDeviation) || maximumDeviation < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumDeviation));
+            }
             Tier = pTier;
             LeftOwnerId = leftOwnerId;
             RightOwnerId = rightOwnerId;

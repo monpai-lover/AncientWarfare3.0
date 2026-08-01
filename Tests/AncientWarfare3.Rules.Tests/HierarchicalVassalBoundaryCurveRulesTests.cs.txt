@@ -19,6 +19,7 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         SafetyAnchorsAndLocalToleranceAreDerivedAutomatically();
         AdaptiveSpacingAndDegenerateGeometryAreStrict();
         TangentScaleFallbackLevelsAreExplicit();
+        InvalidInputsBudgetsAndRawFallbackTrustAreStrict();
         AdversarialRasterMatrixRemainsSafe();
     }
 
@@ -651,6 +652,93 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         }
     }
 
+    private static void InvalidInputsBudgetsAndRawFallbackTrustAreStrict()
+    {
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, float.NaN, false, false),
+            "NaN deviation is rejected");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, float.PositiveInfinity,
+            false, false), "infinite deviation is rejected");
+        Throws<ArgumentOutOfRangeException>(() => new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, -0.01f, false, false),
+            "negative deviation is rejected");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryCurveRules.SampleCentripetalSpan(
+                new BoundaryFloatPoint(float.NaN, 0),
+                new BoundaryFloatPoint(0, 0), new BoundaryFloatPoint(1, 1),
+                new BoundaryFloatPoint(2, 2), 1f),
+            "non-finite controls are rejected before subdivision");
+        Throws<ArgumentOutOfRangeException>(() =>
+            HierarchicalVassalBoundaryCurveRules.SampleCentripetalSpan(
+                new BoundaryFloatPoint(0, 0), new BoundaryFloatPoint(1, 0),
+                new BoundaryFloatPoint(2, 1), new BoundaryFloatPoint(3, 1),
+                float.PositiveInfinity),
+            "non-finite tangent scale is rejected before subdivision");
+        IReadOnlyList<BoundaryFloatPoint> budgeted =
+            HierarchicalVassalBoundaryCurveRules.SampleCentripetalSpan(
+                new BoundaryFloatPoint(-100000000, 0),
+                new BoundaryFloatPoint(0, 0),
+                new BoundaryFloatPoint(1, 0),
+                new BoundaryFloatPoint(100000000, 1), 1f);
+        Equal(true, budgeted.Count <=
+                    HierarchicalVassalBoundaryCurveRules.MaximumAdaptiveSamples,
+            "adaptive sampling has a global output budget");
+
+        var longChain = new BoundaryGridPoint[20000];
+        for (int i = 0; i < longChain.Length; i++)
+            longChain[i] = new BoundaryGridPoint(i, i % 2);
+        IReadOnlyList<BoundaryGridPoint> simplifiedA =
+            HierarchicalVassalBoundaryCurveRules.Simplify(
+                longChain, null, 0.1f);
+        IReadOnlyList<BoundaryGridPoint> simplifiedB =
+            HierarchicalVassalBoundaryCurveRules.Simplify(
+                longChain, null, 0.1f);
+        SequenceEqual(simplifiedA, simplifiedB,
+            "long worst-case simplification is iterative and deterministic");
+
+        BoundaryCellRaster water = Raster(6, 6, (x, y) =>
+            x == 3 && y == 3 ? Water(x, y) : Land(x, y, 1));
+        var forgedRaw = new[]
+        {
+            new BoundaryGridPoint(1, 1), new BoundaryGridPoint(5, 5)
+        };
+        var forgedFallback = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(5, 5)
+        }, false, true, 0f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                forgedFallback, water, forgedRaw,
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false)),
+            "raw fallback cannot cross water");
+        var forgedCrossing = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(5, 5),
+            new BoundaryFloatPoint(1, 5), new BoundaryFloatPoint(5, 1)
+        }, false, true, 0f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                forgedCrossing, Raster(7, 7, (x, y) => Land(x, y, 1)),
+                new[] { new BoundaryGridPoint(1, 1),
+                    new BoundaryGridPoint(5, 5), new BoundaryGridPoint(1, 5),
+                    new BoundaryGridPoint(5, 1) },
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false)),
+            "raw fallback cannot hide a proper self intersection");
+        var fakeClosed = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(4, 1),
+            new BoundaryFloatPoint(4, 4)
+        }, true, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                fakeClosed, Raster(6, 6, (x, y) => Land(x, y, 1)),
+                new[] { new BoundaryGridPoint(1, 1),
+                    new BoundaryGridPoint(4, 1), new BoundaryGridPoint(4, 4) },
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, true, false)),
+            "closed drafts must repeat their first point and validate closure");
+    }
+
     private static void SmallRegionsDoNotDisappear()
     {
         BoundaryCellRaster island = Raster(7, 7, (x, y) =>
@@ -879,6 +967,21 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void Throws<TException>(Action action, string name)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        throw new InvalidOperationException(name + ": expected " +
+                                            typeof(TException).Name);
     }
 
     private static void NearlyEqual(
