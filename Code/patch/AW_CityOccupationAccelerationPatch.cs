@@ -176,8 +176,17 @@ namespace AncientWarfare3.patch
                     __instance.kingdom, __state.OldOwner);
                 if (__state.Direct && __instance?.kingdom ==
                     __state.Capturer)
+                {
                     WarScoreService.ClearDirectRebellionTransferState(
                         __state.WarId, __instance.id);
+                    War war = WarPeaceSettlementWorld.FindWar(__state.WarId);
+                    if (RebellionDirectTerritoryTransferService.
+                            BlocksOrdinarySettlement(war))
+                    {
+                        CityReservePoolService.RefreshCapturedCity(__instance);
+                        RebellionCollapseSettlementService.QueueIfCollapsed(war);
+                    }
+                }
             }
             finally
             {

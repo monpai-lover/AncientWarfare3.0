@@ -89,6 +89,7 @@
     <Compile Include="TemporaryLevyRulesTests.cs.txt" />
     <Compile Include="CityArmyReinforcementRulesTests.cs.txt" />
     <Compile Include="CityReservePoolRulesTests.cs.txt" />
+    <Compile Include="RebellionForceCollapseRulesTests.cs.txt" />
     <Compile Include="ArmyReplenishmentOperationRulesTests.cs.txt" />
     <Compile Include="CourtConscriptionLawRulesTests.cs.txt" />
     <Compile Include="TemporaryLevyRecoveryRulesTests.cs.txt" />
@@ -123,6 +124,7 @@
     <Compile Include="..\..\Code\content\figures\HistoricalFigureSpawnRules.cs" Link="Production\HistoricalFigureSpawnRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityArmyReinforcementRules.cs" Link="Production\CityArmyReinforcementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CityReservePoolRules.cs" Link="Production\CityReservePoolRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\RebellionForceCollapseRules.cs" Link="Production\RebellionForceCollapseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyReplenishmentOperationRules.cs" Link="Production\ArmyReplenishmentOperationRules.cs" />
     <Compile Include="..\..\Code\api\multiplayer\AW3MultiplayerCatalog.cs" Link="Production\AW3MultiplayerCatalog.cs" />
     <Compile Include="..\..\Code\api\multiplayer\IAW3CommandDispatcher.cs" Link="Production\IAW3CommandDispatcher.cs" />

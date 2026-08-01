@@ -224,6 +224,19 @@ namespace AncientWarfare3.core.lineage
             RemoveEmptyState(previousKingdom.id, state);
         }
 
+        internal static void RefreshCapturedCity(City city)
+        {
+            Kingdom kingdom = city?.kingdom;
+            if (city?.data == null || city.isRekt() ||
+                !IsLivingKingdom(kingdom)) return;
+            KingdomPoolState state = State(kingdom);
+            CityPool pool = Pool(state, city.id);
+            int budget = CityReservePoolRules.FullReconciliationBudget(
+                city.units?.Count ?? 0, pool.ActorIds.Count);
+            MaintainCity(kingdom, city, state, budget,
+                allowFrozenAddition: true);
+        }
+
         internal static int CountAvailable(Kingdom kingdom)
         {
             if (kingdom?.data == null ||

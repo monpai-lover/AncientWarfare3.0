@@ -1222,6 +1222,7 @@ namespace AncientWarfare3.core.lineage
             WarScoreDecisiveSettlementService.QueueIfDecisive(pWar);
             WarGoalSettlementRuntimeService.QueueIfReady(pWar);
             WarExhaustionSettlementRuntimeService.QueueIfReady(pWar);
+            RebellionCollapseSettlementService.QueueIfCollapsed(pWar);
         }
 
         private static Kingdom ResolveDominantPresence(City pCity)

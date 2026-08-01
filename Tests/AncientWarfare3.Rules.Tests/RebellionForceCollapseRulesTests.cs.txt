@@ -1,0 +1,42 @@
+using AncientWarfare3.core.lineage;
+
+internal static class RebellionForceCollapseRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, true, 0, 0),
+            "an active rebellion collapses after soldiers and reserves are exhausted");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, true, 1, 0),
+            "a living rebel soldier prevents collapse");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, true, 0, 1),
+            "an available rebel reserve prevents collapse");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, false, true, true, true, 0, 0),
+            "an ended rebellion cannot collapse twice");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, false, true, true, 0, 0),
+            "an ordinary war is outside the collapse rule");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, false, true, 0, 0),
+            "a missing or departed main attacker fails closed");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, false, 0, 0),
+            "unreadable warrior facts fail closed");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, true, -1, 0),
+            "negative warrior facts fail closed");
+        Equal(false, RebellionForceCollapseRules.ShouldCollapse(
+            true, true, true, true, true, 0, -1),
+            "negative reserve facts fail closed");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pName)
+    {
+        if (!EqualityComparer<T>.Default.Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pName}: expected {pExpected}, got {pActual}");
+    }
+}

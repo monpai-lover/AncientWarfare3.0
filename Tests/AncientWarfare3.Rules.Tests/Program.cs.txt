@@ -109,6 +109,13 @@ if (args.Length == 1 && args[0] == "--city-reserve-pool-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--rebellion-force-collapse-slice")
+{
+    RebellionForceCollapseRulesTests.Run();
+    Console.WriteLine("AW3 rebellion force collapse rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--conscription-law-slice")
 {
     CourtConscriptionLawRulesTests.Run();
@@ -7212,6 +7219,7 @@ SuccessionDisputeRulesTests.Run();
 SuccessionDisputeSqlTests.Run();
 ConsistencyRegressionRulesTests.Run();
 CityArmyReinforcementRulesTests.Run();
+RebellionForceCollapseRulesTests.Run();
 HistoricalFigureSpawnRulesTests.Run();
 Regression20260721Tests.Run();
 ArmyMapInformationRulesTests.Run();
