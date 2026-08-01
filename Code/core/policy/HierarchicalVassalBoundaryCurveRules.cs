@@ -130,19 +130,15 @@ namespace AncientWarfare3.core.policy
                 counts[point] = counts.TryGetValue(point, out int count)
                     ? count + 1 : 1;
             }
-            bool smallLeft = CountOwnerCells(
-                pRaster, pOptions.Tier, pOptions.LeftOwnerId, 5) <= 4;
-            bool smallRight = CountOwnerCells(
-                pRaster, pOptions.Tier, pOptions.RightOwnerId, 5) <= 4;
             for (int i = 0; i < pRawPoints.Count; i++)
             {
                 BoundaryGridPoint point = pRawPoints[i];
                 if (counts[point] > 1 ||
                     IsNarrowAnchor(point, pRaster, pOptions) ||
-                    TouchesOwner(point, pRaster, pOptions.Tier,
-                        pOptions.LeftOwnerId) && smallLeft ||
-                    TouchesOwner(point, pRaster, pOptions.Tier,
-                        pOptions.RightOwnerId) && smallRight)
+                    TouchesSmallOwnerComponent(point, pRaster, pOptions.Tier,
+                        pOptions.LeftOwnerId) ||
+                    TouchesSmallOwnerComponent(point, pRaster, pOptions.Tier,
+                        pOptions.RightOwnerId))
                 {
                     result.Add(point);
                 }
@@ -955,40 +951,49 @@ namespace AncientWarfare3.core.policy
             return allowed < 4;
         }
 
-        private static bool TouchesOwner(
+        private static bool TouchesSmallOwnerComponent(
             BoundaryGridPoint pPoint,
             BoundaryCellRaster pRaster,
             BoundaryTier pTier,
             long pOwnerId)
         {
+            var pending = new Queue<BoundaryGridPoint>();
+            var visited = new HashSet<BoundaryGridPoint>();
             for (int x = pPoint.X - 1; x <= pPoint.X; x++)
             for (int y = pPoint.Y - 1; y <= pPoint.Y; y++)
             {
                 BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
-                if (cell.IsLand && OwnerId(cell, pTier) == pOwnerId)
-                    return true;
+                var key = new BoundaryGridPoint(x, y);
+                if (cell.IsLand && OwnerId(cell, pTier) == pOwnerId &&
+                    visited.Add(key))
+                {
+                    pending.Enqueue(key);
+                }
             }
-            return false;
-        }
-
-        private static int CountOwnerCells(
-            BoundaryCellRaster pRaster,
-            BoundaryTier pTier,
-            long pOwnerId,
-            int pStopAfter)
-        {
             int count = 0;
-            for (int x = pRaster.OriginX; x < pRaster.MaxXExclusive; x++)
-            for (int y = pRaster.OriginY; y < pRaster.MaxYExclusive; y++)
+            int[] offsetsX = { -1, 1, 0, 0 };
+            int[] offsetsY = { 0, 0, -1, 1 };
+            while (pending.Count > 0)
             {
-                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
-                if (!cell.IsLand || OwnerId(cell, pTier) != pOwnerId)
-                    continue;
+                BoundaryGridPoint current = pending.Dequeue();
                 count++;
-                if (count >= pStopAfter)
-                    return count;
+                if (count > 4)
+                    return false;
+                for (int i = 0; i < offsetsX.Length; i++)
+                {
+                    var next = new BoundaryGridPoint(
+                        current.X + offsetsX[i], current.Y + offsetsY[i]);
+                    if (visited.Contains(next))
+                        continue;
+                    BoundaryCellFacts cell =
+                        pRaster.GetOrInvalid(next.X, next.Y);
+                    if (!cell.IsLand || OwnerId(cell, pTier) != pOwnerId)
+                        continue;
+                    visited.Add(next);
+                    pending.Enqueue(next);
+                }
             }
-            return count;
+            return count > 0;
         }
 
         private static int FindControlSample(

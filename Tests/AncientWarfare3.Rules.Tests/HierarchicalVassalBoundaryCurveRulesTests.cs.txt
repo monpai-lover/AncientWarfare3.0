@@ -396,6 +396,21 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 islandPoint, islandAnchors, island, options), 0.00001f,
             "small island uses local protected deviation");
 
+        BoundaryCellRaster mainlandAndIsland = Raster(10, 8, (x, y) =>
+            Land(x, y, x < 3 || x == 7 && y == 4 ? 1 : 2));
+        var remoteIslandPoint = new BoundaryGridPoint(7, 4);
+        var remoteIslandRaw = new[]
+        {
+            remoteIslandPoint, new BoundaryGridPoint(8, 4),
+            new BoundaryGridPoint(8, 5), new BoundaryGridPoint(7, 5),
+            remoteIslandPoint
+        };
+        ISet<BoundaryGridPoint> remoteAnchors =
+            HierarchicalVassalBoundaryCurveRules.DeriveProtectedAnchors(
+                remoteIslandRaw, null, mainlandAndIsland, options);
+        Equal(true, remoteAnchors.Contains(new BoundaryGridPoint(8, 4)),
+            "small component is protected even when its owner has a mainland");
+
         BoundaryCellRaster ordinary = VerticalOwnerPair(16, 16);
         var ordinaryPoint = new BoundaryGridPoint(8, 8);
         NearlyEqual(0.45f,
