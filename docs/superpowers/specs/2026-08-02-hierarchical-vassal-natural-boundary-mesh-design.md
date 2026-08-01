@@ -141,6 +141,7 @@ their halo:
 
 - coordinates and valid-cell flags;
 - land, liquid, ocean, lava, and conservative river classification inputs;
+- the real `WorldTile.Height` value clamped to its native 0-255 range;
 - root suzerain-system ID;
 - displayed realm ID for the current hierarchy focus;
 - city ID;
@@ -200,6 +201,33 @@ changing the authoritative topology. At coastlines the water-facing half is
 transparent and land/water clipping forbids the transition band from becoming
 political fill over water.
 
+### Height-Aware Relief
+
+WorldBox stores a real 0-255 height value on every `WorldTile`. The renderer
+uses that value instead of synthetic noise for political-map relief. Immutable
+snapshots include height for the chunk interior and halo; background work packs
+those samples into a small height draft and computes a reference central-difference
+normal for tests and fallback lighting.
+
+The main thread owns one reusable single-channel height texture per world
+chunk, shared by the country and city layers. Accepted terrain revisions upload
+only the affected chunk texture. Fill and boundary materials receive the same
+texture through `MaterialPropertyBlock`, together with world-to-height UV
+mapping, texel size, relief strength, and a fixed map-light direction.
+
+The fill shader samples neighboring heights, derives a normalized surface
+gradient, and modulates political color with restrained diffuse light, ridge
+highlight, and valley shadow. This is visual relief only: it does not displace
+mesh vertices, change ownership topology, cover sprites, or alter click
+coordinates. Flat terrain remains nearly unchanged. The boundary shader uses
+the same lighting factor at reduced strength so borders remain readable.
+
+Height textures are render resources, not per-tile renderers. Their count is
+bounded by world chunk count, each texture is reused, and the two map layers do
+not duplicate it. If `TextureFormat.R8` is unavailable, the material library
+uses a supported single-channel fallback. If height texture creation or upload
+fails, rendering continues without relief and logs one bounded warning.
+
 The fill renderer and boundary renderer use explicit sorting order and stable
 Z values below labels and interaction markers. During minimap redraw, fill
 roots stay enabled while boundary and label roots are temporarily hidden.
@@ -225,6 +253,11 @@ scan.
 No ordinary update swaps or rebuilds the complete map. Only dirty chunks and
 their immediate neighbors are captured, rebuilt, and uploaded; unchanged
 chunk meshes remain active.
+
+Changes to `WorldTile.Height` mark the affected chunk neighborhood dirty while
+the map mode is active. World generation and loading remain cheap because the
+hook is gated until a world and renderer generation are active; initial map-mode
+activation captures current heights incrementally.
 
 ## Activation And Migration
 
@@ -257,6 +290,8 @@ generation so late background results cannot enter a new world.
   keeps the previous valid chunk mesh rather than falling back to per-tile
   rendering.
 - Shader or AssetBundle failures use the built-in material fallback.
+- Height texture failures disable relief for the affected chunk while retaining
+  valid political fill and boundaries.
 - Upload failures retain the last valid mesh and retry with bounded logging.
 - Queue growth is capped; repeated dirty events coalesce into the newest
   revision.
@@ -286,6 +321,8 @@ Assertions include:
 - river borders are single, continuous chains;
 - same-owner rivers do not emit political borders;
 - adjacent chunk drafts share identical seam endpoints;
+- a flat height field produces a neutral normal and equal light factor;
+- an increasing height ramp produces a stable, correctly oriented gradient;
 - fallback output remains renderable after smoothing or triangulation failure.
 
 Integration source guards verify:
@@ -298,6 +335,8 @@ Integration source guards verify:
 - minimap capture hides boundary meshes but retains fill meshes;
 - world clear cancels and invalidates pending results;
 - shader fallback is present.
+- height textures are chunk-bounded, shared across layers, and updated only for
+  accepted terrain revisions.
 
 A large-map benchmark simulates sparse zone and ownership changes. A one-zone
 change must rebuild only intersecting and neighboring chunks. Runtime checks
@@ -314,5 +353,6 @@ Manual visual acceptance requires:
 - no cracks at chunk seams;
 - stable three-region junctions;
 - readable thick/medium/thin hierarchy;
+- relief follows real hills and mountains without changing political geometry;
 - correct country/city switching and hierarchy drill-down;
 - correct minimap behavior.

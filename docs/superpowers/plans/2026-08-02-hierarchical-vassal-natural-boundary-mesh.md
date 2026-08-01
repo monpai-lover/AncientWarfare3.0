@@ -20,6 +20,7 @@
 - Create `Code/core/policy/HierarchicalVassalBoundaryRiverRules.cs`: conservative river-component classification, bank pairing, and different-owner river-border emission.
 - Create `Code/core/policy/HierarchicalVassalBoundaryCurveRules.cs`: bounded simplification, constrained curve sampling, forbidden-cell checks, and raw-chain fallback.
 - Create `Code/core/policy/HierarchicalVassalBoundaryPolygonRules.cs`: ring/hole grouping, chunk-interior clipping, deterministic triangulation, and less-smoothed/raw-contour fallback.
+- Create `Code/core/policy/HierarchicalVassalBoundaryHeightRules.cs`: pack native 0-255 height samples and provide deterministic central-difference normals/light factors for tests and shader fallback.
 - Create `Code/core/policy/HierarchicalVassalBoundaryMeshDraftRules.cs`: consolidated polygon fill and tiered two-sided transition-ribbon vertices/indices using primitive arrays.
 
 **Runtime pipeline**
@@ -48,7 +49,7 @@
 
 **Tests**
 
-- Create seven focused test files under `Tests/AncientWarfare3.Rules.Tests/` matching the seven pure rules files.
+- Create eight focused test files under `Tests/AncientWarfare3.Rules.Tests/` matching the eight pure rules files.
 - Modify `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt` and `AncientWarfare3.Rules.Tests.csproj` to add `--hierarchical-boundary-mesh-slice`.
 - Create `Tests/HierarchicalVassalBoundaryMeshSourceGuard.ps1`.
 - Create `Tests/HierarchicalVassalBoundaryMeshPerformanceGuard.ps1`.
@@ -120,15 +121,17 @@ public readonly struct BoundaryChunkKey : IEquatable<BoundaryChunkKey>
 public readonly struct BoundaryCellFacts
 {
     public BoundaryCellFacts(int x, int y, bool isValid, BoundaryWaterKind water,
-        long systemId, long realmId, long cityId, uint rgba)
+        byte height, long systemId, long realmId, long cityId, uint rgba)
     {
-        X = x; Y = y; IsValid = isValid; Water = water; SystemId = systemId;
+        X = x; Y = y; IsValid = isValid; Water = water; Height = height;
+        SystemId = systemId;
         RealmId = realmId; CityId = cityId; Rgba = rgba;
     }
     public int X { get; }
     public int Y { get; }
     public bool IsValid { get; }
     public BoundaryWaterKind Water { get; }
+    public byte Height { get; }
     public long SystemId { get; }
     public long RealmId { get; }
     public long CityId { get; }
@@ -317,7 +320,57 @@ Boundary ribbons emit left/right vertices carrying centerline normal, signed edg
 
 Expected: all pure geometry tests pass, coherent regions use consolidated polygon geometry, and no test path emits per-tile render primitives.
 
-### Task 6: Dirty Tracker And Main-Thread Snapshot Capture
+### Task 6: Real Height Relief Drafts
+
+**Files:**
+- Create: `Code/core/policy/HierarchicalVassalBoundaryHeightRules.cs`
+- Create: `Tests/AncientWarfare3.Rules.Tests/HierarchicalVassalBoundaryHeightRulesTests.cs.txt`
+- Modify: `Code/core/policy/HierarchicalVassalBoundaryModels.cs`
+
+- [ ] **Step 1: Write failing height-rule tests**
+
+Test native byte packing, invalid-edge clamping, flat normals, X/Y ramps, and bounded diffuse factors using the same reference math required from the shader:
+
+```csharp
+BoundaryHeightDraft flat = HierarchicalVassalBoundaryHeightRules.Pack(
+    grid.WithUniformHeight(128), interiorSize: 32, halo: 2);
+Equal(36, flat.Width);
+Equal(36, flat.Height);
+Equal((byte)128, flat.Samples[flat.Index(18, 18)]);
+Near(new BoundaryFloat3(0f, 0f, 1f),
+    HierarchicalVassalBoundaryHeightRules.NormalAt(flat, 18, 18, 2f), 0.0001f);
+
+BoundaryHeightDraft ramp = HierarchicalVassalBoundaryHeightRules.Pack(
+    grid.WithHeightRampX(), 32, 2);
+Equal(true,
+    HierarchicalVassalBoundaryHeightRules.NormalAt(ramp, 18, 18, 2f).X < 0f);
+InRange(HierarchicalVassalBoundaryHeightRules.LightAt(
+    ramp, 18, 18, lightDirection, 2f), 0.65f, 1.15f);
+```
+
+Add a world-edge case proving invalid halo cells copy the nearest valid edge height instead of introducing a false zero-height cliff. Add a revision test proving country and city drafts reference the same immutable `BoundaryHeightDraft` instance.
+
+- [ ] **Step 2: Run RED**
+
+Run the focused boundary slice. Expected: compilation fails because `HierarchicalVassalBoundaryHeightRules` and `BoundaryHeightDraft` do not exist.
+
+- [ ] **Step 3: Implement native-height packing and reference lighting**
+
+`BoundaryHeightDraft` owns a copied `byte[] Samples`, dimensions, chunk world origin, halo, and terrain revision. `Pack` preserves the native 0-255 value and edge-clamps invalid world cells. `NormalAt` uses normalized central differences:
+
+```csharp
+float dx = (right - left) / 255f * slopeScale;
+float dy = (up - down) / 255f * slopeScale;
+return Normalize(new BoundaryFloat3(-dx, -dy, 1f));
+```
+
+`LightAt` applies bounded ambient plus diffuse light and a small ridge term. Keep constants in the rules file so ShaderLab source guards can require matching `_ReliefStrength`, `_HeightTex_TexelSize`, and `_MapLightDirection` contracts. Height data remains primitive-only and has no Unity/WorldBox references.
+
+- [ ] **Step 4: Run GREEN, full rules, and commit**
+
+Expected: height tests, the focused boundary slice, and the full rules suite exit 0.
+
+### Task 7: Dirty Tracker And Main-Thread Snapshot Capture
 
 **Files:**
 - Create: `Code/core/policy/HierarchicalVassalBoundaryDirtyTracker.cs`
@@ -327,7 +380,7 @@ Expected: all pure geometry tests pass, coherent regions use consolidated polygo
 
 - [ ] **Step 1: Add a failing source guard**
 
-Require the tracker to use `Dictionary<BoundaryChunkKey,long>` plus a queue of unique keys, require `CaptureBudgetPerFrame`, and reject `World`, `Kingdom`, `City`, `TileZone`, `WorldTile`, and `UnityEngine` references from all pure model/rule files. Require capture to create copied `BoundaryCellFacts[]`, include explicit valid-cell facts at clipped world edges, and never store live world objects in the snapshot.
+Require the tracker to use `Dictionary<BoundaryChunkKey,long>` plus a queue of unique keys, require `CaptureBudgetPerFrame`, and reject `World`, `Kingdom`, `City`, `TileZone`, `WorldTile`, and `UnityEngine` references from all pure model/rule files. Require capture to create copied `BoundaryCellFacts[]`, copy `WorldTile.Height` into the native byte range, include explicit valid-cell facts at clipped world edges, and never store live world objects in the snapshot.
 
 - [ ] **Step 2: Run RED**
 
@@ -339,13 +392,13 @@ Expected: missing tracker and capture service.
 
 - [ ] **Step 3: Implement coalesced revisions and bounded capture**
 
-`MarkTile`, `MarkZone`, and `MarkKingdom` expand through `DirtyNeighborhood`. Each key has a monotonically increasing revision; a duplicate mark updates the revision but does not add a duplicate queue node. Capture resolves the current visible hierarchy mapping and stable root/realm/city color variation on the main thread, copies a 32x32 interior plus two-tile halo, and submits at most two snapshots per frame. Cells outside the world are copied as `IsValid == false`, never as water or unowned land. A round-robin audit checks at most one chunk per simulation cycle and only marks a chunk when its compact ownership/terrain fingerprint changes.
+`MarkTile`, `MarkZone`, and `MarkKingdom` expand through `DirtyNeighborhood`. Each key has a monotonically increasing revision; a duplicate mark updates the revision but does not add a duplicate queue node. Capture resolves the current visible hierarchy mapping and stable root/realm/city color variation on the main thread, copies a 32x32 interior plus two-tile halo including `(byte)Mathf.Clamp(tile.Height, 0, 255)`, and submits at most two snapshots per frame. Cells outside the world are copied as `IsValid == false`, never as water or unowned land. The compact terrain fingerprint includes height so missed height hooks are recoverable. A round-robin audit checks at most one chunk per simulation cycle and only marks a chunk when its compact ownership/terrain fingerprint changes.
 
 - [ ] **Step 4: Run guard and commit**
 
 Expected: source guard passes and pure rule suite remains green.
 
-### Task 7: Latest-Wins Background Topology Worker
+### Task 8: Latest-Wins Background Topology Worker
 
 **Files:**
 - Create: `Code/core/policy/HierarchicalVassalBoundaryTopologyWorker.cs`
@@ -358,13 +411,13 @@ Test generation acceptance through the pure chunk rules and require the worker t
 
 - [ ] **Step 2: Implement the worker**
 
-Use one background thread or the existing AW async coordinator with channel key `hierarchical_vassal_boundary`. Coalesce pending requests by `(worldGeneration, chunkKey, layer)` and cap pending work at `worldChunkCount * 2`; when saturated, replace the older revision for the same key and preserve a single rescan marker instead of growing the queue. Process topology, river, curve, polygon, and mesh draft rules in sequence. Catch exceptions per request and enqueue either a draft or a bounded failure record. `ResetWorld` increments generation, cancels/drains pending work and completions, and prevents late results from applying.
+Use one background thread or the existing AW async coordinator with channel key `hierarchical_vassal_boundary`. Coalesce pending requests by `(worldGeneration, chunkKey)` and cap pending work at `worldChunkCount`; when saturated, replace the older revision for the same key and preserve a single rescan marker instead of growing the queue. One immutable chunk snapshot produces a `BoundaryChunkDraftSet` containing country geometry, city geometry, and one shared height draft. Process topology, river, curve, polygon, height, and mesh draft rules in sequence. Catch exceptions per request and enqueue either the draft set or a bounded failure record. `ResetWorld` increments generation, cancels/drains pending work and completions, and prevents late results from applying.
 
 - [ ] **Step 3: Run focused/full tests and commit**
 
 Expected: stale generation tests and source guards pass.
 
-### Task 8: Shader Project And AssetBundle Loader
+### Task 9: Shader Project And AssetBundle Loader
 
 **Files:**
 - Create: `Tools/HierarchicalVassalBoundaryShader/ProjectSettings/ProjectVersion.txt`
@@ -376,11 +429,13 @@ Expected: stale generation tests and source guards pass.
 
 - [ ] **Step 1: Extend source guards for bundle and fallback contracts**
 
-Require bundle path `GameResources/assetbundles/aw3_hierarchical_vassal_boundary`, shader asset names `AW3/HierarchicalVassal/Fill` and `AW3/HierarchicalVassal/Boundary`, a one-warning guard, `AssetBundle.Unload(false)`, and `Shader.Find("Sprites/Default")` fallback.
+Require bundle path `GameResources/assetbundles/aw3_hierarchical_vassal_boundary`, shader asset names `AW3/HierarchicalVassal/Fill` and `AW3/HierarchicalVassal/Boundary`, height properties `_HeightTex`, `_HeightTex_TexelSize`, `_HeightUvScaleOffset`, `_ReliefStrength`, and `_MapLightDirection`, a one-warning guard, `AssetBundle.Unload(false)`, and `Shader.Find("Sprites/Default")` fallback.
 
 - [ ] **Step 2: Implement ShaderLab assets**
 
-The fill shader consumes vertex color and `_OverlayAlpha`, uses transparent blending, and applies edge feathering without sampling outside the consolidated polygon geometry. The boundary shader consumes left/right colors, signed edge distance in UV0, tier in UV1, `_CameraWorldPerPixel`, `_DarkOutline`, and `_EdgeSoftness`; it selects the left or right political color on the corresponding half, draws a narrow dark center line, and uses `fwidth`/`smoothstep` for anti-aliasing. A coastline's water-facing half has zero alpha. Both runtime materials use explicit render queues/Z values below hierarchy labels, nameplates, click markers, and other interaction overlays.
+The fill shader consumes vertex color and `_OverlayAlpha`, uses transparent blending, and applies edge feathering without sampling outside the consolidated polygon geometry. It maps world position into the chunk `_HeightTex`, samples left/right/up/down native height, derives the same central-difference normal as `HierarchicalVassalBoundaryHeightRules`, and applies bounded ambient/diffuse/ridge lighting controlled by `_ReliefStrength` and `_MapLightDirection`. Flat height must produce neutral lighting and the shader must not displace vertices.
+
+The boundary shader consumes left/right colors, signed edge distance in UV0, tier in UV1, `_CameraWorldPerPixel`, `_DarkOutline`, and `_EdgeSoftness`; it selects the left or right political color on the corresponding half, draws a narrow dark center line, uses the shared height light factor at reduced strength, and applies `fwidth`/`smoothstep` anti-aliasing. A coastline's water-facing half has zero alpha. Both runtime materials use explicit render queues/Z values below hierarchy labels, nameplates, click markers, and other interaction overlays.
 
 - [ ] **Step 3: Implement deterministic Windows bundle builder**
 
@@ -412,13 +467,13 @@ The implementation session must first set `ProjectVersion.txt` to the Unity vers
 
 - [ ] **Step 4: Implement runtime material loading and fallback**
 
-Resolve the bundle from `ModClass.Instance.GetDeclaration().FolderPath`, load both shaders, create one shared fill material and three boundary material variants, then unload only the bundle container with `Unload(false)`. On any failure, create equivalent shared materials from `Sprites/Default` and log once.
+Resolve the bundle from `ModClass.Instance.GetDeclaration().FolderPath`, load both shaders, create one shared fill material and three boundary material variants, then unload only the bundle container with `Unload(false)`. Set stable default relief parameters without cloning materials per chunk. On any failure, create equivalent shared materials from `Sprites/Default`, disable height relief, and log once.
 
 - [ ] **Step 5: Run source guard, inspect bundle file, and commit**
 
 Expected: guard passes and generated bundle exists with nonzero length.
 
-### Task 9: Pooled Main-Thread Mesh Renderer
+### Task 10: Pooled Main-Thread Mesh Renderer
 
 **Files:**
 - Create: `Code/core/policy/HierarchicalVassalBoundaryMeshLayer.cs`
@@ -428,11 +483,13 @@ Expected: guard passes and generated bundle exists with nonzero length.
 
 - [ ] **Step 1: Write a failing source guard**
 
-Reject `LineRenderer`, `MaximumSegments`, one-GameObject-per-edge, one-quad-per-tile, and whole-map replacement names from the active path. Require `MeshFilter`, `MeshRenderer`, `Mesh.MarkDynamic`, fill and boundary roots, two-uploads-per-frame budget, mesh reuse, stale result rejection, camera orthographic-scale updates, bounded warning/retry state, and `SetMinimapHidden` to disable only boundary roots.
+Reject `LineRenderer`, `MaximumSegments`, one-GameObject-per-edge, one-quad-per-tile, and whole-map replacement names from the active path. Require `MeshFilter`, `MeshRenderer`, `Mesh.MarkDynamic`, fill and boundary roots, two-uploads-per-frame budget, mesh reuse, one reusable single-channel height texture per chunk, `MaterialPropertyBlock`, stale result rejection, camera orthographic-scale updates, bounded warning/retry state, and `SetMinimapHidden` to disable only boundary roots.
 
 - [ ] **Step 2: Implement pooled chunk render entries**
 
-Each `(chunkKey, layer)` entry owns two reusable GameObjects: fill and boundary. Upload primitive arrays with `Mesh.Clear(false)`, `SetVertices`, `SetColors`, `SetUVs`, and `SetTriangles` for the fill/outer/vassal/city submeshes. Do not allocate a new Mesh on ordinary revision updates. Update the shared `_CameraWorldPerPixel` value only when orthographic scale or viewport height changes. A completed chunk becomes visible immediately; an unbuilt chunk leaves the normal map visible. Upload exceptions retain the previous valid fill/boundary meshes, enqueue one bounded retry, and log through a per-chunk throttled warning rather than clearing the overlay.
+Each `(chunkKey, layer)` entry owns two reusable GameObjects: fill and boundary. Each chunk, independent of layer, owns one reusable 36x36 single-channel height texture (`TextureFormat.R8`, with a supported single-channel fallback) and one cached `MaterialPropertyBlock`. Set `FilterMode.Bilinear`, `TextureWrapMode.Clamp`, and disable mipmaps so height gradients remain continuous without sampling neighboring atlas data. Country and city entries bind the same texture and world-to-height UV transform. Upload height bytes only when an accepted terrain revision changes, using `LoadRawTextureData` and `Apply(updateMipmaps: false, makeNoLongerReadable: false)`; never allocate a texture during an ordinary revision update.
+
+Upload primitive arrays with `Mesh.Clear(false)`, `SetVertices`, `SetColors`, `SetUVs`, and `SetTriangles` for the fill/outer/vassal/city submeshes. Do not allocate a new Mesh on ordinary revision updates. Update the shared `_CameraWorldPerPixel` value only when orthographic scale or viewport height changes. A completed chunk becomes visible immediately; an unbuilt chunk leaves the normal map visible. Mesh or height upload exceptions retain the previous valid resources, enqueue one bounded retry, and log through a per-chunk throttled warning rather than clearing the overlay. A height-only failure binds a neutral one-pixel texture and leaves political geometry visible.
 
 - [ ] **Step 3: Convert the old boundary layer to a compatibility facade**
 
@@ -442,7 +499,7 @@ Keep public/internal call sites stable (`ProcessFrame`, `Reset`, and `SetMinimap
 
 Expected: no active `LineRenderer` path remains.
 
-### Task 10: Runtime Event Wiring And Legacy Suppression
+### Task 11: Runtime Event Wiring And Legacy Suppression
 
 **Files:**
 - Create: `Code/patch/AW_HierarchicalVassalBoundaryDirtyPatch.cs`
@@ -455,11 +512,11 @@ Expected: no active `LineRenderer` path remains.
 
 - [ ] **Step 1: Extend guards and verify RED**
 
-Require hooks for `TileZone.setCity`, `City.addZone`, `City.joinAnotherKingdom`, and all `WorldTile.setTileType`/`setTileTypes` overloads selected through `TargetMethods`. Require the patch to discover and hook available zone removal/destruction and kingdom creation/destruction mutation methods by exact reflected signature, while the bounded chunk audit remains the compatibility fallback for game versions where a named method is absent. Require successful `VassalService.SetVassal`/`EndVassal` to call hierarchy dirty routing. Reject `ComputeWorldRevision`, `RevisionCheckIntervalFrames`, and active `drawZoneMeta` calls for this map mode.
+Require hooks for `TileZone.setCity`, `City.addZone`, `City.joinAnotherKingdom`, the `WorldTile.Height` setter, and all `WorldTile.setTileType`/`setTileTypes` overloads selected through `TargetMethods`. Require the patch to discover and hook available zone removal/destruction and kingdom creation/destruction mutation methods by exact reflected signature, while the bounded chunk audit remains the compatibility fallback for game versions where a named method is absent. Require successful `VassalService.SetVassal`/`EndVassal` to call hierarchy dirty routing. Reject `ComputeWorldRevision`, `RevisionCheckIntervalFrames`, and active `drawZoneMeta` calls for this map mode.
 
 - [ ] **Step 2: Implement territory and terrain hooks**
 
-Use prefix state to capture old city/kingdom/type and postfix logic to mark old and new zone/chunk neighborhoods only when facts changed. `WorldTile` patches call `MarkTile(__instance.x, __instance.y)`. Zone removal/destruction marks the former bounds before references are cleared; kingdom creation/destruction marks its affected city chunks. Map-mode activation and world load mark all chunks once; hierarchy focus/layer changes mark only chunks whose displayed owner mapping changes, with all-chunks fallback when mapping comparison cannot be completed safely.
+Use prefix state to capture old city/kingdom/type/height and postfix logic to mark old and new zone/chunk neighborhoods only when facts changed. `WorldTile` patches call `MarkTile(__instance.x, __instance.y)`. The height-setter postfix exits immediately unless the hierarchical map renderer has an active world generation, preventing generation/load storms before activation. Zone removal/destruction marks the former bounds before references are cleared; kingdom creation/destruction marks its affected city chunks. Map-mode activation and world load mark all chunks once; hierarchy focus/layer changes mark only chunks whose displayed owner mapping changes, with all-chunks fallback when mapping comparison cannot be completed safely.
 
 - [ ] **Step 3: Replace frame ordering and world reset**
 
@@ -473,7 +530,7 @@ While mesh authority is active, `AWMapModeMetaLibrary.HierarchicalVassalAsset.dr
 
 Expected: all tests pass and source guard confirms one authoritative renderer.
 
-### Task 11: Performance And Adversarial Geometry Verification
+### Task 12: Performance And Adversarial Geometry Verification
 
 **Files:**
 - Create: `Tests/HierarchicalVassalBoundaryMeshPerformanceGuard.ps1`
@@ -482,11 +539,11 @@ Expected: all tests pass and source guard confirms one authoritative renderer.
 
 - [ ] **Step 1: Add deterministic performance tests**
 
-Generate a 512x512 synthetic world, build all chunk drafts, then mutate one zone-sized 8x8 area. Assert dirty expansion is at most nine chunks, unchanged chunk revisions remain accepted, queue count stays bounded by world chunk count times two layers, and mesh vertex/index counts stay within calculated chunk maxima. Add failure-injection cases proving an invalid curve falls back to raw topology, a worker exception affects only one chunk, and an upload retry preserves the last valid revision.
+Generate a 512x512 synthetic world, build all chunk draft sets, then mutate one zone-sized 8x8 area and one height sample. Assert dirty expansion is at most nine chunks, unchanged chunk revisions remain accepted, worker queue count stays bounded by world chunk count, each draft set contains one height draft shared by its country/city geometry, height texture count stays bounded by world chunk count, and mesh vertex/index counts stay within calculated chunk maxima. Add failure-injection cases proving an invalid curve falls back to raw topology, a worker exception affects only one chunk, an upload retry preserves the last valid revision, and a height upload failure retains political geometry with neutral relief.
 
 - [ ] **Step 2: Add source-level hot-path guards**
 
-Reject full `World.world.kingdoms` traversal from `ProcessFrame`, `MapBox.Update` postfix, completion drain, and mesh upload. Reject per-tile/per-edge GameObject creation, one fill quad per source tile, per-result Mesh construction, and any ordinary local-change path that clears or replaces all chunk meshes. Require capture/upload budgets and coalescing dictionaries.
+Reject full `World.world.kingdoms` traversal from `ProcessFrame`, `MapBox.Update` postfix, completion drain, and mesh upload. Reject per-tile/per-edge GameObject creation, one fill quad per source tile, per-result Mesh/Texture construction, duplicate country/city height textures, and any ordinary local-change path that clears or replaces all chunk meshes. Require capture/upload budgets and coalescing dictionaries.
 
 - [ ] **Step 3: Run focused benchmark and full suite**
 
@@ -503,7 +560,7 @@ Expected: all commands exit 0; benchmark reports local dirty rebuilding only, co
 
 Commit only the performance test and guard changes.
 
-### Task 12: Deployment And In-Game Visual Acceptance
+### Task 13: Deployment And In-Game Visual Acceptance
 
 **Files:**
 - Deploy all changed production `Code/`, `GameResources/assetbundles/`, and required shader metadata files to `D:/SteamLibrary/steamapps/common/worldbox/Mods/AncientWarfare3.0`.
@@ -522,11 +579,11 @@ Compare every deployed task file and bundle against the workspace and fail on an
 
 - [ ] **Step 4: Run in-game acceptance scenarios**
 
-Verify country and city layers on a large saved world containing islands, lakes, rivers, narrow straits, enclaves, three-way junctions, and nested vassals. Capture screenshots at near, normal, and far zoom. Confirm natural curves, the two-sided political-color transition hides raster stair-steps at ordinary zoom, continuous different-owner river boundaries, same-owner rivers without political lines, no water fill, no third-owner crossing, no seam cracks or tangent kinks, correct thick/medium/thin hierarchy, and correct minimap behavior.
+Verify country and city layers on a large saved world containing islands, lakes, rivers, narrow straits, enclaves, three-way junctions, nested vassals, flat plains, hills, and mountains. Capture screenshots at near, normal, and far zoom. Confirm natural curves, the two-sided political-color transition hides raster stair-steps at ordinary zoom, continuous different-owner river boundaries, same-owner rivers without political lines, no water fill, no third-owner crossing, no seam cracks or tangent kinks, correct thick/medium/thin hierarchy, real-height relief follows hills and mountains without moving political geometry, flat land remains visually neutral, and minimap behavior remains correct.
 
 - [ ] **Step 5: Verify incremental updates and runtime stability**
 
-Capture a city, add/remove a zone, change terrain between land and liquid, establish/end a vassal relation, switch country/city layers, drill into a vassal hierarchy, and clear/reload the world. Confirm affected regions update within the next simulation cycle or about 0.5 seconds, unchanged chunks do not rebuild, stale worker results never enter a new world, and Mesh/GameObject counts remain bounded.
+Capture a city, add/remove a zone, change terrain between land and liquid, change a tile height, establish/end a vassal relation, switch country/city layers, drill into a vassal hierarchy, and clear/reload the world. Confirm affected regions and height textures update within the next simulation cycle or about 0.5 seconds, unchanged chunks do not rebuild, country/city layers share height resources, stale worker results never enter a new world, and Mesh/Texture/GameObject counts remain bounded.
 
 - [ ] **Step 6: Selectively commit and push after user acceptance**
 
