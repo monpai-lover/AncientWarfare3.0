@@ -805,6 +805,30 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
                     1, 2, 0.45f, true, false)),
             "closed drafts must repeat their first point and validate closure");
+        var openDraft = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(2, 1)
+        }, false, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                openDraft, Raster(4, 4, (x, y) => Land(x, y, 1)),
+                new[] { new BoundaryGridPoint(1, 1),
+                    new BoundaryGridPoint(2, 1) },
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, true, false)),
+            "closed options reject an open draft state");
+        var closedDraft = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(2, 1),
+            new BoundaryFloatPoint(1, 1)
+        }, true, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                closedDraft, Raster(4, 4, (x, y) => Land(x, y, 1)),
+                new[] { new BoundaryGridPoint(1, 1),
+                    new BoundaryGridPoint(2, 1),
+                    new BoundaryGridPoint(1, 1) },
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false)),
+            "open options reject a closed draft state");
     }
 
     private static void SmallRegionsDoNotDisappear()

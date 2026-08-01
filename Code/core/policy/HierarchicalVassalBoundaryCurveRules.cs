@@ -291,6 +291,8 @@ namespace AncientWarfare3.core.policy
             {
                 return false;
             }
+            if (pCurve.Closed != pOptions.Closed)
+                return false;
             IReadOnlyList<BoundaryGridPoint> normalizedRaw =
                 NormalizeRawChain(pRawChain, pOptions.Closed);
             if (normalizedRaw.Count < 2)
@@ -1183,26 +1185,6 @@ namespace AncientWarfare3.core.policy
                 pStart, pEnd, pRaster, pOptions.Tier,
                 pOptions.LeftOwnerId, pOptions.RightOwnerId,
                 pOptions.AllowRiverWater, pRaw, pAllowInvalid: true);
-        }
-
-        private static bool HasProperSelfIntersection(
-            IReadOnlyList<BoundaryFloatPoint> pPoints,
-            bool pClosed)
-        {
-            int segmentCount = pPoints.Count - 1;
-            for (int i = 0; i < segmentCount; i++)
-            for (int j = i + 2; j < segmentCount; j++)
-            {
-                if (pClosed && i == 0 && j == segmentCount - 1)
-                    continue;
-                float abC = Cross(pPoints[i], pPoints[i + 1], pPoints[j]);
-                float abD = Cross(pPoints[i], pPoints[i + 1], pPoints[j + 1]);
-                float cdA = Cross(pPoints[j], pPoints[j + 1], pPoints[i]);
-                float cdB = Cross(pPoints[j], pPoints[j + 1], pPoints[i + 1]);
-                if (abC * abD < -GridEpsilon && cdA * cdB < -GridEpsilon)
-                    return true;
-            }
-            return false;
         }
 
         private static bool HasRawInvalidIntersection(
