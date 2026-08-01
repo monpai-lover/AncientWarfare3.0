@@ -7,6 +7,10 @@ Replace the hierarchical-vassal map mode's per-zone fill and per-edge
 natural polygon borders, preserve political topology, never fill across
 water, and remain responsive on large worlds.
 
+Tile cells are topology input only. The renderer does not create one object,
+quad, material, or draw call per tile, and a local change never replaces the
+whole-world overlay.
+
 ## Scope
 
 - Replace both the country layer and city layer rendering.
@@ -67,6 +71,11 @@ smoothing strength reduced. If no safe curve exists, that local chain falls
 back to its original topology. Correct ownership always takes priority over
 smoothness.
 
+Closed owner contours are grouped into outer rings and holes, clipped to the
+chunk interior, and triangulated into consolidated fill geometry. The fill
+uses the same accepted contour anchors as the boundary transition geometry;
+it is not emitted as one quad per source tile.
+
 ## Water And River Rules
 
 Political fill is clipped to visible land cells. No fill triangle may cover a
@@ -97,8 +106,8 @@ out of the chunk's final owned triangles and boundary segments.
 
 Each active layer has two render products per chunk:
 
-- a fill mesh grouped into deterministic region-color submeshes or vertex
-  colors;
+- a consolidated, triangulated polygon fill mesh grouped into deterministic
+  region-color submeshes or vertex colors;
 - a boundary mesh with outer-system, vassal-realm, and city submeshes.
 
 Fill and boundary meshes remain separate so minimap capture can keep political
@@ -145,8 +154,8 @@ Unity collection is passed to background work.
 `HierarchicalVassalBoundaryTopologyWorker` consumes immutable snapshots and
 produces pure mesh drafts. It performs edge extraction, graph construction,
 river-corridor analysis, endpoint protection, simplification, constrained
-curve fitting, loop and hole validation, triangulation, and submesh
-classification.
+curve fitting, loop and hole validation, consolidated polygon triangulation,
+and submesh classification. It never emits one render primitive per tile.
 
 Work is latest-wins by chunk revision. Results older than the current chunk or
 map-mode generation are discarded before upload. Background code does not call
@@ -183,6 +192,14 @@ visual joins, and the dark outline. Orthographic camera scale is supplied as a
 shared material parameter so apparent line width remains readable across zoom
 levels without rebuilding geometry.
 
+Each political ribbon also carries the colors and owner IDs for both sides of
+the boundary. The shader paints the left half with the left region color, the
+right half with the right region color, and a narrow dark political line at
+the center. This transition band covers residual raster stair-stepping without
+changing the authoritative topology. At coastlines the water-facing half is
+transparent and land/water clipping forbids the transition band from becoming
+political fill over water.
+
 The fill renderer and boundary renderer use explicit sorting order and stable
 Z values below labels and interaction markers. During minimap redraw, fill
 roots stay enabled while boundary and label roots are temporarily hidden.
@@ -204,6 +221,10 @@ The current every-15-frame whole-world revision hash is removed. A low-cost,
 round-robin chunk audit may detect missed hooks, but it may inspect only a
 bounded number of chunks per cycle and may not trigger a single-frame full-map
 scan.
+
+No ordinary update swaps or rebuilds the complete map. Only dirty chunks and
+their immediate neighbors are captured, rebuilt, and uploaded; unchanged
+chunk meshes remain active.
 
 ## Activation And Migration
 
@@ -232,7 +253,9 @@ generation so late background results cannot enter a new world.
 - Background exceptions are isolated to the affected chunk and generation.
 - Invalid polygons, self-intersections, winding changes, or failed
   triangulation fall back first to a less-smoothed contour and then to the raw
-  tile-edge contour.
+  tile-edge contour for consolidated polygon triangulation. A repeated failure
+  keeps the previous valid chunk mesh rather than falling back to per-tile
+  rendering.
 - Shader or AssetBundle failures use the built-in material fallback.
 - Upload failures retain the last valid mesh and retry with bounded logging.
 - Queue growth is capped; repeated dirty events coalesce into the newest
@@ -268,6 +291,8 @@ Assertions include:
 Integration source guards verify:
 
 - no `LineRenderer` remains in the active hierarchical-vassal boundary path;
+- no one-quad-per-tile, one-object-per-tile, or full-map replacement path
+  remains in the active renderer;
 - no background worker references live WorldBox or Unity objects;
 - legacy fill and new fill cannot render simultaneously;
 - minimap capture hides boundary meshes but retains fill meshes;
@@ -276,8 +301,8 @@ Integration source guards verify:
 
 A large-map benchmark simulates sparse zone and ownership changes. A one-zone
 change must rebuild only intersecting and neighboring chunks. Runtime checks
-must show no per-frame whole-world scan, no unbounded Mesh/GameObject growth,
-and no all-map replacement after local changes.
+must show no per-frame whole-world scan, no per-tile draw calls, no unbounded
+Mesh/GameObject growth, and no all-map replacement after local changes.
 
 Manual visual acceptance requires:
 

@@ -4,7 +4,7 @@
 
 **Goal:** Replace hierarchical-vassal map mode zone drawing and per-edge `LineRenderer` objects with chunked fill and natural-boundary meshes that update incrementally, follow rivers between different owners, and never fill across water.
 
-**Architecture:** Main-thread hooks coalesce dirty 32x32 chunks and capture immutable cell facts with a two-tile halo. A latest-wins background worker extracts protected topology, river corridors, safe natural curves, and pure mesh drafts; the main thread uploads pooled country/city fill and boundary meshes and binds a custom shader bundle with a built-in fallback.
+**Architecture:** Main-thread hooks coalesce dirty 32x32 chunks and capture immutable cell facts with a two-tile halo. A latest-wins background worker extracts protected topology, river corridors, safe natural curves, consolidated owner polygons, and pure mesh drafts; the main thread uploads pooled country/city fill and two-sided transition-boundary meshes and binds a custom shader bundle with a built-in fallback. Tiles are topology input only: there is no per-tile renderer and no local update replaces the whole map.
 
 **Tech Stack:** C# 11/net48 mod runtime, .NET 9 standalone rule tests, Harmony, Unity `MeshFilter`/`MeshRenderer`, Unity ShaderLab and AssetBundle build pipeline, PowerShell source guards.
 
@@ -19,7 +19,8 @@
 - Create `Code/core/policy/HierarchicalVassalBoundaryTopologyRules.cs`: cell-side comparison, boundary-tier classification, graph construction, protected endpoints, loops, and deterministic seam ownership.
 - Create `Code/core/policy/HierarchicalVassalBoundaryRiverRules.cs`: conservative river-component classification, bank pairing, and different-owner river-border emission.
 - Create `Code/core/policy/HierarchicalVassalBoundaryCurveRules.cs`: bounded simplification, constrained curve sampling, forbidden-cell checks, and raw-chain fallback.
-- Create `Code/core/policy/HierarchicalVassalBoundaryMeshDraftRules.cs`: land-cell fill quads and tiered ribbon vertices/indices using primitive arrays.
+- Create `Code/core/policy/HierarchicalVassalBoundaryPolygonRules.cs`: ring/hole grouping, chunk-interior clipping, deterministic triangulation, and less-smoothed/raw-contour fallback.
+- Create `Code/core/policy/HierarchicalVassalBoundaryMeshDraftRules.cs`: consolidated polygon fill and tiered two-sided transition-ribbon vertices/indices using primitive arrays.
 
 **Runtime pipeline**
 
@@ -47,7 +48,7 @@
 
 **Tests**
 
-- Create six focused test files under `Tests/AncientWarfare3.Rules.Tests/` matching the six pure rules files.
+- Create seven focused test files under `Tests/AncientWarfare3.Rules.Tests/` matching the seven pure rules files.
 - Modify `Tests/AncientWarfare3.Rules.Tests/Program.cs.txt` and `AncientWarfare3.Rules.Tests.csproj` to add `--hierarchical-boundary-mesh-slice`.
 - Create `Tests/HierarchicalVassalBoundaryMeshSourceGuard.ps1`.
 - Create `Tests/HierarchicalVassalBoundaryMeshPerformanceGuard.ps1`.
@@ -268,46 +269,53 @@ Use tolerance `0.45f` tile units for ordinary boundaries and `0.25f` near protec
 
 Expected: safe curves pass and unsafe curves deterministically fall back.
 
-### Task 5: Pure Fill And Boundary Mesh Drafts
+### Task 5: Consolidated Polygon Fill And Two-Sided Boundary Drafts
 
 **Files:**
+- Create: `Code/core/policy/HierarchicalVassalBoundaryPolygonRules.cs`
 - Create: `Code/core/policy/HierarchicalVassalBoundaryMeshDraftRules.cs`
+- Create: `Tests/AncientWarfare3.Rules.Tests/HierarchicalVassalBoundaryPolygonRulesTests.cs.txt`
 - Create: `Tests/AncientWarfare3.Rules.Tests/HierarchicalVassalBoundaryMeshDraftRulesTests.cs.txt`
 
-- [ ] **Step 1: Write failing mesh-draft tests**
+- [ ] **Step 1: Write failing polygon and mesh-draft tests**
 
-Assert two triangles per owned land cell, zero triangles for water/lava, stable color assignment, four vertices per cell, and ribbon submesh tiering:
+Assert rectangle, concave region, island, multiple-hole, chunk-clipped, and raw-contour fallback triangulation. Verify triangle centroids and supercover samples remain inside the owning valid land raster and never cover water/lava. Require substantial vertex reduction for a coherent 32x32 owner block and verify two-sided ribbon attributes:
 
 ```csharp
-BoundaryMeshDraft fill = HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
-    grid.WithLand(0, 0, rgba: 0x336699CC).WithWater(1, 0));
-Equal(4, fill.Positions.Count);
-Equal(6, fill.FillIndices.Count);
-Equal(false, fill.CoversCell(1, 0));
+BoundaryPolygonDraft polygon =
+    HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(grid, ownerId: 7);
+Equal(2, polygon.Holes.Count);
+Equal(true, polygon.Triangles.All(t => grid.TriangleCoversOnlyOwnerLand(t, 7)));
+
+BoundaryMeshDraft coherent =
+    HierarchicalVassalBoundaryMeshDraftRules.BuildFill(grid.WithOwnerBlock(32, 32, 7));
+Equal(true, coherent.Positions.Count < 128);
+Equal(true, coherent.Positions.Count < grid.OwnedCellCount(7));
 
 BoundaryMeshDraft borders =
     HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(chains);
 Equal(true, borders.Indices(BoundaryTier.SuzerainSystem).Count > 0);
 Equal(true, borders.Indices(BoundaryTier.VassalRealm).Count > 0);
 Equal(true, borders.Indices(BoundaryTier.City).Count > 0);
+Equal(leftOwnerColor, borders.LeftColorAt(0));
+Equal(rightOwnerColor, borders.RightColorAt(0));
 ```
 
-Assert identical seam endpoint coordinates for two neighboring chunk drafts.
-Assert realm/city colors are deterministic variations of their root suzerain
-system color, remain stable across rebuilds, and distinguish adjacent displayed
-owners without changing the root hierarchy identity.
+Assert identical seam endpoint coordinates and tangent constraints for two neighboring chunk drafts. Assert realm/city colors are deterministic variations of their root suzerain system color, remain stable across rebuilds, and distinguish adjacent displayed owners without changing the root hierarchy identity.
 
 - [ ] **Step 2: Run RED**
 
-Expected: missing mesh-draft rule type.
+Expected: missing polygon and mesh-draft rule types.
 
-- [ ] **Step 3: Implement primitive draft generation**
+- [ ] **Step 3: Implement consolidated polygon and transition-ribbon drafts**
 
-Fill uses independent tile quads so region colors never interpolate across an ownership edge and no polygon triangulation failure can erase a region. Emit clockwise triangles only for valid `Land` cells in the chunk interior; invalid, water, ocean, lava, and halo cells never contribute fill indices. Derive vassal-realm and city colors from the stable suzerain-system color plus a deterministic displayed-owner hash, with bounded value/saturation offsets and an adjacency fallback that selects the first distinguishable variant. Boundary ribbons use sampled centerline points and emit left/right vertices carrying normal, signed edge distance, tier, and RGBA in primitive arrays. Use tier widths `0.12f`, `0.20f`, and `0.32f` world units as fallback geometry widths; shaders may apply camera-scale refinement without rebuilding topology.
+Group accepted closed contours by displayed owner, classify winding into outer rings and holes, clip rings to the chunk interior, and triangulate each consolidated polygon deterministically. Validate output triangles against valid owner-land facts; retry with reduced smoothing and finally the raw contour. If all attempts fail, return a bounded failure so the runtime retains the previous chunk mesh; never emit one quad per tile. Derive vassal-realm and city colors from the stable suzerain-system color plus a deterministic displayed-owner hash, with bounded value/saturation offsets and an adjacency fallback that selects the first distinguishable variant.
+
+Boundary ribbons emit left/right vertices carrying centerline normal, signed edge distance, tier, left/right owner IDs, and left/right RGBA in primitive arrays. Preserve canonical seam endpoint tangents so adjacent chunks sample the same curve derivative. Use tier widths `0.12f`, `0.20f`, and `0.32f` world units as fallback geometry widths; shaders may apply camera-scale refinement without rebuilding topology. Coastline ribbons mark the water-facing side transparent and retain the exact land clip.
 
 - [ ] **Step 4: Run GREEN, full rules, and commit**
 
-Expected: all pure geometry tests pass.
+Expected: all pure geometry tests pass, coherent regions use consolidated polygon geometry, and no test path emits per-tile render primitives.
 
 ### Task 6: Dirty Tracker And Main-Thread Snapshot Capture
 
@@ -350,7 +358,7 @@ Test generation acceptance through the pure chunk rules and require the worker t
 
 - [ ] **Step 2: Implement the worker**
 
-Use one background thread or the existing AW async coordinator with channel key `hierarchical_vassal_boundary`. Coalesce pending requests by `(worldGeneration, chunkKey, layer)` and cap pending work at `worldChunkCount * 2`; when saturated, replace the older revision for the same key and preserve a single rescan marker instead of growing the queue. Process topology, river, curve, and mesh draft rules in sequence. Catch exceptions per request and enqueue either a draft or a bounded failure record. `ResetWorld` increments generation, cancels/drains pending work and completions, and prevents late results from applying.
+Use one background thread or the existing AW async coordinator with channel key `hierarchical_vassal_boundary`. Coalesce pending requests by `(worldGeneration, chunkKey, layer)` and cap pending work at `worldChunkCount * 2`; when saturated, replace the older revision for the same key and preserve a single rescan marker instead of growing the queue. Process topology, river, curve, polygon, and mesh draft rules in sequence. Catch exceptions per request and enqueue either a draft or a bounded failure record. `ResetWorld` increments generation, cancels/drains pending work and completions, and prevents late results from applying.
 
 - [ ] **Step 3: Run focused/full tests and commit**
 
@@ -372,7 +380,7 @@ Require bundle path `GameResources/assetbundles/aw3_hierarchical_vassal_boundary
 
 - [ ] **Step 2: Implement ShaderLab assets**
 
-The fill shader consumes vertex color and `_OverlayAlpha`, uses transparent blending, and applies edge feathering without sampling outside the geometry. The boundary shader consumes vertex color, signed edge distance in UV0, tier in UV1, `_CameraWorldPerPixel`, `_DarkOutline`, and `_EdgeSoftness`; fragment alpha uses `fwidth`/`smoothstep` for anti-aliasing and darkens the outer ribbon band. Both runtime materials use explicit render queues/Z values below hierarchy labels, nameplates, click markers, and other interaction overlays.
+The fill shader consumes vertex color and `_OverlayAlpha`, uses transparent blending, and applies edge feathering without sampling outside the consolidated polygon geometry. The boundary shader consumes left/right colors, signed edge distance in UV0, tier in UV1, `_CameraWorldPerPixel`, `_DarkOutline`, and `_EdgeSoftness`; it selects the left or right political color on the corresponding half, draws a narrow dark center line, and uses `fwidth`/`smoothstep` for anti-aliasing. A coastline's water-facing half has zero alpha. Both runtime materials use explicit render queues/Z values below hierarchy labels, nameplates, click markers, and other interaction overlays.
 
 - [ ] **Step 3: Implement deterministic Windows bundle builder**
 
@@ -420,7 +428,7 @@ Expected: guard passes and generated bundle exists with nonzero length.
 
 - [ ] **Step 1: Write a failing source guard**
 
-Reject `LineRenderer`, `MaximumSegments`, and one-GameObject-per-edge names from the active path. Require `MeshFilter`, `MeshRenderer`, `Mesh.MarkDynamic`, fill and boundary roots, two-uploads-per-frame budget, mesh reuse, stale result rejection, camera orthographic-scale updates, bounded warning/retry state, and `SetMinimapHidden` to disable only boundary roots.
+Reject `LineRenderer`, `MaximumSegments`, one-GameObject-per-edge, one-quad-per-tile, and whole-map replacement names from the active path. Require `MeshFilter`, `MeshRenderer`, `Mesh.MarkDynamic`, fill and boundary roots, two-uploads-per-frame budget, mesh reuse, stale result rejection, camera orthographic-scale updates, bounded warning/retry state, and `SetMinimapHidden` to disable only boundary roots.
 
 - [ ] **Step 2: Implement pooled chunk render entries**
 
@@ -478,7 +486,7 @@ Generate a 512x512 synthetic world, build all chunk drafts, then mutate one zone
 
 - [ ] **Step 2: Add source-level hot-path guards**
 
-Reject full `World.world.kingdoms` traversal from `ProcessFrame`, `MapBox.Update` postfix, completion drain, and mesh upload. Reject per-edge GameObject creation and per-result Mesh construction. Require capture/upload budgets and coalescing dictionaries.
+Reject full `World.world.kingdoms` traversal from `ProcessFrame`, `MapBox.Update` postfix, completion drain, and mesh upload. Reject per-tile/per-edge GameObject creation, one fill quad per source tile, per-result Mesh construction, and any ordinary local-change path that clears or replaces all chunk meshes. Require capture/upload budgets and coalescing dictionaries.
 
 - [ ] **Step 3: Run focused benchmark and full suite**
 
@@ -489,7 +497,7 @@ dotnet run --project Tests/AncientWarfare3.Rules.Tests/AncientWarfare3.Rules.Tes
 & Tests/HierarchicalVassalBoundaryMeshPerformanceGuard.ps1
 ```
 
-Expected: all commands exit 0; benchmark reports local dirty rebuilding only and the measured capture-to-visible latency for a sparse edit remains within one simulation cycle or approximately 0.5 seconds under the synthetic budget.
+Expected: all commands exit 0; benchmark reports local dirty rebuilding only, coherent-region geometry remains far below tile count, draw object count remains bounded by chunk/layer count rather than tile count, and the measured capture-to-visible latency for a sparse edit remains within one simulation cycle or approximately 0.5 seconds under the synthetic budget.
 
 - [ ] **Step 4: Commit verification assets**
 
@@ -514,7 +522,7 @@ Compare every deployed task file and bundle against the workspace and fail on an
 
 - [ ] **Step 4: Run in-game acceptance scenarios**
 
-Verify country and city layers on a large saved world containing islands, lakes, rivers, narrow straits, enclaves, three-way junctions, and nested vassals. Capture screenshots at near, normal, and far zoom. Confirm natural curves, continuous different-owner river boundaries, same-owner rivers without political lines, no water fill, no third-owner crossing, no seam cracks, correct thick/medium/thin hierarchy, and correct minimap behavior.
+Verify country and city layers on a large saved world containing islands, lakes, rivers, narrow straits, enclaves, three-way junctions, and nested vassals. Capture screenshots at near, normal, and far zoom. Confirm natural curves, the two-sided political-color transition hides raster stair-steps at ordinary zoom, continuous different-owner river boundaries, same-owner rivers without political lines, no water fill, no third-owner crossing, no seam cracks or tangent kinks, correct thick/medium/thin hierarchy, and correct minimap behavior.
 
 - [ ] **Step 5: Verify incremental updates and runtime stability**
 
