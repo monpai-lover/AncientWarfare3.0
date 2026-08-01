@@ -71,10 +71,19 @@ smoothing strength reduced. If no safe curve exists, that local chain falls
 back to its original topology. Correct ownership always takes priority over
 smoothness.
 
+The displayed boundary may deviate from the raw tile edge within the two-owner
+visual corridor. Ordinary open terrain permits at most 0.45 tile of centerline
+deviation into either adjacent owner; protected or narrow terrain reduces the
+limit to 0.15-0.25 tile. The shared curve visually gives small border slivers
+from either side to the other so the color division follows the natural line.
+This is presentation only: `TileZone`, `City`, kingdom ownership, resources,
+occupation, pathfinding, and click inspection continue to use the authoritative
+tile facts.
+
 Safety validation covers the complete rendered footprint, not only the curve
-centerline. Each sampled ribbon cross-section verifies that its left half stays
-inside the left displayed owner and its right half stays inside the right
-displayed owner. Half-width reduces locally near narrow passages, third-owner
+centerline. Each sampled ribbon cross-section may cover either of the two owners
+forming that shared edge, but never water, invalid cells, or a third owner.
+Half-width and deviation reduce locally near narrow passages, third-owner
 corners, coastlines, and junctions. If the required tier cannot fit safely, the
 segment uses the raw contour and the widest safe local ribbon rather than
 covering unrelated territory. River-center boundaries render the political
@@ -346,8 +355,11 @@ Assertions include:
 
 - no fill triangle covers a forbidden cell;
 - no smoothed boundary enters a third region;
-- no left/right ribbon half enters water, the wrong side owner, or a third
-  owner; river-water portions carry no political fill color;
+- no visual fill or ribbon enters water, invalid cells, or a third owner;
+  river-water portions carry no political fill color;
+- visual exchange across a shared edge stays within its deviation corridor,
+  conserves the pair's combined visible land, and never mutates logical owner
+  facts;
 - protected junctions and loop winding remain stable;
 - river borders are single, continuous chains;
 - same-owner rivers do not emit political borders;

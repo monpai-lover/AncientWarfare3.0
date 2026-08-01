@@ -256,6 +256,12 @@ Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
 Equal(true, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
     riverCenterSegment, riverRaster, leftOwner: 1,
     rightOwner: 2));
+Equal(true, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
+    segmentShiftedIntoRightOwnerBy045, ownershipRaster,
+    leftOwner: 1, rightOwner: 2));
+Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
+    segmentShiftedIntoRightOwnerBy046, ownershipRaster,
+    leftOwner: 1, rightOwner: 2));
 ```
 
 Include narrow-isthmus and third-owner tests where the output must fall back to the raw chain.
@@ -268,7 +274,7 @@ Expected: missing curve rule type.
 
 - [ ] **Step 3: Implement simplify, fit, validate, and fallback**
 
-Use tolerance `0.45f` tile units for ordinary boundaries and `0.25f` near protected anchors. Never remove first/last, graph degree other than two, tier transition, river endpoint/fork, narrow-passage anchor, small-island anchor, or chunk seam anchor. Generate centripetal Catmull-Rom samples with maximum spacing `0.35f` tiles. Validate each segment with a supercover grid walk plus midpoint samples. Reject non-finite coordinates, duplicate-only chains, self-intersections, loop winding changes, and any candidate that changes diagonal point-contact topology. Reduce tangent scale through `1.0`, `0.5`, `0.25`, then return the raw chain when no safe candidate remains. Derive seam tangents only from the canonical halo chain so independently rebuilt neighbors produce identical derivatives.
+Use a maximum visual centerline deviation of `0.45f` tile units for ordinary boundaries and `0.15f-0.25f` near protected anchors and narrow topology. A candidate may enter either owner forming the shared edge, but not water, invalid cells, or a third owner. Never remove first/last, graph degree other than two, tier transition, river endpoint/fork, narrow-passage anchor, small-island anchor, or chunk seam anchor. Generate centripetal Catmull-Rom samples with maximum spacing `0.35f` tiles. Validate each segment with a supercover grid walk plus midpoint samples. Reject non-finite coordinates, duplicate-only chains, self-intersections, loop winding changes, and any candidate that changes diagonal point-contact topology. Reduce tangent scale through `1.0`, `0.5`, `0.25`, then return the raw chain when no safe candidate remains. Derive seam tangents only from the canonical halo chain so independently rebuilt neighbors produce identical derivatives.
 
 - [ ] **Step 4: Run GREEN and commit**
 
@@ -284,13 +290,15 @@ Expected: safe curves pass and unsafe curves deterministically fall back.
 
 - [ ] **Step 1: Write failing polygon and mesh-draft tests**
 
-Assert rectangle, concave region, island, multiple-hole, chunk-clipped, and raw-contour fallback triangulation. Verify triangle centroids and supercover samples remain inside the owning valid land raster and never cover water/lava. Require substantial vertex reduction for a coherent 32x32 owner block and verify two-sided ribbon attributes:
+Assert rectangle, concave region, island, multiple-hole, chunk-clipped, and raw-contour fallback triangulation. Verify triangle centroids and supercover samples stay on valid land owned by the region or its paired boundary neighbor, remain within 0.45 tile of their shared raw edge, and never cover water/lava/third owners. Require the two visual polygons to share one contour with no overlap or gap and conserve their combined visible land area. Require substantial vertex reduction for a coherent 32x32 owner block and verify two-sided ribbon attributes:
 
 ```csharp
 BoundaryPolygonDraft polygon =
     HierarchicalVassalBoundaryPolygonRules.BuildOwnerPolygon(grid, ownerId: 7);
 Equal(2, polygon.Holes.Count);
-Equal(true, polygon.Triangles.All(t => grid.TriangleCoversOnlyOwnerLand(t, 7)));
+Equal(true, polygon.Triangles.All(t =>
+    grid.TriangleCoversOnlyAllowedVisualCorridor(t, ownerId: 7,
+        maximumDeviation: 0.45f)));
 
 BoundaryMeshDraft coherent =
     HierarchicalVassalBoundaryMeshDraftRules.BuildFill(grid.WithOwnerBlock(32, 32, 7));
@@ -306,7 +314,7 @@ Equal(leftOwnerColor, borders.LeftColorAt(0));
 Equal(rightOwnerColor, borders.RightColorAt(0));
 ```
 
-Assert identical seam endpoint coordinates, tangent constraints, and local half-widths for two neighboring chunk drafts. Add footprint tests where the curve centerline is valid but a fixed-width ribbon would enter water, the wrong side owner, or a third owner. Require local half-width reduction or raw-contour fallback. Add river tests proving the center line may follow river water while both political-color halves remain transparent over water. Assert realm/city colors are deterministic variations of their root suzerain system color, remain stable across rebuilds, and distinguish adjacent displayed owners without changing the root hierarchy identity.
+Assert identical seam endpoint coordinates, tangent constraints, and local half-widths for two neighboring chunk drafts. Add footprint tests where the curve centerline is valid but a fixed-width ribbon would enter water or a third owner; covering either owner in the defining pair is valid within the 0.45-tile corridor. Require local half-width reduction or raw-contour fallback outside that corridor. Add river tests proving the center line may follow river water while both political-color halves remain transparent over water. Assert realm/city colors are deterministic variations of their root suzerain system color, remain stable across rebuilds, and distinguish adjacent displayed owners without changing the root hierarchy identity.
 
 - [ ] **Step 2: Run RED**
 
@@ -314,9 +322,9 @@ Expected: missing polygon and mesh-draft rule types.
 
 - [ ] **Step 3: Implement consolidated polygon and transition-ribbon drafts**
 
-Group accepted closed contours by displayed owner, classify winding into outer rings and holes, clip rings to the chunk interior, and triangulate each consolidated polygon deterministically. Validate output triangles against valid owner-land facts; retry with reduced smoothing and finally the raw contour. If all attempts fail, return a bounded failure so the runtime retains the previous chunk mesh; never emit one quad per tile. Derive vassal-realm and city colors from the stable suzerain-system color plus a deterministic displayed-owner hash, with bounded value/saturation offsets and an adjacency fallback that selects the first distinguishable variant.
+Group accepted closed contours by displayed owner, classify winding into outer rings and holes, clip rings to the chunk interior, and triangulate each consolidated visual polygon deterministically. A shared smoothed contour is authoritative for both visual sides, so small slivers may display as the adjacent owner while logical tile facts remain unchanged. Validate output triangles against the pair corridor, maximum deviation, water/invalid/third-owner exclusion, pair-area conservation, and no overlap/gap; retry with reduced smoothing and finally the raw contour. If all attempts fail, return a bounded failure so the runtime retains the previous chunk mesh; never emit one quad per tile. Derive vassal-realm and city colors from the stable suzerain-system color plus a deterministic displayed-owner hash, with bounded value/saturation offsets and an adjacency fallback that selects the first distinguishable variant.
 
-Boundary ribbons emit left/right vertices carrying centerline normal, signed edge distance, tier, left/right owner IDs, left/right RGBA, local half-width, and river/coast flags in primitive arrays. `ComputeSafeHalfWidth` samples the full cross-section against the immutable raster: the left half may cover only the left owner and the right half only the right owner. Reduce width near water, narrow passages, junctions, and third-owner corners; use the raw contour if the tier width still cannot fit. Preserve canonical seam endpoint tangents and widths so adjacent chunks produce the same ribbon. Use target tier widths `0.12f`, `0.20f`, and `0.32f` world units; shaders may apply camera-scale refinement only within the prevalidated width. Coastline ribbons mark the water-facing side transparent and retain the exact land clip. River-center ribbons keep both political-color halves transparent while over liquid and render only their central political line until reaching the banks.
+Boundary ribbons emit left/right vertices carrying centerline normal, signed edge distance, tier, left/right owner IDs, left/right RGBA, local half-width, and river/coast flags in primitive arrays. `ComputeSafeHalfWidth` samples the full cross-section against the immutable raster: either half may cover either owner forming the shared edge within the visual corridor, but neither may cover water, invalid cells, or a third owner. Reduce width near water, narrow passages, junctions, and third-owner corners; use the raw contour if the tier width still cannot fit. Preserve canonical seam endpoint tangents and widths so adjacent chunks produce the same ribbon. Use target tier widths `0.12f`, `0.20f`, and `0.32f` world units; shaders may apply camera-scale refinement only within the prevalidated width. Coastline ribbons mark the water-facing side transparent and retain the exact land clip. River-center ribbons keep both political-color halves transparent while over liquid and render only their central political line until reaching the banks.
 
 - [ ] **Step 4: Run GREEN, full rules, and commit**
 
