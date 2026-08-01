@@ -12,6 +12,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         FullFootprintNarrowsAndRiverWaterIsTransparent();
         CoastFlagsAndTransparencyAreSideSpecific();
         CanonicalSeamsAreBitIdentical();
+        CanonicalSeamWidthsIgnoreOneSidedSegmentHazards();
         UnsafeAcceptedRibbonRebuildsFromRawContour();
         UnsafeRawRibbonReturnsBoundedFailure();
         HierarchyColorsAreStableAndDistinguishable();
@@ -83,36 +84,44 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
     {
         long[,] owners =
         {
-            { 1, 8, 2, 3 },
+            { 234, 249, 2, 3 },
             { 4, 5, 6, 7 }
         };
         BoundaryCellRaster grid = Raster(4, 2, (x, y) =>
             Land(x, y, 1, owners[y, x], owners[y, x], 0x336699FF));
+        uint base234 = HierarchicalVassalBoundaryMeshDraftRules.HierarchyColor(
+            0x336699FF, 1, 234, BoundaryTier.City, 0);
+        uint base249 = HierarchicalVassalBoundaryMeshDraftRules.HierarchyColor(
+            0x336699FF, 1, 249, BoundaryTier.City, 0);
+        Equal(base234, base249,
+            "owners 234 and 249 exercise a real candidate-zero collision");
         BoundaryMeshDraft fill =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 grid, BoundaryDisplayLayer.Cities, Interior(grid));
-        uint color1 = fill.LeftRgba[
-            Array.IndexOf(fill.LeftOwnerIds, 1L)];
-        uint color8 = fill.LeftRgba[
-            Array.IndexOf(fill.LeftOwnerIds, 8L)];
-        Equal(true, color1 != color8,
-            "spatially adjacent owners avoid a hash collision even when IDs 2..7 exist");
+        Equal(0, fill.FailureCount,
+            "an ordinary hierarchy-color collision does not reject the chunk");
+        uint color234 = fill.LeftRgba[
+            Array.IndexOf(fill.LeftOwnerIds, 234L)];
+        uint color249 = fill.LeftRgba[
+            Array.IndexOf(fill.LeftOwnerIds, 249L)];
+        Equal(true, color234 != color249,
+            "known colliding owners 234 and 249 receive distinct stable candidates");
         BoundaryMeshDraft rebuilt =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 grid, BoundaryDisplayLayer.Cities, Interior(grid));
-        Equal(color1, rebuilt.LeftRgba[
-                Array.IndexOf(rebuilt.LeftOwnerIds, 1L)],
+        Equal(color234, rebuilt.LeftRgba[
+                Array.IndexOf(rebuilt.LeftOwnerIds, 234L)],
             "adjacency-aware owner color is rebuild-stable");
-        Equal(color8, rebuilt.LeftRgba[
-                Array.IndexOf(rebuilt.LeftOwnerIds, 8L)],
+        Equal(color249, rebuilt.LeftRgba[
+                Array.IndexOf(rebuilt.LeftOwnerIds, 249L)],
             "adjacency fallback choice is rebuild-stable");
     }
 
     private static void FillColorsAreChunkContextIndependentAndSeamStable()
     {
         BoundaryCellRaster contextGrid = Raster(64, 2, (x, y) =>
-            Land(x, y, 1, x == 0 ? 1 : 8,
-                x == 0 ? 1 : 8, 0x336699FF));
+            Land(x, y, 1, x == 0 ? 234 : 249,
+                x == 0 ? 234 : 249, 0x336699FF));
         BoundaryMeshDraft leftContext =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 contextGrid, BoundaryDisplayLayer.Cities,
@@ -121,11 +130,11 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 contextGrid, BoundaryDisplayLayer.Cities,
                 Bounds(32, 0, 64, 2, contextGrid));
-        uint leftColor8 = leftContext.LeftRgba[
-            Array.IndexOf(leftContext.LeftOwnerIds, 8L)];
-        uint rightColor8 = rightContext.LeftRgba[
-            Array.IndexOf(rightContext.LeftOwnerIds, 8L)];
-        Equal(leftColor8, rightColor8,
+        uint leftColor249 = leftContext.LeftRgba[
+            Array.IndexOf(leftContext.LeftOwnerIds, 249L)];
+        uint rightColor249 = rightContext.LeftRgba[
+            Array.IndexOf(rightContext.LeftOwnerIds, 249L)];
+        Equal(leftColor249, rightColor249,
             "same displayed owner color is bit-identical across local adjacency contexts");
 
         BoundaryCellRaster seamGrid = Raster(64, 2, (x, y) =>
@@ -282,6 +291,57 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "seam local half-width");
     }
 
+    private static void CanonicalSeamWidthsIgnoreOneSidedSegmentHazards()
+    {
+        BoundaryCellRaster sharedHalo = Raster(64, 8, (x, y) =>
+            x == 30 && y == 3
+                ? Land(x, y, 3, 30, 300, 0x777777FF)
+                : Land(x, y, y < 4 ? 1 : 2, y < 4 ? 10 : 20,
+                    y < 4 ? 100 : 200, 0xFFFFFFFF));
+        var canonical = new[]
+        {
+            new BoundaryGridPoint(30, 4), new BoundaryGridPoint(31, 4),
+            new BoundaryGridPoint(32, 4), new BoundaryGridPoint(33, 4),
+            new BoundaryGridPoint(34, 4)
+        };
+        var leftCurve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(30.80f, 4.35f),
+            new BoundaryFloatPoint(31.15f, 3.95f)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(1, 0), new BoundaryFloatPoint(1, 0));
+        var rightCurve = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(31.15f, 3.95f),
+            new BoundaryFloatPoint(32.15f, 3.95f)
+        }, false, false, 1f,
+            new BoundaryFloatPoint(1, 0), new BoundaryFloatPoint(1, 0));
+        BoundaryMeshDraft left =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(
+                new[] { new BoundaryRibbonInput(leftCurve, canonical,
+                    BoundaryTier.SuzerainSystem, 1, 2,
+                    0xFFFFFFFF, 0x888888FF, false,
+                    BoundaryRibbonCoastSide.None) }, sharedHalo);
+        BoundaryMeshDraft right =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildRibbons(
+                new[] { new BoundaryRibbonInput(rightCurve, canonical,
+                    BoundaryTier.SuzerainSystem, 1, 2,
+                    0xFFFFFFFF, 0x888888FF, false,
+                    BoundaryRibbonCoastSide.None) }, sharedHalo);
+
+        Equal(true, left.VertexCount > 0 && right.VertexCount > 0,
+            "both sides retain renderable seam ribbons (left=" +
+            left.VertexCount + ", left failures=" + left.FailureCount +
+            ", right=" + right.VertexCount + ", right failures=" +
+            right.FailureCount + ")");
+        BitEqual(leftCurve.Points[^1], rightCurve.Points[0],
+            "asymmetric-hazard seam endpoint");
+        BitEqual(leftCurve.EndTangent, rightCurve.StartTangent,
+            "asymmetric-hazard seam tangent");
+        BitEqual(left.LocalHalfWidths[^1], right.LocalHalfWidths[0],
+            "canonical seam width is independent of either adjacent segment");
+    }
+
     private static void CoastFlagsAndTransparencyAreSideSpecific()
     {
         BoundaryCellRaster coast = Raster(2, 3, (x, y) =>
@@ -325,6 +385,13 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         Equal(realmA, realmARebuild, "same hierarchy color is rebuild-stable");
         Equal(true, realmA != realmB, "adjacent realms are distinguishable");
         Equal(true, city != realmA, "city variation remains distinguishable");
+        uint nextCandidate =
+            HierarchicalVassalBoundaryMeshDraftRules.HierarchyColor(
+                root, 1, 10, BoundaryTier.VassalRealm, realmA);
+        Equal(true, nextCandidate != realmA,
+            "adjacentRgba advances the stable hierarchy-color sequence");
+        AssertBoundedHsv(root, realmA, "realm hierarchy color");
+        AssertBoundedHsv(root, nextCandidate, "realm collision candidate");
         Equal(0xFFu, root & 0xFFu, "root hierarchy alpha identity is stable");
         Equal(0xFFu, realmA & 0xFFu, "derived color preserves root alpha");
     }
@@ -465,6 +532,44 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
     {
         BitEqual(expected.X, actual.X, name + " x");
         BitEqual(expected.Y, actual.Y, name + " y");
+    }
+
+    private static void AssertBoundedHsv(uint root, uint candidate, string name)
+    {
+        ToHsv(root, out float rootHue, out float rootSaturation, out float rootValue);
+        ToHsv(candidate, out float hue, out float saturation, out float value);
+        float hueDistance = Math.Abs(hue - rootHue);
+        hueDistance = Math.Min(hueDistance, 360f - hueDistance);
+        Equal(true, hueDistance <= 12.1f, name + " bounded hue");
+        Equal(true, Math.Abs(saturation - rootSaturation) <= 0.151f,
+            name + " bounded saturation");
+        Equal(true, Math.Abs(value - rootValue) <= 0.151f,
+            name + " bounded value");
+    }
+
+    private static void ToHsv(
+        uint rgba, out float hue, out float saturation, out float value)
+    {
+        float red = ((rgba >> 24) & 255) / 255f;
+        float green = ((rgba >> 16) & 255) / 255f;
+        float blue = ((rgba >> 8) & 255) / 255f;
+        float maximum = Math.Max(red, Math.Max(green, blue));
+        float minimum = Math.Min(red, Math.Min(green, blue));
+        float delta = maximum - minimum;
+        value = maximum;
+        saturation = maximum <= 0f ? 0f : delta / maximum;
+        if (delta <= 0f)
+        {
+            hue = 0f;
+            return;
+        }
+        if (maximum == red)
+            hue = 60f * (((green - blue) / delta) % 6f);
+        else if (maximum == green)
+            hue = 60f * (((blue - red) / delta) + 2f);
+        else
+            hue = 60f * (((red - green) / delta) + 4f);
+        if (hue < 0f) hue += 360f;
     }
 
     private static void Equal<T>(T expected, T actual, string name)

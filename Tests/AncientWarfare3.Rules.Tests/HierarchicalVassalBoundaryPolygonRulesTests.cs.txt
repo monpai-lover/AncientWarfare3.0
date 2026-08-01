@@ -9,6 +9,7 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
         AcceptedContourActuallyDefinesTheFill();
         AcceptedContourRetainsMultipleHoles();
         SharedVisualContourConservesPairArea();
+        MalformedSharedContoursFallBackWithoutOverlapOrGap();
     }
 
     private static void RectangleConcavityIslandsAndHolesTriangulate()
@@ -93,6 +94,7 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
             "right visual face uses the authoritative shared contour");
         Equal(false, pair.HasOverlapOrGap,
             "two visual faces neither overlap nor leave a gap");
+        AssertPairCoverage(pair, 16f, "accepted pair");
         NearlyEqual(16f, pair.Left.Area + pair.Right.Area,
             "pair combined visible area is conserved");
         Equal(true, pair.MaximumDeviation <= 0.45f,
@@ -113,6 +115,7 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
             "raw pair fallback conserves visible land and excludes water");
         Equal(false, fallback.HasOverlapOrGap,
             "raw pair fallback remains crack-free over visible land");
+        AssertPairCoverage(fallback, 15f, "raw fallback pair");
 
         BoundaryCellRaster curvedGrid = Raster(6, 4, (x, y) =>
             Land(x, y, x < 3 ? 7 : 8));
@@ -137,6 +140,51 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
             "curved pair conserves the full visible pair area");
         Equal(false, curved.HasOverlapOrGap,
             "curved pair uses complementary boundary arcs without cracks");
+        AssertPairCoverage(curved, 24f, "curved pair");
+    }
+
+    private static void MalformedSharedContoursFallBackWithoutOverlapOrGap()
+    {
+        BoundaryCellRaster grid = Raster(4, 4, (x, y) =>
+            Land(x, y, x < 2 ? 7 : 8));
+        var raw = new[]
+        {
+            new BoundaryFloatPoint(2, 0), new BoundaryFloatPoint(2, 4)
+        };
+        var overlapping = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(2.30f, 3),
+            new BoundaryFloatPoint(1.70f, 1),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(2, 4)
+        };
+        var gapped = new[]
+        {
+            new BoundaryFloatPoint(2, 0),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(1.70f, 1),
+            new BoundaryFloatPoint(2.30f, 1),
+            new BoundaryFloatPoint(2, 4)
+        };
+
+        BoundaryVisualPairDraft overlapPair =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, overlapping, Interior(grid));
+        BoundaryVisualPairDraft gapPair =
+            HierarchicalVassalBoundaryPolygonRules.BuildVisualPair(
+                grid, 7, 8, BoundaryTier.SuzerainSystem,
+                raw, gapped, Interior(grid));
+
+        Equal(true, overlapPair.Left.UsedRawFallback &&
+                    overlapPair.Right.UsedRawFallback,
+            "self-overlapping accepted contour is rejected to raw fallback");
+        Equal(true, gapPair.Left.UsedRawFallback &&
+                    gapPair.Right.UsedRawFallback,
+            "gapped accepted contour is rejected to raw fallback");
+        AssertPairCoverage(overlapPair, 16f, "overlap contour fallback");
+        AssertPairCoverage(gapPair, 16f, "gap contour fallback");
     }
 
     private static void AcceptedContourActuallyDefinesTheFill()
@@ -218,6 +266,90 @@ internal static class HierarchicalVassalBoundaryPolygonRulesTests
         yield return Mix(Mix(t.A, t.B, 0.5f), t.Centroid, 0.02f);
         yield return Mix(Mix(t.B, t.C, 0.5f), t.Centroid, 0.02f);
         yield return Mix(Mix(t.C, t.A, 0.5f), t.Centroid, 0.02f);
+    }
+
+    private static void AssertPairCoverage(
+        BoundaryVisualPairDraft pair, float expectedArea, string name)
+    {
+        float intersection = 0f;
+        foreach (BoundaryTriangle left in pair.Left.Triangles)
+        foreach (BoundaryTriangle right in pair.Right.Triangles)
+            intersection += TriangleIntersectionArea(left, right);
+        float union = pair.Left.Triangles.Sum(triangle => triangle.Area) +
+                      pair.Right.Triangles.Sum(triangle => triangle.Area) -
+                      intersection;
+        Equal(true, intersection <= 0.0001f,
+            name + " independently calculated intersection is empty");
+        NearlyEqual(expectedArea, union,
+            name + " independently calculated union covers the pair mask");
+        Equal(false, pair.HasOverlapOrGap,
+            name + " reports the independently verified geometry state");
+    }
+
+    private static float TriangleIntersectionArea(
+        BoundaryTriangle subject, BoundaryTriangle clip)
+    {
+        IReadOnlyList<BoundaryFloatPoint> polygon =
+            new[] { subject.A, subject.B, subject.C };
+        BoundaryFloatPoint[] clipping = { clip.A, clip.B, clip.C };
+        float winding = Cross(clipping[0], clipping[1], clipping[2]);
+        for (int edge = 0; edge < 3 && polygon.Count > 0; edge++)
+        {
+            BoundaryFloatPoint a = clipping[edge];
+            BoundaryFloatPoint b = clipping[(edge + 1) % 3];
+            var result = new List<BoundaryFloatPoint>();
+            BoundaryFloatPoint previous = polygon[polygon.Count - 1];
+            bool previousInside = Inside(previous, a, b, winding);
+            for (int i = 0; i < polygon.Count; i++)
+            {
+                BoundaryFloatPoint current = polygon[i];
+                bool currentInside = Inside(current, a, b, winding);
+                if (currentInside != previousInside)
+                    result.Add(LineIntersection(previous, current, a, b));
+                if (currentInside) result.Add(current);
+                previous = current;
+                previousInside = currentInside;
+            }
+            polygon = result;
+        }
+        float twiceArea = 0f;
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            BoundaryFloatPoint next = polygon[(i + 1) % polygon.Count];
+            twiceArea += polygon[i].X * next.Y - polygon[i].Y * next.X;
+        }
+        return Math.Abs(twiceArea) * 0.5f;
+    }
+
+    private static bool Inside(
+        BoundaryFloatPoint point, BoundaryFloatPoint a,
+        BoundaryFloatPoint b, float winding)
+    {
+        float side = Cross(a, b, point);
+        return winding >= 0f ? side >= -0.000001f : side <= 0.000001f;
+    }
+
+    private static BoundaryFloatPoint LineIntersection(
+        BoundaryFloatPoint start, BoundaryFloatPoint end,
+        BoundaryFloatPoint a, BoundaryFloatPoint b)
+    {
+        float dx = end.X - start.X;
+        float dy = end.Y - start.Y;
+        float edgeX = b.X - a.X;
+        float edgeY = b.Y - a.Y;
+        float denominator = dx * edgeY - dy * edgeX;
+        if (Math.Abs(denominator) <= 0.000001f) return start;
+        float ratio = ((a.X - start.X) * edgeY -
+                       (a.Y - start.Y) * edgeX) / denominator;
+        return new BoundaryFloatPoint(
+            start.X + dx * ratio, start.Y + dy * ratio);
+    }
+
+    private static float Cross(
+        BoundaryFloatPoint a, BoundaryFloatPoint b, BoundaryFloatPoint c)
+    {
+        return (b.X - a.X) * (c.Y - a.Y) -
+               (b.Y - a.Y) * (c.X - a.X);
     }
 
     private static BoundaryFloatPoint Mix(

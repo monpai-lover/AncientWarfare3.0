@@ -234,6 +234,7 @@ namespace AncientWarfare3.core.policy
                 pAcceptedContour, pRawContour);
             bool useAccepted =
                 maximumDeviation <= MaximumVisualDeviation + Epsilon &&
+                !PolylineSelfIntersects(pAcceptedContour) &&
                 SharedContourIsSafe(
                     pAcceptedContour, pRaster, pTier,
                     pLeftOwnerId, pRightOwnerId);
@@ -254,13 +255,26 @@ namespace AncientWarfare3.core.policy
                 IReadOnlyList<BoundaryFloatPoint> raw = Copy(pRawContour);
                 left = WithSharedContour(left, raw, pUsedRawFallback: true);
                 right = WithSharedContour(right, raw, pUsedRawFallback: true);
+                float pairArea = CountMask(BuildPairMask(
+                    pRaster, pLeftOwnerId, pRightOwnerId, pTier, pBounds));
                 return new BoundaryVisualPairDraft(
                     left, right, raw, 0f,
-                    pHasOverlapOrGap: false);
+                    pHasOverlapOrGap: PairGeometryHasOverlapOrGap(
+                        left, right, pairArea));
             }
+            if (!useAccepted)
+            {
+                left = WithSharedContour(
+                    left, accepted, pUsedRawFallback: true);
+                right = WithSharedContour(
+                    right, accepted, pUsedRawFallback: true);
+            }
+            float acceptedPairArea = CountMask(BuildPairMask(
+                pRaster, pLeftOwnerId, pRightOwnerId, pTier, pBounds));
             return new BoundaryVisualPairDraft(
                 left, right, accepted, maximumDeviation,
-                pHasOverlapOrGap: false);
+                pHasOverlapOrGap: PairGeometryHasOverlapOrGap(
+                    left, right, acceptedPairArea));
         }
 
         private static bool TrySplitPair(
@@ -335,7 +349,8 @@ namespace AncientWarfare3.core.policy
                 pLeft = WithOwner(secondDraft, pLeftOwnerId);
                 pRight = WithOwner(firstDraft, pRightOwnerId);
             }
-            return Math.Abs(pLeft.Area + pRight.Area - CountMask(pairMask)) <= 0.001f &&
+            return !PairGeometryHasOverlapOrGap(
+                       pLeft, pRight, CountMask(pairMask)) &&
                    TrianglesStayOnPair(
                        pLeft.Positions, pLeft.Indices, pRaster,
                        pLeftOwnerId, pRightOwnerId, pTier) &&
@@ -752,6 +767,41 @@ namespace AncientWarfare3.core.policy
                    (pB.Y - pA.Y) * (pC.X - pA.X);
         }
 
+        private static bool PolylineSelfIntersects(
+            IReadOnlyList<BoundaryFloatPoint> pPoints)
+        {
+            for (int first = 0; first + 1 < pPoints.Count; first++)
+            for (int second = first + 2; second + 1 < pPoints.Count; second++)
+            {
+                if (SegmentsIntersect(
+                        pPoints[first], pPoints[first + 1],
+                        pPoints[second], pPoints[second + 1]))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool SegmentsIntersect(
+            BoundaryFloatPoint pA,
+            BoundaryFloatPoint pB,
+            BoundaryFloatPoint pC,
+            BoundaryFloatPoint pD)
+        {
+            float abC = Cross(pA, pB, pC);
+            float abD = Cross(pA, pB, pD);
+            float cdA = Cross(pC, pD, pA);
+            float cdB = Cross(pC, pD, pB);
+            if ((abC > Epsilon && abD < -Epsilon ||
+                 abC < -Epsilon && abD > Epsilon) &&
+                (cdA > Epsilon && cdB < -Epsilon ||
+                 cdA < -Epsilon && cdB > Epsilon))
+                return true;
+            return Math.Abs(abC) <= Epsilon && PointOnSegment(pC, pA, pB) ||
+                   Math.Abs(abD) <= Epsilon && PointOnSegment(pD, pA, pB) ||
+                   Math.Abs(cdA) <= Epsilon && PointOnSegment(pA, pC, pD) ||
+                   Math.Abs(cdB) <= Epsilon && PointOnSegment(pB, pC, pD);
+        }
+
         private static bool PointInPolygon(
             BoundaryFloatPoint pPoint,
             IReadOnlyList<BoundaryFloatPoint> pRing)
@@ -848,6 +898,103 @@ namespace AncientWarfare3.core.policy
             polygon = ClipPolygon(polygon, 1, pCellY, keepGreater: true);
             polygon = ClipPolygon(polygon, 1, pCellY + 1, keepGreater: false);
             return Math.Abs(SignedAreaClosed(polygon));
+        }
+
+        private static bool PairGeometryHasOverlapOrGap(
+            BoundaryPolygonDraft pLeft,
+            BoundaryPolygonDraft pRight,
+            float pExpectedArea)
+        {
+            float intersection = 0f;
+            for (int left = 0; left < pLeft.Triangles.Count; left++)
+            for (int right = 0; right < pRight.Triangles.Count; right++)
+            {
+                intersection += TriangleIntersectionArea(
+                    pLeft.Triangles[left], pRight.Triangles[right]);
+            }
+            float union = pLeft.Area + pRight.Area - intersection;
+            return intersection > 0.001f ||
+                   Math.Abs(union - pExpectedArea) > 0.001f;
+        }
+
+        private static float TriangleIntersectionArea(
+            BoundaryTriangle pSubject,
+            BoundaryTriangle pClip)
+        {
+            IReadOnlyList<BoundaryFloatPoint> polygon = new[]
+            {
+                pSubject.A, pSubject.B, pSubject.C
+            };
+            BoundaryFloatPoint[] clip = { pClip.A, pClip.B, pClip.C };
+            float winding = Cross(clip[0], clip[1], clip[2]);
+            for (int edge = 0; edge < clip.Length && polygon.Count > 0; edge++)
+            {
+                polygon = ClipConvexPolygon(
+                    polygon, clip[edge], clip[(edge + 1) % clip.Length],
+                    winding);
+            }
+            return Math.Abs(SignedAreaClosed(polygon));
+        }
+
+        private static IReadOnlyList<BoundaryFloatPoint> ClipConvexPolygon(
+            IReadOnlyList<BoundaryFloatPoint> pPolygon,
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            float pWinding)
+        {
+            if (pPolygon.Count == 0)
+                return pPolygon;
+            var result = new List<BoundaryFloatPoint>();
+            BoundaryFloatPoint previous = pPolygon[pPolygon.Count - 1];
+            bool previousInside = InsideDirectedEdge(
+                previous, pStart, pEnd, pWinding);
+            for (int i = 0; i < pPolygon.Count; i++)
+            {
+                BoundaryFloatPoint current = pPolygon[i];
+                bool currentInside = InsideDirectedEdge(
+                    current, pStart, pEnd, pWinding);
+                if (currentInside != previousInside)
+                    result.Add(LineIntersection(
+                        previous, current, pStart, pEnd));
+                if (currentInside)
+                    result.Add(current);
+                previous = current;
+                previousInside = currentInside;
+            }
+            return result;
+        }
+
+        private static bool InsideDirectedEdge(
+            BoundaryFloatPoint pPoint,
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            float pWinding)
+        {
+            float side = Cross(pStart, pEnd, pPoint);
+            return pWinding >= 0f
+                ? side >= -Epsilon
+                : side <= Epsilon;
+        }
+
+        private static BoundaryFloatPoint LineIntersection(
+            BoundaryFloatPoint pFirstStart,
+            BoundaryFloatPoint pFirstEnd,
+            BoundaryFloatPoint pSecondStart,
+            BoundaryFloatPoint pSecondEnd)
+        {
+            float firstX = pFirstEnd.X - pFirstStart.X;
+            float firstY = pFirstEnd.Y - pFirstStart.Y;
+            float secondX = pSecondEnd.X - pSecondStart.X;
+            float secondY = pSecondEnd.Y - pSecondStart.Y;
+            float denominator = firstX * secondY - firstY * secondX;
+            if (Math.Abs(denominator) <= Epsilon)
+                return pFirstStart;
+            float ratio = ((pSecondStart.X - pFirstStart.X) * secondY -
+                           (pSecondStart.Y - pFirstStart.Y) * secondX) /
+                          denominator;
+            return new BoundaryFloatPoint(
+                pFirstStart.X + firstX * ratio,
+                pFirstStart.Y + firstY * ratio);
         }
 
         private static IReadOnlyList<BoundaryFloatPoint> ClipPolygon(
