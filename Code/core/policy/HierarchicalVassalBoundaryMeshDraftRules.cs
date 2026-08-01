@@ -159,8 +159,31 @@ namespace AncientWarfare3.core.policy
             BoundaryDisplayLayer pLayer,
             BoundaryChunkBounds pBounds)
         {
+            // Compatibility-only; authoritative rendering supplies an assignment.
+            return BuildFillCore(pRaster, pLayer, pBounds, null);
+        }
+
+        public static BoundaryMeshDraft BuildFill(
+            BoundaryCellRaster pRaster,
+            BoundaryDisplayLayer pLayer,
+            BoundaryChunkBounds pBounds,
+            HierarchyColorAssignment pAssignment)
+        {
+            if (pAssignment == null)
+                throw new ArgumentNullException(nameof(pAssignment));
+            return BuildFillCore(pRaster, pLayer, pBounds, pAssignment);
+        }
+
+        private static BoundaryMeshDraft BuildFillCore(
+            BoundaryCellRaster pRaster,
+            BoundaryDisplayLayer pLayer,
+            BoundaryChunkBounds pBounds,
+            HierarchyColorAssignment pAssignment)
+        {
             if (pRaster == null)
                 throw new ArgumentNullException(nameof(pRaster));
+            if (pAssignment != null && !pAssignment.IsValid)
+                return EmptyFailureDraft(1);
             BoundaryTier fillTier = pLayer == BoundaryDisplayLayer.Cities
                 ? BoundaryTier.City
                 : BoundaryTier.VassalRealm;
@@ -182,8 +205,27 @@ namespace AncientWarfare3.core.policy
             var cityIndices = new List<int>();
             var vassalIndices = new List<int>();
             var systemIndices = new List<int>();
-            Dictionary<long, uint> ownerColors = BuildHierarchyColors(
-                pRaster, fillTier);
+            var ownerColors = new Dictionary<long, uint>();
+            foreach (long owner in owners)
+            {
+                uint color;
+                if (pAssignment != null)
+                {
+                    if (!pAssignment.TryGetColor(fillTier, owner, out color))
+                        return EmptyFailureDraft(1);
+                }
+                else
+                {
+                    BoundaryCellFacts facts = FindOwnerFacts(
+                        pRaster, owner, fillTier);
+                    color = HierarchicalVassalBoundaryColorRules.CandidateColor(
+                        new HierarchyColorIdentity(
+                            fillTier, owner,
+                            facts.SystemId, facts.SystemId,
+                            facts.RealmId, facts.CityId, facts.Rgba), 0);
+                }
+                ownerColors.Add(owner, color);
+            }
             foreach (long owner in owners)
             {
                 BoundaryPolygonDraft polygon =
@@ -356,61 +398,34 @@ namespace AncientWarfare3.core.policy
             BoundaryTier tier,
             uint adjacentRgba)
         {
-            uint candidate = CanonicalHierarchyColor(
+            HierarchyColorIdentity identity = CompatibilityColorIdentity(
                 rootRgba, rootSystemId, displayedOwnerId, tier);
+            uint candidate =
+                HierarchicalVassalBoundaryColorRules.CandidateColor(identity, 0);
             if (adjacentRgba == 0 || candidate != adjacentRgba)
                 return candidate;
             for (int candidateIndex = 1; candidateIndex < 32; candidateIndex++)
             {
-                candidate = HierarchyColorCandidate(
-                    rootRgba, rootSystemId, displayedOwnerId,
-                    tier, candidateIndex);
+                candidate = HierarchicalVassalBoundaryColorRules.CandidateColor(
+                    identity, candidateIndex);
                 if (candidate != adjacentRgba)
                     return candidate;
             }
             return candidate;
         }
 
-        private static uint CanonicalHierarchyColor(
+        private static HierarchyColorIdentity CompatibilityColorIdentity(
             uint rootRgba,
             long rootSystemId,
             long displayedOwnerId,
             BoundaryTier tier)
         {
-            if (tier == BoundaryTier.SuzerainSystem &&
-                displayedOwnerId == rootSystemId)
-                return rootRgba;
-            return HierarchyColorCandidate(
-                rootRgba, rootSystemId, displayedOwnerId, tier, 0);
-        }
-
-        private static uint HierarchyColorCandidate(
-            uint rootRgba,
-            long rootSystemId,
-            long displayedOwnerId,
-            BoundaryTier tier,
-            int candidateIndex)
-        {
-            uint stableHash = StableHash(
-                rootSystemId, displayedOwnerId, tier);
-            uint hash = candidateIndex == 0
-                ? stableHash
-                : CandidateHash(stableHash, candidateIndex);
-            int red = (int)(rootRgba >> 24) & 255;
-            int green = (int)(rootRgba >> 16) & 255;
-            int blue = (int)(rootRgba >> 8) & 255;
-            int alpha = (int)rootRgba & 255;
-            RgbToHsv(red, green, blue,
-                out float hue, out float saturation, out float value);
-            hue = WrapHue(hue +
-                ((int)(hash % 41u) - 20) * 0.6f);
-            saturation = Clamp01(
-                saturation +
-                ((int)((hash / 41u) % 41u) - 20) * 0.0075f);
-            value = Clamp01(
-                value +
-                ((int)((hash / 1681u) % 41u) - 20) * 0.0075f);
-            return HsvToRgba(hue, saturation, value, alpha);
+            return new HierarchyColorIdentity(
+                tier, displayedOwnerId,
+                rootSystemId, rootSystemId,
+                tier == BoundaryTier.VassalRealm ? displayedOwnerId : -1,
+                tier == BoundaryTier.City ? displayedOwnerId : -1,
+                rootRgba);
         }
 
         private static float ComputeSafeHalfWidth(
@@ -886,153 +901,6 @@ namespace AncientWarfare3.core.policy
                 -1, -1, -1, 0);
         }
 
-        private static Dictionary<long, uint> BuildHierarchyColors(
-            BoundaryCellRaster pRaster,
-            BoundaryTier pTier)
-        {
-            var owners = new SortedSet<long>();
-            for (int y = pRaster.OriginY; y < pRaster.MaxYExclusive; y++)
-            for (int x = pRaster.OriginX; x < pRaster.MaxXExclusive; x++)
-            {
-                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
-                long owner = OwnerId(cell, pTier);
-                if (cell.IsLand && owner >= 0)
-                    owners.Add(owner);
-            }
-            Dictionary<long, HashSet<long>> adjacency = BuildAdjacency(
-                pRaster, pTier);
-            var colors = new Dictionary<long, uint>();
-            foreach (long owner in owners)
-            {
-                BoundaryCellFacts facts = FindOwnerFacts(
-                    pRaster, owner, pTier);
-                uint candidate = CanonicalHierarchyColor(
-                    facts.Rgba, facts.SystemId, owner, pTier);
-                for (int candidateIndex = 0;
-                     candidateIndex < 32; candidateIndex++)
-                {
-                    if (candidateIndex > 0)
-                    {
-                        candidate = HierarchyColorCandidate(
-                            facts.Rgba, facts.SystemId, owner,
-                            pTier, candidateIndex);
-                    }
-                    if (!MatchesAssignedNeighbor(
-                            owner, candidate, adjacency, colors))
-                        break;
-                }
-                colors.Add(owner, candidate);
-            }
-            return colors;
-        }
-
-        private static bool MatchesAssignedNeighbor(
-            long pOwner,
-            uint pCandidate,
-            IReadOnlyDictionary<long, HashSet<long>> pAdjacency,
-            IReadOnlyDictionary<long, uint> pColors)
-        {
-            if (!pAdjacency.TryGetValue(
-                    pOwner, out HashSet<long> neighbors))
-                return false;
-            foreach (long neighbor in neighbors)
-            {
-                if (pColors.TryGetValue(neighbor, out uint color) &&
-                    color == pCandidate)
-                    return true;
-            }
-            return false;
-        }
-
-        private static Dictionary<long, HashSet<long>> BuildAdjacency(
-            BoundaryCellRaster pRaster,
-            BoundaryTier pTier)
-        {
-            var result = new Dictionary<long, HashSet<long>>();
-            for (int y = pRaster.OriginY;
-                 y < pRaster.MaxYExclusive; y++)
-            for (int x = pRaster.OriginX;
-                 x < pRaster.MaxXExclusive; x++)
-            {
-                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
-                if (!cell.IsLand)
-                    continue;
-                long owner = OwnerId(cell, pTier);
-                AddAdjacentOwner(result, owner,
-                    OwnerId(pRaster.GetOrInvalid(x - 1, y), pTier));
-                AddAdjacentOwner(result, owner,
-                    OwnerId(pRaster.GetOrInvalid(x + 1, y), pTier));
-                AddAdjacentOwner(result, owner,
-                    OwnerId(pRaster.GetOrInvalid(x, y - 1), pTier));
-                AddAdjacentOwner(result, owner,
-                    OwnerId(pRaster.GetOrInvalid(x, y + 1), pTier));
-            }
-            return result;
-        }
-
-        private static void AddAdjacentOwner(
-            IDictionary<long, HashSet<long>> pAdjacency,
-            long pFirst,
-            long pSecond)
-        {
-            if (pFirst < 0 || pSecond < 0 || pFirst == pSecond)
-                return;
-            AddNeighbor(pAdjacency, pFirst, pSecond);
-            AddNeighbor(pAdjacency, pSecond, pFirst);
-        }
-
-        private static void AddNeighbor(
-            IDictionary<long, HashSet<long>> pAdjacency,
-            long pOwner,
-            long pNeighbor)
-        {
-            if (!pAdjacency.TryGetValue(pOwner, out HashSet<long> neighbors))
-            {
-                neighbors = new HashSet<long>();
-                pAdjacency.Add(pOwner, neighbors);
-            }
-            neighbors.Add(pNeighbor);
-        }
-
-        private static bool HasAdjacentColorCollision(
-            IReadOnlyDictionary<long, HashSet<long>> pAdjacency,
-            IDictionary<long, uint> pKnownColors,
-            BoundaryCellRaster pRaster,
-            BoundaryTier pTier)
-        {
-            foreach (KeyValuePair<long, HashSet<long>> pair in pAdjacency)
-            {
-                uint color = ColorForOwner(
-                    pair.Key, pKnownColors, pRaster, pTier);
-                foreach (long neighbor in pair.Value)
-                {
-                    if (pair.Key >= neighbor)
-                        continue;
-                    uint neighborColor = ColorForOwner(
-                        neighbor, pKnownColors, pRaster, pTier);
-                    if (color == neighborColor)
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        private static uint ColorForOwner(
-            long pOwnerId,
-            IDictionary<long, uint> pKnownColors,
-            BoundaryCellRaster pRaster,
-            BoundaryTier pTier)
-        {
-            if (pKnownColors.TryGetValue(pOwnerId, out uint color))
-                return color;
-            BoundaryCellFacts facts = FindOwnerFacts(
-                pRaster, pOwnerId, pTier);
-            color = CanonicalHierarchyColor(
-                facts.Rgba, facts.SystemId, pOwnerId, pTier);
-            pKnownColors[pOwnerId] = color;
-            return color;
-        }
-
         private static BoundaryMeshDraft EmptyFailureDraft(int pFailureCount)
         {
             return new BoundaryMeshDraft(
@@ -1054,106 +922,5 @@ namespace AncientWarfare3.core.policy
             return result;
         }
 
-        private static uint StableHash(
-            long pRootSystemId,
-            long pDisplayedOwnerId,
-            BoundaryTier pTier)
-        {
-            unchecked
-            {
-                ulong value = (ulong)pRootSystemId * 11400714819323198485UL;
-                value ^= (ulong)pDisplayedOwnerId + 0x9E3779B97F4A7C15UL;
-                value ^= (ulong)pTier * 0xBF58476D1CE4E5B9UL;
-                value ^= value >> 30;
-                value *= 0xBF58476D1CE4E5B9UL;
-                value ^= value >> 27;
-                return (uint)(value ^ (value >> 32));
-            }
-        }
-
-        private static uint CandidateHash(uint pStableHash, int pCandidateIndex)
-        {
-            unchecked
-            {
-                uint value = pStableHash +
-                    (uint)pCandidateIndex * 0x9E3779B9u;
-                value ^= value >> 16;
-                value *= 0x7FEB352Du;
-                value ^= value >> 15;
-                value *= 0x846CA68Bu;
-                return value ^ (value >> 16);
-            }
-        }
-
-        private static void RgbToHsv(
-            int pRed, int pGreen, int pBlue,
-            out float pHue, out float pSaturation, out float pValue)
-        {
-            float red = pRed / 255f;
-            float green = pGreen / 255f;
-            float blue = pBlue / 255f;
-            float maximum = Math.Max(red, Math.Max(green, blue));
-            float minimum = Math.Min(red, Math.Min(green, blue));
-            float delta = maximum - minimum;
-            pValue = maximum;
-            pSaturation = maximum <= 0f ? 0f : delta / maximum;
-            if (delta <= 0f)
-            {
-                pHue = 0f;
-                return;
-            }
-            if (maximum == red)
-                pHue = 60f * (((green - blue) / delta) % 6f);
-            else if (maximum == green)
-                pHue = 60f * (((blue - red) / delta) + 2f);
-            else
-                pHue = 60f * (((red - green) / delta) + 4f);
-            pHue = WrapHue(pHue);
-        }
-
-        private static uint HsvToRgba(
-            float pHue, float pSaturation, float pValue, int pAlpha)
-        {
-            float chroma = pValue * pSaturation;
-            float section = pHue / 60f;
-            float secondary = chroma * (1f - Math.Abs(section % 2f - 1f));
-            float red = 0f;
-            float green = 0f;
-            float blue = 0f;
-            if (section < 1f) { red = chroma; green = secondary; }
-            else if (section < 2f) { red = secondary; green = chroma; }
-            else if (section < 3f) { green = chroma; blue = secondary; }
-            else if (section < 4f) { green = secondary; blue = chroma; }
-            else if (section < 5f) { red = secondary; blue = chroma; }
-            else { red = chroma; blue = secondary; }
-            float match = pValue - chroma;
-            return Pack(
-                ClampColor((int)Math.Round((red + match) * 255f)),
-                ClampColor((int)Math.Round((green + match) * 255f)),
-                ClampColor((int)Math.Round((blue + match) * 255f)),
-                pAlpha);
-        }
-
-        private static float WrapHue(float pHue)
-        {
-            pHue %= 360f;
-            return pHue < 0f ? pHue + 360f : pHue;
-        }
-
-        private static float Clamp01(float pValue)
-        {
-            if (pValue < 0f) return 0f;
-            return pValue > 1f ? 1f : pValue;
-        }
-
-        private static int ClampColor(int pValue)
-        {
-            return Math.Max(24, Math.Min(231, pValue));
-        }
-
-        private static uint Pack(int pRed, int pGreen, int pBlue, int pAlpha)
-        {
-            return (uint)(pRed << 24 | pGreen << 16 | pBlue << 8 | pAlpha);
-        }
     }
 }

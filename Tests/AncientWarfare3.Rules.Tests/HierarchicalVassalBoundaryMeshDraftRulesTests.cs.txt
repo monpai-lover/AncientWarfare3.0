@@ -8,6 +8,7 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
         CityFillUsesDisplayedOwnersAndHierarchyColors();
         FillColorsAvoidActualAdjacentOwnerCollisions();
         FillColorsAreChunkContextIndependentAndSeamStable();
+        AuthoritativeFillUsesOneAssignmentAcrossIndependentContexts();
         RibbonsCarryTwoSidedPrimitiveAttributesAndTierWidths();
         FullFootprintNarrowsAndRiverWaterIsTransparent();
         CoastFlagsAndTransparencyAreSideSpecific();
@@ -84,10 +85,9 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
     {
         long[,] owners =
         {
-            { 234, 249, 2, 3 },
-            { 4, 5, 6, 7 }
+            { 234, 249 }
         };
-        BoundaryCellRaster grid = Raster(4, 2, (x, y) =>
+        BoundaryCellRaster grid = Raster(2, 1, (x, y) =>
             Land(x, y, 1, owners[y, x], owners[y, x], 0x336699FF));
         uint base234 = HierarchicalVassalBoundaryMeshDraftRules.HierarchyColor(
             0x336699FF, 1, 234, BoundaryTier.City, 0);
@@ -97,7 +97,8 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "owners 234 and 249 exercise a real candidate-zero collision");
         BoundaryMeshDraft fill =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
-                grid, BoundaryDisplayLayer.Cities, Interior(grid));
+                grid, BoundaryDisplayLayer.Cities, Interior(grid),
+                GlobalAssignment());
         Equal(0, fill.FailureCount,
             "an ordinary hierarchy-color collision does not reject the chunk");
         uint color234 = fill.LeftRgba[
@@ -108,7 +109,8 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "known colliding owners 234 and 249 receive distinct stable candidates");
         BoundaryMeshDraft rebuilt =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
-                grid, BoundaryDisplayLayer.Cities, Interior(grid));
+                grid, BoundaryDisplayLayer.Cities, Interior(grid),
+                GlobalAssignment());
         Equal(color234, rebuilt.LeftRgba[
                 Array.IndexOf(rebuilt.LeftOwnerIds, 234L)],
             "adjacency-aware owner color is rebuild-stable");
@@ -119,17 +121,18 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
 
     private static void FillColorsAreChunkContextIndependentAndSeamStable()
     {
+        HierarchyColorAssignment assignment = GlobalAssignment();
         BoundaryCellRaster contextGrid = Raster(64, 2, (x, y) =>
             Land(x, y, 1, x == 0 ? 234 : 249,
                 x == 0 ? 234 : 249, 0x336699FF));
         BoundaryMeshDraft leftContext =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 contextGrid, BoundaryDisplayLayer.Cities,
-                Bounds(0, 0, 32, 2, contextGrid));
+                Bounds(0, 0, 32, 2, contextGrid), assignment);
         BoundaryMeshDraft rightContext =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 contextGrid, BoundaryDisplayLayer.Cities,
-                Bounds(32, 0, 64, 2, contextGrid));
+                Bounds(32, 0, 64, 2, contextGrid), assignment);
         uint leftColor249 = leftContext.LeftRgba[
             Array.IndexOf(leftContext.LeftOwnerIds, 249L)];
         uint rightColor249 = rightContext.LeftRgba[
@@ -138,19 +141,19 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "same displayed owner color is bit-identical across local adjacency contexts");
 
         BoundaryCellRaster seamGrid = Raster(64, 2, (x, y) =>
-            Land(x, y, 1, x < 32 ? 1 : 8,
-                x < 32 ? 1 : 8, 0x336699FF));
+            Land(x, y, 1, x < 32 ? 234 : 249,
+                x < 32 ? 234 : 249, 0x336699FF));
         BoundaryMeshDraft seamLeft =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 seamGrid, BoundaryDisplayLayer.Cities,
-                Bounds(0, 0, 32, 2, seamGrid));
+                Bounds(0, 0, 32, 2, seamGrid), assignment);
         BoundaryMeshDraft seamRight =
             HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
                 seamGrid, BoundaryDisplayLayer.Cities,
-                Bounds(32, 0, 64, 2, seamGrid));
-        uint seamColor1 = seamLeft.LeftRgba[0];
-        uint seamColor8 = seamRight.LeftRgba[0];
-        Equal(true, seamColor1 != seamColor8,
+                Bounds(32, 0, 64, 2, seamGrid), assignment);
+        uint seamColor234 = seamLeft.LeftRgba[0];
+        uint seamColor249 = seamRight.LeftRgba[0];
+        Equal(true, seamColor234 != seamColor249,
             "owners adjacent exactly across a chunk seam remain distinguishable");
         Equal(0, seamLeft.FailureCount,
             "left seam chunk accepts canonical adjacent colors");
@@ -174,6 +177,144 @@ internal static class HierarchicalVassalBoundaryMeshDraftRulesTests
             "city fill uses the city submesh indices");
         Equal(true, fill.LeftRgba.Distinct().Count() == 2,
             "adjacent cities receive distinguishable hierarchy colors");
+    }
+
+    private static void AuthoritativeFillUsesOneAssignmentAcrossIndependentContexts()
+    {
+        HierarchyColorAssignment assignment = GlobalAssignment();
+        BoundaryCellRaster adjacent = Raster(4, 2, (x, y) =>
+            Land(x, y, 1, 10, x < 2 ? 234 : 249, 0x336699FF));
+        BoundaryCellRaster farSide = Raster(4, 2, (x, y) =>
+            Land(x, y, 1, 10, 249, 0x336699FF));
+
+        BoundaryMeshDraft farFirst =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                farSide, BoundaryDisplayLayer.Cities,
+                Interior(farSide), assignment);
+        BoundaryMeshDraft adjacentSecond =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                adjacent, BoundaryDisplayLayer.Cities,
+                Interior(adjacent), assignment);
+        uint far249 = farFirst.LeftRgba[
+            Array.IndexOf(farFirst.LeftOwnerIds, 249L)];
+        uint adjacent249 = adjacentSecond.LeftRgba[
+            Array.IndexOf(adjacentSecond.LeftOwnerIds, 249L)];
+        Equal(far249, adjacent249,
+            "global assignment keeps owner 249 bit-identical across independent rasters");
+
+        BoundaryMeshDraft bounded =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                adjacent, BoundaryDisplayLayer.Cities,
+                Bounds(2, 0, 4, 2, adjacent), assignment);
+        Equal(far249, bounded.LeftRgba[0],
+            "chunk bounds do not alter the authoritative color");
+        BoundaryMeshDraft adjacentFirst =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                adjacent, BoundaryDisplayLayer.Cities,
+                Interior(adjacent), assignment);
+        BoundaryMeshDraft farSecond =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                farSide, BoundaryDisplayLayer.Cities,
+                Interior(farSide), assignment);
+        Equal(adjacent249, adjacentFirst.LeftRgba[
+                Array.IndexOf(adjacentFirst.LeftOwnerIds, 249L)],
+            "reversed build order preserves adjacent-context color");
+        Equal(far249, farSecond.LeftRgba[0],
+            "reversed build order preserves far-context color");
+        uint adjacent234 = adjacentSecond.LeftRgba[
+            Array.IndexOf(adjacentSecond.LeftOwnerIds, 234L)];
+        Equal(true, adjacent234 != adjacent249,
+            "canonical 234/249 edge remains distinguishable");
+
+        BoundaryCellRaster countries = Raster(4, 2, (x, y) =>
+            x < 2
+                ? Land(x, y, 1, 10, 10, 0x336699FF)
+                : Land(x, y, 2, 20, 500, 0x993333FF));
+        BoundaryMeshDraft countryFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                countries, BoundaryDisplayLayer.Countries,
+                Interior(countries), assignment);
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.VassalRealm, 10, out uint realm10),
+            "country assignment lookup");
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.VassalRealm, 20, out uint realm20),
+            "second-root country assignment lookup");
+        Equal(realm10, countryFill.LeftRgba[
+                Array.IndexOf(countryFill.LeftOwnerIds, 10L)],
+            "country layer consumes its tier key");
+        Equal(realm20, countryFill.LeftRgba[
+                Array.IndexOf(countryFill.LeftOwnerIds, 20L)],
+            "different root consumes its canonical color");
+
+        BoundaryCellRaster citySameNumericId = Raster(2, 2, (x, y) =>
+            Land(x, y, 1, 10, 10, 0x336699FF));
+        BoundaryMeshDraft cityFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                citySameNumericId, BoundaryDisplayLayer.Cities,
+                Interior(citySameNumericId), assignment);
+        Equal(true, assignment.TryGetColor(
+            BoundaryTier.City, 10, out uint city10),
+            "city assignment lookup with same numeric realm ID");
+        Equal(city10, cityFill.LeftRgba[0],
+            "city layer consumes its distinct tier key");
+
+        HierarchyColorAssignment missing =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                new[] { CityIdentity(234, 1, 10, 0x336699FF) },
+                Array.Empty<HierarchyColorEdge>());
+        BoundaryMeshDraft missingOwner =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                farSide, BoundaryDisplayLayer.Cities,
+                Interior(farSide), missing);
+        Equal(1, missingOwner.FailureCount,
+            "missing authoritative owner color is a bounded failure");
+        Equal(0, missingOwner.VertexCount,
+            "missing authoritative owner never silently falls back");
+
+        HierarchyColorAssignment invalid =
+            HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+                new[]
+                {
+                    CityIdentity(249, 1, 10, 0x336699FF),
+                    CityIdentity(249, 2, 20, 0x993333FF)
+                }, Array.Empty<HierarchyColorEdge>());
+        BoundaryMeshDraft invalidFill =
+            HierarchicalVassalBoundaryMeshDraftRules.BuildFill(
+                farSide, BoundaryDisplayLayer.Cities,
+                Interior(farSide), invalid);
+        Equal(1, invalidFill.FailureCount,
+            "invalid authoritative assignment is a bounded failure");
+    }
+
+    private static HierarchyColorAssignment GlobalAssignment()
+    {
+        var identities = new[]
+        {
+            new HierarchyColorIdentity(BoundaryTier.VassalRealm, 20,
+                2, 2, 20, -1, 0x993333FF),
+            CityIdentity(249, 1, 10, 0x336699FF),
+            new HierarchyColorIdentity(BoundaryTier.VassalRealm, 10,
+                1, 1, 10, -1, 0x336699FF),
+            CityIdentity(234, 1, 10, 0x336699FF),
+            CityIdentity(10, 1, 10, 0x336699FF),
+            CityIdentity(500, 2, 20, 0x993333FF)
+        };
+        var edges = new[]
+        {
+            new HierarchyColorEdge(BoundaryTier.City, 249, 234),
+            new HierarchyColorEdge(BoundaryTier.VassalRealm, 20, 10),
+            new HierarchyColorEdge(BoundaryTier.City, 234, 249)
+        };
+        return HierarchicalVassalBoundaryColorRules.BuildCanonicalAssignment(
+            identities, edges);
+    }
+
+    private static HierarchyColorIdentity CityIdentity(
+        long owner, long root, long realm, uint rgba)
+    {
+        return new HierarchyColorIdentity(
+            BoundaryTier.City, owner, root, root, realm, owner, rgba);
     }
 
     private static void FullFootprintNarrowsAndRiverWaterIsTransparent()
