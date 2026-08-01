@@ -175,15 +175,35 @@ namespace AncientWarfare3.core.policy
                 throw new ArgumentOutOfRangeException(nameof(pStartIndex));
             }
 
+            var protectedPoints = pProtectedPoints == null
+                ? new HashSet<BoundaryGridPoint>()
+                : new HashSet<BoundaryGridPoint>(pProtectedPoints);
+            protectedPoints.Add(pCanonicalPoints[pStartIndex]);
+            protectedPoints.Add(pCanonicalPoints[pEndIndex]);
+            for (int i = 0; i < pCanonicalPoints.Count; i++)
+                protectedPoints.Add(pCanonicalPoints[i]);
+            BoundaryCellRaster canonicalRaster = CanonicalOverlapRaster(
+                pCanonicalPoints, pRaster);
             BoundaryCurveDraft canonical = Fit(
-                pCanonicalPoints, pProtectedPoints, pRaster, pOptions);
+                pCanonicalPoints, protectedPoints, canonicalRaster, pOptions);
             int sampleStart = FindControlSample(
                 canonical.Points, pCanonicalPoints[pStartIndex], 0);
             int sampleEnd = FindControlSample(
                 canonical.Points, pCanonicalPoints[pEndIndex], sampleStart + 1);
             if (sampleStart < 0 || sampleEnd < sampleStart)
-                return RawFallback(CopyWindow(
-                    pCanonicalPoints, pStartIndex, pEndIndex), false);
+            {
+                IReadOnlyList<BoundaryGridPoint> rawWindow = CopyWindow(
+                    pCanonicalPoints, pStartIndex, pEndIndex);
+                return new BoundaryCurveDraft(
+                    ToFloatPoints(rawWindow), pClosed: false,
+                    pUsedRawFallback: true, canonical.TangentScale,
+                    AcceptedCanonicalTangentAt(
+                        pCanonicalPoints, pStartIndex,
+                        canonical.TangentScale, pOptions.Closed),
+                    AcceptedCanonicalTangentAt(
+                        pCanonicalPoints, pEndIndex,
+                        canonical.TangentScale, pOptions.Closed));
+            }
 
             var points = new List<BoundaryFloatPoint>(sampleEnd - sampleStart + 1);
             for (int i = sampleStart; i <= sampleEnd; i++)
@@ -265,6 +285,11 @@ namespace AncientWarfare3.core.policy
                 if (!IsFinite(pCurve.Points[i]))
                     return false;
             }
+            if (!pCurve.UsedRawFallback && HasChangedSharedCornerIncidence(
+                    pCurve.Points, pRawChain))
+            {
+                return false;
+            }
             for (int i = 1; i < pCurve.Points.Count; i++)
             {
                 if (!pCurve.UsedRawFallback && !IsSafeSegment(
@@ -299,6 +324,11 @@ namespace AncientWarfare3.core.policy
         {
             if (pCurve == null || pCurve.Points == null ||
                 pCurve.Points.Count < 2)
+            {
+                return false;
+            }
+            if (HasChangedSharedCornerIncidence(
+                    pCurve.Points, pRawChain))
             {
                 return false;
             }
@@ -753,8 +783,10 @@ namespace AncientWarfare3.core.policy
                 int rawEnd = DirectionCode(
                     pRaw[next].X - pPoint.X,
                     pRaw[next].Y - pPoint.Y);
-                if (candidateStart == rawStart && candidateEnd == rawEnd ||
-                    candidateStart == rawEnd && candidateEnd == rawStart)
+                if (IncidencePairMatches(
+                        candidateStart, candidateEnd, rawStart, rawEnd) ||
+                    IncidencePairMatches(
+                        candidateStart, candidateEnd, rawEnd, rawStart))
                 {
                     return true;
                 }
@@ -762,11 +794,80 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
+        private static bool IncidencePairMatches(
+            int pCandidateStart,
+            int pCandidateEnd,
+            int pRawStart,
+            int pRawEnd)
+        {
+            DecodeDirection(pRawStart, out int rawStartX, out int rawStartY);
+            DecodeDirection(pRawEnd, out int rawEndX, out int rawEndY);
+            bool straight = rawStartX == -rawEndX &&
+                            rawStartY == -rawEndY;
+            if (straight)
+                return pCandidateStart == pRawStart &&
+                       pCandidateEnd == pRawEnd;
+            return DirectionContains(pCandidateStart, rawStartX, rawStartY) &&
+                   DirectionContains(pCandidateEnd, rawEndX, rawEndY);
+        }
+
+        private static bool DirectionContains(
+            int pCandidate,
+            int pRawX,
+            int pRawY)
+        {
+            DecodeDirection(pCandidate, out int candidateX, out int candidateY);
+            return (pRawX == 0 || candidateX == pRawX) &&
+                   (pRawY == 0 || candidateY == pRawY);
+        }
+
+        private static void DecodeDirection(
+            int pCode,
+            out int pX,
+            out int pY)
+        {
+            pX = pCode / 3 - 1;
+            pY = pCode % 3 - 1;
+        }
+
         private static int DirectionCode(float pX, float pY)
         {
+            float absoluteX = Math.Abs(pX);
+            float absoluteY = Math.Abs(pY);
             int x = pX < -GridEpsilon ? -1 : pX > GridEpsilon ? 1 : 0;
             int y = pY < -GridEpsilon ? -1 : pY > GridEpsilon ? 1 : 0;
+            if (absoluteX > GridEpsilon &&
+                absoluteY <= absoluteX * 0.25f)
+            {
+                y = 0;
+            }
+            else if (absoluteY > GridEpsilon &&
+                     absoluteX <= absoluteY * 0.25f)
+            {
+                x = 0;
+            }
             return (x + 1) * 3 + y + 1;
+        }
+
+        private static bool HasChangedSharedCornerIncidence(
+            IReadOnlyList<BoundaryFloatPoint> pCandidate,
+            IReadOnlyList<BoundaryGridPoint> pRaw)
+        {
+            for (int i = 1; i < pCandidate.Count - 1; i++)
+            {
+                BoundaryFloatPoint point = pCandidate[i];
+                if (!IsGridCorner(point))
+                    continue;
+                var corner = new BoundaryGridPoint(
+                    (int)Math.Round(point.X),
+                    (int)Math.Round(point.Y));
+                if (!RawHasMatchingIncidence(
+                        pRaw, corner, pCandidate[i - 1], pCandidate[i + 1]))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static void AddGridCrossingTimes(
@@ -1046,8 +1147,11 @@ namespace AncientWarfare3.core.policy
                 BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
                 if (!IsAllowedLand(cell, pOptions))
                     continue;
-                if (AllowedRunLength(x, y, 1, 0, pRaster, pOptions) <= 2 ||
-                    AllowedRunLength(x, y, 0, 1, pRaster, pOptions) <= 2)
+                long owner = OwnerId(cell, pOptions.Tier);
+                if (OwnerRunLength(
+                        x, y, 1, 0, owner, pRaster, pOptions.Tier) <= 2 ||
+                    OwnerRunLength(
+                        x, y, 0, 1, owner, pRaster, pOptions.Tier) <= 2)
                 {
                     return true;
                 }
@@ -1055,13 +1159,14 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
-        private static int AllowedRunLength(
+        private static int OwnerRunLength(
             int pX,
             int pY,
             int pDx,
             int pDy,
+            long pOwnerId,
             BoundaryCellRaster pRaster,
-            BoundaryCurveOptions pOptions)
+            BoundaryTier pTier)
         {
             int count = 1;
             for (int direction = -1; direction <= 1; direction += 2)
@@ -1071,7 +1176,7 @@ namespace AncientWarfare3.core.policy
                     BoundaryCellFacts cell = pRaster.GetOrInvalid(
                         pX + pDx * step * direction,
                         pY + pDy * step * direction);
-                    if (!IsAllowedLand(cell, pOptions))
+                    if (!cell.IsLand || OwnerId(cell, pTier) != pOwnerId)
                         break;
                     count++;
                     if (count > 2)
@@ -1162,6 +1267,36 @@ namespace AncientWarfare3.core.policy
             for (int i = pStart; i <= pEnd; i++)
                 result.Add(pPoints[i]);
             return result;
+        }
+
+        private static BoundaryCellRaster CanonicalOverlapRaster(
+            IReadOnlyList<BoundaryGridPoint> pCanonicalPoints,
+            BoundaryCellRaster pSource)
+        {
+            int minimumX = int.MaxValue;
+            int minimumY = int.MaxValue;
+            int maximumX = int.MinValue;
+            int maximumY = int.MinValue;
+            for (int i = 0; i < pCanonicalPoints.Count; i++)
+            {
+                minimumX = Math.Min(minimumX, pCanonicalPoints[i].X);
+                minimumY = Math.Min(minimumY, pCanonicalPoints[i].Y);
+                maximumX = Math.Max(maximumX, pCanonicalPoints[i].X);
+                maximumY = Math.Max(maximumY, pCanonicalPoints[i].Y);
+            }
+            minimumX--;
+            minimumY--;
+            maximumX++;
+            maximumY++;
+            int width = maximumX - minimumX + 1;
+            int height = maximumY - minimumY + 1;
+            var cells = new BoundaryCellFacts[width * height];
+            for (int y = minimumY; y <= maximumY; y++)
+            for (int x = minimumX; x <= maximumX; x++)
+                cells[(y - minimumY) * width + x - minimumX] =
+                    pSource.GetOrInvalid(x, y);
+            return new BoundaryCellRaster(
+                minimumX, minimumY, width, height, cells);
         }
 
         private static BoundaryFloatPoint ToFloat(BoundaryGridPoint pPoint)

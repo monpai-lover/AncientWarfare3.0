@@ -224,6 +224,18 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 BoundaryTier.SuzerainSystem, 1, 2,
                 rawDifferentIncidence, 3f, false),
             "same corner with different incidence cannot change connectivity");
+
+        var endpointCandidate = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1.6f, 1.7f),
+            new BoundaryFloatPoint(2f, 2f),
+            new BoundaryFloatPoint(2.4f, 2.3f)
+        }, false, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                endpointCandidate, paired, rawDifferentIncidence,
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false)),
+            "adjacent candidate segments must compare shared-corner incidence");
     }
 
     private static void OpenStaircaseProducesARealCurve()
@@ -314,9 +326,9 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         {
             new[]
             {
-                new BoundaryGridPoint(30, 10), new BoundaryGridPoint(31, 10),
-                new BoundaryGridPoint(32, 11), new BoundaryGridPoint(33, 11),
-                new BoundaryGridPoint(34, 12)
+                new BoundaryGridPoint(0, 10), new BoundaryGridPoint(1, 10),
+                new BoundaryGridPoint(32, 10), new BoundaryGridPoint(97, 11),
+                new BoundaryGridPoint(151, 11)
             },
             new[]
             {
@@ -355,7 +367,10 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 (x, y) => Land(x, y, 1));
             var options = new BoundaryCurveOptions(
                 BoundaryTier.SuzerainSystem, 1, 2, 50f, closed, false);
-            var protectedPoints = new HashSet<BoundaryGridPoint>(canonical);
+            var protectedPoints = new HashSet<BoundaryGridPoint>
+            {
+                canonical[0], canonical[^1]
+            };
             BoundaryCurveDraft left =
                 HierarchicalVassalBoundaryCurveRules.FitCanonicalWindow(
                     canonical, 0, seamIndex, protectedPoints,
@@ -375,6 +390,9 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 "seam tangent x is the accepted curve derivative");
             NearlyEqual(expectedDerivative.Y, left.EndTangent.Y, 0.001f,
                 "seam tangent y is the accepted curve derivative");
+            Equal(true, Math.Abs(left.EndTangent.X) > 0.0001f ||
+                        Math.Abs(left.EndTangent.Y) > 0.0001f,
+                "canonical seam never uses a default zero tangent fallback");
             Equal(BitConverter.SingleToInt32Bits(left.TangentScale),
                 BitConverter.SingleToInt32Bits(right.TangentScale),
                 "neighbor windows accept bit-identical tangent scale");
@@ -477,6 +495,24 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
             HierarchicalVassalBoundaryCurveRules.LocalMaximumDeviationAt(
                 bridgeMiddle, bridgeAnchors, twoWideBridge, options),
             0.00001f, "two-cell-wide bridge uses narrow deviation");
+
+        BoundaryCellRaster politicalBridge = Raster(12, 8, (x, y) =>
+            Land(x, y, y == 3 || y == 4 ? 1 : 2));
+        var politicalMiddle = new BoundaryGridPoint(6, 3);
+        var politicalRaw = new[]
+        {
+            new BoundaryGridPoint(4, 3), politicalMiddle,
+            new BoundaryGridPoint(8, 3)
+        };
+        ISet<BoundaryGridPoint> politicalAnchors =
+            HierarchicalVassalBoundaryCurveRules.DeriveProtectedAnchors(
+                politicalRaw, null, politicalBridge, options);
+        Equal(true, politicalAnchors.Contains(politicalMiddle),
+            "thin political land bridge is measured per owner");
+        NearlyEqual(0.20f,
+            HierarchicalVassalBoundaryCurveRules.LocalMaximumDeviationAt(
+                politicalMiddle, politicalAnchors, politicalBridge, options),
+            0.00001f, "thin political bridge uses narrow deviation");
     }
 
     private static void AdaptiveSpacingAndDegenerateGeometryAreStrict()
