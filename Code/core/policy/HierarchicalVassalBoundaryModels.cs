@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.policy
 {
@@ -182,5 +183,189 @@ namespace AncientWarfare3.core.policy
         {
             get { return IsValid && Water == BoundaryWaterKind.Land; }
         }
+    }
+
+    public sealed class BoundaryCellRaster
+    {
+        private readonly BoundaryCellFacts[] _cells;
+
+        public BoundaryCellRaster(
+            int pOriginX,
+            int pOriginY,
+            int pWidth,
+            int pHeight,
+            BoundaryCellFacts[] pCells)
+        {
+            if (pWidth < 0)
+                throw new ArgumentOutOfRangeException(nameof(pWidth));
+            if (pHeight < 0)
+                throw new ArgumentOutOfRangeException(nameof(pHeight));
+            if (pCells == null)
+                throw new ArgumentNullException(nameof(pCells));
+            if (pCells.Length != pWidth * pHeight)
+                throw new ArgumentException(
+                    "Cell count must match raster dimensions.", nameof(pCells));
+
+            OriginX = pOriginX;
+            OriginY = pOriginY;
+            Width = pWidth;
+            Height = pHeight;
+            _cells = pCells;
+        }
+
+        public int OriginX { get; }
+
+        public int OriginY { get; }
+
+        public int Width { get; }
+
+        public int Height { get; }
+
+        public int MaxXExclusive
+        {
+            get { return OriginX + Width; }
+        }
+
+        public int MaxYExclusive
+        {
+            get { return OriginY + Height; }
+        }
+
+        public BoundaryCellFacts GetOrInvalid(int pX, int pY)
+        {
+            int localX = pX - OriginX;
+            int localY = pY - OriginY;
+            if (localX < 0 || localY < 0 ||
+                localX >= Width || localY >= Height)
+            {
+                return new BoundaryCellFacts(
+                    pX, pY, false, BoundaryWaterKind.Land, 0,
+                    -1, -1, -1, 0);
+            }
+            return _cells[localY * Width + localX];
+        }
+    }
+
+    public readonly struct BoundaryGridPoint :
+        IEquatable<BoundaryGridPoint>, IComparable<BoundaryGridPoint>
+    {
+        public BoundaryGridPoint(int pX, int pY)
+        {
+            X = pX;
+            Y = pY;
+        }
+
+        public int X { get; }
+
+        public int Y { get; }
+
+        public int CompareTo(BoundaryGridPoint pOther)
+        {
+            int xComparison = X.CompareTo(pOther.X);
+            return xComparison != 0 ? xComparison : Y.CompareTo(pOther.Y);
+        }
+
+        public bool Equals(BoundaryGridPoint pOther)
+        {
+            return X == pOther.X && Y == pOther.Y;
+        }
+
+        public override bool Equals(object pValue)
+        {
+            return pValue is BoundaryGridPoint other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((X * 397) ^ Y);
+        }
+
+        public override string ToString()
+        {
+            return "(" + X + "," + Y + ")";
+        }
+    }
+
+    public readonly struct BoundaryRawEdge
+    {
+        public BoundaryRawEdge(
+            BoundaryGridPoint pStart,
+            BoundaryGridPoint pEnd,
+            BoundaryTier pTier,
+            long leftOwnerId,
+            long rightOwnerId)
+        {
+            Start = pStart;
+            End = pEnd;
+            Tier = pTier;
+            LeftOwnerId = leftOwnerId;
+            RightOwnerId = rightOwnerId;
+        }
+
+        public BoundaryGridPoint Start { get; }
+
+        public BoundaryGridPoint End { get; }
+
+        public BoundaryTier Tier { get; }
+
+        public long LeftOwnerId { get; }
+
+        public long RightOwnerId { get; }
+
+        public BoundaryGridPoint Other(BoundaryGridPoint pPoint)
+        {
+            if (Start.Equals(pPoint))
+                return End;
+            if (End.Equals(pPoint))
+                return Start;
+            throw new ArgumentException("Point is not on the edge.", nameof(pPoint));
+        }
+    }
+
+    public sealed class BoundaryChain
+    {
+        public BoundaryChain(
+            IReadOnlyList<BoundaryGridPoint> pPoints,
+            IReadOnlyList<BoundaryRawEdge> pEdges,
+            bool pClosed)
+        {
+            Points = pPoints ?? throw new ArgumentNullException(nameof(pPoints));
+            Edges = pEdges ?? throw new ArgumentNullException(nameof(pEdges));
+            Closed = pClosed;
+        }
+
+        public IReadOnlyList<BoundaryGridPoint> Points { get; }
+
+        public IReadOnlyList<BoundaryRawEdge> Edges { get; }
+
+        public bool Closed { get; }
+
+        public BoundaryTier Tier
+        {
+            get { return Edges.Count == 0 ? BoundaryTier.None : Edges[0].Tier; }
+        }
+    }
+
+    public sealed class BoundaryTopologyDraft
+    {
+        public BoundaryTopologyDraft(
+            IReadOnlyList<BoundaryRawEdge> pRawEdges,
+            IReadOnlyList<BoundaryChain> pOpenChains,
+            IReadOnlyList<BoundaryChain> pClosedChains,
+            HashSet<BoundaryGridPoint> pProtectedVertices)
+        {
+            RawEdges = pRawEdges;
+            OpenChains = pOpenChains;
+            ClosedChains = pClosedChains;
+            ProtectedVertices = pProtectedVertices;
+        }
+
+        public IReadOnlyList<BoundaryRawEdge> RawEdges { get; }
+
+        public IReadOnlyList<BoundaryChain> OpenChains { get; }
+
+        public IReadOnlyList<BoundaryChain> ClosedChains { get; }
+
+        public HashSet<BoundaryGridPoint> ProtectedVertices { get; }
     }
 }

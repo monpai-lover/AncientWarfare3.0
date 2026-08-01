@@ -10,8 +10,10 @@
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
     <Compile Include="HierarchicalVassalBoundaryChunkRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryTopologyRulesTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryModels.cs" Link="Production\HierarchicalVassalBoundaryModels.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryChunkRules.cs" Link="Production\HierarchicalVassalBoundaryChunkRules.cs" />
+    <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryTopologyRules.cs" Link="Production\HierarchicalVassalBoundaryTopologyRules.cs" />
     <Compile Include="ActiveMilitaryLifecycleRulesTests.cs.txt" />
     <Compile Include="SchoolRuntimePerformanceTests.cs.txt" />
     <Compile Include="PathfindingCursorTests.cs.txt" />
