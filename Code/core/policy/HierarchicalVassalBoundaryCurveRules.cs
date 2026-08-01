@@ -76,8 +76,12 @@ namespace AncientWarfare3.core.policy
             if (raw.Count < 3)
                 return RawFallback(raw, pOptions.Closed);
 
+            ISet<BoundaryGridPoint> safetyAnchors = DeriveProtectedAnchors(
+                raw, pProtectedPoints, pRaster, pOptions);
+            ISet<BoundaryGridPoint> simplificationAnchors =
+                ExpandAnchorNeighbors(raw, safetyAnchors);
             IReadOnlyList<BoundaryGridPoint> simplified = Simplify(
-                raw, pProtectedPoints, 0.45f);
+                raw, simplificationAnchors, 0.45f);
             if (pOptions.Closed && simplified.Count > 0 &&
                 !simplified[0].Equals(simplified[simplified.Count - 1]))
             {
@@ -94,10 +98,105 @@ namespace AncientWarfare3.core.policy
                 var draft = new BoundaryCurveDraft(
                     candidate, pOptions.Closed,
                     pUsedRawFallback: false, tangentScales[i]);
-                if (IsSafeCurve(draft, pRaster, raw, pOptions))
+                if (IsSafeCurveWithAnchors(
+                        draft, pRaster, raw, pOptions, safetyAnchors))
                     return draft;
             }
             return RawFallback(raw, pOptions.Closed);
+        }
+
+        public static ISet<BoundaryGridPoint> DeriveProtectedAnchors(
+            IReadOnlyList<BoundaryGridPoint> pRawPoints,
+            ISet<BoundaryGridPoint> pExplicitPoints,
+            BoundaryCellRaster pRaster,
+            BoundaryCurveOptions pOptions)
+        {
+            if (pRawPoints == null)
+                throw new ArgumentNullException(nameof(pRawPoints));
+            if (pRaster == null)
+                throw new ArgumentNullException(nameof(pRaster));
+            var result = pExplicitPoints == null
+                ? new HashSet<BoundaryGridPoint>()
+                : new HashSet<BoundaryGridPoint>(pExplicitPoints);
+            if (pRawPoints.Count == 0)
+                return result;
+            result.Add(pRawPoints[0]);
+            result.Add(pRawPoints[pRawPoints.Count - 1]);
+
+            var counts = new Dictionary<BoundaryGridPoint, int>();
+            for (int i = 0; i < pRawPoints.Count; i++)
+            {
+                BoundaryGridPoint point = pRawPoints[i];
+                counts[point] = counts.TryGetValue(point, out int count)
+                    ? count + 1 : 1;
+            }
+            bool smallLeft = CountOwnerCells(
+                pRaster, pOptions.Tier, pOptions.LeftOwnerId, 5) <= 4;
+            bool smallRight = CountOwnerCells(
+                pRaster, pOptions.Tier, pOptions.RightOwnerId, 5) <= 4;
+            for (int i = 0; i < pRawPoints.Count; i++)
+            {
+                BoundaryGridPoint point = pRawPoints[i];
+                if (counts[point] > 1 ||
+                    IsNarrowAnchor(point, pRaster, pOptions) ||
+                    TouchesOwner(point, pRaster, pOptions.Tier,
+                        pOptions.LeftOwnerId) && smallLeft ||
+                    TouchesOwner(point, pRaster, pOptions.Tier,
+                        pOptions.RightOwnerId) && smallRight)
+                {
+                    result.Add(point);
+                }
+            }
+            return result;
+        }
+
+        public static float LocalMaximumDeviationAt(
+            BoundaryGridPoint pPoint,
+            ISet<BoundaryGridPoint> pProtectedPoints,
+            BoundaryCellRaster pRaster,
+            BoundaryCurveOptions pOptions)
+        {
+            bool protectedPoint = pProtectedPoints != null &&
+                                  pProtectedPoints.Contains(pPoint);
+            return Math.Min(pOptions.MaximumDeviation,
+                protectedPoint || IsNarrowAnchor(pPoint, pRaster, pOptions)
+                    ? 0.20f : 0.45f);
+        }
+
+        public static BoundaryCurveDraft FitCanonicalWindow(
+            IReadOnlyList<BoundaryGridPoint> pCanonicalPoints,
+            int pStartIndex,
+            int pEndIndex,
+            ISet<BoundaryGridPoint> pProtectedPoints,
+            BoundaryCellRaster pRaster,
+            BoundaryCurveOptions pOptions)
+        {
+            if (pCanonicalPoints == null)
+                throw new ArgumentNullException(nameof(pCanonicalPoints));
+            if (pStartIndex < 0 || pEndIndex <= pStartIndex ||
+                pEndIndex >= pCanonicalPoints.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pStartIndex));
+            }
+
+            BoundaryCurveDraft canonical = Fit(
+                pCanonicalPoints, pProtectedPoints, pRaster, pOptions);
+            int sampleStart = FindControlSample(
+                canonical.Points, pCanonicalPoints[pStartIndex], 0);
+            int sampleEnd = FindControlSample(
+                canonical.Points, pCanonicalPoints[pEndIndex], sampleStart + 1);
+            if (sampleStart < 0 || sampleEnd < sampleStart)
+                return RawFallback(CopyWindow(
+                    pCanonicalPoints, pStartIndex, pEndIndex), false);
+
+            var points = new List<BoundaryFloatPoint>(sampleEnd - sampleStart + 1);
+            for (int i = sampleStart; i <= sampleEnd; i++)
+                points.Add(canonical.Points[i]);
+            return new BoundaryCurveDraft(
+                points, pClosed: false, canonical.UsedRawFallback,
+                canonical.TangentScale,
+                CanonicalTangentAt(pCanonicalPoints, pStartIndex, pOptions.Closed),
+                CanonicalTangentAt(pCanonicalPoints, pEndIndex, pOptions.Closed));
         }
 
         public static bool IsSafeSegment(
@@ -117,9 +216,10 @@ namespace AncientWarfare3.core.policy
                 return false;
             }
 
-            if (TouchesForbiddenGridCorner(
+            if (!IsSupercoverSafe(
                     pStart, pEnd, pRaster, pTier,
-                    pLeftOwnerId, pRightOwnerId, allowRiverWater))
+                    pLeftOwnerId, pRightOwnerId, allowRiverWater,
+                    pRawChain))
             {
                 return false;
             }
@@ -155,8 +255,8 @@ namespace AncientWarfare3.core.policy
             IReadOnlyList<BoundaryGridPoint> pRawChain,
             BoundaryCurveOptions pOptions)
         {
-            if (pCurve == null || pCurve.Points == null ||
-                pCurve.Points.Count == 0)
+            if (pCurve == null || !pCurve.IsValid ||
+                pCurve.Points == null || pCurve.Points.Count < 2)
             {
                 return false;
             }
@@ -167,12 +267,58 @@ namespace AncientWarfare3.core.policy
             }
             for (int i = 1; i < pCurve.Points.Count; i++)
             {
-                if (!IsSafeSegment(
+                if (!pCurve.UsedRawFallback && !IsSafeSegment(
                         pCurve.Points[i - 1], pCurve.Points[i], pRaster,
                         pOptions.Tier, pOptions.LeftOwnerId,
                         pOptions.RightOwnerId, pRawChain,
                         pOptions.MaximumDeviation,
                         pOptions.AllowRiverWater))
+                {
+                    return false;
+                }
+            }
+            if (!pCurve.UsedRawFallback &&
+                HasSelfIntersection(pCurve.Points, pCurve.Closed))
+                return false;
+            if (pCurve.Closed)
+            {
+                int rawSign = Math.Sign(SignedArea(pRawChain));
+                int curveSign = Math.Sign(SignedArea(pCurve.Points));
+                if (rawSign != 0 && curveSign != rawSign)
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool IsSafeCurveWithAnchors(
+            BoundaryCurveDraft pCurve,
+            BoundaryCellRaster pRaster,
+            IReadOnlyList<BoundaryGridPoint> pRawChain,
+            BoundaryCurveOptions pOptions,
+            ISet<BoundaryGridPoint> pSafetyAnchors)
+        {
+            if (pCurve == null || pCurve.Points == null ||
+                pCurve.Points.Count < 2)
+            {
+                return false;
+            }
+            for (int i = 1; i < pCurve.Points.Count; i++)
+            {
+                float maximumDeviation = pOptions.MaximumDeviation;
+                foreach (BoundaryGridPoint anchor in pSafetyAnchors)
+                {
+                    if (DistanceToSegment(ToFloat(anchor),
+                            pCurve.Points[i - 1], pCurve.Points[i]) <= 1f)
+                    {
+                        maximumDeviation = Math.Min(maximumDeviation, 0.20f);
+                        break;
+                    }
+                }
+                if (!IsSafeSegment(
+                        pCurve.Points[i - 1], pCurve.Points[i], pRaster,
+                        pOptions.Tier, pOptions.LeftOwnerId,
+                        pOptions.RightOwnerId, pRawChain,
+                        maximumDeviation, pOptions.AllowRiverWater))
                 {
                     return false;
                 }
@@ -199,6 +345,22 @@ namespace AncientWarfare3.core.policy
                 throw new ArgumentOutOfRangeException(nameof(pIndex));
             int previous = Math.Max(0, pIndex - 1);
             int next = Math.Min(pContext.Count - 1, pIndex + 1);
+            return new BoundaryFloatPoint(
+                (pContext[next].X - pContext[previous].X) * 0.5f,
+                (pContext[next].Y - pContext[previous].Y) * 0.5f);
+        }
+
+        private static BoundaryFloatPoint CanonicalTangentAt(
+            IReadOnlyList<BoundaryGridPoint> pContext,
+            int pIndex,
+            bool pClosed)
+        {
+            if (!pClosed)
+                return CanonicalTangentAt(pContext, pIndex);
+            int uniqueCount = pContext.Count - 1;
+            int index = pIndex == uniqueCount ? 0 : pIndex;
+            int previous = (index + uniqueCount - 1) % uniqueCount;
+            int next = (index + 1) % uniqueCount;
             return new BoundaryFloatPoint(
                 (pContext[next].X - pContext[previous].X) * 0.5f,
                 (pContext[next].Y - pContext[previous].Y) * 0.5f);
@@ -234,6 +396,32 @@ namespace AncientWarfare3.core.policy
             return (float)(area * 0.5d);
         }
 
+        public static BoundaryFloatPoint EvaluateCentripetal(
+            BoundaryFloatPoint p0,
+            BoundaryFloatPoint p1,
+            BoundaryFloatPoint p2,
+            BoundaryFloatPoint p3,
+            float pT)
+        {
+            return CatmullRom(p0, p1, p2, p3,
+                Math.Max(0f, Math.Min(1f, pT)));
+        }
+
+        public static IReadOnlyList<BoundaryFloatPoint> SampleCentripetalSpan(
+            BoundaryFloatPoint p0,
+            BoundaryFloatPoint p1,
+            BoundaryFloatPoint p2,
+            BoundaryFloatPoint p3,
+            float pTangentScale)
+        {
+            var result = new List<BoundaryFloatPoint> { p1 };
+            BoundaryFloatPoint end = p2;
+            SubdivideCentripetalSpan(
+                p0, p1, p2, p3, pTangentScale,
+                0f, 1f, p1, end, 0, result);
+            return result;
+        }
+
         private static IReadOnlyList<BoundaryFloatPoint> SampleCurve(
             IReadOnlyList<BoundaryGridPoint> pPoints,
             bool pClosed,
@@ -251,22 +439,11 @@ namespace AncientWarfare3.core.policy
                 BoundaryFloatPoint p2 = At(pPoints, segment + 1, uniqueCount, pClosed);
                 BoundaryFloatPoint p0 = At(pPoints, segment - 1, uniqueCount, pClosed);
                 BoundaryFloatPoint p3 = At(pPoints, segment + 2, uniqueCount, pClosed);
-                float chordX = p2.X - p1.X;
-                float chordY = p2.Y - p1.Y;
-                int steps = Math.Max(1, (int)Math.Ceiling(
-                    SquareRoot(chordX * chordX + chordY * chordY) / 0.2f));
-                int startStep = segment == 0 ? 0 : 1;
-                for (int step = startStep; step <= steps; step++)
-                {
-                    float t = (float)step / steps;
-                    BoundaryFloatPoint curved = CatmullRom(p0, p1, p2, p3, t);
-                    BoundaryFloatPoint linear = new BoundaryFloatPoint(
-                        p1.X + (p2.X - p1.X) * t,
-                        p1.Y + (p2.Y - p1.Y) * t);
-                    result.Add(new BoundaryFloatPoint(
-                        linear.X + (curved.X - linear.X) * pTangentScale,
-                        linear.Y + (curved.Y - linear.Y) * pTangentScale));
-                }
+                IReadOnlyList<BoundaryFloatPoint> span =
+                    SampleCentripetalSpan(p0, p1, p2, p3, pTangentScale);
+                int start = segment == 0 ? 0 : 1;
+                for (int i = start; i < span.Count; i++)
+                    result.Add(span[i]);
             }
             if (pClosed && result.Count > 0 &&
                 !result[0].Equals(result[result.Count - 1]))
@@ -274,6 +451,60 @@ namespace AncientWarfare3.core.policy
                 result.Add(result[0]);
             }
             return result;
+        }
+
+        private static void SubdivideCentripetalSpan(
+            BoundaryFloatPoint p0,
+            BoundaryFloatPoint p1,
+            BoundaryFloatPoint p2,
+            BoundaryFloatPoint p3,
+            float pTangentScale,
+            float pStartTime,
+            float pEndTime,
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            int pDepth,
+            List<BoundaryFloatPoint> pResult)
+        {
+            float middleTime = (pStartTime + pEndTime) * 0.5f;
+            BoundaryFloatPoint middle = EvaluateScaledCentripetal(
+                p0, p1, p2, p3, middleTime, pTangentScale);
+            float leftLength = Distance(pStart, middle);
+            float rightLength = Distance(middle, pEnd);
+            float chordLength = Distance(pStart, pEnd);
+            bool spacingSafe = chordLength <= 0.30f &&
+                               leftLength <= 0.30f && rightLength <= 0.30f;
+            bool flatEnough = leftLength + rightLength - chordLength <= 0.005f;
+            if (pDepth >= 20 || spacingSafe && flatEnough)
+            {
+                pResult.Add(pEnd);
+                return;
+            }
+            SubdivideCentripetalSpan(
+                p0, p1, p2, p3, pTangentScale,
+                pStartTime, middleTime, pStart, middle,
+                pDepth + 1, pResult);
+            SubdivideCentripetalSpan(
+                p0, p1, p2, p3, pTangentScale,
+                middleTime, pEndTime, middle, pEnd,
+                pDepth + 1, pResult);
+        }
+
+        private static BoundaryFloatPoint EvaluateScaledCentripetal(
+            BoundaryFloatPoint p0,
+            BoundaryFloatPoint p1,
+            BoundaryFloatPoint p2,
+            BoundaryFloatPoint p3,
+            float pTime,
+            float pTangentScale)
+        {
+            BoundaryFloatPoint curved = CatmullRom(p0, p1, p2, p3, pTime);
+            BoundaryFloatPoint linear = new BoundaryFloatPoint(
+                p1.X + (p2.X - p1.X) * pTime,
+                p1.Y + (p2.Y - p1.Y) * pTime);
+            return new BoundaryFloatPoint(
+                linear.X + (curved.X - linear.X) * pTangentScale,
+                linear.Y + (curved.Y - linear.Y) * pTangentScale);
         }
 
         private static BoundaryFloatPoint CatmullRom(
@@ -373,46 +604,138 @@ namespace AncientWarfare3.core.policy
             return false;
         }
 
-        private static bool TouchesForbiddenGridCorner(
+        private static bool IsSupercoverSafe(
             BoundaryFloatPoint pStart,
             BoundaryFloatPoint pEnd,
             BoundaryCellRaster pRaster,
             BoundaryTier pTier,
             long pLeftOwnerId,
             long pRightOwnerId,
-            bool pAllowRiverWater)
+            bool pAllowRiverWater,
+            IReadOnlyList<BoundaryGridPoint> pRawChain)
         {
             float dx = pEnd.X - pStart.X;
             float dy = pEnd.Y - pStart.Y;
-            if (Math.Abs(dx) <= GridEpsilon || Math.Abs(dy) <= GridEpsilon)
+            if (dx * dx + dy * dy <= GridEpsilon * GridEpsilon)
                 return false;
 
-            int firstX = (int)Math.Ceiling(Math.Min(pStart.X, pEnd.X));
-            int lastX = (int)Math.Floor(Math.Max(pStart.X, pEnd.X));
-            for (int x = firstX; x <= lastX; x++)
-            {
-                float ratio = (x - pStart.X) / dx;
-                if (ratio <= GridEpsilon || ratio >= 1f - GridEpsilon)
-                    continue;
-                float yValue = pStart.Y + dy * ratio;
-                int y = (int)Math.Round(yValue);
-                if (Math.Abs(yValue - y) > GridEpsilon)
-                    continue;
+            var times = new List<float> { 0f, 1f };
+            AddGridCrossingTimes(pStart.X, dx, times);
+            AddGridCrossingTimes(pStart.Y, dy, times);
+            times.Sort();
 
-                for (int cellX = x - 1; cellX <= x; cellX++)
-                for (int cellY = y - 1; cellY <= y; cellY++)
+            var cells = new HashSet<BoundaryGridPoint>();
+            float previous = times[0];
+            for (int i = 1; i < times.Count; i++)
+            {
+                float current = times[i];
+                if (current - previous > GridEpsilon)
                 {
-                    BoundaryCellFacts cell =
-                        pRaster.GetOrInvalid(cellX, cellY);
-                    if (IsForbiddenSupercoverCell(
-                            cell, pTier, pLeftOwnerId,
-                            pRightOwnerId, pAllowRiverWater))
+                    AddTouchedCells(PointAt(
+                        pStart, dx, dy, (previous + current) * 0.5f), cells);
+                }
+                if (current > GridEpsilon && current < 1f - GridEpsilon)
+                {
+                    BoundaryFloatPoint crossing =
+                        PointAt(pStart, dx, dy, current);
+                    if (IsGridCorner(crossing) &&
+                        !RawContains(pRawChain,
+                            new BoundaryGridPoint(
+                                (int)Math.Round(crossing.X),
+                                (int)Math.Round(crossing.Y))))
                     {
-                        return true;
+                        return false;
                     }
+                    AddTouchedCells(crossing, cells);
+                }
+                previous = current;
+            }
+            AddTouchedCells(PointAt(pStart, dx, dy, 0.5f), cells);
+
+            foreach (BoundaryGridPoint key in cells)
+            {
+                BoundaryCellFacts cell = pRaster.GetOrInvalid(key.X, key.Y);
+                if (IsForbiddenSupercoverCell(
+                        cell, pTier, pLeftOwnerId,
+                        pRightOwnerId, pAllowRiverWater))
+                {
+                    return false;
                 }
             }
+            return true;
+        }
+
+        private static bool IsGridCorner(BoundaryFloatPoint pPoint)
+        {
+            return Math.Abs(pPoint.X - Math.Round(pPoint.X)) <= GridEpsilon &&
+                   Math.Abs(pPoint.Y - Math.Round(pPoint.Y)) <= GridEpsilon;
+        }
+
+        private static bool RawContains(
+            IReadOnlyList<BoundaryGridPoint> pRaw,
+            BoundaryGridPoint pPoint)
+        {
+            for (int i = 0; i < pRaw.Count; i++)
+            {
+                if (pRaw[i].Equals(pPoint))
+                    return true;
+            }
             return false;
+        }
+
+        private static void AddGridCrossingTimes(
+            float pStart,
+            float pDelta,
+            List<float> pTimes)
+        {
+            if (Math.Abs(pDelta) <= GridEpsilon)
+                return;
+            float end = pStart + pDelta;
+            int first = (int)Math.Ceiling(Math.Min(pStart, end));
+            int last = (int)Math.Floor(Math.Max(pStart, end));
+            for (int grid = first; grid <= last; grid++)
+            {
+                float ratio = (grid - pStart) / pDelta;
+                if (ratio <= GridEpsilon || ratio >= 1f - GridEpsilon)
+                    continue;
+                bool duplicate = false;
+                for (int i = 0; i < pTimes.Count; i++)
+                {
+                    if (Math.Abs(pTimes[i] - ratio) <= GridEpsilon)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate)
+                    pTimes.Add(ratio);
+            }
+        }
+
+        private static BoundaryFloatPoint PointAt(
+            BoundaryFloatPoint pStart,
+            float pDx,
+            float pDy,
+            float pTime)
+        {
+            return new BoundaryFloatPoint(
+                pStart.X + pDx * pTime,
+                pStart.Y + pDy * pTime);
+        }
+
+        private static void AddTouchedCells(
+            BoundaryFloatPoint pPoint,
+            ISet<BoundaryGridPoint> pCells)
+        {
+            int floorX = (int)Math.Floor(pPoint.X);
+            int floorY = (int)Math.Floor(pPoint.Y);
+            bool onX = Math.Abs(pPoint.X - Math.Round(pPoint.X)) <= GridEpsilon;
+            bool onY = Math.Abs(pPoint.Y - Math.Round(pPoint.Y)) <= GridEpsilon;
+            int minimumX = onX ? floorX - 1 : floorX;
+            int minimumY = onY ? floorY - 1 : floorY;
+            for (int x = minimumX; x <= floorX; x++)
+            for (int y = minimumY; y <= floorY; y++)
+                pCells.Add(new BoundaryGridPoint(x, y));
         }
 
         private static bool IsForbiddenSupercoverCell(
@@ -423,7 +746,7 @@ namespace AncientWarfare3.core.policy
             bool pAllowRiverWater)
         {
             if (!pCell.IsValid)
-                return false;
+                return true;
             if (pAllowRiverWater &&
                 pCell.Water == BoundaryWaterKind.InlandWater)
             {
@@ -499,7 +822,23 @@ namespace AncientWarfare3.core.policy
             float abD = Cross(pA, pB, pD);
             float cdA = Cross(pC, pD, pA);
             float cdB = Cross(pC, pD, pB);
-            return abC * abD < -GridEpsilon && cdA * cdB < -GridEpsilon;
+            if (abC * abD < -GridEpsilon && cdA * cdB < -GridEpsilon)
+                return true;
+            return Math.Abs(abC) <= GridEpsilon && OnSegment(pA, pB, pC) ||
+                   Math.Abs(abD) <= GridEpsilon && OnSegment(pA, pB, pD) ||
+                   Math.Abs(cdA) <= GridEpsilon && OnSegment(pC, pD, pA) ||
+                   Math.Abs(cdB) <= GridEpsilon && OnSegment(pC, pD, pB);
+        }
+
+        private static bool OnSegment(
+            BoundaryFloatPoint pStart,
+            BoundaryFloatPoint pEnd,
+            BoundaryFloatPoint pPoint)
+        {
+            return pPoint.X >= Math.Min(pStart.X, pEnd.X) - GridEpsilon &&
+                   pPoint.X <= Math.Max(pStart.X, pEnd.X) + GridEpsilon &&
+                   pPoint.Y >= Math.Min(pStart.Y, pEnd.Y) - GridEpsilon &&
+                   pPoint.Y <= Math.Max(pStart.Y, pEnd.Y) + GridEpsilon;
         }
 
         private static float Cross(
@@ -574,6 +913,108 @@ namespace AncientWarfare3.core.policy
             var result = new List<BoundaryFloatPoint>(pPoints.Count);
             for (int i = 0; i < pPoints.Count; i++)
                 result.Add(ToFloat(pPoints[i]));
+            return result;
+        }
+
+        private static ISet<BoundaryGridPoint> ExpandAnchorNeighbors(
+            IReadOnlyList<BoundaryGridPoint> pRaw,
+            ISet<BoundaryGridPoint> pAnchors)
+        {
+            var result = new HashSet<BoundaryGridPoint>(pAnchors);
+            for (int i = 0; i < pRaw.Count; i++)
+            {
+                if (!pAnchors.Contains(pRaw[i]))
+                    continue;
+                if (i > 0)
+                    result.Add(pRaw[i - 1]);
+                if (i + 1 < pRaw.Count)
+                    result.Add(pRaw[i + 1]);
+            }
+            return result;
+        }
+
+        private static bool IsNarrowAnchor(
+            BoundaryGridPoint pPoint,
+            BoundaryCellRaster pRaster,
+            BoundaryCurveOptions pOptions)
+        {
+            int allowed = 0;
+            for (int x = pPoint.X - 1; x <= pPoint.X; x++)
+            for (int y = pPoint.Y - 1; y <= pPoint.Y; y++)
+            {
+                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
+                if (!cell.IsLand)
+                    continue;
+                long owner = OwnerId(cell, pOptions.Tier);
+                if (owner == pOptions.LeftOwnerId ||
+                    owner == pOptions.RightOwnerId)
+                {
+                    allowed++;
+                }
+            }
+            return allowed < 4;
+        }
+
+        private static bool TouchesOwner(
+            BoundaryGridPoint pPoint,
+            BoundaryCellRaster pRaster,
+            BoundaryTier pTier,
+            long pOwnerId)
+        {
+            for (int x = pPoint.X - 1; x <= pPoint.X; x++)
+            for (int y = pPoint.Y - 1; y <= pPoint.Y; y++)
+            {
+                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
+                if (cell.IsLand && OwnerId(cell, pTier) == pOwnerId)
+                    return true;
+            }
+            return false;
+        }
+
+        private static int CountOwnerCells(
+            BoundaryCellRaster pRaster,
+            BoundaryTier pTier,
+            long pOwnerId,
+            int pStopAfter)
+        {
+            int count = 0;
+            for (int x = pRaster.OriginX; x < pRaster.MaxXExclusive; x++)
+            for (int y = pRaster.OriginY; y < pRaster.MaxYExclusive; y++)
+            {
+                BoundaryCellFacts cell = pRaster.GetOrInvalid(x, y);
+                if (!cell.IsLand || OwnerId(cell, pTier) != pOwnerId)
+                    continue;
+                count++;
+                if (count >= pStopAfter)
+                    return count;
+            }
+            return count;
+        }
+
+        private static int FindControlSample(
+            IReadOnlyList<BoundaryFloatPoint> pSamples,
+            BoundaryGridPoint pControl,
+            int pStart)
+        {
+            for (int i = Math.Max(0, pStart); i < pSamples.Count; i++)
+            {
+                if (pSamples[i].X == pControl.X &&
+                    pSamples[i].Y == pControl.Y)
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static IReadOnlyList<BoundaryGridPoint> CopyWindow(
+            IReadOnlyList<BoundaryGridPoint> pPoints,
+            int pStart,
+            int pEnd)
+        {
+            var result = new List<BoundaryGridPoint>(pEnd - pStart + 1);
+            for (int i = pStart; i <= pEnd; i++)
+                result.Add(pPoints[i]);
             return result;
         }
 

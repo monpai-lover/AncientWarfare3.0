@@ -511,11 +511,26 @@ namespace AncientWarfare3.core.policy
             bool pClosed,
             bool pUsedRawFallback,
             float pTangentScale)
+            : this(pPoints, pClosed, pUsedRawFallback, pTangentScale,
+                default(BoundaryFloatPoint), default(BoundaryFloatPoint))
+        {
+        }
+
+        public BoundaryCurveDraft(
+            IReadOnlyList<BoundaryFloatPoint> pPoints,
+            bool pClosed,
+            bool pUsedRawFallback,
+            float pTangentScale,
+            BoundaryFloatPoint pStartTangent,
+            BoundaryFloatPoint pEndTangent)
         {
             Points = pPoints;
             Closed = pClosed;
             UsedRawFallback = pUsedRawFallback;
             TangentScale = pTangentScale;
+            StartTangent = pStartTangent;
+            EndTangent = pEndTangent;
+            IsValid = HasTwoDistinctFinitePoints(pPoints);
         }
 
         public IReadOnlyList<BoundaryFloatPoint> Points { get; }
@@ -525,5 +540,37 @@ namespace AncientWarfare3.core.policy
         public bool UsedRawFallback { get; }
 
         public float TangentScale { get; }
+
+        public BoundaryFloatPoint StartTangent { get; }
+
+        public BoundaryFloatPoint EndTangent { get; }
+
+        public bool IsValid { get; }
+
+        private static bool HasTwoDistinctFinitePoints(
+            IReadOnlyList<BoundaryFloatPoint> pPoints)
+        {
+            if (pPoints == null || pPoints.Count < 2)
+                return false;
+            BoundaryFloatPoint first = pPoints[0];
+            if (float.IsNaN(first.X) || float.IsInfinity(first.X) ||
+                float.IsNaN(first.Y) || float.IsInfinity(first.Y))
+            {
+                return false;
+            }
+            bool hasDistinctPoint = false;
+            for (int i = 1; i < pPoints.Count; i++)
+            {
+                BoundaryFloatPoint point = pPoints[i];
+                if (float.IsNaN(point.X) || float.IsInfinity(point.X) ||
+                    float.IsNaN(point.Y) || float.IsInfinity(point.Y))
+                {
+                    return false;
+                }
+                if (!point.Equals(first))
+                    hasDistinctPoint = true;
+            }
+            return hasDistinctPoint;
+        }
     }
 }

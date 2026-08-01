@@ -13,7 +13,12 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         OpenStaircaseProducesARealCurve();
         DegenerateAndClosedChainsRemainStable();
         SmallRegionsDoNotDisappear();
+        TwoEdgeChainsRemainExplicitAndSafe();
         SeamContextIsDeterministic();
+        CanonicalHaloWindowsAreBitIdenticalAcrossChunkSeams();
+        SafetyAnchorsAndLocalToleranceAreDerivedAutomatically();
+        AdaptiveSpacingAndDegenerateGeometryAreStrict();
+        TangentScaleFallbackLevelsAreExplicit();
         AdversarialRasterMatrixRemainsSafe();
     }
 
@@ -133,12 +138,18 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
             new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
                 1, 2, 10f, false, false));
 
-        // Segment 1 has 50 steps; index 30 is its t=0.5 sample.
-        BoundaryFloatPoint midpoint = curve.Points[30];
+        BoundaryFloatPoint midpoint =
+            HierarchicalVassalBoundaryCurveRules.EvaluateCentripetal(
+                new BoundaryFloatPoint(8, 8),
+                new BoundaryFloatPoint(9, 8),
+                new BoundaryFloatPoint(9, 18),
+                new BoundaryFloatPoint(16, 20), 0.5f);
         NearlyEqual(8.746955f, midpoint.X, 0.00001f,
             "non-uniform controls use centripetal Catmull-Rom x");
         NearlyEqual(12.566709f, midpoint.Y, 0.00001f,
             "non-uniform controls use centripetal Catmull-Rom y");
+        Equal(0.25f, curve.TangentScale,
+            "protected non-uniform controls use locally reduced smoothing");
     }
 
     private static void SupercoverRejectsDiagonalThirdOwnerContact()
@@ -158,6 +169,38 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 raster, BoundaryTier.SuzerainSystem, 1, 2,
                 diagonal, 0.45f, false),
             "supercover rejects a diagonal crossing through a four-owner point");
+
+        BoundaryCellRaster shoreline = Raster(4, 4, (x, y) =>
+            y == 2 ? Water(x, y) : Land(x, y, y < 2 ? 1 : 2));
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
+                new BoundaryFloatPoint(0.2f, 2f),
+                new BoundaryFloatPoint(3.8f, 2f), shoreline,
+                BoundaryTier.SuzerainSystem, 1, 2,
+                new[] { new BoundaryGridPoint(0, 2),
+                    new BoundaryGridPoint(4, 2) }, 0.45f, false),
+            "supercover checks both sides of a coincident grid edge");
+
+        BoundaryCellRaster clipped = RasterAt(2, 2, 2, 2,
+            (x, y) => Land(x, y, 1));
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
+                new BoundaryFloatPoint(1.2f, 1.2f),
+                new BoundaryFloatPoint(2.8f, 2.8f), clipped,
+                BoundaryTier.SuzerainSystem, 1, 2, diagonal, 2f, false),
+            "supercover rejects invalid cells touched at an interior corner");
+
+        BoundaryCellRaster paired = Raster(4, 4, (x, y) =>
+            Land(x, y, (x + y) % 2 == 0 ? 1 : 2));
+        var rawWithoutCorner = new[]
+        {
+            new BoundaryGridPoint(1, 1), new BoundaryGridPoint(3, 1),
+            new BoundaryGridPoint(3, 3)
+        };
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeSegment(
+                new BoundaryFloatPoint(1.2f, 1.2f),
+                new BoundaryFloatPoint(2.8f, 2.8f), paired,
+                BoundaryTier.SuzerainSystem, 1, 2,
+                rawWithoutCorner, 2f, false),
+            "candidate cannot introduce a diagonal point contact absent from raw");
     }
 
     private static void OpenStaircaseProducesARealCurve()
@@ -242,6 +285,262 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
             "seam tangent is finite");
     }
 
+    private static void CanonicalHaloWindowsAreBitIdenticalAcrossChunkSeams()
+    {
+        var cases = new[]
+        {
+            new[]
+            {
+                new BoundaryGridPoint(30, 10), new BoundaryGridPoint(31, 10),
+                new BoundaryGridPoint(32, 11), new BoundaryGridPoint(33, 11),
+                new BoundaryGridPoint(34, 12)
+            },
+            new[]
+            {
+                new BoundaryGridPoint(30, 30), new BoundaryGridPoint(31, 31),
+                new BoundaryGridPoint(32, 32), new BoundaryGridPoint(33, 33),
+                new BoundaryGridPoint(34, 34)
+            },
+            new[]
+            {
+                new BoundaryGridPoint(16, 16), new BoundaryGridPoint(48, 16),
+                new BoundaryGridPoint(48, 48), new BoundaryGridPoint(16, 48),
+                new BoundaryGridPoint(16, 16)
+            },
+            new[]
+            {
+                new BoundaryGridPoint(31, 31), new BoundaryGridPoint(65, 31),
+                new BoundaryGridPoint(65, 65), new BoundaryGridPoint(31, 65),
+                new BoundaryGridPoint(31, 31)
+            }
+        };
+        BoundaryCellRaster raster = RasterAt(0, 0, 96, 96,
+            (x, y) => Land(x, y, 1));
+
+        foreach (BoundaryGridPoint[] canonical in cases)
+        {
+            bool closed = canonical[0].Equals(canonical[^1]);
+            int seamIndex = closed ? 2 : canonical.Length / 2;
+            var options = new BoundaryCurveOptions(
+                BoundaryTier.SuzerainSystem, 1, 2, 50f, closed, false);
+            var protectedPoints = new HashSet<BoundaryGridPoint>(canonical);
+            BoundaryCurveDraft left =
+                HierarchicalVassalBoundaryCurveRules.FitCanonicalWindow(
+                    canonical, 0, seamIndex, protectedPoints, raster, options);
+            BoundaryCurveDraft right =
+                HierarchicalVassalBoundaryCurveRules.FitCanonicalWindow(
+                    canonical, seamIndex, canonical.Length - 1,
+                    protectedPoints, raster, options);
+
+            BitEqual(left.Points[^1], right.Points[0],
+                "neighbor windows share bit-identical seam position");
+            BitEqual(left.EndTangent, right.StartTangent,
+                "neighbor windows share bit-identical seam tangent");
+            Equal(BitConverter.SingleToInt32Bits(left.TangentScale),
+                BitConverter.SingleToInt32Bits(right.TangentScale),
+                "neighbor windows accept bit-identical tangent scale");
+
+            BoundaryCurveDraft rebuiltRightFirst =
+                HierarchicalVassalBoundaryCurveRules.FitCanonicalWindow(
+                    canonical.ToArray(), seamIndex, canonical.Length - 1,
+                    new HashSet<BoundaryGridPoint>(canonical.Reverse()),
+                    raster, options);
+            BitEqual(right.Points[0], rebuiltRightFirst.Points[0],
+                "seam position is rebuild-order independent");
+            BitEqual(right.StartTangent, rebuiltRightFirst.StartTangent,
+                "seam tangent is rebuild-order independent");
+        }
+    }
+
+    private static void SafetyAnchorsAndLocalToleranceAreDerivedAutomatically()
+    {
+        var fork = new BoundaryGridPoint(2, 2);
+        var riverRaw = new[]
+        {
+            new BoundaryGridPoint(1, 1), fork,
+            new BoundaryGridPoint(3, 2), fork,
+            new BoundaryGridPoint(2, 3)
+        };
+        BoundaryCellRaster river = Raster(6, 6, (x, y) =>
+            x == 2 ? Water(x, y) : Land(x, y, x < 2 ? 1 : 2));
+        var riverOptions = new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, 0.45f, false, true);
+        ISet<BoundaryGridPoint> riverAnchors =
+            HierarchicalVassalBoundaryCurveRules.DeriveProtectedAnchors(
+                riverRaw, null, river, riverOptions);
+        Equal(true, riverAnchors.Contains(riverRaw[0]),
+            "river endpoint is automatically protected");
+        Equal(true, riverAnchors.Contains(riverRaw[^1]),
+            "opposite river endpoint is automatically protected");
+        Equal(true, riverAnchors.Contains(fork),
+            "repeated river fork is automatically protected");
+
+        BoundaryCellRaster island = Raster(7, 7, (x, y) =>
+            Land(x, y, x == 3 && y == 3 ? 1 : 2));
+        var islandPoint = new BoundaryGridPoint(3, 3);
+        var islandRaw = new[]
+        {
+            islandPoint, new BoundaryGridPoint(4, 3),
+            new BoundaryGridPoint(4, 4), new BoundaryGridPoint(3, 4),
+            islandPoint
+        };
+        var options = new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, 0.45f, true, false);
+        ISet<BoundaryGridPoint> islandAnchors =
+            HierarchicalVassalBoundaryCurveRules.DeriveProtectedAnchors(
+                islandRaw, null, island, options);
+        Equal(true, islandAnchors.Contains(islandPoint),
+            "small-island point is automatically protected");
+        NearlyEqual(0.20f,
+            HierarchicalVassalBoundaryCurveRules.LocalMaximumDeviationAt(
+                islandPoint, islandAnchors, island, options), 0.00001f,
+            "small island uses local protected deviation");
+
+        BoundaryCellRaster ordinary = VerticalOwnerPair(16, 16);
+        var ordinaryPoint = new BoundaryGridPoint(8, 8);
+        NearlyEqual(0.45f,
+            HierarchicalVassalBoundaryCurveRules.LocalMaximumDeviationAt(
+                ordinaryPoint, new HashSet<BoundaryGridPoint>(),
+                ordinary, options), 0.00001f,
+            "ordinary terrain retains normal visual deviation");
+    }
+
+    private static void AdaptiveSpacingAndDegenerateGeometryAreStrict()
+    {
+        BoundaryCellRaster raster = Raster(40, 40, (x, y) => Land(x, y, 1));
+        var raw = new[]
+        {
+            new BoundaryGridPoint(10, 10), new BoundaryGridPoint(11, 10),
+            new BoundaryGridPoint(11, 11), new BoundaryGridPoint(30, 30)
+        };
+        BoundaryCurveDraft curved = HierarchicalVassalBoundaryCurveRules.Fit(
+            raw, new HashSet<BoundaryGridPoint>(raw), raster,
+            new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                1, 2, 50f, false, false));
+        Equal(false, curved.UsedRawFallback,
+            "high-curvature spacing fixture produces a fitted curve");
+        Equal(true, MaximumSpacing(curved.Points) <=
+                    HierarchicalVassalBoundaryCurveRules.MaximumSampleSpacing,
+            "adaptive subdivision bounds actual sample spacing");
+        IReadOnlyList<BoundaryFloatPoint> span =
+            HierarchicalVassalBoundaryCurveRules.SampleCentripetalSpan(
+                new BoundaryFloatPoint(10, 10),
+                new BoundaryFloatPoint(10.05f, 10),
+                new BoundaryFloatPoint(10.10f, 10.05f),
+                new BoundaryFloatPoint(35, 35), 1f);
+        Equal(true, MaximumSpacing(span) <=
+                    HierarchicalVassalBoundaryCurveRules.MaximumSampleSpacing,
+            "recursive span subdivision measures the actual curve");
+
+        var duplicate = new[]
+        {
+            new BoundaryGridPoint(4, 4), new BoundaryGridPoint(4, 4),
+            new BoundaryGridPoint(4, 4)
+        };
+        BoundaryCurveDraft invalid = HierarchicalVassalBoundaryCurveRules.Fit(
+            duplicate, null, raster,
+            new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                1, 2, 0.45f, false, false));
+        Equal(false, invalid.IsValid,
+            "duplicate-only chains are explicitly invalid");
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                invalid, raster, duplicate,
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false)),
+            "duplicate-only chains are never considered safe");
+        var nonFinite = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(2, 2),
+            new BoundaryFloatPoint(float.NaN, 3)
+        }, false, false, 1f);
+        Equal(false, nonFinite.IsValid,
+            "a non-finite tail point invalidates the whole draft");
+
+        var overlap = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(4, 1),
+            new BoundaryFloatPoint(2, 1), new BoundaryFloatPoint(5, 1)
+        }, false, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                overlap, raster, new[]
+                {
+                    new BoundaryGridPoint(1, 1), new BoundaryGridPoint(4, 1),
+                    new BoundaryGridPoint(2, 1), new BoundaryGridPoint(5, 1)
+                }, new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 50f, false, false)),
+            "collinear overlap is a self intersection");
+
+        var endpointTouch = new BoundaryCurveDraft(new[]
+        {
+            new BoundaryFloatPoint(1, 1), new BoundaryFloatPoint(4, 1),
+            new BoundaryFloatPoint(4, 4), new BoundaryFloatPoint(1, 1),
+            new BoundaryFloatPoint(1, 4)
+        }, false, false, 1f);
+        Equal(false, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                endpointTouch, raster, new[]
+                {
+                    new BoundaryGridPoint(1, 1), new BoundaryGridPoint(4, 1),
+                    new BoundaryGridPoint(4, 4), new BoundaryGridPoint(1, 1),
+                    new BoundaryGridPoint(1, 4)
+                }, new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 50f, false, false)),
+            "non-adjacent endpoint contact is a self intersection");
+    }
+
+    private static void TangentScaleFallbackLevelsAreExplicit()
+    {
+        BoundaryCellRaster raster = Raster(24, 24, (x, y) => Land(x, y, 1));
+        var corner = new[]
+        {
+            new BoundaryGridPoint(8, 5), new BoundaryGridPoint(8, 8),
+            new BoundaryGridPoint(11, 8), new BoundaryGridPoint(11, 11)
+        };
+        var levels = new[]
+        {
+            (Deviation: 0.45f, Scale: 1f, Raw: false),
+            (Deviation: 0.15f, Scale: 0.5f, Raw: false),
+            (Deviation: 0.07f, Scale: 0.25f, Raw: false),
+            (Deviation: 0.001f, Scale: 0f, Raw: true)
+        };
+        foreach (var level in levels)
+        {
+            BoundaryCurveDraft curve = HierarchicalVassalBoundaryCurveRules.Fit(
+                corner, new HashSet<BoundaryGridPoint> { corner[0], corner[^1] },
+                raster, new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, level.Deviation, false, false));
+            Equal(level.Raw, curve.UsedRawFallback,
+                "fallback raw state at deviation " + level.Deviation);
+            Equal(level.Scale, curve.TangentScale,
+                "accepted tangent scale at deviation " + level.Deviation);
+        }
+
+        var hazardousRaw = new[]
+        {
+            new BoundaryGridPoint(3, 0), new BoundaryGridPoint(3, 2),
+            new BoundaryGridPoint(4, 2), new BoundaryGridPoint(4, 4),
+            new BoundaryGridPoint(3, 4), new BoundaryGridPoint(3, 6)
+        };
+        var hazards = new[]
+        {
+            Raster(8, 7, (x, y) =>
+                x == 3 && (y == 2 || y == 3) ? Water(x, y) :
+                Land(x, y, x < 3 ? 1 : 2)),
+            Raster(8, 7, (x, y) => Land(x, y,
+                x == 3 && (y == 2 || y == 3) ? 3 : x < 3 ? 1 : 2))
+        };
+        foreach (BoundaryCellRaster hazard in hazards)
+        {
+            BoundaryCurveDraft curve = HierarchicalVassalBoundaryCurveRules.Fit(
+                hazardousRaw, null, hazard,
+                new BoundaryCurveOptions(BoundaryTier.SuzerainSystem,
+                    1, 2, 0.45f, false, false));
+            Equal(true, curve.UsedRawFallback,
+                "narrow water and third-owner hazards force raw fallback");
+            Equal(0f, curve.TangentScale,
+                "hazard fallback disables curve tangents");
+        }
+    }
+
     private static void SmallRegionsDoNotDisappear()
     {
         BoundaryCellRaster island = Raster(7, 7, (x, y) =>
@@ -280,6 +579,24 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
             "a near-180-degree chain remains finite or falls back safely");
     }
 
+    private static void TwoEdgeChainsRemainExplicitAndSafe()
+    {
+        BoundaryCellRaster raster = VerticalOwnerPair(8, 8);
+        var twoEdges = new[]
+        {
+            new BoundaryGridPoint(4, 2), new BoundaryGridPoint(4, 3),
+            new BoundaryGridPoint(4, 4)
+        };
+        var options = new BoundaryCurveOptions(
+            BoundaryTier.SuzerainSystem, 1, 2, 0.20f, false, false);
+        BoundaryCurveDraft curve = HierarchicalVassalBoundaryCurveRules.Fit(
+            twoEdges, null, raster, options);
+        Equal(true, curve.IsValid, "two-edge chain remains valid");
+        Equal(true, HierarchicalVassalBoundaryCurveRules.IsSafeCurve(
+                curve, raster, twoEdges, options),
+            "two-edge chain remains topology-safe");
+    }
+
     private static void AdversarialRasterMatrixRemainsSafe()
     {
         var rasters = new[]
@@ -290,6 +607,22 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
             // One-cell land bridge and hooked peninsula.
             Raster(8, 8, (x, y) => Land(x, y,
                 x < 2 || y == 4 && x <= 5 ? 1 : 2)),
+            // Two-cell land bridge.
+            Raster(8, 8, (x, y) => Land(x, y,
+                x < 2 || y >= 3 && y <= 4 && x <= 6 ? 1 : 2)),
+            // Hooked bay cut into the right-hand owner.
+            Raster(8, 8, (x, y) =>
+                x >= 4 && y >= 3 && (x == 4 || y == 3) ? Water(x, y) :
+                Land(x, y, x < 4 ? 1 : 2)),
+            // Acute one-tile peninsula.
+            Raster(8, 8, (x, y) => Land(x, y,
+                x < 2 || x == y && x <= 5 ? 1 : 2)),
+            // Enclave wholly surrounded by the first owner.
+            Raster(8, 8, (x, y) => Land(x, y,
+                x >= 3 && x <= 4 && y >= 3 && y <= 4 ? 2 : 1)),
+            // Three-owner T junction.
+            Raster(8, 8, (x, y) => Land(x, y,
+                y < 4 ? 1 : x < 4 ? 2 : 3)),
             // One-cell strait between different banks.
             Raster(8, 8, (x, y) =>
                 x == 3 && y >= 2 && y <= 5 ? Water(x, y) :
@@ -313,7 +646,10 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
                 x == 5 && y == 5 ? 1 : 2)),
             // High-coordinate chunk and clipped-map-style origin.
             RasterAt(100000, 100000, 8, 8,
-                (x, y) => Land(x, y, x - 100000 < 4 ? 1 : 2))
+                (x, y) => Land(x, y, x - 100000 < 4 ? 1 : 2)),
+            // Political boundary terminating at a clipped map corner.
+            Raster(8, 8, (x, y) => Land(x, y,
+                x + y < 4 ? 1 : 2))
         };
 
         for (int rasterIndex = 0; rasterIndex < rasters.Length; rasterIndex++)
@@ -441,5 +777,14 @@ internal static class HierarchicalVassalBoundaryCurveRulesTests
         if (Math.Abs(expected - actual) > tolerance)
             throw new InvalidOperationException(
                 name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void BitEqual(
+        BoundaryFloatPoint expected, BoundaryFloatPoint actual, string name)
+    {
+        Equal(BitConverter.SingleToInt32Bits(expected.X),
+            BitConverter.SingleToInt32Bits(actual.X), name + " x");
+        Equal(BitConverter.SingleToInt32Bits(expected.Y),
+            BitConverter.SingleToInt32Bits(actual.Y), name + " y");
     }
 }
