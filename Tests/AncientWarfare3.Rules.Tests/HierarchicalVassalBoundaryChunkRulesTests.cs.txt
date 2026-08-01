@@ -1,0 +1,100 @@
+using AncientWarfare3.core.policy;
+
+internal static class HierarchicalVassalBoundaryChunkRulesTests
+{
+    public static void Run()
+    {
+        Equal(32, HierarchicalVassalBoundaryChunkRules.ChunkSize,
+            "boundary chunks use the fixed 32-tile size");
+        Equal(2, HierarchicalVassalBoundaryChunkRules.Halo,
+            "boundary captures carry a two-tile topology halo");
+        Equal(2, HierarchicalVassalBoundaryChunkRules.CaptureBudgetPerFrame,
+            "main-thread boundary capture is bounded");
+        Equal(2, HierarchicalVassalBoundaryChunkRules.UploadBudgetPerFrame,
+            "main-thread boundary upload is bounded");
+
+        Equal(new BoundaryChunkKey(0, 0),
+            HierarchicalVassalBoundaryChunkRules.ForTile(31, 31),
+            "the final tile in a chunk stays in that chunk");
+        Equal(new BoundaryChunkKey(1, 1),
+            HierarchicalVassalBoundaryChunkRules.ForTile(32, 32),
+            "the first tile across a boundary enters the next chunk");
+        Equal(new BoundaryChunkKey(-1, -1),
+            HierarchicalVassalBoundaryChunkRules.ForTile(-1, -32),
+            "negative tile coordinates use floor division");
+        Equal(new BoundaryChunkKey(-2, -2),
+            HierarchicalVassalBoundaryChunkRules.ForTile(-33, -64),
+            "negative exact and non-exact multiples remain stable");
+
+        Equal(new BoundaryChunkBounds(
+                captureMinX: 30, captureMinY: 30,
+                captureMaxXExclusive: 66, captureMaxYExclusive: 66,
+                interiorMinX: 32, interiorMinY: 32,
+                interiorMaxXExclusive: 64, interiorMaxYExclusive: 64),
+            HierarchicalVassalBoundaryChunkRules.CaptureBounds(
+                new BoundaryChunkKey(1, 1), 128, 128),
+            "interior chunks capture a two-tile halo");
+        Equal(new BoundaryChunkBounds(
+                captureMinX: 0, captureMinY: 0,
+                captureMaxXExclusive: 34, captureMaxYExclusive: 34,
+                interiorMinX: 0, interiorMinY: 0,
+                interiorMaxXExclusive: 32, interiorMaxYExclusive: 32),
+            HierarchicalVassalBoundaryChunkRules.CaptureBounds(
+                new BoundaryChunkKey(0, 0), 40, 40),
+            "world-edge captures clip their halo without shifting interiors");
+
+        IReadOnlyList<BoundaryChunkKey> middle =
+            HierarchicalVassalBoundaryChunkRules.DirtyNeighborhood(
+                new BoundaryChunkKey(2, 2), chunkCountX: 8, chunkCountY: 8);
+        Equal(9, middle.Count,
+            "a local change dirties its chunk and eight neighbors");
+        Equal(new BoundaryChunkKey(1, 1), middle[0],
+            "dirty neighborhoods are returned in stable key order");
+        Equal(new BoundaryChunkKey(3, 3), middle[8],
+            "dirty neighborhood ordering has a stable final key");
+        Equal(4, HierarchicalVassalBoundaryChunkRules.DirtyNeighborhood(
+                new BoundaryChunkKey(0, 0), 8, 8).Count,
+            "world corners clip invalid neighbor chunks");
+
+        Equal(true, HierarchicalVassalBoundaryChunkRules.AcceptResult(
+                resultWorldGeneration: 4, currentWorldGeneration: 4,
+                resultRevision: 9, currentRevision: 9,
+                resultLayer: BoundaryDisplayLayer.Countries,
+                currentLayer: BoundaryDisplayLayer.Countries),
+            "matching generation revision and layer is accepted");
+        Equal(false, HierarchicalVassalBoundaryChunkRules.AcceptResult(
+                4, 5, 9, 9, BoundaryDisplayLayer.Countries,
+                BoundaryDisplayLayer.Countries),
+            "a late result from an old world is rejected");
+        Equal(false, HierarchicalVassalBoundaryChunkRules.AcceptResult(
+                4, 4, 8, 9, BoundaryDisplayLayer.Countries,
+                BoundaryDisplayLayer.Countries),
+            "a stale chunk revision is rejected");
+        Equal(false, HierarchicalVassalBoundaryChunkRules.AcceptResult(
+                4, 4, 9, 9, BoundaryDisplayLayer.Countries,
+                BoundaryDisplayLayer.Cities),
+            "a result for the inactive display layer is rejected");
+
+        var facts = new BoundaryCellFacts(
+            x: 5, y: 7, isValid: true, water: BoundaryWaterKind.Land,
+            height: 213, systemId: 11, realmId: 12, cityId: 13,
+            rgba: 0x336699CC);
+        Equal(true, facts.IsLand,
+            "valid land facts are renderable");
+        Equal((byte)213, facts.Height,
+            "cell facts preserve native WorldTile height");
+        Equal(false, new BoundaryCellFacts(
+                x: -1, y: -1, isValid: false,
+                water: BoundaryWaterKind.Land,
+                height: 0, systemId: -1, realmId: -1, cityId: -1,
+                rgba: 0).IsLand,
+            "invalid clipped cells never masquerade as land");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(
+                name + ": expected " + expected + ", got " + actual);
+    }
+}
