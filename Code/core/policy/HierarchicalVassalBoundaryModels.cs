@@ -368,4 +368,108 @@ namespace AncientWarfare3.core.policy
 
         public HashSet<BoundaryGridPoint> ProtectedVertices { get; }
     }
+
+    public readonly struct BoundaryFloatPoint : IEquatable<BoundaryFloatPoint>
+    {
+        public BoundaryFloatPoint(float pX, float pY)
+        {
+            X = pX;
+            Y = pY;
+        }
+
+        public float X { get; }
+
+        public float Y { get; }
+
+        public bool Equals(BoundaryFloatPoint pOther)
+        {
+            return X.Equals(pOther.X) && Y.Equals(pOther.Y);
+        }
+
+        public override bool Equals(object pValue)
+        {
+            return pValue is BoundaryFloatPoint other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((X.GetHashCode() * 397) ^ Y.GetHashCode());
+        }
+    }
+
+    public readonly struct BoundaryGridEdgeKey : IEquatable<BoundaryGridEdgeKey>
+    {
+        public BoundaryGridEdgeKey(
+            BoundaryGridPoint pFirst,
+            BoundaryGridPoint pSecond)
+        {
+            if (pFirst.CompareTo(pSecond) <= 0)
+            {
+                First = pFirst;
+                Second = pSecond;
+            }
+            else
+            {
+                First = pSecond;
+                Second = pFirst;
+            }
+        }
+
+        public BoundaryGridPoint First { get; }
+
+        public BoundaryGridPoint Second { get; }
+
+        public bool Equals(BoundaryGridEdgeKey pOther)
+        {
+            return First.Equals(pOther.First) && Second.Equals(pOther.Second);
+        }
+
+        public override bool Equals(object pValue)
+        {
+            return pValue is BoundaryGridEdgeKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((First.GetHashCode() * 397) ^ Second.GetHashCode());
+        }
+    }
+
+    public sealed class BoundaryPoliticalRiverChain
+    {
+        public BoundaryPoliticalRiverChain(
+            IReadOnlyList<BoundaryFloatPoint> pPoints,
+            BoundaryTier pTier,
+            long pLeftOwnerId,
+            long pRightOwnerId)
+        {
+            Points = pPoints;
+            Tier = pTier;
+            LeftOwnerId = pLeftOwnerId;
+            RightOwnerId = pRightOwnerId;
+        }
+
+        public IReadOnlyList<BoundaryFloatPoint> Points { get; }
+
+        public BoundaryTier Tier { get; }
+
+        public long LeftOwnerId { get; }
+
+        public long RightOwnerId { get; }
+    }
+
+    public sealed class BoundaryRiverDraft
+    {
+        public BoundaryRiverDraft(
+            IReadOnlyList<BoundaryPoliticalRiverChain> pPoliticalChains,
+            HashSet<BoundaryGridEdgeKey> pShoreEdgesToSuppress)
+        {
+            PoliticalChains = pPoliticalChains;
+            ShoreEdgesToSuppress = pShoreEdgesToSuppress;
+        }
+
+        public IReadOnlyList<BoundaryPoliticalRiverChain> PoliticalChains { get; }
+
+        public HashSet<BoundaryGridEdgeKey> ShoreEdgesToSuppress { get; }
+    }
 }
