@@ -68,9 +68,7 @@ namespace AncientWarfare3.core.lineage
             NobleTitleSnapshot title = NobleRankService.ReadHot(pActor);
             bool holdsMaleNobleTitle = title.IsActive &&
                                        title.Style == NobleTitleStyle.Male;
-            pActor.data.get(LineageKeys.LINEAGE_STATUS,
-                out string lineageStatus, LineageStatus.NONE);
-            bool hasNobleIdentity = lineageStatus == LineageStatus.NOBLE;
+            bool hasNobleIdentity = NobleIdentityService.IsNobleActor(pActor);
             float result = DynasticReproductionRules
                 .ReproductionDecisionWeight(
                 pOriginalWeight, usesDynasticSystem,
@@ -88,6 +86,9 @@ namespace AncientWarfare3.core.lineage
         private static bool NeedsWindow(Actor pActor)
         {
             if (pActor?.data == null) return false;
+            Actor partner = LivingPartner(pActor);
+            if (FamilyExpansionService.NeedsExpansion(pActor, partner))
+                return true;
             return DynasticReproductionRules
                 .NeedsCivilianReproductionWindow(
                     IsDynasticIdentity(pActor),
@@ -99,9 +100,7 @@ namespace AncientWarfare3.core.lineage
 
         private static bool IsDynasticIdentity(Actor pActor)
         {
-            pActor.data.get(LineageKeys.LINEAGE_STATUS,
-                out string status, LineageStatus.NONE);
-            if (status == LineageStatus.NOBLE) return true;
+            if (NobleIdentityService.IsNobleActor(pActor)) return true;
             pActor.data.get(LineageKeys.ROYAL_CHILD,
                 out bool royalChild, false);
             return royalChild || FeudatoryService.IsActivePrince(pActor);

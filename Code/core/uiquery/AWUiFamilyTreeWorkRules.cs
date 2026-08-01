@@ -77,6 +77,15 @@ namespace AncientWarfare3.core.uiquery
                        StringComparison.Ordinal);
         }
 
+        public bool AcceptStableWorld(AWUiRetryTicket ticket,
+            long currentWorldGeneration, string currentSpecKey)
+        {
+            return _active && ticket.Generation == _current.Generation &&
+                   ticket.WorldGeneration == currentWorldGeneration &&
+                   string.Equals(ticket.SpecKey, currentSpecKey ?? string.Empty,
+                       StringComparison.Ordinal);
+        }
+
         public bool TryStart(AWUiRetryTicket ticket, long currentFrame)
         {
             if (!_active || _inFlight || Exhausted ||

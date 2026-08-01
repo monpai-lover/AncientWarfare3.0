@@ -8,6 +8,11 @@ namespace AncientWarfare3.core.db
         [TableItemDef(pIsPrimary: true)] public long kingdom_id;
 
         public string kingdom_name;
+        [TableItemDef(pDefaultValue: "")] public string profile_id;
+        [TableItemDef(pDefaultValue: "default")] public string government_state;
+        [TableItemDef(pDefaultValue: "0")] public int royal_authority;
+        [TableItemDef(pDefaultValue: "0")] public int migration_version;
+        [TableItemDef(pDefaultValue: "")] public string obsolete_node_ids;
         public string class_state;
         public string army_state;
         public string name_state;

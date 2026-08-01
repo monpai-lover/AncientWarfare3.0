@@ -148,6 +148,33 @@ namespace AncientWarfare3.core.lineage
             catch { return 0; }
         }
 
+        public static bool MarkGoalCompleted(SQLiteConnection pDb,
+            long pWarId, long pWarGoalId, int pCompletionScore,
+            double pCompletedTime, long pCompletionRevision)
+        {
+            if (pDb == null || pWarId < 0 || pWarGoalId < 0) return false;
+            try
+            {
+                using var command = new SQLiteCommand(pDb)
+                {
+                    CommandText = "UPDATE " + TableName + " SET " +
+                        "COMPLETED=1,COMPLETED_TIME=@time," +
+                        "COMPLETION_SCORE=@score," +
+                        "COMPLETION_REVISION=@revision " +
+                        "WHERE WAR_ID=@war AND WAR_GOAL_ID=@goal " +
+                        "AND RESOLVED=0 AND COMPLETED=0"
+                };
+                command.Parameters.AddWithValue("@time", pCompletedTime);
+                command.Parameters.AddWithValue("@score", pCompletionScore);
+                command.Parameters.AddWithValue("@revision",
+                    pCompletionRevision);
+                command.Parameters.AddWithValue("@war", pWarId);
+                command.Parameters.AddWithValue("@goal", pWarGoalId);
+                return command.ExecuteNonQuery() > 0;
+            }
+            catch { return false; }
+        }
+
         public static IReadOnlyList<WarGoalSettlementSnapshot>
             ReadOpenSettlementGoals(SQLiteConnection pDb, long pWarId)
         {

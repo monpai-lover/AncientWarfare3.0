@@ -21,6 +21,11 @@ namespace AncientWarfare3.core.policy
 
     internal sealed class KingdomPolicySnapshot
     {
+        public string profile_id = "";
+        public string government_state = "default";
+        public int royal_authority;
+        public int migration_version;
+        public string obsolete_node_ids = "";
         public string class_state = "";
         public string army_state = "";
         public string name_state = "";
@@ -69,6 +74,24 @@ namespace AncientWarfare3.core.policy
         {
             _techFrontierCacheYear = int.MinValue;
             _techFrontierMaxLevel = 1;
+            KingdomPolicyEffectService.ClearRuntime();
+        }
+
+        internal static int EnsureWorldInitialized()
+        {
+            int initialized = 0;
+            if (World.world?.kingdoms == null) return initialized;
+            foreach (Kingdom kingdom in World.world.kingdoms)
+            {
+                if (kingdom?.data == null || kingdom.isRekt()) continue;
+                KingdomPolicyProfileId profile =
+                    KingdomPolicyProfileService.EnsureAssigned(kingdom);
+                if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                        profile)) continue;
+                EnsureInitialized(kingdom);
+                initialized++;
+            }
+            return initialized;
         }
 
         public static void OnKingdomYear(Kingdom pKingdom)
@@ -88,15 +111,11 @@ namespace AncientWarfare3.core.policy
             if (elapsedYears <= 0) return;
             pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, currentYear);
 
-            long benchmark = UpdateAgeBenchmark.Begin();
-            try { AddYearlyPoints(pKingdom, elapsedYears); }
-            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyPointsIndex, benchmark); }
-
             EraChangeTriggerService.TryProcessAnnualAi(pKingdom);
 
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
-            benchmark = UpdateAgeBenchmark.Begin();
+            long benchmark = UpdateAgeBenchmark.Begin();
             try { KingdomPolicyAI.TryFillEmptySlots(pKingdom); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAiIndex, benchmark); }
 
@@ -104,15 +123,9 @@ namespace AncientWarfare3.core.policy
             try { AdvanceCurrent(pKingdom, PolicyNodeKind.Tech, elapsedYears); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceTechIndex, benchmark); }
 
-            AdvanceCoreFabrication(pKingdom);
-
             benchmark = UpdateAgeBenchmark.Begin();
             try { AdvanceCurrent(pKingdom, PolicyNodeKind.Social, elapsedYears); }
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceSocialIndex, benchmark); }
-
-            benchmark = UpdateAgeBenchmark.Begin();
-            try { AdvanceCurrent(pKingdom, PolicyNodeKind.Decision, elapsedYears); }
-            finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyAdvanceDecisionIndex, benchmark); }
 
             TryStartCoreFabrication(pKingdom);
             StartNextQueuedDecisionIfEmpty(pKingdom);
@@ -133,9 +146,74 @@ namespace AncientWarfare3.core.policy
             finally { UpdateAgeBenchmark.End(UpdateAgeBenchmarkRules.KingdomPolicyMapDirtyIndex, benchmark); }
         }
 
+        internal static void OnKingdomDecisionMonth(Kingdom pKingdom,
+            int pMonthKey)
+        {
+            if (pKingdom?.data == null || pKingdom.isRekt()) return;
+            if (!IsPolicyEnabledForKingdom(pKingdom)) return;
+            EnsureInitialized(pKingdom);
+            pKingdom.data.get(LineageKeys.POLICY_LAST_DECISION_MONTH,
+                out int lastMonthKey, int.MinValue);
+            if (!KingdomDecisionMonthlyRules.ShouldProcessMonth(pMonthKey,
+                    lastMonthKey)) return;
+            pKingdom.data.set(LineageKeys.POLICY_LAST_DECISION_MONTH,
+                pMonthKey);
+
+            AddMonthlyPoints(pKingdom);
+            TryStartCoreFabrication(pKingdom);
+            AdvanceCoreFabrication(pKingdom,
+                KingdomDecisionMonthlyRules.MonthlyYearFraction);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
+            long benchmark = UpdateAgeBenchmark.Begin();
+            try
+            {
+                AdvanceCurrent(pKingdom, PolicyNodeKind.Decision,
+                    KingdomDecisionMonthlyRules.MonthlyYearFraction);
+            }
+            finally
+            {
+                UpdateAgeBenchmark.End(
+                    UpdateAgeBenchmarkRules.KingdomPolicyAdvanceDecisionIndex,
+                    benchmark);
+            }
+            TryStartCoreFabrication(pKingdom);
+            StartNextQueuedDecisionIfEmpty(pKingdom);
+            UpsertSnapshot(pKingdom);
+        }
+
         public static bool CanUsePolicySystem(Kingdom pKingdom)
         {
             return IsSupportedPolicyKingdom(pKingdom);
+        }
+
+        public static KingdomPolicyProfileId GetPolicyProfile(
+            Kingdom pKingdom)
+        {
+            return KingdomPolicyProfileService.TryGet(pKingdom,
+                out KingdomPolicyProfileId profileId)
+                ? profileId
+                : KingdomPolicyProfileId.None;
+        }
+
+        public static IReadOnlyList<KingdomPolicyDef> GetNodes(
+            Kingdom pKingdom, PolicyNodeKind pKind)
+        {
+            return KingdomPolicyDefs.GetNodes(GetPolicyProfile(pKingdom),
+                pKind);
+        }
+
+        public static IReadOnlyList<KingdomPolicyDef> GetResearchNodes(
+            Kingdom pKingdom)
+        {
+            return KingdomPolicyDefs.GetResearchNodes(
+                GetPolicyProfile(pKingdom));
+        }
+
+        public static KingdomPolicyDef GetDefinition(Kingdom pKingdom,
+            string pNodeId)
+        {
+            return KingdomPolicyDefs.Get(GetPolicyProfile(pKingdom),
+                pNodeId);
         }
 
         public static bool IsPolicyEnabledForKingdom(Kingdom pKingdom)
@@ -143,7 +221,8 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null || pKingdom.isRekt()) return false;
             if (!IsSupportedPolicyKingdom(pKingdom)) return false;
 
-            bool defaultEnabled = XiaizationService.DefaultPolicyEnabled(pKingdom);
+            bool defaultEnabled = KingdomPolicyProfileRules.
+                IsResolvableKingdomProfile(GetPolicyProfile(pKingdom));
             pKingdom.data.get(LineageKeys.POLICY_ENABLED, out bool enabled, defaultEnabled);
             return enabled;
         }
@@ -151,7 +230,8 @@ namespace AncientWarfare3.core.policy
         public static bool IsPolicyAIEnabled(Kingdom pKingdom)
         {
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
-            bool defaultEnabled = XiaizationService.DefaultPolicyAIEnabled(pKingdom);
+            bool defaultEnabled = KingdomPolicyProfileRules.
+                IsResolvableKingdomProfile(GetPolicyProfile(pKingdom));
             pKingdom.data.get(LineageKeys.POLICY_AI_ENABLED, out bool enabled, defaultEnabled);
             return enabled;
         }
@@ -181,6 +261,26 @@ namespace AncientWarfare3.core.policy
         public static void EnsureInitialized(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    KingdomPolicyProfileService.EnsureAssigned(pKingdom)))
+                return;
+            EnsureState(pKingdom, LineageKeys.POLICY_GOVERNMENT_STATE,
+                "default");
+            pKingdom.data.get(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                out int royalAuthority, 0);
+            if (royalAuthority < 0 || royalAuthority >
+                WesternRoyalAuthorityRules.MaximumConsolidatedAuthority)
+            {
+                pKingdom.data.set(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                    Math.Max(0, Math.Min(
+                        WesternRoyalAuthorityRules.
+                            MaximumConsolidatedAuthority,
+                        royalAuthority)));
+            }
+            pKingdom.data.get(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                out string obsoleteNodeIds, "");
+            if (obsoleteNodeIds == null)
+                pKingdom.data.set(LineageKeys.POLICY_OBSOLETE_NODE_IDS, "");
             pKingdom.data.get(LineageKeys.POLICY_CLASS_STATE, out string classState, "");
             if (string.IsNullOrEmpty(classState))
                 pKingdom.data.set(LineageKeys.POLICY_CLASS_STATE, KingdomPolicyDefs.ClassDefault);
@@ -204,6 +304,7 @@ namespace AncientWarfare3.core.policy
             if (coreQueue == null) pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, "");
             if (lockedNodes == null) pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, "");
             MigrateCurrentCoreDecisionToDedicatedSlot(pKingdom);
+            MigrateHotPolicyState(pKingdom);
         }
 
         public static string GetLockedNodesRaw(Kingdom pKingdom)
@@ -222,7 +323,7 @@ namespace AncientWarfare3.core.policy
         public static bool SetNodeLocked(Kingdom pKingdom, string pNodeId, bool pLocked)
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pNodeId)) return false;
-            if (KingdomPolicyDefs.Get(pNodeId) == null) return false;
+            if (GetDefinition(pKingdom, pNodeId) == null) return false;
             EnsureInitialized(pKingdom);
 
             string raw = GetLockedNodesRaw(pKingdom);
@@ -275,7 +376,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
+            KingdomPolicyDef def = GetDefinition(pKingdom, pNodeId);
             if (def == null) return false;
             if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
@@ -316,7 +417,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
+            KingdomPolicyDef def = GetDefinition(pKingdom, pNodeId);
             if (def == null || IsCompleted(pKingdom, def)) return false;
             if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
@@ -347,7 +448,7 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || pTarget?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(pNodeId);
+            KingdomPolicyDef def = GetDefinition(pKingdom, pNodeId);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
             if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
@@ -387,7 +488,7 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null) return false;
             if (!IsPolicyEnabledForKingdom(pKingdom)) return false;
             string defId = FabricationDecisionId(pProjectType);
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(defId);
+            KingdomPolicyDef def = GetDefinition(pKingdom, defId);
             if (def == null || def.Kind != PolicyNodeKind.Decision) return false;
             if (!CanAccessPolicyNode(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
@@ -673,7 +774,10 @@ namespace AncientWarfare3.core.policy
             return state == KingdomPolicyDefs.EnfeoffmentBase ||
                    state == KingdomPolicyDefs.EnfeoffmentLimit ||
                    state == KingdomPolicyDefs.EnfeoffmentUnlimit ||
-                   IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_base_enfeoffment");
+                   IsCompleted(pKingdom, PolicyNodeKind.Social,
+                       "aw_policy_base_enfeoffment") ||
+                   KingdomPolicyEffectService.Read(pKingdom)
+                       .VassalAdministrationUnlocked;
         }
 
         public static float GetPoliticalPoints(Kingdom pKingdom)
@@ -763,6 +867,16 @@ namespace AncientWarfare3.core.policy
             if (pKingdom?.data == null) return snapshot;
             EnsureInitialized(pKingdom);
 
+            snapshot.profile_id = KingdomPolicyProfileRules.ToPersistedId(
+                GetPolicyProfile(pKingdom));
+            pKingdom.data.get(LineageKeys.POLICY_GOVERNMENT_STATE,
+                out snapshot.government_state, "default");
+            pKingdom.data.get(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                out snapshot.royal_authority, 0);
+            pKingdom.data.get(LineageKeys.POLICY_MIGRATION_VERSION,
+                out snapshot.migration_version, 0);
+            pKingdom.data.get(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                out snapshot.obsolete_node_ids, "");
             snapshot.class_state = GetClassId(pKingdom);
             snapshot.army_state = GetArmyState(pKingdom);
             snapshot.name_state = GetNameState(pKingdom);
@@ -795,6 +909,35 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || pSnapshot == null) return;
             EnsureInitialized(pKingdom);
+            KingdomPolicyProfileMigrationState migrated =
+                SanitizeSnapshotNodes(pKingdom, pSnapshot);
+            string migratedDecisionQueue = pSnapshot.decision_queue ?? "";
+            if (pIncludeDecision)
+            {
+                migratedDecisionQueue = MigrateLegacyDecisionQueue(
+                    migratedDecisionQueue, out bool replacedLegacyDecision);
+                if (replacedLegacyDecision)
+                {
+                    migrated.obsoleteNodeIds =
+                        KingdomPolicyProfileMigrationRules.
+                            AppendObsoleteNodeId(migrated.obsoleteNodeIds,
+                                KingdomPolicyProfileMigrationRules.
+                                    LegacyAppeaseXiaCitiesDecisionId);
+                }
+            }
+
+            pKingdom.data.set(LineageKeys.POLICY_PROFILE_ID,
+                migrated.profileId);
+            pKingdom.data.set(LineageKeys.POLICY_GOVERNMENT_STATE,
+                NonEmpty(pSnapshot.government_state, "default"));
+            pKingdom.data.set(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                Math.Max(0, Math.Min(
+                    WesternRoyalAuthorityRules.MaximumConsolidatedAuthority,
+                    pSnapshot.royal_authority)));
+            pKingdom.data.set(LineageKeys.POLICY_MIGRATION_VERSION,
+                migrated.migrationVersion);
+            pKingdom.data.set(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                migrated.obsoleteNodeIds);
 
             SetState(pKingdom, LineageKeys.POLICY_CLASS_STATE,
                 NonEmpty(pSnapshot.class_state, KingdomPolicyDefs.ClassDefault));
@@ -807,31 +950,53 @@ namespace AncientWarfare3.core.policy
 
             pKingdom.data.set(LineageKeys.POLICY_POINTS, Mathf.Clamp(pSnapshot.policy_points, 0f, MAX_POINTS));
             pKingdom.data.set(LineageKeys.TECH_POINTS, Mathf.Clamp(pSnapshot.tech_points, 0f, MAX_POINTS));
-            pKingdom.data.set(LineageKeys.POLICY_CURRENT, pSnapshot.current_policy ?? "");
-            pKingdom.data.set(LineageKeys.POLICY_PROGRESS, Mathf.Max(0f, pSnapshot.policy_progress));
-            pKingdom.data.set(LineageKeys.TECH_CURRENT, pSnapshot.current_tech ?? "");
-            pKingdom.data.set(LineageKeys.TECH_PROGRESS, Mathf.Max(0f, pSnapshot.tech_progress));
-            pKingdom.data.set(LineageKeys.POLICY_COMPLETED, pSnapshot.completed_policies ?? "");
-            pKingdom.data.set(LineageKeys.TECH_COMPLETED, pSnapshot.completed_techs ?? "");
+            pKingdom.data.set(LineageKeys.POLICY_CURRENT,
+                migrated.currentPolicy);
+            pKingdom.data.set(LineageKeys.POLICY_PROGRESS,
+                string.IsNullOrEmpty(migrated.currentPolicy)
+                    ? 0f
+                    : Mathf.Max(0f, pSnapshot.policy_progress));
+            pKingdom.data.set(LineageKeys.TECH_CURRENT,
+                migrated.currentTech);
+            pKingdom.data.set(LineageKeys.TECH_PROGRESS,
+                string.IsNullOrEmpty(migrated.currentTech)
+                    ? 0f
+                    : Mathf.Max(0f, pSnapshot.tech_progress));
+            pKingdom.data.set(LineageKeys.POLICY_COMPLETED,
+                migrated.completedPolicies);
+            pKingdom.data.set(LineageKeys.TECH_COMPLETED,
+                migrated.completedTechs);
 
             if (pIncludeDecision)
             {
-                pKingdom.data.set(LineageKeys.DECISION_CURRENT, pSnapshot.current_decision ?? "");
-                pKingdom.data.set(LineageKeys.DECISION_PROGRESS, Mathf.Max(0f, pSnapshot.decision_progress));
+                pKingdom.data.set(LineageKeys.DECISION_CURRENT,
+                    migrated.currentDecision);
+                pKingdom.data.set(LineageKeys.DECISION_PROGRESS,
+                    string.IsNullOrEmpty(migrated.currentDecision)
+                        ? 0f
+                        : Mathf.Max(0f, pSnapshot.decision_progress));
                 pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_ID,
-                    pSnapshot.decision_target_kingdom_id);
+                    string.IsNullOrEmpty(migrated.currentDecision)
+                        ? -1L
+                        : pSnapshot.decision_target_kingdom_id);
                 pKingdom.data.set(LineageKeys.DECISION_TARGET_KINGDOM_NAME,
-                    pSnapshot.decision_target_kingdom_name ?? "");
-                pKingdom.data.set(LineageKeys.DECISION_QUEUE, pSnapshot.decision_queue ?? "");
+                    string.IsNullOrEmpty(migrated.currentDecision)
+                        ? ""
+                        : pSnapshot.decision_target_kingdom_name ?? "");
+                pKingdom.data.set(LineageKeys.DECISION_QUEUE,
+                    migratedDecisionQueue);
                 pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, pSnapshot.core_fab_current_city_id);
                 pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, pSnapshot.core_fab_current_city_name ?? "");
                 pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, Mathf.Max(0f, pSnapshot.core_fab_progress));
                 pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, pSnapshot.core_fab_queue ?? "");
-                pKingdom.data.set(LineageKeys.DECISION_COMPLETED, pSnapshot.completed_decisions ?? "");
+                pKingdom.data.set(LineageKeys.DECISION_COMPLETED,
+                    migrated.completedDecisions);
             }
 
-            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, pSnapshot.locked_nodes ?? "");
+            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES,
+                migrated.lockedNodes);
 
+            KingdomPolicyEffectService.Invalidate(pKingdom);
             UpsertSnapshot(pKingdom);
         }
 
@@ -849,7 +1014,8 @@ namespace AncientWarfare3.core.policy
                     $"TECH_PROGRESS, CURRENT_DECISION, DECISION_PROGRESS, DECISION_QUEUE, " +
                     $"CORE_FAB_CURRENT_CITY_ID, CORE_FAB_CURRENT_CITY_NAME, CORE_FAB_PROGRESS, " +
                     $"CORE_FAB_QUEUE, COMPLETED_POLICIES, COMPLETED_TECHS, COMPLETED_DECISIONS, " +
-                    $"LOCKED_NODES FROM {KingdomPolicyStateTableItem.GetTableName()} " +
+                    $"LOCKED_NODES, PROFILE_ID, GOVERNMENT_STATE, MIGRATION_VERSION, " +
+                    $"OBSOLETE_NODE_IDS, ROYAL_AUTHORITY FROM {KingdomPolicyStateTableItem.GetTableName()} " +
                     "WHERE KINGDOM_ID=@k LIMIT 1";
                 cmd.Parameters.AddWithValue("@k", pKingdom.id);
                 using var reader = (System.Data.SQLite.SQLiteDataReader)cmd.ExecuteReader();
@@ -876,7 +1042,12 @@ namespace AncientWarfare3.core.policy
                     completedPolicies = DbString(reader, 17),
                     completedTechs = DbString(reader, 18),
                     completedDecisions = DbString(reader, 19),
-                    lockedNodes = DbString(reader, 20)
+                    lockedNodes = DbString(reader, 20),
+                    profileId = DbString(reader, 21),
+                    governmentState = DbString(reader, 22),
+                    migrationVersion = (int)DbLong(reader, 23),
+                    obsoleteNodeIds = DbString(reader, 24),
+                    royalAuthority = (int)DbLong(reader, 25)
                 };
             }
             catch (Exception e)
@@ -890,34 +1061,37 @@ namespace AncientWarfare3.core.policy
             if (state == null) return false;
             pKingdom.data.set(LineageKeys.POLICY_ENABLED, true);
             pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED, true);
-            SetState(pKingdom, LineageKeys.POLICY_CLASS_STATE,
-                NonEmpty(state.classState, KingdomPolicyDefs.ClassDefault));
-            SetState(pKingdom, LineageKeys.POLICY_ARMY_STATE,
-                NonEmpty(state.armyState, KingdomPolicyDefs.ArmyDefault));
-            SetState(pKingdom, LineageKeys.POLICY_NAME_STATE,
-                NonEmpty(state.nameState, KingdomPolicyDefs.NameDefault));
-            SetState(pKingdom, LineageKeys.POLICY_ENFEOFFMENT_STATE,
-                NonEmpty(state.enfeoffmentState, KingdomPolicyDefs.EnfeoffmentDefault));
-            pKingdom.data.set(LineageKeys.POLICY_POINTS, Mathf.Clamp(state.policyPoints, 0f, MAX_POINTS));
-            pKingdom.data.set(LineageKeys.TECH_POINTS, Mathf.Clamp(state.techPoints, 0f, MAX_POINTS));
-            pKingdom.data.set(LineageKeys.POLICY_CURRENT, state.currentPolicy);
-            pKingdom.data.set(LineageKeys.POLICY_PROGRESS, state.policyProgress);
-            pKingdom.data.set(LineageKeys.TECH_CURRENT, state.currentTech);
-            pKingdom.data.set(LineageKeys.TECH_PROGRESS, state.techProgress);
-            pKingdom.data.set(LineageKeys.POLICY_COMPLETED, state.completedPolicies);
-            pKingdom.data.set(LineageKeys.TECH_COMPLETED, state.completedTechs);
-            pKingdom.data.set(LineageKeys.DECISION_COMPLETED, state.completedDecisions);
-            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES, state.lockedNodes);
-            pKingdom.data.set(LineageKeys.DECISION_CURRENT, state.currentDecision);
-            pKingdom.data.set(LineageKeys.DECISION_PROGRESS, state.decisionProgress);
-            pKingdom.data.set(LineageKeys.DECISION_QUEUE, state.decisionQueue);
-            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_ID, state.coreFabricationCityId);
-            pKingdom.data.set(LineageKeys.CORE_FAB_CURRENT_CITY_NAME, state.coreFabricationCityName);
-            pKingdom.data.set(LineageKeys.CORE_FAB_PROGRESS, state.coreFabricationProgress);
-            pKingdom.data.set(LineageKeys.CORE_FAB_QUEUE, state.coreFabricationQueue);
-            ClearDecisionTarget(pKingdom);
             pKingdom.data.set(LineageKeys.POLICY_LAST_YEAR, Date.getCurrentYear());
-            UpsertSnapshot(pKingdom);
+            ApplySnapshot(pKingdom, new KingdomPolicySnapshot
+            {
+                profile_id = state.profileId,
+                government_state = state.governmentState,
+                royal_authority = state.royalAuthority,
+                migration_version = state.migrationVersion,
+                obsolete_node_ids = state.obsoleteNodeIds,
+                class_state = state.classState,
+                army_state = state.armyState,
+                name_state = state.nameState,
+                enfeoffment_state = state.enfeoffmentState,
+                policy_points = state.policyPoints,
+                tech_points = state.techPoints,
+                current_policy = state.currentPolicy,
+                policy_progress = state.policyProgress,
+                current_tech = state.currentTech,
+                tech_progress = state.techProgress,
+                completed_policies = state.completedPolicies,
+                completed_techs = state.completedTechs,
+                completed_decisions = state.completedDecisions,
+                locked_nodes = state.lockedNodes,
+                current_decision = state.currentDecision,
+                decision_progress = state.decisionProgress,
+                decision_queue = state.decisionQueue,
+                core_fab_current_city_id = state.coreFabricationCityId,
+                core_fab_current_city_name =
+                    state.coreFabricationCityName,
+                core_fab_progress = state.coreFabricationProgress,
+                core_fab_queue = state.coreFabricationQueue
+            }, pIncludeDecision: true);
             return true;
         }
 
@@ -939,13 +1113,15 @@ namespace AncientWarfare3.core.policy
         public static TechLevelReport GetTechLevelReport(Kingdom pKingdom)
         {
             var report = new TechLevelReport();
-            report.total_count = KingdomPolicyDefs.Techs.Count();
+            IReadOnlyList<KingdomPolicyDef> techs = GetNodes(pKingdom,
+                PolicyNodeKind.Tech);
+            report.total_count = techs.Count;
             report.max_level = 5;
 
             float maxScore = 0f;
             float score = 0f;
             int completed = 0;
-            foreach (KingdomPolicyDef tech in KingdomPolicyDefs.Techs)
+            foreach (KingdomPolicyDef tech in techs)
             {
                 float cost = Mathf.Max(1f, tech.Cost);
                 maxScore += cost;
@@ -954,7 +1130,8 @@ namespace AncientWarfare3.core.policy
                 score += cost;
             }
 
-            KingdomPolicyDef current = KingdomPolicyDefs.Get(GetCurrent(pKingdom, PolicyNodeKind.Tech));
+            KingdomPolicyDef current = GetDefinition(pKingdom,
+                GetCurrent(pKingdom, PolicyNodeKind.Tech));
             if (current != null && current.Cost > 0f && !IsCompleted(pKingdom, current))
             {
                 float fraction = GetProgressFraction(pKingdom, current);
@@ -986,8 +1163,10 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null) return "";
             var parts = new List<string>();
-            KingdomPolicyDef tech = KingdomPolicyDefs.Get(GetCurrent(pKingdom, PolicyNodeKind.Tech));
-            KingdomPolicyDef social = KingdomPolicyDefs.Get(GetCurrent(pKingdom, PolicyNodeKind.Social));
+            KingdomPolicyDef tech = GetDefinition(pKingdom,
+                GetCurrent(pKingdom, PolicyNodeKind.Tech));
+            KingdomPolicyDef social = GetDefinition(pKingdom,
+                GetCurrent(pKingdom, PolicyNodeKind.Social));
             if (tech != null) parts.Add(AW_L10n.Text(tech.NameKey, tech.FallbackName));
             if (social != null) parts.Add(AW_L10n.Text(social.NameKey, social.FallbackName));
             return parts.Count == 0
@@ -1039,6 +1218,11 @@ namespace AncientWarfare3.core.policy
         private static bool CanAccessPolicyNode(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pKingdom?.data == null || pDef == null) return false;
+            KingdomPolicyProfileId profileId = GetPolicyProfile(pKingdom);
+            if (!KingdomPolicyCatalogRules.BelongsTo(pDef, profileId))
+                return false;
+            if (profileId == KingdomPolicyProfileId.WesternGeneral)
+                return true;
             return XiaizationEligibilityRules.CanUsePolicyNode(
                 XiaizationService.IsNativePolicyKingdom(pKingdom),
                 XiaizationService.GetLevel(pKingdom),
@@ -1052,20 +1236,19 @@ namespace AncientWarfare3.core.policy
             return king?.data != null && (king.hasTrait("first") || king.hasTrait("figure"));
         }
 
-        private static void AddYearlyPoints(Kingdom pKingdom,
-            int pElapsedYears)
+        private static void AddMonthlyPoints(Kingdom pKingdom)
         {
             float political = GetPoliticalPoints(pKingdom);
             float tech = GetTechPoints(pKingdom);
             pKingdom.data.set(LineageKeys.POLICY_POINTS,
                 Mathf.Clamp(political +
-                            KingdomAnnualProgressRules.ScaleAnnualValue(
-                                CalcPoliticalGain(pKingdom), pElapsedYears),
+                            KingdomDecisionMonthlyRules.MonthlyShare(
+                                CalcPoliticalGain(pKingdom)),
                     0f, MAX_POINTS));
             pKingdom.data.set(LineageKeys.TECH_POINTS,
                 Mathf.Clamp(tech +
-                            KingdomAnnualProgressRules.ScaleAnnualValue(
-                                CalcTechGain(pKingdom), pElapsedYears),
+                            KingdomDecisionMonthlyRules.MonthlyShare(
+                                CalcTechGain(pKingdom)),
                     0f, MAX_POINTS));
         }
 
@@ -1088,11 +1271,11 @@ namespace AncientWarfare3.core.policy
         }
 
         private static void AdvanceCurrent(Kingdom pKingdom,
-            PolicyNodeKind pKind, int pElapsedYears)
+            PolicyNodeKind pKind, float pElapsedYears)
         {
             string current = GetCurrent(pKingdom, pKind);
             if (string.IsNullOrEmpty(current)) return;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(current);
+            KingdomPolicyDef def = GetDefinition(pKingdom, current);
             if (def == null)
             {
                 pKingdom.data.set(CurrentKey(pKind), "");
@@ -1148,8 +1331,8 @@ namespace AncientWarfare3.core.policy
             if (points <= 0f) return;
 
             float remaining = def.Cost - progress;
-            float spendLimit = KingdomAnnualProgressRules.ResolveSpendLimit(
-                MAX_YEARLY_SPEND, pElapsedYears);
+            float spendLimit = Mathf.Max(0f,
+                MAX_YEARLY_SPEND * pElapsedYears);
             float rawSpend = pKind == PolicyNodeKind.Tech
                 ? Mathf.Min(points, spendLimit)
                 : PoliticalPointSpendingRules.AutomaticSpend(points,
@@ -1319,6 +1502,9 @@ namespace AncientWarfare3.core.policy
                     SlaveService.SetSlaveryEnabled(pKingdom, true);
                     SlaveService.EnforceSlaveControl(pKingdom);
                     return true;
+                case "aw_west_decision_consolidate_royal_authority":
+                    return KingdomPolicyEffectService.ApplyRoyalAuthorityDecision(
+                        pKingdom);
                 case "aw_decision_absorb_vassal":
                     Kingdom target = GetDecisionTargetKingdom(pKingdom);
                     return target != null &&
@@ -1367,6 +1553,10 @@ namespace AncientWarfare3.core.policy
 
             if (!string.IsNullOrEmpty(pDef.EnfeoffmentStateAfter))
                 SetState(pKingdom, LineageKeys.POLICY_ENFEOFFMENT_STATE, pDef.EnfeoffmentStateAfter);
+
+            if (!string.IsNullOrEmpty(pDef.GovernmentStateAfter))
+                SetState(pKingdom,
+                    LineageKeys.POLICY_GOVERNMENT_STATE, pDef.GovernmentStateAfter);
         }
 
         private static void ApplyClassStateEffects(Kingdom pKingdom, string pClassId)
@@ -1405,6 +1595,8 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || string.IsNullOrEmpty(pValue)) return;
             pKingdom.data.set(pKey, pValue);
+            if (pKey == LineageKeys.POLICY_GOVERNMENT_STATE)
+                KingdomPolicyEffectService.Invalidate(pKingdom);
         }
 
         private static void RecordCompletion(Kingdom pKingdom, KingdomPolicyDef pDef)
@@ -1467,6 +1659,9 @@ namespace AncientWarfare3.core.policy
                 case "aw_decision_control_slaves":
                     return SlaveService.IsSlaveryEnabled(pKingdom) ||
                            IsCompleted(pKingdom, PolicyNodeKind.Social, "aw_policy_start_slavery");
+                case "aw_west_decision_consolidate_royal_authority":
+                    return KingdomPolicyEffectService.
+                        CanConsolidateRoyalAuthority(pKingdom);
                 case "aw_decision_absorb_vassal":
                     return VassalService.FindBestAbsorbVassalTarget(pKingdom) != null;
                 case "aw_decision_seek_suzerain":
@@ -1488,6 +1683,7 @@ namespace AncientWarfare3.core.policy
             var set = new HashSet<string>(Split(GetCompletedRaw(pKingdom, pKind)));
             if (!set.Add(pId)) return;
             pKingdom.data.set(CompletedKey(pKind), string.Join(";", set.ToArray()));
+            KingdomPolicyEffectService.Invalidate(pKingdom);
         }
 
         private static string GetCompletedRaw(Kingdom pKingdom, PolicyNodeKind pKind)
@@ -1524,22 +1720,24 @@ namespace AncientWarfare3.core.policy
             return Mathf.Max(0f, value);
         }
 
-        public static float GetCoreFabricationCost()
+        public static float GetCoreFabricationCost(Kingdom pKingdom)
         {
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(DecisionQueueRules.FabricateCoreDecisionId);
+            KingdomPolicyDef def = GetDefinition(pKingdom,
+                DecisionQueueRules.FabricateCoreDecisionId);
             return Mathf.Max(1f, def?.Cost ?? 80f);
         }
 
         public static float GetCoreFabricationProgressFraction(Kingdom pKingdom)
         {
-            return Mathf.Clamp01(GetCoreFabricationProgress(pKingdom) / GetCoreFabricationCost());
+            return Mathf.Clamp01(GetCoreFabricationProgress(pKingdom) /
+                                 GetCoreFabricationCost(pKingdom));
         }
 
         public static bool TryGetCoreFabricationProject(Kingdom pKingdom, long pCityId,
             out float pProgress, out float pCost)
         {
             pProgress = 0f;
-            pCost = GetCoreFabricationCost();
+            pCost = GetCoreFabricationCost(pKingdom);
             if (pKingdom?.data == null || pCityId < 0) return false;
             if (GetCoreFabricationCityId(pKingdom) != pCityId) return false;
             pProgress = GetCoreFabricationProgress(pKingdom);
@@ -1654,7 +1852,8 @@ namespace AncientWarfare3.core.policy
             StartCoreFabrication(pKingdom, city);
         }
 
-        private static void AdvanceCoreFabrication(Kingdom pKingdom)
+        private static void AdvanceCoreFabrication(Kingdom pKingdom,
+            float pElapsedYears)
         {
             if (pKingdom?.data == null) return;
             if (IsNodeLocked(pKingdom, DecisionQueueRules.FabricateCoreDecisionId))
@@ -1681,10 +1880,11 @@ namespace AncientWarfare3.core.policy
             if (points <= 0f) return;
 
             float progress = GetCoreFabricationProgress(pKingdom);
-            float cost = GetCoreFabricationCost();
+            float cost = GetCoreFabricationCost(pKingdom);
             float remaining = cost - progress;
             float spend = PoliticalPointSpendingRules.AutomaticSpend(points,
-                Mathf.Min(MAX_YEARLY_SPEND, remaining));
+                Mathf.Min(MAX_YEARLY_SPEND * Mathf.Max(0f,
+                    pElapsedYears), remaining));
             if (spend <= 0f) return;
 
             points -= spend;
@@ -1883,7 +2083,8 @@ namespace AncientWarfare3.core.policy
         private static bool CanStartQueuedDecision(Kingdom pKingdom, KingdomDecisionQueueItem pItem)
         {
             if (pKingdom?.data == null || pItem == null || string.IsNullOrEmpty(pItem.decision_id)) return false;
-            KingdomPolicyDef def = KingdomPolicyDefs.Get(pItem.decision_id);
+            KingdomPolicyDef def = GetDefinition(pKingdom,
+                pItem.decision_id);
             if (def == null || def.Kind != PolicyNodeKind.Decision || IsCompleted(pKingdom, def)) return false;
             if (IsNodeLocked(pKingdom, def.Id)) return false;
 
@@ -1934,6 +2135,155 @@ namespace AncientWarfare3.core.policy
         {
             if (string.IsNullOrEmpty(pRaw)) return Array.Empty<string>();
             return pRaw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static KingdomPolicyProfileMigrationState
+            SanitizeSnapshotNodes(Kingdom pKingdom,
+                KingdomPolicySnapshot pSnapshot)
+        {
+            KingdomPolicyProfileId profileId = GetPolicyProfile(pKingdom);
+            string persistedProfileId = KingdomPolicyProfileRules.
+                ToPersistedId(profileId);
+            if (KingdomPolicyProfileRules.TryParsePersisted(
+                    pSnapshot?.profile_id,
+                    out KingdomPolicyProfileId snapshotProfileId) &&
+                snapshotProfileId == profileId)
+            {
+                persistedProfileId = pSnapshot.profile_id;
+            }
+
+            var migrationState = new KingdomPolicyProfileMigrationState
+            {
+                profileId = persistedProfileId,
+                migrationVersion = pSnapshot?.migration_version ?? 0,
+                currentPolicy = pSnapshot?.current_policy ?? "",
+                currentTech = pSnapshot?.current_tech ?? "",
+                currentDecision = pSnapshot?.current_decision ?? "",
+                completedPolicies = pSnapshot?.completed_policies ?? "",
+                completedTechs = pSnapshot?.completed_techs ?? "",
+                completedDecisions = pSnapshot?.completed_decisions ?? "",
+                lockedNodes = pSnapshot?.locked_nodes ?? "",
+                obsoleteNodeIds = pSnapshot?.obsolete_node_ids ?? ""
+            };
+
+            return KingdomPolicyProfileMigrationRules.Sanitize(
+                migrationState,
+                policyAllowed: id => NodeHasKind(profileId, id,
+                    PolicyNodeKind.Social),
+                techAllowed: id => NodeHasKind(profileId, id,
+                    PolicyNodeKind.Tech),
+                decisionAllowed: id => NodeHasKind(profileId, id,
+                    PolicyNodeKind.Decision));
+        }
+
+        private static void MigrateHotPolicyState(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
+            KingdomPolicyProfileId profileId = GetPolicyProfile(pKingdom);
+            if (!KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                    profileId)) return;
+
+            pKingdom.data.get(LineageKeys.POLICY_CURRENT,
+                out string currentPolicy, "");
+            pKingdom.data.get(LineageKeys.TECH_CURRENT,
+                out string currentTech, "");
+            pKingdom.data.get(LineageKeys.DECISION_CURRENT,
+                out string currentDecision, "");
+            pKingdom.data.get(LineageKeys.DECISION_QUEUE,
+                out string decisionQueue, "");
+            pKingdom.data.get(LineageKeys.POLICY_COMPLETED,
+                out string completedPolicies, "");
+            pKingdom.data.get(LineageKeys.TECH_COMPLETED,
+                out string completedTechs, "");
+            pKingdom.data.get(LineageKeys.DECISION_COMPLETED,
+                out string completedDecisions, "");
+            pKingdom.data.get(LineageKeys.POLICY_LOCKED_NODES,
+                out string lockedNodes, "");
+            pKingdom.data.get(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                out string obsoleteNodeIds, "");
+            pKingdom.data.get(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                out int royalAuthority, 0);
+            pKingdom.data.get(LineageKeys.POLICY_MIGRATION_VERSION,
+                out int migrationVersion, 0);
+
+            KingdomPolicyProfileMigrationState migrated =
+                KingdomPolicyProfileMigrationRules.Sanitize(
+                    new KingdomPolicyProfileMigrationState
+                    {
+                        profileId = KingdomPolicyProfileRules.ToPersistedId(
+                            profileId),
+                        migrationVersion = migrationVersion,
+                        currentPolicy = currentPolicy,
+                        currentTech = currentTech,
+                        currentDecision = currentDecision,
+                        completedPolicies = completedPolicies,
+                        completedTechs = completedTechs,
+                        completedDecisions = completedDecisions,
+                        lockedNodes = lockedNodes,
+                        obsoleteNodeIds = obsoleteNodeIds
+                    },
+                    policyAllowed: id => NodeHasKind(profileId, id,
+                        PolicyNodeKind.Social),
+                    techAllowed: id => NodeHasKind(profileId, id,
+                        PolicyNodeKind.Tech),
+                    decisionAllowed: id => NodeHasKind(profileId, id,
+                        PolicyNodeKind.Decision));
+            string migratedDecisionQueue = MigrateLegacyDecisionQueue(
+                decisionQueue, out bool replacedLegacyDecision);
+            if (replacedLegacyDecision)
+            {
+                migrated.obsoleteNodeIds = KingdomPolicyProfileMigrationRules.
+                    AppendObsoleteNodeId(migrated.obsoleteNodeIds,
+                        KingdomPolicyProfileMigrationRules.
+                            LegacyAppeaseXiaCitiesDecisionId);
+            }
+
+            pKingdom.data.set(LineageKeys.POLICY_CURRENT,
+                migrated.currentPolicy);
+            if (string.IsNullOrEmpty(migrated.currentPolicy))
+                pKingdom.data.set(LineageKeys.POLICY_PROGRESS, 0f);
+            pKingdom.data.set(LineageKeys.TECH_CURRENT,
+                migrated.currentTech);
+            if (string.IsNullOrEmpty(migrated.currentTech))
+                pKingdom.data.set(LineageKeys.TECH_PROGRESS, 0f);
+            pKingdom.data.set(LineageKeys.DECISION_CURRENT,
+                migrated.currentDecision);
+            if (string.IsNullOrEmpty(migrated.currentDecision))
+            {
+                pKingdom.data.set(LineageKeys.DECISION_PROGRESS, 0f);
+                ClearDecisionTarget(pKingdom);
+            }
+            pKingdom.data.set(LineageKeys.POLICY_COMPLETED,
+                migrated.completedPolicies);
+            pKingdom.data.set(LineageKeys.TECH_COMPLETED,
+                migrated.completedTechs);
+            pKingdom.data.set(LineageKeys.DECISION_COMPLETED,
+                migrated.completedDecisions);
+            pKingdom.data.set(LineageKeys.DECISION_QUEUE,
+                migratedDecisionQueue);
+            pKingdom.data.set(LineageKeys.POLICY_LOCKED_NODES,
+                migrated.lockedNodes);
+            pKingdom.data.set(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                migrated.obsoleteNodeIds);
+            pKingdom.data.set(LineageKeys.POLICY_MIGRATION_VERSION,
+                migrated.migrationVersion);
+            KingdomPolicyEffectService.Invalidate(pKingdom);
+        }
+
+        private static bool NodeHasKind(KingdomPolicyProfileId pProfileId,
+            string pNodeId, PolicyNodeKind pKind)
+        {
+            KingdomPolicyDef definition = KingdomPolicyDefs.Get(pProfileId,
+                pNodeId);
+            return definition != null && definition.Kind == pKind;
+        }
+
+        private static string MigrateLegacyDecisionQueue(string pRaw,
+            out bool pReplacedLegacyDecision)
+        {
+            return KingdomDecisionQueueCodec.MigrateDecisionIds(pRaw,
+                KingdomPolicyProfileMigrationRules.MapLegacyDecisionId,
+                out pReplacedLegacyDecision);
         }
 
         private static string NonEmpty(string pValue, string pFallback)
@@ -2245,7 +2595,10 @@ namespace AncientWarfare3.core.policy
 
         private static bool IsSupportedPolicyKingdom(Kingdom pKingdom)
         {
-            return XiaizationService.CanUsePolicySystem(pKingdom);
+            return KingdomPolicyProfileService.TryGet(pKingdom,
+                out KingdomPolicyProfileId profileId) &&
+                   KingdomPolicyProfileRules.IsResolvableKingdomProfile(
+                       profileId);
         }
 
         private static bool IsHumanKingdom(Kingdom pKingdom)
@@ -2263,11 +2616,33 @@ namespace AncientWarfare3.core.policy
         {
             var db = LineageArchiveManager.Instance.OperatingDB;
             if (db == null || pKingdom?.data == null) return;
+            pKingdom.data.get(LineageKeys.POLICY_GOVERNMENT_STATE,
+                out string governmentState, "default");
+            pKingdom.data.get(LineageKeys.POLICY_MIGRATION_VERSION,
+                out int migrationVersion,
+                KingdomPolicyProfileMigrationRules.CurrentVersion);
+            pKingdom.data.get(LineageKeys.POLICY_OBSOLETE_NODE_IDS,
+                out string obsoleteNodeIds, "");
+            pKingdom.data.get(LineageKeys.WESTERN_ROYAL_AUTHORITY,
+                out int royalAuthority, 0);
 
             string table = KingdomPolicyStateTableItem.GetTableName();
             var values = new[]
             {
                 ColumnVal.Create("KINGDOM_NAME", pKingdom.name ?? ""),
+                ColumnVal.Create("PROFILE_ID",
+                    KingdomPolicyProfileRules.ToPersistedId(
+                        GetPolicyProfile(pKingdom))),
+                ColumnVal.Create("GOVERNMENT_STATE",
+                    NonEmpty(governmentState, "default")),
+                ColumnVal.Create("ROYAL_AUTHORITY",
+                    Math.Max(0, Math.Min(
+                        WesternRoyalAuthorityRules.
+                            MaximumConsolidatedAuthority,
+                        royalAuthority))),
+                ColumnVal.Create("MIGRATION_VERSION", migrationVersion),
+                ColumnVal.Create("OBSOLETE_NODE_IDS",
+                    obsoleteNodeIds ?? ""),
                 ColumnVal.Create("CLASS_STATE", GetClassId(pKingdom)),
                 ColumnVal.Create("ARMY_STATE", GetArmyState(pKingdom)),
                 ColumnVal.Create("NAME_STATE", GetNameState(pKingdom)),

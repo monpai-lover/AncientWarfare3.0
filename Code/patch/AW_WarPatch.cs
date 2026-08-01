@@ -169,7 +169,7 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(War), "removeFromWar")]
-        private static void RemoveFromWar_Prefix(War __instance,
+        private static bool RemoveFromWar_Prefix(War __instance,
             Kingdom pKingdom, out bool __state)
         {
             __state = false;
@@ -180,6 +180,9 @@ namespace AncientWarfare3.patch
                           __instance.hasKingdom(pKingdom);
             }
             catch { }
+            return !__state ||
+                   !ZhuluPeaceGuard.BlocksOrdinarySettlement(__instance) ||
+                   ZhuluWarSettlementService.IsDedicatedSettlementActive;
         }
 
         [HarmonyPostfix]
@@ -204,17 +207,23 @@ namespace AncientWarfare3.patch
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.endWar))]
-        private static void EndWar_Prefix(War pWar,
+        private static bool EndWar_Prefix(War pWar,
             out WarEndParticipantSnapshot __state)
         {
             __state = CaptureParticipants(pWar);
+            if (!ZhuluWarService.IsZhuluWar(pWar) ||
+                ZhuluWarSettlementService.IsDedicatedSettlementActive)
+                return true;
+            ZhuluWarSettlementService.Queue(pWar);
+            return false;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WarManager), nameof(WarManager.endWar))]
         private static void EndWar_Postfix(War pWar, WarWinner pWinner,
-            WarEndParticipantSnapshot __state)
+            WarEndParticipantSnapshot __state, bool __runOriginal)
         {
+            if (!__runOriginal) return;
             if (pWar?.data == null) return;
             WarParticipantEntrySourceService.Instance.
                 TryEndAllActiveSourcesForWar(pWar.data.id,
@@ -222,6 +231,7 @@ namespace AncientWarfare3.patch
             CloseParticipantSources(pWar.data.id,
                 __state?.ParticipantIds);
             ArmyReplenishmentOperationService.OnWarEnded(pWar);
+            DiplomaticWarDeclarationService.OnWarEnded(pWar);
             KingdomWarDirectorService.OnWarEnded(pWar);
             CoalitionWarTaskService.OnWarEnded(pWar);
             WarMilitaryFactsService.OnWarEnded(pWar);

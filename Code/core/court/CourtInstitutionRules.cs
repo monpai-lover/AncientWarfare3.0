@@ -8,6 +8,11 @@ namespace AncientWarfare3.core.court
         public const string Han = "han";
         public const string Tang = "tang";
         public const string Song = "song";
+        public const string WesternPrimitive = "western_primitive";
+        public const string WesternBase = "western_base";
+        public const string WesternElective = "western_elective";
+        public const string WesternFeudal = "western_feudal";
+        public const string WesternRoyalDirect = "western_royal_direct";
     }
 
     public static class CourtInstitutionRules
@@ -32,7 +37,12 @@ namespace AncientWarfare3.core.court
             return pInstitution == CourtInstitutionId.Zhou ||
                    pInstitution == CourtInstitutionId.Han ||
                    pInstitution == CourtInstitutionId.Tang ||
-                   pInstitution == CourtInstitutionId.Song;
+                   pInstitution == CourtInstitutionId.Song ||
+                   pInstitution == CourtInstitutionId.WesternPrimitive ||
+                   pInstitution == CourtInstitutionId.WesternBase ||
+                   pInstitution == CourtInstitutionId.WesternElective ||
+                   pInstitution == CourtInstitutionId.WesternFeudal ||
+                   pInstitution == CourtInstitutionId.WesternRoyalDirect;
         }
 
         public static int Rank(string pInstitution)
@@ -42,6 +52,10 @@ namespace AncientWarfare3.core.court
                 case CourtInstitutionId.Han: return 1;
                 case CourtInstitutionId.Tang: return 2;
                 case CourtInstitutionId.Song: return 3;
+                case CourtInstitutionId.WesternBase: return 1;
+                case CourtInstitutionId.WesternElective:
+                case CourtInstitutionId.WesternFeudal: return 2;
+                case CourtInstitutionId.WesternRoyalDirect: return 3;
                 default: return 0;
             }
         }
@@ -82,6 +96,12 @@ namespace AncientWarfare3.core.court
                 case CourtInstitutionId.Tang:
                 case CourtInstitutionId.Song:
                     return CourtTier.SanShengLiuBu;
+                case CourtInstitutionId.WesternPrimitive:
+                case CourtInstitutionId.WesternBase:
+                case CourtInstitutionId.WesternElective:
+                case CourtInstitutionId.WesternFeudal:
+                case CourtInstitutionId.WesternRoyalDirect:
+                    return pInstitution;
                 default:
                     return CourtTier.EasternZhou;
             }
@@ -95,6 +115,12 @@ namespace AncientWarfare3.core.court
                     return CourtInstitutionId.Han;
                 case CourtTier.SanShengLiuBu:
                     return CourtInstitutionId.Tang;
+                case CourtInstitutionId.WesternPrimitive:
+                case CourtInstitutionId.WesternBase:
+                case CourtInstitutionId.WesternElective:
+                case CourtInstitutionId.WesternFeudal:
+                case CourtInstitutionId.WesternRoyalDirect:
+                    return pTier;
                 default:
                     return CourtInstitutionId.Zhou;
             }
@@ -105,6 +131,8 @@ namespace AncientWarfare3.core.court
         {
             string office = pOfficeId ?? "";
             if (string.IsNullOrEmpty(office)) return "aw_court_office_";
+            if (office.StartsWith("west_", StringComparison.Ordinal))
+                return "aw_court_office_" + office;
             string institution = IsKnown(pInstitution)
                 ? pInstitution
                 : CourtInstitutionId.Zhou;

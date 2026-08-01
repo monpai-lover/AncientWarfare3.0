@@ -129,6 +129,20 @@ namespace AncientWarfare3.core.lineage
             return changed || next > current;
         }
 
+        internal static void RepairInvalidContactState(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null || IsNativePolicyKingdom(pKingdom) ||
+                GetLevel(pKingdom) > LevelForeignOccupier) return;
+            pKingdom.data.set(LineageKeys.XIA_CONTACT_PROGRESS, 0f);
+            pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_SOURCE_MASK, "");
+            pKingdom.data.set(LineageKeys.XIA_CONTACT_LAST_GAIN, 0f);
+            pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, LevelNone);
+            pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, "");
+            pKingdom.data.set(LineageKeys.XIAIZATION_PSEUDO_DYNASTY, false);
+            UpsertKingdomState(pKingdom, LevelNone, "", adoptedRites: false,
+                adoptedLaw: false, stableYears: 0);
+        }
+
         public static bool IsForeignPseudoDynasty(Kingdom pKingdom)
         {
             if (pKingdom?.data == null || IsNativePolicyKingdom(pKingdom)) return false;
@@ -192,23 +206,10 @@ namespace AncientWarfare3.core.lineage
 
             try
             {
-                using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText =
-                    "SELECT DISTINCT COURT_CULTURE_ID FROM " +
-                    KingdomXiaizationStateTableItem.GetTableName() +
-                    " WHERE XIAIZATION_LEVEL>=@level " +
-                    "AND COURT_CULTURE_ID<>''";
-                cmd.Parameters.AddWithValue("@level", LevelXiaInstitutions);
-                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    string raw = reader.IsDBNull(0)
-                        ? ""
-                        : Convert.ToString(reader.GetValue(0)) ?? "";
-                    if (!long.TryParse(raw, out long cultureId)) continue;
-                    Culture culture = World.world.cultures.get(cultureId);
-                    XiaCultureIntegrationService.MarkIntegrated(culture);
-                }
+                RestorePersistedCultureMarker(LevelXiaInstitutions,
+                    XiaCultureIntegrationService.MarkIntegrated);
+                RestorePersistedCultureMarker(LevelXiaizedDynasty,
+                    XiaCultureIntegrationService.MarkFullyIntegrated);
 
                 _persistedCultureIntegrationsRestored = true;
                 return true;
@@ -219,6 +220,27 @@ namespace AncientWarfare3.core.lineage
                     "Culture Xia integration restore failed: " +
                     e.Message);
                 return false;
+            }
+        }
+
+        private static void RestorePersistedCultureMarker(int pMinimumLevel,
+            Func<Culture, bool> pMark)
+        {
+            using var cmd = new SQLiteCommand(DB);
+            cmd.CommandText =
+                "SELECT DISTINCT COURT_CULTURE_ID FROM " +
+                KingdomXiaizationStateTableItem.GetTableName() +
+                " WHERE XIAIZATION_LEVEL>=@level " +
+                "AND COURT_CULTURE_ID<>''";
+            cmd.Parameters.AddWithValue("@level", pMinimumLevel);
+            using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                string raw = reader.IsDBNull(0)
+                    ? ""
+                    : Convert.ToString(reader.GetValue(0)) ?? "";
+                if (!long.TryParse(raw, out long cultureId)) continue;
+                pMark?.Invoke(World.world.cultures.get(cultureId));
             }
         }
 
@@ -236,15 +258,23 @@ namespace AncientWarfare3.core.lineage
             if (!Ready) return false;
             try
             {
-                using var cmd = new SQLiteCommand(DB);
-                cmd.CommandText =
-                    $"SELECT XIAIZATION_LEVEL, LEGITIMACY_TYPE FROM " +
-                    $"{KingdomXiaizationStateTableItem.GetTableName()} WHERE KINGDOM_ID=@k LIMIT 1";
-                cmd.Parameters.AddWithValue("@k", pKingdom.id);
-                using var reader = (SQLiteDataReader)cmd.ExecuteReader();
-                if (!reader.Read()) return false;
-                int level = reader.IsDBNull(0) ? LevelNone : Convert.ToInt32(reader.GetValue(0));
-                string legitimacy = reader.IsDBNull(1) ? "" : Convert.ToString(reader.GetValue(1)) ?? "";
+                int level;
+                string legitimacy;
+                using (var cmd = new SQLiteCommand(DB))
+                {
+                    cmd.CommandText =
+                        $"SELECT XIAIZATION_LEVEL, LEGITIMACY_TYPE FROM " +
+                        $"{KingdomXiaizationStateTableItem.GetTableName()} WHERE KINGDOM_ID=@k LIMIT 1";
+                    cmd.Parameters.AddWithValue("@k", pKingdom.id);
+                    using var reader = (SQLiteDataReader)cmd.ExecuteReader();
+                    if (!reader.Read()) return false;
+                    level = reader.IsDBNull(0)
+                        ? LevelNone
+                        : Convert.ToInt32(reader.GetValue(0));
+                    legitimacy = reader.IsDBNull(1)
+                        ? ""
+                        : Convert.ToString(reader.GetValue(1)) ?? "";
+                }
                 pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, level);
                 pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, legitimacy);
                 pKingdom.data.set(LineageKeys.XIAIZATION_PSEUDO_DYNASTY,
@@ -256,6 +286,14 @@ namespace AncientWarfare3.core.lineage
                     pKingdom.data.set(LineageKeys.POLICY_AI_ENABLED, true);
                 }
                 RestorePersistedCultureIntegrations();
+                if (level >= LevelXiaizedDynasty)
+                {
+                    if (!XiaizedFamilyBranchTransitionService.TryPrepare(
+                            pKingdom, out var familyTransition))
+                        return false;
+                    XiaizedFamilyBranchTransitionService.Publish(
+                        familyTransition);
+                }
                 return true;
             }
             catch (Exception e)
@@ -308,7 +346,6 @@ namespace AncientWarfare3.core.lineage
             if (pKingdom?.data == null) return "";
             int level = GetLevel(pKingdom);
             bool nativeXiaCulture = IsNativePolicyKingdom(pKingdom);
-            if (level <= LevelNone && !nativeXiaCulture) return "";
             var lines = new List<string>
             {
                 AW_L10n.Text("aw_xiaization_level", "Xiaization level") + ": " + LevelLabel(level)
@@ -379,9 +416,8 @@ namespace AncientWarfare3.core.lineage
                     bool changed = TrySetLevel(pKingdom, LevelXiaInstitutions, "xia_law_institutions", true);
                     LineageService.EnsureForeignPseudoDynastyLineage(pKingdom);
                     return changed;
-                case "aw_decision_appease_xia_cities":
-                    AppeaseXiaCities(pKingdom);
-                    return true;
+                case "aw_decision_appease_foreign_cities":
+                    return AppeaseForeignCities(pKingdom) > 0;
                 default:
                     return false;
             }
@@ -392,7 +428,7 @@ namespace AncientWarfare3.core.lineage
             return pDef != null &&
                    (pDef.Id == "aw_policy_adopt_xia_rites" ||
                     pDef.Id == "aw_policy_xia_law_institutions" ||
-                    pDef.Id == "aw_decision_appease_xia_cities");
+                    pDef.Id == "aw_decision_appease_foreign_cities");
         }
 
         public static bool SpecialRequirementMet(Kingdom pKingdom, string pPolicyId)
@@ -406,8 +442,8 @@ namespace AncientWarfare3.core.lineage
                 case "aw_policy_xia_law_institutions":
                     return !IsNativePolicyKingdom(pKingdom) &&
                            GetLevel(pKingdom) >= LevelAdoptedRites;
-                case "aw_decision_appease_xia_cities":
-                    return GetLevel(pKingdom) >= LevelPseudoDynasty && MaxCityResentment(pKingdom) >= 15f;
+                case "aw_decision_appease_foreign_cities":
+                    return MaxForeignCityResentment(pKingdom) >= 15f;
                 default:
                     return true;
             }
@@ -416,13 +452,14 @@ namespace AncientWarfare3.core.lineage
         public static int ScoreResearch(Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pKingdom?.data == null || pDef == null) return 0;
+            if (pDef.Id == "aw_decision_appease_foreign_cities")
+                return SpecialRequirementMet(pKingdom, pDef.Id) ? 460 : 0;
             if (IsNativePolicyKingdom(pKingdom) ||
                 GetLevel(pKingdom) < LevelPseudoDynasty) return 0;
             switch (pDef.Id)
             {
                 case "aw_policy_adopt_xia_rites": return 520;
                 case "aw_policy_xia_law_institutions": return 500;
-                case "aw_decision_appease_xia_cities": return 460;
                 default: return 0;
             }
         }
@@ -447,6 +484,11 @@ namespace AncientWarfare3.core.lineage
         private static bool TrySetLevel(Kingdom pKingdom, int pLevel, string pLegitimacy, bool pRecord)
         {
             if (pKingdom?.data == null || pLevel <= GetLevel(pKingdom)) return false;
+            XiaizedFamilyBranchTransitionPrepared familyTransition = null;
+            if (pLevel >= LevelXiaizedDynasty &&
+                !XiaizedFamilyBranchTransitionService.TryPrepare(
+                    pKingdom, out familyTransition))
+                return false;
             pKingdom.data.set(LineageKeys.XIAIZATION_LEVEL, pLevel);
             pKingdom.data.set(LineageKeys.XIAIZATION_LEGITIMACY, pLegitimacy ?? "");
             if (KingdomPolicySplitInheritanceRules
@@ -455,6 +497,11 @@ namespace AncientWarfare3.core.lineage
                             pKingdom.culture), pLevel))
                 XiaCultureIntegrationService.MarkIntegrated(
                     pKingdom.culture);
+            if (KingdomPolicySplitInheritanceRules
+                    .ShouldMarkCultureFullyIntegrated(pLevel))
+                XiaCultureIntegrationService.MarkFullyIntegrated(
+                    pKingdom.culture);
+            XiaizedFamilyBranchTransitionService.Publish(familyTransition);
             UpsertKingdomState(pKingdom, pLevel, pLegitimacy, HasAdoptedRites(pKingdom), HasAdoptedLaw(pKingdom),
                 ReadStableYears(pKingdom));
             if (pLevel >= LevelXiaizedDynasty)
@@ -487,26 +534,82 @@ namespace AncientWarfare3.core.lineage
             KingdomPolicyService.EnsureInitialized(pKingdom);
         }
 
-        private static void AppeaseXiaCities(Kingdom pKingdom)
+        private static int AppeaseForeignCities(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null || !Ready) return;
+            if (pKingdom?.data == null) return 0;
+            long rulerCultureId = pKingdom.culture?.id ?? -1L;
+            bool xiaContact = HasQualifyingXiaContact(pKingdom);
             int changed = 0;
+            int xiaChanged = 0;
             foreach (City city in pKingdom.getCities())
             {
                 if (city?.data == null || city.isRekt()) continue;
-                double current = GetCityResentment(city);
-                if (current <= 0.0) continue;
-                UpsertCityState(city, pKingdom, "appeased", 100.0, 100.0, Math.Max(0.0, current - 18.0));
-                ForeignOccupationService.AdjustResentment(city, -18.0);
+                long cityCultureId = city.culture?.id ?? -1L;
+                if (!WesternPolicyDefinitionRules.CanAppeaseForeignCity(
+                        city.kingdom == pKingdom, rulerCultureId,
+                        cityCultureId)) continue;
+
+                double occupationResentment =
+                    ForeignOccupationService.GetResentment(city);
+                double xiaResentment = xiaContact && Ready
+                    ? GetCityResentment(city)
+                    : 0.0;
+                if (occupationResentment <= 0.0 && xiaResentment <= 0.0)
+                    continue;
+
+                if (occupationResentment > 0.0)
+                    ForeignOccupationService.AdjustResentment(city, -18.0);
+                if (xiaResentment > 0.0)
+                {
+                    UpsertCityState(city, pKingdom, "appeased", 100.0,
+                        100.0, Math.Max(0.0, xiaResentment - 18.0));
+                    xiaChanged++;
+                }
                 changed++;
             }
 
-            HistoryWriter.RecordKingdom(pKingdom, KingdomEvent.XIAIZATION_ADOPTED,
-                HistoryText.Kingdom(pKingdom) +
-                HistoryLocalizationRules.H("aw_hist_xiaization_appeased_mid") +
-                HistoryText.PlainText(changed.ToString()) +
-                HistoryLocalizationRules.H("aw_hist_xiaization_city_count_suffix"),
-                HistoryTarget.Kingdom(pKingdom));
+            if (xiaChanged > 0)
+            {
+                HistoryWriter.RecordKingdom(pKingdom,
+                    KingdomEvent.XIAIZATION_ADOPTED,
+                    HistoryText.Kingdom(pKingdom) +
+                    HistoryLocalizationRules.H(
+                        "aw_hist_xiaization_appeased_mid") +
+                    HistoryText.PlainText(xiaChanged.ToString()) +
+                    HistoryLocalizationRules.H(
+                        "aw_hist_xiaization_city_count_suffix"),
+                    HistoryTarget.Kingdom(pKingdom));
+            }
+
+            return changed;
+        }
+
+        private static bool HasQualifyingXiaContact(Kingdom pKingdom)
+        {
+            return pKingdom?.data != null &&
+                   !IsNativePolicyKingdom(pKingdom) &&
+                   GetLevel(pKingdom) >= LevelPseudoDynasty;
+        }
+
+        private static float MaxForeignCityResentment(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return 0f;
+            long rulerCultureId = pKingdom.culture?.id ?? -1L;
+            bool xiaContact = HasQualifyingXiaContact(pKingdom);
+            float maximum = 0f;
+            foreach (City city in pKingdom.getCities())
+            {
+                if (city?.data == null || city.isRekt()) continue;
+                if (!WesternPolicyDefinitionRules.CanAppeaseForeignCity(
+                        city.kingdom == pKingdom, rulerCultureId,
+                        city.culture?.id ?? -1L)) continue;
+                maximum = Math.Max(maximum,
+                    ForeignOccupationService.GetResentment(city));
+                if (xiaContact && Ready)
+                    maximum = Math.Max(maximum,
+                        (float)GetCityResentment(city));
+            }
+            return maximum;
         }
 
         private static void UpsertKingdomState(Kingdom pKingdom, int pLevel, string pLegitimacy,

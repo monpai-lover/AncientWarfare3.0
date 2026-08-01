@@ -155,6 +155,7 @@ aw_diplomacy_failure_rebel_suzerain,起义政权不能通过外交接纳附庸,A
 aw_diplomacy_failure_alliance_conflict,双方已经分属不同盟约,Both realms already belong to different alliances,雙方已經分屬不同盟約
 aw_diplomacy_failure_alliance_members_refuse,现有盟约的成员拒绝该国加入,The existing alliance will not admit this realm,現有盟約的成員拒絕該國加入
 aw_diplomacy_failure_alliance_unavailable,当前无法建立或加入该盟约,The alliance cannot currently be formed,當前無法建立或加入該盟約
+aw_diplomacy_failure_alliance_too_distant,两国相距过远 无法建立盟约,The realms are too distant to form an alliance,兩國相距過遠 無法建立盟約
 aw_diplomacy_failure_join_war_execution,该国未能加入指定战争,The realm could not be added to the requested war,該國未能加入指定戰爭
 aw_diplomacy_failure_join_war_stale,指定战争已经结束或参战关系已经变化,The selected war is no longer available,指定戰爭已經結束或參戰關係已經變化
 aw_diplomacy_failure_protector_war_conflict,拟议保护国已在该战争中或与交战方存在宗藩冲突,The proposed protector is already involved in a conflicting war,擬議保護國已在該戰爭中或與交戰方存在宗藩衝突

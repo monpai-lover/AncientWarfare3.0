@@ -12,6 +12,7 @@ namespace AncientWarfare3.core.lineage
         public const string WAR_NORMAL = "aw_normal_war";
         public const string WAR_RESTORATION = "restoration_war";
         public const string WAR_TRIBUTARY = "tributary_war";
+        public const string WAR_ZHULU = ZhuluWarRules.WarTypeId;
 
         private const int DEFAULT_CLAIM_YEARS = 30;
         private const int NO_CB_COOLDOWN_YEARS = 20;
@@ -394,11 +395,9 @@ namespace AncientWarfare3.core.lineage
         private static bool CanPassVassalWarRules(Kingdom pAttacker, Kingdom pDefender, string pWarType,
             out string pReason)
         {
-            Kingdom attackerSuzerain =
-                VassalService.GetDiplomaticSuzerain(pAttacker);
+            Kingdom attackerSuzerain = VassalService.GetSuzerain(pAttacker);
             bool attackerIsVassal = attackerSuzerain?.data != null && !attackerSuzerain.isRekt();
-            Kingdom defenderSuzerain =
-                VassalService.GetDiplomaticSuzerain(pDefender);
+            Kingdom defenderSuzerain = VassalService.GetSuzerain(pDefender);
             bool defenderIsSubject = defenderSuzerain?.data != null &&
                                      !defenderSuzerain.isRekt();
             bool defenderIsSuzerain = attackerSuzerain != null && attackerSuzerain == pDefender;
@@ -453,6 +452,9 @@ namespace AncientWarfare3.core.lineage
                     return CanForceTributary(pAttacker, pDefender);
                 case WAR_NORMAL:
                     return WarTerritoryService.CanUseMandateConquest(pAttacker, pDefender);
+                case WAR_ZHULU:
+                    return ZhuluWarService.CanDeclare(pAttacker, pDefender,
+                        out _);
                 case MandateService.WAR_TIANMING:
                     return MandatePhaseService.CanContestMandate &&
                            MandateService.GetCurrentMandateKingdom() == pDefender;
@@ -472,6 +474,10 @@ namespace AncientWarfare3.core.lineage
 
         public static bool CanForceVassal(Kingdom pAttacker, Kingdom pDefender)
         {
+            if (!WarAiGoalSelectionRules.CanAiForceVassal(
+                    (int)KingdomTitleService.GetTitle(pAttacker),
+                    (int)KingdomTitleService.GetTitle(pDefender)))
+                return false;
             if (!VassalService.CanSetVassal(pDefender, pAttacker)) return false;
             if (VassalService.IsVassalKingdom(pAttacker)) return false;
             if (VassalService.IsSuzerain(pDefender)) return false;
@@ -591,6 +597,8 @@ namespace AncientWarfare3.core.lineage
                 case "tianming": return WarDisplayLabelRules.Label("tianming");
                 case "mandate_conquest": return WarDisplayLabelRules.Label("mandate_conquest");
                 case "jingnan": return WarDisplayLabelRules.Label("jingnan_war");
+                case ZhuluWarRules.GoalTypeId:
+                    return WarDisplayLabelRules.Label(ZhuluWarRules.GoalTypeId);
                 case "no_cb": return WarDisplayLabelRules.Label("no_cb");
             }
 

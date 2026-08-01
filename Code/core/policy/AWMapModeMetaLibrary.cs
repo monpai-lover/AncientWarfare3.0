@@ -8,6 +8,7 @@ namespace AncientWarfare3.core.policy
 {
     internal static class AWMapModeMetaLibrary
     {
+        private const int MaxVisualClosureZones = 64;
         private static readonly Dictionary<string, AWMapModeMetaObject> Metas = new Dictionary<string, AWMapModeMetaObject>();
         private static readonly Dictionary<string, ColorAsset> ColorCache = new Dictionary<string, ColorAsset>();
         private static bool _hadAnyDynamicMeta;
@@ -25,6 +26,9 @@ namespace AncientWarfare3.core.policy
         public static MetaTypeAsset DevelopmentAsset { get; private set; }
         public static MetaTypeAsset SchoolAsset { get; private set; }
         public static MetaTypeAsset FeudatoryAsset { get; private set; }
+        public static MetaTypeAsset HierarchicalVassalAsset {
+            get; private set;
+        }
 
         private static ZoneCalculator ZoneManager => World.world?.zone_calculator;
 
@@ -57,6 +61,8 @@ namespace AncientWarfare3.core.policy
                     return SchoolAsset;
                 case FeudatoryMapModeService.POWER_ID:
                     return FeudatoryAsset;
+                case HierarchicalVassalMapModeService.POWER_ID:
+                    return HierarchicalVassalAsset;
                 default:
                     return null;
             }
@@ -91,6 +97,15 @@ namespace AncientWarfare3.core.policy
                 AWMapModeMetaTypes.Feudatory, FeudatoryMapModeService.POWER_ID,
                 GetFeudatoryMetaForZone);
             FeudatoryAsset.click_action_zone = FeudatoryMapModeService.SelectPrince;
+            HierarchicalVassalAsset = AddOrGet(
+                AWMapModeMetaTypes.HierarchicalVassalId,
+                AWMapModeMetaTypes.HierarchicalVassal,
+                HierarchicalVassalMapModeService.POWER_ID,
+                HierarchicalVassalMapModeService.GetMetaForZone);
+            HierarchicalVassalAsset.draw_zones =
+                HierarchicalVassalMapModeService.DrawZones;
+            HierarchicalVassalAsset.click_action_zone =
+                HierarchicalVassalMapModeService.HandleZoneClick;
         }
 
         private static void ConfigureSchoolSelectionAsset(MetaTypeAsset pAsset)
@@ -554,7 +569,14 @@ namespace AncientWarfare3.core.policy
 
         private static bool ShowKingdomTooltip(TileZone pZone, MetaTypeAsset pAsset, int pZoneOption)
         {
-            if (AWMapModeMetaRules.ShouldUseCityTooltipForMapMode(pAsset?.map_mode ?? MetaType.None))
+            bool hierarchicalCityLayer =
+                HierarchicalVassalMapModeService.IsActive() &&
+                HierarchicalVassalMapModeService.IsCityLayer &&
+                AWMapModeMetaRules.IsRuntimeMeta(
+                    pAsset?.map_mode ?? MetaType.None,
+                    AWMapModeMetaTypes.HierarchicalVassal);
+            if (hierarchicalCityLayer ||
+                AWMapModeMetaRules.ShouldUseCityTooltipForMapMode(pAsset?.map_mode ?? MetaType.None))
             {
                 City city = GetCityForZone(pZone);
                 Kingdom cityKingdom = city?.kingdom;
@@ -590,14 +612,46 @@ namespace AncientWarfare3.core.policy
             if (TechMapModeService.IsActive() &&
                 AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None, AWMapModeMetaTypes.Tech))
             {
-                QuantumSpriteLibrary.colorZones(pQAsset, city.zones, color);
+                ColorCityZonesWithClosure(pQAsset, city, color);
                 return;
             }
 
             if (DevelopmentMapModeService.IsActive() &&
                 AWMapModeMetaRules.IsRuntimeMeta(pAsset?.map_mode ?? MetaType.None, AWMapModeMetaTypes.Development))
             {
-                QuantumSpriteLibrary.colorZones(pQAsset, city.zones, color);
+                ColorCityZonesWithClosure(pQAsset, city, color);
+                return;
+            }
+
+            if (HierarchicalVassalMapModeService.IsActive() &&
+                AWMapModeMetaRules.IsRuntimeMeta(
+                    pAsset?.map_mode ?? MetaType.None,
+                    AWMapModeMetaTypes.HierarchicalVassal))
+            {
+                Kingdom displayedKingdom;
+                if (HierarchicalVassalMapModeService.IsCityLayer)
+                {
+                    ColorCityZonesWithClosure(pQAsset, city, color);
+                    displayedKingdom = city.kingdom;
+                }
+                else if (HierarchicalVassalMapModeService.
+                    TryGetDisplayedRealm(pTile.zone,
+                        out displayedKingdom,
+                        out List<TileZone> displayedZones))
+                {
+                    ColorDisplayedRealmZones(pQAsset, displayedZones,
+                        color);
+                }
+                else
+                {
+                    return;
+                }
+
+                if (displayedKingdom?.data != null &&
+                    PlayerConfig.optionBoolEnabled(
+                        "highlight_kingdom_enemies"))
+                    QuantumSpriteLibrary.colorEnemies(pQAsset,
+                        displayedKingdom);
                 return;
             }
 
@@ -616,19 +670,110 @@ namespace AncientWarfare3.core.policy
                         try { member = cities?.get(snapshot.CityIds[i]); }
                         catch { member = null; }
                         if (member?.data != null)
-                            QuantumSpriteLibrary.colorZones(pQAsset, member.zones,
-                                color);
+                            ColorCityZonesWithClosure(pQAsset, member, color);
                     }
                 }
                 else
                 {
-                    QuantumSpriteLibrary.colorZones(pQAsset, city.zones, color);
+                    ColorCityZonesWithClosure(pQAsset, city, color);
                 }
                 return;
             }
 
             foreach (City item in city.kingdom.getCities())
-                QuantumSpriteLibrary.colorZones(pQAsset, item.zones, color);
+                ColorCityZonesWithClosure(pQAsset, item, color);
+        }
+
+        private static void ColorDisplayedRealmZones(
+            QuantumSpriteAsset pQAsset, List<TileZone> pZones, Color pColor)
+        {
+            if (pQAsset == null || pZones == null || pZones.Count == 0)
+                return;
+            QuantumSpriteLibrary.colorZones(pQAsset, pZones, pColor);
+        }
+
+        private static void ColorCityZonesWithClosure(QuantumSpriteAsset pQAsset,
+            City pCity, Color pColor)
+        {
+            if (pQAsset == null || pCity?.data == null || pCity.zones == null)
+                return;
+
+            QuantumSpriteLibrary.colorZones(pQAsset, pCity.zones, pColor);
+            if (pCity.kingdom?.data == null || pCity.kingdom.isNeutral()) return;
+
+            var visited = new HashSet<long>();
+            var component = new List<TileZone>();
+            var frontier = new Queue<TileZone>();
+            for (int i = 0; i < pCity.zones.Count; i++)
+            {
+                TileZone zone = pCity.zones[i];
+                TileZone[] neighbours = zone?.neighbours;
+                if (neighbours == null) continue;
+                for (int j = 0; j < neighbours.Length; j++)
+                {
+                    TileZone seed = neighbours[j];
+                    if (seed == null || seed.city != null ||
+                        !visited.Add(EncodeZone(seed))) continue;
+
+                    component.Clear();
+                    frontier.Clear();
+                    frontier.Enqueue(seed);
+                    bool touchesWorldEdge = false;
+                    bool enclosedByKingdom = true;
+                    bool exceededZoneBudget = false;
+                    while (frontier.Count > 0)
+                    {
+                        if (component.Count >= MaxVisualClosureZones)
+                        {
+                            exceededZoneBudget = true;
+                            break;
+                        }
+                        TileZone current = frontier.Dequeue();
+                        if (current == null || current.city != null) continue;
+                        component.Add(current);
+                        if (current.world_edge) touchesWorldEdge = true;
+                        TileZone[] currentNeighbours = current.neighbours;
+                        if (currentNeighbours == null ||
+                            currentNeighbours.Length != 4)
+                        {
+                            touchesWorldEdge = true;
+                            continue;
+                        }
+                        for (int k = 0; k < currentNeighbours.Length; k++)
+                        {
+                            TileZone next = currentNeighbours[k];
+                            if (next == null)
+                            {
+                                touchesWorldEdge = true;
+                                continue;
+                            }
+                            if (next.city == null)
+                            {
+                                if (visited.Add(EncodeZone(next)))
+                                    frontier.Enqueue(next);
+                                continue;
+                            }
+                            Kingdom boundary = next.city.kingdom;
+                            if (boundary?.data == null || boundary.isNeutral() ||
+                                boundary.id != pCity.kingdom.id)
+                                enclosedByKingdom = false;
+                        }
+                    }
+
+                    if (!touchesWorldEdge && !exceededZoneBudget &&
+                        enclosedByKingdom &&
+                        component.Count > 0)
+                        QuantumSpriteLibrary.colorZones(pQAsset, component,
+                            pColor);
+                }
+            }
+        }
+
+        private static long EncodeZone(TileZone pZone)
+        {
+            return pZone == null
+                ? long.MinValue
+                : ((long)(uint)pZone.x << 32) | (uint)pZone.y;
         }
     }
 }

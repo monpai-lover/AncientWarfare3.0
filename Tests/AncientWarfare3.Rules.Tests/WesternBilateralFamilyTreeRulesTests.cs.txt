@@ -1,0 +1,77 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class WesternBilateralFamilyTreeRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, FamilyTreeRelationRules.UsesBilateralBigTree(
+            NamingProfileId.Western),
+            "western families use bilateral trees");
+        Equal(true, FamilyTreeRelationRules.UsesBilateralBigTree(
+            NamingProfileId.OrcNomadic),
+            "nomadic orc families use bilateral trees");
+        Equal(false, FamilyTreeRelationRules.UsesBilateralBigTree(
+            NamingProfileId.Xia),
+            "Xia families retain agnatic trees");
+        Equal(false, FamilyTreeRelationRules.UsesBilateralBigTree(
+            NamingProfileId.Monkey),
+            "monkey families retain Xia agnatic trees");
+        Equal(false, FamilyTreeRelationRules.UsesBilateralBigTree(
+            NamingProfileId.None),
+            "unknown profiles retain the safe agnatic fallback");
+
+        Equal(true, FamilyTreeRelationRules.ShouldShowInBigTree(
+            pSex: 1, pStatus: "noble", NamingProfileId.Western,
+            pHasHeldTitle: true),
+            "western female title holders are visible in the large family tree");
+        Equal(true, FamilyTreeRelationRules.ShouldShowInBigTree(
+            pSex: 1, pStatus: "none", NamingProfileId.OrcNomadic,
+            pHasHeldTitle: true),
+            "orc female title holders are visible regardless of office status");
+        Equal(false, FamilyTreeRelationRules.ShouldShowInBigTree(
+            pSex: 1, pStatus: "noble", NamingProfileId.Western,
+            pHasHeldTitle: false),
+            "untitled western noble women stay outside the large tree");
+        Equal(false, FamilyTreeRelationRules.ShouldShowInBigTree(
+            pSex: 1, pStatus: "noble", NamingProfileId.Xia,
+            pHasHeldTitle: true),
+            "Xia women remain outside the agnatic large tree");
+        Equal(false, FamilyTreeRelationRules.ShouldShowInBigTree(
+            pSex: 1, pStatus: "noble", NamingProfileId.Monkey,
+            pHasHeldTitle: true),
+            "monkey women remain outside the agnatic large tree");
+
+        Equal(true, FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+            pParentId: 20, pFatherId: 10, pMotherId: 20,
+            pParentSex: 1, pParentHasHeldTitle: true,
+            pChildSex: 1, pChildStatus: "none",
+            pChildHasHeldTitle: true, pProfile: NamingProfileId.Western),
+            "western trees continue through a titled mother and titled daughter");
+        Equal(false, FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+            pParentId: 20, pFatherId: 10, pMotherId: 20,
+            pParentSex: 1, pParentHasHeldTitle: false,
+            pChildSex: 0, pChildStatus: "none",
+            pChildHasHeldTitle: false, pProfile: NamingProfileId.Western),
+            "an untitled mother cannot open a maternal branch");
+        Equal(false, FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+            pParentId: 20, pFatherId: 10, pMotherId: 20,
+            pParentSex: 1, pParentHasHeldTitle: true,
+            pChildSex: 0, pChildStatus: "noble",
+            pChildHasHeldTitle: false, pProfile: NamingProfileId.Xia),
+            "Xia trees do not continue through maternal edges");
+        Equal(true, FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+            pParentId: 10, pFatherId: 10, pMotherId: 20,
+            pParentSex: 0, pParentHasHeldTitle: false,
+            pChildSex: 0, pChildStatus: "noble",
+            pChildHasHeldTitle: false, pProfile: NamingProfileId.Xia),
+            "Xia trees retain paternal male edges");
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{name}: expected {expected}, got {actual}");
+    }
+}

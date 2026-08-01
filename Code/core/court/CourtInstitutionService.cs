@@ -9,29 +9,55 @@ namespace AncientWarfare3.core.court
     {
         public static string GetInstitution(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return CourtInstitutionId.Zhou;
+            ICourtProfile profile = CourtProfileRegistry.For(pKingdom);
+            if (pKingdom?.data == null || profile == null)
+                return CourtInstitutionId.Zhou;
             pKingdom.data.get(LineageKeys.COURT_INSTITUTION,
                 out string institution, "");
-            if (CourtInstitutionRules.IsKnown(institution)) return institution;
+            if (CourtInstitutionRules.IsKnown(institution) &&
+                InstitutionMatchesProfile(profile, institution))
+                return institution;
             return Refresh(pKingdom, pRecordHistory: false);
         }
 
         public static string Refresh(Kingdom pKingdom, bool pRecordHistory)
         {
-            if (pKingdom?.data == null) return CourtInstitutionId.Zhou;
+            ICourtProfile profile = CourtProfileRegistry.For(pKingdom);
+            if (pKingdom?.data == null || profile == null)
+                return CourtInstitutionId.Zhou;
             pKingdom.data.get(LineageKeys.COURT_INSTITUTION,
                 out string previous, "");
-            if (!CourtInstitutionRules.IsKnown(previous))
+            if (!CourtInstitutionRules.IsKnown(previous) ||
+                !InstitutionMatchesProfile(profile, previous))
             {
                 pKingdom.data.get(LineageKeys.COURT_TIER,
                     out string previousTier, CourtTier.EasternZhou);
                 previous = CourtInstitutionRules.InstitutionForTier(previousTier);
             }
 
-            string next = CourtInstitutionRules.Resolve(
-                HasTech(pKingdom, "aw_tech_official_court"),
-                HasTech(pKingdom, "aw_tech_three_departments"),
-                HasTech(pKingdom, "aw_tech_song_court"));
+            string next;
+            if (profile.Id == CourtProfileId.Western)
+            {
+                KingdomPolicyEffects effects =
+                    KingdomPolicyEffectService.Read(pKingdom);
+                pKingdom.data.get(LineageKeys.POLICY_GOVERNMENT_STATE,
+                    out string governmentState, "default");
+                next = profile.ResolveInstitution(
+                    effects.WesternCourtUnlocked,
+                    effects.ElectiveTermsUnlocked &&
+                    governmentState == CourtInstitutionId.WesternElective,
+                    effects.FeudalRetainersUnlocked &&
+                    governmentState == CourtInstitutionId.WesternFeudal,
+                    effects.RoyalAppointmentsUnlocked &&
+                    governmentState == CourtInstitutionId.WesternRoyalDirect);
+            }
+            else
+            {
+                next = CourtInstitutionRules.Resolve(
+                    HasTech(pKingdom, "aw_tech_official_court"),
+                    HasTech(pKingdom, "aw_tech_three_departments"),
+                    HasTech(pKingdom, "aw_tech_song_court"));
+            }
             pKingdom.data.set(LineageKeys.COURT_INSTITUTION, next);
             pKingdom.data.set(LineageKeys.COURT_TIER,
                 CourtInstitutionRules.TierForInstitution(next));
@@ -66,6 +92,16 @@ namespace AncientWarfare3.core.court
                     "Unrest -4 · Manpower +15% · Slots +10% · Direct autonomy cap -10",
                 CourtInstitutionId.Tang =>
                     "Cross-culture opinion +10 · Slots +12% · Domestic spread +10%",
+                CourtInstitutionId.WesternPrimitive =>
+                    "No formal office system",
+                CourtInstitutionId.WesternBase =>
+                    "Standing royal and local offices",
+                CourtInstitutionId.WesternElective =>
+                    "Six-year terms; vacancies filled by election",
+                CourtInstitutionId.WesternFeudal =>
+                    "Landed nobles and educated retainers favored",
+                CourtInstitutionId.WesternRoyalDirect =>
+                    "Royal appointment; higher administration and tax; noble and vassal discontent",
                 CourtInstitutionId.Song =>
                     "Policy +15% · Tech/spread +20% · Tax +10% · Direct tribute +10 · Slots -10%",
                 _ => "Vassal soft cap 8 · Feudatory maintenance loyalty +1"
@@ -79,6 +115,10 @@ namespace AncientWarfare3.core.court
             string office = pOfficeId ?? "";
             string fallback = AW_L10n.Text("aw_court_office_" + office,
                 office);
+            CourtOfficeDefinition definition =
+                CourtProfileRegistry.FindOffice(pKingdom, office);
+            if (definition != null)
+                return AW_L10n.Text(definition.LocalizationKey, fallback);
             return AW_L10n.Text(
                 CourtInstitutionRules.OfficeLocalizationKey(
                     GetInstitution(pKingdom), office), fallback);
@@ -88,6 +128,16 @@ namespace AncientWarfare3.core.court
         {
             return KingdomPolicyService.IsCompleted(pKingdom,
                 PolicyNodeKind.Tech, pTechId);
+        }
+
+        private static bool InstitutionMatchesProfile(ICourtProfile pProfile,
+            string pInstitution)
+        {
+            bool western = pInstitution.StartsWith("western_",
+                System.StringComparison.Ordinal);
+            return pProfile.Id == CourtProfileId.Western
+                ? western
+                : !western;
         }
     }
 }

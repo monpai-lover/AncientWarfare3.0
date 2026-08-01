@@ -22,17 +22,17 @@ namespace AncientWarfare3.core.lineage
         }
 
         public static bool ShouldCreateRetryRequest(bool pManagedPregnancy,
-            bool pNobleCoupleEligible, bool pEitherEligibleParentHasLivingSon,
+            bool pNobleCoupleEligible, bool pNeedsExpansion,
             bool pAlreadyPending)
         {
             return pManagedPregnancy && pNobleCoupleEligible &&
-                   !pEitherEligibleParentHasLivingSon && !pAlreadyPending;
+                   pNeedsExpansion && !pAlreadyPending;
         }
 
         public static NobleHeirRetryDisposition EvaluateRetry(
             bool pAuthoritative, bool pNextCycleReached,
             bool pMotherAlive, bool pNobleCoupleEligible,
-            bool pEitherEligibleParentHasLivingSon, bool pPartnerReady,
+            bool pNeedsExpansion, bool pPartnerReady,
             bool pPregnancyRemoved, bool pMotherAdult,
             bool pMotherBreedingAge, bool pFertile, bool pHasNutrition,
             bool pCitySafe, bool pPersonalOffspringRoom,
@@ -40,7 +40,7 @@ namespace AncientWarfare3.core.lineage
             bool pWorldLawAllows)
         {
             if (!pMotherAlive || !pNobleCoupleEligible ||
-                pEitherEligibleParentHasLivingSon)
+                !pNeedsExpansion)
                 return NobleHeirRetryDisposition.Clear;
 
             bool offspringRoom = DynasticMaleLineContinuityRules

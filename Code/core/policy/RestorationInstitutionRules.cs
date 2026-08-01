@@ -2,6 +2,11 @@ namespace AncientWarfare3.core.policy
 {
     public sealed class RestorationInstitutionState
     {
+        public string profileId = "";
+        public string governmentState = "default";
+        public int royalAuthority;
+        public int migrationVersion;
+        public string obsoleteNodeIds = "";
         public string classState = "";
         public string armyState = "";
         public string nameState = "";
@@ -33,6 +38,17 @@ namespace AncientWarfare3.core.policy
             if (pFallen == null) return null;
             return new RestorationInstitutionState
             {
+                profileId = pFallen.profileId ?? "",
+                governmentState = string.IsNullOrEmpty(
+                    pFallen.governmentState)
+                    ? "default"
+                    : pFallen.governmentState,
+                royalAuthority = Clamp(pFallen.royalAuthority, 0,
+                    WesternRoyalAuthorityRules.MaximumConsolidatedAuthority),
+                migrationVersion = pFallen.migrationVersion < 0
+                    ? 0
+                    : pFallen.migrationVersion,
+                obsoleteNodeIds = pFallen.obsoleteNodeIds ?? "",
                 classState = SanitizeClassStateForRevival(pFallen.classState),
                 armyState = pFallen.armyState ?? "",
                 nameState = pFallen.nameState ?? "",
@@ -67,6 +83,12 @@ namespace AncientWarfare3.core.policy
         private static float NonNegative(float pValue)
         {
             return pValue < 0f ? 0f : pValue;
+        }
+
+        private static int Clamp(int pValue, int pMinimum, int pMaximum)
+        {
+            return System.Math.Max(pMinimum,
+                System.Math.Min(pMaximum, pValue));
         }
     }
 }

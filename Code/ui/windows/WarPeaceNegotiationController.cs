@@ -232,6 +232,8 @@ namespace AncientWarfare3.ui.windows
             War war = session.War;
             if (war.hasEnded())
                 disabledReason = "war_no_longer_active";
+            else if (ZhuluPeaceGuard.BlocksOrdinarySettlement(war))
+                disabledReason = ZhuluPeaceGuard.Reason(war);
             else if (RebellionDirectTerritoryTransferService.
                          BlocksOrdinarySettlement(war))
                 disabledReason = RebellionDirectTerritoryTransferRules.
@@ -320,6 +322,11 @@ namespace AncientWarfare3.ui.windows
                 return false;
             }
             pWar = sharedWar;
+            if (ZhuluPeaceGuard.BlocksOrdinarySettlement(sharedWar))
+            {
+                pReason = ZhuluPeaceGuard.Reason(sharedWar);
+                return false;
+            }
             if (RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(sharedWar))
             {

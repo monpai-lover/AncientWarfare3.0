@@ -562,7 +562,7 @@ namespace AncientWarfare3.core.lineage
             command.Parameters.AddWithValue("@kind", KindCode(pKind));
             command.Parameters.AddWithValue("@rank",
                 RulerHouseholdRules.TitleKey(ResolveRealmTier(pRecipient),
-                    pKind));
+                    pKind, pRuler.isSexFemale()));
             command.Parameters.AddWithValue("@year", pYear);
             command.Parameters.AddWithValue("@time", LineageService.CurTime());
             command.Parameters.AddWithValue("@proposal", pProposalId);

@@ -16,6 +16,8 @@ aw_household_consort_capacity,妾室,Consorts,妾室
 aw_household_section_principal_wife,正妻,Principal Wife,正妻
 aw_household_section_consorts,妾室,Consorts,妾室
 aw_household_empty_principal_wife,尚无正妻,No Principal Wife,尚無正妻
+aw_household_section_royal_husband,王夫,Prince Consort,王夫
+aw_household_empty_royal_husband,尚无王夫,No Prince Consort,尚無王夫
 aw_household_empty_consorts,尚无妾室,No Consorts,尚無妾室
 aw_household_unavailable,后宫档案不可用,Household Unavailable,後宮檔案不可用
 aw_household_unknown,不详,Unknown,不詳
@@ -29,6 +31,7 @@ aw_household_status_unavailable,情况不明,Unavailable,情況不明
 aw_household_title_empress,皇后,Empress,皇后
 aw_household_title_queen,王后,Queen,王后
 aw_household_title_principal_wife,正妻,Principal Wife,正妻
+aw_household_title_royal_husband,王夫,Prince Consort,王夫
 aw_household_title_imperial_consort,帝妃,Imperial Consort,帝妃
 aw_household_title_royal_consort,王妃,Royal Consort,王妃
 aw_household_title_secondary_consort,妾室,Consort,妾室

@@ -851,8 +851,8 @@ namespace AncientWarfare3.ui.windows
                 {
                     title = AW_L10n.Text("aw_diplomacy_action_declare_war",
                         "Declare war");
-                    available = !DiplomaticWarDeclarationService.HasPending(
-                                    pRequester) &&
+                    available = !DiplomaticWarDeclarationService.
+                                    HasPendingForPair(pRequester, pResponder) &&
                                 WarTerritoryService.BuildTargetOptions(
                                     pRequester, pResponder).Count > 0;
                     reason = available ? "" : "unavailable";
@@ -1248,6 +1248,9 @@ namespace AncientWarfare3.ui.windows
                 "alliance_members_refuse" => AW_L10n.Text(
                     "aw_diplomacy_failure_alliance_members_refuse",
                     "The existing alliance will not admit this realm"),
+                "alliance_too_distant" => AW_L10n.Text(
+                    "aw_diplomacy_failure_alliance_too_distant",
+                    "The realms are too distant to form an alliance"),
                 "alliance_unavailable" or "alliance_execution_failed" =>
                     AW_L10n.Text("aw_diplomacy_failure_alliance_unavailable",
                         "The alliance cannot currently be formed"),

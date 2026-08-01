@@ -12,6 +12,9 @@ namespace AncientWarfare3.core.lineage
                 pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
             if (pWarType == CoupRestorationRules.WarTypeId &&
                 pPath == "ui/wars/war_rebellion") return "wars/war_rebellion";
+            if (pWarType == ZhuluWarRules.WarTypeId &&
+                string.IsNullOrEmpty(pPath))
+                return "ui/Icons/traits/iconTianming";
             return pPath ?? "";
         }
 
@@ -20,6 +23,8 @@ namespace AncientWarfare3.core.lineage
             switch (pKind ?? "")
             {
                 case "take_mandate": return "ui/Icons/traits/iconTianming";
+                case "zhulu_annexation":
+                    return "ui/Icons/traits/iconTianming";
                 case "mandate_conquest": return "wars/war_conquest";
                 case "take_core_city": return "ui/plots/plot_reclaim";
                 case "press_claim_city": return "ui/plots/plot_reclaim";

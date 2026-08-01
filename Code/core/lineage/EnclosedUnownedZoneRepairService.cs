@@ -76,6 +76,31 @@ namespace AncientWarfare3.core.lineage
             _sweepCursor = 0;
         }
 
+        // Save loading is a stable world boundary. Repair all currently
+        // enclosed unowned components before the first map frame so mapmodes
+        // never expose holes left by the serialized zone graph.
+        public static void RepairWorldImmediately()
+        {
+            PendingCoordinates.Clear();
+            PendingCoordinateSet.Clear();
+            PendingCityBoundaryScans.Clear();
+            PendingBoundaryScansByCityId.Clear();
+            _sweepCursor = -1;
+
+            ZoneCalculator calculator = World.world?.zone_calculator;
+            if (calculator?.zones == null) return;
+            List<TileZone> zones = calculator.zones;
+            for (int index = 0; index < zones.Count; index++)
+            {
+                try { TryRepair(zones[index]); }
+                catch
+                {
+                    // A partially deserialized zone is retried by the normal
+                    // ownership queue after the world becomes live.
+                }
+            }
+        }
+
         public static void Reset()
         {
             PendingCoordinates.Clear();

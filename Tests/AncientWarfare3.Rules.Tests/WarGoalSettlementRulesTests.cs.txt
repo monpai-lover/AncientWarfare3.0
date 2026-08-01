@@ -17,6 +17,86 @@ internal static class WarGoalSettlementRulesTests
         LegacyInvalidGoalDataCannotForceEarlySettlement();
         SystemGoalsPublishAutomaticSettlementProfiles();
         AutomaticCessionKeepsItsPersistedGoalScore();
+        CompletedAffordableGoalsCanSettleWithoutIncompleteGoals();
+        GoalSubsetStopsBeforeExceedingAvailableScore();
+        PermanentExtinctionRemainsZeroInsteadOfReturningToOneCity();
+        ConcurrentPermanentExtinctionCanCloseTheWar();
+        EmptyCityResettlementIsBoundedAndExcludesUnsafeCities();
+    }
+
+    private static void CompletedAffordableGoalsCanSettleWithoutIncompleteGoals()
+    {
+        var goals = new[]
+        {
+            Settlement(score: 35, requiredScore: 30, warGoalId: 1,
+                goalCompleted: true, requestedGoalTermWarGoalId: 1),
+            Settlement(score: 35, requiredScore: 20, warGoalId: 2,
+                goalCompleted: false, requestedGoalTermWarGoalId: 2)
+        };
+
+        int[] selected = WarGoalSettlementRules.
+            SelectCompletedAffordableGoalIndices(35, goals);
+
+        Equal(1, selected.Length,
+            "an incomplete second goal does not block a completed goal");
+        Equal(0, selected[0],
+            "the completed affordable goal is selected for settlement");
+    }
+
+    private static void GoalSubsetStopsBeforeExceedingAvailableScore()
+    {
+        var goals = new[]
+        {
+            Settlement(score: 50, requiredScore: 30, warGoalId: 1,
+                requestedGoalTermWarGoalId: 1),
+            Settlement(score: 50, requiredScore: 25, warGoalId: 2,
+                requestedGoalTermWarGoalId: 2),
+            Settlement(score: 50, requiredScore: 15, warGoalId: 3,
+                requestedGoalTermWarGoalId: 3)
+        };
+
+        int[] selected = WarGoalSettlementRules.
+            SelectCompletedAffordableGoalIndices(50, goals);
+
+        Equal(2, selected.Length,
+            "selection includes later affordable goals without overspending");
+        Equal(0, selected[0], "the first declared goal keeps priority");
+        Equal(2, selected[1],
+            "an unaffordable middle goal does not block a cheaper later goal");
+    }
+
+    private static void PermanentExtinctionRemainsZeroInsteadOfReturningToOneCity()
+    {
+        Equal(0, WarParticipantCityBaselineRules.ResolveRemainingCityCount(
+                pRecordedCount: 3, pLiveCount: 0,
+                pPermanentOwnershipChanged: true),
+            "a participant that permanently lost its final city remains at zero");
+    }
+
+    private static void ConcurrentPermanentExtinctionCanCloseTheWar()
+    {
+        Equal(100, WarScoreRules.ResolveRealmOccupationDecisiveScore(
+                WarScoreSide.Defenders, occupiedHostileCityCount: 1,
+                remainingHomeCityCount: 0),
+            "a realm reduced to zero cities by another permanent settlement closes when this war still holds its territory");
+    }
+
+    private static void EmptyCityResettlementIsBoundedAndExcludesUnsafeCities()
+    {
+        True(EmptyCityResettlementRules.CanResettle(
+                true, false, true, 4, 0, false, false),
+            "a neutral empty zoned city can be resettled");
+        False(EmptyCityResettlementRules.CanResettle(
+                true, false, true, 4, 0, true, false),
+            "a city marked for razing cannot be resettled");
+        False(EmptyCityResettlementRules.CanResettle(
+                true, false, true, 4, 0, false, true),
+            "a frozen wartime occupation cannot be stolen by migration");
+        False(EmptyCityResettlementRules.CanResettle(
+                true, false, false, 4, 0, false, false),
+            "an owned city cannot be reassigned by empty-city migration");
+        Equal(4, EmptyCityResettlementRules.ResolveScanCount(100, 4),
+            "empty-city scans remain bounded per authority cycle");
     }
 
     private static void GoalTypeNormalizationPreservesEqualityAndHashing()

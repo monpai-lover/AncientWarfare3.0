@@ -53,6 +53,55 @@ namespace AncientWarfare3.core.lineage
 
     public static class DiplomacyTreatyPersistence
     {
+        public static bool TryReadActiveTreatyYears(SQLiteConnection pDb,
+            string pTableName, long pFirstKingdomId,
+            long pSecondKingdomId, int pCurrentYear,
+            out int pNonAggressionUntil, out int pTruceUntil)
+        {
+            pNonAggressionUntil = -1;
+            pTruceUntil = -1;
+            if (pDb == null || !IsSafeIdentifier(pTableName) ||
+                pFirstKingdomId < 0L || pSecondKingdomId < 0L ||
+                pFirstKingdomId == pSecondKingdomId) return false;
+            try
+            {
+                using var command = new SQLiteCommand(
+                    "SELECT PROPOSAL_TYPE,MAX(TREATY_UNTIL_YEAR) FROM " +
+                    pTableName +
+                    " WHERE PROPOSAL_TYPE IN ('non_aggression','truce') " +
+                    "AND STATUS='accepted' AND TREATY_UNTIL_YEAR>=@year " +
+                    "AND ((REQUESTER_KINGDOM_ID=@a AND " +
+                    "RESPONDER_KINGDOM_ID=@b) OR " +
+                    "(REQUESTER_KINGDOM_ID=@b AND " +
+                    "RESPONDER_KINGDOM_ID=@a)) GROUP BY PROPOSAL_TYPE",
+                    pDb);
+                command.Parameters.AddWithValue("@year", pCurrentYear);
+                command.Parameters.AddWithValue("@a", pFirstKingdomId);
+                command.Parameters.AddWithValue("@b", pSecondKingdomId);
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    string type = reader.IsDBNull(0)
+                        ? ""
+                        : reader.GetString(0);
+                    int until = reader.IsDBNull(1)
+                        ? -1
+                        : reader.GetInt32(1);
+                    if (type == "non_aggression")
+                        pNonAggressionUntil = until;
+                    else if (type == "truce")
+                        pTruceUntil = until;
+                }
+                return true;
+            }
+            catch
+            {
+                pNonAggressionUntil = -1;
+                pTruceUntil = -1;
+                return false;
+            }
+        }
+
         public static bool HasProposalTruce(SQLiteConnection pDb,
             string pTableName, long pSourceProposalId, long pFirstKingdomId,
             long pSecondKingdomId, int pCurrentYear,

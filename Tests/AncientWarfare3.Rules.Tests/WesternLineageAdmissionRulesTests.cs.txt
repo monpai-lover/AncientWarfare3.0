@@ -1,0 +1,196 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class WesternLineageAdmissionRulesTests
+{
+    public static void Run()
+    {
+        foreach (NamingProfileId profile in new[]
+                 {
+                     NamingProfileId.Western,
+                     NamingProfileId.OrcNomadic
+                 })
+        {
+            Equal(WesternLineageAdmissionAction.ReuseComplete,
+                Resolve(profile, hasStableLineage: true,
+                    hasCompleteLineageAndShi: true,
+                    hasSameProfileRelativeCompleteSource: true),
+                $"{profile} reuses an already complete family");
+            Equal(WesternLineageAdmissionAction.InheritRelative,
+                Resolve(profile, hasStableLineage: true,
+                    hasSameProfileRelativeCompleteSource: true),
+                $"{profile} inherits a complete same-profile relative");
+            Equal(WesternLineageAdmissionAction.CompletePartialBranch,
+                Resolve(profile, hasStableLineage: true),
+                $"{profile} completes an existing lineage without Shi");
+            Equal(WesternLineageAdmissionAction.CreateRoot,
+                Resolve(profile, hasStableLineage: false),
+                $"{profile} creates a root without a stable lineage id");
+        }
+
+        foreach (NamingProfileId rejectedProfile in new[]
+                 {
+                     NamingProfileId.None,
+                     NamingProfileId.Xia,
+                     NamingProfileId.Monkey
+                 })
+        {
+            Equal(WesternLineageAdmissionAction.Reject,
+                Resolve(rejectedProfile, hasStableLineage: true,
+                    hasCompleteLineageAndShi: true,
+                    hasSameProfileRelativeCompleteSource: true),
+                $"{rejectedProfile} never enters western admission");
+        }
+
+        Equal(WesternLineageAdmissionAction.Reject,
+            Resolve(NamingProfileId.Western, valid: false),
+            "an invalid actor is rejected");
+        Equal(WesternLineageAdmissionAction.Reject,
+            Resolve(NamingProfileId.Western, civilized: false),
+            "a non-civilized actor is rejected");
+        Equal(WesternLineageAdmissionAction.Reject,
+            Resolve(NamingProfileId.Western, rekt: true),
+            "a rekt actor is rejected");
+        Equal(WesternLineageAdmissionAction.Reject,
+            Resolve(NamingProfileId.Western, canonicalMaster: true),
+            "a canonical master actor is rejected");
+        Equal(WesternLineageAdmissionAction.Reject,
+            Resolve(NamingProfileId.Western,
+                requiresCompleteFamily: false,
+                hasStableLineage: true,
+                hasCompleteLineageAndShi: true),
+            "an ordinary western commoner is rejected");
+
+        Equal(WesternLineageAdmissionAction.ReuseComplete,
+            Resolve(NamingProfileId.Western,
+                hasStableLineage: false,
+                hasCompleteLineageAndShi: true,
+                hasSameProfileRelativeCompleteSource: true),
+            "complete identity takes precedence over relative and stable-id facts");
+        Equal(WesternLineageAdmissionAction.InheritRelative,
+            Resolve(NamingProfileId.Western,
+                hasStableLineage: true,
+                hasSameProfileRelativeCompleteSource: true),
+            "relative inheritance takes precedence over partial completion");
+
+        Equal(false, WesternLineageAdmissionRules.IsRoleAdmission(
+                ruler: false, heir: false, noble: false, official: false),
+            "a commoner trigger is not a role admission");
+        Equal(true, WesternLineageAdmissionRules.IsRoleAdmission(
+                ruler: true, heir: false, noble: false, official: false),
+            "a ruler trigger is a role admission");
+        Equal(true, WesternLineageAdmissionRules.IsRoleAdmission(
+                ruler: false, heir: true, noble: false, official: false),
+            "an heir trigger is a role admission");
+        Equal(true, WesternLineageAdmissionRules.IsRoleAdmission(
+                ruler: false, heir: false, noble: true, official: false),
+            "a noble trigger is a role admission");
+        Equal(true, WesternLineageAdmissionRules.IsRoleAdmission(
+                ruler: false, heir: false, noble: false, official: true),
+            "an official trigger is a role admission");
+
+        Equal(true, WesternLineageAdmissionRules.ShouldRunPromotionHook(
+                NamingProfileId.Western, isXiaActor: false,
+                isXiaKingdom: false, isForeignPseudoDynasty: false),
+            "ordinary western kingdoms must admit promoted rulers and officials");
+        Equal(true, WesternLineageAdmissionRules.ShouldRunPromotionHook(
+                NamingProfileId.OrcNomadic, isXiaActor: false,
+                isXiaKingdom: false, isForeignPseudoDynasty: false),
+            "ordinary orc kingdoms must admit promoted rulers and officials");
+        Equal(false, WesternLineageAdmissionRules.ShouldRunPromotionHook(
+                NamingProfileId.Monkey, isXiaActor: false,
+                isXiaKingdom: false, isForeignPseudoDynasty: false),
+            "monkey kingdoms must not enter the western admission hook");
+
+        Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                fromLoad: true, actorIsActualKing: true,
+                NamingProfileId.Western),
+            "a generated or restored western king is admitted even when WorldBox marks setKing as loading");
+        Equal(true, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                fromLoad: true, actorIsActualKing: true,
+                NamingProfileId.OrcNomadic),
+            "a generated or restored orc king is admitted even when WorldBox marks setKing as loading");
+        Equal(false, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                fromLoad: true, actorIsActualKing: true,
+                NamingProfileId.Monkey),
+            "a monkey king remains excluded from western admission");
+        Equal(false, WesternLineageAdmissionRules.ShouldRunKingAdmission(
+                fromLoad: false, actorIsActualKing: false,
+                NamingProfileId.Western),
+            "a rejected setKing candidate is never admitted");
+
+        foreach (NamingProfileId profile in new[]
+                 {
+                     NamingProfileId.Western,
+                     NamingProfileId.OrcNomadic
+                 })
+        {
+            Equal(WesternOriginalClanSyncAction.RenameExisting,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: true, hasActorClan: true,
+                    hasMatchingFamilyClan: true),
+                $"{profile} renames an existing vanilla clan");
+            Equal(WesternOriginalClanSyncAction.BindFamilyClan,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: true, hasActorClan: false,
+                    hasMatchingFamilyClan: true),
+                $"{profile} binds the matching family vanilla clan");
+            Equal(WesternOriginalClanSyncAction.CreateClan,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: true, hasActorClan: false,
+                    hasMatchingFamilyClan: false),
+                $"{profile} creates a vanilla clan when none exists");
+
+            Equal(WesternOriginalClanSyncAction.None,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: false, hasActorClan: false,
+                    hasMatchingFamilyClan: false),
+                $"{profile} heirs, officials, and ordinary nobles never create a vanilla clan");
+            Equal(WesternOriginalClanSyncAction.None,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: false, hasActorClan: true,
+                    hasMatchingFamilyClan: true),
+                $"{profile} heirs, officials, and ordinary nobles never rename a vanilla clan");
+        }
+
+        foreach (NamingProfileId profile in new[]
+                 {
+                     NamingProfileId.None,
+                     NamingProfileId.Xia,
+                     NamingProfileId.Monkey
+                 })
+        {
+            Equal(WesternOriginalClanSyncAction.None,
+                WesternLineageAdmissionRules.ResolveOriginalClanSync(
+                    profile, ruler: true, hasActorClan: false,
+                    hasMatchingFamilyClan: false),
+                $"{profile} never enters western vanilla-clan synchronization");
+        }
+
+        Equal("orc_nomadic_family_stem",
+            AWOrcNomadicNamingRules.FamilyStemGeneratorId,
+            "orc family creation exposes the suffix-free generator id");
+    }
+
+    private static WesternLineageAdmissionAction Resolve(
+        NamingProfileId pProfile, bool valid = true,
+        bool civilized = true, bool rekt = false,
+        bool canonicalMaster = false,
+        bool requiresCompleteFamily = true,
+        bool hasStableLineage = false,
+        bool hasCompleteLineageAndShi = false,
+        bool hasSameProfileRelativeCompleteSource = false)
+    {
+        return WesternLineageAdmissionRules.Resolve(pProfile, valid,
+            civilized, rekt, canonicalMaster, requiresCompleteFamily,
+            hasStableLineage, hasCompleteLineageAndShi,
+            hasSameProfileRelativeCompleteSource);
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

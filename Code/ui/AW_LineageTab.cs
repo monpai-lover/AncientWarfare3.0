@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
 using NeoModLoader.General;
 using NeoModLoader.General.UI.Tab;
@@ -85,6 +86,15 @@ namespace AncientWarfare3.ui
                 ?? SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
             Register(groups, AWLineageTabLayoutRules.Territory, vassalMapButton);
 
+            PowerButton hierarchicalVassalMapButton =
+                CreateMapModeToggleButton(
+                    HierarchicalVassalMapModeService.POWER_ID,
+                    SpriteTextureLoader.getSprite("ui/icons/iconMap")
+                    ?? SpriteTextureLoader.getSprite(
+                        "ui/icons/iconDiplomacy"));
+            Register(groups, AWLineageTabLayoutRules.Territory,
+                hierarchicalVassalMapButton);
+
             PowerButton mandateButton = PowerButtonCreator.CreateSimpleButton(
                 "aw_mandate_dynasty_btn",
                 () => windows.MandateDynastyWindow.Open(),
@@ -139,6 +149,13 @@ namespace AncientWarfare3.ui
                 content.figures.HistoricalFigureService.TOGGLE_POWER_ID,
                 SpriteTextureLoader.getSprite("ui/Icons/iconKings"));
             Register(groups, AWLineageTabLayoutRules.Settings, figureToggle);
+
+            PowerButton diplomacyAiToggle =
+                PowerButtonCreator.CreateToggleButton(
+                    DiplomacyAiRules.TogglePowerId,
+                    SpriteTextureLoader.getSprite("ui/icons/iconDiplomacy"));
+            Register(groups, AWLineageTabLayoutRules.Settings,
+                diplomacyAiToggle);
 
             ApplyNativeLayout(tab, groups);
         }

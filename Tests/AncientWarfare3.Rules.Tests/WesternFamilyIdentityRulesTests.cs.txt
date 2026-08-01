@@ -1,0 +1,133 @@
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
+
+internal static class WesternFamilyIdentityRulesTests
+{
+    public static void Run()
+    {
+        FamilyBranchIdentityProjection western =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.Western, "de", parentShiId: -1L,
+                originCityChineseName: "巴黎", rawDisplayStem: "");
+        Equal("western", western.PersistedNamingProfile,
+            "a western branch persists its naming profile");
+        Equal("de", western.PersistedWesternNamingTradition,
+            "a western branch persists its selected tradition");
+        Equal("路易",
+            WesternFamilyIdentityRules.BuildActor(western, "路易",
+                noble: false),
+            "a western commoner displays only the given name");
+        Equal("路易 德·巴黎",
+            WesternFamilyIdentityRules.BuildActor(western, "路易",
+                noble: true),
+            "a western noble displays given name and family stem");
+        Equal(false,
+            WesternFamilyIdentityRules.BuildActor(western, "路易",
+                noble: true).Contains("家族"),
+            "a western actor name never contains the family-title suffix");
+
+        Equal("冯·维也纳家族",
+            WesternFamilyIdentityRules.BuildHeading(
+                WesternFamilyIdentityRules.ProjectBranch(
+                    NamingProfileId.Western, "von", -1L, "维也纳", "")),
+            "persisted Von produces the Feng family heading");
+        Equal("德·巴黎家族",
+            WesternFamilyIdentityRules.BuildHeading(western),
+            "persisted De produces the De family heading");
+        Equal("范·阿姆斯特丹家族",
+            WesternFamilyIdentityRules.BuildHeading(
+                WesternFamilyIdentityRules.ProjectBranch(
+                    NamingProfileId.Western, "van", -1L,
+                    "阿姆斯特丹", "")),
+            "persisted Van produces the Fan family heading");
+        Equal("迪·佛罗伦萨家族",
+            WesternFamilyIdentityRules.BuildHeading(
+                WesternFamilyIdentityRules.ProjectBranch(
+                    NamingProfileId.Western, "di", -1L,
+                    "佛罗伦萨", "")),
+            "persisted Di produces the Di family heading");
+
+        FamilyBranchIdentityProjection landed =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.Western, "de", parentShiId: 41L,
+                originCityChineseName: "里昂", rawDisplayStem: "");
+        Equal(41L, landed.ParentShiId,
+            "a landed branch retains its parent branch id");
+        Equal("里昂", landed.OriginCityChineseName,
+            "a landed branch stores the new origin city raw value");
+        Equal("德·里昂", landed.DisplayStem,
+            "a landed branch derives its stem from the new origin city");
+
+        FamilyBranchIdentityProjection orc =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.OrcNomadic, "", parentShiId: 9L,
+                originCityChineseName: "斡难河",
+                rawDisplayStem: "孛儿只斤");
+        Equal("orc_nomadic", orc.PersistedNamingProfile,
+            "an orc branch persists its nomadic naming profile");
+        Equal(string.Empty, orc.PersistedWesternNamingTradition,
+            "an orc branch does not persist a western tradition");
+        Equal("铁木真 孛儿只斤",
+            WesternFamilyIdentityRules.BuildActor(orc, "铁木真",
+                noble: false),
+            "an orc actor displays given name and nomadic clan stem");
+        Equal("孛儿只斤部落",
+            WesternFamilyIdentityRules.BuildHeading(orc),
+            "an orc heading appends the tribe suffix");
+
+        FamilyBranchIdentityProjection orcPrecomposedRaw =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.OrcNomadic, "", parentShiId: 9L,
+                originCityChineseName: "斡难河",
+                rawDisplayStem: "孛儿只斤部落");
+        Equal("孛儿只斤部落", orcPrecomposedRaw.DisplayStem,
+            "a structured orc raw stem is never recovered by stripping a suffix");
+        Equal("铁木真 孛儿只斤部落",
+            WesternFamilyIdentityRules.BuildActor(orcPrecomposedRaw,
+                "铁木真", noble: false),
+            "an orc actor preserves a supplied structured raw stem");
+        Equal("孛儿只斤部落部落",
+            WesternFamilyIdentityRules.BuildHeading(orcPrecomposedRaw),
+            "an orc heading appends its suffix without parsing the raw stem");
+
+        Equal(string.Empty,
+            WesternFamilyIdentityRules.BuildHeading(
+                WesternFamilyIdentityRules.ProjectBranch(
+                    NamingProfileId.Western, "de", -1L, "   ", "")),
+            "an empty western raw origin cannot emit punctuation or a suffix");
+        Equal(string.Empty,
+            WesternFamilyIdentityRules.BuildHeading(
+                WesternFamilyIdentityRules.ProjectBranch(
+                    NamingProfileId.OrcNomadic, "", -1L, "", "   ")),
+            "an empty orc raw stem cannot emit only a suffix");
+
+        FamilyBranchIdentityProjection xia =
+            WesternFamilyIdentityRules.ProjectBranch(
+                NamingProfileId.Xia, "", -1L, "洛邑", "洛邑周氏");
+        Equal("xia", xia.PersistedNamingProfile,
+            "a Xia branch persists the compatibility profile");
+        Equal(string.Empty, xia.PersistedWesternNamingTradition,
+            "a Xia branch does not persist a western tradition");
+        Equal("洛邑周氏", xia.DisplayStem,
+            "a structured Xia raw display remains unchanged");
+        Equal("周名",
+            WesternFamilyIdentityRules.BuildActor(xia, "名", noble: true,
+                xiaFamilyName: "姬", xiaClanName: "周", xiaMale: true,
+                xiaNameIntegrated: false),
+            "Xia male noble display remains prefix plus given name");
+        Equal("名姬",
+            WesternFamilyIdentityRules.BuildActor(xia, "名", noble: true,
+                xiaFamilyName: "姬", xiaClanName: "周", xiaMale: false,
+                xiaNameIntegrated: false),
+            "Xia female noble display remains given plus family name");
+        Equal("洛邑周氏", WesternFamilyIdentityRules.BuildHeading(xia),
+            "an existing Xia branch heading is preserved verbatim");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

@@ -1,4 +1,5 @@
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.policy;
 
 namespace AncientWarfare3.core.court
 {
@@ -9,6 +10,12 @@ namespace AncientWarfare3.core.court
             if (pKingdom?.data == null)
                 return CourtInstitutionEffectRules.Resolve(
                     CourtInstitutionId.Zhou, eligibleXiaRealm: false);
+
+            if (KingdomPolicyService.GetPolicyProfile(pKingdom) !=
+                KingdomPolicyProfileId.Xia)
+                return CourtInstitutionEffectRules.Resolve(
+                    CourtInstitutionId.WesternPrimitive,
+                    eligibleXiaRealm: false);
 
             bool eligible = pKingdom.data.original_actor_asset ==
                             LineageService.XIA_ASSET_ID;

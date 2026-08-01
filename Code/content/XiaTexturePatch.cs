@@ -13,6 +13,12 @@ namespace AncientWarfare3.content
         {
             if (__instance?.asset == null) return true;
 
+            if (CivMonkeyTextureCatalog.TryGetRuntimeTexturePath(__instance, out string monkeyTexture))
+            {
+                __result = monkeyTexture;
+                return false;
+            }
+
             if (__instance.asset.id == LineageService.XIA_ASSET_ID && IsHeirSkinActor(__instance))
             {
                 __result = XiaRace.TEXTURE_PATH + "heir";

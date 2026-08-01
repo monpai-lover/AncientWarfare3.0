@@ -10,6 +10,9 @@ namespace AncientWarfare3.patch
         [ThreadStatic]
         private static int NonSexualPregnancyDepth;
 
+        internal static bool IsNonSexualPregnancyScope =>
+            NonSexualPregnancyDepth > 0;
+
         private readonly struct PregnancyStartState
         {
             public readonly Actor Mother;

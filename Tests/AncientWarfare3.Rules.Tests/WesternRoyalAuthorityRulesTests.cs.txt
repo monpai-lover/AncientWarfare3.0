@@ -1,0 +1,77 @@
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.lineage;
+
+internal static class WesternRoyalAuthorityRulesTests
+{
+    public static void Run()
+    {
+        Equal(10, WesternRoyalAuthorityRules.ApplyConsolidation(0),
+            "the first consolidation establishes a real authority reserve");
+        Equal(20, WesternRoyalAuthorityRules.ApplyConsolidation(10),
+            "repeatable consolidation accumulates authority");
+        Equal(30, WesternRoyalAuthorityRules.ApplyConsolidation(30),
+            "consolidated authority is capped");
+        Equal(10, WesternRoyalAuthorityRules.ApplyConsolidation(-40),
+            "invalid negative persisted authority is repaired before applying");
+
+        Equal(0, WesternRoyalAuthorityRules.ResolveSuccessionBonus(
+                KingdomPolicyProfileId.Xia, ritualOrderCompleted: true,
+                royalDirectRuleActive: true, consolidatedAuthority: 30),
+            "Xia does not consume dormant western authority");
+        Equal(10, WesternRoyalAuthorityRules.ResolveSuccessionBonus(
+                KingdomPolicyProfileId.WesternGeneral,
+                ritualOrderCompleted: true,
+                royalDirectRuleActive: false, consolidatedAuthority: 30),
+            "ritual order stabilizes succession without requiring direct rule");
+        Equal(15, WesternRoyalAuthorityRules.ResolveSuccessionBonus(
+                KingdomPolicyProfileId.WesternGeneral,
+                ritualOrderCompleted: true,
+                royalDirectRuleActive: true, consolidatedAuthority: 0),
+            "ritual order and active direct rule provide a stable baseline");
+        Equal(45, WesternRoyalAuthorityRules.ResolveSuccessionBonus(
+                KingdomPolicyProfileId.WesternGeneral,
+                ritualOrderCompleted: true,
+                royalDirectRuleActive: true, consolidatedAuthority: 30),
+            "maximum consolidation adds to institutional legitimacy");
+        Equal(35, WesternRoyalAuthorityRules.ResolveSuccessionBonus(
+                KingdomPolicyProfileId.WesternGeneral,
+                ritualOrderCompleted: false,
+                royalDirectRuleActive: true, consolidatedAuthority: 99),
+            "persisted authority is clamped before use");
+
+        Equal(70, WesternRoyalAuthorityRules.ApplyToCourtInfluence(40, 45),
+            "western authority can lift the inherited raw forty-point cap");
+        Equal(-15, WesternRoyalAuthorityRules.ApplyToCourtInfluence(-60, 45),
+            "authority reduces controversy without hiding a deeply weak ruler");
+        Equal(-60, WesternRoyalAuthorityRules.ApplyToCourtInfluence(-80, 0),
+            "the established negative influence floor remains intact");
+
+        var authoritySnapshot = new InheritanceLawSnapshot(
+            MandatePhase.Golden,
+            hasLivingDirectSon: false,
+            stableDynasty: false,
+            atWar: false,
+            activeArmyCount: 0,
+            activeGeneralCount: 0,
+            activeOfficerCount: 0,
+            institutionMaturity: 0,
+            militaryDirection: 0,
+            civilDirection: 0,
+            rulerCourtInfluence: 70);
+        Equal(70, authoritySnapshot.RulerCourtInfluence,
+            "institutional authority is not clamped back to the raw forty-point cap");
+
+        RestorationInstitutionState restored =
+            RestorationInstitutionRules.SanitizeForRevival(
+                new RestorationInstitutionState { royalAuthority = 99 });
+        Equal(30, restored.royalAuthority,
+            "restoration preserves authority within its persisted cap");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

@@ -93,8 +93,7 @@ namespace AncientWarfare3.core.lineage
         public static bool CanAiForceVassal(int attackerTitleRank,
             int targetTitleRank)
         {
-            return attackerTitleRank >= 0 && targetTitleRank >= 0 &&
-                   attackerTitleRank - targetTitleRank >= 2;
+            return attackerTitleRank == 2 && targetTitleRank == 0;
         }
 
         public static WarAiPeopleRelation ResolvePeopleRelation(

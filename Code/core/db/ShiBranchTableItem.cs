@@ -17,6 +17,11 @@ namespace AncientWarfare3.core.db
         public long   lineage_id = -1;    // 所属姓族
         public string clan_name;          // 氏(如 夏后/有扈/斟鄩)
         public long   parent_shi_id = -1;
+        [TableItemDef(pDefaultValue: "xia")]
+        public string naming_profile = "xia";
+        public string western_naming_tradition = "";
+        public string origin_city_chinese_name = "";
+        public string display_stem = "";
         public string state_name = "";
         public string state_name_source = "";
         [TableItemDef(pDefaultValue: "-1")] public double state_name_decided_time = -1;

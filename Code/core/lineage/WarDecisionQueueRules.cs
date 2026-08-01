@@ -61,6 +61,9 @@ namespace AncientWarfare3.core.lineage
                 case "reunify_succession":
                     return Check(pCanReunifySuccession,
                         "missing_reunification_claim", out pReason);
+                case ZhuluWarRules.GoalTypeId:
+                    return Check(pHasNormalCb, "missing_zhulu_cb",
+                        out pReason);
                 case "no_cb":
                 case "no_cb_punitive":
                     return Check(pCanForceNoCb, "cannot_force_no_cb", out pReason);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.api.multiplayer;
 #if !AW3_RULES_TESTS
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 #endif
 
 namespace AncientWarfare3.core.multiplayer
@@ -205,8 +206,13 @@ namespace AncientWarfare3.core.multiplayer
                 if (actor.army?.data == null && !isGeneral) continue;
                 actor.data.get(LineageKeys.GENERAL_MERIT,
                     out int merit, 0);
+                AWLocalizedNameIdentitySnapshot identity =
+                    AWLocalizedNamePersistence.Capture(actor.data);
                 result.Add(new AW3MultiplayerActorProjection(actor.data.id,
-                    isGeneral, Math.Max(0, merit)));
+                    isGeneral, Math.Max(0, merit), identity.NativeName,
+                    identity.ChineseName, identity.GivenName,
+                    identity.FamilyComponent, identity.GeneratorId,
+                    identity.CultureId, Math.Max(0, identity.SchemaVersion)));
             }
             return result;
         }
@@ -259,6 +265,11 @@ namespace AncientWarfare3.core.multiplayer
             actor.data.set(LineageKeys.GENERAL_ACTIVE, pActor.IsGeneral);
             actor.data.set(LineageKeys.GENERAL_MERIT,
                 pActor.GeneralMerit);
+            AWLocalizedNamePersistence.Apply(actor.data,
+                new AWLocalizedNameIdentitySnapshot(pActor.NativeName,
+                    pActor.ChineseName, pActor.GivenName,
+                    pActor.FamilyComponent, pActor.GeneratorId,
+                    pActor.CultureId, pActor.NamingSchemaVersion));
         }
 
         public void CompleteArmySnapshot(

@@ -132,13 +132,20 @@ namespace AncientWarfare3.ui.windows
                 AW_L10n.Text("aw_household_consort_capacity",
                     "Consorts") + " " + snapshot.Consorts.Count + " / " +
                 snapshot.ConsortCapacity;
-            _principalLabel.text = AW_L10n.Text(
-                "aw_household_section_principal_wife", "Principal Wife");
+            string principalSectionKey = snapshot.RulerIsFemale
+                ? "aw_household_section_royal_husband"
+                : "aw_household_section_principal_wife";
+            string principalEmptyKey = snapshot.RulerIsFemale
+                ? "aw_household_empty_royal_husband"
+                : "aw_household_empty_principal_wife";
+            _principalLabel.text = AW_L10n.Text(principalSectionKey,
+                snapshot.RulerIsFemale ? "Prince Consort" : "Principal Wife");
             _consortLabel.text = AW_L10n.Text(
                 "aw_household_section_consorts", "Consorts");
             BindRow(_principalRow, snapshot.PrincipalWife,
-                AW_L10n.Text("aw_household_empty_principal_wife",
-                    "No principal wife"));
+                AW_L10n.Text(principalEmptyKey, snapshot.RulerIsFemale
+                    ? "No prince consort"
+                    : "No principal wife"));
             for (int i = 0; i < snapshot.Consorts.Count; i++)
             {
                 while (_consortRows.Count <= i)

@@ -39,6 +39,7 @@ namespace AncientWarfare3.core.lineage
         {
             if (AW3MultiplayerReplicaScope.IsReplicaSession ||
                 pWar?.data == null || pWar.hasEnded() ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(pWar) ||
                 RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(pWar) ||
                 WarPeaceSettlementService.Instance.HasActionableSettlement(
@@ -64,6 +65,7 @@ namespace AncientWarfare3.core.lineage
             if (AW3MultiplayerReplicaScope.IsReplicaSession) return;
             War war = WarPeaceSettlementWorld.FindWar(pWarId);
             if (war?.data == null || war.hasEnded() ||
+                ZhuluPeaceGuard.BlocksOrdinarySettlement(war) ||
                 RebellionDirectTerritoryTransferService.
                     BlocksOrdinarySettlement(war) ||
                 WarPeaceSettlementService.Instance.HasActionableSettlement(
@@ -110,6 +112,21 @@ namespace AncientWarfare3.core.lineage
                 goals.Count > WarGoalSettlementRules.MaximumPersistedGoals)
                 return false;
 
+            var allFacts = new List<WarGoalSettlementFacts>(goals.Count);
+            for (int i = 0; i < goals.Count; i++)
+            {
+                WarGoalSettlementSnapshot goal = goals[i];
+                bool completed = goal.Completed ||
+                    TryRepairCompletionFromFrozenOccupation(database, pWar,
+                        goal, attacker, score);
+                allFacts.Add(new WarGoalSettlementFacts(score.Score,
+                    goal.WarGoalId, goal.RequiredWarScore, completed,
+                    goal.WarGoalId));
+            }
+            int[] selected = WarGoalSettlementRules.
+                SelectCompletedAffordableGoalIndices(score.Score, allFacts);
+            if (selected.Length == 0) return false;
+
             var draft = new WarPeaceSettlementDraft
             {
                 WarId = pWar.data.id,
@@ -118,24 +135,70 @@ namespace AncientWarfare3.core.lineage
                 SignedWarScore = score.Score,
                 PlayerInitiated = false
             };
-            var facts = new List<WarGoalSettlementFacts>(goals.Count);
-            for (int i = 0; i < goals.Count; i++)
+            var facts = new List<WarGoalSettlementFacts>(selected.Length);
+            for (int i = 0; i < selected.Length; i++)
             {
-                WarGoalSettlementSnapshot goal = goals[i];
+                int goalIndex = selected[i];
+                WarGoalSettlementSnapshot goal = goals[goalIndex];
                 if (goal.AttackerKingdomId != attacker.id ||
                     goal.DefenderKingdomId != defender.id ||
-                    goal.RequiredWarScore <= 0 || !goal.Completed ||
+                    goal.RequiredWarScore <= 0 ||
                     !TryBuildTerm(goal, attacker, defender,
                         out WarPeaceSettlementTermDraft term)) return false;
                 draft.Terms.Add(term);
+                WarGoalSettlementFacts selectedFacts = allFacts[goalIndex];
                 facts.Add(new WarGoalSettlementFacts(score.Score,
-                    goal.WarGoalId, goal.RequiredWarScore,
-                    goal.Completed, term.WarGoalId));
+                    selectedFacts.WarGoalId, selectedFacts.RequiredScore,
+                    selectedFacts.GoalCompleted, term.WarGoalId));
             }
             pDraft = draft;
             pFacts = facts;
-            pExpectedGoalCount = goals.Count;
+            pExpectedGoalCount = facts.Count;
             return true;
+        }
+
+        private static bool TryRepairCompletionFromFrozenOccupation(
+            SQLiteConnection pDatabase, War pWar,
+            WarGoalSettlementSnapshot pGoal, Kingdom pAttacker,
+            WarScoreSnapshot pScore)
+        {
+            if (pGoal == null || pGoal.WarGoalId < 0 ||
+                pGoal.TargetCityId < 0 || pAttacker?.data == null ||
+                pGoal.CompletionKind != "city_control" &&
+                pGoal.CompletionKind != "capital_control") return false;
+
+            long frozenCityId = ResolveFrozenCityObjectId(pWar.data.id,
+                pGoal.TargetCityId, pAttacker.id);
+            if (frozenCityId < 0) return false;
+            bool repaired = WarGoalPersistence.MarkGoalCompleted(pDatabase,
+                pWar.data.id, pGoal.WarGoalId, pScore.Score,
+                CurrentWorldTime(), pScore.Revision);
+            if (repaired) pGoal.Completed = true;
+            return repaired;
+        }
+
+        private static long ResolveFrozenCityObjectId(long pWarId,
+            long pTargetCityId, long pAttackerKingdomId)
+        {
+            if (WarScoreService.TryGetFrozenOccupation(pWarId,
+                    pTargetCityId, out long directController) &&
+                directController == pAttackerKingdomId)
+                return pTargetCityId;
+            try
+            {
+                foreach (City city in World.world.cities)
+                {
+                    if (city?.data == null ||
+                        city.id != pTargetCityId &&
+                        city.data.id != pTargetCityId) continue;
+                    if (WarScoreService.TryGetFrozenOccupation(pWarId,
+                            city.id, out long controller) &&
+                        controller == pAttackerKingdomId) return city.id;
+                    break;
+                }
+            }
+            catch { }
+            return -1L;
         }
 
         private static bool TryBuildTerm(WarGoalSettlementSnapshot pGoal,

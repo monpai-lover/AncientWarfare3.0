@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AncientWarfare3.core.lineage
 {
@@ -28,9 +29,8 @@ namespace AncientWarfare3.core.lineage
         {
             if (pAttacker?.data == null || pDefender?.data == null ||
                 pAttacker.isRekt() || pDefender.isRekt()) return false;
-            pAttacker.data.get(LineageKeys.DIPLOMATIC_WAR_PENDING,
-                out bool pending, false);
-            if (pending) return false;
+            if (DiplomaticWarDeclarationLedgerService.HasPendingForPair(
+                    pAttacker, pDefender)) return false;
 
             string goalType = pGoalType ?? "";
             string warType = pWarType ?? WarDecisionService.WAR_NORMAL;
@@ -40,37 +40,50 @@ namespace AncientWarfare3.core.lineage
 
             City displayCity = pTargetCity ?? FindDisplayCity(pAttacker,
                 pDefender, goalType);
+            int noticeYear = Date.getCurrentYear();
+            long cityId = displayCity?.data?.id ?? -1L;
+            bool requiresNotice = WarNoticeRules.RequiresNotice(
+                LineageService.IsXiaKingdom(pAttacker),
+                XiaizationService.GetLevel(pAttacker), deliberateDecision: true,
+                goalType, warType, joiningExistingWar: false,
+                pairAlreadyAtWar: HasWar(pAttacker, pDefender));
+            string signature = WarNoticeRules.BuildSignature(pAttacker.id,
+                pDefender.id, goalType, cityId, noticeYear);
+            var record = new DiplomaticWarDeclarationRecord
+            {
+                Signature = signature,
+                AttackerId = pAttacker.id,
+                DefenderId = pDefender.id,
+                GoalType = goalType,
+                WarType = warType,
+                ReasonKey = pReasonKey ?? "",
+                ReasonLabel = pReasonLabel ?? "",
+                TargetCityId = cityId,
+                TargetCityName = displayCity?.data?.name ?? "",
+                SourceClaimId = pSourceClaimId,
+                SourceCoreId = pSourceCoreId,
+                RestorationClaimId = pRestorationClaimId,
+                ClaimantActorId = pClaimant?.data?.id ?? -1L,
+                NoticeSignature = requiresNotice ? signature : "",
+                NoticeYear = requiresNotice ? noticeYear : -1,
+                EarliestWarYear = requiresNotice
+                    ? WarNoticeRules.EarliestWarYear(noticeYear)
+                    : -1,
+                ForcedWarYear = requiresNotice
+                    ? WarNoticeRules.ForcedWarYear(noticeYear)
+                    : -1
+            };
+            if (!DiplomaticWarDeclarationLedgerService.Append(pAttacker,
+                    record)) return false;
             pAttacker.data.set(
                 LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_REASON, "");
             pAttacker.data.set(
                 LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_YEAR, -1);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_PENDING, true);
-            pAttacker.data.set(
-                LineageKeys.DIPLOMATIC_WAR_TARGET_KINGDOM_ID, pDefender.id);
-            pAttacker.data.set(
-                LineageKeys.DIPLOMATIC_WAR_TARGET_KINGDOM_NAME,
-                pDefender.name ?? "");
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TYPE, warType);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
-                goalType);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_REASON_KEY,
-                pReasonKey ?? "");
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_REASON_LABEL,
-                pReasonLabel ?? "");
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
-                displayCity?.data?.id ?? -1L);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_NAME,
-                displayCity?.data?.name ?? "");
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CLAIM_ID,
-                pSourceClaimId);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CORE_ID,
-                pSourceCoreId);
-            pAttacker.data.set(
-                LineageKeys.DIPLOMATIC_WAR_RESTORATION_CLAIM_ID,
-                pRestorationClaimId);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID,
-                pClaimant?.data?.id ?? -1L);
+            ProjectCompatibilityRecord(pAttacker, record);
             WarNoticeService.EnsureCurrentNotice(pAttacker);
+            DiplomaticWarDeclarationLedgerService.SyncNoticeProjection(
+                pAttacker, record.Signature);
+            RefreshCompatibilityProjection(pAttacker);
             KingdomStrategyRevisionService.MarkChanged(pAttacker.id, pDefender.id);
             return true;
         }
@@ -84,6 +97,18 @@ namespace AncientWarfare3.core.lineage
                 ReasonKeyForGoal(pOption.goal_type), pOption.label,
                 FindActor(pOption.claimant_actor_id), pOption.source_claim_id,
                 pOption.source_core_id, pOption.restoration_claim_id);
+        }
+
+        public static bool IssueZhulu(Kingdom pAttacker,
+            Kingdom pDefender)
+        {
+            City target = FindDisplayCity(pAttacker, pDefender,
+                ZhuluWarRules.GoalTypeId);
+            return Issue(pAttacker, pDefender,
+                ZhuluWarRules.GoalTypeId, target,
+                ZhuluWarRules.WarTypeId, ZhuluWarRules.GoalTypeId,
+                HistoryLocalizationRules.Text(
+                    "aw_war_goal_zhulu_annexation"));
         }
 
         public static bool CanIssue(Kingdom pAttacker,
@@ -103,18 +128,31 @@ namespace AncientWarfare3.core.lineage
 
         public static void OnKingdomYear(Kingdom pAttacker)
         {
-            if (!HasPending(pAttacker)) return;
-            Kingdom defender = TargetKingdom(pAttacker);
+            if (pAttacker?.data == null) return;
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pAttacker);
+            for (int i = 0; i < records.Count; i++)
+                ProcessPendingRecord(pAttacker, records[i]);
+            RefreshCompatibilityProjection(pAttacker);
+        }
+
+        private static void ProcessPendingRecord(Kingdom pAttacker,
+            DiplomaticWarDeclarationRecord pRecord)
+        {
+            if (pAttacker?.data == null || pRecord == null) return;
+            ProjectCompatibilityRecord(pAttacker, pRecord);
+            Kingdom defender = FindKingdom(pRecord.DefenderId);
             if (defender?.data == null || defender.isRekt() ||
                 pAttacker.isRekt())
             {
-                Clear(pAttacker);
+                TerminateRecord(pAttacker, pRecord, "cancelled",
+                    "invalid_participants");
                 return;
             }
 
             if (HasWar(pAttacker, defender))
             {
-                Clear(pAttacker);
+                TerminateRecord(pAttacker, pRecord, "started", "already_at_war");
                 return;
             }
 
@@ -126,18 +164,21 @@ namespace AncientWarfare3.core.lineage
                     warType, out string pairFailure,
                     pSystemWar: IsSystemGoal(goalType)))
             {
-                Cancel(pAttacker, pairFailure);
+                TerminateRecord(pAttacker, pRecord, "cancelled", pairFailure);
                 return;
             }
 
             WarNoticeService.EnsureCurrentNotice(pAttacker);
+            DiplomaticWarDeclarationLedgerService.SyncNoticeProjection(
+                pAttacker, pRecord.Signature);
             if (!WarNoticeService.CanCompleteDiplomaticDeclaration(pAttacker))
                 return;
             ExecutionResult result = Execute(pAttacker, defender);
             if (result.Started)
-                Clear(pAttacker);
+                TerminateRecord(pAttacker, pRecord, "started", "");
             else
-                Cancel(pAttacker, result.FailureReason);
+                TerminateRecord(pAttacker, pRecord, "cancelled",
+                    result.FailureReason);
         }
 
         public static void OnWarStarted(War pWar)
@@ -145,17 +186,65 @@ namespace AncientWarfare3.core.lineage
             if (pWar?.data == null) return;
             Kingdom attacker = pWar.getMainAttacker();
             Kingdom defender = pWar.getMainDefender();
-            if (!HasPending(attacker) || defender?.data == null ||
-                TargetKingdom(attacker) != defender) return;
-            Clear(attacker);
+            if (attacker?.data == null || defender?.data == null) return;
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(attacker);
+            for (int i = 0; i < records.Count; i++)
+                if (records[i].DefenderId == defender.id)
+                    TerminateRecord(attacker, records[i], "started", "");
+            RefreshCompatibilityProjection(attacker);
+        }
+
+        public static void OnWarEnded(War pWar)
+        {
+            if (pWar?.data == null) return;
+            Kingdom attacker = pWar.getMainAttacker();
+            Kingdom defender = pWar.getMainDefender();
+            ReconcileEndedWarPair(attacker, defender);
+            ReconcileEndedWarPair(defender, attacker);
+        }
+
+        private static void ReconcileEndedWarPair(Kingdom pOwner,
+            Kingdom pOpponent)
+        {
+            if (pOwner?.data == null || pOpponent?.data == null) return;
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pOwner);
+            for (int i = 0; i < records.Count; i++)
+            {
+                DiplomaticWarDeclarationRecord record = records[i];
+                if (!DiplomaticWarDeclarationLedgerRules.
+                        MatchesDirectedWarPair(record?.AttackerId ?? -1L,
+                            record?.DefenderId ?? -1L, pOwner.id,
+                            pOpponent.id)) continue;
+                TerminateRecord(pOwner, record, "ended", "war_ended");
+            }
+            RefreshCompatibilityProjection(pOwner);
         }
 
         public static bool HasPending(Kingdom pKingdom)
         {
-            if (pKingdom?.data == null) return false;
-            pKingdom.data.get(LineageKeys.DIPLOMATIC_WAR_PENDING,
-                out bool pending, false);
-            return pending;
+            return DiplomaticWarDeclarationLedgerService.HasPending(pKingdom);
+        }
+
+        public static bool HasPendingForPair(Kingdom pAttacker,
+            Kingdom pDefender)
+        {
+            return DiplomaticWarDeclarationLedgerService.HasPendingForPair(
+                pAttacker, pDefender);
+        }
+
+        public static void ClearPendingForPair(Kingdom pAttacker,
+            Kingdom pDefender, string pReason = "cleared")
+        {
+            if (pAttacker?.data == null || pDefender?.data == null) return;
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pAttacker);
+            for (int i = 0; i < records.Count; i++)
+                if (records[i].DefenderId == pDefender.id)
+                    TerminateRecord(pAttacker, records[i], "cancelled",
+                        pReason);
+            RefreshCompatibilityProjection(pAttacker);
         }
 
         public static Kingdom TargetKingdom(Kingdom pKingdom)
@@ -170,7 +259,16 @@ namespace AncientWarfare3.core.lineage
         public static void Clear(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return;
-            WarNoticeService.OnDiplomaticDeclarationClearing(pKingdom);
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pKingdom);
+            for (int i = 0; i < records.Count; i++)
+                TerminateRecord(pKingdom, records[i], "cleared", "");
+            RefreshCompatibilityProjection(pKingdom);
+        }
+
+        private static void ClearCompatibilityProjection(Kingdom pKingdom)
+        {
+            if (pKingdom?.data == null) return;
             pKingdom.data.set(LineageKeys.DIPLOMATIC_WAR_PENDING, false);
             pKingdom.data.set(
                 LineageKeys.DIPLOMATIC_WAR_TARGET_KINGDOM_ID, -1L);
@@ -198,14 +296,114 @@ namespace AncientWarfare3.core.lineage
                 false);
         }
 
-        private static void Cancel(Kingdom pAttacker, string pReason)
+        private static void TerminateRecord(Kingdom pAttacker,
+            DiplomaticWarDeclarationRecord pRecord, string pLifecycle,
+            string pReason)
+        {
+            if (pAttacker?.data == null || pRecord == null) return;
+            WarNoticeService.OnDiplomaticDeclarationClearing(pAttacker,
+                pRecord.NoticeSignature);
+            DiplomaticWarDeclarationLedgerService.MarkTerminal(pAttacker,
+                pRecord.Signature, pLifecycle, pReason);
+            if (pLifecycle == "cancelled")
+            {
+                pAttacker.data.set(
+                    LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_REASON,
+                    string.IsNullOrEmpty(pReason)
+                        ? "execution_invalid"
+                        : pReason);
+                pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_YEAR,
+                    Date.getCurrentYear());
+            }
+        }
+
+        internal static void EnsureLedgerNotices(Kingdom pAttacker)
         {
             if (pAttacker?.data == null) return;
-            Clear(pAttacker);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_REASON,
-                string.IsNullOrEmpty(pReason) ? "execution_invalid" : pReason);
-            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_LAST_CANCEL_YEAR,
-                Date.getCurrentYear());
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pAttacker);
+            for (int i = 0; i < records.Count; i++)
+            {
+                ProjectCompatibilityRecord(pAttacker, records[i]);
+                WarNoticeService.EnsureCurrentNotice(pAttacker);
+                DiplomaticWarDeclarationLedgerService.SyncNoticeProjection(
+                    pAttacker, records[i].Signature);
+            }
+            RefreshCompatibilityProjection(pAttacker);
+        }
+
+        private static void RefreshCompatibilityProjection(Kingdom pAttacker)
+        {
+            if (pAttacker?.data == null) return;
+            List<DiplomaticWarDeclarationRecord> records =
+                DiplomaticWarDeclarationLedgerService.GetPending(pAttacker);
+            DiplomaticWarDeclarationRecord selected = null;
+            for (int i = 0; i < records.Count; i++)
+            {
+                DiplomaticWarDeclarationRecord candidate = records[i];
+                if (candidate == null) continue;
+                if (selected == null ||
+                    DiplomaticWarDeclarationLedgerRules.ComparePriority(
+                        PriorityYear(candidate.EarliestWarYear),
+                        PriorityYear(candidate.NoticeYear), candidate.Signature,
+                        PriorityYear(selected.EarliestWarYear),
+                        PriorityYear(selected.NoticeYear), selected.Signature) < 0)
+                    selected = candidate;
+            }
+            if (selected == null)
+                ClearCompatibilityProjection(pAttacker);
+            else
+                ProjectCompatibilityRecord(pAttacker, selected);
+        }
+
+        private static int PriorityYear(int pYear)
+        {
+            return pYear < 0 ? int.MaxValue : pYear;
+        }
+
+        private static void ProjectCompatibilityRecord(Kingdom pAttacker,
+            DiplomaticWarDeclarationRecord pRecord)
+        {
+            if (pAttacker?.data == null || pRecord == null) return;
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_PENDING, true);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_KINGDOM_ID,
+                pRecord.DefenderId);
+            Kingdom defender = FindKingdom(pRecord.DefenderId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_KINGDOM_NAME,
+                defender?.name ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TYPE,
+                pRecord.WarType ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_GOAL_TYPE,
+                pRecord.GoalType ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_REASON_KEY,
+                pRecord.ReasonKey ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_REASON_LABEL,
+                pRecord.ReasonLabel ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_ID,
+                pRecord.TargetCityId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_TARGET_CITY_NAME,
+                pRecord.TargetCityName ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CLAIM_ID,
+                pRecord.SourceClaimId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_SOURCE_CORE_ID,
+                pRecord.SourceCoreId);
+            pAttacker.data.set(
+                LineageKeys.DIPLOMATIC_WAR_RESTORATION_CLAIM_ID,
+                pRecord.RestorationClaimId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_CLAIMANT_ACTOR_ID,
+                pRecord.ClaimantActorId);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_SIGNATURE,
+                pRecord.NoticeSignature ?? "");
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_YEAR,
+                pRecord.NoticeYear);
+            pAttacker.data.set(
+                LineageKeys.DIPLOMATIC_WAR_NOTICE_EARLIEST_YEAR,
+                pRecord.EarliestWarYear);
+            pAttacker.data.set(
+                LineageKeys.DIPLOMATIC_WAR_NOTICE_FORCED_YEAR,
+                pRecord.ForcedWarYear);
+            pAttacker.data.set(LineageKeys.DIPLOMATIC_WAR_NOTICE_RECORDED,
+                pRecord.NoticeRecorded);
         }
 
         private static ExecutionResult Execute(Kingdom pAttacker,
@@ -339,6 +537,13 @@ namespace AncientWarfare3.core.lineage
                         pFailureReason = "missing_reunification_claim";
                         return false;
                     }
+                    city = pDefender.capital ??
+                           WarTerritoryService.FindFirstTargetCity(pDefender);
+                    break;
+                case ZhuluWarRules.GoalTypeId:
+                    if (!ZhuluWarService.CanDeclare(pAttacker, pDefender,
+                            out pFailureReason))
+                        return false;
                     city = pDefender.capital ??
                            WarTerritoryService.FindFirstTargetCity(pDefender);
                     break;
@@ -525,6 +730,7 @@ namespace AncientWarfare3.core.lineage
                     WarDecisionService.WAR_RESTORATION,
                 WarTerritoryService.GOAL_REUNIFY_SUCCESSION =>
                     SuccessionDisputeRules.WarTypeId,
+                ZhuluWarRules.GoalTypeId => ZhuluWarRules.WarTypeId,
                 _ => WarDecisionService.WAR_NORMAL
             };
         }
@@ -544,9 +750,17 @@ namespace AncientWarfare3.core.lineage
                 WarTerritoryService.GOAL_RESTORE_KINGDOM => "restoration",
                 WarTerritoryService.GOAL_REUNIFY_SUCCESSION =>
                     "succession_reunification",
+                ZhuluWarRules.GoalTypeId => ZhuluWarRules.GoalTypeId,
                 WarTerritoryService.GOAL_NO_CB => "no_cb",
                 _ => ""
             };
+        }
+
+        private static Kingdom FindKingdom(long pKingdomId)
+        {
+            if (pKingdomId < 0L) return null;
+            try { return World.world?.kingdoms?.get(pKingdomId); }
+            catch { return null; }
         }
 
         private static City FindCity(long pCityId)

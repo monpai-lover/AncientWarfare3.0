@@ -30,7 +30,12 @@ namespace AncientWarfare3.patch
             if (HistoricalSchoolActorSpawnCapture.IsTargetActor(__instance)) return;
             if (!LineageService.IsNativeXiaCultureActor(__instance)) return;
 
-            LineageService.OnActorBorn(__instance);
+            try { LineageService.OnActorBorn(__instance); }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Lineage actor birth initialization failed: " +
+                                    e.Message);
+            }
         }
 
         [HarmonyPostfix]
@@ -39,16 +44,81 @@ namespace AncientWarfare3.patch
         {
             if (AW3MultiplayerReplicaScope.IsApplying) return;
             if (pBaby?.data == null) return;
-            RulerHouseholdPregnancyService.ApplyBirthLegitimacy(pBaby,
-                pParent1, pParent2);
-            LineageService.OnActorBornWithParents(pBaby, pParent1, pParent2);
+            try
+            {
+                RulerHouseholdPregnancyService.ApplyBirthLegitimacy(pBaby,
+                    pParent1, pParent2);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Birth legitimacy processing failed: " +
+                                    e.Message);
+            }
+
+            WesternLineageBirthAdmissionDecision decision = default;
+            try
+            {
+                decision = LineageService.ResolveBirthAdmissionDecision(pBaby,
+                    pParent1, pParent2);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning(
+                    "Western lineage admission decision failed: " + e.Message);
+            }
+
+            bool parentEdgesOwned = decision.UseFullPath ||
+                                    decision.UseLightweightEdges;
+            if (decision.UseLightweightEdges)
+            {
+                try
+                {
+                    WesternLineageParentEdgeService.RecordBirth(pBaby,
+                        pParent1, pParent2, pUseLightweightEdges: true);
+                }
+                catch (System.Exception e)
+                {
+                    ModClass.LogWarning(
+                        "Western lightweight parent-edge recording failed: " +
+                        e.Message);
+                }
+            }
+            try
+            {
+                LineageService.OnActorBornWithParents(pBaby, pParent1,
+                    pParent2, decision.UseFullPath);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Lineage birth processing failed: " +
+                                    e.Message);
+            }
             try { RoyalClaimService.OnActorBornWithParents(pBaby, pParent1, pParent2); }
             catch (System.Exception e) { ModClass.LogWarning("Royal claim birth inheritance failed: " + e.Message); }
 
             // 编年史:给贵族父/母各记一条"喜得子/女"(谱系继承已在上一步完成,名字已就绪)。
-            ChronicleEvents.OnHadChild(pParent1, pParent2, pBaby);
-            LineageService.OnMixedAncestryBorn(pBaby, pParent1, pParent2);
-            XiaContactService.OnMixedChildBorn(pBaby, pParent1, pParent2);
+            try { ChronicleEvents.OnHadChild(pParent1, pParent2, pBaby); }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Birth chronicle processing failed: " +
+                                    e.Message);
+            }
+            try
+            {
+                LineageService.OnMixedAncestryBorn(pBaby, pParent1, pParent2,
+                    parentEdgesOwned);
+            }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Mixed ancestry birth processing failed: " +
+                                    e.Message);
+            }
+            try { XiaContactService.OnMixedChildBorn(pBaby, pParent1, pParent2); }
+            catch (System.Exception e)
+            {
+                ModClass.LogWarning("Xia contact birth processing failed: " +
+                                    e.Message);
+            }
         }
     }
 }

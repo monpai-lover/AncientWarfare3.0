@@ -19,8 +19,8 @@ namespace AncientWarfare3.content
                 float original = _originalWeight != null
                     ? _originalWeight(pActor)
                     : decision.weight;
-                return DynasticReproductionService
-                    .ReproductionDecisionWeight(pActor, original);
+                return FamilyExpansionService.ReproductionDecisionWeight(
+                    pActor, original);
             };
             decision.has_weight_custom = true;
             _initialized = true;

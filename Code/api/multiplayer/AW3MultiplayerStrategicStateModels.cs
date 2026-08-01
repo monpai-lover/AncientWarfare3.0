@@ -141,19 +141,46 @@ namespace AncientWarfare3.api.multiplayer
     {
         public AW3MultiplayerActorProjection(long actorId, bool isGeneral,
             int generalMerit)
+            : this(actorId, isGeneral, generalMerit, string.Empty,
+                string.Empty, string.Empty, string.Empty, string.Empty,
+                -1L, 0)
+        {
+        }
+
+        public AW3MultiplayerActorProjection(long actorId, bool isGeneral,
+            int generalMerit, string nativeName, string chineseName,
+            string givenName, string familyComponent, string generatorId,
+            long cultureId, int namingSchemaVersion)
         {
             AW3MultiplayerStrategicValidation.RequiredId(actorId,
                 nameof(actorId));
             if (generalMerit < 0)
                 throw new ArgumentOutOfRangeException(nameof(generalMerit));
+            if (namingSchemaVersion < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(namingSchemaVersion));
             ActorId = actorId;
             IsGeneral = isGeneral;
             GeneralMerit = generalMerit;
+            NativeName = nativeName ?? string.Empty;
+            ChineseName = chineseName ?? string.Empty;
+            GivenName = givenName ?? string.Empty;
+            FamilyComponent = familyComponent ?? string.Empty;
+            GeneratorId = generatorId ?? string.Empty;
+            CultureId = cultureId;
+            NamingSchemaVersion = namingSchemaVersion;
         }
 
         public long ActorId { get; }
         public bool IsGeneral { get; }
         public int GeneralMerit { get; }
+        public string NativeName { get; }
+        public string ChineseName { get; }
+        public string GivenName { get; }
+        public string FamilyComponent { get; }
+        public string GeneratorId { get; }
+        public long CultureId { get; }
+        public int NamingSchemaVersion { get; }
     }
 
     public sealed class AW3MultiplayerStrategicSnapshot

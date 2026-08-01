@@ -107,7 +107,8 @@ Require-Text $historyLocalization `
     'first official rank grant suffix is localized in history'
 Require-Text $historyWindow 'NormalizeLegacyLocalizationKeys(' `
     'history rendering repairs legacy official rank keys without rewriting the archive'
-Require-Text $state 'pActing ? pYearAfter(currentYear)' 'one-year acting term'
+Require-Text $state 'int termEndYear = pActing' 'acting term branch'
+Require-Text $state '? pYearAfter(currentYear)' 'one-year acting term'
 Require-Text $state 'pActing ? currentYear : -1' 'durable acting marker'
 Require-Text $state 'TryExpireActingCityGovernor(' 'acting expiry before promotion'
 Require-Text $state 'TryExpireActingCentralOfficial(' `

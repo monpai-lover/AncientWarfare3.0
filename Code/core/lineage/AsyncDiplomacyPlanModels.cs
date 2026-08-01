@@ -37,7 +37,8 @@ namespace AncientWarfare3.core.lineage
         None = 0,
         Normal = 1,
         TakeMandate = 2,
-        MandateConquest = 3
+        MandateConquest = 3,
+        Zhulu = 4
     }
 
     internal readonly struct KingdomStrategyFacts
@@ -82,7 +83,9 @@ namespace AncientWarfare3.core.lineage
             bool fabricationAvailable = true, bool sameAlliance = false,
             float sourceAlliancePower = 0f,
             float targetAlliancePower = 0f, int mandateValue = 0,
-            float mandateCoreControl = 1f)
+            float mandateCoreControl = 1f,
+            bool zhuluEligible = false, float capitalDistance = 0f,
+            bool zhuluAge = false)
         {
             TargetId = targetId;
             Power = float.IsNaN(power) || float.IsInfinity(power) || power < 0f
@@ -101,6 +104,9 @@ namespace AncientWarfare3.core.lineage
             TargetAlliancePower = FiniteNonNegative(targetAlliancePower);
             MandateValue = mandateValue;
             MandateCoreControl = Clamp01(mandateCoreControl);
+            ZhuluEligible = zhuluEligible;
+            CapitalDistance = FiniteNonNegative(capitalDistance);
+            ZhuluAge = zhuluAge;
         }
 
         public long TargetId { get; }
@@ -118,6 +124,9 @@ namespace AncientWarfare3.core.lineage
         public float TargetAlliancePower { get; }
         public int MandateValue { get; }
         public float MandateCoreControl { get; }
+        public bool ZhuluEligible { get; }
+        public float CapitalDistance { get; }
+        public bool ZhuluAge { get; }
 
         private static float FiniteNonNegative(float pValue)
         {
@@ -326,6 +335,22 @@ namespace AncientWarfare3.core.lineage
                 pTarget.TargetId == pSource.KingdomId || pTarget.Power <= 0f ||
                 pTarget.SameRoot || pTarget.VassalBlocked ||
                 pTarget.WarBlocked) return false;
+
+            if (pTarget.PreferredKind == WarStrategyCandidateKind.Zhulu)
+            {
+                if (!pTarget.ZhuluEligible || pTarget.AtWar) return false;
+                double score = ZhuluWarRules.ScoreTarget(pSource.Power,
+                    pTarget.Power, pTarget.Neighbor,
+                    pTarget.CapitalDistance);
+                if (score == double.MinValue && pTarget.ZhuluAge)
+                    score = ZhuluWarRules.ScoreWeakFallbackTarget(
+                        pSource.Power, pTarget.Power, pTarget.Neighbor,
+                        pTarget.CapitalDistance);
+                pCandidate = new WarStrategyCandidate(pTarget.TargetId,
+                    WarStrategyCandidateKind.Zhulu,
+                    score);
+                return pCandidate.Score > double.MinValue;
+            }
 
             if (pTarget.PreferredKind ==
                 WarStrategyCandidateKind.MandateConquest)
@@ -713,6 +738,8 @@ namespace AncientWarfare3.core.lineage
             pValues.Add(FloatBits(pTarget.TargetAlliancePower));
             pValues.Add(pTarget.MandateValue);
             pValues.Add(FloatBits(pTarget.MandateCoreControl));
+            pValues.Add(Bool(pTarget.ZhuluEligible));
+            pValues.Add(FloatBits(pTarget.CapitalDistance));
         }
 
         private static void AppendProposal(List<long> pValues,

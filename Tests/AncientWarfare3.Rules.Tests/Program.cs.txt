@@ -2,6 +2,7 @@ using AncientWarfare3.content;
 using AncientWarfare3.content.figures;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
@@ -59,6 +60,65 @@ if (args.Length == 1 && args[0] == "--xia-monkey-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--diplomacy-ai")
+{
+    DiplomacyAiRulesTests.Run();
+    Console.WriteLine("AW3 diplomacy AI rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--integrated-naming-rules-slice")
+{
+    IntegratedNamingRulesTests.Run();
+    ActorLocalizedNameBoundaryRulesTests.Run();
+    LocalizedNameProfileReadinessRulesTests.Run();
+    Console.WriteLine("AW3 integrated naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--localized-name-migration-slice")
+{
+    LocalizedNameMigrationRulesTests.Run();
+    Console.WriteLine("AW3 localized-name migration rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--western-lineage-naming-rules-slice")
+{
+    WesternLineageNamingRulesTests.Run();
+    WesternFamilyIdentityRulesTests.Run();
+    WesternLineageEligibilityRulesTests.Run();
+    WesternBilateralFamilyTreeRulesTests.Run();
+    Console.WriteLine("AW3 western lineage naming rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--western-lineage-admission-rules-slice")
+{
+    WesternLineageAdmissionRulesTests.Run();
+    NobleIdentityRulesTests.Run();
+    CourtOfficeLabelDeduplicationRulesTests.Run();
+    WesternLineageAdmissionPersistenceSqlTests.Run();
+    XiaizedFamilyBranchTransitionRulesTests.Run();
+    XiaizedFamilyBranchTransitionPersistenceSqlTests.Run();
+    Console.WriteLine("AW3 western lineage admission rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--western-policy-profile-slice")
+{
+    WesternPolicyProfileRulesTests.Run();
+    WesternPolicyProfileMigrationRulesTests.Run();
+    WesternPolicyProfilePersistenceSqlTests.Run();
+    WesternRoyalAuthorityRulesTests.Run();
+    WesternPolicyEffectRulesTests.Run();
+    WesternPolicyAiRulesTests.Run();
+    WesternCourtProfileRulesTests.Run();
+    WesternCourtElectionRulesTests.Run();
+    Console.WriteLine("AW3 western policy profile rules passed.");
+    return;
+}
+
 if (args.Length == 1 && args[0] == "--family-tree-label-slice")
 {
 FamilyTreeLabelLayoutRulesTests.Run();
@@ -98,7 +158,30 @@ if (args.Length == 1 && args[0] == "--actor-kingdom-safety-slice")
 if (args.Length == 1 && args[0] == "--war-ai-slice")
 {
     WarAiGoalSelectionRulesTests.Run();
+    SamePeopleWarIntentRulesTests.Run();
     Console.WriteLine("War AI goal selection rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--zhulu-war-slice")
+{
+    ZhuluWarRulesTests.Run();
+    ZhuluAgeRulesTests.Run();
+    Console.WriteLine("Zhulu war rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--xiaization-ui-slice")
+{
+    XiaizationStatusDisplayRulesTests.Run();
+    Console.WriteLine("Xiaization UI rules passed.");
+    return;
+}
+
+if (args.Length == 1 && args[0] == "--western-goal-regressions")
+{
+    WesternGoalRegressionRulesTests.Run();
+    Console.WriteLine("Western goal regression rules passed.");
     return;
 }
 
@@ -126,6 +209,7 @@ if (args.Length == 1 && args[0] == "--conscription-law-slice")
 if (args.Length == 1 && args[0] == "--three-month-replenishment-slice")
 {
     ArmyReplenishmentOperationRulesTests.Run();
+    VassalRuntimeProjectionRulesTests.Run();
     Console.WriteLine("AW3 three-month replenishment rules passed.");
     return;
 }
@@ -323,6 +407,24 @@ static void RunArmyRtsCommandContinuityRulesTests()
             unitCount: 20, captainAlive: true, royalGuard: false,
             dedicatedGarrison: false, specialArmy: true),
         "a special army never enters ordinary defense-to-attack conversion");
+    True(KingdomWarDirectorRules.ShouldUsePriorityDefenseTarget(
+            ArmyRtsObjectiveState.OpenDefense),
+        "an active capital threat keeps the priority defense target");
+    Equal(false, KingdomWarDirectorRules.ShouldUsePriorityDefenseTarget(
+            ArmyRtsObjectiveState.ClosedOccupied),
+        "a cleared capital threat falls through to another open objective");
+    Equal(ArmyRtsRole.Assault,
+        KingdomWarDirectorRules.ResolveMissionRole(
+            ArmyRtsRole.Defense, hasStrategicTarget: true,
+            forceReady: true, friendlyDefenseTarget: true,
+            ArmyRtsProposalKind.Attack),
+        "a defense army counterattacking an occupied homeland city receives an assault mission");
+    Equal(ArmyRtsRole.Defense,
+        KingdomWarDirectorRules.ResolveMissionRole(
+            ArmyRtsRole.Assault, hasStrategicTarget: true,
+            forceReady: true, friendlyDefenseTarget: true,
+            ArmyRtsProposalKind.Defend),
+        "an actively contested homeland city still receives a defense mission");
 
     True(ArmyRtsTaskOwnershipRules.HasImmediateCombatPriority(
             hasAttackTarget: true, targetAlive: true,
@@ -395,6 +497,55 @@ static void RunArmyRtsCommandContinuityRulesTests()
             living: 9, targetStrength: 42, minimumForceReady: true,
             replenishmentBypassActive: true),
         "a stalled replenishment request never authorizes an understrength Army to depart");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
+            requiresEscort: true, rosterLiving: 10,
+            nearbyFollowers: 0, captainPresent: true,
+            immediateCombat: false, transportOwnsMovement: false),
+        "a captain cannot march alone while the army remains behind");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
+            requiresEscort: true, rosterLiving: 10,
+            nearbyFollowers: 6, captainPresent: true,
+            immediateCombat: false, transportOwnsMovement: false),
+        "a captain waits while fewer than eighty percent are nearby");
+    True(ArmyRtsRules.CanCaptainAdvanceWithEscort(
+            requiresEscort: true, rosterLiving: 10,
+            nearbyFollowers: 7, captainPresent: true,
+            immediateCombat: false, transportOwnsMovement: false),
+        "a captain advances once the eighty-percent escort quorum is present");
+    Equal(false, ArmyRtsRules.CanCaptainAdvanceWithEscort(
+            requiresEscort: true, rosterLiving: 1,
+            nearbyFollowers: 0, captainPresent: true,
+            immediateCombat: true, transportOwnsMovement: false),
+        "an attack target cannot make an isolated captain leave his army");
+    Equal(false, ArmyRtsRules.IsViableAttackAssignment(
+            attackAssignment: true, warActive: true,
+            objectiveState: ArmyRtsObjectiveState.OpenAttack,
+            living: 7, targetStrength: 10, minimumOperationalForce: 2),
+        "an understrength stale attack cannot block objective handoff");
+    Equal(false, ArmyRtsRules.IsViableAttackAssignment(
+            attackAssignment: true, warActive: true,
+            objectiveState: ArmyRtsObjectiveState.ClosedOccupied,
+            living: 10, targetStrength: 10, minimumOperationalForce: 2),
+        "an occupied target cannot count as a continuing attack");
+    True(ArmyRtsRules.IsViableAttackAssignment(
+            attackAssignment: true, warActive: true,
+            objectiveState: ArmyRtsObjectiveState.OpenAttack,
+            living: 8, targetStrength: 10, minimumOperationalForce: 2),
+        "an active open attack at eighty percent preserves continuity");
+    True(DiplomaticWarDeclarationLedgerRules.MatchesDirectedWarPair(
+            recordAttackerId: 10L, recordDefenderId: 20L,
+            warAttackerId: 10L, warDefenderId: 20L),
+        "ending A-B clears A's declaration against B");
+    Equal(false,
+        DiplomaticWarDeclarationLedgerRules.MatchesDirectedWarPair(
+            recordAttackerId: 10L, recordDefenderId: 30L,
+            warAttackerId: 10L, warDefenderId: 20L),
+        "ending A-B preserves A's pending declaration against C");
+    Equal(false,
+        DiplomaticWarDeclarationLedgerRules.MatchesDirectedWarPair(
+            recordAttackerId: 20L, recordDefenderId: 10L,
+            warAttackerId: 10L, warDefenderId: 20L),
+        "the reverse declaration is handled explicitly for its owner");
     True(ArmyRtsRules.ShouldRemainInReplenishment(
             needsReplenishment: true, departureStrengthReady: false),
         "an understrength Army remains in replenishment after its retry window expires");
@@ -1666,7 +1817,7 @@ Equal(false, VassalWarPermissionRules.CanUseOrdinaryWarDecision(
     "subject targets expose no ordinary war decisions");
 True(VassalWarPermissionRules.CanUseOrdinaryWarDecision(
         pSourceIsSubject: false, pTargetIsSubject: false),
-    "independent pairs retain ordinary war decisions");
+    "tributaries retain ordinary war decisions because they are not formal subjects");
 Equal(false, VassalWarPermissionRules.CanCreateAlliance(true, out string vassalAllianceReason),
     "a vassal cannot create or join an alliance even through a forced path");
 Equal("vassal_no_alliance", vassalAllianceReason,
@@ -3831,6 +3982,41 @@ Equal(103, decodedNoticeQueue[0].forced_war_year,
 True(decodedNoticeQueue[0].notice_recorded,
     "notice history deduplication flag survives decision preemption");
 
+var legacyAppeasementQueueItem = new KingdomDecisionQueueItem
+{
+    decision_id = "aw_decision_appease_xia_cities",
+    progress = 27.5f,
+    target_kingdom_id = 31,
+    target_kingdom_name = "legacy target"
+};
+string legacyAppeasementQueue = KingdomDecisionQueueCodec.Encode(
+    new List<KingdomDecisionQueueItem> { legacyAppeasementQueueItem });
+string migratedAppeasementQueue =
+    KingdomDecisionQueueCodec.MigrateDecisionIds(
+        legacyAppeasementQueue,
+        KingdomPolicyProfileMigrationRules.MapLegacyDecisionId,
+        out bool replacedLegacyAppeasement);
+List<KingdomDecisionQueueItem> migratedAppeasementItems =
+    KingdomDecisionQueueCodec.Decode(migratedAppeasementQueue);
+True(replacedLegacyAppeasement,
+    "legacy appeasement queue migration reports replacement");
+Equal(1, migratedAppeasementItems.Count,
+    "legacy appeasement queue keeps its item");
+Equal("aw_decision_appease_foreign_cities",
+    migratedAppeasementItems[0].decision_id,
+    "legacy appeasement queue maps to the generalized id");
+Equal(27.5f, migratedAppeasementItems[0].progress,
+    "legacy appeasement queue preserves progress");
+Equal(31L, migratedAppeasementItems[0].target_kingdom_id,
+    "legacy appeasement queue preserves target metadata");
+Equal(legacyAppeasementQueue,
+    KingdomDecisionQueueCodec.MigrateDecisionIds(
+        legacyAppeasementQueue, id => id,
+        out bool replacedUnchangedDecision),
+    "unchanged queue migration preserves its exact serialized form");
+Equal(false, replacedUnchangedDecision,
+    "unchanged queue migration reports no replacement");
+
 Equal(25, SlaveArmyFormationRules.MaximumRoster,
     "one temporary slave vanguard is capped at 25 members");
 Equal(4, SlaveArmyFormationRules.MinimumInitialSlaves,
@@ -4318,6 +4504,28 @@ True(RoyalRestorationRules.ShouldSuppressNewKingdomEffects(
     "the restoration object suppresses fresh-foundation side effects");
 Equal(false, RoyalRestorationRules.ShouldSuppressNewKingdomEffects(true, 47, 48),
     "unrelated kingdom creation is never suppressed");
+True(RoyalRestorationRules.ShouldFoundRestorationCadetBranch(
+        restorationActive: true,
+        hasLineage: true,
+        hasShi: true,
+        isHistoricalFigure: false,
+        isLineageRootFounder: false,
+        alreadyFoundedForDestination: false),
+    "a restored claimant founds a new cadet Shi instead of reusing the old branch");
+Equal(false, RoyalRestorationRules.ShouldFoundRestorationCadetBranch(
+        restorationActive: true,
+        hasLineage: true,
+        hasShi: true,
+        isHistoricalFigure: false,
+        isLineageRootFounder: false,
+        alreadyFoundedForDestination: true),
+    "a restoration does not duplicate its cadet Shi on retry");
+Equal("周", RoyalRestorationRules.ResolveRestoredKingdomName(
+        "周", "周", "周", "赵", "赵"),
+    "restoration prefers the archived kingdom name over a claimant Shi name");
+Equal("周", RoyalRestorationRules.ResolveRestoredKingdomName(
+        "", "周", "", "赵", "赵"),
+    "restoration falls back to the archive name when continuity is missing");
 
 var restorationFathers = new Dictionary<long, long>
 {
@@ -5869,6 +6077,24 @@ Equal(false, DiplomacyProposalRules.ShouldBreakNonAggression(
 Equal(false, DiplomacyProposalRules.ShouldBreakNonAggression(
         opinion: -80, requesterPower: 90f, responderPower: 100f),
     "a weaker realm preserves the protection of its pact");
+Equal("", DiplomacyProposalRules.AllianceDistanceFailure(
+        sharesBorder: true, hasBothCapitals: true,
+        capitalDistance: 500f),
+    "bordering realms may ally regardless of capital distance");
+Equal("", DiplomacyProposalRules.AllianceDistanceFailure(
+        sharesBorder: false, hasBothCapitals: true,
+        capitalDistance: 120f),
+    "nearby non-bordering realms may ally across a narrow sea");
+Equal("alliance_too_distant",
+    DiplomacyProposalRules.AllianceDistanceFailure(
+        sharesBorder: false, hasBothCapitals: true,
+        capitalDistance: 120.01f),
+    "remote realms cannot form a new alliance");
+Equal("alliance_unavailable",
+    DiplomacyProposalRules.AllianceDistanceFailure(
+        sharesBorder: false, hasBothCapitals: false,
+        capitalDistance: 0f),
+    "alliance distance fails closed when a capital is missing");
 DiplomacyTreatyPersistenceTests.Run();
 DiplomacyActionExpansionRulesTests.Run();
 DiplomacyProposalOpportunityRulesTests.Run();
@@ -7022,6 +7248,24 @@ var allianceAction = new DiplomacyProposalAiCandidate(
     DiplomacyProposalType.Alliance, allowed: true, opinion: 75,
     requesterPowerRatio: 1f, directRoyalMarriage: false,
     targetPowerRatio: 0f, targetHasMandate: false);
+var equalOpinionAllianceAction = new DiplomacyProposalAiCandidate(
+    DiplomacyProposalType.Alliance, allowed: true, opinion: 60,
+    requesterPowerRatio: 1f, directRoyalMarriage: false,
+    targetPowerRatio: 0f, targetHasMandate: false);
+var urgentHouseholdAction = new DiplomacyProposalAiCandidate(
+    DiplomacyProposalType.HouseholdOffering, allowed: true, opinion: 60,
+    requesterPowerRatio: 1f, directRoyalMarriage: false,
+    targetPowerRatio: 0f, targetHasMandate: false, urgency: 30);
+var routineHouseholdAction = new DiplomacyProposalAiCandidate(
+    DiplomacyProposalType.HouseholdOffering, allowed: true, opinion: 60,
+    requesterPowerRatio: 1f, directRoyalMarriage: false,
+    targetPowerRatio: 0f, targetHasMandate: false, urgency: 0);
+True(DiplomacyProposalAiRules.Score(urgentHouseholdAction) >
+     DiplomacyProposalAiRules.Score(equalOpinionAllianceAction),
+    "an empty ruler household outranks a routine alliance");
+True(DiplomacyProposalAiRules.Score(routineHouseholdAction) <=
+     DiplomacyProposalAiRules.Score(equalOpinionAllianceAction),
+    "a populated household does not dominate routine diplomacy");
 Equal(DiplomacyProposalType.Coalition,
     DiplomacyProposalAiRules.SelectBest(
         new[] { allianceAction, coalitionAction }).Type,
@@ -7199,6 +7443,17 @@ OfficialCareerClosePersistenceSqlTests.Run();
 CourtDispositionSqlTests.Run();
 NameSystemRulesTests.Run();
 XiaExpansionAndCivMonkeyNamingRulesTests.Run();
+IntegratedNamingRulesTests.Run();
+WesternLineageNamingRulesTests.Run();
+WesternFamilyIdentityRulesTests.Run();
+WesternLineageEligibilityRulesTests.Run();
+WesternBilateralFamilyTreeRulesTests.Run();
+WesternLineageAdmissionRulesTests.Run();
+NobleIdentityRulesTests.Run();
+CourtOfficeLabelDeduplicationRulesTests.Run();
+WesternGoalRegressionRulesTests.Run();
+WesternLineageAdmissionPersistenceSqlTests.Run();
+WesternPolicyEffectRulesTests.Run();
 PathfindingRuntimeModeRulesTests.Run();
 ActorRacePerformanceRulesTests.Run();
 ActorBatchPerformanceRulesTests.Run();
@@ -7209,6 +7464,10 @@ SchedulerLoadSafetyRulesTests.Run();
 ActorDeathInvocationRulesTests.Run();
 XiaPopulationRecoveryRulesTests.Run();
 WarAiGoalSelectionRulesTests.Run();
+SamePeopleWarIntentRulesTests.Run();
+ZhuluWarRulesTests.Run();
+ZhuluAgeRulesTests.Run();
+XiaizationStatusDisplayRulesTests.Run();
 WarGoalSettlementRulesTests.Run();
 WarScoreBudgetRulesTests.Run();
 WarScoreBudgetServiceTests.Run();
@@ -7234,6 +7493,7 @@ AW3MultiplayerCatalogRulesTests.Run();
 ArmyRtsPlanGifTests.Run();
 GanzhiChronologyRulesTests.Run();
 HistoryUiRulesTests.Run();
+ChronicleTextExportRulesTests.Run();
 HistoryLocalizationRulesTests.Run();
 ActiveMilitaryLifecycleRulesTests.Run();
 ArmyLogisticsSustainmentRulesTests.Run();

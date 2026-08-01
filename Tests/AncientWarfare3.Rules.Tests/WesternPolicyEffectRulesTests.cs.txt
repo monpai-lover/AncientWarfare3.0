@@ -1,0 +1,216 @@
+using AncientWarfare3.core.policy;
+using AncientWarfare3.core.lineage;
+
+internal static class WesternPolicyEffectRulesTests
+{
+    public static void Run()
+    {
+        KingdomPolicyEffects none = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.None, Array.Empty<string>(), "default");
+        Near(1f, none.TaxMultiplier,
+            "a realm without a policy profile has neutral tax output");
+        Near(1f, none.FarmOutputMultiplier,
+            "a realm without a policy profile has neutral farm output");
+        Equal(0, none.ExtraWorkshopAttempts,
+            "a realm without a policy profile has no workshop bonus");
+        Equal(false, none.WesternCourtUnlocked,
+            "a realm without a policy profile has no western court");
+
+        KingdomPolicyEffects writing = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.WesternGeneral,
+            new[] { "aw_tech_writing" }, "default");
+        Near(1.03f, writing.AdministrationMultiplier,
+            "writing improves real policy and technology administration output");
+
+        KingdomPolicyEffects survey = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.WesternGeneral,
+            new[] { "aw_tech_well_field_survey" }, "default");
+        Near(1.05f, survey.FarmOutputMultiplier,
+            "land survey improves cultivated output rather than exposing a dead tier only");
+
+        string[] materialAndFiscal =
+        {
+            "aw_tech_pottery_casting",
+            "aw_tech_bronze_casting",
+            "aw_tech_granary_accounting",
+            "aw_tech_city_defense",
+            "aw_tech_well_field_survey",
+            "aw_west_tech_iron_casting",
+            "aw_west_tech_coin_minting",
+            "aw_west_tech_irrigation",
+            "aw_west_tech_tax_office",
+            "aw_west_tech_landlord_tax"
+        };
+        KingdomPolicyEffects material = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.WesternGeneral, materialAndFiscal,
+            "default");
+        Equal(3, material.ExtraWorkshopAttempts,
+            "pottery bronze and iron knowledge add bounded workshop attempts");
+        Equal(3, material.EquipmentQualityBonus,
+            "bronze and iron knowledge improve equipment quality cumulatively");
+        Near(1.35f, material.TaxMultiplier,
+            "coin tax-office and landlord-tax technologies stack cumulatively");
+        Near(1.25f, material.StorageMultiplier,
+            "granary accounting raises storage capacity");
+        Equal(true, material.OrganizedFamineTransfers,
+            "granary accounting enables organized famine transfers");
+        Near(1.23f, material.FarmOutputMultiplier,
+            "land survey and irrigation supply cumulative farm-output bonuses");
+        Near(0.2f, material.FamineResilience,
+            "irrigation supplies famine resilience");
+        Near(1.15f, material.GarrisonMultiplier,
+            "city defense improves garrison strength");
+        Near(0.15f, material.OccupationResistance,
+            "city defense slows hostile occupation");
+        Equal(1, material.ZoneTechnologyTier,
+            "land survey advances the city-zone technology tier");
+        Equal(-10, material.NobleOpinion,
+            "landlord tax revenue carries a noble-loyalty cost");
+
+        KingdomPolicyEffects landlordPolicy =
+            KingdomPolicyEffectRules.Resolve(
+                KingdomPolicyProfileId.WesternGeneral,
+                new[]
+                {
+                    "aw_west_tech_coin_minting",
+                    "aw_west_tech_tax_office",
+                    "aw_west_tech_landlord_tax",
+                    "aw_west_policy_landlord_taxation"
+                }, "default");
+        Near(1.47f, landlordPolicy.TaxMultiplier,
+            "landlord taxation retains a real marginal tax effect after its prerequisites");
+
+        CityEconomyContribution neutralEconomy =
+            CityEconomyRules.CalculateContribution(
+                CityEconomyRole.AgrarianGranary, population: 100,
+                adoptedTechCount: 4, totalTechCount: 8,
+                distanceFromCapital: 0f, slavePopulation: 0,
+                nonCore: false);
+        CityEconomyContribution improvedEconomy =
+            CityEconomyRules.CalculateContribution(
+                CityEconomyRole.AgrarianGranary, population: 100,
+                adoptedTechCount: 4, totalTechCount: 8,
+                distanceFromCapital: 0f, slavePopulation: 0,
+                nonCore: false, taxMultiplier: material.TaxMultiplier,
+                policyMultiplier: 1.1f, techMultiplier: 1.1f,
+                farmOutputMultiplier: material.FarmOutputMultiplier);
+        Near(neutralEconomy.TaxValue * material.TaxMultiplier,
+            improvedEconomy.TaxValue,
+            "western fiscal effects multiply city tax output");
+        Near(neutralEconomy.FoodStability *
+             material.FarmOutputMultiplier,
+            improvedEconomy.FoodStability,
+            "irrigation multiplies city food stability output");
+        Near(neutralEconomy.PolicyPoints * 1.1f,
+            improvedEconomy.PolicyPoints,
+            "administration effects multiply policy output");
+        Near(neutralEconomy.TechPoints * 1.1f,
+            improvedEconomy.TechPoints,
+            "administration effects multiply technology output");
+        Equal(640, KingdomFoodReliefRules.TransferBudget(
+                KingdomFoodReliefRules.MaxKingdomTransferPerYear,
+                material.StorageMultiplier),
+            "granary storage expands the bounded annual relief budget");
+        Equal(40, KingdomFoodReliefRules.EmergencyTarget(
+                pPopulation: 100,
+                pFamineResilience: material.FamineResilience),
+            "irrigation resilience lowers emergency food demand");
+        Near(8.5f, CityOccupationAccelerationRules.ApplyResistance(
+                pCaptureDelta: 10f,
+                pOccupationResistance: material.OccupationResistance),
+            "city-defense resistance slows hostile capture progress");
+        Near(-10f, CityOccupationAccelerationRules.ApplyResistance(
+                pCaptureDelta: -10f,
+                pOccupationResistance: material.OccupationResistance),
+            "occupation resistance does not slow defender recapture");
+        Equal(5, WartimeGarrisonRules.ScaleTarget(
+                WartimeGarrisonRules.BaseTarget,
+                material.GarrisonMultiplier),
+            "city defense raises the wartime garrison target");
+        Equal(0, WartimeGarrisonRules.ScaleTarget(
+                pBaseTarget: 0, material.GarrisonMultiplier),
+            "defense knowledge does not create a peacetime garrison target");
+
+        string[] institutions =
+        {
+            "aw_west_tech_enfeoffment_study",
+            "aw_west_tech_office_system",
+            "aw_west_tech_elective_offices",
+            "aw_west_tech_ritual_order",
+            "aw_west_tech_feudal_retainers",
+            "aw_west_tech_royal_domain",
+            "aw_west_policy_landlord_taxation",
+            "aw_west_policy_noble_council",
+            "aw_west_policy_feudal_retainers",
+            "aw_west_policy_royal_direct_rule"
+        };
+        KingdomPolicyEffects active = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.WesternGeneral, institutions,
+            "western_royal_direct");
+        Equal(true, active.GovernorAdministrationUnlocked,
+            "enfeoffment study unlocks systematic governors");
+        Equal(true, active.VassalAdministrationUnlocked,
+            "enfeoffment study unlocks systematic vassal administration");
+        Equal(true, active.WesternCourtUnlocked,
+            "office-system knowledge opens the western court");
+        Equal(true, active.ElectiveTermsUnlocked,
+            "elective-office knowledge unlocks official terms");
+        Equal(true, active.FeudalRetainersUnlocked,
+            "feudal-retainer knowledge unlocks landed offices");
+        Near(1.1f, active.GarrisonMultiplier,
+            "feudal retainers provide a real reserve-garrison benefit");
+        Equal(true, active.RoyalAppointmentsUnlocked,
+            "active royal-direct government enables royal appointments");
+        Equal(true, active.CentralizationUnlocked,
+            "active royal-direct government enables western centralization");
+        Equal(10, active.LegitimacyBonus,
+            "ritual order improves legitimacy");
+        Equal(5, active.SameCultureOpinion,
+            "ritual order improves same-culture relations");
+        Equal(10, active.SuccessionStability,
+            "ritual order reduces succession controversy");
+        Near(1.25f, active.AdministrationMultiplier,
+            "office-system and active direct rule improve administration within the cap");
+        Equal(-15, active.NobleOpinion,
+            "direct rule remains costly to nobles after council mitigation");
+        Equal(-10, active.VassalOpinion,
+            "direct rule increases vassal dissatisfaction");
+
+        KingdomPolicyEffects councilAdministration =
+            KingdomPolicyEffectRules.Resolve(
+                KingdomPolicyProfileId.WesternGeneral,
+                new[]
+                {
+                    "aw_west_tech_office_system",
+                    "aw_west_tech_elective_offices",
+                    "aw_west_policy_noble_council"
+                }, "western_noble_council");
+        Near(1.18f, councilAdministration.AdministrationMultiplier,
+            "elective terms and noble council both improve real administrative output");
+
+        KingdomPolicyEffects transitioned = KingdomPolicyEffectRules.Resolve(
+            KingdomPolicyProfileId.Xia, institutions,
+            "western_royal_direct");
+        Equal(false, transitioned.WesternCourtUnlocked,
+            "western court effects stop immediately after full Xiaization");
+        Equal(false, transitioned.RoyalAppointmentsUnlocked,
+            "western direct-appointment effects stop after profile transition");
+        Equal(0, transitioned.LegitimacyBonus,
+            "dormant western ritual completion does not affect the Xia profile");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void Near(float pExpected, float pActual,
+        string pMessage)
+    {
+        if (Math.Abs(pExpected - pActual) > 0.0001f)
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

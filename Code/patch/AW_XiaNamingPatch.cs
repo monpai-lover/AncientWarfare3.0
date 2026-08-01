@@ -75,9 +75,21 @@ namespace AncientWarfare3.patch
         [HarmonyPriority(Priority.Last)]
         [HarmonyAfter(new[] { "set_culture_name" })]
         [HarmonyPatch(typeof(Culture), nameof(Culture.createCulture))]
-        private static void Culture_CreateCulture_Postfix(Culture __instance, Actor pActor)
+        private static void Culture_CreateCulture_Postfix(Culture __instance,
+            Actor pActor, Culture __state)
         {
+            XiaCultureIntegrationService.InheritFullyIntegrated(__instance,
+                __state);
             XiaNamingRepair.TryRenameCulture(__instance, pActor, pForce: true);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
+        [HarmonyPatch(typeof(Culture), nameof(Culture.createCulture))]
+        private static void Culture_CreateCulture_Prefix(Actor pActor,
+            ref Culture __state)
+        {
+            __state = pActor?.culture;
         }
     }
 }

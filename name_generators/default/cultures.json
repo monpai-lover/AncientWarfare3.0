@@ -1,0 +1,80 @@
+[
+    {
+        "id":  "human_culture",
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}{文化}",
+                              "weight":  10
+                          },
+                          {
+                              "format":  "{犹太男名}{文化}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "Xia_culture",
+        "templates":  [
+                          {
+                              "format":  "{真实城名}#文化#"
+                          }
+                      ]
+    },
+    {
+        "id":  "elf_culture",
+        "templates":  [
+                          {
+                              "format":  "{拉丁国名}{文化}",
+                              "weight":  3
+                          },
+                          {
+                              "format":  "{拉丁城名}{文化}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_culture",
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}#部落#",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "dwarf_culture",
+        "templates":  [
+                          {
+                              "format":  "{罗斯城名}{文化}",
+                              "weight":  3
+                          }
+                      ]
+    },
+    {
+        "id":  "western_culture",
+        "default_template":  {
+                                 "format":  "{人类文化}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{西方城名上}{西方城名下}{文化}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_culture",
+        "default_template":  {
+                                 "format":  "{兽人文化}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}#部落#",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

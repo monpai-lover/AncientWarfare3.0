@@ -462,6 +462,8 @@ namespace AncientWarfare3.core.lineage
             internal int ObservedLiving;
             internal int TargetStrength;
             internal int DirectorGeneration = -1;
+            internal int DirectorFriendlyForce;
+            internal int DirectorEnemyForce;
             internal bool DirectorConnectivityInitialized;
             internal bool DirectorConnectedSupply;
             internal bool DirectorConnectedCorridor;
@@ -676,9 +678,7 @@ namespace AncientWarfare3.core.lineage
                 }
                 AssignMission(army, mission, proposal.ConnectedSupply,
                     proposal.ConnectedCorridor, pSnapshot.Generation);
-                if (RuntimeByArmy.TryGetValue(proposal.ArmyId,
-                        out RuntimeState runtime))
-                    runtime.DirectorForceReady = proposal.ForceReady;
+                ApplyDirectorTacticalProjection(proposal);
             }
 
             var stale = new List<long>();
@@ -753,6 +753,9 @@ namespace AncientWarfare3.core.lineage
                 RuntimeByArmy[pArmy.id] = runtime;
             }
             runtime.DirectorForceReady = pProposal.ForceReady;
+            runtime.DirectorFriendlyForce = Math.Max(0,
+                pProposal.FriendlyForce);
+            runtime.DirectorEnemyForce = Math.Max(0, pProposal.EnemyForce);
             runtime.DirectorGeneration = pDirectorGeneration;
             bool connectivityChanged =
                 !runtime.DirectorConnectivityInitialized ||
@@ -768,6 +771,17 @@ namespace AncientWarfare3.core.lineage
                 ArmyLogisticsService.OnMissionAssigned(pArmy,
                     record.Mission, pProposal.ConnectedSupply,
                     pProposal.ConnectedCorridor);
+        }
+
+        private static void ApplyDirectorTacticalProjection(
+            KingdomWarDirectorShadowMission pProposal)
+        {
+            if (pProposal == null || !RuntimeByArmy.TryGetValue(
+                    pProposal.ArmyId, out RuntimeState runtime)) return;
+            runtime.DirectorForceReady = pProposal.ForceReady;
+            runtime.DirectorFriendlyForce = Math.Max(0,
+                pProposal.FriendlyForce);
+            runtime.DirectorEnemyForce = Math.Max(0, pProposal.EnemyForce);
         }
 
         private static bool IsKingdomInWar(War pWar,
@@ -1174,6 +1188,16 @@ namespace AncientWarfare3.core.lineage
             Controllers.Requeue(pArmyId);
         }
 
+        internal static void OnReplenishmentOperationCompleted(Army pArmy)
+        {
+            if (pArmy?.data == null || !RuntimeByArmy.TryGetValue(
+                    pArmy.id, out RuntimeState runtime)) return;
+            runtime.ReplenishmentRequested = false;
+            runtime.ReplenishmentRetryDue = false;
+            runtime.ReplenishmentProgress.Reset();
+            Controllers.Requeue(pArmy.id);
+        }
+
         public static bool TryGetCaptainTarget(Actor pActor,
             out WorldTile pTarget)
         {
@@ -1186,6 +1210,26 @@ namespace AncientWarfare3.core.lineage
                     out ArmyRtsControllerRecord record) ||
                 !RuntimeByArmy.TryGetValue(army.id,
                     out RuntimeState runtime)) return false;
+            bool requiresEscort =
+                (record.State == ArmyRtsState.March ||
+                 record.State == ArmyRtsState.Deploy ||
+                 record.State == ArmyRtsState.Assault ||
+                 record.State == ArmyRtsState.Pursue) &&
+                record.Mission?.ProposalKind !=
+                    ArmyRtsProposalKind.Retreat;
+            bool transportOwnsMovement =
+                ArmyRtsTransportService.HasActiveVoyage(army) ||
+                pActor.is_inside_boat ||
+                ArmyRtsTransportService.OwnsActorTask(pActor);
+            ArmyFormationCounters escort = ArmyFormationService.
+                GetIncrementalFollowerCounters(army);
+            bool captainPresent = pActor?.data != null &&
+                                  pActor.isAlive() && !pActor.isRekt() &&
+                                  pActor.current_tile?.data != null;
+            if (!ArmyRtsRules.CanCaptainAdvanceWithEscort(
+                    requiresEscort, SafeUnitCount(army), escort.Rallied,
+                    captainPresent, HasImmediateCombatPriority(pActor),
+                    transportOwnsMovement)) return false;
             if (ArmyRtsTransportService.TryGetTarget(army,
                     out WorldTile activeTransportTarget) &&
                 (ArmyRtsTransportRules.ShouldUseTransportBeforeLandRoute(
@@ -2583,6 +2627,11 @@ namespace AncientWarfare3.core.lineage
                 pursuitState != ArmyRtsState.Pursue;
             facts.PursuitRequiresRegroup = pursuitState ==
                 ArmyRtsState.Regroup;
+            facts.OpenObjective = targetValid && !frontHold && !complete;
+            facts.LocalForceAdvantage = facts.OpenObjective &&
+                ArmyRtsRules.HasLocalForceAdvantage(
+                    pRuntime.DirectorFriendlyForce,
+                    pRuntime.DirectorEnemyForce);
             facts.Supply = operational.Supply;
             facts.Organization = operational.Organization;
             return facts;
@@ -2613,8 +2662,7 @@ namespace AncientWarfare3.core.lineage
                     pCommit, pNext, pRuntime.ReplenishmentRequested,
                     missingStrength)) return;
             Kingdom kingdom = SafeKingdom(pArmy);
-            City preferredCity = AWArmyService.FindAnchorCity(pArmy) ??
-                                 SafeCaptain(pArmy)?.city;
+            City preferredCity = AWArmyService.FindAnchorCity(pArmy);
             ArmyReplenishmentOperationState operation =
                 ArmyReplenishmentOperationService.Ensure(pArmy, kingdom,
                     preferredCity, missingStrength, CurrentWorldTime());

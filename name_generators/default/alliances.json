@@ -1,0 +1,56 @@
+[
+    {
+        "id":  "alliance_name",
+        "default_template":  {
+                                 "format":  "#无名联盟#"
+                             },
+        "templates":  [
+                          {
+                              "format":  "{奇幻人类国名}#帝国#",
+                              "weight":  20
+                          },
+                          {
+                              "format":  "{奇幻完整国名}",
+                              "weight":  10
+                          },
+                          {
+                              "format":  "{奇幻人类国名}#合众联邦#",
+                              "weight":  10
+                          },
+                          {
+                              "format":  "$k1_short$$k2_short$#之盟#",
+                              "weight":  1
+                          },
+                          {
+                              "format":  "$天干地支纪年${联盟名后缀}",
+                              "weight":  0.1
+                          }
+                      ]
+    },
+    {
+        "id":  "western_alliance",
+        "default_template":  {
+                                 "format":  "{奇幻人类国名}{联盟名后缀}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{西方国名}{联盟名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    },
+    {
+        "id":  "orc_nomadic_alliance",
+        "default_template":  {
+                                 "format":  "{兽人国名}{联盟名后缀}",
+                                 "weight":  1
+                             },
+        "templates":  [
+                          {
+                              "format":  "{游牧姓氏}{联盟名后缀}",
+                              "weight":  1
+                          }
+                      ]
+    }
+]

@@ -16,6 +16,7 @@ namespace AncientWarfare3.core.lineage
         public const string ReunifySuccession = "reunify_succession";
         public const string NoCb = "no_cb_punitive";
         public const string LegacyNoCb = "no_cb";
+        public const string ZhuluAnnexation = "zhulu_annexation";
     }
 
     public readonly struct WarGoalIdentity : IEquatable<WarGoalIdentity>
@@ -104,7 +105,8 @@ namespace AncientWarfare3.core.lineage
         RestoreKingdom,
         Independence,
         ReunifySuccession,
-        NoCbOutcome
+        NoCbOutcome,
+        ZhuluAnnexation
     }
 
     public readonly struct WarGoalAutomaticSettlementProfile
@@ -195,6 +197,12 @@ namespace AncientWarfare3.core.lineage
                         "capital_control", NoCbOutcomeRequiredScore,
                         pUsesDynamicCityCost: false);
                     return true;
+                case WarGoalTypeIds.ZhuluAnnexation:
+                    pProfile = new WarGoalAutomaticSettlementProfile(
+                        WarGoalAutomaticSettlementEffect.ZhuluAnnexation,
+                        "principal_extinction", DecisiveVictoryScore,
+                        pUsesDynamicCityCost: false);
+                    return true;
                 default:
                     pProfile = default;
                     return false;
@@ -275,6 +283,33 @@ namespace AncientWarfare3.core.lineage
                 return false;
             }
             return true;
+        }
+
+        public static int[] SelectCompletedAffordableGoalIndices(
+            int pAchievedScore,
+            IReadOnlyList<WarGoalSettlementFacts> pFacts)
+        {
+            if (pFacts == null || pFacts.Count == 0 ||
+                pAchievedScore <= 0) return Array.Empty<int>();
+
+            int available = Math.Min(MaximumRequiredScore,
+                pAchievedScore);
+            var selected = new List<int>(Math.Min(pFacts.Count,
+                MaximumPersistedGoals));
+            var goalIds = new HashSet<long>();
+            for (int i = 0; i < pFacts.Count &&
+                            selected.Count < MaximumPersistedGoals; i++)
+            {
+                WarGoalSettlementFacts facts = pFacts[i];
+                if (facts.WarGoalId < 0 || facts.RequiredScore <= 0 ||
+                    !facts.GoalCompleted ||
+                    facts.RequestedGoalTermWarGoalId != facts.WarGoalId ||
+                    !goalIds.Add(facts.WarGoalId) ||
+                    facts.RequiredScore > available) continue;
+                selected.Add(i);
+                available -= facts.RequiredScore;
+            }
+            return selected.ToArray();
         }
     }
 }

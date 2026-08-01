@@ -38,6 +38,9 @@
     <Compile Include="..\..\Code\core\court\CivilServiceForeignResidentQualificationQuery.cs" Link="Production\CivilServiceForeignResidentQualificationQuery.cs" />
     <Compile Include="..\..\Code\core\court\CivilServiceFormalCandidateQuery.cs" Link="Production\CivilServiceFormalCandidateQuery.cs" />
     <Compile Include="..\..\Code\core\lineage\LineageKeys.cs" Link="Production\LineageKeys.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomacyAiRules.cs" Link="Production\DiplomacyAiRules.cs" />
+    <Compile Include="..\..\Code\core\naming\ActorLocalizedNameBoundaryRules.cs" Link="Production\ActorLocalizedNameBoundaryRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameProfileReadinessRules.cs" Link="Production\AWLocalizedNameProfileReadinessRules.cs" />
     <Compile Include="TestOfficialCareerPersistenceStubs.cs.txt" />
     <Compile Include="..\..\Code\core\lineage\NobleDeathSuccessionPersistence.cs" Link="Production\NobleDeathSuccessionPersistence.cs" />
     <Compile Include="..\..\Code\core\court\OfficialCareerRewardCooldownPersistence.cs" Link="Production\OfficialCareerRewardCooldownPersistence.cs" />
@@ -48,14 +51,45 @@
     <Compile Include="CourtDispositionPerformanceTests.cs.txt" />
     <Compile Include="NameSystemRulesTests.cs.txt" />
     <Compile Include="XiaExpansionAndCivMonkeyNamingRulesTests.cs.txt" />
+    <Compile Include="IntegratedNamingRulesTests.cs.txt" />
+    <Compile Include="ActorLocalizedNameBoundaryRulesTests.cs.txt" />
+    <Compile Include="LocalizedNameMigrationRulesTests.cs.txt" />
+    <Compile Include="LocalizedNameProfileReadinessRulesTests.cs.txt" />
+    <Compile Include="WesternLineageNamingRulesTests.cs.txt" />
+    <Compile Include="WesternFamilyIdentityRulesTests.cs.txt" />
+    <Compile Include="WesternLineageEligibilityRulesTests.cs.txt" />
+    <Compile Include="WesternBilateralFamilyTreeRulesTests.cs.txt" />
+    <Compile Include="WesternLineageAdmissionRulesTests.cs.txt" />
+    <Compile Include="NobleIdentityRulesTests.cs.txt" />
+    <Compile Include="CourtOfficeLabelDeduplicationRulesTests.cs.txt" />
+    <Compile Include="WesternGoalRegressionRulesTests.cs.txt" />
+    <Compile Include="WesternLineageAdmissionPersistenceSqlTests.cs.txt" />
+    <Compile Include="XiaizedFamilyBranchTransitionRulesTests.cs.txt" />
+    <Compile Include="XiaizedFamilyBranchTransitionPersistenceSqlTests.cs.txt" />
+    <Compile Include="WesternPolicyProfileRulesTests.cs.txt" />
+    <Compile Include="WesternPolicyProfileMigrationRulesTests.cs.txt" />
+    <Compile Include="WesternPolicyProfilePersistenceSqlTests.cs.txt" />
+    <Compile Include="WesternRoyalAuthorityRulesTests.cs.txt" />
+    <Compile Include="WesternPolicyEffectRulesTests.cs.txt" />
+    <Compile Include="WesternPolicyAiRulesTests.cs.txt" />
+    <Compile Include="WesternCourtProfileRulesTests.cs.txt" />
+    <Compile Include="WesternCourtElectionRulesTests.cs.txt" />
+    <Compile Include="..\..\Code\attributes\TableDefAttribute.cs" Link="Production\TableDefAttribute.cs" />
+    <Compile Include="..\..\Code\attributes\TableItemDefAttribute.cs" Link="Production\TableItemDefAttribute.cs" />
+    <Compile Include="..\..\Code\core\db\AbstractTableItem.cs" Link="Production\AbstractTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomPolicyStateTableItem.cs" Link="Production\KingdomPolicyStateTableItem.cs" />
+    <Compile Include="..\..\Code\core\db\KingdomCourtStateTableItem.cs" Link="Production\KingdomCourtStateTableItem.cs" />
+    <Compile Include="..\..\Code\utils\SQLiteHelper.cs" Link="Production\SQLiteHelper.cs" />
     <Compile Include="TitleAtomicSqlTests.cs.txt" />
     <Compile Include="DiplomacyTreatyPersistenceTests.cs.txt" />
     <Compile Include="ConferredPosthumousTitleRulesTests.cs.txt" />
     <Compile Include="ConferredPosthumousTitleSqlTests.cs.txt" />
     <Compile Include="DiplomacyActionExpansionRulesTests.cs.txt" />
     <Compile Include="DiplomacyProposalOpportunityRulesTests.cs.txt" />
+    <Compile Include="DiplomacyAiRulesTests.cs.txt" />
     <Compile Include="AsyncDiplomacyProposalIdentityTests.cs.txt" />
     <Compile Include="VassalRelationConversionPersistenceTests.cs.txt" />
+    <Compile Include="VassalRuntimeProjectionRulesTests.cs.txt" />
     <Compile Include="RulerHouseholdRulesTests.cs.txt" />
     <Compile Include="WarPeaceSettlementScopeRulesTests.cs.txt" />
     <Compile Include="SeparatePeaceRuntimeFactsRulesTests.cs.txt" />
@@ -69,6 +103,7 @@
     <Compile Include="SuccessionDisputeSqlTests.cs.txt" />
     <Compile Include="GanzhiChronologyRulesTests.cs.txt" />
     <Compile Include="HistoryUiRulesTests.cs.txt" />
+    <Compile Include="ChronicleTextExportRulesTests.cs.txt" />
     <Compile Include="FamilyTreeLabelLayoutRulesTests.cs.txt" />
     <Compile Include="DeferredRuntimeWorkRulesTests.cs.txt" />
     <Compile Include="PathfindingRuntimeModeRulesTests.cs.txt" />
@@ -96,6 +131,10 @@
     <Compile Include="GarrisonSortieRuntimeIndexRulesTests.cs.txt" />
     <Compile Include="XiaPopulationRecoveryRulesTests.cs.txt" />
     <Compile Include="WarAiGoalSelectionRulesTests.cs.txt" />
+    <Compile Include="SamePeopleWarIntentRulesTests.cs.txt" />
+    <Compile Include="ZhuluWarRulesTests.cs.txt" />
+    <Compile Include="ZhuluAgeRulesTests.cs.txt" />
+    <Compile Include="XiaizationStatusDisplayRulesTests.cs.txt" />
     <Compile Include="WarGoalSettlementRulesTests.cs.txt" />
     <Compile Include="WarScoreBudgetRulesTests.cs.txt" />
     <Compile Include="WarScoreBudgetServiceTests.cs.txt" />
@@ -149,6 +188,8 @@
     <Compile Include="..\..\Code\core\lineage\LineageBranchRules.cs" Link="Production\LineageBranchRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirTitleSelectionRules.cs" Link="Production\HeirTitleSelectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\FamilyTreeProjectionRevision.cs" Link="Production\FamilyTreeProjectionRevision.cs" />
+    <Compile Include="..\..\Code\core\lineage\HistoricalFigureNameRules.cs" Link="Production\HistoricalFigureNameRules.cs" />
+    <Compile Include="..\..\Code\core\uiquery\FamilyTreeMaterializationRules.cs" Link="Production\FamilyTreeMaterializationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerTitleFacts.cs" Link="Production\RulerTitleFacts.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerTitleFactRules.cs" Link="Production\RulerTitleFactRules.cs" />
     <Compile Include="..\..\Code\core\lineage\PosthumousTitleDefs.cs" Link="Production\PosthumousTitleDefs.cs" />
@@ -166,6 +207,8 @@
     <Compile Include="..\..\Code\core\lineage\PoliticalPointReservationLedger.cs" Link="Production\PoliticalPointReservationLedger.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomDecisionPriorityRules.cs" Link="Production\KingdomDecisionPriorityRules.cs" />
     <Compile Include="..\..\Code\core\policy\KingdomPolicyTechOrderRules.cs" Link="Production\KingdomPolicyTechOrderRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomPolicyEffectRules.cs" Link="Production\KingdomPolicyEffectRules.cs" />
+    <Compile Include="..\..\Code\core\policy\WesternPolicyAiRules.cs" Link="Production\WesternPolicyAiRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerAppellationRules.cs" Link="Production\RulerAppellationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NameDecisionViewModel.cs" Link="Production\NameDecisionViewModel.cs" />
     <Compile Include="..\..\Code\core\lineage\RoyalLineageResolutionRules.cs" Link="Production\RoyalLineageResolutionRules.cs" />
@@ -186,6 +229,7 @@
     <Compile Include="..\..\Code\core\lineage\MandateWarDefenseRules.cs" Link="Production\MandateWarDefenseRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalFiscalRules.cs" Link="Production\VassalFiscalRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalContractTierRules.cs" Link="Production\VassalContractTierRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\VassalRuntimeProjectionRules.cs" Link="Production\VassalRuntimeProjectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalOpportunityRules.cs" Link="Production\DiplomacyProposalOpportunityRules.cs" />
     <Compile Include="..\..\Code\core\lineage\AsyncDiplomacyPlanModels.cs" Link="Production\AsyncDiplomacyPlanModels.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalRelationConversionPersistence.cs" Link="Production\VassalRelationConversionPersistence.cs" />
@@ -204,13 +248,18 @@
     <Compile Include="..\..\Code\core\lineage\PeaceSettlementRules.cs" Link="Production\PeaceSettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarGoalSettlementRules.cs" Link="Production\WarGoalSettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantCityBaselineRules.cs" Link="Production\WarParticipantCityBaselineRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\EmptyCityResettlementRules.cs" Link="Production\EmptyCityResettlementRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarParticipantMobilizationBaselineRules.cs" Link="Production\WarParticipantMobilizationBaselineRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScoreRules.cs" Link="Production\WarScoreRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WarBattleEpisodeRules.cs" Link="Production\WarBattleEpisodeRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarVictoryExhaustionRules.cs" Link="Production\WarVictoryExhaustionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScorePersistence.cs" Link="Production\WarScorePersistence.cs" />
     <Compile Include="..\..\Code\core\lineage\WarScoreService.cs" Link="Production\WarScoreService.cs" />
     <Compile Include="..\..\Code\core\lineage\InheritanceLawRules.cs" Link="Production\InheritanceLawRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryListLayoutRules.cs" Link="Production\HistoryListLayoutRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ChronicleTextExportModels.cs" Link="Production\ChronicleTextExportModels.cs" />
+    <Compile Include="..\..\Code\core\lineage\ChronicleTextExportRules.cs" Link="Production\ChronicleTextExportRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\AW3SaveDirectoryRegistry.cs" Link="Production\AW3SaveDirectoryRegistry.cs" />
     <Compile Include="..\..\Code\core\lineage\HistoryLocalizationRules.cs" Link="Production\HistoryLocalizationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\InheritanceCandidateRules.cs" Link="Production\InheritanceCandidateRules.cs" />
     <Compile Include="..\..\Code\core\lineage\HeirDirectSonRules.cs" Link="Production\HeirDirectSonRules.cs" />
@@ -276,6 +325,13 @@
     <Compile Include="..\..\Code\core\court\CourtIds.cs" Link="Production\CourtIds.cs" />
     <Compile Include="..\..\Code\core\court\CourtTierRules.cs" Link="Production\CourtTierRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInstitutionRules.cs" Link="Production\CourtInstitutionRules.cs" />
+    <Compile Include="..\..\Code\core\court\CourtProfileId.cs" Link="Production\CourtProfileId.cs" />
+    <Compile Include="..\..\Code\core\court\CourtOfficeDefinition.cs" Link="Production\CourtOfficeDefinition.cs" />
+    <Compile Include="..\..\Code\core\court\ICourtProfile.cs" Link="Production\ICourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\XiaCourtProfile.cs" Link="Production\XiaCourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtProfile.cs" Link="Production\WesternCourtProfile.cs" />
+    <Compile Include="..\..\Code\core\court\CourtProfileRegistry.cs" Link="Production\CourtProfileRegistry.cs" />
+    <Compile Include="..\..\Code\core\court\WesternCourtElectionRules.cs" Link="Production\WesternCourtElectionRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtInstitutionEffectRules.cs" Link="Production\CourtInstitutionEffectRules.cs" />
     <Compile Include="..\..\Code\core\court\CourtAristocraticGroupRules.cs" Link="Production\CourtAristocraticGroupRules.cs" />
     <Compile Include="..\..\Code\core\lineage\OfficialShiRules.cs" Link="Production\OfficialShiRules.cs" />
@@ -289,6 +345,35 @@
     <Compile Include="..\..\Code\core\lineage\KingdomMilitaryReadinessIndex.cs" Link="Production\KingdomMilitaryReadinessIndex.cs" />
     <Compile Include="..\..\Code\content\XiaFertilityRules.cs" Link="Production\XiaFertilityRules.cs" />
     <Compile Include="..\..\Code\content\CivMonkeyNamingRules.cs" Link="Production\CivMonkeyNamingRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNamingLanguageRules.cs" Link="Production\AWNamingLanguageRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNamingCollisionRules.cs" Link="Production\AWNamingCollisionRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNamingSeedRules.cs" Link="Production\AWNamingSeedRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNameGenerationContext.cs" Link="Production\AWNameGenerationContext.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameIdentitySnapshot.cs" Link="Production\AWLocalizedNameIdentitySnapshot.cs" />
+    <Compile Include="..\..\Code\core\naming\AWBoundedLocalizedNameWriteQueue.cs" Link="Production\AWBoundedLocalizedNameWriteQueue.cs" />
+    <Compile Include="..\..\Code\core\db\LocalizedNameIdentitySchema.cs" Link="Production\LocalizedNameIdentitySchema.cs" />
+    <Compile Include="..\..\Code\core\naming\AWInvalidNameTemplateException.cs" Link="Production\AWInvalidNameTemplateException.cs" />
+    <Compile Include="..\..\Code\core\naming\AWWordLibraryAsset.cs" Link="Production\AWWordLibraryAsset.cs" />
+    <Compile Include="..\..\Code\core\naming\AWWordLibraryManager.cs" Link="Production\AWWordLibraryManager.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNameTemplate.cs" Link="Production\AWNameTemplate.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNameGeneratorAsset.cs" Link="Production\AWNameGeneratorAsset.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameProjectionRules.cs" Link="Production\AWLocalizedNameProjectionRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedMottoProjectionRules.cs" Link="Production\AWLocalizedMottoProjectionRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedMottoCreationRules.cs" Link="Production\AWLocalizedMottoCreationRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWLocalizedNameMigrationRules.cs" Link="Production\AWLocalizedNameMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWNamingProfileRules.cs" Link="Production\AWNamingProfileRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternLineageEligibilityRules.cs" Link="Production\WesternLineageEligibilityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionRules.cs" Link="Production\WesternLineageAdmissionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternLineageAdmissionPersistence.cs" Link="Production\WesternLineageAdmissionPersistence.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionRules.cs" Link="Production\XiaizedFamilyBranchTransitionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizedFamilyBranchTransitionPersistence.cs" Link="Production\XiaizedFamilyBranchTransitionPersistence.cs" />
+    <Compile Include="..\..\Code\core\naming\AWCultureNamingTraditionRules.cs" Link="Production\AWCultureNamingTraditionRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWWesternFamilyNameRules.cs" Link="Production\AWWesternFamilyNameRules.cs" />
+    <Compile Include="..\..\Code\core\naming\AWOrcNomadicNamingRules.cs" Link="Production\AWOrcNomadicNamingRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\WesternFamilyIdentityRules.cs" Link="Production\WesternFamilyIdentityRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileRules.cs" Link="Production\KingdomPolicyProfileRules.cs" />
+    <Compile Include="..\..\Code\core\policy\KingdomPolicyProfileMigrationRules.cs" Link="Production\KingdomPolicyProfileMigrationRules.cs" />
+    <Compile Include="..\..\Code\core\policy\WesternRoyalAuthorityRules.cs" Link="Production\WesternRoyalAuthorityRules.cs" />
     <Compile Include="..\..\Code\core\policy\CivMonkeyPolicyRules.cs" Link="Production\CivMonkeyPolicyRules.cs" />
     <Compile Include="..\..\Code\core\policy\XiaExpansionDecisionRules.cs" Link="Production\XiaExpansionDecisionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarNoticeRules.cs" Link="Production\WarNoticeRules.cs" />
@@ -316,6 +401,10 @@
     <Compile Include="..\..\Code\core\lineage\VassalAnnexDecisionRules.cs" Link="Production\VassalAnnexDecisionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\VassalAIActionRules.cs" Link="Production\VassalAIActionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarAiGoalSelectionRules.cs" Link="Production\WarAiGoalSelectionRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\SamePeopleWarIntentRules.cs" Link="Production\SamePeopleWarIntentRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ZhuluWarRules.cs" Link="Production\ZhuluWarRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\ZhuluAgeRules.cs" Link="Production\ZhuluAgeRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaizationStatusDisplayRules.cs" Link="Production\XiaizationStatusDisplayRules.cs" />
     <Compile Include="..\..\Code\core\lineage\WarTargetSelectionRules.cs" Link="Production\WarTargetSelectionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\KingdomTitleProgressionRules.cs" Link="Production\KingdomTitleProgressionRules.cs" />
     <Compile Include="..\..\Code\core\policy\VassalMapModeRules.cs" Link="Production\VassalMapModeRules.cs" />
@@ -381,6 +470,9 @@
     <Compile Include="..\..\Code\core\lineage\DynasticTitleRules.cs" Link="Production\DynasticTitleRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DynasticReproductionRules.cs" Link="Production\DynasticReproductionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleRankRules.cs" Link="Production\NobleRankRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\NobleIdentityRules.cs" Link="Production\NobleIdentityRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\XiaContactRules.cs" Link="Production\XiaContactRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\FamilyTreeChronologyRules.cs" Link="Production\FamilyTreeChronologyRules.cs" />
     <Compile Include="..\..\Code\core\lineage\NobleTitleNameRules.cs" Link="Production\NobleTitleNameRules.cs" />
     <Compile Include="..\..\Code\core\lineage\CeremonialHistoryRules.cs" Link="Production\CeremonialHistoryRules.cs" />
     <Compile Include="..\..\Code\core\lineage\ArmyMarchRules.cs" Link="Production\ArmyMarchRules.cs" />
@@ -407,6 +499,7 @@
     <Compile Include="..\..\Code\core\lineage\DiplomacyConversationRules.cs" Link="Production\DiplomacyConversationRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyOpinionRules.cs" Link="Production\DiplomacyOpinionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyProposalRules.cs" Link="Production\DiplomacyProposalRules.cs" />
+    <Compile Include="..\..\Code\core\lineage\DiplomaticWarDeclarationLedgerRules.cs" Link="Production\DiplomaticWarDeclarationLedgerRules.cs" />
     <Compile Include="..\..\Code\core\lineage\DiplomacyActionExpansionRules.cs" Link="Production\DiplomacyActionExpansionRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdRules.cs" Link="Production\RulerHouseholdRules.cs" />
     <Compile Include="..\..\Code\core\lineage\RulerHouseholdPregnancyRules.cs" Link="Production\RulerHouseholdPregnancyRules.cs" />

@@ -271,8 +271,10 @@ Require-Text $cityPatch 'City previousCity = actor.city;' `
     'vacancy appointment remembers the original city'
 Require-Text $cityPatch 'bool appointed = acting' `
     'vacancy appointment observes the persistence result'
-Require-Text $cityPatch 'if (!appointed)' `
-    'failed vacancy appointment enters rollback'
+Require-Text $cityPatch 'if (appointed)' `
+    'successful vacancy appointment enters committed placement'
+Require-Text $cityPatch 'else' `
+    'failed vacancy appointment enters rollback branch'
 Require-Text $cityPatch 'if (pCity.leader == actor)' `
     'failed vacancy appointment only removes its tentative leader'
 Require-Text $cityPatch 'pCity.removeLeader();' `
@@ -295,10 +297,12 @@ else {
         [System.StringComparison]::Ordinal)
     $appointment = $selection.IndexOf('bool appointed = acting',
         [System.StringComparison]::Ordinal)
-    $rollback = $selection.IndexOf('if (!appointed)',
+    $committed = $selection.IndexOf('if (appointed)',
         [System.StringComparison]::Ordinal)
+    $rollback = $selection.IndexOf('if (pCity.leader == actor)',
+        $committed, [System.StringComparison]::Ordinal)
     if ($setLeader -lt 0 -or $appointment -le $setLeader -or
-        $rollback -le $appointment) {
+        $committed -le $appointment -or $rollback -le $committed) {
         $failures.Add(
             'vacancy leader projection must be followed by checked appointment and rollback')
     }

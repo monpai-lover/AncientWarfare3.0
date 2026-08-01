@@ -1,0 +1,141 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using AncientWarfare3.core.lineage;
+
+internal static class ChronicleTextExportRulesTests
+{
+    public static void Run()
+    {
+        FormatsEveryEventWithItsChronicleDate();
+        FormatsKingdomAndCityPeriodChronicleDates();
+        PublishesUtf8BomFileInsideSaveDirectory();
+        RegistersAndClearsActiveSaveDirectory();
+    }
+
+    private static void FormatsEveryEventWithItsChronicleDate()
+    {
+        var request = new ChronicleTextExportRequest(
+            ChronicleTextExportSource.Person, 42L, "孙武", "C:/save");
+        var snapshot = ChronicleTextExportSnapshot.ForPerson(
+            new List<ChronicleTextExportEvent>
+            {
+                new ChronicleTextExportEvent("建元元年",
+                    "<color=red>拜为将军</color>"),
+                new ChronicleTextExportEvent("建元二年", "出征")
+            });
+
+        string text = ChronicleTextExportRules.Format(request, snapshot,
+            new DateTime(2026, 7, 31, 8, 0, 0));
+
+        Contains(text, "建元元年  拜为将军",
+            "person export includes first event chronicle date");
+        Contains(text, "建元二年  出征",
+            "person export includes second event chronicle date");
+        NotContains(text, "<color=red>",
+            "person export removes rich-text tags");
+    }
+
+    private static void FormatsKingdomAndCityPeriodChronicleDates()
+    {
+        var kingdom = new ChronicleTextExportRequest(
+            ChronicleTextExportSource.Kingdom, 7L, "齐国", "C:/save");
+        var kingdomSnapshot = ChronicleTextExportSnapshot.ForKingdom(
+            new List<ChronicleTextExportDynasty>
+            {
+                new ChronicleTextExportDynasty("田齐", "建元元年",
+                    "建元十年", new List<ChronicleTextExportPeriod>
+                    {
+                        new ChronicleTextExportPeriod("齐威王", "建元元年",
+                            "建元十年", new List<ChronicleTextExportEvent>())
+                    })
+            });
+        string kingdomText = ChronicleTextExportRules.Format(kingdom,
+            kingdomSnapshot, new DateTime(2026, 7, 31, 8, 0, 0));
+        Contains(kingdomText, "田齐（建元元年 - 建元十年）",
+            "kingdom export includes dynasty chronicle span");
+        Contains(kingdomText, "齐威王（建元元年 - 建元十年）",
+            "kingdom export includes reign chronicle span");
+
+        var city = new ChronicleTextExportRequest(
+            ChronicleTextExportSource.City, 9L, "临淄", "C:/save");
+        var citySnapshot = ChronicleTextExportSnapshot.ForCity(
+            new List<ChronicleTextExportPeriod>
+            {
+                new ChronicleTextExportPeriod("齐国", "建元三年", "建元五年",
+                    new List<ChronicleTextExportEvent>())
+            });
+        string cityText = ChronicleTextExportRules.Format(city, citySnapshot,
+            new DateTime(2026, 7, 31, 8, 0, 0));
+        Contains(cityText, "齐国（建元三年 - 建元五年）",
+            "city export includes ownership chronicle span");
+    }
+
+    private static void PublishesUtf8BomFileInsideSaveDirectory()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "aw3-chronicle-test-" +
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = new ChronicleTextExportRequest(
+                ChronicleTextExportSource.Person, 5L, "A:B", root);
+            string path = ChronicleTextExportRules.ResolveUniqueFilePath(
+                request, new DateTime(2026, 7, 31, 8, 0, 0));
+            ChronicleTextExportResult result = ChronicleTextExportRules.Publish(
+                path, "编年史");
+
+            True(result.Succeeded, "text export succeeds");
+            True(File.Exists(result.Path), "published export exists");
+            True(result.Path.StartsWith(Path.Combine(Path.GetFullPath(root),
+                "aw3_exports", "chronicles"), StringComparison.Ordinal),
+                "export remains inside active save directory");
+            True(Path.GetFileName(result.Path).IndexOf(':') < 0,
+                "export filename removes invalid Windows characters");
+            byte[] bytes = File.ReadAllBytes(result.Path);
+            True(bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB &&
+                bytes[2] == 0xBF, "export uses UTF-8 BOM");
+            True(!File.Exists(result.Path + ".tmp"),
+                "export leaves no temporary file");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static void RegistersAndClearsActiveSaveDirectory()
+    {
+        AW3SaveDirectoryRegistry.ClearForNewWorld();
+        True(!AW3SaveDirectoryRegistry.TryGet(out _),
+            "new world has no chronicle export save directory");
+        True(!AW3SaveDirectoryRegistry.Observe("  "),
+            "blank save directory is rejected");
+        True(AW3SaveDirectoryRegistry.Observe("C:/temp/world-7"),
+            "loaded save directory is accepted");
+        True(AW3SaveDirectoryRegistry.TryGet(out string directory),
+            "loaded save directory becomes available");
+        True(string.Equals(directory, Path.GetFullPath("C:/temp/world-7"),
+            StringComparison.Ordinal), "save directory is normalized");
+        AW3SaveDirectoryRegistry.ClearForNewWorld();
+        True(!AW3SaveDirectoryRegistry.TryGet(out _),
+            "new world clear removes prior save directory");
+    }
+
+    private static void Contains(string value, string expected, string name)
+    {
+        if ((value ?? "").Contains(expected ?? "")) return;
+        throw new InvalidOperationException(name + ": missing " + expected);
+    }
+
+    private static void NotContains(string value, string expected, string name)
+    {
+        if (!(value ?? "").Contains(expected ?? "")) return;
+        throw new InvalidOperationException(name + ": unexpectedly found " + expected);
+    }
+
+    private static void True(bool value, string name)
+    {
+        if (value) return;
+        throw new InvalidOperationException(name + ": expected True, got False");
+    }
+}

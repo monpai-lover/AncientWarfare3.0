@@ -160,7 +160,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.joinCity))]
         private static bool ActorJoinCity_Prefix(Actor __instance, City pCity)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return true;
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                SmoothLoader.isLoading() || !Config.game_loaded) return true;
             return HistoricalAffiliationService.CanJoinCity(__instance, pCity);
         }
 
@@ -169,7 +170,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), nameof(Actor.joinKingdom))]
         private static bool ActorJoinKingdom_Prefix(Actor __instance, Kingdom pKingdom)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return true;
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                SmoothLoader.isLoading() || !Config.game_loaded) return true;
             return HistoricalAffiliationService.CanJoinKingdom(__instance, pKingdom);
         }
 
@@ -179,7 +181,8 @@ namespace AncientWarfare3.patch
         private static bool ActorSetCity_Prefix(Actor __instance, City pCity,
             out ActorSetCityState __state)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying)
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                SmoothLoader.isLoading() || !Config.game_loaded)
             {
                 __state = default(ActorSetCityState);
                 return true;
@@ -197,7 +200,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "setCity", new[] { typeof(City) })]
         private static void ActorSetCity_Postfix(Actor __instance, ActorSetCityState __state)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return;
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                SmoothLoader.isLoading() || !Config.game_loaded) return;
             long oldCityId = __state.OldCity?.data?.id ?? -1L;
             long newCityId = __instance?.city?.data?.id ?? -1L;
             if (!SchoolResidenceInvalidationRules.ShouldInvalidateActiveMemberMove(
@@ -213,7 +217,8 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(Actor), "setKingdom", new[] { typeof(Kingdom) })]
         private static bool ActorSetKingdom_Prefix(Actor __instance, Kingdom pKingdomToSet)
         {
-            if (AW3MultiplayerReplicaScope.IsApplying) return true;
+            if (AW3MultiplayerReplicaScope.IsApplying ||
+                SmoothLoader.isLoading() || !Config.game_loaded) return true;
             return HistoricalAffiliationService.CanJoinKingdom(__instance, pKingdomToSet);
         }
 

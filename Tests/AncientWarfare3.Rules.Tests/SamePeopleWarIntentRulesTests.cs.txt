@@ -1,0 +1,100 @@
+using AncientWarfare3.core.lineage;
+
+internal static class SamePeopleWarIntentRulesTests
+{
+    public static void Run()
+    {
+        int territorial = 0;
+        for (int bucket = 0; bucket < 100; bucket++)
+        {
+            if (SamePeopleWarIntentRules.RouteFromBucket(
+                    WarAiPeopleRelation.SameSpecies, bucket,
+                    territorialIntentLocked: false) ==
+                SamePeopleWarRoute.Territorial)
+                territorial++;
+        }
+
+        Equal(80, territorial,
+            "exactly eighty buckets prefer annexation");
+
+        int first = SamePeopleWarIntentRules.StableBucket(11L, 22L, 99);
+        int second = SamePeopleWarIntentRules.StableBucket(11L, 22L, 99);
+        Equal(first, second,
+            "the same realm pair and period stays stable");
+
+        Equal(SamePeopleWarRoute.NotApplicable,
+            SamePeopleWarIntentRules.RouteFromBucket(
+                WarAiPeopleRelation.Foreign, 0, false),
+            "foreign wars bypass same-people routing");
+        Equal(SamePeopleWarRoute.Territorial,
+            SamePeopleWarIntentRules.RouteFromBucket(
+                WarAiPeopleRelation.SameCulture, 99, true),
+            "an active claim plan remains territorial");
+        True(SamePeopleWarIntentRules.ShouldSuppressSubjugation(
+                SamePeopleWarRoute.Territorial, "force_vassal"),
+            "the eighty-percent route blocks the vassal side entrance");
+        False(SamePeopleWarIntentRules.ShouldSuppressSubjugation(
+                SamePeopleWarRoute.Territorial, "take_mandate"),
+            "special war goals bypass ordinary routing");
+
+        Equal(SamePeopleWarDirective.PrepareClaim,
+            SamePeopleWarIntentRules.ResolveDirective(
+                SamePeopleWarRoute.Territorial, "force_vassal",
+                hasTerritorialOption: false, canFabricate: true),
+            "the annexation route prepares a claim instead of vassalizing");
+        Equal(SamePeopleWarDirective.SuppressSelection,
+            SamePeopleWarIntentRules.ResolveDirective(
+                SamePeopleWarRoute.Territorial, "force_tributary",
+                hasTerritorialOption: false, canFabricate: false),
+            "an impossible claim does not fall through to tributary war");
+        Equal(SamePeopleWarDirective.KeepSelection,
+            SamePeopleWarIntentRules.ResolveDirective(
+                SamePeopleWarRoute.SubjugationCompetition,
+                "force_vassal", hasTerritorialOption: false,
+                canFabricate: true),
+            "the twenty-percent route keeps existing eligibility competition");
+
+        RuntimeEntrypointsShareRule();
+    }
+
+    private static void RuntimeEntrypointsShareRule()
+    {
+        string root = Directory.GetCurrentDirectory();
+        string warAi = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "WarDecisionAI.cs"));
+        string vassalAi = File.ReadAllText(Path.Combine(root, "Code", "core",
+            "lineage", "VassalAIService.cs"));
+        string claimService = Path.Combine(root, "Code", "core", "lineage",
+            "WarClaimPreparationService.cs");
+
+        True(File.Exists(claimService),
+            "the shared claim preparation service exists");
+        True(warAi.Contains("SamePeopleWarIntentRules.Resolve("),
+            "normal war AI uses the shared same-people route");
+        True(warAi.Contains("WarClaimPreparationService.TryBeginWeakClaim("),
+            "normal war AI uses shared weak-claim preparation");
+        True(vassalAi.Contains("SamePeopleWarIntentRules.Resolve("),
+            "dedicated vassal AI uses the shared same-people route");
+        True(vassalAi.Contains("WarClaimPreparationService.TryBeginWeakClaim("),
+            "dedicated vassal AI cannot bypass claim preparation");
+    }
+
+    private static void True(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
+    }
+
+    private static void False(bool value, string message)
+    {
+        if (value) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        {
+            throw new InvalidOperationException(message +
+                ": expected=" + expected + " actual=" + actual);
+        }
+    }
+}

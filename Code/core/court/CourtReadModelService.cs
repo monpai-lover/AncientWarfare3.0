@@ -68,7 +68,8 @@ namespace AncientWarfare3.core.court
         private static void AddOfficersAndVacancies(List<CourtPyramidNodeModel> pSeeds,
             Kingdom pKingdom, List<CourtOfficerView> pOfficers, string pTier)
         {
-            string[] expected = CourtTierRules.CentralOfficesForTier(pTier);
+            string[] expected =
+                CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
             var expectedOrder = new Dictionary<string, int>();
             for (int i = 0; i < expected.Length; i++) expectedOrder[expected[i]] = i;
 

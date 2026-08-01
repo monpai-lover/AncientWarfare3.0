@@ -1,0 +1,448 @@
+using AncientWarfare3.core.naming;
+using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.uiquery;
+
+internal static class IntegratedNamingRulesTests
+{
+    public static void Run()
+    {
+        Equal(15, FamilyTreeMaterializationRules.ReaderStartupFallbackFrames,
+            "family-tree reader startup fallback stays below a visible delay");
+        Equal(60, FamilyTreeMaterializationRules.RequestTimeoutFrames,
+            "family-tree async timeout stays bounded to about one second");
+        Equal(true, AWLocalizedMottoCreationRules.ShouldProjectOnCreation(
+                observedMotto: string.Empty, chineseMotto: string.Empty,
+                nativeMotto: string.Empty),
+            "a new kingdom must project a generated motto during creation");
+        Equal(false, AWLocalizedMottoCreationRules.ShouldProjectOnCreation(
+                observedMotto: "Existing", chineseMotto: "已有",
+                nativeMotto: "Existing"),
+            "an existing motto is not regenerated during creation");
+        Equal("共守家园", AWLocalizedMottoCreationRules.ResolveFallback(
+                language: "cz"),
+            "a missing Chinese motto has a visible deterministic fallback");
+        Equal(true, AWLocalizedMottoCreationRules.ShouldUseFallback(
+                language: "en", observedMotto: string.Empty,
+                nativeMotto: string.Empty, chineseMotto: string.Empty),
+            "an empty non-Chinese motto must also receive a deterministic fallback");
+
+        Equal("姬发", HistoricalFigureNameRules.ResolveDisplayName(
+                familyName: "姬", givenName: "发", currentName: "随机名"),
+            "a historical figure keeps the canonical family and given name");
+        Equal("姬", HistoricalFigureNameRules.ResolveDisplayName(
+                familyName: "姬", givenName: string.Empty,
+                currentName: "随机名"),
+            "a partial historical identity never falls back to a random name");
+        Equal(false, HistoricalFigureNameRules.ShouldProtect(
+                hasHistoricalFigureTrait: false, familyName: "姬",
+                givenName: "发"),
+            "ordinary actors are not protected by historical-name rules");
+        Equal(true, HistoricalFigureNameRules.ShouldProtect(
+                hasHistoricalFigureTrait: true, familyName: "姬",
+                givenName: "发"),
+            "historical figures are protected from generic renaming");
+
+        Equal(true, FamilyTreeMaterializationRules.ShouldQueueAfterInactiveCompletion(
+                snapshotAccepted: true, windowActive: false),
+            "an async snapshot completed while inactive remains queued");
+        Equal(false, FamilyTreeMaterializationRules.ShouldQueueAfterInactiveCompletion(
+            snapshotAccepted: false, windowActive: false),
+            "a rejected async snapshot is never queued");
+        Equal(true,
+            FamilyTreeMaterializationRules.AcceptCompletedSnapshotWithoutRevisionEquality(
+                sameGeneration: true, sameWorldGeneration: true,
+                sameSpec: true),
+            "an accepted family-tree snapshot survives unrelated projection changes");
+        Equal(false,
+            FamilyTreeMaterializationRules.AcceptCompletedSnapshotWithoutRevisionEquality(
+                sameGeneration: true, sameWorldGeneration: false,
+                sameSpec: true),
+            "a family-tree snapshot from another world is rejected");
+        Equal(true,
+            FamilyTreeMaterializationRules.AcceptRetryWithoutContentRevision(
+                sameGeneration: true, sameWorldGeneration: true,
+                sameSpec: true),
+            "a family-tree retry remains valid after a projection revision change");
+        Equal(false,
+            FamilyTreeMaterializationRules.ShouldConsumeDetachedReadAttempt(
+                asynchronousReadRequired: true,
+                historicalReadReady: false),
+            "family-tree startup waiting does not consume a retry attempt");
+        Equal(true,
+            FamilyTreeMaterializationRules.ShouldConsumeDetachedReadAttempt(
+                asynchronousReadRequired: true,
+                historicalReadReady: true),
+            "a ready async reader may consume a real read attempt");
+        Equal(true,
+            FamilyTreeMaterializationRules.ShouldConsumeDetachedReadAttempt(
+                asynchronousReadRequired: false,
+                historicalReadReady: false),
+            "a synchronous family-tree read does not wait for the async reader");
+        Equal(false,
+            FamilyTreeMaterializationRules.ShouldUseSynchronousFallback(
+                asynchronousReadRequired: true,
+                historicalReadReady: false,
+                waitingFrames: 119,
+                fallbackAfterFrames: 120),
+            "a briefly starting historical reader keeps its async grace period");
+        Equal(true,
+            FamilyTreeMaterializationRules.ShouldUseSynchronousFallback(
+                asynchronousReadRequired: true,
+                historicalReadReady: false,
+                waitingFrames: 120,
+                fallbackAfterFrames: 120),
+            "a historical reader that never becomes ready cannot leave the family tree loading forever");
+        Equal(true,
+            FamilyTreeMaterializationRules.ShouldUseSynchronousFallback(
+                asynchronousReadRequired: false,
+                historicalReadReady: false,
+                waitingFrames: 0,
+                fallbackAfterFrames: 120),
+            "a configured synchronous family-tree read uses the main thread immediately");
+        Equal(false,
+            FamilyTreeMaterializationRules.ShouldUseSynchronousFallback(
+                asynchronousReadRequired: true,
+                historicalReadReady: true,
+                waitingFrames: 500,
+                fallbackAfterFrames: 120),
+            "a ready historical reader remains on the async path");
+        Equal(false,
+            FamilyTreeMaterializationRules.ShouldRecoverTimedOutRequest(
+                requestInFlight: true, elapsedFrames: 299,
+                timeoutFrames: 300),
+            "an active detached read keeps its bounded execution window");
+        Equal(true,
+            FamilyTreeMaterializationRules.ShouldRecoverTimedOutRequest(
+                requestInFlight: true, elapsedFrames: 300,
+                timeoutFrames: 300),
+            "a detached read that never completes is recovered instead of loading forever");
+        Equal(false,
+            FamilyTreeMaterializationRules.ShouldRecoverTimedOutRequest(
+                requestInFlight: false, elapsedFrames: 1000,
+                timeoutFrames: 300),
+            "an idle family-tree reader is not treated as a timed-out request");
+
+        Equal(true, AWNamingLanguageRules.IsChinesePresentation("ch"),
+            "ch enables Chinese presentation");
+        Equal(true, AWNamingLanguageRules.IsChinesePresentation("CZ"),
+            "cz enables Chinese presentation case-insensitively");
+        Equal(false, AWNamingLanguageRules.IsChinesePresentation("en"),
+            "English uses native presentation");
+        Equal(false, AWNamingLanguageRules.IsChinesePresentation("zh"),
+            "zh is not an AW3 Chinese presentation code");
+        Equal(false, AWNamingLanguageRules.IsChinesePresentation(null),
+            "a missing language uses native presentation");
+        Equal(false, AWNamingLanguageRules.IsChinesePresentation("ch "),
+            "only exact language codes enable Chinese presentation");
+        Equal(false, AWNamingLanguageRules.ShouldGenerateChineseIdentity(
+                "en", hasChineseIdentity: false),
+            "non-Chinese creation keeps the native name without eagerly generating Chinese identity");
+        Equal(true, AWNamingLanguageRules.ShouldGenerateChineseIdentity(
+                "ch", hasChineseIdentity: false),
+            "Chinese creation generates the integrated Chinese identity");
+        Equal(false, AWNamingLanguageRules.ShouldGenerateChineseIdentity(
+                "cz", hasChineseIdentity: true),
+            "an existing Chinese identity is never regenerated");
+
+        Equal(string.Empty,
+            AWCultureNamingTraditionRules.ResolveAvailableGeneratorId(
+                "angle_name", false, "angle_name", false),
+            "an unavailable legacy generator is left to vanilla naming");
+        Equal("western_actor_von",
+            AWCultureNamingTraditionRules.ResolveAvailableGeneratorId(
+                "western_actor_von", true, "human_name", false),
+            "an available integrated profile generator remains authoritative");
+        Equal("orc_name",
+            AWCultureNamingTraditionRules.ResolveAvailableGeneratorId(
+                "orc_nomadic_actor", false, "orc_name", true),
+            "an available profile fallback remains authoritative");
+
+        const string externalChineseNameUid =
+            "\u4e00\u7c73_\u4e2d\u6587\u540d";
+        Equal(externalChineseNameUid,
+            AWNamingCollisionRules.ExternalChineseNameUid,
+            "the collision gate uses the external Chinese Name mod's exact UID");
+        Equal(true, AWNamingCollisionRules.IsRecognizedModConflict(
+                externalChineseNameUid, "LOADED"),
+            "a loaded external Chinese Name declaration conflicts");
+        Equal(true, AWNamingCollisionRules.IsRecognizedModConflict(
+                externalChineseNameUid, "FAILED"),
+            "a recognized but failed external Chinese Name declaration conflicts");
+        Equal(false, AWNamingCollisionRules.IsRecognizedModConflict(
+                externalChineseNameUid, "DISABLED"),
+            "a disabled external Chinese Name declaration does not conflict");
+        Equal(false, AWNamingCollisionRules.IsRecognizedModConflict(
+                externalChineseNameUid, "loaded"),
+            "recognized mod states are matched exactly");
+        Equal(false, AWNamingCollisionRules.IsRecognizedModConflict(
+                externalChineseNameUid + "_copy", "LOADED"),
+            "similar external mod UIDs do not conflict");
+        Equal(false, AWNamingCollisionRules.IsRecognizedModConflict(
+                null, "LOADED"),
+            "a missing declaration UID is safe");
+        Equal(false, AWNamingCollisionRules.ShouldDisableIntegratedNamingPatches(
+                loadedModsConflict: false, registryScanSucceeded: false,
+                registryConflictDetected: true),
+            "an unconfirmed registry-only conflict cannot survive reflection failure");
+        Equal(true, AWNamingCollisionRules.ShouldDisableIntegratedNamingPatches(
+                loadedModsConflict: false, registryScanSucceeded: true,
+                registryConflictDetected: true),
+            "a successfully detected conflict disables integrated naming patches");
+        Equal(false, AWNamingCollisionRules.ShouldDisableIntegratedNamingPatches(
+                loadedModsConflict: false, registryScanSucceeded: true,
+                registryConflictDetected: false),
+            "a successful scan without conflict keeps integrated naming patches enabled");
+        Equal(true, AWNamingCollisionRules.ShouldDisableIntegratedNamingPatches(
+                loadedModsConflict: true, registryScanSucceeded: false,
+                registryConflictDetected: false),
+            "a known LoadedMods conflict survives registry reflection failure");
+        Equal(true, AWNamingCollisionRules.ShouldDisableIntegratedNamingPatches(
+                loadedModsConflict: true, registryScanSucceeded: true,
+                registryConflictDetected: false),
+            "a known LoadedMods conflict survives an empty recognized registry");
+        Equal(true, AWNamingCollisionRules.ShouldSkipHarmonyPatch(
+                "AncientWarfare3.patch.naming", disableIntegratedNamingPatches: true),
+            "the integrated naming patch namespace is skipped on conflict");
+        Equal(true, AWNamingCollisionRules.ShouldSkipHarmonyPatch(
+                "AncientWarfare3.patch.naming.projection", disableIntegratedNamingPatches: true),
+            "integrated naming patch subnamespaces are skipped on conflict");
+        Equal(false, AWNamingCollisionRules.ShouldSkipHarmonyPatch(
+                "AncientWarfare3.patch.namingExtra", disableIntegratedNamingPatches: true),
+            "a namespace with only a shared prefix remains enabled");
+        Equal(false, AWNamingCollisionRules.ShouldSkipHarmonyPatch(
+                "AncientWarfare3.patch", disableIntegratedNamingPatches: true),
+            "Xia naming and unrelated AW3 patches remain enabled");
+        Equal(false, AWNamingCollisionRules.ShouldSkipHarmonyPatch(
+                "AncientWarfare3.patch.naming", disableIntegratedNamingPatches: false),
+            "integrated naming patches remain enabled without a conflict");
+
+        long first = AWNamingSeedRules.Combine(12L, 34L, "human_name", 1);
+        Equal(first,
+            AWNamingSeedRules.Combine(12L, 34L, "human_name", 1),
+            "the same inputs produce a stable seed");
+        NotEqual(first,
+            AWNamingSeedRules.Combine(13L, 34L, "human_name", 1),
+            "object id changes the seed");
+        NotEqual(first,
+            AWNamingSeedRules.Combine(12L, 35L, "human_name", 1),
+            "culture id changes the seed");
+        NotEqual(first,
+            AWNamingSeedRules.Combine(12L, 34L, "city_name", 1),
+            "generator id changes the seed");
+        NotEqual(first,
+            AWNamingSeedRules.Combine(12L, 34L, "human_name", 2),
+            "schema version changes the seed");
+        NotEqual(first,
+            AWNamingSeedRules.Combine(14L, 35L, "human_name", 1),
+            "object and culture fields cannot cancel each other");
+
+        long nullGeneratorSeed = AWNamingSeedRules.Combine(12L, 34L, null, 1);
+        Equal(nullGeneratorSeed,
+            AWNamingSeedRules.Combine(12L, 34L, null, 1),
+            "a null generator id is safe and deterministic");
+
+        var libraries = new AWWordLibraryManager();
+        libraries.Submit("surname", new[] { "冯", "德" });
+        libraries.Submit("given", new[] { "安", "平" });
+
+        var legacyLibraries = new AWWordLibraryManager();
+        legacyLibraries.Submit("阿拉伯男名", new[] { "阿里" });
+        legacyLibraries.Submit("阿拉伯女名", new[] { "法蒂玛" });
+        legacyLibraries.Submit("罗斯男名", new[] { "伊凡" });
+        legacyLibraries.Submit("罗斯女名", new[] { "安娜" });
+        legacyLibraries.Submit("犹太男名", new[] { "大卫" });
+        legacyLibraries.Submit("犹太女名", new[] { "米利暗" });
+        legacyLibraries.InstallChineseNameLegacyAliases();
+        Equal(2, legacyLibraries.GetWords("阿拉伯名字").Count,
+            "old Arabic generator id keeps its merged legacy word library");
+        Equal(2, legacyLibraries.GetWords("罗斯名字").Count,
+            "old Russian generator id keeps its merged legacy word library");
+        Equal(2, legacyLibraries.GetWords("犹太人名").Count,
+            "old Jewish generator id keeps its merged legacy word library");
+
+        var parameters = new Dictionary<string, string>
+        {
+            ["title"] = "公"
+        };
+        var context = new AWNameGenerationContext(991L, parameters,
+            new Dictionary<string, string>());
+        var tagged = AWNameTemplate.Create(
+            "{surname:family}$family$$title${given}", 2f);
+        string taggedName = tagged.GenerateName(context, libraries);
+        Equal(4, taggedName.Length, "tag, parameter and word atoms compose");
+        Equal(taggedName[0], taggedName[1],
+            "a tagged word is generated once and reused");
+        Equal('公', taggedName[2], "a supplied parameter is projected");
+        Equal(false, parameters.ContainsKey("family"),
+            "template generation never mutates caller parameters");
+        AWGeneratedName taggedIdentity = tagged.GenerateIdentity(context,
+            libraries);
+        Equal(taggedIdentity.Name[0].ToString(),
+            taggedIdentity.Components["family"],
+            "a generated tag is returned for old Chinese-name field persistence");
+        Equal(false, parameters.ContainsKey("family"),
+            "returning generated components still never mutates caller parameters");
+
+        Equal(string.Empty,
+            AWNameTemplate.Create("<missing>", 1f)
+                .GenerateName(context, libraries),
+            "a required missing word library rejects the template");
+        Equal("号",
+            AWNameTemplate.Create("{missing}#号#", 1f)
+                .GenerateName(context, libraries),
+            "an optional missing word library contributes an empty value");
+        Equal(string.Empty,
+            AWNameTemplate.Create("$missing$", 1f)
+                .GenerateName(context, libraries),
+            "a missing required parameter rejects the template");
+        Throws<AWInvalidNameTemplateException>(
+            () => AWNameTemplate.Create("{surname", 1f),
+            "an unclosed atom is rejected during parsing");
+
+        var generator = new AWNameGeneratorAsset("test_name",
+            new[]
+            {
+                AWNameTemplate.Create("{surname}{given}", 3f),
+                AWNameTemplate.Create("{given}{surname}", 1f)
+            }, AWNameTemplate.Create("#无名#", 1f));
+        string firstName = generator.GenerateName(context, libraries);
+        string repeatedName = generator.GenerateName(context, libraries);
+        Equal(firstName, repeatedName,
+            "generation is deterministic and keeps no shared picker state");
+
+        Equal("Native", AWLocalizedNameProjectionRules.Select(
+            "en", "Native", "中文名"),
+            "non-Chinese languages project the native name");
+        Equal("中文名", AWLocalizedNameProjectionRules.Select(
+            "ch", "Native", "中文名"),
+            "ch projects the Chinese name");
+        Equal("中文名", AWLocalizedNameProjectionRules.Select(
+            "CZ", "Native", "中文名"),
+            "cz projects the Chinese name case-insensitively");
+        Equal("Native", AWLocalizedNameProjectionRules.Select(
+            "ch", "Native", string.Empty),
+            "a missing Chinese name falls back to native");
+        Equal("中文名", AWLocalizedNameProjectionRules.Select(
+            "en", string.Empty, "中文名"),
+            "a legacy Chinese-only identity never projects an empty name");
+
+        AWLocalizedMottoProjection initialMotto =
+            AWLocalizedMottoProjectionRules.Resolve(
+                "ch", "Honesty, passion, pride", string.Empty,
+                string.Empty);
+        Equal("Honesty, passion, pride", initialMotto.NativeMotto,
+            "an original English motto is captured as native in Chinese UI");
+        Equal(true, initialMotto.NeedsChineseGeneration,
+            "an original-only motto requests a Chinese projection");
+
+        AWLocalizedMottoProjection emptyChineseMotto =
+            AWLocalizedMottoProjectionRules.Resolve(
+                "ch", string.Empty, string.Empty, string.Empty);
+        Equal(true, emptyChineseMotto.NeedsChineseGeneration,
+            "an empty new kingdom still requests a Chinese motto");
+
+        AWLocalizedMottoProjection generatedMotto =
+            AWLocalizedMottoProjectionRules.Resolve(
+                "ch", "Honesty, passion, pride",
+                initialMotto.NativeMotto, "诚信为本");
+        Equal("诚信为本", generatedMotto.ProjectedMotto,
+            "Chinese UI projects the generated Chinese motto");
+        Equal("Honesty, passion, pride",
+            AWLocalizedMottoProjectionRules.Resolve(
+                "en", generatedMotto.ProjectedMotto,
+                generatedMotto.NativeMotto,
+                generatedMotto.ChineseMotto).ProjectedMotto,
+            "switching away from Chinese restores the native motto");
+
+        AWLocalizedMottoProjection legacyChineseMotto =
+            AWLocalizedMottoProjectionRules.Resolve(
+                "ch", "诚信为本", string.Empty, string.Empty);
+        Equal(string.Empty, legacyChineseMotto.NativeMotto,
+            "a legacy Chinese-only motto is not misclassified as native");
+        Equal("诚信为本", legacyChineseMotto.ChineseMotto,
+            "a legacy Chinese-only motto is preserved as Chinese");
+        Equal(false, legacyChineseMotto.NeedsChineseGeneration,
+            "a preserved legacy Chinese motto is never regenerated");
+
+        AWLocalizedMottoProjection editedChineseMotto =
+            AWLocalizedMottoProjectionRules.Resolve(
+                "ch", "天下为公", "Native motto", "Old Chinese motto");
+        Equal("天下为公", editedChineseMotto.ChineseMotto,
+            "a player edit updates only the active Chinese projection");
+        Equal("Native motto", editedChineseMotto.NativeMotto,
+            "a Chinese player edit preserves the native projection");
+
+        AWLocalizedMottoProjection explicitChineseEdit =
+            AWLocalizedMottoProjectionRules.ResolveEdit(
+                "ch", "Chinese slot in English", "Native motto",
+                "Old Chinese motto");
+        Equal("Chinese slot in English", explicitChineseEdit.ChineseMotto,
+            "an explicit Chinese UI edit updates Chinese regardless of script");
+        Equal("Native motto", explicitChineseEdit.NativeMotto,
+            "an explicit Chinese UI edit preserves native");
+
+        AWLocalizedMottoProjection explicitNativeEdit =
+            AWLocalizedMottoProjectionRules.ResolveEdit(
+                "en", "天下为公", "Native motto", "Chinese motto");
+        Equal("天下为公", explicitNativeEdit.NativeMotto,
+            "an explicit native UI edit updates native regardless of script");
+        Equal("Chinese motto", explicitNativeEdit.ChineseMotto,
+            "an explicit native UI edit preserves Chinese");
+
+        var identityWrites = new AWBoundedLocalizedNameWriteQueue(2);
+        var oldKingdomIdentity = new AWLocalizedNameIdentitySnapshot(
+            "Native Realm", "旧国名", string.Empty, string.Empty,
+            "western_kingdom", 7L, 1);
+        var fullXiaIdentity = new AWLocalizedNameIdentitySnapshot(
+            "Native Realm", "新朝名", string.Empty, string.Empty,
+            "Xia_kingdom", 7L, 1);
+        Equal(true, identityWrites.Enqueue("Kingdom", 42L,
+                oldKingdomIdentity),
+            "the initial localized kingdom identity enters the write queue");
+        Equal(true, identityWrites.Enqueue("Kingdom", 42L,
+                fullXiaIdentity),
+            "a level-five rename replaces the pending identity by object key");
+        Equal(1, identityWrites.Count,
+            "a renamed kingdom keeps one pending persistence write");
+        Equal(true, identityWrites.TryDequeue(
+                out AWLocalizedNamePendingWrite renamedKingdom),
+            "the renamed kingdom identity remains available for persistence");
+        Equal("新朝名", renamedKingdom.Snapshot.ChineseName,
+            "migration persists the level-five Chinese name, not the old row");
+        Equal("新朝名", AWLocalizedNameProjectionRules.Select(
+                "ch", renamedKingdom.Snapshot.NativeName,
+                renamedKingdom.Snapshot.ChineseName),
+            "a Chinese language refresh keeps the committed level-five name");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+
+    private static void NotEqual<T>(T pUnexpected, T pActual,
+        string pMessage)
+    {
+        if (Equals(pUnexpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: both values were {pActual}");
+    }
+
+    private static void Throws<TException>(Action pAction, string pMessage)
+        where TException : Exception
+    {
+        try
+        {
+            pAction();
+        }
+        catch (TException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{pMessage}: expected {typeof(TException).Name}");
+    }
+}

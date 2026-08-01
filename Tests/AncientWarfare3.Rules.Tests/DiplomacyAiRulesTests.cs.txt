@@ -1,0 +1,14 @@
+using AncientWarfare3.core.lineage;
+
+internal static class DiplomacyAiRulesTests
+{
+    public static void Run()
+    {
+        if (!DiplomacyAiRules.ShouldRun(true))
+            throw new InvalidOperationException(
+                "enabled diplomacy AI should run");
+        if (DiplomacyAiRules.ShouldRun(false))
+            throw new InvalidOperationException(
+                "disabled diplomacy AI should not run");
+    }
+}

@@ -241,8 +241,9 @@ namespace AncientWarfare3.core.lineage
             int remainingHomeCityCount)
         {
             if (!IsParticipantSide(pHomeSide) ||
-                remainingHomeCityCount <= 0 ||
-                occupiedHostileCityCount < remainingHomeCityCount)
+                remainingHomeCityCount < 0 || occupiedHostileCityCount <= 0 ||
+                occupiedHostileCityCount < Math.Max(1,
+                    remainingHomeCityCount))
                 return 0;
             return pHomeSide == WarScoreSide.Defenders
                 ? MaximumScore

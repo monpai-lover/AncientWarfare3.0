@@ -350,7 +350,7 @@ internal static class AWActorPresentationRenderer
             Scale = liveActor.current_scale,
             Rotation = liveActor.current_rotation,
             MainSprite = mainSprite,
-            VisualScale = liveActor.stats[strings.S.scale],
+            VisualScale = liveActor.stats["scale"],
             Flip = liveActor.flip,
             FlyingVehicleSprite = flyingVehicleSprite,
             FlyingVehicleVertical = flyingVehicleVertical,

@@ -52,11 +52,14 @@ namespace AncientWarfare3.patch
                     hostName = AW_L10n.Text("aw_unknown_city", "Unknown city");
                 ShowRawRow(__instance, "aw_royal_asylum_host", hostName);
             }
-            if (!LineageService.IsXia(actor)) return;
+            if (!LineageService.IsXia(actor) &&
+                !LineageService.UsesAwLineageSystem(actor)) return;
 
             actor.data.get(LineageKeys.LINEAGE_STATUS, out string status, LineageStatus.NONE);
             if (SlaveService.IsSlave(actor))
                 status = LineageStatus.SLAVE;
+            else if (NobleIdentityService.IsNobleActor(actor))
+                status = LineageStatus.NOBLE;
 
             actor.data.get(LineageKeys.LINEAGE_ID, out long lineageId, -1L);
             bool hasLineage = lineageId >= 0;

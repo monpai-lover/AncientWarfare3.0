@@ -5,7 +5,7 @@ namespace AncientWarfare3.core.lineage
 {
     /// <summary>
     ///     古姓 / 氏 名池。直接读 mod 自带的 name_generators/lib/姓.txt 与 氏.txt,
-    ///     不依赖"一米_中文名" mod 的 WordLibraryManager —— 后端血缘逻辑独立可用。
+    ///     不依赖外部命名模组的词库管理器，后端血缘逻辑可独立运行。
     ///     若文件缺失则退化为内置兜底池,保证 LineageService 不会因取不到姓氏而崩。
     ///
     ///     ⚠ 取样**必须用 mod 私有 System.Random**,不能用 UnityEngine.Random:

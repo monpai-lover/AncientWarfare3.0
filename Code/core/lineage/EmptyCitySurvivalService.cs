@@ -123,7 +123,7 @@ namespace AncientWarfare3.core.lineage
                 WarScoreService.ShouldHoldFrozenOccupation(pCity));
         }
 
-        private static bool HasRazeIntent(City pCity)
+        internal static bool HasRazeIntent(City pCity)
         {
             if (pCity?.data == null) return false;
             pCity.data.get(RazeIntentKey, out bool result, false);

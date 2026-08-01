@@ -1,6 +1,7 @@
 using System;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using UnityEngine;
 
 namespace AncientWarfare3.content.figures
@@ -529,8 +530,16 @@ namespace AncientWarfare3.content.figures
                 if (string.IsNullOrEmpty(colorHex)) colorHex = "#FFFFFF";
                 string localizedName = AncientWarfare3.ui.AW_L10n.Text(
                     pDef.NameLocaleKey, pDef.Key);
-                string localizedDynasty = HistoricalFigureSpawnRules.
+                string canonicalStateName = HistoricalFigureSpawnRules.
                     ProjectStateName(pDef.DynastyName, pDef.KingdomName);
+                string localizedStateName = AncientWarfare3.ui.AW_L10n.Text(
+                    pDef.DynastyLocaleKey, canonicalStateName);
+                string language = LocalizedTextManager.instance?.language ??
+                                  string.Empty;
+                string localizedDynasty = HistoricalFigureSpawnRules.
+                    ProjectLocalizedStateName(canonicalStateName,
+                        localizedStateName, AWNamingLanguageRules.
+                            IsChinesePresentation(language));
                 string localizedLabel =
                     HistoricalFigureSpawnRules.FormatLocalizedLabel(
                         localizedName, localizedDynasty);

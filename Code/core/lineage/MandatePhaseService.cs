@@ -55,9 +55,12 @@ namespace AncientWarfare3.core.lineage
                 MandatePhaseRules.CatalystDeltaForMandateChange(
                     pAnnualMandateDelta) + courtDelta);
 
+            bool activeClaimants = ZhuluWarRules.HasActiveClaimants(
+                MandateRebelService.HasActiveRebelClaimants(),
+                ZhuluWarService.HasActivePrincipalWars());
             bool stable = pMandateValue >= 70 && pAuthority >= 60 &&
                           _catalystScore <= 20 &&
-                          !MandateRebelService.HasActiveRebelClaimants();
+                          !activeClaimants;
             _stableYears = stable ? Math.Min(999, _stableYears + 1) : 0;
             EvaluateAndPersist(pReport, pYear, true,
                 pMandateValue, pAuthority, "active_year");
@@ -140,7 +143,9 @@ namespace AncientWarfare3.core.lineage
         private static void EvaluateAndPersist(MandateReport pReport, int pYear,
             bool pMandateActive, int pMandateValue, int pAuthority, string pReason)
         {
-            bool activeClaimants = MandateRebelService.HasActiveRebelClaimants();
+            bool activeClaimants = ZhuluWarRules.HasActiveClaimants(
+                MandateRebelService.HasActiveRebelClaimants(),
+                ZhuluWarService.HasActivePrincipalWars());
             var facts = new MandatePhaseFacts(
                 _phase,
                 pYear,

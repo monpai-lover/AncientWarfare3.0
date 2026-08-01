@@ -829,7 +829,8 @@ namespace AncientWarfare3.core.lineage
                 DiplomacyProposalType.RoyalMarriage => 80 + opinion +
                     (pCandidate.DirectRoyalMarriage ? 25 : 0),
                 DiplomacyProposalType.HouseholdOffering => 65 + opinion +
-                    (pCandidate.PrincipalHouseholdOffer ? 15 : 0),
+                    (pCandidate.PrincipalHouseholdOffer ? 15 : 0) +
+                    Math.Max(0, pCandidate.Urgency),
                 DiplomacyProposalType.Tributary => 90 +
                     Math.Min(60, (int)Math.Round(Math.Max(0f,
                         pCandidate.RequesterPowerRatio - 1f) * 30f)) +

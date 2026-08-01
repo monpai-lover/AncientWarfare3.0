@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using System.Reflection;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.court;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
 using AncientWarfare3.utils;
@@ -268,6 +269,9 @@ namespace AncientWarfare3.core.lineage
             {
                 ApplyIdentity(restored, pTargetCity, pClaimant, pRequest,
                     archive, continuity, deadStats);
+                // 复国沿用旧国的合法氏支作为政治正统，但复国领袖必须另立
+                // 一支，避免把新一轮王朝直接写回旧氏，导致族谱看不到分支。
+                LineageService.EnsureRestorationFounderBranch(restored, pClaimant);
                 XiaizationService.RestoreIdentityContinuity(restored);
                 KingdomPolicyService.RestoreIdentityContinuity(restored);
                 CourtService.RestoreIdentityContinuity(restored);
@@ -335,12 +339,12 @@ namespace AncientWarfare3.core.lineage
             ContinuitySnapshot pContinuity, KingdomData pDeadStats)
         {
             MergeVanillaHistory(pKingdom.data, pDeadStats);
-            string name = StateNameRules.ResolveRestorationStateName(
+            string name = RoyalRestorationRules.ResolveRestoredKingdomName(
+                pContinuity?.name,
+                pArchive?.name,
+                pRequest.original_kingdom_name,
                 StateNameService.GetBoundStateName(pRequest.shi_id),
                 pRequest.state_name);
-            if (string.IsNullOrEmpty(name)) name = pArchive?.name;
-            if (string.IsNullOrEmpty(name)) name = pContinuity?.name;
-            if (string.IsNullOrEmpty(name)) name = pRequest.original_kingdom_name;
             if (!string.IsNullOrEmpty(name)) pKingdom.setName(name, pTrack: false);
 
             if (pArchive != null)
@@ -411,6 +415,7 @@ namespace AncientWarfare3.core.lineage
             pCurrent.custom_name = pDead.custom_name;
             pCurrent.name_culture_id = pDead.name_culture_id;
             pCurrent.motto = pDead.motto;
+            AWLocalizedMottoService.CopyIdentity(pDead, pCurrent);
             pCurrent.left = pDead.left;
             pCurrent.joined = pDead.joined;
             pCurrent.moved = pDead.moved;

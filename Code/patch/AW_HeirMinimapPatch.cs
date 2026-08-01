@@ -21,6 +21,7 @@ namespace AncientWarfare3.patch
         [HarmonyPatch(typeof(QuantumSpriteLibrary), "drawKings")]
         public static void DrawKings_Heir_Postfix(QuantumSpriteAsset pAsset)
         {
+            if (HierarchicalVassalMapModeService.IsActive()) return;
             if (pAsset?.group_system == null) return;
             long benchmark = RecentFeatureBenchmark.Begin();
             try

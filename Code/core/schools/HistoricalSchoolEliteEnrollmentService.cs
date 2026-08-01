@@ -791,10 +791,7 @@ namespace AncientWarfare3.core.schools
 
         private static bool IsNobleIdentity(Actor pActor)
         {
-            if (pActor?.data == null) return false;
-            pActor.data.get(LineageKeys.LINEAGE_STATUS,
-                out string status, LineageStatus.NONE);
-            return status == LineageStatus.NOBLE;
+            return NobleIdentityService.IsNobleActor(pActor);
         }
 
         private static bool IsExamPipelineAdmissionEligible(Actor pActor,

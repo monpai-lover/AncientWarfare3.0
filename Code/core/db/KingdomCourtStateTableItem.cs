@@ -7,6 +7,8 @@ namespace AncientWarfare3.core.db
     {
         [TableItemDef(pIsPrimary: true)] public long kingdom_id;
         public string kingdom_name;
+        [TableItemDef(pDefaultValue: "")] public string court_profile_id;
+        [TableItemDef(pDefaultValue: "")] public string institution_id;
         public string court_mode;
         public string dominant_school;
         public string secondary_school;

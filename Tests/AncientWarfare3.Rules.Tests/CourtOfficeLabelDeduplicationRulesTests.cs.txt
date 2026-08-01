@@ -1,0 +1,24 @@
+using AncientWarfare3.core.court;
+
+internal static class CourtOfficeLabelDeduplicationRulesTests
+{
+    public static void Run()
+    {
+        Equal("郡守", OfficialCareerRankRules.ComposeJointTitle(
+                "郡守", "郡守"),
+            "exact duplicate office labels collapse");
+        Equal("郡守", OfficialCareerRankRules.ComposeJointTitle(
+                "太守", "郡守"),
+            "governor synonyms prefer the formal office label");
+        Equal("中散大夫 · 郡守",
+            OfficialCareerRankRules.ComposeJointTitle("中散大夫", "郡守"),
+            "different scattered rank and substantive office stay visible");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

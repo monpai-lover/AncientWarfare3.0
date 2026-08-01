@@ -43,6 +43,19 @@ namespace AncientWarfare3.core.court
         public const string ImperialPhysician = "imperial_physician";
         public const string ImperialAstrologer = "imperial_astrologer";
         public const string FeudatoryChiefClerk = "feudatory_changshi";
+
+        public const string WestExecutive = "west_executive";
+        public const string WestSenateElder = "west_senate_elder";
+        public const string WestHighPriest = "west_high_priest";
+        public const string WestFieldGeneral = "west_field_general";
+        public const string WestMayor = "west_mayor";
+        public const string WestHighJustice = "west_high_justice";
+        public const string WestTreasurer = "west_treasurer";
+        public const string WestPalaceSteward = "west_palace_steward";
+        public const string WestRoyalChamberlain = "west_royal_chamberlain";
+        public const string WestMarshal = "west_marshal";
+        public const string WestSecretary = "west_secretary";
+        public const string WestCount = "west_count";
     }
 
     // 官场按科技分历史层级:东周六卿 → 三公九卿 → 三省六部。

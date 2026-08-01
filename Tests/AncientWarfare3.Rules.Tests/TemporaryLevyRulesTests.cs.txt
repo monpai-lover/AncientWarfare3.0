@@ -9,6 +9,34 @@ internal static class TemporaryLevyRulesTests
         PreservesGarrisonAndAssignedSoldiers();
         NotifiesRtsForEveryRosterMembershipChange();
         PreparationScanRunsOnlyOnMonthTickOrInvalidation();
+        DirectedReplenishmentNeverLeavesItsSourceCity();
+        DirectedReserveExhaustionIsArmyScoped();
+    }
+
+    private static void DirectedReplenishmentNeverLeavesItsSourceCity()
+    {
+        Assert(TemporaryLevyRules.ShouldUseDirectedReplenishmentAnchor(
+                completedWorkItems: 12),
+            "every directed replenishment batch must stay in its Army source city");
+    }
+
+    private static void DirectedReserveExhaustionIsArmyScoped()
+    {
+        Assert(!TemporaryLevyRules.IsReplenishmentDemandExhausted(
+                directedReplenishment: true,
+                realmReserveExhausted: true,
+                targetReserveExhausted: false),
+            "another city exhausting its reserves must not block this Army");
+        Assert(TemporaryLevyRules.IsReplenishmentDemandExhausted(
+                directedReplenishment: true,
+                realmReserveExhausted: false,
+                targetReserveExhausted: true),
+            "a directed Army must stop when its own source city is exhausted");
+        Assert(TemporaryLevyRules.IsReplenishmentDemandExhausted(
+                directedReplenishment: false,
+                realmReserveExhausted: true,
+                targetReserveExhausted: false),
+            "realm-wide establishment stops only after realm reserves exhaust");
     }
 
     private static void RecoversEligibleOrphanWarriorsDuringWar()

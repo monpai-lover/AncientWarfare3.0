@@ -1,4 +1,6 @@
 key,cz,en,ch
+aw3_hierarchical_vassal_map_option_country,国家,Country,國家
+aw3_hierarchical_vassal_map_option_city,城市,City,城市
 aw_tech_level_mapmode,科技地图,Technology Map,科技地圖
 aw_tech_level_mapmode Description,按城市实际掌握科技和传播进度从红到绿显示,Show cities from red to green by adopted technology and spread progress,按城市實際掌握科技和傳播進度從紅到綠顯示
 aw_tech_level_mapmode_description,按城市实际掌握科技和传播进度从红到绿显示,Show cities from red to green by adopted technology and spread progress,按城市實際掌握科技和傳播進度從紅到綠顯示
@@ -16,6 +18,11 @@ aw_vassal_mapmode,附庸地图,Vassal Map,附庸地圖
 aw_vassal_mapmode Description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
 aw_vassal_mapmode_description,按根宗主国颜色显示附庸体系,Show vassal networks by root suzerain color,按根宗主國顏色顯示附庸體系
 aw_vassal_mapmode_tooltip,附庸地图,Vassal Map,附庸地圖
+aw3_hierarchical_vassal_map,层级附庸地图,Hierarchical Vassal Map,層級附庸地圖
+aw3_hierarchical_vassal_map Description,逐层查看宗主与直属附庸的领土结构,Drill through suzerains and their direct vassals,逐層查看宗主與直屬附庸的領土結構
+aw3_hierarchical_vassal_map_description,逐层查看宗主与直属附庸的领土结构,Drill through suzerains and their direct vassals,逐層查看宗主與直屬附庸的領土結構
+aw3_hierarchical_vassal_map_tooltip,层级附庸地图,Hierarchical Vassal Map,層級附庸地圖
+map_aw3_hierarchical_vassal_map,层级附庸地图,Hierarchical Vassal Map,層級附庸地圖
 aw_vassal_set,创建附庸,Create Vassal,建立附庸
 aw_vassal_set Description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國
 aw_vassal_set_description,先选择附庸国再选择宗主国,Select vassal first then suzerain,先選擇附庸國再選擇宗主國

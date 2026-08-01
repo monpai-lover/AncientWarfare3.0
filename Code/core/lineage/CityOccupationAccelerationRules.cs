@@ -1,3 +1,5 @@
+using System;
+
 namespace AncientWarfare3.core.lineage
 {
     public static class CityOccupationAccelerationRules
@@ -56,6 +58,15 @@ namespace AncientWarfare3.core.lineage
             bool actorAlive, bool actorIsWarrior, bool actorHasKingdom)
         {
             return isActor && actorAlive && actorIsWarrior && actorHasKingdom;
+        }
+
+        public static float ApplyResistance(float pCaptureDelta,
+            float pOccupationResistance)
+        {
+            if (pCaptureDelta <= 0f) return pCaptureDelta;
+            float resistance = Math.Max(0f,
+                Math.Min(0.95f, pOccupationResistance));
+            return pCaptureDelta * (1f - resistance);
         }
 
     }

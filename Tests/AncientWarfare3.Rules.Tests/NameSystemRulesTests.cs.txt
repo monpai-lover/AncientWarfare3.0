@@ -41,6 +41,24 @@ internal static class NameSystemRulesTests
                 clanName: "姬", isNoble: true, isMale: false,
                 isNameIntegrated: false),
             "an archive without a recoverable given name preserves its stored display name");
+        Equal("姬发", LineageDisplayNameRules.ProjectStored(
+                storedDisplayName: "旧随机名", givenName: "发", familyName: "姬",
+                clanName: "姬", isNoble: true, isMale: true,
+                isNameIntegrated: false),
+            "a stale historical display name must yield to structured family identity");
+        Equal("路易 冯·维也纳", LineageDisplayNameRules.ProjectStored(
+                storedDisplayName: "旧随机名", givenName: "路易",
+                familyName: "冯·维也纳", clanName: "冯·维也纳",
+                isNoble: true, isMale: true, isNameIntegrated: false),
+            "a western noble display uses given name followed by its family stem");
+        Equal("璺槗 鍐风淮涔熺撼", LineageDisplayNameRules.ProjectArchive(
+                storedDisplayName: "鏃ч殢鏈哄悕", givenName: "璺槗",
+                familyName: "鍐风淮涔熺撼", clanName: "鍐风淮涔熺撼",
+                status: LineageStatus.NOBLE, isMale: true,
+                isNameIntegrated: false, namingProfile: "western",
+                westernNamingTradition: "von", originCityName: "",
+                displayStem: "鍐风淮涔熺撼"),
+            "an archived western node rebuilds its family name when origin metadata is missing");
 
         Equal(12, RulerTitleFactRules.NormalizeStat(162, 150),
             "Mandate office bonuses are removed from personal stewardship");
@@ -622,7 +640,9 @@ internal static class NameSystemRulesTests
                      FamilyTreeProjectionChange.DynastyOrStateName,
                      FamilyTreeProjectionChange.Heir,
                      FamilyTreeProjectionChange.LifeStatus,
-                     FamilyTreeProjectionChange.PosthumousTitle
+                     FamilyTreeProjectionChange.PosthumousTitle,
+                     FamilyTreeProjectionChange.FamilyStructure,
+                     FamilyTreeProjectionChange.IdentityOrTitle
                  })
             Equal(true, FamilyTreeProjectionRevisionRules.ShouldAdvance(change),
                 $"family-tree projection change {change} advances its dedicated revision");
@@ -638,6 +658,187 @@ internal static class NameSystemRulesTests
             FamilyTreeProjectionRevision.Advance(
                 FamilyTreeProjectionChange.Era),
             "a family-tree projection event advances its dedicated revision exactly once");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            FamilyTreeProjectionRevisionRules.ResolveArchiveChange(
+                firstArchive: true, familyStructureChanged: false,
+                lifeStatusChanged: false, identityOrTitleChanged: false),
+            "a newly committed actor archive changes family-tree structure");
+        Equal(FamilyTreeProjectionChange.LifeStatus,
+            FamilyTreeProjectionRevisionRules.ResolveArchiveChange(
+                firstArchive: false, familyStructureChanged: false,
+                lifeStatusChanged: true, identityOrTitleChanged: false),
+            "a committed death changes family-tree life status");
+        Equal(FamilyTreeProjectionChange.IdentityOrTitle,
+            FamilyTreeProjectionRevisionRules.ResolveArchiveChange(
+                firstArchive: false, familyStructureChanged: false,
+                lifeStatusChanged: false, identityOrTitleChanged: true),
+            "a committed visible title changes the family-tree projection");
+        Equal(FamilyTreeProjectionChange.None,
+            FamilyTreeProjectionRevisionRules.ResolveArchiveChange(
+                firstArchive: false, familyStructureChanged: false,
+                lifeStatusChanged: false, identityOrTitleChanged: false),
+            "an unchanged actor archive does not invalidate the family tree");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            FamilyTreeProjectionRevisionRules.MergeArchiveChanges(
+                FamilyTreeProjectionChange.LifeStatus,
+                FamilyTreeProjectionChange.FamilyStructure),
+            "a coalesced family-structure change outranks a death change");
+        Equal(FamilyTreeProjectionChange.LifeStatus,
+            FamilyTreeProjectionRevisionRules.MergeArchiveChanges(
+                FamilyTreeProjectionChange.IdentityOrTitle,
+                FamilyTreeProjectionChange.LifeStatus),
+            "a coalesced death change outranks a visible identity change");
+        Equal(FamilyTreeProjectionChange.IdentityOrTitle,
+            FamilyTreeProjectionRevisionRules.MergeArchiveChanges(
+                FamilyTreeProjectionChange.IdentityOrTitle,
+                FamilyTreeProjectionChange.None),
+            "an unchanged replacement cannot erase a visible archive change");
+
+        var pendingProjection = new FamilyTreeProjectionPendingState();
+        pendingProjection.Publish(301L, 41L,
+            FamilyTreeProjectionChange.LifeStatus);
+        pendingProjection.Publish(301L, 42L,
+            FamilyTreeProjectionChange.None);
+        Equal(false, pendingProjection.TryComplete(301L, 41L, out _),
+            "an older replaced archive completion cannot consume newer metadata");
+        Equal(true, pendingProjection.TryComplete(301L, 42L,
+                out FamilyTreeProjectionChange retainedDeath),
+            "the final coalesced archive sequence owns the retained metadata");
+        Equal(FamilyTreeProjectionChange.LifeStatus, retainedDeath,
+            "the final sequence retains an earlier death projection change");
+        Equal(false, pendingProjection.TryComplete(301L, 42L, out _),
+            "committed projection metadata is consumed exactly once");
+
+        pendingProjection.Publish(302L, 50L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+        pendingProjection.Publish(302L, 51L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        Equal(true, pendingProjection.TryComplete(302L, 51L,
+                out FamilyTreeProjectionChange retainedStructure),
+            "the newest archive sequence completes merged structure metadata");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, retainedStructure,
+            "coalescing retains the strongest family-tree projection change");
+
+        pendingProjection.Publish(303L, 60L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        pendingProjection.Publish(303L, 59L,
+            FamilyTreeProjectionChange.None);
+        Equal(false, pendingProjection.TryComplete(303L, 59L, out _),
+            "a late publication from an older sequence cannot replace the owner");
+        Equal(true, pendingProjection.TryComplete(303L, 60L,
+                out FamilyTreeProjectionChange retainedNewerStructure),
+            "the newer sequence remains completable after an older publication");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            retainedNewerStructure,
+            "an older publication cannot erase newer structural metadata");
+
+        var birthCommitBoundary = new FamilyTreeProjectionPendingState();
+        birthCommitBoundary.IncludePrerequisite(401L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        Equal(false, birthCommitBoundary.TryComplete(401L, 0L, out _),
+            "committed parent edges cannot release projection before the baby archive boundary");
+        birthCommitBoundary.Publish(401L, 70L,
+            FamilyTreeProjectionChange.None);
+        Equal(true, birthCommitBoundary.TryComplete(401L, 70L,
+                out FamilyTreeProjectionChange birthProjection),
+            "the final baby archive commit releases the parent-edge projection");
+        Equal(FamilyTreeProjectionChange.FamilyStructure, birthProjection,
+            "the baby archive boundary includes already committed parent edges");
+
+        var branchCommitBoundary = new FamilyTreeProjectionPendingState();
+        branchCommitBoundary.IncludePrerequisite(402L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        Equal(FamilyTreeProjectionChange.None,
+            branchCommitBoundary.FinalizeSynchronous(402L,
+                FamilyTreeProjectionChange.None,
+                finalWriteSucceeded: false),
+            "a failed founder archive cannot expose a partially committed branch");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            branchCommitBoundary.FinalizeSynchronous(402L,
+                FamilyTreeProjectionChange.None,
+                finalWriteSucceeded: true),
+            "a successful founder archive releases the complete branch projection");
+        Equal(FamilyTreeProjectionChange.None,
+            branchCommitBoundary.FinalizeSynchronous(402L,
+                FamilyTreeProjectionChange.None,
+                finalWriteSucceeded: true),
+            "a branch projection boundary is consumed exactly once");
+
+        var masterIdentityBoundary = new FamilyTreeProjectionPendingState();
+        masterIdentityBoundary.IncludePrerequisite(403L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            masterIdentityBoundary.FinalizeSynchronous(403L,
+                FamilyTreeProjectionChange.FamilyStructure,
+                finalWriteSucceeded: true),
+            "a forced historical-master archive update releases the strongest structural revision");
+
+        var deferredDescendantBoundary = new FamilyTreeProjectionPendingState();
+        deferredDescendantBoundary.IncludePrerequisite(404L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        deferredDescendantBoundary.Discard(404L);
+        deferredDescendantBoundary.Publish(404L, 80L,
+            FamilyTreeProjectionChange.None);
+        Equal(true, deferredDescendantBoundary.TryComplete(404L, 80L,
+                out FamilyTreeProjectionChange deferredDescendantProjection),
+            "a deferred descendant archive still owns its final sequence");
+        Equal(FamilyTreeProjectionChange.None, deferredDescendantProjection,
+            "a branch barrier suppresses descendant projection until the founder commit");
+
+        var rejectedDeferredBoundary =
+            new FamilyTreeProjectionPendingState();
+        rejectedDeferredBoundary.IncludePrerequisite(405L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        Equal(false, rejectedDeferredBoundary.PublishDeferred(405L, 81L,
+                writeAccepted: false),
+            "a rejected descendant write cannot discard its pending projection signal");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            rejectedDeferredBoundary.FinalizeSynchronous(405L,
+                FamilyTreeProjectionChange.None,
+                finalWriteSucceeded: true),
+            "a later successful write still owns the signal rejected work never consumed");
+
+        var acceptedDeferredBoundary =
+            new FamilyTreeProjectionPendingState();
+        acceptedDeferredBoundary.IncludePrerequisite(406L,
+            FamilyTreeProjectionChange.FamilyStructure);
+        Equal(true, acceptedDeferredBoundary.PublishDeferred(406L, 82L,
+                writeAccepted: true),
+            "an accepted deferred descendant write installs a suppression owner");
+        Equal(true, acceptedDeferredBoundary.TryComplete(406L, 82L,
+                out FamilyTreeProjectionChange acceptedDeferredProjection),
+            "the accepted descendant sequence completes its suppression owner");
+        Equal(FamilyTreeProjectionChange.FamilyStructure,
+            acceptedDeferredProjection,
+            "an accepted deferred write retains an older independent revision");
+
+        var deferredAfterIndependentRefresh =
+            new FamilyTreeProjectionPendingState();
+        deferredAfterIndependentRefresh.Publish(407L, 90L,
+            FamilyTreeProjectionChange.IdentityOrTitle);
+        Equal(true,
+            deferredAfterIndependentRefresh.PublishDeferred(407L, 91L,
+                writeAccepted: true),
+            "an accepted deferred write takes final sequence ownership");
+        Equal(false,
+            deferredAfterIndependentRefresh.TryComplete(407L, 90L, out _),
+            "the replaced independent completion cannot consume the owner");
+        Equal(true,
+            deferredAfterIndependentRefresh.TryComplete(407L, 91L,
+                out FamilyTreeProjectionChange independentRefresh),
+            "the deferred completion releases retained independent work");
+        Equal(FamilyTreeProjectionChange.IdentityOrTitle,
+            independentRefresh,
+            "a deferred descendant write cannot swallow an older refresh");
+
+        Equal(false,
+            FamilyTreeProjectionRevisionRules.CanFinalizeFounderBoundary(
+                allDescendantWritesAccepted: false),
+            "a failed descendant archive blocks the founder revision boundary");
+        Equal(true,
+            FamilyTreeProjectionRevisionRules.CanFinalizeFounderBoundary(
+                allDescendantWritesAccepted: true),
+            "a fully accepted descendant batch may release the founder boundary");
         Equal(false, RulerAppellationRules.ShouldProjectLiving(
                 isXiaKingdom: false, usesXiaInstitutions: false,
                 isRebel: false, isRepublic: false),

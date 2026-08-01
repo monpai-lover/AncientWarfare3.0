@@ -3,15 +3,22 @@ namespace AncientWarfare3.content
     internal static class XiaCultureTraits
     {
         public const string IntegratedTraitId = "aw_xia_integrated";
+        public const string FullyIntegratedTraitId =
+            "aw_xia_fully_integrated";
 
         public static void Init()
         {
-            if (AssetManager.culture_traits.get(IntegratedTraitId) != null)
-                return;
+            EnsureTrait(IntegratedTraitId);
+            EnsureTrait(FullyIntegratedTraitId);
+        }
+
+        private static void EnsureTrait(string pTraitId)
+        {
+            if (AssetManager.culture_traits.get(pTraitId) != null) return;
 
             AssetManager.culture_traits.add(new CultureTrait
             {
-                id = IntegratedTraitId,
+                id = pTraitId,
                 group_id = "special",
                 path_icon = "ui/Icons/iconXias",
                 can_be_given = false,
@@ -21,7 +28,7 @@ namespace AncientWarfare3.content
                 has_description_2 = false
             });
 
-            // Culture.save() persists the marker in CultureData.saved_traits.
+            // Culture.save() persists both markers in CultureData.saved_traits.
         }
     }
 }

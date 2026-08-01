@@ -186,7 +186,16 @@ namespace AncientWarfare3.core.lineage
         public static bool ShouldUseDirectedReplenishmentAnchor(
             int completedWorkItems)
         {
-            return completedWorkItems <= 0;
+            return true;
+        }
+
+        public static bool IsReplenishmentDemandExhausted(
+            bool directedReplenishment, bool realmReserveExhausted,
+            bool targetReserveExhausted)
+        {
+            return directedReplenishment
+                ? targetReserveExhausted
+                : realmReserveExhausted;
         }
 
         public static bool ShouldKeepCasualtyReinforcementCity(

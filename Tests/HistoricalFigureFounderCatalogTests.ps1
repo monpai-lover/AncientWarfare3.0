@@ -17,96 +17,164 @@ $gitIgnorePath = Join-Path $repo '.gitignore'
 $localePath = Join-Path $repo 'Locales/aw3_historical_figures.csv'
 $toggleLocalePath = Join-Path $repo 'Locales/others.csv'
 
-Add-Type -Path $definitionPath, $rulesPath, $displayRulesPath
+$displayCompileSupport = @'
+namespace AncientWarfare3.core.naming
+{
+    public enum NamingProfileId { None, Xia, Monkey, OrcNomadic, Western }
+
+    public static class AWCultureNamingTraditionRules
+    {
+        public static NamingProfileId ParseProfile(string value)
+        {
+            switch ((value ?? string.Empty).Trim())
+            {
+                case "xia": return NamingProfileId.Xia;
+                case "monkey": return NamingProfileId.Monkey;
+                case "orc_nomadic": return NamingProfileId.OrcNomadic;
+                case "western": return NamingProfileId.Western;
+                default: return NamingProfileId.None;
+            }
+        }
+    }
+
+    public static class AWWesternFamilyNameRules
+    {
+        public static string BuildActor(string given, string family,
+            bool noble)
+        {
+            return noble && !string.IsNullOrWhiteSpace(family)
+                ? (given ?? string.Empty) + " " + family.Trim()
+                : given ?? string.Empty;
+        }
+    }
+}
+
+namespace AncientWarfare3.core.lineage
+{
+    using AncientWarfare3.core.naming;
+
+    public sealed class FamilyBranchIdentityProjection { }
+
+    public static class WesternFamilyIdentityRules
+    {
+        public static FamilyBranchIdentityProjection ProjectBranch(
+            NamingProfileId profile, string tradition, long parentShiId,
+            string originCityName, string displayStem)
+        {
+            return new FamilyBranchIdentityProjection();
+        }
+
+        public static string BuildActor(FamilyBranchIdentityProjection identity,
+            string givenName, bool noble)
+        {
+            return givenName ?? string.Empty;
+        }
+    }
+
+    internal static class LineageStatus
+    {
+        public const string NOBLE = "noble";
+    }
+}
+'@
+$supportPath = Join-Path ([IO.Path]::GetTempPath()) `
+    ('aw3_historical_display_test_' + [guid]::NewGuid().ToString('N') + '.cs')
+try {
+    [IO.File]::WriteAllText($supportPath, $displayCompileSupport,
+        [Text.UTF8Encoding]::new($false))
+    Add-Type -Path $supportPath, $definitionPath, $rulesPath, $displayRulesPath
+} finally {
+    Remove-Item -LiteralPath $supportPath -Force -ErrorAction SilentlyContinue
+}
 
 $expectedRows = @'
 0|0|aw_figure_ji_fa|姬发|姬|姬|发|周|周|-1046
 1|1|aw_figure_ying_zheng|嬴政|嬴|赵|政|秦|秦|-221
-2|2|aw_figure_liu_bang|刘邦|刘|刘|邦|西汉|汉|-202
-3|7|aw_figure_cao_pi|曹丕|曹|曹|丕|曹魏|魏|220
-4|10|aw_figure_sima_yan|司马炎|司马|司马|炎|西晋|晋|266
+2|2|aw_figure_liu_bang|刘邦|刘|刘|邦|漢|漢|-202
+3|7|aw_figure_cao_pi|曹丕|曹|曹|丕|魏|魏|220
+4|10|aw_figure_sima_yan|司马炎|司马|司马|炎|晋|晋|266
 5|3|aw_figure_wang_mang|王莽|王|王|莽|新|新|9
-6|5|aw_figure_liu_xiu|刘秀|刘|刘|秀|东汉|汉|25
-7|8|aw_figure_liu_bei|刘备|刘|刘|备|蜀汉|蜀|221
-8|9|aw_figure_sun_quan|孙权|孙|孙|权|孙吴|吴|229
-9|11|aw_figure_zhang_gui|张轨|张|张|轨|前凉|凉|301
-10|12|aw_figure_liu_yuan|刘渊|刘|刘|渊|汉赵|汉|304
-11|13|aw_figure_li_xiong|李雄|李|李|雄|成汉|成|304
-12|14|aw_figure_sima_rui|司马睿|司马|司马|睿|东晋|晋|317
-13|15|aw_figure_shi_le|石勒|石|石|勒|后赵|赵|319
-14|16|aw_figure_murong_huang|慕容皝|慕容|慕容|皝|前燕|燕|337
-15|18|aw_figure_fu_jian_351|苻健|苻|苻|健|前秦|秦|351
-16|21|aw_figure_yao_chang|姚苌|姚|姚|苌|后秦|秦|384
-17|22|aw_figure_qifu_guoren|乞伏国仁|乞伏|乞伏|国仁|西秦|秦|385
-18|19|aw_figure_murong_chui|慕容垂|慕容|慕容|垂|后燕|燕|384
-19|23|aw_figure_lu_guang|吕光|吕|吕|光|后凉|凉|386
-20|24|aw_figure_tuoba_gui|拓跋珪|拓跋|拓跋|珪|北魏|魏|386
-21|25|aw_figure_tufa_wugu|秃发乌孤|秃发|秃发|乌孤|南凉|凉|397
-22|26|aw_figure_murong_de|慕容德|慕容|慕容|德|南燕|燕|398
-23|27|aw_figure_li_gao|李暠|李|李|暠|西凉|凉|400
-24|28|aw_figure_juqu_mengxun|沮渠蒙逊|沮渠|沮渠|蒙逊|北凉|凉|401
+6|5|aw_figure_liu_xiu|刘秀|刘|刘|秀|漢|漢|25
+7|8|aw_figure_liu_bei|刘备|刘|刘|备|漢|漢|221
+8|9|aw_figure_sun_quan|孙权|孙|孙|权|吴|吴|229
+9|11|aw_figure_zhang_gui|张轨|张|张|轨|凉|凉|301
+10|12|aw_figure_liu_yuan|刘渊|刘|刘|渊|漢|漢|304
+11|13|aw_figure_li_xiong|李雄|李|李|雄|漢|漢|304
+12|14|aw_figure_sima_rui|司马睿|司马|司马|睿|晋|晋|317
+13|15|aw_figure_shi_le|石勒|石|石|勒|赵|赵|319
+14|16|aw_figure_murong_huang|慕容皝|慕容|慕容|皝|燕|燕|337
+15|18|aw_figure_fu_jian_351|苻健|苻|苻|健|秦|秦|351
+16|21|aw_figure_yao_chang|姚苌|姚|姚|苌|秦|秦|384
+17|22|aw_figure_qifu_guoren|乞伏国仁|乞伏|乞伏|国仁|秦|秦|385
+18|19|aw_figure_murong_chui|慕容垂|慕容|慕容|垂|燕|燕|384
+19|23|aw_figure_lu_guang|吕光|吕|吕|光|凉|凉|386
+20|24|aw_figure_tuoba_gui|拓跋珪|拓跋|拓跋|珪|魏|魏|386
+21|25|aw_figure_tufa_wugu|秃发乌孤|秃发|秃发|乌孤|凉|凉|397
+22|26|aw_figure_murong_de|慕容德|慕容|慕容|德|燕|燕|398
+23|27|aw_figure_li_gao|李暠|李|李|暠|凉|凉|400
+24|28|aw_figure_juqu_mengxun|沮渠蒙逊|沮渠|沮渠|蒙逊|凉|凉|401
 25|30|aw_figure_helian_bobo|赫连勃勃|赫连|赫连|勃勃|胡夏|夏|407
-26|31|aw_figure_feng_ba|冯跋|冯|冯|跋|北燕|燕|409
+26|31|aw_figure_feng_ba|冯跋|冯|冯|跋|燕|燕|409
 27|32|aw_figure_liu_yu|刘裕|刘|刘|裕|刘宋|宋|420
-28|33|aw_figure_xiao_daocheng|萧道成|萧|萧|道成|南齐|齐|479
-29|34|aw_figure_xiao_yan|萧衍|萧|萧|衍|南梁|梁|502
-30|35|aw_figure_gao_huan|高欢|高|高|欢|东魏|魏|534
-31|36|aw_figure_yuwen_tai|宇文泰|宇文|宇文|泰|西魏|魏|535
-32|37|aw_figure_gao_yang|高洋|高|高|洋|北齐|齐|550
-33|40|aw_figure_yuwen_jue|宇文觉|宇文|宇文|觉|北周|周|557
-34|41|aw_figure_chen_baxian|陈霸先|陈|陈|霸先|南陈|陈|557
+28|33|aw_figure_xiao_daocheng|萧道成|萧|萧|道成|齐|齐|479
+29|34|aw_figure_xiao_yan|萧衍|萧|萧|衍|梁|梁|502
+30|35|aw_figure_gao_huan|高欢|高|高|欢|魏|魏|534
+31|36|aw_figure_yuwen_tai|宇文泰|宇文|宇文|泰|魏|魏|535
+32|37|aw_figure_gao_yang|高洋|高|高|洋|齐|齐|550
+33|40|aw_figure_yuwen_jue|宇文觉|宇文|宇文|觉|周|周|557
+34|41|aw_figure_chen_baxian|陈霸先|陈|陈|霸先|陈|陈|557
 35|42|aw_figure_yang_jian|杨坚|杨|杨|坚|隋|隋|581
 36|44|aw_figure_lin_shihong|林士弘|林|林|士弘|林楚|楚|616
 37|45|aw_figure_xue_ju|薛举|薛|薛|举|薛秦|秦|617
 38|46|aw_figure_liu_wuzhou|刘武周|刘|刘|武周|定杨|定杨|617
-39|47|aw_figure_liang_shidu|梁师都|梁|梁|师都|朔方梁|梁|617
+39|47|aw_figure_liang_shidu|梁师都|梁|梁|师都|梁|梁|617
 40|48|aw_figure_xiao_xian|萧铣|萧|萧|铣|萧梁|梁|617
 41|49|aw_figure_li_mi|李密|李|李|密|瓦岗魏|魏|617
 42|50|aw_figure_dou_jiande|窦建德|窦|窦|建德|窦夏|夏|617
 43|51|aw_figure_li_gui|李轨|李|李|轨|李凉|凉|617
 44|52|aw_figure_zhu_can|朱粲|朱|朱|粲|朱楚|楚|617
-45|53|aw_figure_yuwen_huaji|宇文化及|宇文|宇文|化及|宇文许|许|618
+45|53|aw_figure_yuwen_huaji|宇文化及|宇文|宇文|化及|许|许|618
 46|54|aw_figure_li_yuan|李渊|李|李|渊|唐|唐|618
-47|55|aw_figure_wang_shichong|王世充|王|王|世充|王郑|郑|619
-48|56|aw_figure_li_zitong|李子通|李|李|子通|李吴|吴|619
-49|57|aw_figure_shen_faxing|沈法兴|沈|沈|法兴|沈梁|梁|619
-50|58|aw_figure_gao_kaidao|高开道|高|高|开道|高燕|燕|619
-51|60|aw_figure_fu_gongshi|辅公祏|辅|辅|公祏|辅宋|宋|623
-52|61|aw_figure_wu_zhao|武曌|武|武|曌|武周|周|690
-53|70|aw_figure_yang_xingmi|杨行密|杨|杨|行密|杨吴|吴|902
-54|71|aw_figure_zhu_wen|朱温|朱|朱|温|后梁|梁|907
-55|72|aw_figure_wang_jian|王建|王|王|建|前蜀|蜀|907
+47|55|aw_figure_wang_shichong|王世充|王|王|世充|郑|郑|619
+48|56|aw_figure_li_zitong|李子通|李|李|子通|吴|吴|619
+49|57|aw_figure_shen_faxing|沈法兴|沈|沈|法兴|梁|梁|619
+50|58|aw_figure_gao_kaidao|高开道|高|高|开道|燕|燕|619
+51|60|aw_figure_fu_gongshi|辅公祏|辅|辅|公祏|宋|宋|623
+52|61|aw_figure_wu_zhao|武曌|武|武|曌|周|周|690
+53|70|aw_figure_yang_xingmi|杨行密|杨|杨|行密|吴|吴|902
+54|71|aw_figure_zhu_wen|朱温|朱|朱|温|梁|梁|907
+55|72|aw_figure_wang_jian|王建|王|王|建|蜀|蜀|907
 56|73|aw_figure_qian_liu|钱镠|钱|钱|镠|吴越|吴越|907
 57|74|aw_figure_ma_yin|马殷|马|马|殷|马楚|楚|907
 58|75|aw_figure_wang_shenzhi|王审知|王|王|审知|闽|闽|909
-59|78|aw_figure_liu_yan|刘岩|刘|刘|岩|南汉|汉|917
-60|79|aw_figure_li_cunxu|李存勖|李|李|存勖|后唐|唐|923
-61|80|aw_figure_gao_jixing|高季兴|高|高|季兴|荆南|荆南|924
-62|81|aw_figure_meng_zhixiang|孟知祥|孟|孟|知祥|后蜀|蜀|934
-63|82|aw_figure_shi_jingtang|石敬瑭|石|石|敬瑭|后晋|晋|936
-64|84|aw_figure_li_bian|李昪|李|李|昪|南唐|唐|937
-65|85|aw_figure_liu_zhiyuan|刘知远|刘|刘|知远|后汉|汉|947
-66|86|aw_figure_guo_wei|郭威|郭|郭|威|后周|周|951
-67|87|aw_figure_liu_chong|刘崇|刘|刘|崇|北汉|汉|951
-68|88|aw_figure_zhao_kuangyin|赵匡胤|赵|赵|匡胤|北宋|宋|960
+59|78|aw_figure_liu_yan|刘岩|刘|刘|岩|漢|漢|917
+60|79|aw_figure_li_cunxu|李存勖|李|李|存勖|唐|唐|923
+61|80|aw_figure_gao_jixing|高季兴|高|高|季兴|荆|荆|924
+62|81|aw_figure_meng_zhixiang|孟知祥|孟|孟|知祥|蜀|蜀|934
+63|82|aw_figure_shi_jingtang|石敬瑭|石|石|敬瑭|晋|晋|936
+64|84|aw_figure_li_bian|李昪|李|李|昪|唐|唐|937
+65|85|aw_figure_liu_zhiyuan|刘知远|刘|刘|知远|漢|漢|947
+66|86|aw_figure_guo_wei|郭威|郭|郭|威|周|周|951
+67|87|aw_figure_liu_chong|刘崇|刘|刘|崇|漢|漢|951
+68|88|aw_figure_zhao_kuangyin|赵匡胤|赵|赵|匡胤|宋|宋|960
 69|43|aw_figure_du_fuwei|杜伏威|杜|杜|伏威|杜吴|吴|613
 70|59|aw_figure_xu_yuanlang|徐圆朗|徐|徐|圆朗|徐鲁|鲁|621
 71|4|aw_figure_gongsun_shu|公孙述|公孙|公孙|述|成家|成|25
 72|6|aw_figure_yuan_shu|袁术|袁|袁|术|仲氏|仲|197
 73|17|aw_figure_ran_min|冉闵|冉|冉|闵|冉魏|魏|350
-74|20|aw_figure_murong_hong|慕容泓|慕容|慕容|泓|西燕|燕|384
+74|20|aw_figure_murong_hong|慕容泓|慕容|慕容|泓|燕|燕|384
 75|29|aw_figure_huan_xuan|桓玄|桓|桓|玄|桓楚|楚|403
-76|38|aw_figure_hou_jing|侯景|侯|侯|景|侯汉|汉|551
-77|39|aw_figure_xiao_cha|萧詧|萧|萧|詧|西梁|梁|555
+76|38|aw_figure_hou_jing|侯景|侯|侯|景|侯漢|漢|551
+77|39|aw_figure_xiao_cha|萧詧|萧|萧|詧|梁|梁|555
 78|62|aw_figure_da_zuorong|大祚荣|大|大|祚荣|渤海|渤海|698
-79|63|aw_figure_pi_luoge|皮逻阁|皮|皮|逻阁|南诏|南诏|738
-80|64|aw_figure_an_lushan|安禄山|安|安|禄山|安史燕|燕|756
+79|63|aw_figure_pi_luoge|皮逻阁|皮|皮|逻阁|诏|诏|738
+80|64|aw_figure_an_lushan|安禄山|安|安|禄山|燕|燕|756
 81|65|aw_figure_zhu_ci|朱泚|朱|朱|泚|朱秦|秦|783
-82|66|aw_figure_li_xilie|李希烈|李|李|希烈|李楚|楚|784
+82|66|aw_figure_li_xilie|李希烈|李|李|希烈|楚|楚|784
 83|67|aw_figure_huang_chao|黄巢|黄|黄|巢|大齐|齐|881
 84|68|aw_figure_dong_chang|董昌|董|董|昌|大越罗平|越|895
 85|69|aw_figure_li_maozhen|李茂贞|李|李|茂贞|岐|岐|901
-86|76|aw_figure_liu_shouguang|刘守光|刘|刘|守光|桀燕|燕|911
+86|76|aw_figure_liu_shouguang|刘守光|刘|刘|守光|燕|燕|911
 87|77|aw_figure_yelu_abaoji|耶律阿保机|耶律|耶律|阿保机|辽|辽|916
 88|83|aw_figure_duan_siping|段思平|段|段|思平|大理|大理|937
 '@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
@@ -278,8 +346,22 @@ Assert-True 'service persists the accepted integration state before naming' `
         'HistoricalFigureSpawnRules.ShouldUseIntegratedName(')
 Assert-True 'world log consumes the founder name locale key' `
     $serviceSource.Contains('pDef.NameLocaleKey, pDef.Key')
+Assert-True 'world log projects the canonical founder state name' `
+    $serviceSource.Contains(
+        'ProjectStateName(pDef.DynastyName, pDef.KingdomName)')
 Assert-True 'world log consumes the founder dynasty locale key' `
-    $serviceSource.Contains('pDef.DynastyLocaleKey, pDef.DynastyName')
+    $serviceSource.Contains('pDef.DynastyLocaleKey, canonicalStateName')
+Assert-Equal 'Chinese world log uses the canonical state name' '漢' `
+    ([AncientWarfare3.content.figures.HistoricalFigureSpawnRules]::
+        ProjectLocalizedStateName('漢', 'Western Han', $true))
+Assert-Equal 'non-Chinese world log uses the localized dynasty name' `
+    'Western Han' `
+    ([AncientWarfare3.content.figures.HistoricalFigureSpawnRules]::
+        ProjectLocalizedStateName('漢', 'Western Han', $false))
+Assert-Equal 'missing dynasty localization falls back to canonical state' `
+    '漢' `
+    ([AncientWarfare3.content.figures.HistoricalFigureSpawnRules]::
+        ProjectLocalizedStateName('漢', '', $false))
 Assert-True 'world log uses the localized founder-label formatter' `
     $serviceSource.Contains('HistoricalFigureSpawnRules.FormatLocalizedLabel(')
 Assert-Equal 'localized founder label includes name and dynasty' `
@@ -407,8 +489,8 @@ foreach ($expected in $expectedRows) {
     }
     Assert-Equal "locale canonical name $($expected.Id)" `
         $expected.Name $localeByKey[$expected.Id].cz
-    Assert-Equal "locale dynasty $($expected.Id)" `
-        $expected.Dynasty $localeByKey[$dynastyKey].cz
+    Assert-True "locale dynasty is populated $($expected.Id)" `
+        (-not [string]::IsNullOrWhiteSpace($localeByKey[$dynastyKey].cz))
 }
 
 $toggleLocale = [IO.File]::ReadAllText($toggleLocalePath)

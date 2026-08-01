@@ -1,5 +1,6 @@
 using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.performance;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.uiquery;
@@ -28,6 +29,8 @@ namespace AncientWarfare3.patch
             {
                 MapBoxFrameStageGuard.Run("historical_read_completion",
                     DrainPresentationCompletionsMeasured);
+                MapBoxFrameStageGuard.Run("localized_name_refresh",
+                    AWLocalizedNameRefreshService.ProcessFrame);
                 MapBoxFrameStageGuard.Run("school_map_presentation",
                     ProcessSchoolMapPresentationMeasured);
             }
@@ -68,6 +71,7 @@ namespace AncientWarfare3.patch
             if (!AWAsyncClearWorldGuard.CleanupAllowed) return;
             MapBoxFrameStageGuard.Reset();
             FamilyTreeDeferredCleanupHost.InvalidateWorld(long.MinValue);
+            AWLocalizedNameRefreshService.Clear();
             ArmyCaptainDisposalScope.ClearRuntime();
             ArmyRetreatService.ClearRuntime();
             ArmyRtsControllerService.ClearRuntime();

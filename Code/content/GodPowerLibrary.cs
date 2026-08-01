@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.lineage;
 using AncientWarfare3.core.policy;
+using AncientWarfare3.core.performance;
 using AncientWarfare3.ui;
 using AncientWarfare3.ui.windows;
 using UnityEngine;
@@ -34,9 +35,11 @@ namespace AncientWarfare3.content
             RegisterTechMapMode();
             RegisterWarMapModes();
             RegisterVassalMapMode();
+            RegisterHierarchicalVassalMapMode();
             RegisterMandateMapModes();
             RegisterFeudatoryMapMode();
             RegisterSchoolMapMode();
+            RegisterDiplomacyAiToggle();
             LinkMapModeAssets();
             AWMapModeMetaLibrary.Init();
             RegisterMapModeNameplates();
@@ -69,6 +72,62 @@ namespace AncientWarfare3.content
             xia.name = SPAWN_XIA;
             xia.actor_asset_id = XiaRace.ID;
             xia.path_icon = "ui/Icons/iconXias";
+        }
+
+        private static void RegisterDiplomacyAiToggle()
+        {
+            const string optionId = DiplomacyAiRules.TogglePowerId;
+            OptionAsset option = AssetManager.options_library.get(optionId);
+            if (option == null)
+            {
+                option = AssetManager.options_library.add(new OptionAsset
+                {
+                    id = optionId,
+                    default_bool = true,
+                    type = OptionType.Bool
+                });
+            }
+            else
+            {
+                option.default_bool = true;
+                option.type = OptionType.Bool;
+            }
+
+            if (!PlayerConfig.dict.ContainsKey(optionId))
+                PlayerConfig.instance.data.add(new PlayerOptionData(optionId)
+                {
+                    boolVal = true
+                });
+
+            GodPower power = AssetManager.powers.get(optionId);
+            if (power == null)
+            {
+                power = AssetManager.powers.add(new GodPower
+                {
+                    id = optionId,
+                    name = optionId,
+                    path_icon = "ui/icons/iconDiplomacy",
+                    toggle_name = optionId,
+                    toggle_action = BuildMapModeToggleAction(
+                        SyncDiplomacyAiSetting)
+                });
+            }
+            else
+            {
+                power.toggle_name = optionId;
+                power.toggle_action = BuildMapModeToggleAction(
+                    SyncDiplomacyAiSetting);
+            }
+
+            SyncDiplomacyAiSetting();
+        }
+
+        private static void SyncDiplomacyAiSetting()
+        {
+            bool enabled = PlayerConfig.dict.TryGetValue(
+                DiplomacyAiRules.TogglePowerId,
+                out PlayerOptionData value) && value.boolVal;
+            AWPerformanceSettings.SwitchDiplomacyAi(enabled);
         }
 
         private static void RegisterSchoolMapMode()
@@ -168,6 +227,82 @@ namespace AncientWarfare3.content
                 allow_unit_selection = true,
                 toggle_action = BuildMapModeToggleAction(VassalMapModeService.DirtyMap)
             });
+        }
+
+        private static void RegisterHierarchicalVassalMapMode()
+        {
+            // Keep the default registration path for compatibility with
+            // older saved option data before installing the two-layer list.
+            RegisterMapModeOption(HierarchicalVassalMapModeService.POWER_ID);
+            RegisterMapModeOption(
+                HierarchicalVassalMapModeService.POWER_ID,
+                AWMapModeNameplateRules.GetHierarchicalVassalZoneOptionLocaleIds());
+            SyncHierarchicalVassalLayerOption();
+            GodPower existing = AssetManager.powers.get(
+                HierarchicalVassalMapModeService.POWER_ID);
+            if (existing != null)
+            {
+                ConfigureMapModePower(existing,
+                    HierarchicalVassalMapModeService.POWER_ID,
+                    RefreshHierarchicalVassalMapMode);
+                existing.path_icon = "ui/icons/iconMap";
+                existing.multi_toggle = true;
+                existing.click_special_action = new PowerActionWithID(
+                    HierarchicalVassalMapClick);
+                return;
+            }
+
+            AssetManager.powers.add(new GodPower
+            {
+                id = HierarchicalVassalMapModeService.POWER_ID,
+                name = HierarchicalVassalMapModeService.POWER_ID,
+                path_icon = "ui/icons/iconMap",
+                map_modes_switch = true,
+                multi_toggle = true,
+                toggle_name = AWMapModeMetaRules.ResolveOptionId(
+                    HierarchicalVassalMapModeService.POWER_ID),
+                force_map_mode =
+                    AWMapModePowerRules.ResolveForcedMapModeForLayerPower(),
+                unselect_when_window = true,
+                ignore_cursor_icon = true,
+                allow_unit_selection = true,
+                toggle_action = BuildMapModeToggleAction(
+                    RefreshHierarchicalVassalMapMode),
+                click_special_action = new PowerActionWithID(
+                    HierarchicalVassalMapClick)
+            });
+        }
+
+        private static void RefreshHierarchicalVassalMapMode()
+        {
+            SyncHierarchicalVassalLayerOption();
+            string optionId = AWMapModeMetaRules.ResolveOptionId(
+                HierarchicalVassalMapModeService.POWER_ID);
+            if (!PlayerConfig.dict.TryGetValue(optionId,
+                    out PlayerOptionData data) || !data.boolVal)
+            {
+                HierarchicalVassalMapModeService.Reset();
+                return;
+            }
+            HierarchicalVassalMapModeService.DirtyMap();
+        }
+
+        private static void SyncHierarchicalVassalLayerOption()
+        {
+            try
+            {
+                int layer = AWMapModeMetaLibrary.HierarchicalVassalAsset?
+                    .getZoneOptionState() ?? 0;
+                HierarchicalVassalMapModeService.SetSelectedLayerFromOption(layer);
+            }
+            catch { }
+        }
+
+        private static bool HierarchicalVassalMapClick(WorldTile pTile,
+            string pPowerId)
+        {
+            return HierarchicalVassalMapModeService.HandleZoneClick(pTile,
+                pPowerId);
         }
 
         private static void RegisterWarMapModes()
@@ -428,15 +563,45 @@ namespace AncientWarfare3.content
                 feudatoryPlate.action_main = DrawFeudatoryNameplates;
             }
 
+            NameplateAsset hierarchicalVassalPlate = library.get(
+                "plate_aw_hierarchical_vassal");
+            if (hierarchicalVassalPlate == null)
+            {
+                hierarchicalVassalPlate = library.add(new NameplateAsset
+                {
+                    id = "plate_aw_hierarchical_vassal",
+                    path_sprite = "ui/nameplates/nameplate_kingdom",
+                    map_mode = AWMapModeMetaTypes.HierarchicalVassal,
+                    max_nameplate_count = 0,
+                    action_main = DrawNoNameplates
+                });
+            }
+            else
+            {
+                hierarchicalVassalPlate.map_mode =
+                    AWMapModeMetaTypes.HierarchicalVassal;
+                hierarchicalVassalPlate.max_nameplate_count = 0;
+                hierarchicalVassalPlate.action_main = DrawNoNameplates;
+            }
+
             foreach (MetaType metaType in AWMapModeNameplateRules.GetRequiredNameplateMetaTypes())
             {
                 if (metaType == AWMapModeMetaTypes.School ||
-                    metaType == AWMapModeMetaTypes.Feudatory) continue;
+                    metaType == AWMapModeMetaTypes.Feudatory ||
+                    metaType == AWMapModeMetaTypes.HierarchicalVassal)
+                    continue;
                 library.map_modes_nameplates[metaType] = kingdomPlate;
             }
             library.map_modes_nameplates[AWMapModeMetaTypes.School] = schoolPlate;
             library.map_modes_nameplates[AWMapModeMetaTypes.Feudatory] =
                 feudatoryPlate;
+            library.map_modes_nameplates[AWMapModeMetaTypes.HierarchicalVassal] =
+                hierarchicalVassalPlate;
+        }
+
+        private static void DrawNoNameplates(NameplateManager pManager,
+            NameplateAsset pAsset)
+        {
         }
 
         private static void DrawFeudatoryNameplates(NameplateManager pManager,

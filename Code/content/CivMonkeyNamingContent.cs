@@ -2,10 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
-#if 一米_中文名
-using Chinese_Name;
-#endif
+using AncientWarfare3.core.naming;
 
 namespace AncientWarfare3.content
 {
@@ -28,13 +25,39 @@ namespace AncientWarfare3.content
                 return;
             }
 
+            ApplyGameplayBalance(actor);
+            CivMonkeyTextureCatalog.Repair(actor);
             RegisterVanillaGenerators();
             RegisterVanillaNameSet(actor);
             actor.name_template_sets = new[] { CivMonkeyNamingRules.NameSetId };
 
-#if 一米_中文名
-            RegisterChineseNameGenerators();
-#endif
+            RegisterIntegratedNameGenerators();
+        }
+
+        private static void ApplyGameplayBalance(ActorAsset pActor)
+        {
+            SetGenomeValue(pActor, "lifespan", 50f);
+        }
+
+        // addGenome accumulates duplicate IDs, so a balance override must replace.
+        private static void SetGenomeValue(ActorAsset pActor, string pId,
+            float pValue)
+        {
+            if (pActor?.genome_parts == null || string.IsNullOrEmpty(pId))
+                return;
+
+            GenomePart existing = default(GenomePart);
+            bool found = false;
+            foreach (GenomePart part in pActor.genome_parts)
+            {
+                if (part.id != pId) continue;
+                existing = part;
+                found = true;
+                break;
+            }
+
+            if (found) pActor.genome_parts.Remove(existing);
+            pActor.genome_parts.Add(new GenomePart(pId, pValue));
         }
 
         internal static long ActorSeed(long pActorId)
@@ -51,10 +74,8 @@ namespace AncientWarfare3.content
             string pInheritedOrExistingShi, long pActorId)
         {
             IReadOnlyList<string> surnames = CivMonkeyNamingRules.Surnames;
-#if 一米_中文名
-            surnames = CivMonkeyChineseNameGenerator.GetWords(SurnameLibraryId,
+            surnames = CivMonkeyIntegratedNameGenerator.GetWords(SurnameLibraryId,
                 CivMonkeyNamingRules.Surnames);
-#endif
             return CivMonkeyNamingRules.ResolveLineageIdentity(
                 pInheritedOrExistingShi, ActorSeed(pActorId), surnames);
         }
@@ -178,28 +199,32 @@ namespace AncientWarfare3.content
                 StringComparison.Ordinal) ? "monpai" : pName;
         }
 
-#if 一米_中文名
-        private static void RegisterChineseNameGenerators()
+        private static void RegisterIntegratedNameGenerators()
         {
             string libraryDirectory = Path.Combine(
                 ModClass.Instance.GetDeclaration().FolderPath, "name_generators", "lib");
-            WordLibraryManager.SubmitDirectoryToLoad(libraryDirectory);
+            foreach (AWWordLibraryAsset library in
+                     AWNamingResourceLoader.LoadWordLibraries(libraryDirectory,
+                         ModClass.LogWarning))
+                AWWordLibraryManager.Instance.Submit(library);
 
             const string actorGetter = "aw_civ_monkey_actor";
             const string cityGetter = "aw_civ_monkey_city";
             const string clanGetter = "aw_civ_monkey_clan";
             const string kingdomGetter = "aw_civ_monkey_kingdom";
 
-            ParameterGetters.PutActorParameterGetter(actorGetter, (pActor, pParameters) =>
+            AWNameParameterGetters.PutActorParameterGetter(actorGetter,
+                (pActor, pParameters) =>
             {
                 PutSeed(pParameters, ActorSeed(pActor?.getID() ?? 0L));
                 string family = ResolveInheritedFamily(pActor);
                 pParameters[InheritedFamilyParameter] = family;
                 if (!string.IsNullOrEmpty(family)) pParameters["family_name"] = family;
             });
-            ParameterGetters.PutCityParameterGetter(cityGetter, (pCity, pParameters) =>
+            AWNameParameterGetters.PutCityParameterGetter(cityGetter,
+                (pCity, pParameters) =>
                 PutSeed(pParameters, MetaSeed(pCity?.getID() ?? 0L)));
-            ParameterGetters.PutClanParameterGetter(clanGetter,
+            AWNameParameterGetters.PutClanParameterGetter(clanGetter,
                 (pClan, pActor, pParameters) =>
                 {
                     PutSeed(pParameters, ActorSeed(pActor?.getID() ?? 0L));
@@ -211,16 +236,17 @@ namespace AncientWarfare3.content
                         ? pClan?.data?.founder_kingdom_name ?? ""
                         : pClan.data.founder_city_name;
                 });
-            ParameterGetters.PutKingdomParameterGetter(kingdomGetter, (pKingdom, pParameters) =>
+            AWNameParameterGetters.PutKingdomParameterGetter(kingdomGetter,
+                (pKingdom, pParameters) =>
                 PutSeed(pParameters, MetaSeed(pKingdom?.getID() ?? 0L)));
 
-            CN_NameGeneratorLibrary.Submit(new CivMonkeyChineseNameGenerator(
+            AWNameGeneratorLibrary.Submit(new CivMonkeyIntegratedNameGenerator(
                 CivMonkeyNamingRules.ActorGeneratorId, actorGetter, MonkeyNameKind.Actor));
-            CN_NameGeneratorLibrary.Submit(new CivMonkeyChineseNameGenerator(
+            AWNameGeneratorLibrary.Submit(new CivMonkeyIntegratedNameGenerator(
                 CivMonkeyNamingRules.CityGeneratorId, cityGetter, MonkeyNameKind.City));
-            CN_NameGeneratorLibrary.Submit(new CivMonkeyChineseNameGenerator(
+            AWNameGeneratorLibrary.Submit(new CivMonkeyIntegratedNameGenerator(
                 CivMonkeyNamingRules.ClanGeneratorId, clanGetter, MonkeyNameKind.Clan));
-            CN_NameGeneratorLibrary.Submit(new CivMonkeyChineseNameGenerator(
+            AWNameGeneratorLibrary.Submit(new CivMonkeyIntegratedNameGenerator(
                 CivMonkeyNamingRules.KingdomGeneratorId, kingdomGetter, MonkeyNameKind.Kingdom));
         }
 
@@ -229,7 +255,7 @@ namespace AncientWarfare3.content
             pParameters[SeedParameter] = pSeed.ToString(CultureInfo.InvariantCulture);
         }
 
-        internal static bool ChineseNameOwns(MetaType pType)
+        internal static bool IntegratedNameOwns(MetaType pType)
         {
             string id = pType == MetaType.Unit
                 ? CivMonkeyNamingRules.ActorGeneratorId
@@ -240,7 +266,7 @@ namespace AncientWarfare3.content
                         : pType == MetaType.Kingdom
                             ? CivMonkeyNamingRules.KingdomGeneratorId
                             : "";
-            return !string.IsNullOrEmpty(id) && CN_NameGeneratorLibrary.Get(id) != null;
+            return !string.IsNullOrEmpty(id) && AWNameGeneratorLibrary.Get(id) != null;
         }
 
         private enum MonkeyNameKind
@@ -251,80 +277,80 @@ namespace AncientWarfare3.content
             Kingdom
         }
 
-        private sealed class CivMonkeyChineseNameGenerator : CN_NameGeneratorAsset
+        private sealed class CivMonkeyIntegratedNameGenerator : AWNameGeneratorAsset
         {
-            private static readonly FieldInfo WordLibraryInstanceField =
-                typeof(WordLibraryManager).GetField("Instance",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
             private readonly MonkeyNameKind _kind;
-            private readonly CN_NameTemplate _template;
+            private readonly AWNameTemplate _template;
 
-            public CivMonkeyChineseNameGenerator(string pId, string pParameterGetter,
+            public CivMonkeyIntegratedNameGenerator(string pId,
+                string pParameterGetter,
                 MonkeyNameKind pKind)
+                : base(pId, new[] { CreateTemplate(pKind) },
+                    CreateTemplate(pKind), pParameterGetter)
             {
-                id = pId;
-                parameter_getter = pParameterGetter;
                 _kind = pKind;
-                string format = pKind == MonkeyNameKind.Actor
-                    ? "{猴族姓氏:family_name}{猴族名:given_name}"
-                    : pKind == MonkeyNameKind.City
-                        ? "{猴族城市:city_name}"
-                        : pKind == MonkeyNameKind.Clan
-                            ? "$founder_home$#的#$founder_family_name$#家族#"
-                            : "{猴族国家:kingdom_name}";
-                _template = CN_NameTemplate.Create(format, 1f);
-                templates.Add(_template);
+                _template = CreateTemplate(pKind);
             }
 
-            public override string GenerateName(Dictionary<string, string> pParameters)
+            public override string GenerateName(AWNameGenerationContext pContext,
+                AWWordLibraryManager pLibraries)
             {
-                pParameters ??= new Dictionary<string, string>();
-                long seed = ReadSeed(pParameters);
+                var parameters = new Dictionary<string, string>(
+                    StringComparer.Ordinal);
+                if (pContext != null)
+                {
+                    foreach (KeyValuePair<string, string> pair in
+                             pContext.Parameters)
+                        parameters[pair.Key] = pair.Value;
+                }
+                long seed = ReadSeed(parameters, pContext?.Seed ?? 0L);
 
                 switch (_kind)
                 {
                     case MonkeyNameKind.Actor:
                     {
-                        pParameters.TryGetValue(InheritedFamilyParameter,
+                        parameters.TryGetValue(InheritedFamilyParameter,
                             out string inheritedFamily);
                         if (string.IsNullOrWhiteSpace(inheritedFamily))
-                            pParameters.TryGetValue("family_name", out inheritedFamily);
+                            parameters.TryGetValue("family_name", out inheritedFamily);
                         CivMonkeyNamingRules.BuildActorName(inheritedFamily, seed,
                             (int)MetaType.Unit, GetWords(SurnameLibraryId,
                                 CivMonkeyNamingRules.Surnames),
                             GetWords(GivenNameLibraryId, CivMonkeyNamingRules.GivenNames),
                             out string surname, out string givenName);
-                        pParameters["family_name"] = surname;
-                        pParameters["given_name"] = givenName;
+                        parameters["family_name"] = surname;
+                        parameters["given_name"] = givenName;
                         break;
                     }
                     case MonkeyNameKind.City:
-                        pParameters["city_name"] = CivMonkeyNamingRules.PickCity(seed,
+                        parameters["city_name"] = CivMonkeyNamingRules.PickCity(seed,
                             (int)MetaType.City,
                             GetWords(CityLibraryId, CivMonkeyNamingRules.CityNames));
                         break;
                     case MonkeyNameKind.Clan:
                     {
-                        pParameters.TryGetValue(InheritedFamilyParameter,
+                        parameters.TryGetValue(InheritedFamilyParameter,
                             out string inheritedFamily);
                         if (string.IsNullOrWhiteSpace(inheritedFamily))
-                            pParameters.TryGetValue("founder_family_name",
+                            parameters.TryGetValue("founder_family_name",
                                 out inheritedFamily);
-                        pParameters["founder_family_name"] =
+                        parameters["founder_family_name"] =
                             CivMonkeyNamingRules.ResolveSurname(inheritedFamily, seed,
                                 GetWords(SurnameLibraryId,
                                     CivMonkeyNamingRules.Surnames));
                         break;
                     }
                     case MonkeyNameKind.Kingdom:
-                        pParameters["kingdom_name"] = CivMonkeyNamingRules.PickKingdom(seed,
+                        parameters["kingdom_name"] = CivMonkeyNamingRules.PickKingdom(seed,
                             (int)MetaType.Kingdom,
                             GetWords(KingdomLibraryId, CivMonkeyNamingRules.KingdomNames));
                         break;
                 }
 
-                string generated = _template.GenerateName(pParameters);
+                var generatedContext = new AWNameGenerationContext(seed,
+                    parameters);
+                string generated = _template.GenerateName(generatedContext,
+                    pLibraries ?? AWWordLibraryManager.Instance);
                 if (!string.IsNullOrWhiteSpace(generated) &&
                     !string.Equals(generated, "name", StringComparison.OrdinalIgnoreCase))
                     return generated;
@@ -338,13 +364,27 @@ namespace AncientWarfare3.content
                             : CivMonkeyNamingRules.PickKingdom(seed, (int)MetaType.Kingdom);
             }
 
-            private static long ReadSeed(IReadOnlyDictionary<string, string> pParameters)
+            private static AWNameTemplate CreateTemplate(MonkeyNameKind pKind)
+            {
+                string format = pKind == MonkeyNameKind.Actor
+                    ? "{猴族姓氏:family_name}{猴族名:given_name}"
+                    : pKind == MonkeyNameKind.City
+                        ? "{猴族城市:city_name}"
+                        : pKind == MonkeyNameKind.Clan
+                            ? "$founder_home$#的#$founder_family_name$#家族#"
+                            : "{猴族国家:kingdom_name}";
+                return AWNameTemplate.Create(format, 1f);
+            }
+
+            private static long ReadSeed(
+                IReadOnlyDictionary<string, string> pParameters,
+                long pFallback)
             {
                 if (pParameters.TryGetValue(SeedParameter, out string seedText) &&
                     long.TryParse(seedText, NumberStyles.Integer,
                         CultureInfo.InvariantCulture, out long seed))
                     return seed;
-                return 0L;
+                return pFallback;
             }
 
             internal static IReadOnlyList<string> GetWords(string pId,
@@ -352,10 +392,9 @@ namespace AncientWarfare3.content
             {
                 try
                 {
-                    var manager = WordLibraryInstanceField?.GetValue(null) as WordLibraryManager;
-                    if (manager != null && manager.dict.TryGetValue(pId,
-                            out WordLibraryAsset library) && library?.words?.Count > 0)
-                        return library.words;
+                    IReadOnlyList<string> words =
+                        AWWordLibraryManager.Instance.GetWords(pId);
+                    if (words.Count > 0) return words;
                 }
                 catch (Exception e)
                 {
@@ -366,6 +405,5 @@ namespace AncientWarfare3.content
                 return pFallback;
             }
         }
-#endif
     }
 }

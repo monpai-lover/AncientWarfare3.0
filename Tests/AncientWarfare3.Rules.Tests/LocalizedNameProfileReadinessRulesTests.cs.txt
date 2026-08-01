@@ -1,0 +1,36 @@
+using AncientWarfare3.core.naming;
+
+internal static class LocalizedNameProfileReadinessRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, AWLocalizedNameProfileReadinessRules.IsReady(
+                "western_von_name", "western"),
+            "western generators run after the western profile is persisted");
+        Equal(false, AWLocalizedNameProfileReadinessRules.IsReady(
+                "western_von_name", string.Empty),
+            "western generators wait for a persisted profile");
+        Equal(false, AWLocalizedNameProfileReadinessRules.IsReady(
+                "western_von_name", "xia"),
+            "western generators cannot run after full Xia entry");
+        Equal(true, AWLocalizedNameProfileReadinessRules.IsReady(
+                "orc_nomadic_name", "orc_nomadic"),
+            "orc generators require the nomadic profile");
+        Equal(true, AWLocalizedNameProfileReadinessRules.IsReady(
+                "Xia_name", "xia"),
+            "Xia generators require the Xia profile");
+        Equal(true, AWLocalizedNameProfileReadinessRules.IsReady(
+                "civ_monkey_name", "monkey"),
+            "monkey generators retain the dedicated monkey profile");
+        Equal(true, AWLocalizedNameProfileReadinessRules.IsReady(
+                "human_name", string.Empty),
+            "legacy explicit generators do not wait on an unrelated profile");
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

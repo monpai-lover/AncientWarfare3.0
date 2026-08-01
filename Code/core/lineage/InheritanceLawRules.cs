@@ -51,7 +51,7 @@ namespace AncientWarfare3.core.lineage
             InstitutionMaturity = Math.Max(0, institutionMaturity);
             MilitaryDirection = Clamp(militaryDirection, 0, 20);
             CivilDirection = Clamp(civilDirection, 0, 20);
-            RulerCourtInfluence = Clamp(rulerCourtInfluence, -60, 40);
+            RulerCourtInfluence = Clamp(rulerCourtInfluence, -60, 70);
         }
 
         public MandatePhase Phase { get; }

@@ -85,9 +85,16 @@ namespace AncientWarfare3.core.policy
                         : null;
                 bool slaveryEnabled = SlaveService.IsSlaveryEnabled(pKingdom);
                 int cityCount = cities.Count;
-                CentralizationEffects effects = CentralizationService.ReadSnapshot(pKingdom).effects;
+                CentralizationEffects centralization =
+                    CentralizationService.ReadSnapshot(pKingdom).effects;
                 CourtInstitutionEffects institution =
                     CourtInstitutionEffectService.Read(pKingdom);
+                KingdomPolicyEffects policyEffects =
+                    KingdomPolicyEffectService.Read(pKingdom);
+                float administrationMultiplier =
+                    policyEffects.AdministrationMultiplier;
+                float workshopTechMultiplier = 1f +
+                    policyEffects.ExtraWorkshopAttempts * 0.05f;
                 var sums = new CityEconomyContributionSums { year = year };
                 foreach (City city in cities)
                 {
@@ -100,11 +107,18 @@ namespace AncientWarfare3.core.policy
                     if (!UpdateCity(pKingdom, city, year, cityCount,
                             slaveryEnabled, providesToRealm, techReports,
                             storedStates,
-                            effects.TaxMultiplier * institution.TaxMultiplier,
-                            effects.ManpowerMultiplier * institution.ManpowerMultiplier,
-                            effects.UnrestReduction + institution.UnrestReduction,
-                            institution.PolicyOutputMultiplier,
-                            institution.TechOutputMultiplier,
+                            centralization.TaxMultiplier *
+                            institution.TaxMultiplier *
+                            policyEffects.TaxMultiplier,
+                            centralization.ManpowerMultiplier *
+                            institution.ManpowerMultiplier,
+                            centralization.UnrestReduction +
+                            institution.UnrestReduction,
+                            institution.PolicyOutputMultiplier *
+                            administrationMultiplier,
+                            institution.TechOutputMultiplier *
+                            administrationMultiplier * workshopTechMultiplier,
+                            policyEffects.FarmOutputMultiplier,
                             out CityEconomyContribution contribution))
                         continue;
                     if (!providesToRealm) continue;
@@ -201,6 +215,7 @@ namespace AncientWarfare3.core.policy
             Dictionary<long, CityEconomyStoredState> pStoredStates, float pTaxMultiplier,
             float pManpowerMultiplier, float pUnrestReduction,
             float pPolicyMultiplier, float pTechMultiplier,
+            float pFarmOutputMultiplier,
             out CityEconomyContribution pContribution)
         {
             pContribution = default;
@@ -239,7 +254,7 @@ namespace AncientWarfare3.core.policy
                 tech.adopted_count, tech.total_count, DistanceFromCapital(pKingdom, pCity),
                 slavePopulation, nonCore, activeFief, pTaxMultiplier, pManpowerMultiplier,
                 pUnrestReduction, feudatoryRemittance, pPolicyMultiplier,
-                pTechMultiplier);
+                pTechMultiplier, pFarmOutputMultiplier);
             float realmMultiplier = OccupiedCitySupplyRules.
                 RealmContributionMultiplier(
                     enemyFrozenControl: !pProvidesToRealm);

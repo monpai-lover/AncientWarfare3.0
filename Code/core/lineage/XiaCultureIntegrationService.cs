@@ -7,15 +7,13 @@ namespace AncientWarfare3.core.lineage
     {
         public static bool IsIntegrated(Culture pCulture)
         {
-            if (pCulture?.data == null) return false;
-            try
-            {
-                return pCulture.hasTrait(XiaCultureTraits.IntegratedTraitId);
-            }
-            catch
-            {
-                return false;
-            }
+            return HasTrait(pCulture, XiaCultureTraits.IntegratedTraitId);
+        }
+
+        public static bool IsFullyIntegrated(Culture pCulture)
+        {
+            return HasTrait(pCulture,
+                XiaCultureTraits.FullyIntegratedTraitId);
         }
 
         public static bool IsNativeXiaCulture(Culture pCulture)
@@ -27,15 +25,48 @@ namespace AncientWarfare3.core.lineage
 
         public static bool MarkIntegrated(Culture pCulture)
         {
+            return MarkTrait(pCulture, XiaCultureTraits.IntegratedTraitId);
+        }
+
+        public static bool MarkFullyIntegrated(Culture pCulture)
+        {
+            bool integratedChanged = MarkIntegrated(pCulture);
+            bool fullChanged = MarkTrait(pCulture,
+                XiaCultureTraits.FullyIntegratedTraitId);
+            return integratedChanged || fullChanged;
+        }
+
+        public static bool InheritFullyIntegrated(Culture pChild,
+            Culture pParent)
+        {
+            return pChild?.data != null && pParent?.data != null &&
+                   !object.ReferenceEquals(pChild, pParent) &&
+                   IsFullyIntegrated(pParent) &&
+                   MarkFullyIntegrated(pChild);
+        }
+
+        private static bool HasTrait(Culture pCulture, string pTraitId)
+        {
+            if (pCulture?.data == null) return false;
+            try
+            {
+                return pCulture.hasTrait(pTraitId);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool MarkTrait(Culture pCulture, string pTraitId)
+        {
             if (pCulture?.data == null ||
-                AssetManager.culture_traits.get(
-                    XiaCultureTraits.IntegratedTraitId) == null)
+                AssetManager.culture_traits.get(pTraitId) == null)
                 return false;
 
-            bool changed = !IsIntegrated(pCulture) &&
-                           pCulture.addTrait(
-                               XiaCultureTraits.IntegratedTraitId);
-            if (IsIntegrated(pCulture))
+            bool changed = !HasTrait(pCulture, pTraitId) &&
+                           pCulture.addTrait(pTraitId);
+            if (HasTrait(pCulture, pTraitId))
                 pCulture.data.saved_traits = pCulture.getTraitsAsStrings();
             return changed;
         }

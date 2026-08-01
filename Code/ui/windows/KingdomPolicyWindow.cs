@@ -55,7 +55,10 @@ namespace AncientWarfare3.ui.windows
         private float _viewportHeight = DEFAULT_WINDOW_H - SCROLL_MARGIN_Y;
         private Transform _canvas;
         private RectTransform _canvasRect;
+        private RectTransform _policyViewportRect;
+        private RectTransform _policyContentRect;
         private GameObject _dragSurface;
+        private Button _kingdomBack;
         private bool _commandPending;
         private bool _commandRefreshRequested;
 
@@ -131,6 +134,8 @@ namespace AncientWarfare3.ui.windows
 
         private void ConfigureWindow()
         {
+            EnsureOwnedPolicyViewport();
+            EnsureKingdomBackButton();
             ApplyWindowLayout();
             InstallDragAndResizeHandles();
             EnsureCanvas();
@@ -147,6 +152,7 @@ namespace AncientWarfare3.ui.windows
 
             Transform close = BackgroundTransform.parent != null ? BackgroundTransform.parent.Find("CloseBackground") : null;
             if (close != null) close.localPosition = new Vector3(_windowSize.x / 2f - 20f, _windowSize.y / 2f - 12f);
+            LayoutKingdomBackButton(close);
 
             Transform titleBg = BackgroundTransform.Find("TitleBackground");
             var titleRect = titleBg != null ? titleBg.GetComponent<RectTransform>() : null;
@@ -166,69 +172,67 @@ namespace AncientWarfare3.ui.windows
                 if (titleTextRect != null) titleTextRect.sizeDelta = new Vector2(_windowSize.x * 0.48f, 28f);
             }
 
-            Transform scroll = BackgroundTransform.Find("Scroll View");
-            var scrollRect = scroll != null ? scroll.GetComponent<RectTransform>() : null;
-            if (scrollRect != null)
+            if (_policyViewportRect != null)
             {
-                scrollRect.sizeDelta = new Vector2(_contentWidth, _viewportHeight);
-                scroll.localPosition = new Vector3(0, -20f, 0);
+                _policyViewportRect.anchorMin = new Vector2(0.5f, 0.5f);
+                _policyViewportRect.anchorMax = new Vector2(0.5f, 0.5f);
+                _policyViewportRect.pivot = new Vector2(0.5f, 0.5f);
+                _policyViewportRect.sizeDelta = new Vector2(_contentWidth,
+                    _viewportHeight);
+                _policyViewportRect.anchoredPosition = new Vector2(0f, -20f);
             }
 
-            var scrollComponent = scroll != null ? scroll.GetComponent<ScrollRect>() : null;
-            if (scrollComponent != null)
+            if (_policyContentRect != null)
             {
-                scrollComponent.vertical = false;
-                scrollComponent.horizontal = false;
+                _policyContentRect.anchorMin = new Vector2(0f, 1f);
+                _policyContentRect.anchorMax = new Vector2(0f, 1f);
+                _policyContentRect.pivot = new Vector2(0f, 1f);
+                _policyContentRect.anchoredPosition = Vector2.zero;
+                _policyContentRect.sizeDelta = new Vector2(_contentWidth,
+                    Mathf.Max(_viewportHeight + 1f,
+                        _policyContentRect.sizeDelta.y));
             }
-
-            Transform viewport = BackgroundTransform.Find("Scroll View/Viewport");
-            var viewRect = viewport != null ? viewport.GetComponent<RectTransform>() : null;
-            if (viewRect != null) viewRect.sizeDelta = new Vector2(_contentWidth, _viewportHeight);
-            EnsureViewportMask(viewport);
-            // 可拖动的科技/国策/决策节点挂在 ContentTransform 下的 PolicyCanvas 上，
-            // 直接给 ContentTransform 的父视口挂遮罩，才能把自由平移的节点裁剪在窗体框内。
-            EnsureViewportMask(ContentTransform != null ? ContentTransform.parent : null);
-
-            Transform scrollbar = BackgroundTransform.Find("Scroll View/Scrollbar Vertical");
-            HideNativeScrollbarVisual(scrollbar);
-            var scrollbarRect = scrollbar != null ? scrollbar.GetComponent<RectTransform>() : null;
-            if (scrollbarRect != null)
-            {
-                scrollbarRect.anchorMin = new Vector2(1f, 0f);
-                scrollbarRect.anchorMax = new Vector2(1f, 1f);
-                scrollbarRect.pivot = new Vector2(1f, 0.5f);
-                scrollbarRect.sizeDelta = new Vector2(1f, 0f);
-                scrollbarRect.anchoredPosition = new Vector2(9999f, 0f);
-            }
-
-            var contentRect = ContentTransform != null ? ContentTransform.GetComponent<RectTransform>() : null;
-            if (contentRect != null)
-                contentRect.sizeDelta = new Vector2(_contentWidth, Mathf.Max(_viewportHeight + 1f, contentRect.sizeDelta.y));
 
             if (_canvasRect != null)
                 _canvasRect.sizeDelta = new Vector2(_contentWidth, Mathf.Max(1f, _viewportHeight));
+
+            // The stock template may reactivate its illustration tabs when the
+            // window is shown again. Re-apply the isolation after every layout
+            // pass, while leaving controls created by this window untouched.
+            HideNativePolicyContent();
         }
 
-        private static void HideNativeScrollbarVisual(Transform pScrollbar)
+        private void EnsureOwnedPolicyViewport()
         {
-            if (pScrollbar == null) return;
-
-            pScrollbar.gameObject.SetActive(true);
-            var scrollbar = pScrollbar.GetComponent<Scrollbar>();
-            if (scrollbar != null) scrollbar.interactable = false;
-
-            foreach (var graphic in pScrollbar.GetComponentsInChildren<Graphic>(true))
+            if (_policyViewportRect != null && _policyContentRect != null)
             {
-                graphic.enabled = false;
-                graphic.raycastTarget = false;
+                ContentTransform = _policyContentRect;
+                return;
             }
-        }
 
-        private static void EnsureViewportMask(Transform pViewport)
-        {
-            if (pViewport == null) return;
-            if (pViewport.GetComponent<RectMask2D>() == null)
-                pViewport.gameObject.AddComponent<RectMask2D>();
+            Transform nativeScroll = BackgroundTransform?.Find("Scroll View");
+            if (nativeScroll != null)
+                nativeScroll.gameObject.SetActive(false);
+
+            Transform existingViewport = BackgroundTransform?.Find(
+                "AW3PolicyViewport");
+            GameObject viewport = existingViewport != null
+                ? existingViewport.gameObject
+                : new GameObject("AW3PolicyViewport", typeof(RectTransform),
+                    typeof(RectMask2D));
+            if (existingViewport == null)
+                viewport.transform.SetParent(BackgroundTransform, false);
+            _policyViewportRect = viewport.GetComponent<RectTransform>();
+
+            Transform existingContent = viewport.transform.Find(
+                "AW3PolicyContent");
+            GameObject content = existingContent != null
+                ? existingContent.gameObject
+                : new GameObject("AW3PolicyContent", typeof(RectTransform));
+            if (existingContent == null)
+                content.transform.SetParent(viewport.transform, false);
+            _policyContentRect = content.GetComponent<RectTransform>();
+            ContentTransform = _policyContentRect;
         }
 
         private void EnsureCanvas()
@@ -252,6 +256,112 @@ namespace AncientWarfare3.ui.windows
 
             var pan = canvasObj.GetComponent<TreeDragPanHandler>() ?? canvasObj.AddComponent<TreeDragPanHandler>();
             pan.Setup(_canvasRect, null);
+
+            // AbstractWindow clones the stock world_info content.  Its tabs
+            // contain native illustration/mask graphics that are unrelated to
+            // the policy tree and can cover the custom canvas at runtime.
+            // Keep the Content transform itself (it is still the ScrollRect
+            // content) and the PolicyCanvas, but hide every stock child.
+            HideNativePolicyContent();
+        }
+
+        private void EnsureKingdomBackButton()
+        {
+            if (_kingdomBack != null || BackgroundTransform?.parent == null)
+                return;
+
+            Transform existing = BackgroundTransform.parent.Find(
+                "PolicyBackToKingdom");
+            GameObject buttonObject = existing != null
+                ? existing.gameObject
+                : new GameObject("PolicyBackToKingdom",
+                    typeof(RectTransform), typeof(Image), typeof(Button),
+                    typeof(TipButton));
+            if (existing == null)
+                buttonObject.transform.SetParent(BackgroundTransform.parent, false);
+
+            RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+            buttonRect.anchorMin = buttonRect.anchorMax =
+                new Vector2(0.5f, 0.5f);
+            buttonRect.pivot = new Vector2(0.5f, 0.5f);
+            buttonRect.sizeDelta = new Vector2(24f, 24f);
+
+            Image background = buttonObject.GetComponent<Image>();
+            AW_UIStyle.ApplyButton(background, 0.96f);
+            background.raycastTarget = true;
+
+            Transform iconTransform = buttonObject.transform.Find(
+                "PolicyBackToKingdomIcon");
+            GameObject iconObject = iconTransform != null
+                ? iconTransform.gameObject
+                : new GameObject("PolicyBackToKingdomIcon",
+                    typeof(RectTransform), typeof(Image));
+            if (iconTransform == null)
+                iconObject.transform.SetParent(buttonObject.transform, false);
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = iconRect.anchorMax =
+                new Vector2(0.5f, 0.5f);
+            iconRect.pivot = new Vector2(0.5f, 0.5f);
+            iconRect.anchoredPosition = Vector2.zero;
+            iconRect.sizeDelta = new Vector2(14f, 14f);
+            iconRect.localScale = new Vector3(-1f, 1f, 1f);
+            Image icon = iconObject.GetComponent<Image>();
+            icon.sprite = SpriteTextureLoader.getSprite(
+                "ui/icons/iconArrowMetaRight");
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            _kingdomBack = buttonObject.GetComponent<Button>();
+            _kingdomBack.onClick.RemoveAllListeners();
+            _kingdomBack.onClick.AddListener(BackToKingdom);
+
+            TipButton tip = buttonObject.GetComponent<TipButton>();
+            tip.enabled = true;
+            tip.type = AW_RawTooltip.TYPE;
+            tip.hoverAction = () => Tooltip.show(buttonObject,
+                AW_RawTooltip.TYPE, new TooltipData
+                {
+                    tip_name = AW_L10n.Text(
+                        "aw_policy_back_to_kingdom", "Return to Kingdom"),
+                    tip_description = ""
+                });
+        }
+
+        private void LayoutKingdomBackButton(Transform pClose)
+        {
+            if (_kingdomBack == null) return;
+            Vector3 closePosition = pClose != null
+                ? pClose.localPosition
+                : new Vector3(_windowSize.x / 2f - 20f,
+                    _windowSize.y / 2f - 12f, 0f);
+            _kingdomBack.transform.localPosition =
+                closePosition + new Vector3(-30f, 0f, 0f);
+            _kingdomBack.transform.SetAsLastSibling();
+            if (pClose != null) pClose.SetAsLastSibling();
+        }
+
+        private void BackToKingdom()
+        {
+            Kingdom kingdom = World.world?.kingdoms?.get(_kingdomId);
+            bool canOpen = kingdom?.data != null && !kingdom.isRekt();
+            if (canOpen)
+            {
+                AW_LineageWindowIds.ShowKingdom(_kingdomId);
+                return;
+            }
+            ScrollWindow.finishAnimations();
+            ScrollWindow.hideAllEvent();
+        }
+
+        private void HideNativePolicyContent()
+        {
+            if (ContentTransform == null || _canvas == null) return;
+            for (int i = ContentTransform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = ContentTransform.GetChild(i);
+                if (child == _canvas || _created.Contains(child.gameObject)) continue;
+                child.gameObject.SetActive(false);
+            }
         }
 
         private void EnsureCanvasPanZoom()
@@ -348,10 +458,12 @@ namespace AncientWarfare3.ui.windows
             y = BuildProgressOverview(kingdom, y + 6f);
             float treeY = y + 8f;
             y = BuildSection(kingdom, AW_L10n.Text("aw_policy_tech_section", "\u79D1\u6280\u7814\u53D1"),
-                KingdomPolicyDefs.Techs, treeY);
+                KingdomPolicyService.GetNodes(kingdom,
+                    PolicyNodeKind.Tech), treeY);
             CreateSectionSeparator(y + 2f);
             y = BuildSection(kingdom, AW_L10n.Text("aw_policy_social_section", "\u793E\u4F1A\u56FD\u7B56"),
-                KingdomPolicyDefs.SocialPolicies, y + 18f);
+                KingdomPolicyService.GetNodes(kingdom,
+                    PolicyNodeKind.Social), y + 18f);
             BuildPolicyLinks(kingdom);
             SetPolicyChromeToFront();
             SetContentHeight(y);
@@ -732,9 +844,15 @@ namespace AncientWarfare3.ui.windows
 
         private static KingdomPolicyDef GetDisplayedCurrent(Kingdom pKingdom)
         {
-            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
-            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
-            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            KingdomPolicyDef decision = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
+            KingdomPolicyDef tech = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Tech));
+            KingdomPolicyDef social = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Social));
 
             if (_mode == PolicyPanelMode.Decision) return decision;
             if (tech != null) return tech;
@@ -756,6 +874,10 @@ namespace AncientWarfare3.ui.windows
                 ? KingdomPolicyService.GetTechPointGain(pKingdom)
                 : KingdomPolicyService.GetPoliticalPointGain(pKingdom);
             int years = EstimateYearsRemaining(remaining, banked, yearlyGain);
+            float monthlyGain = KingdomDecisionMonthlyRules.MonthlyShare(
+                yearlyGain);
+            int months = EstimateMonthsRemaining(remaining, banked,
+                monthlyGain);
 
             var lines = new List<string>
             {
@@ -768,6 +890,11 @@ namespace AncientWarfare3.ui.windows
             };
             if (pKind == PolicyNodeKind.Decision)
             {
+                lines.Add(AW_L10n.Text("aw_policy_monthly_gain",
+                    "\u6708\u589e\u957F") + ": " +
+                    monthlyGain.ToString("0.0"));
+                lines.Add(AW_L10n.Text("aw_policy_estimated_months",
+                    "\u9884\u8BA1\u6708\u6570") + ": " + months);
                 string target = KingdomPolicyService.BuildDecisionTargetLine(pKingdom);
                 if (!string.IsNullOrEmpty(target)) lines.Insert(1, target);
             }
@@ -795,7 +922,8 @@ namespace AncientWarfare3.ui.windows
                 lines.Add(AW_L10n.Text("aw_core_fabrication_current", "\u5F53\u524D") + ": " +
                           (string.IsNullOrEmpty(cityName) ? "?" : cityName) + " " +
                           Mathf.FloorToInt(KingdomPolicyService.GetCoreFabricationProgress(pKingdom)) + "/" +
-                          Mathf.CeilToInt(KingdomPolicyService.GetCoreFabricationCost()));
+                          Mathf.CeilToInt(KingdomPolicyService.
+                              GetCoreFabricationCost(pKingdom)));
             }
             else
             {
@@ -826,11 +954,17 @@ namespace AncientWarfare3.ui.windows
 
             lines.Add("");
             lines.Add(ProgressLineText(pKingdom,
-                KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech)), PolicyNodeKind.Tech));
+                KingdomPolicyService.GetDefinition(pKingdom,
+                    KingdomPolicyService.GetCurrent(pKingdom,
+                        PolicyNodeKind.Tech)), PolicyNodeKind.Tech));
             lines.Add(ProgressLineText(pKingdom,
-                KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social)), PolicyNodeKind.Social));
+                KingdomPolicyService.GetDefinition(pKingdom,
+                    KingdomPolicyService.GetCurrent(pKingdom,
+                        PolicyNodeKind.Social)), PolicyNodeKind.Social));
             lines.Add(ProgressLineText(pKingdom,
-                KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision)), PolicyNodeKind.Decision));
+                KingdomPolicyService.GetDefinition(pKingdom,
+                    KingdomPolicyService.GetCurrent(pKingdom,
+                        PolicyNodeKind.Decision)), PolicyNodeKind.Decision));
             return string.Join("\n", lines.ToArray());
         }
 
@@ -850,6 +984,28 @@ namespace AncientWarfare3.ui.windows
                 if (remaining <= 0.001f) return year;
             }
             return 99;
+        }
+
+        private static int EstimateMonthsRemaining(float pRemaining,
+            float pBanked, float pMonthlyGain)
+        {
+            if (pRemaining <= 0f) return 0;
+            float remaining = pRemaining;
+            float stock = Mathf.Max(0f, pBanked);
+            float gain = Mathf.Max(0f, pMonthlyGain);
+            float monthlySpend = KingdomDecisionMonthlyRules.MonthlyShare(
+                KingdomPolicyService.MAX_YEARLY_SPEND);
+            for (int month = 1; month <= 396; month++)
+            {
+                stock += gain;
+                float spend = Mathf.Min(stock, Mathf.Min(monthlySpend,
+                    remaining));
+                if (spend <= 0.001f) return 396;
+                stock -= spend;
+                remaining -= spend;
+                if (remaining <= 0.001f) return month;
+            }
+            return 396;
         }
 
         private static string NoCurrentText(PolicyNodeKind pKind)
@@ -906,7 +1062,9 @@ namespace AncientWarfare3.ui.windows
                 TopLeft(CONTENT_PAD_X, pY), new Vector2(160, SECTION_TITLE_H), TextAnchor.MiddleLeft, 11,
                 new Color(1f, 0.92f, 0.6f, 1f));
 
-            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            KingdomPolicyDef decision = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
             float barX = CONTENT_PAD_X;
             float fullW = Mathf.Max(260f, _contentWidth - CONTENT_PAD_X * 2f);
             bool showCoreSidebar = CoreFabricationSlotRules.ShouldShowDecisionSidebarButton(
@@ -923,7 +1081,8 @@ namespace AncientWarfare3.ui.windows
                     new Vector2(DECISION_SIDEBAR_W, PROGRESS_H));
 
             return BuildSection(pKingdom, AW_L10n.Text("aw_policy_decision_section", "\u53EF\u6267\u884C\u51B3\u7B56"),
-                KingdomPolicyDefs.Decisions, pY + 58f);
+                KingdomPolicyService.GetNodes(pKingdom,
+                    PolicyNodeKind.Decision), pY + 58f);
         }
 
         private void BuildCoreFabricationSidebarButton(Kingdom pKingdom, Vector2 pPos, Vector2 pSize)
@@ -1126,19 +1285,24 @@ namespace AncientWarfare3.ui.windows
 
         private void BuildPolicyLinks(Kingdom pKingdom)
         {
-            foreach (KingdomPolicyDef target in KingdomPolicyDefs.ResearchPolicies)
+            foreach (KingdomPolicyDef target in
+                     KingdomPolicyService.GetResearchNodes(pKingdom))
             {
                 if (target.Kind == PolicyNodeKind.Tech)
                 {
                     foreach (string requiredTech in target.RequiredTechs ?? System.Array.Empty<string>())
-                        DrawOrthogonalRequirementLine(pKingdom, KingdomPolicyDefs.Get(requiredTech), target);
+                        DrawOrthogonalRequirementLine(pKingdom,
+                            KingdomPolicyService.GetDefinition(pKingdom,
+                                requiredTech), target);
                     continue;
                 }
 
                 if (target.Kind == PolicyNodeKind.Social)
                 {
                     foreach (string requiredPolicy in target.RequiredPolicies ?? System.Array.Empty<string>())
-                        DrawOrthogonalRequirementLine(pKingdom, KingdomPolicyDefs.Get(requiredPolicy), target);
+                        DrawOrthogonalRequirementLine(pKingdom,
+                            KingdomPolicyService.GetDefinition(pKingdom,
+                                requiredPolicy), target);
                 }
             }
         }
@@ -1455,8 +1619,12 @@ namespace AncientWarfare3.ui.windows
         private static string BuildCurrentSummary(Kingdom pKingdom)
         {
             var parts = new List<string>();
-            KingdomPolicyDef tech = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Tech));
-            KingdomPolicyDef social = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Social));
+            KingdomPolicyDef tech = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Tech));
+            KingdomPolicyDef social = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Social));
             if (tech != null) parts.Add(PolicyName(tech));
             if (social != null) parts.Add(PolicyName(social));
             return parts.Count == 0 ? AW_L10n.Text("aw_policy_idle", "\u5F85\u5B9A") : string.Join("/", parts.ToArray());
@@ -1464,7 +1632,9 @@ namespace AncientWarfare3.ui.windows
 
         private static string BuildDecisionSummary(Kingdom pKingdom)
         {
-            KingdomPolicyDef decision = KingdomPolicyDefs.Get(KingdomPolicyService.GetCurrent(pKingdom, PolicyNodeKind.Decision));
+            KingdomPolicyDef decision = KingdomPolicyService.GetDefinition(
+                pKingdom, KingdomPolicyService.GetCurrent(pKingdom,
+                    PolicyNodeKind.Decision));
             if (decision == null)
                 return AW_L10n.Text("aw_policy_no_current_decision", "\u65E0\u51B3\u7B56");
 
@@ -1506,12 +1676,18 @@ namespace AncientWarfare3.ui.windows
                 }
             }
 
-            AddRequirementTooltipLines(lines, pDef);
+            AddRequirementTooltipLines(lines, pKingdom, pDef);
 
             var missing = KingdomPolicyService.MissingRequirements(pKingdom, pDef).ToList();
             if (missing.Count > 0)
             {
-                var names = missing.Select(id => PolicyName(KingdomPolicyDefs.Get(id) ?? new KingdomPolicyDef { FallbackName = id, NameKey = id }));
+                var names = missing.Select(id => PolicyName(
+                    KingdomPolicyService.GetDefinition(pKingdom, id) ??
+                    new KingdomPolicyDef
+                    {
+                        FallbackName = id,
+                        NameKey = id
+                    }));
                 lines.Add(AW_L10n.Text("aw_policy_missing", "\u672A\u6EE1\u8DB3") + ": " + string.Join(", ", names.ToArray()));
             }
             AddSpecialRequirementTooltipLines(lines, pKingdom, pDef);
@@ -1592,27 +1768,40 @@ namespace AncientWarfare3.ui.windows
             }
         }
 
-        private static void AddRequirementTooltipLines(List<string> pLines, KingdomPolicyDef pDef)
+        private static void AddRequirementTooltipLines(List<string> pLines,
+            Kingdom pKingdom, KingdomPolicyDef pDef)
         {
             if (pDef == null) return;
             if (pDef.Kind == PolicyNodeKind.Tech)
             {
-                AddRequirementTooltipLine(pLines, "aw_policy_tech_prereq", "\u79D1\u6280\u524D\u7F6E", pDef.RequiredTechs);
+                AddRequirementTooltipLine(pLines, pKingdom,
+                    "aw_policy_tech_prereq", "\u79D1\u6280\u524D\u7F6E",
+                    pDef.RequiredTechs);
                 return;
             }
 
             if (pDef.Kind == PolicyNodeKind.Social)
             {
-                AddRequirementTooltipLine(pLines, "aw_policy_policy_prereq", "\u56FD\u7B56\u524D\u7F6E", pDef.RequiredPolicies);
-                AddRequirementTooltipLine(pLines, "aw_policy_cross_tech_prereq", "\u79D1\u6280\u524D\u63D0", pDef.RequiredTechs);
+                AddRequirementTooltipLine(pLines, pKingdom,
+                    "aw_policy_policy_prereq", "\u56FD\u7B56\u524D\u7F6E",
+                    pDef.RequiredPolicies);
+                AddRequirementTooltipLine(pLines, pKingdom,
+                    "aw_policy_cross_tech_prereq", "\u79D1\u6280\u524D\u63D0",
+                    pDef.RequiredTechs);
             }
         }
 
-        private static void AddRequirementTooltipLine(List<string> pLines, string pKey, string pFallback, string[] pIds)
+        private static void AddRequirementTooltipLine(List<string> pLines,
+            Kingdom pKingdom, string pKey, string pFallback, string[] pIds)
         {
             if (pIds == null || pIds.Length == 0) return;
             var names = pIds
-                .Select(id => PolicyName(KingdomPolicyDefs.Get(id) ?? new KingdomPolicyDef { FallbackName = id, NameKey = id }))
+                .Select(id => PolicyName(KingdomPolicyService.GetDefinition(
+                    pKingdom, id) ?? new KingdomPolicyDef
+                {
+                    FallbackName = id,
+                    NameKey = id
+                }))
                 .Where(p => !string.IsNullOrEmpty(p));
             pLines.Add(AW_L10n.Text(pKey, pFallback) + "\uFF1A" + string.Join(", ", names.ToArray()));
         }

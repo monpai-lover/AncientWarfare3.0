@@ -3,6 +3,7 @@ using AncientWarfare3.core.asyncwork;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
 using AncientWarfare3.core.lineage;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.core.pathfinding;
 using AncientWarfare3.core.policy;
 using AncientWarfare3.core.schools;
@@ -42,12 +43,18 @@ namespace AncientWarfare3.core.performance
             RulerHouseholdPregnancyService.Reset();
             DynasticMaleLineContinuityService.Reset();
             EnclosedUnownedZoneRepairService.Reset();
+            EmptyCityResettlementService.Reset();
             WarScoreService.ClearPendingCityOccupations();
             CivilServiceExamService.ClearRuntime();
+            WesternCourtElectionService.Reset();
             TemporaryMilitaryReturnService.ClearRuntime();
             CityReservePoolService.ClearRuntime();
             ArmyReplenishmentOperationService.ClearRuntime();
+            KingdomDecisionMonthlyService.Reset();
             WarParticipantEntrySourceService.Instance.ClearRuntime();
+            ZhuluAgeDirectorService.Reset();
+            AWLocalizedNameMigrationService.Reset();
+            WesternLineageMigrationService.Reset();
         }
 
         private static void ProcessCycle(AWAuthorityCycleGate pGate,
@@ -58,10 +65,14 @@ namespace AncientWarfare3.core.performance
                 AW3MultiplayerReplicaScope.IsReplicaSession);
             if (!pGate.TryEnter(pCycleToken, allowed)) return;
 
+            WesternCourtElectionService.ProcessAuthorityCycle();
+            AWLocalizedNameMigrationService.ProcessAuthorityCycle();
+            WesternLineageMigrationService.ProcessAuthorityCycle();
             DynasticMaleLineContinuityService.ProcessAuthorityCycle();
             NobleHeirPregnancyService.ProcessAuthorityCycle();
             RulerHouseholdPregnancyService.ProcessAuthorityCycle();
             EnclosedUnownedZoneRepairService.ProcessAuthorityCycle();
+            EmptyCityResettlementService.ProcessAuthorityCycle();
             TemporaryMilitaryReturnService.ProcessFrame();
             Measure(RecentFeatureBenchmarkRules.PathfindingIndex,
                 AWPathfindingBootstrap.ProcessFrame);
@@ -74,8 +85,12 @@ namespace AncientWarfare3.core.performance
                 DiplomacyProposalService.ProcessFrame);
             Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
                 DiplomaticOperationService.ProcessFrame);
+            Measure(RecentFeatureBenchmarkRules.DiplomacyIndex,
+                ZhuluAgeDirectorService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
                 TemporaryLevyService.ProcessPreparationMonth);
+            Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
+                KingdomDecisionMonthlyService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,
                 CityReservePoolService.ProcessAuthorityCycle);
             Measure(RecentFeatureBenchmarkRules.KingdomMobilizationIndex,

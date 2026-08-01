@@ -202,6 +202,8 @@ namespace AncientWarfare3.core.lineage
                 pFather.isFighting() || !pFather.canBreed() ||
                 !pFather.canProduceBabies())
                 return false;
+            if (!FamilyExpansionService.NeedsExpansion(pMother, pFather))
+                return false;
             City city = pMother.city;
             if (city?.data == null || city.isRekt() ||
                 city.kingdom != pKingdom || city.isInDanger())

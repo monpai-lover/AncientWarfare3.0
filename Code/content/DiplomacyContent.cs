@@ -15,6 +15,7 @@ namespace AncientWarfare3.content
                 "争位之战,宗统之争,两朝争位");
             AddWarNameTemplate("war_coup_restoration",
                 "勤王复统之战,讨逆复统之役,宗室复位之战");
+            AddWarNameTemplate("war_zhulu", "逐鹿之战,问鼎之战,天下争衡");
 
             AddWarType("aw_normal_war", "war_conquest", "war_type_aw_normal_war", "ui/wars/war_conquest", true);
             AddWarType("reclaim", "war_reclaim", "war_type_reclaim", "ui/wars/war_reclaim", true);
@@ -38,10 +39,15 @@ namespace AncientWarfare3.content
             AddWarType(CoupRestorationRules.WarTypeId,
                 "war_coup_restoration", "war_type_coup_restoration_war",
                 "ui/wars/war_rebellion", false, pRebellion: true);
+            AddWarType(ZhuluWarRules.WarTypeId, "war_zhulu",
+                "war_type_zhulu_war", "ui/Icons/traits/iconTianming",
+                pAllianceJoin: true, pRebellion: false,
+                pTotalWar: ZhuluWarRules.ShouldUseVanillaTotalWar());
         }
 
-        private static void AddWarType(string pId, string pNameTemplate, string pLocalizedType, string pIcon,
-            bool pAllianceJoin, bool pRebellion = false)
+        private static void AddWarType(string pId, string pNameTemplate,
+            string pLocalizedType, string pIcon, bool pAllianceJoin,
+            bool pRebellion = false, bool pTotalWar = false)
         {
             WarTypeAsset asset = null;
             try
@@ -60,7 +66,7 @@ namespace AncientWarfare3.content
             asset.path_icon = WarIconPathRules.ResolveWarIconPath(pId, pIcon);
             asset.kingdom_for_name_attacker = true;
             asset.forced_war = false;
-            asset.total_war = false;
+            asset.total_war = pTotalWar;
             asset.alliance_join = pAllianceJoin;
             asset.rebellion = pRebellion;
 

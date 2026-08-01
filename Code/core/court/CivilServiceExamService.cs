@@ -135,8 +135,8 @@ namespace AncientWarfare3.core.court
             catch { return false; }
 
             int cityCount = hostCityIds.Count;
-            string[] centralOffices = CourtTierRules.CentralOfficesForTier(
-                CourtService.ResolveTier(pKingdom));
+            string[] centralOffices =
+                CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
             int establishedPosts = centralOffices.Length + cityCount;
             int reserveTarget = CivilServiceExamRules.ReserveTarget(establishedPosts);
             if (!CivilServiceWaitingPoolQuery.TryLoadActorIds(db,
@@ -921,8 +921,8 @@ namespace AncientWarfare3.core.court
         private static int CountCentralVacancies(Kingdom pKingdom)
         {
             if (pKingdom?.data == null) return 0;
-            string[] expected = CourtTierRules.CentralOfficesForTier(
-                CourtService.ResolveTier(pKingdom));
+            string[] expected =
+                CourtService.CentralOfficeIdsForCurrentProfile(pKingdom);
             if (expected.Length == 0) return 0;
             var occupied = new HashSet<string>(StringComparer.Ordinal);
             foreach (CourtOfficerView officer in CourtService.GetActiveOfficers(

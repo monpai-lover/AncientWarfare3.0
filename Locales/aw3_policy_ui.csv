@@ -1,4 +1,5 @@
 key,cz,en,ch
+aw_policy_back_to_kingdom,返回国家,Return to Kingdom,返回國家
 aw_policy_tree Title,国策科技,Policy and Tech,國策科技
 aw_policy_tree_title,国策科技,Policy and Tech,國策科技
 aw_policy_no_kingdom,王国不存在,Kingdom missing,王國不存在
@@ -165,5 +166,37 @@ aw_policy_lock_node_desc,玩家和AI都不能选择该项,Player and AI cannot s
 aw_policy_unlock_node_desc,恢复该项的正常选择,Restore normal selection for this node,恢復該項的正常選擇
 aw_policy_locked_count,锁定项,Locked Nodes,鎖定項
 aw_policy_core_fabrication_locked,制造核心已锁定,Core fabrication is locked,製造核心已鎖定
+aw_west_tech_iron_casting,铁器铸造,Iron Casting,鐵器鑄造
+aw_west_tech_iron_casting_desc,改良炼铁与铸造工艺以稳定生产农具和武器,Improve ironworking to supply reliable tools and weapons,改良煉鐵與鑄造工藝以穩定生產農具和武器
+aw_west_tech_coin_minting,铸造金币,Coin Minting,鑄造金幣
+aw_west_tech_coin_minting_desc,建立统一币制以支撑税收市场和官府支付,Establish a common coinage for taxes markets and state payments,建立統一幣制以支撐稅收市場和官府支付
+aw_west_tech_irrigation,灌溉渠,Irrigation Canals,灌溉渠
+aw_west_tech_irrigation_desc,开凿沟渠并整治农田以稳定城市粮食生产,Build canals and improve fields to stabilize urban food supply,開鑿溝渠並整治農田以穩定城市糧食生產
+aw_west_tech_enfeoffment_study,分封考,Feudal Tenure Survey,分封考
+aw_west_tech_enfeoffment_study_desc,以封土义务和继承规则组织封建领地,Organize feudal lands through tenure duties and succession rules,以封土義務和繼承規則組織封建領地
+aw_west_tech_tax_office,税务官,Tax Officials,稅務官
+aw_west_tech_tax_office_desc,设置专职税务书吏登记土地货币和贡赋,Create tax offices to register land coinage and dues,設置專職稅務書吏登記土地貨幣和貢賦
+aw_west_tech_landlord_tax,地主税,Landlord Tax,地主稅
+aw_west_tech_landlord_tax_desc,把土地持有与财政责任结合以形成稳定税源,Bind landholding to fiscal duties for a stable tax base,把土地持有與財政責任結合以形成穩定稅源
+aw_west_tech_office_system,官职体系,Office System,官職體系
+aw_west_tech_office_system_desc,划分稳定的宫廷官职以形成连续行政秩序,Define durable court offices for continuous administration,劃分穩定的宮廷官職以形成連續行政秩序
+aw_west_tech_elective_offices,选举制,Elective Offices,選舉制
+aw_west_tech_elective_offices_desc,由贵族与宫廷集会推举主要官员并约束任期,Let noble assemblies elect major officers under fixed terms,由貴族與宮廷集會推舉主要官員並約束任期
+aw_west_tech_ritual_order,礼乐制度,Ritual Order,禮樂制度
+aw_west_tech_ritual_order_desc,以宫廷仪式神职和爵位秩序强化君主合法性,Use ritual clergy and noble order to strengthen royal legitimacy,以宮廷儀式神職和爵位秩序強化君主合法性
+aw_west_tech_feudal_retainers,封建家臣,Feudal Retainers,封建家臣
+aw_west_tech_feudal_retainers_desc,由家臣封臣和地方贵族承担军政义务,Bind retainers vassals and landed nobles to military and civil duties,由家臣封臣和地方貴族承擔軍政義務
+aw_west_tech_royal_domain,国王直辖,Royal Domain,國王直轄
+aw_west_tech_royal_domain_desc,扩大王室直属领地与官僚以降低对封臣的依赖,Expand the royal domain and administration to reduce vassal dependence,擴大王室直屬領地與官僚以降低對封臣的依賴
+aw_west_policy_landlord_taxation,地主税制,Landlord Taxation,地主稅制
+aw_west_policy_landlord_taxation_desc,向登记地主征税并建立稳定的王国财政,Tax registered landlords to establish stable royal finances,向登記地主徵稅並建立穩定的王國財政
+aw_west_policy_noble_council,贵族议政,Noble Council,貴族議政
+aw_west_policy_noble_council_desc,让大贵族和宗教领袖参与宫廷决策以换取秩序,Share court decisions with nobles and clergy to preserve order,讓大貴族和宗教領袖參與宮廷決策以換取秩序
+aw_west_policy_elective_offices,选举官制,Elective Administration,選舉官制
+aw_west_policy_elective_offices_desc,以宫廷选举和固定任期任用主要官员,Appoint major officers through court elections and fixed terms,以宮廷選舉和固定任期任用主要官員
+aw_west_policy_feudal_retainers,封建家臣制,Feudal Retainer System,封建家臣制
+aw_west_policy_feudal_retainers_desc,以封土换取地方贵族和家臣的忠诚与兵役,Exchange land for the loyalty and service of nobles and retainers,以封土換取地方貴族和家臣的忠誠與兵役
+aw_west_policy_royal_direct_rule,王室直辖制,Royal Direct Rule,王室直轄制
+aw_west_policy_royal_direct_rule_desc,将财政军事和地方任命重新收归王室直接统治,Return finance military command and appointments to direct royal rule,將財政軍事和地方任命重新收歸王室直接統治
 aw_mandate_decision_great_enfeoffment,大封诸王,Enfeoff the Princes,大封諸王
 aw_mandate_decision_great_enfeoffment_desc,将成年宗室分封至京畿以外的边疆藩国，城市仍由流官治理。,Establish frontier feudatories outside the imperial core while ordinary governors continue to administer their cities.,將成年宗室分封至京畿以外的邊疆藩國，城市仍由流官治理。

@@ -85,10 +85,12 @@ namespace AncientWarfare3.ui.windows
         private string _bulkReadRequestKey = string.Empty;
         private LineageBulkSnapshot _bulkSnapshot;
         private long _bulkSnapshotRootId = -1L;
-        private long _bulkSnapshotRevision = -1L;
         private long _bulkSnapshotProjectionRevision = -1L;
         private string _bulkSnapshotSpecKey = string.Empty;
         private long _bulkRequestWorldGeneration = -1L;
+        private int _bulkReadWaitStartedFrame;
+        private int _bulkReadRequestStartedFrame;
+        private bool _forceSynchronousFallback;
         private Dictionary<long, IReadOnlyList<long>> _childIdsCache =
             new Dictionary<long, IReadOnlyList<long>>();
         private readonly AWUiIncrementalWorkState _materializationState =
@@ -101,6 +103,7 @@ namespace AncientWarfare3.ui.windows
         private bool _cleanupPending;
         private bool _cleanupLinesOnly;
         private bool _initialCenterRequested;
+        private bool _snapshotReadyForMaterialization;
 
         public static void OpenBigTree(long pShiId)
         {
@@ -155,7 +158,6 @@ namespace AncientWarfare3.ui.windows
         {
             _bulkSnapshot = null;
             _bulkSnapshotRootId = -1L;
-            _bulkSnapshotRevision = -1L;
             _bulkSnapshotProjectionRevision = -1L;
             _bulkSnapshotSpecKey = string.Empty;
             _bulkRequestWorldGeneration = -1L;
@@ -164,6 +166,7 @@ namespace AncientWarfare3.ui.windows
             _locateFound = false;
             _locateTarget = Vector2.zero;
             _initialCenterRequested = false;
+            _snapshotReadyForMaterialization = false;
             _intentState.CancelAll();
             CancelMaterialization(clearPendingRequest: true);
             BeginBoundedCleanup();
@@ -189,9 +192,12 @@ namespace AncientWarfare3.ui.windows
             if (_readSpec == null) return;
             _bulkReadTicket = _bulkReadRetry.Begin(
                 AWAsyncRuntime.WorldGeneration,
-                HistoricalContentRevision.Current, _readSpec.Key,
+                FamilyTreeProjectionRevision.Current, _readSpec.Key,
                 Time.frameCount);
             _bulkReadTicketActive = true;
+            _bulkReadWaitStartedFrame = Time.frameCount;
+            _bulkReadRequestStartedFrame = 0;
+            _forceSynchronousFallback = false;
         }
 
         private void CancelDetachedRead()
@@ -203,6 +209,9 @@ namespace AncientWarfare3.ui.windows
             _bulkReadRetry.Cancel();
             _bulkReadTicketActive = false;
             _bulkRequestWorldGeneration = -1L;
+            _bulkReadWaitStartedFrame = 0;
+            _bulkReadRequestStartedFrame = 0;
+            _forceSynchronousFallback = false;
         }
 
         private void ClearBulkReadRequestIdentity(long pRequestId = -1L)
@@ -539,6 +548,13 @@ namespace AncientWarfare3.ui.windows
                 PreservePanForNextRebuild();
                 Rebuild();
             }
+            if (_snapshotReadyForMaterialization && isActiveAndEnabled &&
+                _bulkSnapshot != null && !_bulkReadTicketActive)
+            {
+                _snapshotReadyForMaterialization = false;
+                QueueMaterialization(_bulkSnapshot,
+                    _bulkSnapshotProjectionRevision);
+            }
             TryScheduleBulkSnapshot();
             AdvanceMaterialization();
         }
@@ -685,13 +701,13 @@ namespace AncientWarfare3.ui.windows
         {
             CancelMaterialization(clearPendingRequest: true);
             if (_readSpec == null) return;
-            long revision = HistoricalContentRevision.Current;
+            long projectionRevision = FamilyTreeProjectionRevision.Current;
             if (_bulkSnapshot != null &&
-                _bulkSnapshotRevision == revision &&
+                _bulkSnapshotProjectionRevision == projectionRevision &&
                 string.Equals(_bulkSnapshotSpecKey, _readSpec.Key,
                     System.StringComparison.Ordinal))
             {
-                QueueMaterialization(_bulkSnapshot, revision);
+                QueueMaterialization(_bulkSnapshot, projectionRevision);
                 return;
             }
             BeginDetachedRead();
@@ -701,11 +717,11 @@ namespace AncientWarfare3.ui.windows
         private bool TryScheduleBulkSnapshot()
         {
             if (!_bulkReadTicketActive || _readSpec == null) return false;
-            long revision = HistoricalContentRevision.Current;
+            long projectionRevision = FamilyTreeProjectionRevision.Current;
             long worldGeneration = AWAsyncRuntime.WorldGeneration;
             LineageTreeReadSpec spec = _readSpec;
             AWUiRetryTicket ticket = _bulkReadTicket;
-            if (!_bulkReadRetry.Accept(ticket, worldGeneration, revision,
+            if (!_bulkReadRetry.AcceptStableWorld(ticket, worldGeneration,
                     spec.Key))
             {
                 return false;
@@ -715,14 +731,45 @@ namespace AncientWarfare3.ui.windows
                 ShowDetachedReadUnavailable();
                 return false;
             }
+            bool asynchronousReadRequired = AWAsyncRuntime.UiEnabled ||
+                                            AWAsyncRuntime.ShadowEnabled;
+            bool historicalReadReady = AWHistoricalReadService.Ready;
+            int waitingFrames = System.Math.Max(0,
+                Time.frameCount - _bulkReadWaitStartedFrame);
+            int requestElapsedFrames = System.Math.Max(0,
+                Time.frameCount - _bulkReadRequestStartedFrame);
+            if (FamilyTreeMaterializationRules.ShouldRecoverTimedOutRequest(
+                    _bulkReadRetry.InFlight, requestElapsedFrames,
+                    FamilyTreeMaterializationRules.RequestTimeoutFrames))
+            {
+                if (_bulkReadRequestId >= 0L)
+                    AWHistoricalReadService.ReleaseRequest(
+                        _bulkReadRequestId, _bulkReadRequestKey);
+                ClearBulkReadRequestIdentity();
+                _bulkReadRetry.RecordFault(ticket, Time.frameCount);
+                _forceSynchronousFallback = true;
+            }
+            bool synchronousFallback = _forceSynchronousFallback ||
+                FamilyTreeMaterializationRules
+                .ShouldUseSynchronousFallback(asynchronousReadRequired,
+                    historicalReadReady, waitingFrames,
+                    FamilyTreeMaterializationRules
+                        .ReaderStartupFallbackFrames);
+            if (!FamilyTreeMaterializationRules
+                    .ShouldConsumeDetachedReadAttempt(
+                        asynchronousReadRequired,
+                        historicalReadReady) && !synchronousFallback)
+            {
+                ShowDetachedReadLoading();
+                return false;
+            }
             if (!_bulkReadRetry.TryStart(ticket, Time.frameCount))
                 return _bulkReadRetry.InFlight;
 
             _bulkRequestWorldGeneration = worldGeneration;
             ShowDetachedReadLoading();
             var execution = new LineageTreeReadExecution(spec);
-            if (!AWAsyncRuntime.UiEnabled &&
-                !AWAsyncRuntime.ShadowEnabled)
+            if (synchronousFallback)
             {
                 try
                 {
@@ -738,18 +785,11 @@ namespace AncientWarfare3.ui.windows
                     return false;
                 }
             }
-            if (!AWHistoricalReadService.Ready)
-            {
-                _bulkReadRetry.RecordFault(ticket, Time.frameCount);
-                ShowDetachedReadLoading();
-                return false;
-            }
-
             long scheduledRequestId = -1L;
             var request = new AWHistoricalReadRequest(
                 "lineage-tree:" + ticket.Generation + ":" + spec.Key,
                 new AWAsyncStamp(worldGeneration, 0L,
-                    revision), execution.Execute,
+                    projectionRevision), execution.Execute,
                 result => ApplyBulkSnapshot(ticket, spec,
                     scheduledRequestId, result),
                 error => HandleBulkReadFault(ticket, spec,
@@ -760,6 +800,7 @@ namespace AncientWarfare3.ui.windows
             {
                 _bulkReadRequestId = scheduledRequestId;
                 _bulkReadRequestKey = request.Key;
+                _bulkReadRequestStartedFrame = Time.frameCount;
                 return true;
             }
             CancelBulkQuery();
@@ -776,15 +817,21 @@ namespace AncientWarfare3.ui.windows
         private void ApplyBulkSnapshot(AWUiRetryTicket pTicket,
             LineageTreeReadSpec pSpec, long pRequestId, object pResult)
         {
-            long revision = HistoricalContentRevision.Current;
+            long projectionRevision = FamilyTreeProjectionRevision.Current;
             long worldGeneration = AWAsyncRuntime.WorldGeneration;
             if (_readSpec == null || !_bulkReadTicketActive ||
                 pTicket.Generation != _bulkReadTicket.Generation ||
                 !string.Equals(_readSpec.Key, pSpec.Key,
                     System.StringComparison.Ordinal) ||
                 worldGeneration != _bulkRequestWorldGeneration) return;
-            if (!_bulkReadRetry.Accept(pTicket, worldGeneration, revision,
-                    _readSpec.Key))
+            if (!FamilyTreeMaterializationRules
+                    .AcceptCompletedSnapshotWithoutRevisionEquality(
+                        sameGeneration: pTicket.Generation ==
+                            _bulkReadTicket.Generation,
+                        sameWorldGeneration: worldGeneration ==
+                            _bulkRequestWorldGeneration,
+                        sameSpec: string.Equals(_readSpec.Key, pSpec.Key,
+                            System.StringComparison.Ordinal)))
             {
                 RestartDetachedReadAfterStaleCompletion(pTicket, pSpec,
                     pRequestId, worldGeneration);
@@ -802,13 +849,12 @@ namespace AncientWarfare3.ui.windows
             }
 
             _bulkReadRetry.RecordSuccess(pTicket);
+            _forceSynchronousFallback = false;
             ClearBulkReadRequestIdentity(pRequestId);
             _bulkReadTicketActive = false;
             _bulkSnapshot = snapshot;
             _bulkSnapshotRootId = snapshot.RootActorId;
-            _bulkSnapshotRevision = revision;
-            _bulkSnapshotProjectionRevision =
-                FamilyTreeProjectionRevision.Current;
+            _bulkSnapshotProjectionRevision = projectionRevision;
             _bulkSnapshotSpecKey = pSpec.Key;
             _rootActorId = snapshot.RootActorId;
             if (pSpec.ShiId >= 0L) _backShiId = pSpec.ShiId;
@@ -817,9 +863,17 @@ namespace AncientWarfare3.ui.windows
                 : -1L;
             ApplyLocateExpansion(snapshot, pSpec.Mode);
             var pKey = new AWUiQueryKey("family_tree", snapshot.RootActorId,
-                pSpec.Key, revision, pTicket.Generation);
+                pSpec.Key, projectionRevision, pTicket.Generation);
             if (isActiveAndEnabled)
+            {
+                _snapshotReadyForMaterialization = false;
                 QueueMaterialization(pKey, snapshot);
+            }
+            else if (FamilyTreeMaterializationRules.ShouldQueueAfterInactiveCompletion(
+                         snapshotAccepted: true, windowActive: false))
+            {
+                _snapshotReadyForMaterialization = true;
+            }
         }
 
         private void RestartDetachedReadAfterStaleCompletion(
@@ -843,14 +897,14 @@ namespace AncientWarfare3.ui.windows
             LineageTreeReadSpec pSpec, long pRequestId,
             System.Exception pError)
         {
-            long revision = HistoricalContentRevision.Current;
+            long projectionRevision = FamilyTreeProjectionRevision.Current;
             long worldGeneration = AWAsyncRuntime.WorldGeneration;
             if (_readSpec == null || !_bulkReadTicketActive ||
                 pTicket.Generation != _bulkReadTicket.Generation ||
                 !string.Equals(_readSpec.Key, pSpec.Key,
                     System.StringComparison.Ordinal) ||
                 worldGeneration != _bulkRequestWorldGeneration) return;
-            if (!_bulkReadRetry.Accept(pTicket, worldGeneration, revision,
+            if (!_bulkReadRetry.AcceptStableWorld(pTicket, worldGeneration,
                     _readSpec.Key))
             {
                 RestartDetachedReadAfterStaleCompletion(pTicket, pSpec,
@@ -870,7 +924,6 @@ namespace AncientWarfare3.ui.windows
             CancelDetachedRead();
             _bulkSnapshot = null;
             _bulkSnapshotRootId = -1L;
-            _bulkSnapshotRevision = -1L;
             _bulkSnapshotProjectionRevision = -1L;
             _bulkSnapshotSpecKey = string.Empty;
             _bulkRequestWorldGeneration = -1L;
@@ -942,8 +995,8 @@ namespace AncientWarfare3.ui.windows
         private void QueueBigTreeRelayout()
         {
             if (_mode != Mode.BigTree || _bulkSnapshot == null) return;
-            long revision = HistoricalContentRevision.Current;
-            if (_bulkSnapshotRevision != revision)
+            long projectionRevision = FamilyTreeProjectionRevision.Current;
+            if (_bulkSnapshotProjectionRevision != projectionRevision)
             {
                 Rebuild();
                 return;
@@ -952,7 +1005,7 @@ namespace AncientWarfare3.ui.windows
             CancelMaterialization(clearPendingRequest: true);
             BeginBoundedLineCleanup();
             AWUiIncrementalTicket ticket = _materializationState.Begin(
-                AWAsyncRuntime.WorldGeneration, revision);
+                AWAsyncRuntime.WorldGeneration, projectionRevision);
             AWUiMaterializationIntentLease intentLease =
                 _intentState.Capture();
             _pendingMaterialization = new FamilyTreeMaterializationRequest(
@@ -2117,6 +2170,10 @@ namespace AncientWarfare3.ui.windows
             FamilyTreeMaterializationRequest pRequest)
         {
             var frames = new Stack<ExpandLiveFrame>();
+            var includedIds = new HashSet<long>
+            {
+                pRequest.BigTreeRootId
+            };
             frames.Push(new ExpandLiveFrame
             {
                 ActorId = pRequest.BigTreeRootId,
@@ -2159,8 +2216,10 @@ namespace AncientWarfare3.ui.windows
                         frame.ChildIds[frame.ChildIndex++];
                     LineageBulkSnapshot snapshot =
                         LineageBulkSnapshotContext.Current;
-                    frame.CandidateIsAgnatic = snapshot != null &&
-                        snapshot.FatherId(frame.CandidateId) == frame.ActorId;
+                    frame.CandidateIsAgnatic =
+                        ShouldIncludeBigTreeCandidate(snapshot,
+                            frame.ActorId, frame.CandidateId) &&
+                        includedIds.Add(frame.CandidateId);
                     frame.Stage = 3;
                     yield return null;
                     continue;
@@ -2185,9 +2244,7 @@ namespace AncientWarfare3.ui.windows
                     FamilyTreeNode child = frame.CandidateData;
                     frame.CandidateData = null;
                     frame.Stage = 2;
-                    if (child != null &&
-                        FamilyTreeRelationRules.ShouldShowInBigTree(
-                            child.sex, child.status))
+                    if (child != null)
                     {
                         frame.HasVisibleChildren = true;
                         if (visited < MAX_AUTO_EXPAND_VISITS &&
@@ -2254,6 +2311,10 @@ namespace AncientWarfare3.ui.windows
             var root = new TreeLayoutNode { data = rootData };
             pRequest.Root = root;
             var frames = new Stack<BigTreeBuildFrame>();
+            var includedIds = new HashSet<long>
+            {
+                pRequest.BigTreeRootId
+            };
             frames.Push(CreateBigTreeBuildFrame(root, 0));
             yield return null;
 
@@ -2285,9 +2346,10 @@ namespace AncientWarfare3.ui.windows
                         frame.ChildIds[frame.ChildIndex++];
                     LineageBulkSnapshot snapshot =
                         LineageBulkSnapshotContext.Current;
-                    frame.CandidateIsAgnatic = snapshot != null &&
-                        snapshot.FatherId(frame.CandidateId) ==
-                        frame.Node.data.id;
+                    frame.CandidateIsAgnatic =
+                        ShouldIncludeBigTreeCandidate(snapshot,
+                            frame.Node.data.id, frame.CandidateId) &&
+                        includedIds.Add(frame.CandidateId);
                     frame.Stage = 2;
                     yield return null;
                     continue;
@@ -2310,9 +2372,7 @@ namespace AncientWarfare3.ui.windows
                     FamilyTreeNode childData = frame.CandidateData;
                     frame.CandidateData = null;
                     frame.Stage = 1;
-                    if (childData != null &&
-                        FamilyTreeRelationRules.ShouldShowInBigTree(
-                            childData.sex, childData.status))
+                    if (childData != null)
                     {
                         frame.Node.hasChildren = true;
                         if (!_foldDecided.Contains(frame.Node.data.id))
@@ -2352,6 +2412,21 @@ namespace AncientWarfare3.ui.windows
                 Depth = pDepth,
                 ChildIds = new List<long>()
             };
+        }
+
+        private static bool ShouldIncludeBigTreeCandidate(
+            LineageBulkSnapshot pSnapshot, long pParentId, long pChildId)
+        {
+            if (pSnapshot == null ||
+                !pSnapshot.TryGetNode(pParentId,
+                    out LineageTreeNodeSnapshot parent) ||
+                !pSnapshot.TryGetNode(pChildId,
+                    out LineageTreeNodeSnapshot child)) return false;
+            return FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                pParentId, pSnapshot.FatherId(pChildId),
+                pSnapshot.MotherId(pChildId), parent.Sex,
+                parent.HasHeldTitle, child.Sex, child.Status,
+                child.HasHeldTitle, pSnapshot.BigTreeProfile);
         }
 
         private void SpawnNode(TreeLayoutNode pNode,
@@ -2565,6 +2640,7 @@ namespace AncientWarfare3.ui.windows
                 city_name = node.CityName,
                 social_title = node.SocialTitle,
                 social_title_color = node.SocialTitleColor,
+                has_held_title = node.HasHeldTitle,
                 shi_id = node.ShiId,
                 noble_distance = node.NobleDistance,
                 head = node.Head,

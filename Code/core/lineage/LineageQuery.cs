@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using AncientWarfare3.core.court;
 using AncientWarfare3.core.db;
+using AncientWarfare3.core.naming;
 using AncientWarfare3.ui;
 
 namespace AncientWarfare3.core.lineage
@@ -15,6 +16,12 @@ namespace AncientWarfare3.core.lineage
     /// </summary>
     internal static class LineageQuery
     {
+        private const string ShiBranchIdentitySelectColumns =
+            "IFNULL(NAMING_PROFILE, 'xia'), " +
+            "IFNULL(WESTERN_NAMING_TRADITION, ''), " +
+            "IFNULL(ORIGIN_CITY_CHINESE_NAME, ''), " +
+            "IFNULL(DISPLAY_STEM, '')";
+
         private static SQLiteConnection DB => LineageArchiveManager.Instance.OperatingDB;
 
         // ─────────────────────── 姓族总览(所有姓) ───────────────────────
@@ -382,7 +389,8 @@ namespace AncientWarfare3.core.lineage
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
                 $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
                 $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
-                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1), " +
+                $"{ShiBranchIdentitySelectColumns} " +
                 $"FROM {shiTable} WHERE LINEAGE_ID IN " +
                 $"(SELECT LINEAGE_ID FROM {lineageTable} WHERE FAMILY_NAME=@f) " +
                 $"ORDER BY CREATED_TIME ASC";
@@ -564,6 +572,65 @@ namespace AncientWarfare3.core.lineage
             return -1L;
         }
 
+        public static long GetMotherId(long pActorId)
+        {
+            if (pActorId < 0) return -1L;
+            foreach (long parentId in GetParentIds(pActorId))
+            {
+                if (parentId >= 0 && GetActorSex(parentId) != 0)
+                    return parentId;
+            }
+            return -1L;
+        }
+
+        public static bool HasHeldTitle(long pActorId)
+        {
+            if (pActorId < 0L) return false;
+            LineageBulkSnapshot bulk = LineageBulkSnapshotContext.Current;
+            if (bulk != null && bulk.ContainsNode(pActorId))
+                return bulk.HasHeldTitle(pActorId);
+
+            Actor live = World.world?.units?.get(pActorId);
+            if (live?.data != null && !live.isRekt())
+            {
+                if (live.isKing()) return true;
+                if (NobleRankService.ReadHot(live).Rank >
+                    NobleRankRules.RankNone) return true;
+            }
+
+            var db = DB;
+            if (db == null) return false;
+            try
+            {
+                using var command = new SQLiteCommand(db);
+                command.CommandText =
+                    "SELECT CASE WHEN EXISTS (SELECT 1 FROM " +
+                    KingdomReignTableItem.GetTableName() +
+                    " WHERE KING_ACTOR_ID=@actor) OR EXISTS (SELECT 1 FROM " +
+                    EnfeoffmentTableItem.GetTableName() +
+                    " WHERE ACTOR_ID=@actor AND NOBLE_RANK>0) " +
+                    "THEN 1 ELSE 0 END";
+                command.Parameters.AddWithValue("@actor", pActorId);
+                return System.Convert.ToInt32(command.ExecuteScalar()) != 0;
+            }
+            catch (SQLiteException)
+            {
+                return false;
+            }
+        }
+
+        private static NamingProfileId GetBigTreeProfile(long pActorId)
+        {
+            LineageBulkSnapshot bulk = LineageBulkSnapshotContext.Current;
+            if (bulk != null) return bulk.BigTreeProfile;
+            long shiId = GetActorShiId(pActorId);
+            ShiBranchInfo branch = shiId >= 0L
+                ? GetShiBranchInfo(shiId)
+                : null;
+            return AWCultureNamingTraditionRules.ParseProfile(
+                branch?.naming_profile);
+        }
+
         /// <summary>
         ///     是否为该姓(LINEAGE_ID)的男系(父→父→…同姓)后裔。氏(SHI/分支)可不同,不受限。
         ///     沿途任一父亲出现异姓即判否;男系链一路同姓到始祖或链根则判是。
@@ -722,7 +789,8 @@ namespace AncientWarfare3.core.lineage
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
                 $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
                 $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
-                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1), " +
+                $"{ShiBranchIdentitySelectColumns} " +
                 $"FROM {ShiBranchTableItem.GetTableName()} WHERE SHI_ID=@s LIMIT 1";
             cmd.Parameters.AddWithValue("@s", pShiId);
             ShiBranchInfo info = null;
@@ -775,7 +843,8 @@ namespace AncientWarfare3.core.lineage
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
                 $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
                 $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
-                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1), " +
+                $"{ShiBranchIdentitySelectColumns} " +
                 $"FROM {ShiBranchTableItem.GetTableName()} WHERE LINEAGE_ID=@l " +
                 $"ORDER BY CREATED_TIME ASC, SHI_ID ASC LIMIT 1";
             cmd.Parameters.AddWithValue("@l", pLineageId);
@@ -861,7 +930,8 @@ namespace AncientWarfare3.core.lineage
                 $"SELECT SHI_ID, LINEAGE_ID, CLAN_NAME, SOURCE_TYPE, CREATED_TIME, FOUNDER_ACTOR_ID, " +
                 $"IFNULL(ORIGIN_KINGDOM_ID, -1), IFNULL(ORIGIN_CITY_ID, -1), " +
                 $"IFNULL(PARENT_SHI_ID, -1), IFNULL(STATE_NAME, ''), " +
-                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1) " +
+                $"IFNULL(STATE_NAME_SOURCE, ''), IFNULL(STATE_NAME_DECIDED_TIME, -1), " +
+                $"{ShiBranchIdentitySelectColumns} " +
                 $"FROM {ShiBranchTableItem.GetTableName()} " +
                 pWhereSql +
                 $" ORDER BY CREATED_TIME ASC, SHI_ID ASC";
@@ -889,7 +959,11 @@ namespace AncientWarfare3.core.lineage
                 parent_shi_id = ToLong(pReader, 8, -1),
                 state_name = SafeStr(pReader, 9),
                 state_name_source = SafeStr(pReader, 10),
-                state_name_decided_time = ToDouble(pReader, 11, -1)
+                state_name_decided_time = ToDouble(pReader, 11, -1),
+                naming_profile = SafeStr(pReader, 12),
+                western_naming_tradition = SafeStr(pReader, 13),
+                origin_city_chinese_name = SafeStr(pReader, 14),
+                display_stem = SafeStr(pReader, 15)
             };
         }
 
@@ -1311,12 +1385,52 @@ namespace AncientWarfare3.core.lineage
             if (live?.data != null)
             {
                 live.data.get("display_name", out string display, "");
-                return string.IsNullOrEmpty(display) ? live.getName() : display;
+                live.data.get(LineageKeys.GIVEN_NAME, out string given, "");
+                live.data.get(LineageKeys.FAMILY_NAME, out string family, "");
+                live.data.get(LineageKeys.CLAN_NAME, out string clan, "");
+                live.data.get(LineageKeys.LINEAGE_STATUS,
+                    out string status, LineageStatus.NONE);
+                live.data.get(LineageKeys.NAME_INTEGRATED,
+                    out bool integrated, false);
+                live.data.get(LineageKeys.NAMING_PROFILE,
+                    out string namingProfile, string.Empty);
+                live.data.get(LineageKeys.WESTERN_NAMING_TRADITION,
+                    out string westernTradition, string.Empty);
+                live.data.get(LineageKeys.SHI_ID, out long liveShiId, -1L);
+                ShiBranchInfo liveBranch = liveShiId >= 0L
+                    ? GetShiBranchInfo(liveShiId)
+                    : null;
+                if (string.IsNullOrWhiteSpace(namingProfile) &&
+                    liveBranch != null)
+                    namingProfile = liveBranch.naming_profile;
+                if (string.IsNullOrWhiteSpace(westernTradition) &&
+                    liveBranch != null)
+                    westernTradition = liveBranch.western_naming_tradition;
+                return LineageDisplayNameRules.ProjectArchive(
+                    string.IsNullOrEmpty(display) ? live.getName() : display,
+                    given, family, clan, status, live.isSexMale(),
+                    integrated ||
+                    LineageService.IsKingdomIntegrated(live.kingdom),
+                    namingProfile, westernTradition,
+                    liveBranch?.origin_city_name ??
+                    liveBranch?.origin_city_chinese_name,
+                    liveBranch?.display_stem);
             }
 
             var row = LineageArchiveReader.ReadRow(pActorId);
             if (row == null) return "";
-            return string.IsNullOrEmpty(row.display_name) ? (row.given_name ?? "") : row.display_name;
+            ShiBranchInfo archivedBranch = row.shi_id >= 0L
+                ? GetShiBranchInfo(row.shi_id)
+                : null;
+            return LineageDisplayNameRules.ProjectArchive(
+                row.display_name, row.given_name, row.family_name,
+                row.clan_name, row.status, row.sex == 0,
+                row.name_integrated != 0,
+                archivedBranch?.naming_profile,
+                archivedBranch?.western_naming_tradition,
+                archivedBranch?.origin_city_name ??
+                archivedBranch?.origin_city_chinese_name,
+                archivedBranch?.display_stem);
         }
 
         /// <summary>
@@ -1331,16 +1445,22 @@ namespace AncientWarfare3.core.lineage
             if (childIds.Count == 0) return probe;
 
             var units = World.world?.units;
+            NamingProfileId profile = GetBigTreeProfile(pNodeId);
+            int parentSex = GetActorSex(pNodeId);
+            bool parentHasHeldTitle = HasHeldTitle(pNodeId);
             foreach (long cid in childIds)
             {
-                if (GetFatherId(cid) != pNodeId) continue;
                 var live = units?.get(cid);
                 bool liveValid = live != null && !live.isRekt() && live.isAlive();
 
                 // 平民/奴隶不进氏族大树;女性也不进氏族大树 → 探测里同样跳过(否则会显示 + 号却展开为空)。
                 string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(cid);
                 int sex = liveValid ? (live.isSexMale() ? 0 : 1) : LineageArchiveReader.GetSex(cid);
-                if (!FamilyTreeRelationRules.ShouldShowInBigTree(sex, status)) continue;
+                bool childHasHeldTitle = HasHeldTitle(cid);
+                if (!FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                        pNodeId, GetFatherId(cid), GetMotherId(cid),
+                        parentSex, parentHasHeldTitle, sex, status,
+                        childHasHeldTitle, profile)) continue;
 
                 probe.has_children = true; // 至少有一个大树可见(非平民)子代
 
@@ -1368,18 +1488,26 @@ namespace AncientWarfare3.core.lineage
             var visited = new HashSet<long> { pNodeId };
             queue.Enqueue(pNodeId);
             int scanned = 0;
+            NamingProfileId profile = GetBigTreeProfile(pNodeId);
             while (queue.Count > 0 && scanned < 512)
             {
                 long parentId = queue.Dequeue();
+                int parentSex = GetActorSex(parentId);
+                bool parentHasHeldTitle = HasHeldTitle(parentId);
                 foreach (long childId in GetChildIds(parentId))
                 {
-                    if (GetFatherId(childId) != parentId || !visited.Add(childId)) continue;
-                    scanned++;
                     Actor live = World.world?.units?.get(childId);
                     bool liveValid = live != null && !live.isRekt() && live.isAlive();
                     string status = liveValid ? GetLiveStatus(live) : GetArchivedStatus(childId);
                     int sex = liveValid ? (live.isSexMale() ? 0 : 1) : GetActorSex(childId);
-                    if (!FamilyTreeRelationRules.ShouldShowInBigTree(sex, status)) continue;
+                    bool childHasHeldTitle = HasHeldTitle(childId);
+                    if (!FamilyTreeRelationRules.ShouldIncludeBigTreeEdge(
+                            parentId, GetFatherId(childId),
+                            GetMotherId(childId), parentSex,
+                            parentHasHeldTitle, sex, status,
+                            childHasHeldTitle, profile) ||
+                        !visited.Add(childId)) continue;
+                    scanned++;
                     if (liveValid || LineageArchiveReader.ReadRow(childId)?.is_alive == 1) return true;
                     queue.Enqueue(childId);
                     if (scanned >= 512) break;
@@ -1425,6 +1553,19 @@ namespace AncientWarfare3.core.lineage
                 live.data.get(LineageKeys.NAME_INTEGRATED,
                     out bool nameIntegrated, false);
                 live.data.get(LineageKeys.SHI_ID, out long shi, -1L);
+                live.data.get(LineageKeys.NAMING_PROFILE,
+                    out string liveNamingProfile, string.Empty);
+                live.data.get(LineageKeys.WESTERN_NAMING_TRADITION,
+                    out string liveWesternTradition, string.Empty);
+                ShiBranchInfo liveNodeBranch = shi >= 0L
+                    ? GetShiBranchInfo(shi)
+                    : null;
+                if (string.IsNullOrWhiteSpace(liveNamingProfile) &&
+                    liveNodeBranch != null)
+                    liveNamingProfile = liveNodeBranch.naming_profile;
+                if (string.IsNullOrWhiteSpace(liveWesternTradition) &&
+                    liveNodeBranch != null)
+                    liveWesternTradition = liveNodeBranch.western_naming_tradition;
                 // ⚠ NOBLE_DISTANCE 是用 set(key,int) 写入的(LineageService:111),必须 get<int> 读,
                 //   用 get<long> 会类型失配返默认 99 → 活人 tooltip 永远不显示"距贵族N代"(用户报"只有死人有")。
                 live.data.get(LineageKeys.NOBLE_DISTANCE, out int nd, 99);
@@ -1433,11 +1574,15 @@ namespace AncientWarfare3.core.lineage
                 {
                     id = pId,
                     asset_id = live.asset?.id ?? row?.asset_id ?? "",
-                    display_name = LineageDisplayNameRules.ProjectStored(
+                    display_name = LineageDisplayNameRules.ProjectArchive(
                         string.IsNullOrEmpty(disp) ? live.getName() : disp,
-                        given, family, clan, st == LineageStatus.NOBLE,
-                        live.isSexMale(), nameIntegrated ||
-                            LineageService.IsKingdomIntegrated(live.kingdom)),
+                        given, family, clan, st, live.isSexMale(),
+                        nameIntegrated ||
+                            LineageService.IsKingdomIntegrated(live.kingdom),
+                        liveNamingProfile, liveWesternTradition,
+                        liveNodeBranch?.origin_city_name ??
+                        liveNodeBranch?.origin_city_chinese_name,
+                        liveNodeBranch?.display_stem),
                     sex = live.isSexMale() ? 0 : 1,
                     is_alive = true,
                     status = st,
@@ -1451,6 +1596,7 @@ namespace AncientWarfare3.core.lineage
                     kingdom_color = kingdomSnapshot.kingdomColor,
                     original_clan_id = live.clan?.data?.id ?? -1,
                     city_name = ResolveLiveCityName(live, row),
+                    has_held_title = HasHeldTitle(pId),
                     head = live.data.head,
                     age_overgrowth = live.data.age_overgrowth,
                     phenotype_index = live.data.phenotype_index,
@@ -1469,14 +1615,22 @@ namespace AncientWarfare3.core.lineage
             if (row == null) return null;
             bool liveKnownDead = live?.data != null && (!live.isAlive() || live.isRekt());
             bool archivedAlive = row.is_alive != 0 && row.death_time <= 0 && !liveKnownDead;
+            ShiBranchInfo archivedNodeBranch = row.shi_id >= 0L
+                ? GetShiBranchInfo(row.shi_id)
+                : null;
             var archived = new FamilyTreeNode
             {
                 id = pId,
                 asset_id = row.asset_id ?? "",
-                display_name = LineageDisplayNameRules.ProjectStored(
+                display_name = LineageDisplayNameRules.ProjectArchive(
                     row.display_name, row.given_name, row.family_name,
-                    row.clan_name, row.status == LineageStatus.NOBLE,
-                    row.sex == 0, row.name_integrated != 0),
+                    row.clan_name, row.status, row.sex == 0,
+                    row.name_integrated != 0,
+                    archivedNodeBranch?.naming_profile,
+                    archivedNodeBranch?.western_naming_tradition,
+                    archivedNodeBranch?.origin_city_name ??
+                    archivedNodeBranch?.origin_city_chinese_name,
+                    archivedNodeBranch?.display_stem),
                 sex = row.sex,
                 is_alive = archivedAlive,
                 status = row.status,
@@ -1492,6 +1646,7 @@ namespace AncientWarfare3.core.lineage
                 city_name = row.city_name ?? "",
                 social_title = row.social_title ?? "",
                 social_title_color = row.social_title_color ?? "",
+                has_held_title = HasHeldTitle(pId),
                 head = row.head,
                 skin = row.skin,
                 skin_set = row.skin_set,

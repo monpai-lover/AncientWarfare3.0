@@ -1,0 +1,460 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class WesternLineageAdmissionPersistenceSqlTests
+{
+    public static void Run()
+    {
+        using var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+
+        var create = Request(101L, WesternLineageAdmissionAction.CreateRoot,
+            "western", "de", "巴黎", "德·巴黎");
+        WesternLineageAdmissionCommitResult created =
+            WesternLineageAdmissionPersistence.TryCommit(db, create);
+        Equal(true, created.Success,
+            "a western root family commits atomically");
+        Equal(1L, created.LineageId,
+            "the first root receives the first lineage id");
+        Equal(1L, created.ShiId,
+            "the first root receives the first Shi id");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM LineageGroup"),
+            "one lineage group is persisted");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "one branch is persisted");
+        Equal("western|de|巴黎|德·巴黎", ScalarText(db,
+                "SELECT NAMING_PROFILE||'|'||WESTERN_NAMING_TRADITION||" +
+                "'|'||ORIGIN_CITY_CHINESE_NAME||'|'||DISPLAY_STEM " +
+                "FROM ShiBranch WHERE SHI_ID=1"),
+            "the branch stores its complete western identity");
+        Equal("1|1|德·巴黎|德·巴黎", ScalarText(db,
+                "SELECT LINEAGE_ID||'|'||SHI_ID||'|'||FAMILY_NAME||" +
+                "'|'||CLAN_NAME FROM ActorArchive WHERE ID=101"),
+            "the actor archive is bound in the same transaction");
+
+        var reuse = Request(101L,
+            WesternLineageAdmissionAction.ReuseComplete, "western", "de",
+            "巴黎", "德·巴黎", created.LineageId, created.ShiId);
+        WesternLineageAdmissionCommitResult reused =
+            WesternLineageAdmissionPersistence.TryCommit(db, reuse);
+        Equal(true, reused.Success,
+            "an existing complete branch is reusable");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM LineageGroup"),
+            "reuse does not duplicate the lineage group");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "reuse does not duplicate the branch");
+
+        CompletePartialBranchCreatesMissingShi();
+        CompletePartialBranchCompletesExistingShiInPlace();
+        CompletePartialBranchAcceptsLegacyAndMatchingProfiles();
+        CompletePartialBranchRejectsConflictingProfile();
+        CompletePartialBranchRollsBackInPlaceUpdate();
+        InheritRelativeReusesExistingBranch();
+        CreateRootRollsBackAtEveryFaultBoundary();
+    }
+
+    private static void CompletePartialBranchCreatesMissingShi()
+    {
+        using var db = OpenDatabase();
+        InsertLineage(db, 10L);
+
+        var request = Request(301L,
+            WesternLineageAdmissionAction.CompletePartialBranch,
+            "western", "von", "Hamburg", "von Hamburg", 10L);
+        WesternLineageAdmissionCommitResult result =
+            WesternLineageAdmissionPersistence.TryCommit(db, request);
+
+        Equal(true, result.Success,
+            "a stable lineage without a Shi creates its missing branch");
+        Equal(10L, result.LineageId,
+            "missing-Shi completion keeps the existing lineage");
+        Equal(1L, result.ShiId,
+            "missing-Shi completion allocates one new Shi id");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "missing-Shi completion creates exactly one branch");
+        Equal("10|1", ScalarText(db,
+                "SELECT LINEAGE_ID||'|'||SHI_ID FROM ActorArchive " +
+                "WHERE ID=301"),
+            "the actor binds to the newly created Shi");
+    }
+
+    private static void CompletePartialBranchCompletesExistingShiInPlace()
+    {
+        using var db = OpenDatabase();
+        InsertLineage(db, 20L);
+        InsertPartialBranch(db, 40L, 20L, "de Berlin", 7L,
+            "western", 900L, "de Berlin");
+
+        var request = Request(302L,
+            WesternLineageAdmissionAction.CompletePartialBranch,
+            "western", "de", "Berlin", "de Berlin", 20L, 40L);
+        WesternLineageAdmissionCommitResult first =
+            WesternLineageAdmissionPersistence.TryCommit(db, request);
+
+        Equal(true, first.Success,
+            "a legacy partial Shi can be completed");
+        Equal(40L, first.ShiId,
+            "partial completion keeps the existing Shi id");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "partial completion does not create a child branch");
+        Equal("20|7|900|western|de|Berlin|de Berlin|de Berlin",
+            ScalarText(db,
+                "SELECT LINEAGE_ID||'|'||PARENT_SHI_ID||'|'||" +
+                "FOUNDER_ACTOR_ID||'|'||NAMING_PROFILE||'|'||" +
+                "WESTERN_NAMING_TRADITION||'|'||" +
+                "ORIGIN_CITY_CHINESE_NAME||'|'||DISPLAY_STEM||'|'||" +
+                "CLAN_NAME FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion fills identity without rewriting ancestry");
+        Equal("legacy", ScalarText(db,
+                "SELECT SOURCE_TYPE FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion preserves the branch source type");
+        Equal(2L, ScalarLong(db,
+                "SELECT ORIGIN_KINGDOM_ID FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion preserves the origin kingdom");
+        Equal(3L, ScalarLong(db,
+                "SELECT ORIGIN_CITY_ID FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion preserves the origin city");
+        Equal(4L, ScalarLong(db,
+                "SELECT ORIGIN_ORIGINAL_CLAN_ID FROM ShiBranch " +
+                "WHERE SHI_ID=40"),
+            "partial completion preserves the original clan reference");
+        Equal(1d, ScalarDouble(db,
+                "SELECT CREATED_TIME FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion preserves branch creation time");
+        Equal(0L, ScalarLong(db,
+                "SELECT IS_EXTINCT FROM ShiBranch WHERE SHI_ID=40"),
+            "partial completion preserves extinction state");
+        Equal("20|40", ScalarText(db,
+                "SELECT LINEAGE_ID||'|'||SHI_ID FROM ActorArchive " +
+                "WHERE ID=302"),
+            "the actor binds to the completed Shi");
+
+        WesternLineageAdmissionCommitResult second =
+            WesternLineageAdmissionPersistence.TryCommit(db, request);
+        Equal(true, second.Success,
+            "repeating partial completion is idempotent");
+        Equal(40L, second.ShiId,
+            "idempotent completion keeps the existing Shi id");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "idempotent completion does not duplicate the branch");
+    }
+
+    private static void CompletePartialBranchAcceptsLegacyAndMatchingProfiles()
+    {
+        (string Label, string Profile, string Clan, string Stem)[] cases =
+        {
+            ("null", null, string.Empty, string.Empty),
+            ("empty", string.Empty, string.Empty, string.Empty),
+            ("matching", "western", "von Cologne", "von Cologne")
+        };
+        for (int index = 0; index < cases.Length; index++)
+        {
+            using var db = OpenDatabase();
+            InsertLineage(db, 25L);
+            InsertPartialBranch(db, 45L, 25L, cases[index].Clan, -1L,
+                cases[index].Profile, 905L, cases[index].Stem);
+
+            var request = Request(310L + index,
+                WesternLineageAdmissionAction.CompletePartialBranch,
+                "western", "von", "Cologne", "von Cologne", 25L, 45L);
+            WesternLineageAdmissionCommitResult result =
+                WesternLineageAdmissionPersistence.TryCommit(db, request);
+
+            Equal(true, result.Success,
+                $"a {cases[index].Label} profile partial Shi is completable");
+            Equal(45L, result.ShiId,
+                $"a {cases[index].Label} profile keeps its Shi id");
+            Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+                $"a {cases[index].Label} profile creates no child branch");
+            Equal("western|von|Cologne|von Cologne", ScalarText(db,
+                    "SELECT NAMING_PROFILE||'|'||" +
+                    "WESTERN_NAMING_TRADITION||'|'||" +
+                    "ORIGIN_CITY_CHINESE_NAME||'|'||DISPLAY_STEM " +
+                    "FROM ShiBranch WHERE SHI_ID=45"),
+                $"a {cases[index].Label} profile receives full identity");
+        }
+
+        using (var db = OpenDatabase())
+        {
+            InsertLineage(db, 26L);
+            InsertPartialBranch(db, 46L, 26L, "old xia", -1L,
+                "xia", 906L, "old xia");
+            WesternLineageAdmissionCommitResult transition =
+                WesternLineageAdmissionPersistence.TryCommit(db,
+                    Request(314L,
+                        WesternLineageAdmissionAction.CompletePartialBranch,
+                        "western", "von", "Cologne", "von Cologne", 26L,
+                        46L));
+            Equal(true, transition.Success,
+                "a Xia branch transition creates a new western child branch");
+            Equal(false, transition.ShiId == 46L,
+                "a Xia branch transition never reuses the old Shi id");
+            Equal(2L, ScalarLong(db,
+                "SELECT COUNT(*) FROM ShiBranch"),
+                "a Xia branch transition preserves the old branch");
+            Equal("xia|old xia", ScalarText(db,
+                "SELECT NAMING_PROFILE||'|'||DISPLAY_STEM FROM ShiBranch " +
+                "WHERE SHI_ID=46"),
+                "the old Xia branch remains unchanged");
+            WesternLineageAdmissionCommitResult replay =
+                WesternLineageAdmissionPersistence.TryCommit(db,
+                    Request(314L,
+                        WesternLineageAdmissionAction.CompletePartialBranch,
+                        "western", "von", "Cologne", "von Cologne", 26L,
+                        46L));
+            Equal(true, replay.Success,
+                "replaying a Xia branch transition reuses the actor binding");
+            Equal(2L, ScalarLong(db,
+                "SELECT COUNT(*) FROM ShiBranch"),
+                "replaying a Xia transition does not create another child");
+        }
+    }
+
+    private static void CompletePartialBranchRejectsConflictingProfile()
+    {
+        using var db = OpenDatabase();
+        InsertLineage(db, 30L);
+        InsertPartialBranch(db, 50L, 30L, "Iron Wolf", -1L,
+            "orc_nomadic", 901L, "Iron Wolf");
+
+        var request = Request(303L,
+            WesternLineageAdmissionAction.CompletePartialBranch,
+            "western", "van", "Ghent", "van Ghent", 30L, 50L);
+        WesternLineageAdmissionCommitResult result =
+            WesternLineageAdmissionPersistence.TryCommit(db, request);
+
+        Equal(false, result.Success,
+            "partial completion rejects a conflicting branch profile");
+        Equal(true, result.Failure.Contains("branch_profile_mismatch"),
+            "profile conflict returns a stable failure reason");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "profile conflict does not create another branch");
+        Equal("orc_nomadic|Iron Wolf", ScalarText(db,
+                "SELECT NAMING_PROFILE||'|'||DISPLAY_STEM FROM ShiBranch " +
+                "WHERE SHI_ID=50"),
+            "profile conflict leaves the existing identity unchanged");
+        Equal(0L, ScalarLong(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=303"),
+            "profile conflict leaves no actor binding");
+    }
+
+    private static void CompletePartialBranchRollsBackInPlaceUpdate()
+    {
+        using var db = OpenDatabase();
+        InsertLineage(db, 40L);
+        InsertPartialBranch(db, 60L, 40L, "legacy clan", 8L,
+            "xia", 902L);
+
+        var request = Request(304L,
+            WesternLineageAdmissionAction.CompletePartialBranch,
+            "western", "di", "Rome", "di Rome", 40L, 60L);
+        WesternLineageAdmissionCommitResult result =
+            WesternLineageAdmissionPersistence.TryCommit(db, request,
+                stage => stage ==
+                    WesternLineageAdmissionCommitStage.AfterBranchWrite);
+
+        Equal(false, result.Success,
+            "an injected failure rejects in-place completion");
+        Equal("xia||legacy clan", ScalarText(db,
+                "SELECT NAMING_PROFILE||'|'||IFNULL(DISPLAY_STEM,'')||" +
+                "'|'||CLAN_NAME FROM ShiBranch WHERE SHI_ID=60"),
+            "an injected failure rolls back the in-place identity update");
+        Equal(0L, ScalarLong(db,
+                "SELECT COUNT(*) FROM ActorArchive WHERE ID=304"),
+            "an injected failure leaves no partial actor binding");
+    }
+
+    private static void InheritRelativeReusesExistingBranch()
+    {
+        using var db = OpenDatabase();
+        InsertLineage(db, 50L);
+        InsertPartialBranch(db, 70L, 50L, "von Vienna", 6L,
+            "western", 903L, "von Vienna");
+        Execute(db, "UPDATE ShiBranch SET " +
+            "WESTERN_NAMING_TRADITION='von'," +
+            "ORIGIN_CITY_CHINESE_NAME='Vienna' WHERE SHI_ID=70");
+
+        var request = Request(305L,
+            WesternLineageAdmissionAction.InheritRelative,
+            "western", "von", "Vienna", "von Vienna", 50L, 70L);
+        WesternLineageAdmissionCommitResult result =
+            WesternLineageAdmissionPersistence.TryCommit(db, request);
+
+        Equal(true, result.Success,
+            "relative inheritance reuses a compatible complete branch");
+        Equal(50L, result.LineageId,
+            "relative inheritance keeps the source lineage id");
+        Equal(70L, result.ShiId,
+            "relative inheritance keeps the source Shi id");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM LineageGroup"),
+            "relative inheritance does not copy the lineage");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "relative inheritance does not copy the branch");
+        Equal("50|70|von Vienna", ScalarText(db,
+                "SELECT LINEAGE_ID||'|'||SHI_ID||'|'||CLAN_NAME " +
+                "FROM ActorArchive WHERE ID=305"),
+            "relative inheritance binds the actor to the source branch");
+        Equal("903|legacy|von Vienna", ScalarText(db,
+                "SELECT FOUNDER_ACTOR_ID||'|'||SOURCE_TYPE||'|'||" +
+                "DISPLAY_STEM FROM ShiBranch WHERE SHI_ID=70"),
+            "relative inheritance leaves the source branch unchanged");
+    }
+
+    private static void CreateRootRollsBackAtEveryFaultBoundary()
+    {
+        WesternLineageAdmissionCommitStage[] stages =
+        {
+            WesternLineageAdmissionCommitStage.AfterLineageWrite,
+            WesternLineageAdmissionCommitStage.AfterBranchWrite,
+            WesternLineageAdmissionCommitStage.AfterActorWrite
+        };
+        for (int index = 0; index < stages.Length; index++)
+        {
+            using var db = OpenDatabase();
+            var request = Request(320L + index,
+                WesternLineageAdmissionAction.CreateRoot,
+                "orc_nomadic", "", "Black Rock", "Iron Wolf");
+            WesternLineageAdmissionCommitStage faultStage = stages[index];
+
+            WesternLineageAdmissionCommitResult result =
+                WesternLineageAdmissionPersistence.TryCommit(db, request,
+                    stage => stage == faultStage);
+
+            Equal(false, result.Success,
+                $"a {faultStage} failure rejects root creation");
+            Equal(0L, ScalarLong(db, "SELECT COUNT(*) FROM LineageGroup"),
+                $"a {faultStage} failure rolls back the lineage");
+            Equal(0L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+                $"a {faultStage} failure rolls back the Shi");
+            Equal(0L, ScalarLong(db, "SELECT COUNT(*) FROM ActorArchive"),
+                $"a {faultStage} failure rolls back the actor binding");
+        }
+    }
+
+    private static WesternLineageAdmissionCommitRequest Request(long pActorId,
+        WesternLineageAdmissionAction pAction, string pProfile,
+        string pTradition, string pOriginCity, string pStem,
+        long pLineageId = -1L, long pShiId = -1L)
+    {
+        return new WesternLineageAdmissionCommitRequest
+        {
+            Action = pAction,
+            ActorId = pActorId,
+            ExistingLineageId = pLineageId,
+            ExistingShiId = pShiId,
+            GivenName = pActorId == 101L ? "路易" : "铁木真",
+            DisplayName = pActorId == 101L ? "路易 德·巴黎" :
+                "铁木真 孛儿只斤",
+            FamilyName = pStem,
+            ClanName = pStem,
+            AssetId = pProfile == "orc_nomadic" ? "orc" : "human",
+            Sex = 0,
+            NamingProfile = pProfile,
+            WesternNamingTradition = pTradition,
+            OriginCityChineseName = pOriginCity,
+            DisplayStem = pStem,
+            SourceType = "western_admission",
+            OriginKingdomId = 7L,
+            OriginCityId = 9L,
+            OriginOriginalClanId = 11L,
+            CreatedTime = 123.5
+        };
+    }
+
+    private static void CreateSchema(SQLiteConnection pDb)
+    {
+        Execute(pDb, "CREATE TABLE LineageGroup (" +
+            "LINEAGE_ID INTEGER PRIMARY KEY,FAMILY_NAME TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,FOUNDER_NAME TEXT,CREATED_TIME REAL," +
+            "ORIGIN_KINGDOM_ID INTEGER,ORIGIN_CITY_ID INTEGER," +
+            "IS_EXTINCT INTEGER)");
+        Execute(pDb, "CREATE TABLE ShiBranch (" +
+            "SHI_ID INTEGER PRIMARY KEY,LINEAGE_ID INTEGER,CLAN_NAME TEXT," +
+            "PARENT_SHI_ID INTEGER,NAMING_PROFILE TEXT," +
+            "WESTERN_NAMING_TRADITION TEXT," +
+            "ORIGIN_CITY_CHINESE_NAME TEXT,DISPLAY_STEM TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,SOURCE_TYPE TEXT," +
+            "ORIGIN_KINGDOM_ID INTEGER,ORIGIN_CITY_ID INTEGER," +
+            "ORIGIN_ORIGINAL_CLAN_ID INTEGER,CREATED_TIME REAL," +
+            "IS_EXTINCT INTEGER)");
+        Execute(pDb, "CREATE TABLE ActorArchive (" +
+            "ID INTEGER PRIMARY KEY,GIVEN_NAME TEXT,DISPLAY_NAME TEXT," +
+            "FAMILY_NAME TEXT,CLAN_NAME TEXT,LINEAGE_ID INTEGER," +
+            "SHI_ID INTEGER,ASSET_ID TEXT,SEX INTEGER,STATUS TEXT," +
+            "NOBLE_DISTANCE INTEGER,IS_ALIVE INTEGER)");
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection(
+            "Data Source=:memory:;Version=3;New=True;");
+        db.Open();
+        CreateSchema(db);
+        return db;
+    }
+
+    private static void InsertLineage(SQLiteConnection pDb, long pLineageId)
+    {
+        Execute(pDb, "INSERT INTO LineageGroup " +
+            "(LINEAGE_ID,FAMILY_NAME,FOUNDER_ACTOR_ID,FOUNDER_NAME," +
+            "CREATED_TIME,ORIGIN_KINGDOM_ID,ORIGIN_CITY_ID,IS_EXTINCT) " +
+            $"VALUES ({pLineageId},'legacy',700,'legacy',1,2,3,0)");
+    }
+
+    private static void InsertPartialBranch(SQLiteConnection pDb,
+        long pShiId, long pLineageId, string pClanName, long pParentShiId,
+        string pProfile, long pFounderId, string pDisplayStem = "")
+    {
+        using var command = new SQLiteCommand(pDb);
+        command.CommandText = "INSERT INTO ShiBranch " +
+            "(SHI_ID,LINEAGE_ID,CLAN_NAME,PARENT_SHI_ID,NAMING_PROFILE," +
+            "WESTERN_NAMING_TRADITION,ORIGIN_CITY_CHINESE_NAME," +
+            "DISPLAY_STEM,FOUNDER_ACTOR_ID,SOURCE_TYPE," +
+            "ORIGIN_KINGDOM_ID,ORIGIN_CITY_ID,ORIGIN_ORIGINAL_CLAN_ID," +
+            "CREATED_TIME,IS_EXTINCT) VALUES " +
+            "(@shi,@lineage,@clan,@parent,@profile,'','',@stem,@founder," +
+            "'legacy',2,3,4,1,0)";
+        command.Parameters.AddWithValue("@shi", pShiId);
+        command.Parameters.AddWithValue("@lineage", pLineageId);
+        command.Parameters.AddWithValue("@clan", pClanName);
+        command.Parameters.AddWithValue("@parent", pParentShiId);
+        command.Parameters.AddWithValue("@profile",
+            pProfile == null ? DBNull.Value : pProfile);
+        command.Parameters.AddWithValue("@stem", pDisplayStem);
+        command.Parameters.AddWithValue("@founder", pFounderId);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        command.ExecuteNonQuery();
+    }
+
+    private static long ScalarLong(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static double ScalarDouble(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToDouble(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection pDb, string pSql)
+    {
+        using var command = new SQLiteCommand(pSql, pDb);
+        return Convert.ToString(command.ExecuteScalar()) ?? string.Empty;
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

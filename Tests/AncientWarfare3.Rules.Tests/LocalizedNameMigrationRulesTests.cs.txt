@@ -1,0 +1,70 @@
+using AncientWarfare3.core.naming;
+
+internal static class LocalizedNameMigrationRulesTests
+{
+    public static void Run()
+    {
+        AWLocalizedNameMigrationDecision nativeOnly =
+            AWLocalizedNameMigrationRules.Resolve("Native", "Native", "",
+                0, AWLocalizedNameLegacySource.Unknown, "en");
+        Equal("Native", nativeOnly.NativeName,
+            "native-only rows retain the existing native name");
+        Equal("", nativeOnly.ChineseName,
+            "native-only rows do not invent Chinese names for non-Chinese UI");
+        Equal(false, nativeOnly.NeedsChineseGeneration,
+            "native-only rows defer Chinese generation outside ch/cz");
+        Equal(true, nativeOnly.NeedsPersistence,
+            "legacy rows receive the current schema version");
+
+        AWLocalizedNameMigrationDecision nativeOnlyChineseUi =
+            AWLocalizedNameMigrationRules.Resolve("Native", "Native", "",
+                0, AWLocalizedNameLegacySource.Unknown, "ch");
+        Equal(true, nativeOnlyChineseUi.NeedsChineseGeneration,
+            "native-only rows request Chinese generation only for ch/cz");
+
+        AWLocalizedNameMigrationDecision chineseOnly =
+            AWLocalizedNameMigrationRules.Resolve("中文名", "", "中文名",
+                0, AWLocalizedNameLegacySource.Unknown, "ch");
+        Equal("中文名", chineseOnly.ChineseName,
+            "legacy Chinese-only rows retain their Chinese identity");
+        Equal(false, chineseOnly.NeedsNativeGeneration,
+            "Chinese UI leaves legacy native generation deferred");
+
+        AWLocalizedNameMigrationDecision chineseOnlyNativeUi =
+            AWLocalizedNameMigrationRules.Resolve("中文名", "", "中文名",
+                0, AWLocalizedNameLegacySource.Unknown, "en");
+        Equal(true, chineseOnlyNativeUi.NeedsNativeGeneration,
+            "native generation remains lazy until a native UI needs it");
+
+        AWLocalizedNameMigrationDecision current =
+            AWLocalizedNameMigrationRules.Resolve("Native", "Native", "中文名",
+                AWLocalizedNameMigrationRules.CurrentSchemaVersion,
+                AWLocalizedNameLegacySource.Unknown, "en");
+        Equal(false, current.NeedsPersistence,
+            "current schema identities are idempotent");
+
+        AWLocalizedNameMigrationDecision host =
+            AWLocalizedNameMigrationRules.Resolve("Native", "Native", "中文名",
+                AWLocalizedNameMigrationRules.CurrentSchemaVersion,
+                AWLocalizedNameLegacySource.Unknown, "en");
+        AWLocalizedNameMigrationDecision client =
+            AWLocalizedNameMigrationRules.Resolve("Native", "Native", "中文名",
+                AWLocalizedNameMigrationRules.CurrentSchemaVersion,
+                AWLocalizedNameLegacySource.Unknown, "ch");
+        Equal(host.NativeName, client.NativeName,
+            "host and client retain the same native identity component");
+        Equal(host.ChineseName, client.ChineseName,
+            "host and client retain the same Chinese identity component");
+        Equal("Native", host.ProjectedName,
+            "native host projects its local presentation");
+        Equal("中文名", client.ProjectedName,
+            "Chinese client projects its local presentation");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

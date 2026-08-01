@@ -81,12 +81,18 @@ namespace AncientWarfare3.core.lineage
                 CourtTermLaw.Lifetime, officers.Count);
 
             CourtSnapshot court = CourtService.GetSnapshot(pKingdom);
-            int rulerCourtInfluence = king?.data == null
+            int rawRulerCourtInfluence = king?.data == null
                 ? -60
                 : InheritanceLawRules.ResolveRulerCourtInfluence(
                     RulerAbility(king), MinisterialPower(pKingdom),
                     StrongestRivalAristocraticPower(pKingdom),
                     RoyalGuardService.HasKingdomGuardStateHint(pKingdom));
+            int institutionalAuthorityBonus =
+                KingdomPolicyEffectService.ReadSuccessionAuthorityBonus(
+                    pKingdom);
+            int rulerCourtInfluence =
+                WesternRoyalAuthorityRules.ApplyToCourtInfluence(
+                    rawRulerCourtInfluence, institutionalAuthorityBonus);
             InheritanceLawSnapshot snapshot = new InheritanceLawSnapshot(
                 MandateService.IsMandateKingdom(pKingdom)
                     ? MandatePhaseService.CurrentPhase
@@ -136,6 +142,9 @@ namespace AncientWarfare3.core.lineage
             pKingdom.data.set(
                 LineageKeys.INHERITANCE_RULER_COURT_INFLUENCE,
                 rulerCourtInfluence);
+            pKingdom.data.set(
+                LineageKeys.INHERITANCE_INSTITUTIONAL_AUTHORITY_BONUS,
+                institutionalAuthorityBonus);
             pKingdom.data.set(LineageKeys.INHERITANCE_MILITARY_UNLOCKED,
                 militaryUnlocked);
             pKingdom.data.set(LineageKeys.INHERITANCE_CIVIL_UNLOCKED,

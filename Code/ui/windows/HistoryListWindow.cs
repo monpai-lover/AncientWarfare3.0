@@ -8,6 +8,7 @@ using AncientWarfare3.ui;
 using AncientWarfare3.ui.items;
 using NeoModLoader.api;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace AncientWarfare3.ui.windows
 {
@@ -47,6 +48,14 @@ namespace AncientWarfare3.ui.windows
         private bool _readQueryPending;
         private readonly Queue<HistoryRow> _pendingRows =
             new Queue<HistoryRow>();
+        private Button _exportButton;
+        private Text _exportText;
+        private TipButton _exportTip;
+        private bool _exportPending;
+        private long _exportRequestId = -1L;
+        private string _exportRequestKey = "";
+        private string _exportFeedbackKey = "";
+        private string _exportFeedbackDetail = "";
 
         public static void OpenPerson(long pActorId, long pConferKingdomId = -1L)
         {
@@ -57,7 +66,10 @@ namespace AncientWarfare3.ui.windows
                                      _contextId != pActorId ||
                                      previousKingdomContext !=
                                      pConferKingdomId))
+            {
+                Instance.CancelExportRequest();
                 _personFilter = "";
+            }
             _contextId = pActorId;
             _personConferKingdomId = pConferKingdomId;
             Instance?.InvalidateReadResult();
@@ -70,6 +82,7 @@ namespace AncientWarfare3.ui.windows
             _source = Source.Kingdom;
             if (Instance != null && (previous != Source.Kingdom || _contextId != pKingdomId))
             {
+                Instance.CancelExportRequest();
                 Instance._expandedDynasties.Clear();
                 Instance._expandedReigns.Clear();
                 Instance._seeded = false;
@@ -85,6 +98,7 @@ namespace AncientWarfare3.ui.windows
             _source = Source.City;
             if (Instance != null && (previous != Source.City || _contextId != pCityId))
             {
+                Instance.CancelExportRequest();
                 Instance._expandedDynasties.Clear();
                 Instance._expandedReigns.Clear();
                 Instance._seeded = false;
@@ -105,6 +119,7 @@ namespace AncientWarfare3.ui.windows
             Instance._seeded = false;
             Instance._dynasties = null;
             Instance._reigns = null;
+            Instance.CancelExportRequest();
             Instance.InvalidateReadResult();
             Instance.ResetRenderRows();
         }
@@ -163,6 +178,7 @@ namespace AncientWarfare3.ui.windows
 
         protected override void Init()
         {
+            CreateExportButton();
             // 使用原版列表窗尺寸。
         }
 
@@ -170,6 +186,7 @@ namespace AncientWarfare3.ui.windows
         {
             InvalidateReadResult();
             Refresh();
+            RefreshExportButton();
         }
 
         public override void OnNormalDisable()
@@ -177,6 +194,199 @@ namespace AncientWarfare3.ui.windows
             _readQueryState.Close();
             _readQueryPending = false;
             _pendingRows.Clear();
+            CancelExportRequest();
+        }
+
+        private void CreateExportButton()
+        {
+            var buttonObject = new GameObject("ExportChronicleText",
+                typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TipButton));
+            buttonObject.transform.SetParent(BackgroundTransform, false);
+            var rect = buttonObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(78f, 20f);
+            rect.anchoredPosition = new Vector2(80f, -56f);
+            AW_UIStyle.ApplyButton(buttonObject.GetComponent<Image>(), .95f);
+            _exportButton = buttonObject.GetComponent<Button>();
+            _exportButton.onClick.AddListener(ExportChronicleText);
+            _exportTip = buttonObject.GetComponent<TipButton>();
+            _exportTip.type = AW_RawTooltip.TYPE;
+            _exportTip.hoverAction = ShowExportTooltip;
+
+            var textObject = new GameObject("Text", typeof(RectTransform),
+                typeof(Text));
+            textObject.transform.SetParent(buttonObject.transform, false);
+            var textRect = textObject.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+            _exportText = textObject.GetComponent<Text>();
+            _exportText.font = LocalizedTextManager.current_font;
+            _exportText.fontSize = 8;
+            _exportText.alignment = TextAnchor.MiddleCenter;
+            _exportText.color = Color.white;
+            _exportText.raycastTarget = false;
+            RefreshExportButton();
+        }
+
+        private void ExportChronicleText()
+        {
+            if (_exportPending || _contextId < 0L) return;
+            if (!AW3SaveDirectoryRegistry.TryGet(out string saveDirectory))
+            {
+                SetExportFeedback("aw_chronicle_export_save_first", "");
+                RefreshExportButton();
+                return;
+            }
+            if (!AWHistoricalReadService.Ready)
+            {
+                SetExportFeedback("aw_chronicle_export_archive_unavailable", "");
+                RefreshExportButton();
+                return;
+            }
+
+            long contextId = _contextId;
+            ChronicleTextExportRequest request =
+                new ChronicleTextExportRequest(CurrentExportSource(),
+                    contextId, ExportDisplayName(), saveDirectory);
+            _exportRequestKey = "chronicle-export:" + request.Source + ":" +
+                                contextId;
+            var execution = new AWChronicleTextExportExecution(request,
+                System.DateTime.Now);
+            var readRequest = new AWHistoricalReadRequest(_exportRequestKey,
+                new AWAsyncStamp(AWAsyncRuntime.WorldGeneration, 0L,
+                    HistoricalContentRevision.Current), execution.Execute,
+                ApplyExportResult, HandleExportFault,
+                pDatabaseEpoch: LineageArchiveManager.RuntimeDatabaseEpoch);
+            _exportPending = AWHistoricalReadService.TrySchedule(readRequest,
+                out _exportRequestId);
+            if (!_exportPending)
+            {
+                _exportRequestId = -1L;
+                _exportRequestKey = "";
+                SetExportFeedback("aw_chronicle_export_archive_unavailable", "");
+            }
+            else
+                SetExportFeedback("aw_chronicle_export_pending", "");
+            RefreshExportButton();
+        }
+
+        private void ApplyExportResult(object pValue)
+        {
+            if (!_exportPending) return;
+            _exportPending = false;
+            _exportRequestId = -1L;
+            _exportRequestKey = "";
+            var result = pValue as ChronicleTextExportResult;
+            if (result?.Succeeded == true)
+                SetExportFeedback("aw_chronicle_export_success",
+                    System.IO.Path.GetFileName(result.Path));
+            else
+                SetExportFeedback("aw_chronicle_export_failed",
+                    result?.Error ?? "");
+            RefreshExportButton();
+        }
+
+        private void HandleExportFault(System.Exception pError)
+        {
+            if (!_exportPending) return;
+            _exportPending = false;
+            _exportRequestId = -1L;
+            _exportRequestKey = "";
+            SetExportFeedback("aw_chronicle_export_failed",
+                pError?.GetBaseException()?.Message ?? "");
+            RefreshExportButton();
+        }
+
+        private void CancelExportRequest()
+        {
+            if (_exportRequestId >= 0L &&
+                !string.IsNullOrEmpty(_exportRequestKey))
+                AWHistoricalReadService.ReleaseRequest(_exportRequestId,
+                    _exportRequestKey);
+            _exportPending = false;
+            _exportRequestId = -1L;
+            _exportRequestKey = "";
+        }
+
+        private ChronicleTextExportSource CurrentExportSource()
+        {
+            if (_source == Source.Kingdom)
+                return ChronicleTextExportSource.Kingdom;
+            if (_source == Source.City) return ChronicleTextExportSource.City;
+            return ChronicleTextExportSource.Person;
+        }
+
+        private string ExportDisplayName()
+        {
+            if (_readResult != null && _readResult.ContextId == _contextId &&
+                _readResult.Source == CurrentReadSource())
+            {
+                if (_source == Source.Person && _readResult.Entries.Count > 0)
+                    return _readResult.Entries[0]?.subject_name ?? "person";
+                if (_source == Source.Kingdom && _readResult.Dynasties.Count > 0)
+                {
+                    DynastyView dynasty = _readResult.Dynasties[0];
+                    if (!string.IsNullOrWhiteSpace(dynasty?.original_kingdom_name))
+                        return dynasty.original_kingdom_name;
+                    if (!string.IsNullOrWhiteSpace(dynasty?.dynasty_name))
+                        return dynasty.dynasty_name;
+                }
+                if (_source == Source.City && _readResult.Periods.Count > 0)
+                {
+                    ReignPeriod period = _readResult.Periods[0];
+                    if (period?.events != null && period.events.Count > 0)
+                        return period.events[0]?.subject_name ?? "city";
+                }
+            }
+            return CurrentExportSource().ToString().ToLowerInvariant();
+        }
+
+        private void SetExportFeedback(string pKey, string pDetail)
+        {
+            _exportFeedbackKey = pKey ?? "";
+            _exportFeedbackDetail = pDetail ?? "";
+        }
+
+        private void RefreshExportButton()
+        {
+            if (_exportButton == null || _exportText == null) return;
+            bool hasSaveDirectory = AW3SaveDirectoryRegistry.TryGet(out _);
+            _exportButton.interactable = _contextId >= 0L &&
+                                         hasSaveDirectory && !_exportPending &&
+                                         AWHistoricalReadService.Ready;
+            _exportText.text = _exportPending
+                ? AW_L10n.Text("aw_chronicle_export_pending", "Exporting")
+                : AW_L10n.Text("aw_chronicle_export_txt", "Export TXT");
+        }
+
+        private void ShowExportTooltip()
+        {
+            if (_exportTip == null) return;
+            string description;
+            if (_exportPending)
+                description = AW_L10n.Text("aw_chronicle_export_pending",
+                    "Exporting complete chronicle.");
+            else if (!AW3SaveDirectoryRegistry.TryGet(out _))
+                description = AW_L10n.Text("aw_chronicle_export_save_first",
+                    "Save the world before exporting its chronicle.");
+            else if (!string.IsNullOrEmpty(_exportFeedbackKey))
+                description = AW_L10n.Text(_exportFeedbackKey,
+                    _exportFeedbackKey) + _exportFeedbackDetail;
+            else
+                description = AW_L10n.Text("aw_chronicle_export_desc",
+                    "Export the complete chronicle with historical dates.");
+            Tooltip.show(_exportTip.gameObject, AW_RawTooltip.TYPE,
+                new TooltipData
+                {
+                    tip_name = AW_L10n.Text("aw_chronicle_export_txt",
+                        "Export TXT"),
+                    tip_description = description
+                });
         }
 
         public void Refresh()

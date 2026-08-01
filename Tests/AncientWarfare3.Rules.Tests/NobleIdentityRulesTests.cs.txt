@@ -1,0 +1,31 @@
+using AncientWarfare3.core.lineage;
+
+internal static class NobleIdentityRulesTests
+{
+    public static void Run()
+    {
+        Equal(true, NobleIdentityRules.IsNobleIdentity(
+                isCurrentRuler: true, formalNobleRank: 0,
+                lineageStatus: "none"),
+            "a reigning ruler is noble without a synthetic grant");
+        Equal(true, NobleIdentityRules.IsNobleIdentity(
+                isCurrentRuler: false, formalNobleRank: 1,
+                lineageStatus: "none"),
+            "a formal title holder is noble");
+        Equal(true, NobleIdentityRules.IsNobleIdentity(
+                isCurrentRuler: false, formalNobleRank: 0,
+                lineageStatus: "noble"),
+            "an admitted lineage noble is noble");
+        Equal(false, NobleIdentityRules.IsNobleIdentity(
+                isCurrentRuler: false, formalNobleRank: 0,
+                lineageStatus: "common"),
+            "a commoner without a throne or title is not noble");
+    }
+
+    private static void Equal<T>(T pExpected, T pActual, string pMessage)
+    {
+        if (!Equals(pExpected, pActual))
+            throw new InvalidOperationException(
+                $"{pMessage}: expected {pExpected}, got {pActual}");
+    }
+}

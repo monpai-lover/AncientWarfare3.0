@@ -5,9 +5,51 @@ internal static class DiplomacyTreatyPersistenceTests
 {
     public static void Run()
     {
+        PeaceTruceAndTributaryRemainPairScoped();
         CommitsBreakAndFiveYearTruceTogether();
         RollsBackPactClosureWhenTruceInsertFails();
         EnsuresOneProposalKeyedAllianceWithdrawalTruce();
+    }
+
+    private static void PeaceTruceAndTributaryRemainPairScoped()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        using (var insert = new SQLiteCommand(
+            "INSERT INTO Proposal(PROPOSAL_ID,REQUESTER_KINGDOM_ID," +
+            "RESPONDER_KINGDOM_ID,PROPOSAL_TYPE,STATUS," +
+            "TREATY_UNTIL_YEAR) VALUES(9,1,2,'truce','accepted',48);",
+            db))
+            insert.ExecuteNonQuery();
+
+        True(DiplomacyTreatyPersistence.TryReadActiveTreatyYears(db,
+                "Proposal", 1L, 2L, 38,
+                out int abNonAggression, out int abTruce),
+            "A-B treaty lookup succeeds after their peace");
+        Equal(-1, abNonAggression,
+            "A-B has no unrelated non-aggression pact");
+        Equal(48, abTruce, "A-B retains its post-war truce");
+
+        True(DiplomacyTreatyPersistence.TryReadActiveTreatyYears(db,
+                "Proposal", 1L, 3L, 38,
+                out int acNonAggression, out int acTruce),
+            "A-C treaty lookup succeeds independently");
+        Equal(-1, acNonAggression,
+            "A-C does not inherit A-B's non-aggression pact");
+        Equal(-1, acTruce, "A-C does not inherit A-B's truce");
+
+        VassalRuntimeProjection tributary =
+            VassalRuntimeProjectionRules.Resolve(2L, 17L,
+                VassalContractTierRules.Tributary);
+        bool canDeclare = VassalWarPermissionRules.CanDeclareWar(
+            pAttackerIsVassal: VassalContractTierRules.CountsAsVassal(
+                tributary.ContractTier),
+            pDefenderIsSubject: false, pDefenderIsSuzerain: false,
+            pSameRootSuzerain: false, pBlockInternalWar: false,
+            pWarType: "aw_normal_war", out string reason);
+        True(canDeclare,
+            "a tier-3 tributary may declare an ordinary war on C");
+        Equal("", reason,
+            "the formal-vassal war gate does not reject a tributary");
     }
 
     private static void EnsuresOneProposalKeyedAllianceWithdrawalTruce()

@@ -1,0 +1,61 @@
+using System;
+using System.Linq;
+using AncientWarfare3.core.policy;
+
+namespace AncientWarfare3.core.court
+{
+    public static partial class CourtProfileRegistry
+    {
+        public static ICourtProfile For(Kingdom pKingdom)
+        {
+            return For(KingdomPolicyService.GetPolicyProfile(pKingdom));
+        }
+
+        public static string[] CentralOfficeIdsFor(Kingdom pKingdom)
+        {
+            ICourtProfile profile = For(pKingdom);
+            if (profile == null) return Array.Empty<string>();
+            string institution = CourtInstitutionService.GetInstitution(
+                pKingdom);
+            return profile.OfficeIdsForInstitution(institution)
+                .Where(p => profile.FindOffice(p)?.Layer ==
+                            CourtOfficeLayer.Central)
+                .ToArray();
+        }
+
+        public static CourtOfficeDefinition FindOffice(Kingdom pKingdom,
+            string pOfficeId)
+        {
+            return For(pKingdom)?.FindOffice(pOfficeId);
+        }
+
+        public static CourtOfficeDefinition FindOfficeAcrossProfiles(
+            string pOfficeId)
+        {
+            return Xia.FindOffice(pOfficeId) ?? Western.FindOffice(pOfficeId);
+        }
+
+        public static string PreferredSchoolFor(Kingdom pKingdom,
+            string pOfficeId)
+        {
+            return FindOffice(pKingdom, pOfficeId)?.PreferredSchoolId ??
+                   CourtSchoolId.None;
+        }
+
+        public static bool IsOfficeAvailableFor(Kingdom pKingdom,
+            string pOfficeId, string pLayer = null)
+        {
+            CourtOfficeDefinition office = FindOffice(pKingdom, pOfficeId);
+            if (office == null || pLayer != null &&
+                !string.Equals(office.Layer, pLayer,
+                    StringComparison.Ordinal)) return false;
+            return office.AvailableIn(
+                CourtInstitutionService.GetInstitution(pKingdom));
+        }
+
+        public static bool IsMilitaryOfficeAcrossProfiles(string pOfficeId)
+        {
+            return FindOfficeAcrossProfiles(pOfficeId)?.MilitaryCapable == true;
+        }
+    }
+}

@@ -31,6 +31,9 @@ namespace AncientWarfare3.core.policy
         {
             if (pKingdom?.data == null || pKingdom.isRekt() ||
                 pKingdom.cities == null || pKingdom.cities.Count < 2) return;
+            KingdomPolicyEffects effects =
+                KingdomPolicyEffectService.Read(pKingdom);
+            if (!effects.OrganizedFamineTransfers) return;
             int year = Date.getCurrentYear();
             if (LastProcessedYear.TryGetValue(pKingdom.id, out int lastYear) &&
                 lastYear == year) return;
@@ -63,13 +66,16 @@ namespace AncientWarfare3.core.policy
                     Population = population,
                     Food = food
                 };
-                if (food < KingdomFoodReliefRules.EmergencyTarget(population))
+                if (food < KingdomFoodReliefRules.EmergencyTarget(population,
+                        effects.FamineResilience))
                     receivers.Add(state);
                 else if (food > KingdomFoodReliefRules.DonorReserve(population))
                     donors.Add(state);
             }
 
-            int budget = KingdomFoodReliefRules.MaxKingdomTransferPerYear;
+            int budget = KingdomFoodReliefRules.TransferBudget(
+                KingdomFoodReliefRules.MaxKingdomTransferPerYear,
+                effects.StorageMultiplier);
             int relievedCities = 0;
             int donorIndex = 0;
             for (int receiverIndex = 0;
@@ -85,7 +91,8 @@ namespace AncientWarfare3.core.policy
                     CityFoodState donor = donors[donorIndex];
                     int requested = KingdomFoodReliefRules.TransferAmount(
                         receiver.Food, receiver.Population, donor.Food,
-                        donor.Population, budget);
+                        donor.Population, budget,
+                        effects.FamineResilience);
                     if (requested <= 0)
                     {
                         donorIndex++;
@@ -106,7 +113,8 @@ namespace AncientWarfare3.core.policy
                     receivedAny = true;
                     if (receiver.Food >=
                         KingdomFoodReliefRules.EmergencyTarget(
-                            receiver.Population)) break;
+                            receiver.Population,
+                            effects.FamineResilience)) break;
                     if (donor.Food <=
                         KingdomFoodReliefRules.DonorReserve(donor.Population))
                         donorIndex++;

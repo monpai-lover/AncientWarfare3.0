@@ -45,6 +45,40 @@ internal static class CityReservePoolRulesTests
             "peace candidate validation is bounded");
         Equal(32, CityReservePoolRules.ActorBudget(preparation: true),
             "preparation candidate validation remains bounded");
+        Equal(73, CityReservePoolRules.FullReconciliationBudget(
+            residentCount: 61, indexedMemberCount: 12),
+            "war start budgets one complete resident and member pass");
+        Equal(1, CityReservePoolRules.FullReconciliationBudget(
+            residentCount: 0, indexedMemberCount: 0),
+            "an empty uncached city still receives a reconciliation visit");
+
+        Equal(true, CityReservePoolRules.CanRestoreRejectedCandidate(
+            sameKingdom: true, sameCity: true, alive: true,
+            reserveEligible: true, enlistedIntoTargetArmy: false),
+            "a rejected enlistment candidate returns to its source city pool");
+        Equal(false, CityReservePoolRules.CanRestoreRejectedCandidate(
+            sameKingdom: true, sameCity: true, alive: true,
+            reserveEligible: true, enlistedIntoTargetArmy: true),
+            "a successfully enlisted candidate cannot remain in reserve");
+        Equal(false, CityReservePoolRules.CanRestoreRejectedCandidate(
+            sameKingdom: true, sameCity: false, alive: true,
+            reserveEligible: true, enlistedIntoTargetArmy: false),
+            "a migrant cannot be returned to the former city's pool");
+        Equal(true, CityReservePoolRules.MatchesSourceCity(
+            sourceCityId: 10L, candidateCityId: 10L),
+            "an army may consume reserves raised by its source city");
+        Equal(false, CityReservePoolRules.MatchesSourceCity(
+            sourceCityId: 10L, candidateCityId: 20L),
+            "an army cannot consume reserves raised by another city");
+        Equal(true, CityReservePoolRules.ShouldReconcileJoiningKingdom(
+            warActive: true, liveKingdom: true),
+            "a realm joining an active war reconciles every city before freezing");
+        Equal(false, CityReservePoolRules.ShouldReconcileJoiningKingdom(
+            warActive: false, liveKingdom: true),
+            "an ended war cannot trigger a joining-realm reconciliation");
+        Equal(false, CityReservePoolRules.ShouldReconcileJoiningKingdom(
+            warActive: true, liveKingdom: false),
+            "an invalid realm cannot enter reserve reconciliation");
 
         Equal(true, CityReservePoolRules.ShouldApplyReserveExhaustion(
             attackAssignment: true, reinforcementShortage: 1,
@@ -109,28 +143,6 @@ internal static class CityReservePoolRulesTests
             activeWarCount: 0),
             "leaving the final war reopens peace maintenance");
 
-        var donors = new List<CityReserveDonorFacts>
-        {
-            new CityReserveDonorFacts(30L, preferred: false,
-                distanceSquared: 9L),
-            new CityReserveDonorFacts(20L, preferred: false,
-                distanceSquared: 4L),
-            new CityReserveDonorFacts(40L, preferred: true,
-                distanceSquared: 100L),
-            new CityReserveDonorFacts(10L, preferred: false,
-                distanceSquared: 4L)
-        };
-        IReadOnlyList<long> donorOrder =
-            CityReservePoolRules.OrderDonorCityIds(donors);
-        Equal(40L, donorOrder[0],
-            "the army anchor city is consumed before nearby donors");
-        Equal(10L, donorOrder[1],
-            "equal-distance donors use ascending city id");
-        Equal(20L, donorOrder[2],
-            "the second equal-distance donor remains deterministic");
-        Equal(30L, donorOrder[3],
-            "more distant donors are consumed last");
-
         var actorIds = new SortedSet<long> { 9L, 3L, 7L };
         Equal(true, CityReservePoolRules.TryTakeNextActorId(actorIds,
             out long firstActorId),
@@ -180,6 +192,26 @@ internal static class CityReservePoolRulesTests
             "eligible civilians without registrations do not block exhaustion");
         Equal(true, CityReservePoolRules.HasRemainingUsableActors(1),
             "one registered reserve actor keeps the pool available");
+
+        Equal(true, CityReservePoolRules.ShouldDeferPersistedMemberValidation(
+            hasPersistedMember: true, restoreValidationReady: false),
+            "save restore defers member validation until actor state is ready");
+        Equal(false, CityReservePoolRules.ShouldDeferPersistedMemberValidation(
+            hasPersistedMember: true, restoreValidationReady: true),
+            "ready restore may validate persisted reserve membership");
+        Equal(false, CityReservePoolRules.ShouldDeferPersistedMemberValidation(
+            hasPersistedMember: false, restoreValidationReady: false),
+            "unmarked actors do not enter deferred member validation");
+
+        Equal(true, CityReservePoolRules.ShouldDeferCallbackInvalidation(
+            hasPersistedMember: true, restoreInFlight: true),
+            "load-time profession callbacks preserve persisted reserve members");
+        Equal(false, CityReservePoolRules.ShouldDeferCallbackInvalidation(
+            hasPersistedMember: false, restoreInFlight: true),
+            "load-time callbacks do not defer unmarked actors");
+        Equal(false, CityReservePoolRules.ShouldDeferCallbackInvalidation(
+            hasPersistedMember: true, restoreInFlight: false),
+            "normal profession changes still validate reserve members");
     }
 
     private static void Equal<T>(T expected, T actual, string name)

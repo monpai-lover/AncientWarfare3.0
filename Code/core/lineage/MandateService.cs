@@ -230,7 +230,9 @@ namespace AncientWarfare3.core.lineage
             {
                 MandatePhaseService.EvaluateVacantWorldYear(
                     ReadReport(), Date.getCurrentYear());
-                if (MandateRebelService.HasActiveRebelClaimants()) return;
+                if (ZhuluWarRules.HasActiveClaimants(
+                        MandateRebelService.HasActiveRebelClaimants(),
+                        ZhuluWarService.HasActivePrincipalWars())) return;
                 TryAutoDeclareMandate(pKingdom);
                 return;
             }
@@ -280,9 +282,53 @@ namespace AncientWarfare3.core.lineage
             }
         }
 
-        public static bool TryDeclareMandate(Kingdom pKingdom, string pReason = "decision",
-            string pOriginType = "native", string pClaimantKind = "orthodox", Kingdom pRebelOrigin = null)
+        public static bool TryDeclareMandate(Kingdom pKingdom,
+            string pReason = "decision", string pOriginType = "native",
+            string pClaimantKind = "orthodox",
+            Kingdom pRebelOrigin = null)
         {
+            return TryDeclareMandateCore(pKingdom, pReason, pOriginType,
+                pClaimantKind, pRebelOrigin, pForceZhuluAge: false);
+        }
+
+        public static bool TryForceGrantMandateForZhuluAge(
+            Kingdom pTarget, out string pReason)
+        {
+            pReason = "";
+            if (!Ready)
+            {
+                pReason = "database_not_ready";
+                return false;
+            }
+            if (pTarget?.data == null || pTarget.isRekt() ||
+                !pTarget.isCiv() || pTarget.isNeutral())
+            {
+                pReason = "invalid";
+                return false;
+            }
+            if (!pTarget.hasKing() || pTarget.king?.data == null)
+            {
+                pReason = "no_king";
+                return false;
+            }
+            if (IsMandateKingdom(pTarget)) return true;
+
+            bool orthodox = XiaizationService.CanUseMandateSystem(pTarget);
+            string origin = orthodox ? "zhulu_age" : "pseudo_foreign";
+            string claimant = orthodox ? "orthodox" : "foreign_pseudo";
+            bool granted = TryDeclareMandateCore(pTarget,
+                "zhulu_age_lead", origin, claimant, null,
+                pForceZhuluAge: true);
+            if (!granted) pReason = "grant_failed";
+            return granted;
+        }
+
+        private static bool TryDeclareMandateCore(Kingdom pKingdom,
+            string pReason, string pOriginType, string pClaimantKind,
+            Kingdom pRebelOrigin, bool pForceZhuluAge)
+        {
+            if (!pForceZhuluAge &&
+                ZhuluWarService.HasActivePrincipalWars()) return false;
             if (pKingdom?.data != null)
             {
                 pKingdom.data.get(LineageKeys.RESTORATION_COMPLETED,
@@ -294,7 +340,13 @@ namespace AncientWarfare3.core.lineage
             }
             NormalizeForeignMandateOrigin(pKingdom, pReason, ref pOriginType, ref pClaimantKind);
             if (!Ready) return false;
-            if (!CanDeclareMandateForOrigin(pKingdom, pReason, pOriginType, pClaimantKind, out _)) return false;
+            if (pKingdom?.data == null || pKingdom.isRekt() ||
+                !pKingdom.isCiv() || pKingdom.isNeutral() ||
+                !pKingdom.hasKing() || pKingdom.king?.data == null)
+                return false;
+            if (!pForceZhuluAge &&
+                !CanDeclareMandateForOrigin(pKingdom, pReason,
+                    pOriginType, pClaimantKind, out _)) return false;
 
             MandateReport previousReport = ReadReport();
             bool hadPreviousMandate = previousReport.period_id >= 0;
@@ -391,6 +443,11 @@ namespace AncientWarfare3.core.lineage
         public static bool TryGrantMandateByPlayer(Kingdom pTarget, out string pReason)
         {
             pReason = "";
+            if (ZhuluWarService.HasActivePrincipalWars())
+            {
+                pReason = "zhulu_unresolved";
+                return false;
+            }
             bool validTarget = pTarget?.data != null && !pTarget.isRekt() &&
                                pTarget.isCiv() && !pTarget.isNeutral();
             if (!Ready)
@@ -424,6 +481,11 @@ namespace AncientWarfare3.core.lineage
             MandateDeclarationSource pSource, out string pReason)
         {
             pReason = "";
+            if (ZhuluWarService.HasActivePrincipalWars())
+            {
+                pReason = "zhulu_unresolved";
+                return false;
+            }
             if (pKingdom?.data == null || pKingdom.isRekt() || !pKingdom.isCiv() || pKingdom.isNeutral())
             {
                 pReason = "invalid";
@@ -489,6 +551,11 @@ namespace AncientWarfare3.core.lineage
         private static bool CanDeclareMandateForOrigin(Kingdom pKingdom, string pDeclarationReason,
             string pOriginType, string pClaimantKind, out string pReason)
         {
+            if (ZhuluWarService.HasActivePrincipalWars())
+            {
+                pReason = "zhulu_unresolved";
+                return false;
+            }
             MandateDeclarationSource source = MandateRitesRules.ResolveSource(
                 pDeclarationReason, pOriginType, pClaimantKind);
             bool rebelOrigin = source == MandateDeclarationSource.MandateRebel;

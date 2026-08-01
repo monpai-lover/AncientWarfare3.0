@@ -85,7 +85,8 @@ namespace AncientWarfare3.core.policy
             bool nonCore, bool activeFief = false, float taxMultiplier = 1f,
             float manpowerMultiplier = 1f, float unrestReduction = 0f,
             float feudatoryRemittanceMultiplier = 1f,
-            float policyMultiplier = 1f, float techMultiplier = 1f)
+            float policyMultiplier = 1f, float techMultiplier = 1f,
+            float farmOutputMultiplier = 1f)
         {
             float pop = Mathf.Max(0, population);
             float techFactor = totalTechCount <= 0 ? 0f : Mathf.Clamp01((float)adoptedTechCount / totalTechCount);
@@ -146,6 +147,7 @@ namespace AncientWarfare3.core.policy
             tech *= techMultiplier;
             tax *= taxMultiplier;
             manpower *= manpowerMultiplier;
+            food *= farmOutputMultiplier;
             float remittance = Mathf.Clamp01(feudatoryRemittanceMultiplier);
             policy *= remittance;
             tax *= remittance;

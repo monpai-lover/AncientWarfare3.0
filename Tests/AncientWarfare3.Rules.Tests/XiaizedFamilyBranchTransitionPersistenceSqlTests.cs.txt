@@ -1,0 +1,142 @@
+using System.Data.SQLite;
+using AncientWarfare3.core.lineage;
+
+internal static class XiaizedFamilyBranchTransitionPersistenceSqlTests
+{
+    public static void Run()
+    {
+        CreatesChildAndMovesOnlyLivingMembers();
+        ReplayReusesTheSameChild();
+        FailureRollsBackEveryWrite();
+    }
+
+    private static void CreatesChildAndMovesOnlyLivingMembers()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedWesternBranch(db);
+        XiaizedFamilyBranchTransitionResult result =
+            XiaizedFamilyBranchTransitionPersistence.TryCommit(db,
+                Request());
+
+        Equal(true, result.Success, "transition commits");
+        Equal(11L, result.NewShiId, "one child Shi is allocated");
+        Equal("western|德·巴黎", ScalarText(db,
+            "SELECT NAMING_PROFILE||'|'||DISPLAY_STEM FROM ShiBranch " +
+            "WHERE SHI_ID=10"), "the historical western branch is unchanged");
+        Equal("10|xia||洛", ScalarText(db,
+            "SELECT PARENT_SHI_ID||'|'||NAMING_PROFILE||'|'||" +
+            "WESTERN_NAMING_TRADITION||'|'||DISPLAY_STEM FROM ShiBranch " +
+            "WHERE SHI_ID=11"), "the new Xia branch points to its parent");
+        Equal("11|姬|洛|1", ScalarText(db,
+            "SELECT SHI_ID||'|'||FAMILY_NAME||'|'||CLAN_NAME||'|'||" +
+            "NAME_INTEGRATED FROM ActorArchive WHERE ID=101"),
+            "living members move to the Xia branch");
+        Equal("10|德·巴黎|德·巴黎|0", ScalarText(db,
+            "SELECT SHI_ID||'|'||FAMILY_NAME||'|'||CLAN_NAME||'|'||" +
+            "NAME_INTEGRATED FROM ActorArchive WHERE ID=102"),
+            "dead members remain on the historical branch");
+    }
+
+    private static void ReplayReusesTheSameChild()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedWesternBranch(db);
+        XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
+        XiaizedFamilyBranchTransitionResult replay =
+            XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request());
+
+        Equal(true, replay.Success, "replay succeeds");
+        Equal(11L, replay.NewShiId, "replay reuses the existing Xia child");
+        Equal(2L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "replay creates no duplicate branch");
+    }
+
+    private static void FailureRollsBackEveryWrite()
+    {
+        using SQLiteConnection db = OpenDatabase();
+        SeedWesternBranch(db);
+        XiaizedFamilyBranchTransitionResult failed =
+            XiaizedFamilyBranchTransitionPersistence.TryCommit(db, Request(),
+                stage => stage ==
+                    XiaizedFamilyBranchTransitionStage.AfterBranchWrite);
+
+        Equal(false, failed.Success, "injected failure is reported");
+        Equal(1L, ScalarLong(db, "SELECT COUNT(*) FROM ShiBranch"),
+            "failed transition leaves no child branch");
+        Equal(10L, ScalarLong(db,
+            "SELECT SHI_ID FROM ActorArchive WHERE ID=101"),
+            "failed transition leaves the living actor on the old branch");
+    }
+
+    private static XiaizedFamilyBranchTransitionRequest Request()
+    {
+        return new XiaizedFamilyBranchTransitionRequest
+        {
+            FounderActorId = 101L,
+            LineageId = 5L,
+            OldShiId = 10L,
+            OldNamingProfile = "western",
+            FamilyName = "姬",
+            ClanName = "洛",
+            OriginKingdomId = 7L,
+            OriginCityId = 8L,
+            OriginCityChineseName = "洛阳",
+            CreatedTime = 100d
+        };
+    }
+
+    private static SQLiteConnection OpenDatabase()
+    {
+        var db = new SQLiteConnection("Data Source=:memory:");
+        db.Open();
+        Execute(db, "CREATE TABLE ShiBranch (SHI_ID INTEGER PRIMARY KEY," +
+            "LINEAGE_ID INTEGER,CLAN_NAME TEXT,PARENT_SHI_ID INTEGER," +
+            "NAMING_PROFILE TEXT,WESTERN_NAMING_TRADITION TEXT," +
+            "ORIGIN_CITY_CHINESE_NAME TEXT,DISPLAY_STEM TEXT," +
+            "FOUNDER_ACTOR_ID INTEGER,SOURCE_TYPE TEXT," +
+            "ORIGIN_KINGDOM_ID INTEGER,ORIGIN_CITY_ID INTEGER," +
+            "ORIGIN_ORIGINAL_CLAN_ID INTEGER,CREATED_TIME REAL," +
+            "IS_EXTINCT INTEGER)");
+        Execute(db, "CREATE TABLE ActorArchive (ID INTEGER PRIMARY KEY," +
+            "SHI_ID INTEGER,LINEAGE_ID INTEGER,FAMILY_NAME TEXT," +
+            "CLAN_NAME TEXT,GIVEN_NAME TEXT,DISPLAY_NAME TEXT," +
+            "NAME_INTEGRATED INTEGER,IS_ALIVE INTEGER)");
+        return db;
+    }
+
+    private static void SeedWesternBranch(SQLiteConnection db)
+    {
+        Execute(db, "INSERT INTO ShiBranch VALUES " +
+            "(10,5,'德·巴黎',-1,'western','de','巴黎','德·巴黎'," +
+            "101,'western_admission',7,8,-1,1,0)");
+        Execute(db, "INSERT INTO ActorArchive VALUES " +
+            "(101,10,5,'德·巴黎','德·巴黎','路易','路易 德·巴黎',0,1)");
+        Execute(db, "INSERT INTO ActorArchive VALUES " +
+            "(102,10,5,'德·巴黎','德·巴黎','查理','查理 德·巴黎',0,0)");
+    }
+
+    private static void Execute(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        command.ExecuteNonQuery();
+    }
+
+    private static long ScalarLong(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    private static string ScalarText(SQLiteConnection db, string sql)
+    {
+        using var command = new SQLiteCommand(sql, db);
+        return Convert.ToString(command.ExecuteScalar()) ?? string.Empty;
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        if (!Equals(expected, actual))
+            throw new InvalidOperationException(
+                $"{message}: expected {expected}, got {actual}");
+    }
+}

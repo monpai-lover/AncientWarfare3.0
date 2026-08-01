@@ -1,5 +1,6 @@
 key,cz,en,ch
 aw_policy_state_short,政,State,政
+aw_policy_court_short,宫廷,Court,宮廷
 aw_policy_research_short,研,Research,研
 aw_policy_decision_short,令,Decision,令
 aw_policy_decisions,常态决策,Decisions,常態決策
@@ -16,3 +17,7 @@ aw_decision_change_capital,迁都,Move Capital,遷都
 aw_decision_change_capital_desc,非战时迁往更强的统治城市,Move the capital to a stronger city in peace,非戰時遷往更強的統治城市
 aw_decision_control_slaves,整饬奴隶,Discipline Slaves,整飭奴隸
 aw_decision_control_slaves_desc,重申奴隶管控与捕奴职责,Reinforce slave control and catcher duties,重申奴隸管控與捕奴職責
+aw_decision_appease_foreign_cities,安抚异族,Appease Foreign Cities,安撫異族
+aw_decision_appease_foreign_cities_desc,安抚本国控制的异文化城市并降低占领民怨,Appease controlled foreign-culture cities and reduce occupation unrest,安撫本國控制的異文化城市並降低佔領民怨
+aw_west_decision_consolidate_royal_authority,巩固王权,Consolidate Royal Authority,鞏固王權
+aw_west_decision_consolidate_royal_authority_desc,整合宫廷与王室领地以降低继承争议并提高合法性,Unify court and royal lands to reduce succession disputes and raise legitimacy,整合宮廷與王室領地以降低繼承爭議並提高合法性

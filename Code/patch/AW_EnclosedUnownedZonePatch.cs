@@ -33,7 +33,7 @@ namespace AncientWarfare3.patch
         private static void OnWorldLoaded()
         {
             MapBox.on_world_loaded -= OnWorldLoaded;
-            EnclosedUnownedZoneRepairService.BeginInitialSweep();
+            EnclosedUnownedZoneRepairService.RepairWorldImmediately();
         }
     }
 }

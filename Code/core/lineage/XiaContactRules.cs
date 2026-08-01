@@ -19,6 +19,28 @@ namespace AncientWarfare3.core.lineage
         private const int MaxOccupiedCitiesPerYear = 5;
         private const int MaxMixedChildEventsPerYear = 8;
 
+        public static bool CanPropagateFromKingdom(bool nativeXiaKingdom,
+            bool usesXiaInstitutions)
+        {
+            return nativeXiaKingdom;
+        }
+
+        public static bool CanPropagateFromOfficial(bool biologicalXia,
+            bool usesAwLineageSystem)
+        {
+            return biologicalXia;
+        }
+
+        public static bool ShouldClearLegacyFalseOfficialContact(
+            bool nativeXiaKingdom, float progress, int level,
+            string sourceMask, bool hasCurrentQualifyingContact)
+        {
+            if (nativeXiaKingdom || progress <= 0f || level > LevelKnownXia ||
+                hasCurrentQualifyingContact) return false;
+            return string.Equals((sourceMask ?? string.Empty).Trim(),
+                "official", StringComparison.Ordinal);
+        }
+
         public static float CalculateYearlyGain(bool pBordersXia, bool pDiplomaticContact, bool pVassalContact,
             int pOccupiedXiaCityCount, int pMixedChildEvents, bool pOfficialContact = false,
             bool pNearbyXiaContact = false)

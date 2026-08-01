@@ -40,6 +40,7 @@ namespace AncientWarfare3.core.lineage
                 case "war_jingnan":
                 case "war_succession_dispute":
                 case "war_coup_restoration":
+                case "war_zhulu":
                     return true;
                 default:
                     return false;
