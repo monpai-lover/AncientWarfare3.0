@@ -6,6 +6,8 @@
 
 **Architecture:** Main-thread hooks coalesce dirty 32x32 chunks and capture immutable cell facts with a two-tile halo. A latest-wins background worker extracts protected topology, river corridors, safe natural curves, consolidated owner polygons, and pure mesh drafts; the main thread uploads pooled country/city fill and two-sided transition-boundary meshes and binds a custom shader bundle with a built-in fallback. Tiles are topology input only: there is no per-tile renderer and no local update replaces the whole map.
 
+**Current status (2026-08-02):** Tasks 1-8 and 10-12 are implemented and verified. Task 9 source, ShaderLab files, loader, and fallback are implemented; AssetBundle generation is blocked by the local Unity Editor reporting `No valid Unity Editor license found`. Task 13 source deployment and hash verification are complete; in-game acceptance remains pending because no DLL compilation was authorized and no valid AssetBundle is available.
+
 **Tech Stack:** C# 11/net48 mod runtime, .NET 9 standalone rule tests, Harmony, Unity `MeshFilter`/`MeshRenderer`, Unity ShaderLab and AssetBundle build pipeline, PowerShell source guards.
 
 ---
