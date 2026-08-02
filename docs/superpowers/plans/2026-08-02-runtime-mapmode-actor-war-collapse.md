@@ -52,15 +52,15 @@ Equal(false, WarNoForceSurrenderRules.IsNoForce(
     "reserve soldiers prevent false surrender");
 Equal(true, WarNoForceSurrenderRules.ShouldSurrender(
     warYears: 3, sideNoForce: true, enemyHasForce: true,
-    protectedTotalWar: false, bothSidesNoForce: false),
+    ordinaryNegotiationBlocked: false, bothSidesNoForce: false),
     "late ordinary war with no force surrenders");
 Equal(true, WarNoForceSurrenderRules.ShouldSurrender(
     warYears: 3, sideNoForce: true, enemyHasForce: true,
-    protectedTotalWar: true, bothSidesNoForce: false),
-    "late total war with no force also collapses");
+    ordinaryNegotiationBlocked: true, bothSidesNoForce: false),
+    "late non-negotiable war with no force also collapses");
 Equal(false, WarNoForceSurrenderRules.ShouldSurrender(
     warYears: 3, sideNoForce: true, enemyHasForce: false,
-    protectedTotalWar: true, bothSidesNoForce: true),
+    ordinaryNegotiationBlocked: true, bothSidesNoForce: true),
     "a two-sided empty war waits for a deterministic winner");
 ```
 
@@ -114,7 +114,7 @@ namespace AncientWarfare3.core.policy
 }
 ```
 
-`HierarchicalVassalMapModeInvalidationRules.IsFallbackDue` compares elapsed seconds with a positive interval. `WarNoForceSurrenderRules` must require war years `>= 3`, positive enemy force, and reject the both-empty case; the `protectedTotalWar` argument is informational for the caller and must not suppress the trigger.
+`HierarchicalVassalMapModeInvalidationRules.IsFallbackDue` compares elapsed seconds with a positive interval. `WarNoForceSurrenderRules` must require war years `>= 3`, positive enemy force, and reject the both-empty case. The `ordinaryNegotiationBlocked` argument identifies the continuous-territory path and must not suppress the trigger.
 
 - [ ] **Step 2: Run the focused rules tests**
 
@@ -293,29 +293,31 @@ git commit -m "feat: aggregate military potential per war side"
 - Modify: `Code/core/lineage/DiplomacyProposalService.cs`
 - Modify: `Code/core/lineage/WarPeaceSettlementRuntime.cs`
 - Modify: `Code/core/lineage/WarTerritoryService.cs`
+- Modify: `Code/core/lineage/ZhuluWarSettlementService.cs`
+- Create: `Code/core/lineage/WarTotalWarSurrenderService.cs`
 - Modify: `Code/patch/AW_WarPatch.cs`
 - Modify: `Tests/AncientWarfare3.Rules.Tests/WarNoForceSurrenderRulesTests.cs.txt`
 
 - [ ] **Step 1: Add no-force decision priority**
 
-At the annual war settlement assessment, build side facts after mobilization. Call `WarNoForceSurrenderRules.ShouldSurrender`; when true, create a surrender candidate with higher priority than ordinary peace/enforce-demands candidates. Do not bypass `IsProtectedWar`, proposal validation, or replica gates for ordinary wars.
+At the annual war settlement assessment, build side facts after mobilization. Call `WarNoForceSurrenderRules.ShouldSurrender`; when true, create a surrender candidate with higher priority than ordinary peace/enforce-demands candidates. Use a unified `BlocksOrdinaryNegotiation(War)` predicate composed from the existing protected-war, Zhulu, total-war, and direct-transfer guards. Do not bypass proposal validation or replica gates.
 
-- [ ] **Step 2: Route total-war no-force to full surrender**
+- [ ] **Step 2: Route non-negotiable no-force to continuous-territory surrender**
 
-For a `WarTypeAsset.total_war` asset, including Zhulu, bypass ordinary proposal creation only after the no-force rule is true. Zhulu must enqueue its existing `ZhuluWarSettlementService` full-territory transaction. Other total-war assets use one idempotent `WarTotalWarSurrenderService.Apply(war, defeatedSide, winnerSide)` main-thread transaction that:
+For any war classified by `BlocksOrdinaryNegotiation`, bypass ordinary proposal creation only after the no-force rule is true. Zhulu must enqueue its existing `ZhuluWarSettlementService` transaction, updated to transfer only the defeated side's largest connected controlled land region. Other non-negotiable wars use one idempotent `WarTotalWarSurrenderService.Apply(war, defeatedSide, winnerSide)` main-thread transaction that:
 
 ```csharp
 if (!WarNoForceSurrenderRules.ShouldSurrender(...)) return false;
-WarTerritoryService.TransferAllEligibleDefeatedTerritory(
+WarTerritoryService.TransferLargestConnectedDefeatedTerritory(
     pWar, pDefeatedSide, pWinnerSide);
 WarScoreService.EndWarAsSurrender(pWar, pDefeatedSide, pWinnerSide);
 ```
 
-The transaction must close Army missions, occupation locks, participant state, and war persistence once. If no territory remains, call existing extinction cleanup. Do not route rebellion, independence, mandate, or restoration protected wars through this full-annex path.
+The transaction must close Army missions, occupation locks, participant state, and war persistence once. If no continuous territory remains, call existing extinction cleanup. Disconnected islands/enclaves remain with the defeated side. All war types blocked from ordinary negotiation use this same continuous-territory outcome.
 
 - [ ] **Step 3: Protect both-empty wars**
 
-When both sides have zero potential, do not choose a surrender unless the existing war-score winner/tie-breaker identifies a surviving side. Add a regression test for a total war with both sides empty.
+When both sides have zero potential, do not choose a surrender unless the existing war-score winner/tie-breaker identifies a surviving side. Add regressions for a total war and a protected non-total war with both sides empty.
 
 - [ ] **Step 4: Run tests and commit**
 

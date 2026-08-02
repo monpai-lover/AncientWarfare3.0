@@ -14,8 +14,9 @@ the new invalidation or no-force settlement gates.
    without reducing Actor, movement, city, or war simulation frequency.
 3. End late wars that have genuinely exhausted one whole side's military
    potential instead of allowing a country to remain in a dead war forever.
-4. Make a total-war surrender (including Zhulu) transfer the defeated side's
-   entire eligible territory, not a partial peace settlement.
+4. Make a surrender in every war that cannot use ordinary negotiation transfer
+   the defeated side's continuous main territory, while allowing disconnected
+   islands or enclaves to remain.
 
 ## Non-Goals
 
@@ -109,27 +110,29 @@ using the current war score and active war goals. The no-force rule supplies a
 high-priority surrender decision; it does not bypass validation, protected
 goals, or the existing settlement transaction.
 
-### Total wars and Zhulu
+### Non-negotiable wars
 
-Wars whose `WarTypeAsset.total_war` flag is true, including Zhulu, do not create
-an ordinary peace proposal. Other protected wars such as rebellions,
-independence, mandate, and restoration wars keep their existing protected
-settlement semantics. When a total-war defeated side satisfies `NoForce`, the
-runtime executes a total-war surrender settlement:
+Wars that cannot use ordinary negotiation, including Zhulu, total-war assets,
+and the existing protected/direct-transfer war types, do not create an ordinary
+peace proposal. When a defeated side satisfies `NoForce`, the runtime executes
+a continuous-territory surrender settlement:
 
 - the surviving side is recorded as the winner;
-- every eligible city/territory controlled by the defeated side is transferred
-  according to the existing total-war occupation/annexation transfer path;
+- every city in the defeated side's largest connected controlled land region is
+  transferred according to the existing occupation/annexation transfer path;
+- disconnected islands and enclaves outside that main region may remain under
+  the defeated side;
 - no partial war-goal selection is offered;
 - all Army missions, occupation locks, and participant records are closed by
   the same end-war transaction used by other authoritative war endings.
 
 Zhulu reuses the existing queued and retryable `ZhuluWarSettlementService`
-full-territory transfer. A generic total-war path must preserve that
-transaction shape instead of adding a second direct `endWar` route.
+transfer, updated to select the continuous main region. Other non-negotiable
+wars use one equivalent, idempotent main-thread transfer transaction instead of
+partial war-goal terms.
 
 If the defeated side has no eligible territory left, the normal extinction
-cleanup path is used. A total war with no-force on both sides does not trigger
+cleanup path is used. A non-negotiable war with no-force on both sides does not trigger
 until one side has positive military potential or a deterministic tie-breaker
 from the existing war-score winner is available.
 
