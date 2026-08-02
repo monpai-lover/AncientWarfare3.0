@@ -34,16 +34,153 @@ function Forbid-Regex([string]$name, [string]$source,
     }
 }
 
+function Forbid-Text([string]$name, [string]$source,
+    [string]$needle, [string]$message) {
+    if ($source.Contains($needle)) {
+        $failures.Add("${name}: $message")
+    }
+}
+
 $tracker = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundaryDirtyTracker.cs'
 $capture = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundarySnapshotCapture.cs'
+$capturedModel = Read-Source `
+    'Code/core/policy/HierarchicalVassalBoundaryChunkSnapshot.cs'
 $snapshot = Read-Source `
     'Code/core/policy/HierarchicalVassalMapModeSnapshot.cs'
 $service = Read-Source `
     'Code/core/policy/HierarchicalVassalMapModeService.cs'
 $chunkRules = Read-Source `
     'Code/core/policy/HierarchicalVassalBoundaryChunkRules.cs'
+$worker = Read-Source `
+    'Code/core/policy/HierarchicalVassalBoundaryTopologyWorker.cs'
+$projectVersion = Read-Source `
+    'Tools/HierarchicalVassalBoundaryShader/ProjectSettings/ProjectVersion.txt'
+$fillShader = Read-Source `
+    'Tools/HierarchicalVassalBoundaryShader/Assets/Shaders/AW3HierarchicalVassalFill.shader'
+$boundaryShader = Read-Source `
+    'Tools/HierarchicalVassalBoundaryShader/Assets/Shaders/AW3HierarchicalVassalBoundary.shader'
+$bundleBuilder = Read-Source `
+    'Tools/HierarchicalVassalBoundaryShader/Assets/Editor/AW3BoundaryBundleBuilder.cs'
+$materialLibrary = Read-Source `
+    'Code/core/policy/HierarchicalVassalBoundaryMaterialLibrary.cs'
+
+Require-Text 'Unity project version' $projectVersion 'm_EditorVersion: 2022.3.60f1' `
+    'must match the installed WorldBox Unity player editor version'
+Require-Text 'fill shader' $fillShader 'Shader "AW3/HierarchicalVassal/Fill"' `
+    'must expose the bundled fill shader name'
+Require-Text 'fill shader' $fillShader '_OverlayAlpha' `
+    'must expose overlay alpha control'
+Require-Text 'fill shader' $fillShader '_EdgeSoftness' `
+    'must expose edge feather softness'
+Require-Text 'fill shader' $fillShader 'fwidth' `
+    'must derive edge feather width from screen derivatives'
+Require-Text 'fill shader' $fillShader 'smoothstep' `
+    'must antialias fill edges with smoothstep'
+Require-Text 'fill shader' $fillShader '_HeightTex_TexelSize' `
+    'must use texture texel size for center differences'
+Require-Text 'fill shader' $fillShader '_HeightUvScaleOffset' `
+    'must expose height UV scale/offset'
+Require-Text 'fill shader' $fillShader '_ReliefStrength' `
+    'must expose height relief strength'
+Require-Text 'fill shader' $fillShader '_MapLightDirection' `
+    'must expose map light direction'
+Require-Text 'fill shader' $fillShader 'Blend SrcAlpha OneMinusSrcAlpha' `
+    'must use transparent alpha blending'
+Require-Text 'fill shader' $fillShader 'tex2D(_HeightTex' `
+    'must sample the single-channel height texture'
+Require-Text 'fill shader' $fillShader 'heightPlus' `
+    'must calculate a centered height difference'
+Forbid-Regex 'fill shader' $fillShader `
+    '(?m)vertex\.(?:vertex|position|xyz)\s*[+\-]=' `
+    'height relief must not displace vertices'
+
+Require-Text 'boundary shader' $boundaryShader `
+    'Shader "AW3/HierarchicalVassal/Boundary"' `
+    'must expose the bundled boundary shader name'
+Require-Text 'boundary shader' $boundaryShader '_LeftColor' `
+    'must expose left-side color'
+Require-Text 'boundary shader' $boundaryShader '_RightColor' `
+    'must expose right-side color'
+Require-Text 'boundary shader' $boundaryShader '_CameraWorldPerPixel' `
+    'must use camera world-pixel scale for edge AA'
+Require-Text 'boundary shader' $boundaryShader '_DarkOutline' `
+    'must expose center dark-line strength'
+Require-Text 'boundary shader' $boundaryShader '_EdgeSoftness' `
+    'must expose edge softness'
+Require-Text 'boundary shader' $boundaryShader '_HeightTex_TexelSize' `
+    'must use shared height texture texel size'
+Require-Text 'boundary shader' $boundaryShader '_HeightUvScaleOffset' `
+    'must expose shared height UV scale/offset'
+Require-Text 'boundary shader' $boundaryShader '_ReliefStrength' `
+    'must expose shared height relief strength'
+Require-Text 'boundary shader' $boundaryShader '_MapLightDirection' `
+    'must expose shared map light direction'
+Require-Text 'boundary shader' $boundaryShader 'tex2D(_HeightTex' `
+    'must sample shared height texture'
+Require-Text 'boundary shader' $boundaryShader 'heightPlus' `
+    'must calculate centered height differences'
+Require-Text 'boundary shader' $boundaryShader 'fwidth' `
+    'must use derivative antialiasing'
+Require-Text 'boundary shader' $boundaryShader 'smoothstep' `
+    'must use smoothstep antialiasing'
+Require-Text 'boundary shader' $boundaryShader 'uv0.x' `
+    'must read signed edge distance from UV0'
+Require-Text 'boundary shader' $boundaryShader 'uv1.x' `
+    'must read boundary tier from UV1'
+Require-Text 'boundary shader' $boundaryShader 'coast' `
+    'must handle water-side coastline alpha'
+Require-Text 'boundary shader' $boundaryShader 'Queue"="Transparent-100"' `
+    'must render before labels and click overlays'
+Require-Text 'boundary shader' $boundaryShader 'ZWrite Off' `
+    'must not write depth over labels'
+
+Require-Text 'bundle builder' $bundleBuilder 'BuildWindows' `
+    'must expose a Windows bundle build entry point'
+Require-Text 'bundle builder' $bundleBuilder 'GameResources/assetbundles' `
+    'must write into the mod GameResources assetbundles directory'
+Require-Text 'bundle builder' $bundleBuilder `
+    'aw3_hierarchical_vassal_boundary' `
+    'must use the stable boundary bundle name'
+Require-Text 'bundle builder' $bundleBuilder 'ChunkBasedCompression' `
+    'must use chunk-based compression'
+Require-Text 'bundle builder' $bundleBuilder 'StandaloneWindows64' `
+    'must target Windows 64-bit'
+Require-Text 'bundle builder' $bundleBuilder `
+    'AW3/HierarchicalVassal/Fill' `
+    'must include the fill shader asset'
+Require-Text 'bundle builder' $bundleBuilder `
+    'AW3/HierarchicalVassal/Boundary' `
+    'must include the boundary shader asset'
+
+Require-Text 'material library' $materialLibrary `
+    'ModClass.Instance.GetDeclaration().FolderPath' `
+    'must resolve the bundle from the mod declaration folder'
+Require-Text 'material library' $materialLibrary `
+    'aw3_hierarchical_vassal_boundary' `
+    'must load the boundary bundle'
+Require-Text 'material library' $materialLibrary `
+    'AW3/HierarchicalVassal/Fill' `
+    'must load the fill shader by bundled name'
+Require-Text 'material library' $materialLibrary `
+    'AW3/HierarchicalVassal/Boundary' `
+    'must load the boundary shader by bundled name'
+Require-Text 'material library' $materialLibrary 'Unload(false)' `
+    'must unload bundle assets while retaining loaded shaders'
+Forbid-Text 'material library' $materialLibrary 'Unload(true)' `
+    'must never unload loaded shader assets'
+Require-Text 'material library' $materialLibrary 'Shader.Find("Sprites/Default")' `
+    'must provide a Sprites/Default fallback shader'
+Require-Text 'material library' $materialLibrary '_ReliefStrength' `
+    'must disable height relief on fallback'
+Require-Text 'material library' $materialLibrary 'LogWarning' `
+    'must report fallback failure'
+Require-Text 'material library' $materialLibrary '_warningWritten' `
+    'must emit only one fallback warning'
+Forbid-Regex 'material library' $materialLibrary `
+    '\b(?:Instantiate|Clone)\s*\(' `
+    'must reuse shared materials instead of cloning per chunk'
 
 Require-Text 'chunk rules' $chunkRules 'CaptureBudgetPerFrame = 2' `
     'capture budget must remain exactly two chunks per frame'
@@ -137,21 +274,43 @@ Require-Regex 'map snapshot service' $service `
     '\.neighbours\b' `
     'canonical colors must use real zone adjacency'
 
-$modelStart = $capture.IndexOf(
+$modelStart = $capturedModel.IndexOf(
     'public sealed class HierarchicalVassalBoundaryChunkSnapshot')
-$modelEnd = $capture.IndexOf(
-    'internal sealed class HierarchicalVassalBoundarySnapshotCapture',
-    $modelStart)
+$modelEnd = $capturedModel.LastIndexOf('}')
 if ($modelStart -lt 0 -or $modelEnd -le $modelStart) {
     $failures.Add('captured boundary snapshot: cannot isolate data model region')
     $capturedModelRegion = ''
 } else {
-    $capturedModelRegion = $capture.Substring(
+    $capturedModelRegion = $capturedModel.Substring(
         $modelStart, $modelEnd - $modelStart)
 }
 Forbid-Regex 'captured boundary snapshot' $capturedModelRegion `
     '(?m)\b(?:public|internal|protected|private)\s+(?:(?:readonly|static)\s+)*(?:(?:IReadOnlyList|IReadOnlyCollection|List|Dictionary|Queue|HashSet)<\s*)?(?:World|Kingdom|City|TileZone|WorldTile|UnityEngine(?:\.[A-Za-z_][A-Za-z0-9_]*)?|object)\b(?:\s*\[\s*\])?' `
     'captured snapshot data fields and properties must use primitive/pure types only'
+
+Require-Text 'topology worker' $worker 'new Thread(' `
+    'must own one dedicated worker thread'
+if (([regex]::Matches($worker, 'new\s+Thread\s*\(')).Count -ne 1) {
+    $failures.Add('topology worker: must create exactly one dedicated worker thread')
+}
+Require-Text 'topology worker' $worker 'AutoResetEvent' `
+    'must signal bounded pending work without polling'
+Require-Text 'topology worker' $worker 'Dictionary<WorkKey,' `
+    'must coalesce pending requests by generation and chunk key'
+Require-Text 'topology worker' $worker 'Dictionary<WorkKey, long>' `
+    'must retain the latest accepted revision across pending and completion states'
+Require-Text 'topology worker' $worker '_pending.Count >= _worldChunkCount' `
+    'pending queue must reject distinct keys at saturation'
+Require-Text 'topology worker' $worker '_completions.Count >= _worldChunkCount' `
+    'completion queue must remain bounded'
+Require-Text 'topology worker' $worker '_needsRescan = true' `
+    'saturation must preserve one rescan marker'
+Require-Text 'topology worker' $worker 'BuildFillAuthoritative(' `
+    'worker must use the authoritative color assignment'
+Require-Text 'topology worker' $worker 'BuildRibbons(' `
+    'worker must build consolidated ribbons'
+Forbid-Regex 'topology worker' $worker '\bTask\s*\.\s*Run\s*\(' `
+    'worker cannot create unbounded Task.Run work'
 
 $pureFiles = @(
     'Code/core/policy/HierarchicalVassalBoundaryModels.cs',
@@ -162,7 +321,9 @@ $pureFiles = @(
     'Code/core/policy/HierarchicalVassalBoundaryPolygonRules.cs',
     'Code/core/policy/HierarchicalVassalBoundaryHeightRules.cs',
     'Code/core/policy/HierarchicalVassalBoundaryMeshDraftRules.cs',
-    'Code/core/policy/HierarchicalVassalBoundaryColorRules.cs'
+    'Code/core/policy/HierarchicalVassalBoundaryColorRules.cs',
+    'Code/core/policy/HierarchicalVassalBoundaryChunkSnapshot.cs',
+    'Code/core/policy/HierarchicalVassalBoundaryTopologyWorker.cs'
 )
 foreach ($relativePath in $pureFiles) {
     $source = Read-Source $relativePath
