@@ -18,6 +18,7 @@
     <Compile Include="HierarchicalVassalBoundaryMeshDraftRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalBoundaryHeightRulesTests.cs.txt" />
     <Compile Include="HierarchicalVassalBoundaryWorkerRulesTests.cs.txt" />
+    <Compile Include="HierarchicalVassalBoundaryPerformanceTests.cs.txt" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryModels.cs" Link="Production\HierarchicalVassalBoundaryModels.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryChunkRules.cs" Link="Production\HierarchicalVassalBoundaryChunkRules.cs" />
     <Compile Include="..\..\Code\core\policy\HierarchicalVassalBoundaryTopologyRules.cs" Link="Production\HierarchicalVassalBoundaryTopologyRules.cs" />

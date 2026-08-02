@@ -23,6 +23,13 @@ if (args.Length == 1 && args[0] == "--hierarchical-boundary-mesh-slice")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--hierarchical-boundary-performance")
+{
+    HierarchicalVassalBoundaryPerformanceTests.Run();
+    Console.WriteLine("Hierarchical vassal boundary mesh performance rules passed.");
+    return;
+}
+
 if (args.Length == 2 && args[0] == "--benchmark" &&
     args[1] == "recent")
 {
