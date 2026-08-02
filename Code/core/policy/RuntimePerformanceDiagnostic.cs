@@ -72,6 +72,8 @@ namespace AncientWarfare3.core.policy
         private static int _sampleGc2Start;
         private static long _sampleManagedHeapStart;
         [ThreadStatic] private static int _pathSmoothDepth;
+        [ThreadStatic] private static int _actorAiDetailSamples;
+        [ThreadStatic] private static int _actorRaceDetailSamples;
 
         private sealed class ActorTaskSample
         {
@@ -103,6 +105,8 @@ namespace AncientWarfare3.core.policy
             if (_sampling)
             {
                 ResetSample();
+                _actorAiDetailSamples = 0;
+                _actorRaceDetailSamples = 0;
                 _sampleFrameStarted = Stopwatch.GetTimestamp();
                 _sampleGc0Start = GC.CollectionCount(0);
                 _sampleGc1Start = GC.CollectionCount(1);
@@ -114,6 +118,33 @@ namespace AncientWarfare3.core.policy
         public static long BeginScope()
         {
             return _sampling ? Stopwatch.GetTimestamp() : 0L;
+        }
+
+        public static bool ShouldCollectActorDetail()
+        {
+            return _sampling;
+        }
+
+        public static bool TryConsumeActorAiDetailSample()
+        {
+            if (!_sampling) return false;
+            int ordinal = _actorAiDetailSamples++;
+            return ActorDiagnosticSamplingRules.ShouldCollectDetail(
+                diagnosticsEnabled: true, benchmarkEnabled: false,
+                sampleOrdinal: ordinal,
+                perFrameBudget: ActorDiagnosticSamplingRules.
+                    MaximumSamplesPerFrame);
+        }
+
+        public static bool TryConsumeActorRaceDetailSample()
+        {
+            if (!_sampling) return false;
+            int ordinal = _actorRaceDetailSamples++;
+            return ActorDiagnosticSamplingRules.ShouldCollectDetail(
+                diagnosticsEnabled: true, benchmarkEnabled: false,
+                sampleOrdinal: ordinal,
+                perFrameBudget: ActorDiagnosticSamplingRules.
+                    MaximumSamplesPerFrame);
         }
 
         public static long BeginDeathEvent()
@@ -133,7 +164,7 @@ namespace AncientWarfare3.core.policy
 
         public static ActorRaceScopeToken BeginActorRaceScope(Actor pActor)
         {
-            if (!_sampling) return default;
+            if (!TryConsumeActorRaceDetailSample()) return default;
             return new ActorRaceScopeToken(Stopwatch.GetTimestamp(),
                 ActorRacePerformanceRules.Classify(pActor?.asset?.id));
         }
