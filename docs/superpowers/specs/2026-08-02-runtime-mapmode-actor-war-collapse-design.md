@@ -111,9 +111,11 @@ goals, or the existing settlement transaction.
 
 ### Total wars and Zhulu
 
-Total-war/protected-war types, including Zhulu, do not create an ordinary peace
-proposal. When the defeated side satisfies `NoForce`, the runtime executes a
-total-war surrender settlement:
+Wars whose `WarTypeAsset.total_war` flag is true, including Zhulu, do not create
+an ordinary peace proposal. Other protected wars such as rebellions,
+independence, mandate, and restoration wars keep their existing protected
+settlement semantics. When a total-war defeated side satisfies `NoForce`, the
+runtime executes a total-war surrender settlement:
 
 - the surviving side is recorded as the winner;
 - every eligible city/territory controlled by the defeated side is transferred
@@ -121,6 +123,10 @@ total-war surrender settlement:
 - no partial war-goal selection is offered;
 - all Army missions, occupation locks, and participant records are closed by
   the same end-war transaction used by other authoritative war endings.
+
+Zhulu reuses the existing queued and retryable `ZhuluWarSettlementService`
+full-territory transfer. A generic total-war path must preserve that
+transaction shape instead of adding a second direct `endWar` route.
 
 If the defeated side has no eligible territory left, the normal extinction
 cleanup path is used. A total war with no-force on both sides does not trigger
