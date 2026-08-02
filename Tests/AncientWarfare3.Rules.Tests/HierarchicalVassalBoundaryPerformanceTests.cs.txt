@@ -6,11 +6,18 @@ internal static class HierarchicalVassalBoundaryPerformanceTests
 {
     public static void Run()
     {
+        CurveMeshFeatureIsDisabledByDefault();
         Synthetic512WorldStaysChunkBounded();
         DirtyNeighborhoodIsAtMostNineChunks();
         SharedHeightDraftIsImmutableAcrossLayers();
         CurveRebuildIsDeterministicAcrossCompletionOrder();
         FailureFallbackRemainsBounded();
+    }
+
+    private static void CurveMeshFeatureIsDisabledByDefault()
+    {
+        Equal(false, HierarchicalVassalBoundaryChunkRules.EnableNaturalBoundaryMesh,
+            "natural curve mesh is disabled while the legacy map renderer is used");
     }
 
     private static void Synthetic512WorldStaysChunkBounded()

@@ -39,7 +39,9 @@ namespace AncientWarfare3.patch
 
         internal static bool MeshAuthorityActive
         {
-            get { return _meshAuthorityActive && !_initializing; }
+            get { return HierarchicalVassalBoundaryChunkRules.
+                EnableNaturalBoundaryMesh && _meshAuthorityActive &&
+                !_initializing; }
         }
 
         internal static bool RendererGenerationActive
@@ -55,13 +57,25 @@ namespace AncientWarfare3.patch
 
         internal static bool MeshFallbackActive
         {
-            get { return _meshFallback && !_meshAuthorityActive; }
+            get { return HierarchicalVassalBoundaryChunkRules.
+                EnableNaturalBoundaryMesh && _meshFallback &&
+                !_meshAuthorityActive; }
         }
 
         // Called by AW_DeferredRuntimeWorkPatch in this exact order.
         internal static void ProcessWorldRevisionEvents()
         {
             if (!Config.game_loaded || SmoothLoader.isLoading()) return;
+            if (!HierarchicalVassalBoundaryChunkRules.
+                    EnableNaturalBoundaryMesh)
+            {
+                if (_worker != null || _meshAuthorityActive || _meshFallback)
+                {
+                    CancelGeneration();
+                    HierarchicalVassalBoundaryMeshLayer.Reset();
+                }
+                return;
+            }
             bool active = HierarchicalVassalMapModeService.IsActive();
             if (!active)
             {
@@ -80,6 +94,8 @@ namespace AncientWarfare3.patch
 
         internal static void ProcessCapture()
         {
+            if (!HierarchicalVassalBoundaryChunkRules.
+                    EnableNaturalBoundaryMesh) return;
             if (!Config.game_loaded || SmoothLoader.isLoading() ||
                 !HierarchicalVassalMapModeService.IsActive()) return;
             if (!EnsureRuntime() || _capture == null || _worker == null) return;
@@ -104,6 +120,8 @@ namespace AncientWarfare3.patch
 
         internal static void DrainWorker()
         {
+            if (!HierarchicalVassalBoundaryChunkRules.
+                    EnableNaturalBoundaryMesh) return;
             if (_worker == null) return;
             int limit = HierarchicalVassalBoundaryChunkRules.UploadBudgetPerFrame;
             int drained = 0;
@@ -125,6 +143,8 @@ namespace AncientWarfare3.patch
 
         internal static void DrainMesh()
         {
+            if (!HierarchicalVassalBoundaryChunkRules.
+                    EnableNaturalBoundaryMesh) return;
             int uploaded = HierarchicalVassalBoundaryMeshLayer.DrainMesh();
             if (!HierarchicalVassalBoundaryMeshLayer.IsHealthy)
             {

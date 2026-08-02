@@ -5,6 +5,10 @@ namespace AncientWarfare3.core.policy
 {
     public static class HierarchicalVassalBoundaryChunkRules
     {
+        // Keep the legacy hierarchical map renderer as the default until the
+        // natural-boundary mesh has a dedicated performance budget.
+        public const bool EnableNaturalBoundaryMesh = false;
+
         public const int ChunkSize = 32;
 
         public const int Halo = 2;
